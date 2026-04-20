@@ -67,6 +67,13 @@ const logger = winston.createLogger({
   transports,
 });
 
+// Morgan expects a writable stream interface with a write() method.
+logger.stream = {
+  write: (message) => {
+    logger.http(message.trim());
+  },
+};
+
 // Create logs directory if it doesn't exist
 const fs = require('fs');
 const logsDir = path.join(__dirname, '../logs');
