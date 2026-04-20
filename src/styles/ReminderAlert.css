@@ -1,0 +1,566 @@
+.reminderalert-page {
+  min-height: 100vh;
+  padding: 2rem 1rem 4rem;
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.2), transparent 28%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 30%),
+    linear-gradient(180deg, #f6efe4 0%, #eef4fb 55%, #f9fbfd 100%);
+  color: #14213d;
+}
+
+.reminderalert-hero,
+.reminderalert-stats-grid,
+.reminderalert-layout {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.reminderalert-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 1.5rem;
+  align-items: stretch;
+  margin-bottom: 1.5rem;
+}
+
+.reminderalert-hero h1 {
+  margin: 0 0 0.9rem;
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+.reminderalert-eyebrow,
+.reminderalert-panel-heading p,
+.reminderalert-highlight-label {
+  margin: 0 0 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #a8550f;
+}
+
+.reminderalert-intro {
+  max-width: 760px;
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: #334155;
+}
+
+.reminderalert-highlight-card,
+.reminderalert-stat-card,
+.reminderalert-panel,
+.reminderalert-requirement-card,
+.reminderalert-role-card,
+.reminderalert-task-card {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.reminderalert-highlight-card {
+  border-radius: 28px;
+  padding: 1.5rem;
+  background: linear-gradient(160deg, rgba(14, 116, 144, 0.92), rgba(30, 41, 59, 0.96));
+  color: #f8fafc;
+}
+
+.reminderalert-highlight-card strong {
+  display: block;
+  margin-bottom: 0.7rem;
+  font-size: 1.4rem;
+  line-height: 1.2;
+}
+
+.reminderalert-highlight-card p {
+  margin: 0;
+  color: rgba(248, 250, 252, 0.84);
+  line-height: 1.6;
+}
+
+.reminderalert-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.reminderalert-stat-card {
+  border-radius: 24px;
+  padding: 1.35rem;
+}
+
+.reminderalert-stat-card strong {
+  display: block;
+  font-size: 2rem;
+  color: #0f766e;
+}
+
+.reminderalert-stat-card span {
+  display: block;
+  margin-top: 0.3rem;
+  font-weight: 700;
+}
+
+.reminderalert-stat-card p {
+  margin: 0.55rem 0 0;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.reminderalert-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 0.95fr);
+  gap: 1.5rem;
+}
+
+.reminderalert-primary-column,
+.reminderalert-secondary-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reminderalert-panel {
+  border-radius: 28px;
+  padding: 1.5rem;
+}
+
+.reminderalert-panel-heading h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.reminderalert-step-list,
+.reminderalert-role-stack,
+.reminderalert-task-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.reminderalert-link-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.reminderalert-step-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.reminderalert-step-item span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  color: #fff;
+  font-weight: 700;
+}
+
+.reminderalert-step-item p,
+.reminderalert-list li,
+.reminderalert-role-card li,
+.reminderalert-requirement-card li {
+  margin: 0;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.reminderalert-requirement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.reminderalert-requirement-card,
+.reminderalert-role-card {
+  border-radius: 22px;
+  padding: 1.2rem;
+}
+
+.reminderalert-requirement-card h3,
+.reminderalert-role-card h3,
+.reminderalert-task-card h3 {
+  margin: 0 0 0.8rem;
+}
+
+.reminderalert-requirement-card input,
+.reminderalert-requirement-card select {
+  width: 100%;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 14px;
+  font: inherit;
+  color: #14213d;
+  background: rgba(255, 255, 255, 0.94);
+  box-sizing: border-box;
+}
+
+.reminderalert-requirement-card input:focus,
+.reminderalert-requirement-card select:focus {
+  outline: none;
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.reminderalert-requirement-card ul,
+.reminderalert-role-card ul,
+.reminderalert-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.reminderalert-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.reminderalert-filter-chip {
+  border: 1px solid rgba(14, 116, 144, 0.18);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  background: #fff;
+  color: #0f172a;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.reminderalert-filter-chip.active,
+.reminderalert-filter-chip:hover {
+  transform: translateY(-1px);
+  background: #0f766e;
+  color: #fff;
+}
+
+.reminderalert-task-card {
+  border-radius: 22px;
+  padding: 1.2rem;
+}
+
+.reminderalert-task-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.reminderalert-task-topline p,
+.reminderalert-task-due {
+  margin: 0;
+  color: #475569;
+}
+
+.reminderalert-task-status {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.reminderalert-task-due {
+  margin-top: 0.7rem;
+  font-weight: 600;
+}
+
+.reminderalert-task-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.reminderalert-task-channels span,
+.reminderalert-callout {
+  border-radius: 18px;
+}
+
+.reminderalert-task-channels span {
+  padding: 0.45rem 0.75rem;
+  background: #eef6ff;
+  color: #1d4ed8;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.reminderalert-callout {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12), rgba(14, 116, 144, 0.12));
+}
+
+.reminderalert-callout strong {
+  display: block;
+  margin-bottom: 0.45rem;
+}
+
+.reminderalert-callout p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.6;
+}
+
+@media (max-width: 1080px) {
+  .reminderalert-stats-grid,
+  .reminderalert-requirement-grid,
+  .reminderalert-hero,
+  .reminderalert-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Add button */
+.reminderalert-add-btn {
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  color: #fff;
+  border: none;
+  border-radius: 24px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.reminderalert-add-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(245, 158, 11, 0.3);
+}
+
+/* Form styles */
+.reminderalert-form-section {
+  margin-bottom: 2rem;
+}
+
+.reminderalert-form-container {
+  max-width: 800px;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 28px;
+  padding: 2rem;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+}
+
+.reminderalert-form-container h2 {
+  margin: 0 0 1.5rem;
+  color: #0f172a;
+}
+
+.reminderalert-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reminderalert-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.reminderalert-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.reminderalert-form-group label {
+  font-weight: 600;
+  color: #374151;
+}
+
+.reminderalert-form-group input,
+.reminderalert-form-group select,
+.reminderalert-form-group textarea {
+  padding: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.reminderalert-form-group input:focus,
+.reminderalert-form-group select:focus,
+.reminderalert-form-group textarea:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
+.reminderalert-form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.reminderalert-checkbox-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.reminderalert-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.reminderalert-form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.reminderalert-submit-btn,
+.reminderalert-cancel-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.reminderalert-submit-btn {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+}
+
+.reminderalert-submit-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.reminderalert-cancel-btn {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.reminderalert-cancel-btn:hover {
+  transform: translateY(-1px);
+  background: #e5e7eb;
+}
+
+/* Task actions */
+.reminderalert-task-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.reminderalert-action-btn {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+  background: transparent;
+}
+
+.reminderalert-action-btn:hover {
+  transform: scale(1.1);
+}
+
+.reminderalert-action-btn.complete {
+  color: #10b981;
+}
+
+.reminderalert-action-btn.complete:hover {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.reminderalert-action-btn.edit {
+  color: #3b82f6;
+}
+
+.reminderalert-action-btn.edit:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.reminderalert-action-btn.delete {
+  color: #ef4444;
+}
+
+.reminderalert-action-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Completed task styling */
+.reminderalert-task-card.completed {
+  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.reminderalert-task-card.completed h3 {
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+/* Task description */
+.reminderalert-task-description {
+  margin: 0.5rem 0 0;
+  font-style: italic;
+  color: #6b7280;
+}
+
+/* Empty state */
+.reminderalert-empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: #6b7280;
+}
+
+.reminderalert-empty-state p {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .reminderalert-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .reminderalert-form-actions {
+    flex-direction: column;
+  }
+
+  .reminderalert-task-actions {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}
+
+@media (max-width: 640px) {
+  .reminderalert-page {
+    padding: 1.25rem 0.75rem 3rem;
+  }
+
+  .reminderalert-panel,
+  .reminderalert-highlight-card,
+  .reminderalert-stat-card,
+  .reminderalert-task-card {
+    padding: 1.1rem;
+  }
+
+  .reminderalert-task-topline {
+    flex-direction: column;
+  }
+}

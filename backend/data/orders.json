@@ -1,0 +1,130 @@
+[
+  {
+    "id": "8f8faac3-261e-45dc-8772-733eb8b30d92",
+    "customerEmail": "mgdhanyamohan@gmail.com",
+    "customerName": "mgdhanyamohan",
+    "amount": "INR 145",
+    "subtotal": "INR 90",
+    "deliveryFee": "INR 55",
+    "deliveryAddress": "khk, seft, Kollam, Kerala, India, 691017",
+    "deliveryDetails": {
+      "receiverPhone": "07907714368",
+      "pincode": "691017",
+      "country": "India",
+      "state": "Kerala",
+      "district": "Kollam",
+      "houseName": "khk",
+      "addressLine": "seft"
+    },
+    "items": [
+      {
+        "id": "b3014a5a-1a32-406e-88f7-a1e643ba3570",
+        "name": "banana",
+        "quantity": 1,
+        "price": 90,
+        "sellerKey": "malavikaaditi3@gmail.com",
+        "sellerEmail": "malavikaaditi3@gmail.com",
+        "sellerName": "malavika",
+        "businessName": "Malu",
+        "status": "Confirmed"
+      }
+    ],
+    "sellerFulfillments": [
+      {
+        "sellerKey": "malavikaaditi3@gmail.com",
+        "sellerEmail": "malavikaaditi3@gmail.com",
+        "sellerName": "malavika",
+        "businessName": "Malu",
+        "itemIds": [
+          "b3014a5a-1a32-406e-88f7-a1e643ba3570"
+        ],
+        "status": "Delivered",
+        "provider": "manual",
+        "trackingNumber": "",
+        "shipmentId": "",
+        "externalStatus": "",
+        "updatedAt": "2026-04-19T13:46:33.943Z",
+        "history": [
+          {
+            "status": "Confirmed",
+            "provider": "manual",
+            "trackingNumber": "",
+            "shipmentId": "",
+            "externalStatus": "",
+            "changedAt": "2026-04-19T13:40:08.997Z",
+            "source": "order_created"
+          },
+          {
+            "status": "Packed",
+            "provider": "shiprocket",
+            "trackingNumber": "",
+            "shipmentId": "",
+            "externalStatus": "",
+            "changedAt": "2026-04-19T13:44:37.459Z",
+            "source": "manual"
+          },
+          {
+            "status": "Shipped",
+            "provider": "shiprocket",
+            "trackingNumber": "",
+            "shipmentId": "",
+            "externalStatus": "",
+            "changedAt": "2026-04-19T13:44:48.193Z",
+            "source": "manual"
+          },
+          {
+            "status": "Delivered",
+            "provider": "manual",
+            "trackingNumber": "",
+            "shipmentId": "",
+            "externalStatus": "",
+            "changedAt": "2026-04-19T13:46:33.943Z",
+            "source": "manual"
+          }
+        ]
+      }
+    ],
+    "paymentDetails": {
+      "gateway": "cash_on_delivery"
+    },
+    "status": "Delivered",
+    "createdAt": "2026-04-19T13:40:08.999Z"
+  },
+  {
+    "id": "6ee55085-6071-4ec7-8197-508743aff90d",
+    "customerEmail": "mgdhanyamohan@gmail.com",
+    "customerName": "mgdhanyamohan",
+    "amount": "INR 12068",
+    "subtotal": "INR 11998",
+    "deliveryFee": "INR 70",
+    "deliveryAddress": "khk, 434, Kollam, Kerala, India, 691017",
+    "deliveryDetails": {
+      "receiverPhone": "07907714368",
+      "pincode": "691017",
+      "country": "India",
+      "state": "Kerala",
+      "district": "Kollam",
+      "houseName": "khk",
+      "addressLine": "434"
+    },
+    "items": [
+      {
+        "id": 2,
+        "name": "Smart Watch",
+        "quantity": 1,
+        "price": 7999
+      },
+      {
+        "id": 1,
+        "name": "Wireless Headphones",
+        "quantity": 1,
+        "price": 3999
+      }
+    ],
+    "paymentDetails": {
+      "gateway": "cash_on_delivery"
+    },
+    "status": "Cash on Delivery",
+    "createdAt": "2026-04-19T13:18:15.706Z"
+  }
+]
