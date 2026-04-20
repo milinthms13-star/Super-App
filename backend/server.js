@@ -9,7 +9,9 @@ const dotenv = require('dotenv');
 const path = require('path');
 const { initializeWebSocket, io: getIo } = require('./config/websocket');
 
-dotenv.config({ path: path.join(__dirname, '.env') });
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: path.join(__dirname, '.env') });
+}
 
 const connectDB = require('./config/db');
 const { connectRedis } = require('./config/redis');
