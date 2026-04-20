@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 const { initializeWebSocket, io: getIo } = require('./config/websocket');
 
 if (process.env.NODE_ENV !== 'production') {
@@ -122,13 +123,26 @@ app.use('/api/reminders', reminderRoutes);
 app.use('/api/diary', diaryRoutes);
 app.use('/api/sos', sosRoutes);
 
-// Serve static files from the React app build directory
-app.use(express.static(path.join(__dirname, '../build')));
+const buildDir = path.join(__dirname, '../build');
+const buildIndexPath = path.join(buildDir, 'index.html');
+const hasFrontendBuild = fs.existsSync(buildIndexPath);
 
-// Catch all handler: send back React's index.html file for client-side routing
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../build/index.html'));
-});
+if (hasFrontendBuild) {
+  app.use(express.static(buildDir));
+
+  // Catch-all handler for client-side routing when the frontend bundle exists.
+  app.get('*', (req, res) => {
+    res.sendFile(buildIndexPath);
+  });
+} else {
+  logger.warn(`Frontend build not found at ${buildIndexPath}. Serving API only.`);
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'MalabarBazaar backend is running. Frontend build is not deployed on this service.',
+    });
+  });
+}
 
 // 404 handler for API routes
 app.use('/api/*', (req, res) => {
