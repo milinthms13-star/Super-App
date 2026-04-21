@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
+import { getStoredAuthToken } from "../utils/auth";
 import "../styles/Navigation.css";
 
 const Navigation = ({ onModuleChange, onLogout, loggedInUser }) => {
@@ -62,6 +63,7 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser }) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(getStoredAuthToken() ? { Authorization: `Bearer ${getStoredAuthToken()}` } : {}),
         },
         credentials: "include",
         body: JSON.stringify({

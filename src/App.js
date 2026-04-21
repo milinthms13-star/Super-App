@@ -26,6 +26,11 @@ import {
   CUSTOM_LINKS_STORAGE_KEY,
   sanitizeCustomLinks,
 } from "./utils/customLinks";
+import {
+  clearStoredAuthToken,
+  getStoredAuthToken,
+  storeAuthToken,
+} from "./utils/auth";
 import "./App.css";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
@@ -41,6 +46,7 @@ const EMPTY_APP_DATA = {
 axios.defaults.withCredentials = true;
 
 function App() {
+  const [authToken, setAuthToken] = useState(() => getStoredAuthToken());
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [currentModule, setCurrentModule] = useState("dashboard");
@@ -100,6 +106,15 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (authToken) {
+      axios.defaults.headers.common.Authorization = `Bearer ${authToken}`;
+      return;
+    }
+
+    delete axios.defaults.headers.common.Authorization;
+  }, [authToken]);
+
+  useEffect(() => {
     localStorage.setItem(CUSTOM_LINKS_STORAGE_KEY, JSON.stringify(customLinks));
   }, [customLinks]);
 
@@ -116,6 +131,8 @@ function App() {
           });
 
           if (authResponse.status === 401) {
+            clearStoredAuthToken();
+            setAuthToken("");
             setIsLoggedIn(false);
             setLoggedInUser(null);
             setCurrentModule("dashboard");
@@ -198,6 +215,13 @@ function App() {
   const handleLoginSuccess = useCallback(
     async (user, _token, activeRole) => {
       const resolvedRegistrationType = activeRole || registrationType || user.registrationType || "user";
+      const nextAuthToken = _token || authToken;
+
+      if (nextAuthToken) {
+        storeAuthToken(nextAuthToken);
+        setAuthToken(nextAuthToken);
+        axios.defaults.headers.common.Authorization = `Bearer ${nextAuthToken}`;
+      }
 
       let nextUser = {
         ...user,
@@ -279,6 +303,7 @@ function App() {
       enabledModules,
       fetchAdminAppData,
       fetchPublicAppData,
+      authToken,
       pendingModule,
       registrationType,
       syncAppDataFromResponse,
@@ -291,6 +316,9 @@ function App() {
     } catch (error) {
       // Clear local app state even if the backend logout request fails.
     }
+    clearStoredAuthToken();
+    setAuthToken("");
+    delete axios.defaults.headers.common.Authorization;
     setIsLoggedIn(false);
     setLoggedInUser(null);
     setCurrentModule("dashboard");
@@ -665,7 +693,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <AppProvider loggedInUser={loggedInUser} language={language}>
+      <AppProvider loggedInUser={loggedInUser} language={language} authToken={authToken}>
         <AnnouncementBar language={language} />
         <Navigation
           onModuleChange={setCurrentModule}

@@ -259,7 +259,7 @@ const buildModuleDataState = (incomingModuleData = {}, currentData = EMPTY_MODUL
 
 axios.defaults.withCredentials = true;
 
-export const AppProvider = ({ children, loggedInUser, language = "en" }) => {
+export const AppProvider = ({ children, loggedInUser, language = "en", authToken = "" }) => {
   const currentUser = useMemo(
     () =>
       loggedInUser || {
@@ -310,7 +310,10 @@ export const AppProvider = ({ children, loggedInUser, language = "en" }) => {
   const handledStripeRedirectRef = useRef("");
   const storefrontHydratedRef = useRef(false);
   const storefrontPersistTimeoutRef = useRef(null);
-  const authHeaders = useMemo(() => ({}), []);
+  const authHeaders = useMemo(
+    () => (authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    [authToken]
+  );
 
   useEffect(() => {
     setCart(Array.isArray(loggedInUser?.cart) ? loggedInUser.cart : []);
