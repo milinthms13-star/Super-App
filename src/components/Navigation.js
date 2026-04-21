@@ -1,16 +1,13 @@
 import React, { useState } from "react";
 import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
-import { getStoredAuthToken } from "../utils/auth";
 import "../styles/Navigation.css";
 
-const Navigation = ({ onModuleChange, onLogout, loggedInUser }) => {
+const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) => {
   const { currentUser, cart } = useApp();
   const { t } = useI18n();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showSOSModal, setShowSOSModal] = useState(false);
-  const [sosLoading, setSosLoading] = useState(false);
 
   const displayUser = loggedInUser || currentUser;
   const isAdmin = displayUser?.role === "admin" || displayUser?.registrationType === "admin";
@@ -51,46 +48,13 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser }) => {
     setIsSidebarOpen(false);
   };
 
-  const handleSendSOSAlert = async () => {
-    setSosLoading(true);
-    try {
-      const userId = displayUser?.id || displayUser?._id;
-      const userName = displayUser?.name || displayUser?.email;
-      const userPhone = displayUser?.phone || "Not provided";
-
-      // Send SOS alert to backend
-      const response = await fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000/api"}/sos/send-alert`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(getStoredAuthToken() ? { Authorization: `Bearer ${getStoredAuthToken()}` } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          userId,
-          userName,
-          userPhone,
-          timestamp: new Date().toISOString(),
-          location: "Current Location",
-        }),
-      });
-
-      if (response.ok) {
-        alert("🆘 SOS Alert Sent Successfully!\n\nEmergency contacts have been notified of your location and status.");
-        setShowSOSModal(false);
-      } else {
-        alert("Failed to send SOS alert. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error sending SOS alert:", error);
-      alert("Error sending SOS alert: " + error.message);
-    } finally {
-      setSosLoading(false);
-    }
-  };
-
   const handleSOSButtonClick = () => {
-    setShowSOSModal(true);
+    onModuleChange("sosalert");
+    setIsSidebarOpen(false);
+
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("malabarbazaar:sos-requested"));
+    }, currentModule === "sosalert" ? 0 : 150);
   };
 
   return (
@@ -120,10 +84,9 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser }) => {
                 type="button"
                 className="sos-alert-button"
                 onClick={handleSOSButtonClick}
-                title="Send SOS Alert - Emergency Help"
-                disabled={sosLoading}
+                title="Open SOS Safety Center and trigger the emergency workflow"
               >
-                🆘 SOS
+                SOS
               </button>
               <div className="user-profile" onClick={() => setShowUserMenu(!showUserMenu)}>
                 <span className="user-avatar">{displayUser.avatar}</span>
@@ -192,45 +155,6 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser }) => {
           ))}
         </div>
       </div>
-
-      {showSOSModal && (
-        <div className="sos-modal-overlay">
-          <div className="sos-modal">
-            <div className="sos-modal-header">
-              <h2>🆘 SEND SOS ALERT</h2>
-            </div>
-            <div className="sos-modal-content">
-              <p className="sos-warning">You are about to send an emergency SOS alert!</p>
-              <p className="sos-info">
-                This will immediately notify emergency contacts and authorities of your location and status.
-              </p>
-              <div className="sos-details">
-                <p><strong>Name:</strong> {displayUser?.name || displayUser?.email}</p>
-                <p><strong>Phone:</strong> {displayUser?.phone || "Not provided"}</p>
-              </div>
-              <p className="sos-confirmation">
-                Are you sure you want to send the SOS alert?
-              </p>
-            </div>
-            <div className="sos-modal-actions">
-              <button
-                className="sos-cancel-btn"
-                onClick={() => setShowSOSModal(false)}
-                disabled={sosLoading}
-              >
-                Cancel
-              </button>
-              <button
-                className="sos-send-btn"
-                onClick={handleSendSOSAlert}
-                disabled={sosLoading}
-              >
-                {sosLoading ? "Sending..." : "Send SOS Alert"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

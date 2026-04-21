@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import axios from "axios";
+import { io } from "socket.io-client";
 import { AppProvider } from "./contexts/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AnnouncementBar from "./components/AnnouncementBar";
@@ -34,6 +35,7 @@ import {
 import "./App.css";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const SOCKET_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
 const EMPTY_APP_DATA = {
   businessCategories: [],
@@ -71,6 +73,7 @@ function App() {
     }
   });
   const [appDataError, setAppDataError] = useState("");
+  const [incomingSosAlert, setIncomingSosAlert] = useState(null);
   const [globeMartCategoryEndpointAvailable, setGlobeMartCategoryEndpointAvailable] =
     useState(true);
 
@@ -117,6 +120,43 @@ function App() {
   useEffect(() => {
     localStorage.setItem(CUSTOM_LINKS_STORAGE_KEY, JSON.stringify(customLinks));
   }, [customLinks]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !authToken) {
+      setIncomingSosAlert(null);
+      return undefined;
+    }
+
+    const socket = io(process.env.REACT_APP_BACKEND_URL || SOCKET_BASE_URL, {
+      auth: {
+        token: authToken,
+      },
+      withCredentials: true,
+    });
+
+    socket.on("sos:incoming", (payload) => {
+      setIncomingSosAlert(payload || null);
+    });
+
+    socket.on("call:incoming", (payload) => {
+      if (payload?.emergency) {
+        setIncomingSosAlert((currentAlert) => currentAlert || {
+          alertId: `sos-${payload.callId}`,
+          callId: payload.callId,
+          chatId: payload.chatId,
+          fromUser: payload.caller,
+          location: payload.sosAlert?.location || "Current Location",
+          reason: payload.sosAlert?.reason || "Emergency support requested",
+          timestamp: payload.sosAlert?.timestamp || new Date().toISOString(),
+          online: true,
+        });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [authToken, isLoggedIn]);
 
   useEffect(() => {
     const bootstrapApp = async () => {
@@ -327,6 +367,11 @@ function App() {
     setLanguage("en");
   };
 
+  const handleOpenEmergencyModule = useCallback((nextModule) => {
+    setIncomingSosAlert(null);
+    setCurrentModule(nextModule);
+  }, []);
+
   const handleSelectRegistrationType = (type, targetModule = "") => {
     setRegistrationType(type);
     setPendingModule(targetModule);
@@ -445,6 +490,20 @@ function App() {
     }
 
     setEnabledModules(response.data.data?.enabledModules || []);
+  }, []);
+
+  const handleReviewRegistration = useCallback(async (applicationId, action, reason) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/app-data/registration-applications/${applicationId}/review`,
+      { action, reason }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Registration review update failed.");
+    }
+
+    setRegistrationApplications(response.data.data?.registrationApplications || []);
+    return response.data;
   }, []);
 
   const handleCreateGlobeMartCategory = useCallback(async (categoryInput) => {
@@ -626,6 +685,7 @@ function App() {
             businessCategories={businessCategories}
             globeMartCategories={globeMartCategories}
             registrationApplications={registrationApplications}
+            onReviewRegistration={handleReviewRegistration}
             onUpdateCategoryFee={handleUpdateCategoryFee}
             onCreateGlobeMartCategory={handleCreateGlobeMartCategory}
             onAddGlobeMartSubcategory={handleAddGlobeMartSubcategory}
@@ -699,11 +759,52 @@ function App() {
           onModuleChange={setCurrentModule}
           onLogout={handleLogout}
           loggedInUser={loggedInUser}
+          currentModule={currentModule}
         />
         <main className="main-content">
           {appDataError && <div className="app-loading">{appDataError}</div>}
           {renderModule()}
         </main>
+        {incomingSosAlert ? (
+          <div className="emergency-call-overlay">
+            <div className="emergency-call-modal">
+              <span className="emergency-call-kicker">Emergency Alert</span>
+              <h2>{incomingSosAlert.fromUser?.name || incomingSosAlert.fromUser?.email || "A contact"} needs help</h2>
+              <p>
+                {incomingSosAlert.reason} near {incomingSosAlert.location}.
+              </p>
+              <p className="emergency-call-meta">
+                In-app SOS call requested at {new Date(incomingSosAlert.timestamp).toLocaleTimeString("en-IN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+              <div className="emergency-call-actions">
+                <button
+                  type="button"
+                  className="emergency-call-primary"
+                  onClick={() => handleOpenEmergencyModule("sosalert")}
+                >
+                  Open SOS Center
+                </button>
+                <button
+                  type="button"
+                  className="emergency-call-secondary"
+                  onClick={() => handleOpenEmergencyModule("messaging")}
+                >
+                  Open Messaging
+                </button>
+                <button
+                  type="button"
+                  className="emergency-call-secondary"
+                  onClick={() => setIncomingSosAlert(null)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </AppProvider>
     </ErrorBoundary>
   );

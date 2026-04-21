@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import "../../styles/SOSAlert.css";
 
@@ -99,8 +99,9 @@ const buildAlertLog = (entry) => ({
 });
 
 const SOSAlert = () => {
-  const { currentUser } = useApp();
+  const { currentUser, apiCall } = useApp();
   const [contacts, setContacts] = useState(() => createInitialState(currentUser).contacts);
+  const [registeredContacts, setRegisteredContacts] = useState([]);
   const [history, setHistory] = useState([]);
   const [settings, setSettings] = useState(() => createInitialState(currentUser).settings);
   const [alertState, setAlertState] = useState({
@@ -122,6 +123,31 @@ const SOSAlert = () => {
     notifyBy: ["Push", "SMS"],
   });
   const [statusMessage, setStatusMessage] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadRegisteredContacts = async () => {
+      try {
+        const response = await apiCall("/messaging/contacts", "GET", { limit: 100 });
+        if (!isMounted) {
+          return;
+        }
+
+        setRegisteredContacts(Array.isArray(response?.contacts) ? response.contacts : []);
+      } catch (error) {
+        if (isMounted) {
+          setRegisteredContacts([]);
+        }
+      }
+    };
+
+    loadRegisteredContacts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiCall]);
 
   useEffect(() => {
     try {
@@ -221,8 +247,8 @@ const SOSAlert = () => {
 
   const stats = [
     { label: "Trusted contacts", value: String(contacts.length) },
+    { label: "Registered app contacts", value: String(registeredContacts.length) },
     { label: "Readiness score", value: `${readinessScore}%` },
-    { label: "Live channels", value: DELIVERY_CHANNELS.length.toString() },
     { label: "Alert state", value: alertState.active ? alertState.mode : "Standby" },
   ];
 
@@ -286,18 +312,24 @@ const SOSAlert = () => {
     }));
   };
 
-  const handleTriggerSOS = () => {
+  const handleTriggerSOS = useCallback(async () => {
     const startedAt = new Date().toISOString();
     const reason = alertState.reason;
     const channels = settings.silentMode ? ["Push", "SMS"] : DELIVERY_CHANNELS;
+    const nextHistoryItem = {
+      id: `alert-${Date.now()}`,
+      reason,
+      startedAt,
+      location: LOCATION_POINTS[0],
+      mode: settings.silentMode ? "Silent alert" : "Active alert",
+      outcome: "In progress",
+    };
     const log = [
       buildAlertLog(`SOS alert sent for ${reason.toLowerCase()}.`),
       buildAlertLog(`Location shared from ${LOCATION_POINTS[0]}.`),
       buildAlertLog(`Notifications queued for ${activeContacts.length} trusted contacts.`),
     ];
-
-    setContacts((current) => current.map((contact) => ({ ...contact, acknowledged: false })));
-    setAlertState({
+    const baseAlertState = {
       active: true,
       mode: settings.silentMode ? "Silent alert" : "Active alert",
       reason,
@@ -307,20 +339,70 @@ const SOSAlert = () => {
       acknowledgedBy: "",
       channels,
       log,
-    });
-    setHistory((current) => [
-      {
-        id: `alert-${Date.now()}`,
+    };
+
+    setContacts((current) => current.map((contact) => ({ ...contact, acknowledged: false })));
+    setAlertState(baseAlertState);
+    setHistory((current) => [nextHistoryItem, ...current]);
+
+    try {
+      const response = await apiCall("/sos/send-alert", "POST", {
         reason,
-        startedAt,
         location: LOCATION_POINTS[0],
-        mode: settings.silentMode ? "Silent alert" : "Active alert",
-        outcome: "In progress",
-      },
-      ...current,
-    ]);
-    setStatusMessage("SOS alert is live. Trusted contacts are being notified now.");
-  };
+        channels,
+        timestamp: startedAt,
+      });
+
+      const recipients = Array.isArray(response?.data?.recipients) ? response.data.recipients : [];
+      const onlineRecipientCount = Number(response?.data?.onlineRecipientCount || 0);
+      setAlertState((current) => ({
+        ...current,
+        log: [
+          buildAlertLog(
+            `Emergency call request sent to ${recipients.length} registered contact${recipients.length === 1 ? "" : "s"}, ${onlineRecipientCount} online right now.`
+          ),
+          ...current.log,
+        ].slice(0, 8),
+      }));
+      setStatusMessage(
+        recipients.length > 0
+          ? `SOS alert is live. ${recipients.length} registered contact${recipients.length === 1 ? "" : "s"} received the emergency alert.`
+          : "SOS alert is live. Add registered contacts in LinkUp to trigger in-app emergency calls."
+      );
+    } catch (error) {
+      setAlertState((current) => ({
+        ...current,
+        log: [
+          buildAlertLog(
+            `Registered contact dispatch failed: ${error.response?.data?.message || error.message || "Unknown error"}.`
+          ),
+          ...current.log,
+        ].slice(0, 8),
+      }));
+      setStatusMessage(
+        error.response?.data?.message ||
+          "SOS alert is active locally, but registered app contacts could not be reached."
+      );
+    }
+  }, [activeContacts.length, alertState.reason, apiCall, settings.silentMode]);
+
+  useEffect(() => {
+    const handleExternalSOSRequest = () => {
+      if (alertState.active) {
+        setStatusMessage("SOS alert is already active. Use the controls below to escalate or mark safe.");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      handleTriggerSOS();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    window.addEventListener("malabarbazaar:sos-requested", handleExternalSOSRequest);
+    return () => {
+      window.removeEventListener("malabarbazaar:sos-requested", handleExternalSOSRequest);
+    };
+  }, [alertState.active, handleTriggerSOS]);
 
   const handleAcknowledge = (contactId) => {
     const contact = contacts.find((item) => item.id === contactId);
@@ -540,6 +622,12 @@ const SOSAlert = () => {
             <div className="sos-panel-heading">
               <p>Trusted contacts</p>
               <h2>Manage who gets notified</h2>
+            </div>
+
+            <div className="sos-status-banner">
+              {registeredContacts.length > 0
+                ? `${registeredContacts.length} registered app contact${registeredContacts.length === 1 ? "" : "s"} in LinkUp can receive automatic in-app SOS call alerts.`
+                : "No registered LinkUp contacts found yet. Add contacts there to ring them automatically during SOS."}
             </div>
 
             <form className="sos-contact-form" onSubmit={handleAddContact}>

@@ -21,6 +21,7 @@ const devAuthStore = require('../utils/devAuthStore');
 const { deleteGridFSFile, uploadBufferToGridFS } = require('../utils/gridfs');
 const { ADMIN_EMAIL } = require('../config/constants');
 const { validatePhone } = require('../utils/validators');
+const { sendEmailViaGmail } = require('../config/gmail');
 
 const router = express.Router();
 const upload = multer({
@@ -314,6 +315,103 @@ const useMemoryAuth = () => {
   return process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production';
 };
 
+const hasRealEmailConfig = () => {
+  if (process.env.EMAIL_SERVICE === 'gmail-api') {
+    return !!process.env.GMAIL_USER;
+  }
+
+  if (process.env.EMAIL_SERVICE === 'ses') {
+    return !!(
+      process.env.AWS_ACCESS_KEY_ID &&
+      process.env.AWS_SECRET_ACCESS_KEY &&
+      !process.env.AWS_ACCESS_KEY_ID.includes('your-')
+    );
+  }
+
+  const values = [
+    process.env.EMAIL_USER,
+    process.env.EMAIL_PASS,
+    process.env.EMAIL_FROM,
+  ];
+  return values.every((value) => value && !value.includes('your-'));
+};
+
+const getEmailService = () => {
+  if (process.env.EMAIL_SERVICE === 'gmail-api') {
+    return 'gmail-api';
+  }
+
+  if (process.env.EMAIL_SERVICE === 'ses') {
+    const AWS = require('aws-sdk');
+    AWS.config.update({
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      region: process.env.AWS_REGION || 'us-east-1',
+    });
+    return new AWS.SES({ apiVersion: '2010-12-01' });
+  }
+
+  const nodemailer = require('nodemailer');
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: Number(process.env.EMAIL_PORT) || 587,
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+};
+
+const sendRegistrationReviewEmail = async ({ to, applicantName, businessName, status, reason }) => {
+  if (!hasRealEmailConfig()) {
+    logger.warn(`Registration review email skipped for ${to}: email service not configured.`);
+    return false;
+  }
+
+  const subject = `MalabarBazaar registration update: ${status}`;
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; color: #1a2332;">
+      <h2>MalabarBazaar Registration Review</h2>
+      <p>Hello ${applicantName || businessName || 'Entrepreneur'},</p>
+      <p>Your entrepreneur registration for <strong>${businessName || 'your business account'}</strong> has been reviewed.</p>
+      <p><strong>Status:</strong> ${status}</p>
+      <p><strong>Reason:</strong> ${reason || 'No additional reason provided.'}</p>
+      <p>Please log in to MalabarBazaar for the latest account details.</p>
+    </div>
+  `;
+
+  if (process.env.EMAIL_SERVICE === 'gmail-api') {
+    await sendEmailViaGmail(to, subject, htmlContent);
+    return true;
+  }
+
+  if (process.env.EMAIL_SERVICE === 'ses') {
+    const ses = getEmailService();
+    await ses.sendEmail({
+      Source: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      Destination: { ToAddresses: [to] },
+      Message: {
+        Subject: { Data: subject },
+        Body: {
+          Html: { Data: htmlContent },
+        },
+      },
+    }).promise();
+    return true;
+  }
+
+  const transporter = getEmailService();
+  const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+  await transporter.sendMail({
+    from: `MalabarBazaar <${fromAddress}>`,
+    to,
+    subject,
+    html: htmlContent,
+  });
+  return true;
+};
+
 router.get('/public', async (req, res) => {
   const appData = await devAppDataStore.readAppData();
   const classifiedsModuleData = await listClassifiedModuleData();
@@ -475,6 +573,8 @@ router.post('/registration-applications', registrationUploadFields, async (req, 
             {
               id: Date.now(),
               submittedAt: new Date().toLocaleDateString(),
+              status: 'Pending Review',
+              reviewReason: '',
               ...registrationPayload,
             },
             ...currentData.registrationApplications,
@@ -542,6 +642,10 @@ router.post('/registration-applications', registrationUploadFields, async (req, 
                 registrationPayload.foodLicenseDocumentUrl ||
                 account.foodLicenseDocumentUrl ||
                 '',
+              entrepreneurApprovalStatus:
+                registrationPayload.registrationType === 'entrepreneur'
+                  ? 'Pending Review'
+                  : account.entrepreneurApprovalStatus || 'Not Requested',
             }
           : account
       );
@@ -570,6 +674,10 @@ router.post('/registration-applications', registrationUploadFields, async (req, 
           foodLicenseDocumentName: registrationPayload.foodLicenseDocumentName || '',
           foodLicenseDocumentFileId: registrationPayload.foodLicenseDocumentFileId || '',
           foodLicenseDocumentUrl: registrationPayload.foodLicenseDocumentUrl || '',
+          entrepreneurApprovalStatus:
+            registrationPayload.registrationType === 'entrepreneur'
+              ? 'Pending Review'
+              : 'Not Requested',
         },
       ];
     }
@@ -586,6 +694,95 @@ router.post('/registration-applications', registrationUploadFields, async (req, 
     data: {
       registrationApplications: nextData.registrationApplications,
       registeredAccounts: nextData.registeredAccounts,
+    },
+  });
+});
+
+router.patch('/registration-applications/:applicationId/review', authenticate, adminOnly, async (req, res) => {
+  const normalizedAction = String(req.body?.action || '').trim().toLowerCase();
+  const normalizedReason = String(req.body?.reason || '').trim();
+
+  if (!['approve', 'reject'].includes(normalizedAction)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Action must be approve or reject.',
+    });
+  }
+
+  const applicationId = String(req.params.applicationId);
+  const nextStatus = normalizedAction === 'approve' ? 'Approved' : 'Rejected';
+  let reviewedApplication = null;
+
+  const nextData = await devAppDataStore.updateAppData(async (currentData) => {
+    const registrationApplications = currentData.registrationApplications.map((application) =>
+      String(application.id) === applicationId
+        ? {
+            ...application,
+            status: nextStatus,
+            reviewReason: normalizedReason,
+            reviewedAt: new Date().toISOString(),
+            reviewedBy: req.user.email,
+          }
+        : application
+    );
+
+    const registrationEmail =
+      registrationApplications.find((application) => String(application.id) === applicationId)?.email || '';
+
+    const registeredAccounts = currentData.registeredAccounts.map((account) =>
+      account.email === registrationEmail
+        ? {
+            ...account,
+            entrepreneurApprovalStatus: nextStatus,
+          }
+        : account
+    );
+
+    reviewedApplication =
+      registrationApplications.find((application) => String(application.id) === applicationId) || null;
+
+    return {
+      ...currentData,
+      registrationApplications,
+      registeredAccounts,
+    };
+  });
+
+  if (!reviewedApplication) {
+    return res.status(404).json({
+      success: false,
+      message: 'Registration application not found.',
+    });
+  }
+
+  let emailSent = false;
+  try {
+    emailSent = await sendRegistrationReviewEmail({
+      to: reviewedApplication.email,
+      applicantName: reviewedApplication.applicantName,
+      businessName: reviewedApplication.businessName,
+      status: nextStatus,
+      reason: normalizedReason,
+    });
+  } catch (error) {
+    logger.error('Failed to send registration review email', {
+      applicationId,
+      email: reviewedApplication.email,
+      error: error.message,
+    });
+  }
+
+  const completedActionLabel = normalizedAction === 'approve' ? 'approved' : 'rejected';
+
+  return res.json({
+    success: true,
+    message: emailSent
+      ? `Registration ${completedActionLabel} and email sent to entrepreneur.`
+      : `Registration ${completedActionLabel}. Email could not be sent.`,
+    data: {
+      registrationApplications: nextData.registrationApplications,
+      registeredAccounts: nextData.registeredAccounts,
+      emailSent,
     },
   });
 });

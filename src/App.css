@@ -212,3 +212,81 @@ textarea {
 .shadow-lg {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 }
+
+.emergency-call-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 1rem;
+}
+
+.emergency-call-modal {
+  width: min(100%, 460px);
+  border-radius: 24px;
+  padding: 1.5rem;
+  background: linear-gradient(160deg, #fff5f5, #ffffff);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
+}
+
+.emergency-call-kicker {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.emergency-call-modal h2 {
+  margin: 0 0 0.75rem;
+  color: #111827;
+}
+
+.emergency-call-modal p {
+  margin: 0 0 0.75rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.emergency-call-meta {
+  font-size: 0.92rem;
+  color: #991b1b;
+  font-weight: 600;
+}
+
+.emergency-call-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.emergency-call-primary,
+.emergency-call-secondary {
+  border: 0;
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.emergency-call-primary {
+  background: linear-gradient(135deg, #b91c1c, #ef4444);
+  color: #fff;
+}
+
+.emergency-call-secondary {
+  background: #fff;
+  color: #991b1b;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}

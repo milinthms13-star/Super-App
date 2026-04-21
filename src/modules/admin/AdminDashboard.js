@@ -93,6 +93,7 @@ const AdminDashboard = ({
   businessCategories,
   globeMartCategories,
   registrationApplications,
+  onReviewRegistration,
   onUpdateCategoryFee,
   onCreateGlobeMartCategory,
   onAddGlobeMartSubcategory,
@@ -122,6 +123,9 @@ const AdminDashboard = ({
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
   const [categoryMessage, setCategoryMessage] = useState("");
   const [returnActionMessage, setReturnActionMessage] = useState("");
+  const [registrationActionPending, setRegistrationActionPending] = useState({});
+  const [registrationActionMessage, setRegistrationActionMessage] = useState("");
+  const [registrationRemarks, setRegistrationRemarks] = useState({});
   const moderationSectionRef = useRef(null);
 
   const totalRevenuePotential = useMemo(
@@ -307,6 +311,29 @@ const AdminDashboard = ({
       );
     } finally {
       setReturnActionPending((current) => ({ ...current, [pendingKey]: false }));
+    }
+  };
+
+  const handleRegistrationAction = async (applicationId, action) => {
+    const pendingKey = `${applicationId}-${action}`;
+    const reason = String(registrationRemarks[applicationId] ?? "").trim();
+    setRegistrationActionPending((current) => ({ ...current, [pendingKey]: true }));
+    setRegistrationActionMessage("");
+
+    try {
+      const response = await onReviewRegistration(applicationId, action, reason);
+      setRegistrationActionMessage(
+        response?.message ||
+          (action === "approve"
+            ? "Registration approved and entrepreneur notified."
+            : "Registration rejected and entrepreneur notified.")
+      );
+    } catch (error) {
+      setRegistrationActionMessage(
+        error.response?.data?.message || "The registration review could not be updated."
+      );
+    } finally {
+      setRegistrationActionPending((current) => ({ ...current, [pendingKey]: false }));
     }
   };
 
@@ -787,6 +814,8 @@ const AdminDashboard = ({
           <p>{t("admin.registrationsSubtitle", "Review the categories chosen by each business and the total fee tied to that registration.")}</p>
         </div>
 
+        {registrationActionMessage && <p className="admin-feedback-message">{registrationActionMessage}</p>}
+
         <div className="registration-table">
           {registrationApplications.length === 0 ? (
             <p className="empty-state">{t("admin.noRegistrations", "No business registrations have been submitted yet.")}</p>
@@ -807,7 +836,52 @@ const AdminDashboard = ({
                     <span key={`${application.id}-${category.id}`}>{category.name} · INR {category.fee}</span>
                   ))}
                 </div>
+                <label
+                  className="moderation-remarks-field"
+                  htmlFor={`registration-remarks-${application.id}`}
+                >
+                  <span>Reason to include in email</span>
+                  <textarea
+                    id={`registration-remarks-${application.id}`}
+                    value={registrationRemarks[application.id] ?? application.reviewReason ?? ""}
+                    onChange={(event) =>
+                      setRegistrationRemarks((currentRemarks) => ({
+                        ...currentRemarks,
+                        [application.id]: event.target.value,
+                      }))
+                    }
+                    rows={3}
+                    placeholder="Explain why this registration was approved or rejected"
+                  />
+                </label>
+                {application.reviewReason && (
+                  <p className="moderation-note">Latest review reason: {application.reviewReason}</p>
+                )}
                 <strong className="registration-fee">{t("admin.totalFee", "Total Fee:")} INR {application.registrationFee}</strong>
+                <div className="moderation-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => handleRegistrationAction(application.id, "approve")}
+                    disabled={
+                      application.status === "Approved" ||
+                      Boolean(registrationActionPending[`${application.id}-approve`])
+                    }
+                  >
+                    {registrationActionPending[`${application.id}-approve`] ? "Updating..." : "Approve"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline moderation-reject-btn"
+                    onClick={() => handleRegistrationAction(application.id, "reject")}
+                    disabled={
+                      application.status === "Rejected" ||
+                      Boolean(registrationActionPending[`${application.id}-reject`])
+                    }
+                  >
+                    {registrationActionPending[`${application.id}-reject`] ? "Updating..." : "Reject"}
+                  </button>
+                </div>
               </article>
             ))
           )}
