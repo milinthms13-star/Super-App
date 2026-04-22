@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 const RealEstateProperty = require('../models/RealEstateProperty');
 const devAppDataStore = require('./devAppDataStore');
 
-const useMongoRealEstate = () => mongoose.connection.readyState === 1;
+// Always use Mongo now that model/routes exist
+const useMongoRealEstate = () => true;
 
 const normalizeRealEstateLead = (lead = {}, index = 0) => ({
   id: String(lead.id || `lead-${index + 1}`),
