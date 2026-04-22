@@ -17,10 +17,25 @@ const PropertyLeadSchema = new mongoose.Schema(
       default: 'Enquiry',
       trim: true,
     },
+    email: {
+      type: String,
+      default: '',
+      lowercase: true,
+      trim: true,
+    },
+    message: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     priority: {
       type: String,
       default: 'Warm',
       trim: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
     },
   },
   { _id: false }
@@ -37,10 +52,20 @@ const PropertyMessageSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    senderEmail: {
+      type: String,
+      default: '',
+      lowercase: true,
+      trim: true,
+    },
     text: {
       type: String,
       required: true,
       trim: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
     },
   },
   { _id: false }
@@ -57,6 +82,12 @@ const PropertyReviewSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    buyerEmail: {
+      type: String,
+      default: '',
+      lowercase: true,
+      trim: true,
+    },
     score: {
       type: Number,
       min: 1,
@@ -67,6 +98,45 @@ const PropertyReviewSchema = new mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
+const PropertyReportSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      default: () => crypto.randomUUID(),
+    },
+    reporterEmail: {
+      type: String,
+      default: '',
+      lowercase: true,
+      trim: true,
+    },
+    reporterName: {
+      type: String,
+      default: 'User',
+      trim: true,
+    },
+    reason: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    status: {
+      type: String,
+      default: 'open',
+      trim: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
     },
   },
   { _id: false }
@@ -92,6 +162,7 @@ const RealEstatePropertySchema = new mongoose.Schema(
     sellerName: { type: String, default: '', trim: true },
     sellerRole: { type: String, default: 'Owner', trim: true },
     sellerEmail: { type: String, default: '', lowercase: true, trim: true, index: true },
+    ownerId: { type: String, default: '', trim: true, index: true },
     developer: { type: String, default: '', trim: true },
     listedBy: { type: String, default: 'Owner', trim: true },
     verified: { type: Boolean, default: false },
@@ -111,6 +182,7 @@ const RealEstatePropertySchema = new mongoose.Schema(
     chatPreview: { type: [PropertyMessageSchema], default: [] },
     similarTags: { type: [String], default: [] },
     reviews: { type: [PropertyReviewSchema], default: [] },
+    reports: { type: [PropertyReportSchema], default: [] },
     disputeCount: { type: Number, default: 0, min: 0 },
     languageSupport: { type: [String], default: ['English', 'Malayalam'] },
     status: { type: String, default: 'available', trim: true },

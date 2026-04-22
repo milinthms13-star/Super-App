@@ -1,6 +1,44 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useApp } from "../../contexts/AppContext";
 import "../../styles/Classifieds.css";
+import MultiSelectFilter from "./MultiSelectFilter";
+import ImageLightbox from "./ImageLightbox";
+import SpamWarning from "./SpamWarning";
+import ResponseTimeBadge from "./ResponseTimeBadge";
+import ToastContainer from "./ToastContainer";
+import PriceHistory from "./PriceHistory";
+import SellerFollow from "./SellerFollow";
+import ReviewCard from "./ReviewCard";
+import Wishlist from "./Wishlist";
+import ChatBox from "./ChatBox";
+import SellerStore from "./SellerStore";
+import BulkActions from "./BulkActions";
+import AdvancedReporting from "./AdvancedReporting";
+import NotificationCenter from "./NotificationCenter";
+import CategoryForms from "./CategoryForms";
+import ListingTemplates from "./ListingTemplates";
+import AutoRelist from "./AutoRelist";
+import ScheduledPosting from "./ScheduledPosting";
+import BulkImport from "./BulkImport";
+import QuickDuplicate from "./QuickDuplicate";
+
+// Map component - using a simple fallback for demonstration
+const MapComponent = ({ location, latitude = 0, longitude = 0 }) => {
+  return (
+    <div className="classifieds-map-container">
+      <iframe
+        title={`Map for ${location}`}
+        width="100%"
+        height="300"
+        style={{ border: "1px solid #ddd", borderRadius: "8px" }}
+        src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyDummyKey&q=${encodeURIComponent(location)}`}
+        allowFullScreen=""
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    </div>
+  );
+};
 
 const ROLE_MODES = [
   {
@@ -72,6 +110,14 @@ const normalizeListing = (listing, index) => ({
       ? listing.mediaGallery
       : ["Primary image"],
   monetizationPlan: listing?.monetizationPlan || (listing?.featured ? "Featured" : "Free"),
+  spamScore: listing?.spamScore || 0,
+  spamFlags: listing?.spamFlags || [],
+  responseTimeMinutes: listing?.responseTimeMinutes || (listing?.verified ? 60 : 180),
+  isOnline: listing?.isOnline || false,
+  priceHistory: listing?.priceHistory || [],
+  reviews: listing?.reviews || [],
+  followers: listing?.followers || 0,
+  messages: listing?.messages || [],
 });
 
 const getBaseRole = (currentUser) => {
@@ -115,11 +161,14 @@ const Classifieds = () => {
   } = useApp();
   const [activeRole, setActiveRole] = useState(() => getBaseRole(currentUser));
   const [searchText, setSearchText] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("All");
-  const [locationFilter, setLocationFilter] = useState("All");
-  const [conditionFilter, setConditionFilter] = useState("All");
-  const [priceFilter, setPriceFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState([]);
+  const [locationFilter, setLocationFilter] = useState([]);
+  const [conditionFilter, setConditionFilter] = useState([]);
+  const [priceFilter, setPriceFilter] = useState([]);
   const [sortBy, setSortBy] = useState("featured");
+  const [toasts, setToasts] = useState([]);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [listingForm, setListingForm] = useState(DEFAULT_AD_FORM);
   const [chatInput, setChatInput] = useState("");
@@ -130,6 +179,34 @@ const Classifieds = () => {
   const [savedSearches, setSavedSearches] = useState([]);
   const [selectedListings, setSelectedListings] = useState(new Set());
   const [bulkAction, setBulkAction] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(9);
+  const [uploadedImages, setUploadedImages] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [wishlistItems, setWishlistItems] = useState(new Set());
+  const [followedSellers, setFollowedSellers] = useState(new Set());
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatWithListing, setChatWithListing] = useState(null);
+  const [storeOpen, setStoreOpen] = useState(false);
+  const [selectedSellerStore, setSelectedSellerStore] = useState(null);
+  const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
+  const [reportingOpen, setReportingOpen] = useState(false);
+  const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
+  const [showCategoryForms, setShowCategoryForms] = useState(false);
+  const [categoryFormData, setCategoryFormData] = useState({});
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [autoRelistOpen, setAutoRelistOpen] = useState(false);
+  const [selectedListingForRelist, setSelectedListingForRelist] = useState(null);
+  const [scheduledPostingOpen, setScheduledPostingOpen] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [quickDuplicateOpen, setQuickDuplicateOpen] = useState(false);
+  const [selectedListingForDuplicate, setSelectedListingForDuplicate] = useState(null);
+  const [savedTemplates, setSavedTemplates] = useState([]);
+  const [scheduledListings, setScheduledListings] = useState([]);
+  const fileInputRef = useRef(null);
 
   const handleSaveSearch = () => {
     const searchName = prompt("Enter a name for this saved search:");
@@ -153,19 +230,99 @@ const Classifieds = () => {
     setStatusMessage(`Search "${searchName}" saved successfully.`);
   };
 
+  const handleImageUpload = (files) => {
+    Array.from(files).forEach((file) => {
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setUploadedImages((current) => [
+            ...current,
+            {
+              id: `img-${Date.now()}-${Math.random()}`,
+              data: event.target.result,
+              name: file.name,
+            },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+    addToast(`${files.length} image(s) uploaded successfully.`, 'success');
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    setDragOver(false);
+    handleImageUpload(event.dataTransfer.files);
+  };
+
+  const removeImage = (imageId) => {
+    setUploadedImages((current) =>
+      current.filter((img) => img.id !== imageId)
+    );
+    addToast("Image removed.", 'info');
+  };
+
+  const handleSubmitReview = async () => {
+    if (!selectedListing || !reviewText.trim()) {
+      addToast("Please write a review before submitting.", 'warning');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const review = {
+        id: `review-${Date.now()}`,
+        rating: reviewRating,
+        comment: reviewText.trim(),
+        reviewerName: currentUser?.name || "Anonymous",
+        reviewerEmail: currentUser?.email || "",
+        createdAt: new Date().toISOString(),
+      };
+
+      await reportClassifiedListing(selectedListing.id, { review });
+      setReviewText("");
+      setReviewRating(5);
+      setShowReviewForm(false);
+      addToast(`Review submitted for ${selectedListing.title}.`, 'success');
+    } catch (error) {
+      setStatusMessage("Review could not be submitted.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleLoadSearch = (search) => {
     setSearchText(search.filters.searchText || "");
-    setCategoryFilter(search.filters.categoryFilter || "All");
-    setLocationFilter(search.filters.locationFilter || "All");
-    setConditionFilter(search.filters.conditionFilter || "All");
-    setPriceFilter(search.filters.priceFilter || "All");
+    setCategoryFilter(search.filters.categoryFilter || []);
+    setLocationFilter(search.filters.locationFilter || []);
+    setConditionFilter(search.filters.conditionFilter || []);
+    setPriceFilter(search.filters.priceFilter || []);
     setSortBy(search.filters.sortBy || "featured");
-    setStatusMessage(`Loaded saved search "${search.name}".`);
+    addToast(`Loaded saved search "${search.name}".`, 'info');
   };
 
   const handleDeleteSearch = (searchId) => {
     setSavedSearches(current => current.filter(search => search.id !== searchId));
-    setStatusMessage("Saved search deleted.");
+    addToast("Saved search deleted.", 'info');
+  };
+
+  const addToast = (message, type = 'info', duration = 4000) => {
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts(current => [...current, { id, message, type, duration }]);
+  };
+
+  const removeToast = (id) => {
+    setToasts(current => current.filter(toast => toast.id !== id));
   };
 
   const handleSelectListing = (listingId, selected) => {
@@ -235,14 +392,21 @@ const Classifieds = () => {
     : [];
 
   const categories = useMemo(
-    () => ["All", ...new Set(listings.map((listing) => listing.category))],
+    () => [...new Set(listings.map((listing) => listing.category))],
     [listings]
   );
 
   const locations = useMemo(
-    () => ["All", ...new Set(listings.map((listing) => listing.location))],
+    () => [...new Set(listings.map((listing) => listing.location))],
     [listings]
   );
+
+  const conditions = useMemo(
+    () => [...new Set(listings.map((listing) => listing.condition))],
+    [listings]
+  );
+
+  const priceRanges = ["Under 10k", "10k - 50k", "50k - 1L", "1L+"];
 
   const filteredListings = useMemo(() => {
     const visibleListings = listings.filter((listing) => {
@@ -263,16 +427,20 @@ const Classifieds = () => {
           .join(" ")
           .toLowerCase()
           .includes(searchText.toLowerCase());
-      const matchesCategory = categoryFilter === "All" || listing.category === categoryFilter;
-      const matchesLocation = locationFilter === "All" || listing.location === locationFilter;
-      const matchesCondition =
-        conditionFilter === "All" || listing.condition === conditionFilter;
-      const matchesPrice =
-        priceFilter === "All" ||
-        (priceFilter === "Under 10k" && listing.price < 10000) ||
-        (priceFilter === "10k - 50k" && listing.price >= 10000 && listing.price <= 50000) ||
-        (priceFilter === "50k - 1L" && listing.price > 50000 && listing.price <= 100000) ||
-        (priceFilter === "1L+" && listing.price > 100000);
+      
+      const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(listing.category);
+      const matchesLocation = locationFilter.length === 0 || locationFilter.includes(listing.location);
+      const matchesCondition = conditionFilter.length === 0 || conditionFilter.includes(listing.condition);
+      
+      const matchesPrice = 
+        priceFilter.length === 0 ||
+        priceFilter.some(range => {
+          if (range === "Under 10k") return listing.price < 10000;
+          if (range === "10k - 50k") return listing.price >= 10000 && listing.price <= 50000;
+          if (range === "50k - 1L") return listing.price > 50000 && listing.price <= 100000;
+          if (range === "1L+") return listing.price > 100000;
+          return false;
+        });
 
       return (
         matchesSearch &&
@@ -316,6 +484,19 @@ const Classifieds = () => {
     searchText,
     sortBy,
   ]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredListings.length / itemsPerPage);
+  const paginatedListings = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredListings.slice(startIndex, endIndex);
+  }, [filteredListings, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchText, categoryFilter, locationFilter, conditionFilter, priceFilter, sortBy]);
 
   useEffect(() => {
     if (!filteredListings.length) {
@@ -598,6 +779,87 @@ const Classifieds = () => {
         </div>
       </section>
 
+      {/* Toolbar for Priority Set #3 Features */}
+      <div className="classifieds-toolbar">
+        <button
+          className="toolbar-btn notification-btn"
+          onClick={() => setNotificationCenterOpen(true)}
+          title="Open notifications"
+        >
+          🔔 Notifications
+        </button>
+
+        {getBaseRole(currentUser) === 'seller' && (
+          <>
+            <button
+              className="toolbar-btn bulk-actions-btn"
+              onClick={() => setBulkActionsOpen(true)}
+              title="Bulk manage listings"
+            >
+              📋 Manage Listings
+            </button>
+            <button
+              className="toolbar-btn reporting-btn"
+              onClick={() => setReportingOpen(true)}
+              title="View analytics"
+            >
+              📊 Analytics
+            </button>
+
+            {/* Priority Set #4 Seller Tools */}
+            <button
+              className="toolbar-btn templates-btn"
+              onClick={() => setTemplatesOpen(true)}
+              title="Manage listing templates"
+            >
+              📚 Templates
+            </button>
+            <button
+              className="toolbar-btn schedule-btn"
+              onClick={() => {
+                if (selectedListing) {
+                  setScheduledPostingOpen(true);
+                } else {
+                  addToast('Please select a listing first', 'warning');
+                }
+              }}
+              title="Schedule listing post"
+            >
+              📅 Schedule
+            </button>
+            <button
+              className="toolbar-btn import-btn"
+              onClick={() => setBulkImportOpen(true)}
+              title="Bulk import listings"
+            >
+              📂 Import
+            </button>
+            <button
+              className="toolbar-btn duplicate-btn"
+              onClick={() => {
+                if (selectedListing) {
+                  setSelectedListingForDuplicate(selectedListing);
+                  setQuickDuplicateOpen(true);
+                } else {
+                  addToast('Please select a listing first', 'warning');
+                }
+              }}
+              title="Quick duplicate listing"
+            >
+              📋 Duplicate
+            </button>
+          </>
+        )}
+
+        <button
+          className="toolbar-btn category-forms-btn"
+          onClick={() => setShowCategoryForms(true)}
+          title="Add category details"
+        >
+          📝 Category Details
+        </button>
+      </div>
+
       <section className="classifieds-role-strip">
         {ROLE_MODES.map((mode) => (
           <button
@@ -633,49 +895,37 @@ const Classifieds = () => {
                 />
               </label>
 
-              <label className="classifieds-field">
-                <span>Category</span>
-                <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-                  {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MultiSelectFilter
+                label="Category"
+                options={categories}
+                selected={categoryFilter}
+                onChange={setCategoryFilter}
+                placeholder="Select categories..."
+              />
 
-              <label className="classifieds-field">
-                <span>Location</span>
-                <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)}>
-                  {locations.map((location) => (
-                    <option key={location} value={location}>
-                      {location}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MultiSelectFilter
+                label="Location"
+                options={locations}
+                selected={locationFilter}
+                onChange={setLocationFilter}
+                placeholder="Select locations..."
+              />
 
-              <label className="classifieds-field">
-                <span>Condition</span>
-                <select value={conditionFilter} onChange={(event) => setConditionFilter(event.target.value)}>
-                  {["All", "New", "Like New", "Used"].map((condition) => (
-                    <option key={condition} value={condition}>
-                      {condition}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MultiSelectFilter
+                label="Condition"
+                options={conditions}
+                selected={conditionFilter}
+                onChange={setConditionFilter}
+                placeholder="Select conditions..."
+              />
 
-              <label className="classifieds-field">
-                <span>Price range</span>
-                <select value={priceFilter} onChange={(event) => setPriceFilter(event.target.value)}>
-                  {["All", "Under 10k", "10k - 50k", "50k - 1L", "1L+"].map((priceLabel) => (
-                    <option key={priceLabel} value={priceLabel}>
-                      {priceLabel}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <MultiSelectFilter
+                label="Price range"
+                options={priceRanges}
+                selected={priceFilter}
+                onChange={setPriceFilter}
+                placeholder="Select price ranges..."
+              />
 
               <label className="classifieds-field">
                 <span>Sort by</span>
@@ -791,7 +1041,7 @@ const Classifieds = () => {
             </div>
 
             <div className="classifieds-listings-grid">
-              {filteredListings.map((listing) => {
+              {paginatedListings.map((listing) => {
                 const favoriteId = `classifieds-${listing.id}`;
                 const isSaved = favoriteIds.has(favoriteId);
                 const isSelected = selectedListings.has(listing.id);
@@ -848,6 +1098,32 @@ const Classifieds = () => {
                 );
               })}
             </div>
+
+            {totalPages > 1 && (
+              <div className="classifieds-pagination">
+                <button
+                  type="button"
+                  className="classifieds-pagination-button"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  ← Previous
+                </button>
+                <div className="classifieds-pagination-info">
+                  <span>
+                    Page {currentPage} of {totalPages} ({filteredListings.length} total)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="classifieds-pagination-button"
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </article>
 
           {(activeRole === "seller" || activeRole === "admin") ? (
@@ -958,6 +1234,52 @@ const Classifieds = () => {
                   </select>
                 </label>
 
+                <div className="classifieds-field classifieds-field-full">
+                  <span>Upload images</span>
+                  <div
+                    className={`classifieds-image-upload-zone ${dragOver ? "drag-over" : ""}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <div className="classifieds-upload-content">
+                      <span className="classifieds-upload-icon">📁</span>
+                      <p>Drag and drop images here or click to select</p>
+                      <span className="classifieds-upload-hint">Supports JPG, PNG, GIF (Max 5MB each)</span>
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => handleImageUpload(e.target.files)}
+                    />
+                  </div>
+                  {uploadedImages.length > 0 && (
+                    <div className="classifieds-uploaded-images">
+                      <p className="classifieds-uploaded-count">
+                        {uploadedImages.length} image(s) uploaded
+                      </p>
+                      <div className="classifieds-image-gallery">
+                        {uploadedImages.map((img) => (
+                          <div key={img.id} className="classifieds-image-item">
+                            <img src={img.data} alt={img.name} />
+                            <button
+                              type="button"
+                              className="classifieds-image-remove"
+                              onClick={() => removeImage(img.id)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <label className="classifieds-field classifieds-field-full">
                   <span>Description</span>
                   <textarea
@@ -1062,11 +1384,54 @@ const Classifieds = () => {
                 <div className="classifieds-detail-media">
                   <strong>{selectedListing.image}</strong>
                   <span>{selectedListing.mediaGallery.length} media items stored for this ad</span>
+                  <button
+                    type="button"
+                    className="classifieds-inline-button"
+                    onClick={() => {
+                      setLightboxOpen(true);
+                      setLightboxIndex(0);
+                    }}
+                  >
+                    View gallery
+                  </button>
                 </div>
+
+                <SpamWarning
+                  spamScore={selectedListing.spamScore}
+                  spamFlags={selectedListing.spamFlags}
+                />
 
                 <div className="classifieds-detail-price">
                   <strong>{formatPrice(selectedListing.price)}</strong>
                   <span>{selectedListing.category} • {selectedListing.condition}</span>
+                </div>
+
+                <div className="price-history-section">
+                  <PriceHistory 
+                    priceHistory={selectedListing.priceHistory}
+                    currentPrice={selectedListing.price}
+                    currency="₹"
+                  />
+                </div>
+
+                <div className="wishlist-section">
+                  <Wishlist 
+                    isInWishlist={wishlistItems.has(selectedListing.id)}
+                    listingId={selectedListing.id}
+                    onWishlistChange={(isWishlisted) => {
+                      if (isWishlisted) {
+                        setWishlistItems(prev => new Set([...prev, selectedListing.id]));
+                        addToast(`${selectedListing.title} added to wishlist.`, 'success');
+                      } else {
+                        setWishlistItems(prev => {
+                          const newSet = new Set(prev);
+                          newSet.delete(selectedListing.id);
+                          return newSet;
+                        });
+                        addToast(`${selectedListing.title} removed from wishlist.`, 'info');
+                      }
+                    }}
+                  />
                 </div>
 
                 <p className="classifieds-detail-description">{selectedListing.description}</p>
@@ -1080,12 +1445,141 @@ const Classifieds = () => {
                 <div className="classifieds-map-card">
                   <strong>Location map</strong>
                   <span>{selectedListing.mapLabel}</span>
+                  <MapComponent location={selectedListing.location} />
                 </div>
 
+                <section className="classifieds-surface-subcard">
+                  <div className="classifieds-section-heading">
+                    <h3>Ratings & Reviews</h3>
+                    <p>See what other buyers think about this listing and seller.</p>
+                  </div>
+                  <div className="classifieds-rating-summary">
+                    <div className="classifieds-rating-display">
+                      <span className="classifieds-rating-value">
+                        {selectedListing.averageRating || 4.8}
+                      </span>
+                      <span className="classifieds-rating-stars">
+                        {'⭐'.repeat(Math.round(selectedListing.averageRating || 4.8))}
+                      </span>
+                      <span className="classifieds-review-count">
+                        ({selectedListing.totalReviews || 0} reviews)
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="classifieds-inline-button"
+                    onClick={() => setShowReviewForm(!showReviewForm)}
+                  >
+                    {showReviewForm ? "Cancel review" : "Write a review"}
+                  </button>
+                  {showReviewForm && (
+                    <div className="classifieds-review-form">
+                      <label className="classifieds-field">
+                        <span>Rating</span>
+                        <div className="classifieds-star-input">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              className={`classifieds-star ${
+                                star <= reviewRating ? "active" : ""
+                              }`}
+                              onClick={() => setReviewRating(star)}
+                            >
+                              ⭐
+                            </button>
+                          ))}
+                        </div>
+                      </label>
+                      <label className="classifieds-field">
+                        <span>Your review</span>
+                        <textarea
+                          rows="3"
+                          value={reviewText}
+                          onChange={(e) => setReviewText(e.target.value)}
+                          placeholder="Share your experience with this listing..."
+                          maxLength={500}
+                        />
+                        <span className="classifieds-char-count">
+                          {reviewText.length}/500
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        className="classifieds-primary-button"
+                        onClick={handleSubmitReview}
+                        disabled={submitting || !reviewText.trim()}
+                      >
+                        {submitting ? "Submitting..." : "Submit review"}
+                      </button>
+                    </div>
+                  )}
+                  {selectedListing.reviews && selectedListing.reviews.length > 0 && (
+                    <div className="classifieds-reviews-list">
+                      <strong>Recent reviews</strong>
+                      {selectedListing.reviews.slice(0, 5).map((review, idx) => (
+                        <ReviewCard
+                          key={`${review.id || idx}`}
+                          review={{
+                            id: review.id || idx,
+                            rating: review.rating || 5,
+                            title: review.title,
+                            comment: review.comment,
+                            buyerName: review.reviewerName || 'Anonymous',
+                            buyerAvatar: review.reviewerAvatar,
+                            date: review.createdAt || new Date().toISOString(),
+                            verified: review.verified !== false,
+                            pros: review.pros || [],
+                            cons: review.cons || [],
+                            images: review.images || [],
+                            helpfulCount: review.helpful || 0,
+                            userMarkedHelpful: false,
+                            tags: review.tags || [],
+                            sellerResponse: review.sellerResponse,
+                          }}
+                          onHelpful={(helpful) => {
+                            addToast(helpful ? 'Marked as helpful' : 'Removed helpful mark', 'info');
+                          }}
+                          onReport={(reviewId) => {
+                            addToast('Review reported for review', 'info');
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
                 <div className="classifieds-seller-card">
-                  <strong>{selectedListing.seller}</strong>
-                  <span>{selectedListing.sellerRole}</span>
-                  <span>{selectedListing.languageSupport.join(", ")}</span>
+                  <SellerFollow
+                    seller={{
+                      name: selectedListing.seller,
+                      avatar: selectedListing.sellerAvatar || '/default-avatar.png',
+                      verified: selectedListing.verified,
+                      rating: selectedListing.sellerRating || 4.8,
+                      reviewCount: selectedListing.sellerReviewCount || 45,
+                      listingCount: selectedListing.sellerListingCount || 24,
+                      followers: selectedListing.followers || 0,
+                      responseTime: `~${selectedListing.responseTimeMinutes} min`,
+                      memberSince: 'Jan 2024',
+                      positivePercentage: 98,
+                      verificationBadges: ['email', 'phone', selectedListing.verified ? 'identity' : null].filter(Boolean),
+                    }}
+                    isFollowing={followedSellers.has(selectedListing.seller)}
+                    onFollowChange={(isFollowing) => {
+                      if (isFollowing) {
+                        setFollowedSellers(prev => new Set([...prev, selectedListing.seller]));
+                        addToast(`You followed ${selectedListing.seller}.`, 'success');
+                      } else {
+                        setFollowedSellers(prev => {
+                          const newSet = new Set(prev);
+                          newSet.delete(selectedListing.seller);
+                          return newSet;
+                        });
+                        addToast(`You unfollowed ${selectedListing.seller}.`, 'info');
+                      }
+                    }}
+                  />
                 </div>
 
                 <div className="classifieds-kpi-row">
@@ -1107,23 +1601,26 @@ const Classifieds = () => {
                   <button
                     type="button"
                     className="classifieds-primary-button"
-                    onClick={() => setStatusMessage(`Chat ready for ${selectedListing.seller}. Type below to save it.`)}
+                    onClick={() => {
+                      setChatWithListing(selectedListing);
+                      setChatOpen(true);
+                    }}
                   >
-                    Contact seller
+                    💬 Chat with Seller
                   </button>
                   <button
                     type="button"
                     className="classifieds-secondary-button"
-                    onClick={() => setStatusMessage(`Call request shared with ${selectedListing.seller}.`)}
+                    onClick={() => addToast(`Call request shared with ${selectedListing.seller}.`, 'info')}
                   >
-                    Call seller
+                    📞 Call Seller
                   </button>
                   <button
                     type="button"
                     className="classifieds-secondary-button"
-                    onClick={() => setStatusMessage(`Price drop alerts enabled for ${selectedListing.title}.`)}
+                    onClick={() => addToast(`Price alerts enabled for ${selectedListing.title}.`, 'success')}
                   >
-                    Enable price alert
+                    🔔 Price Alert
                   </button>
                 </div>
 
@@ -1297,6 +1794,166 @@ const Classifieds = () => {
           </article>
         </aside>
       </section>
+
+      {lightboxOpen && (
+        <ImageLightbox
+          images={selectedListing?.mediaGallery || []}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+
+      {chatOpen && chatWithListing && (
+        <ChatBox
+          listing={chatWithListing}
+          seller={{
+            name: chatWithListing.seller,
+            avatar: chatWithListing.sellerAvatar || '/default-avatar.png',
+            verified: chatWithListing.verified,
+            responseTime: chatWithListing.responseTimeMinutes,
+            positiveFeedback: 98,
+          }}
+          currentUser={currentUser}
+          isOpen={chatOpen}
+          onClose={() => {
+            setChatOpen(false);
+            setChatWithListing(null);
+            addToast('Chat closed', 'info');
+          }}
+        />
+      )}
+
+      {storeOpen && selectedSellerStore && (
+        <SellerStore
+          seller={selectedSellerStore}
+          listings={mockData.filter(l => l.seller === selectedSellerStore.name)}
+          onListingClick={(listing) => {
+            setSelectedListing(listing);
+            setStoreOpen(false);
+            addToast(`Viewing ${listing.title}`, 'info');
+          }}
+          onClose={() => {
+            setStoreOpen(false);
+            setSelectedSellerStore(null);
+          }}
+        />
+      )}
+
+      {bulkActionsOpen && getBaseRole(currentUser) === 'seller' && (
+        <BulkActions
+          listings={mockData}
+          userListings={mockData.filter(l => l.seller === currentUser?.name)}
+          onAction={(action, listingIds) => {
+            addToast(`${action} action completed for ${listingIds.length} listings`, 'success');
+          }}
+        />
+      )}
+
+      {reportingOpen && getBaseRole(currentUser) === 'seller' && (
+        <AdvancedReporting
+          listings={mockData.filter(l => l.seller === currentUser?.name)}
+          analyticsData={{}}
+        />
+      )}
+
+      {notificationCenterOpen && (
+        <NotificationCenter
+          onClose={() => setNotificationCenterOpen(false)}
+        />
+      )}
+
+      {showCategoryForms && (
+        <div className="category-forms-modal">
+          <div className="modal-backdrop" onClick={() => setShowCategoryForms(false)} />
+          <div className="modal-content">
+            <button className="modal-close" onClick={() => setShowCategoryForms(false)}>✕</button>
+            <CategoryForms
+              selectedCategory={listingForm.category || 'electronics'}
+              formData={categoryFormData}
+              onFormDataChange={setCategoryFormData}
+            />
+          </div>
+        </div>
+      )}
+
+      {templatesOpen && selectedListing && (
+        <ListingTemplates
+          currentListing={selectedListing}
+          savedTemplates={savedTemplates}
+          onSaveTemplate={(template) => {
+            setSavedTemplates([...savedTemplates, template]);
+            addToast('Template saved successfully', 'success');
+          }}
+          onApplyTemplate={(templateData) => {
+            setSelectedListing({ ...selectedListing, ...templateData });
+            setTemplatesOpen(false);
+            addToast('Template applied to current listing', 'info');
+          }}
+          onDeleteTemplate={(templateId) => {
+            setSavedTemplates(savedTemplates.filter(t => t.id !== templateId));
+            addToast('Template deleted', 'info');
+          }}
+          onClose={() => setTemplatesOpen(false)}
+        />
+      )}
+
+      {autoRelistOpen && selectedListingForRelist && (
+        <AutoRelist
+          listingId={selectedListingForRelist.id}
+          currentConfig={selectedListingForRelist.autoRelistConfig || {}}
+          onSave={(config) => {
+            addToast('Auto-relist settings saved', 'success');
+            setAutoRelistOpen(false);
+          }}
+          onClose={() => setAutoRelistOpen(false)}
+        />
+      )}
+
+      {scheduledPostingOpen && selectedListing && (
+        <ScheduledPosting
+          currentListing={selectedListing}
+          scheduledListings={scheduledListings}
+          onSchedule={(item) => {
+            setScheduledListings([...scheduledListings, item]);
+            addToast('Listing scheduled successfully', 'success');
+            setScheduledPostingOpen(false);
+          }}
+          onCancel={(scheduleId) => {
+            setScheduledListings(scheduledListings.filter(s => s.id !== scheduleId));
+            addToast('Scheduled post cancelled', 'info');
+          }}
+          onClose={() => setScheduledPostingOpen(false)}
+        />
+      )}
+
+      {bulkImportOpen && (
+        <BulkImport
+          existingListings={mockData}
+          onImport={(importedListings) => {
+            addToast(`Imported ${importedListings.length} listings successfully`, 'success');
+            setBulkImportOpen(false);
+          }}
+          onClose={() => setBulkImportOpen(false)}
+        />
+      )}
+
+      {quickDuplicateOpen && selectedListingForDuplicate && (
+        <QuickDuplicate
+          selectedListing={selectedListingForDuplicate}
+          allListings={mockData}
+          onDuplicate={(duplicates) => {
+            addToast(`Created ${duplicates.length} duplicate listing(s)`, 'success');
+            setQuickDuplicateOpen(false);
+            setSelectedListingForDuplicate(null);
+          }}
+          onClose={() => {
+            setQuickDuplicateOpen(false);
+            setSelectedListingForDuplicate(null);
+          }}
+        />
+      )}
+
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 };

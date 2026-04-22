@@ -16,9 +16,12 @@ describe('realEstateStore', () => {
       intent: 'sale',
       sellerName: 'Amina Niyas',
       sellerRole: 'Owner',
+      sellerEmail: 'seller@example.com',
+      ownerId: 'owner-1',
       verified: true,
       featured: true,
-      rating: 4.8,
+      reports: [{ reporterEmail: 'user@example.com', reason: 'Duplicate listing' }],
+      reviews: [{ author: 'Buyer', score: 4, comment: 'Smooth visit scheduling.' }],
     });
 
     expect(serialized).toEqual(
@@ -29,9 +32,16 @@ describe('realEstateStore', () => {
         location: 'Kochi',
         type: 'Flat',
         intent: 'sale',
+        sellerEmail: 'seller@example.com',
+        ownerId: 'owner-1',
         verified: true,
         featured: true,
+        disputeCount: 1,
       })
+    );
+    expect(serialized.reviews[0]).toEqual(expect.objectContaining({ author: 'Buyer', score: 4 }));
+    expect(serialized.reports[0]).toEqual(
+      expect.objectContaining({ reporterEmail: 'user@example.com', reason: 'Duplicate listing' })
     );
   });
 });

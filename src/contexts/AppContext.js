@@ -726,6 +726,21 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     return response.data.data;
   };
 
+  const addClassifiedReview = async (listingId, payload) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/app-data/classifieds/listings/${encodeURIComponent(listingId)}/reviews`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to submit the classified review.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
   const updateClassifiedListing = async (listingId, listingData) => {
     const response = await axios.patch(
       `${API_BASE_URL}/app-data/classifieds/listings/${encodeURIComponent(listingId)}`,
@@ -764,6 +779,123 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
 
     if (!response.data?.success) {
       throw new Error("Unable to delete the classified listing.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data;
+  };
+
+  const createRealEstateListing = async (listingData) => {
+    const response = await axios.post(`${API_BASE_URL}/app-data/realestate/listings`, listingData, {
+      headers: authHeaders,
+    });
+
+    if (!response.data?.success) {
+      throw new Error("Unable to create the real-estate listing.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
+  const updateRealEstateListing = async (listingId, listingData) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}`,
+      listingData,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to update the real-estate listing.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
+  const sendRealEstateEnquiry = async (listingId, payload) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}/enquiries`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to send the real-estate enquiry.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
+  const sendRealEstateMessage = async (listingId, payload) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}/messages`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to send the real-estate message.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
+  const addRealEstateReview = async (listingId, payload) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}/reviews`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to submit the real-estate review.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
+  const reportRealEstateListing = async (listingId, payload) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}/reports`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to report the real-estate listing.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
+  const moderateRealEstateListing = async (listingId, action) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}/moderation`,
+      { action },
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to moderate the real-estate listing.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
+  const deleteRealEstateListing = async (listingId) => {
+    const response = await axios.delete(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}`,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to delete the real-estate listing.");
     }
 
     applyModuleData(response.data.data?.moduleData || {});
@@ -1218,9 +1350,18 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         createClassifiedListing,
         sendClassifiedMessage,
         reportClassifiedListing,
+        addClassifiedReview,
         updateClassifiedListing,
         moderateClassifiedListing,
         deleteClassifiedListing,
+        createRealEstateListing,
+        updateRealEstateListing,
+        sendRealEstateEnquiry,
+        sendRealEstateMessage,
+        addRealEstateReview,
+        reportRealEstateListing,
+        moderateRealEstateListing,
+        deleteRealEstateListing,
         updateSavedAddresses,
         apiCall,
         placeOrder,

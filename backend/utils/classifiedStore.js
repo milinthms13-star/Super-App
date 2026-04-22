@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 const ClassifiedAd = require('../models/ClassifiedAd');
 const devAppDataStore = require('./devAppDataStore');
+const { generateSlug } = require('./slugGenerator');
+const { calculateSpamScore, detectSuspiciousFlags } = require('./spamDetector');
+const { calculatePopularityScore, calculateSellerScore } = require('./analyticsHelper');
+const { getCoordinatesForCity } = require('./geolocationHelper');
 
 const useMongoClassifieds = () => mongoose.connection.readyState === 1;
 
@@ -32,18 +36,20 @@ const serializeClassifiedAd = (record, index = 0) => {
       plainRecord.description ||
         'Trusted local listing with seller details, direct chat, and location-first discovery.'
     ).trim(),
+    slug: String(plainRecord.slug || '').trim(),
     price: Number(plainRecord.price || 0),
+    priceHistory: Array.isArray(plainRecord.priceHistory) ? plainRecord.priceHistory : [],
     category: String(plainRecord.category || 'General').trim(),
+    subcategory: String(plainRecord.subcategory || '').trim(),
     seller: String(plainRecord.seller || 'Trusted Seller').trim(),
     sellerRole: String(plainRecord.sellerRole || 'Seller').trim(),
     sellerEmail: String(plainRecord.sellerEmail || '').trim().toLowerCase(),
+    sellerRating: Number(plainRecord.sellerRating || 5),
+    sellerReviewCount: Number(plainRecord.sellerReviewCount || 0),
+    sellerVerificationLevel: String(plainRecord.sellerVerificationLevel || 'unverified').trim(),
     location: String(plainRecord.location || 'Kerala').trim(),
     locality: String(plainRecord.locality || plainRecord.location || 'Prime area').trim(),
-    image: String(plainRecord.image || 'Listing').trim(),
-    posted: String(
-      plainRecord.posted ||
-        (plainRecord.createdAt ? new Date(plainRecord.createdAt).toISOString().slice(0, 10) : '')
-    ).trim(),
+    coordinates: plainRecord.coordinates || { type: 'Point', coordinates: [0, 0] },
     condition: String(plainRecord.condition || 'Used').trim(),
     featured: Boolean(plainRecord.featured),
     urgent: Boolean(plainRecord.urgent),
@@ -54,6 +60,7 @@ const serializeClassifiedAd = (record, index = 0) => {
     moderationStatus: String(
       plainRecord.moderationStatus || (plainRecord.verified === false ? 'pending' : 'approved')
     ).trim(),
+    moderationNotes: String(plainRecord.moderationNotes || '').trim(),
     languageSupport:
       Array.isArray(plainRecord.languageSupport) && plainRecord.languageSupport.length > 0
         ? plainRecord.languageSupport
@@ -69,13 +76,24 @@ const serializeClassifiedAd = (record, index = 0) => {
       Array.isArray(plainRecord.contactOptions) && plainRecord.contactOptions.length > 0
         ? plainRecord.contactOptions
         : ['Chat'],
-    mediaGallery:
-      Array.isArray(plainRecord.mediaGallery) && plainRecord.mediaGallery.length > 0
-        ? plainRecord.mediaGallery
-        : ['Primary image'],
+    mediaGallery: Array.isArray(plainRecord.mediaGallery) ? plainRecord.mediaGallery : [],
     monetizationPlan: String(
       plainRecord.monetizationPlan || buildClassifiedPlanLabel(plainRecord.plan || 'free')
     ).trim(),
+    promotionPlanExpiry: plainRecord.promotionPlanExpiry || null,
+    subscriptionTier: String(plainRecord.subscriptionTier || 'none').trim(),
+    subscriptionExpiryDate: plainRecord.subscriptionExpiryDate || null,
+    listedDate: plainRecord.listedDate || plainRecord.createdAt || new Date(),
+    expiryDate: plainRecord.expiryDate || null,
+    autoRenew: Boolean(plainRecord.autoRenew),
+    isDraft: Boolean(plainRecord.isDraft),
+    reviews: Array.isArray(plainRecord.reviews) ? plainRecord.reviews : [],
+    averageRating: Number(plainRecord.averageRating || 5),
+    totalReviews: Number(plainRecord.totalReviews || 0),
+    spamScore: Number(plainRecord.spamScore || 0),
+    flags: Array.isArray(plainRecord.flags) ? plainRecord.flags : [],
+    analytics: plainRecord.analytics || {},
+    popularityScore: calculatePopularityScore(plainRecord),
     createdAt: plainRecord.createdAt ? new Date(plainRecord.createdAt).toISOString() : null,
     updatedAt: plainRecord.updatedAt ? new Date(plainRecord.updatedAt).toISOString() : null,
   };
@@ -89,6 +107,8 @@ const flattenClassifiedMessages = (ads = []) =>
       from: String(message.from || 'User').trim(),
       senderEmail: String(message.senderEmail || '').trim().toLowerCase(),
       text: String(message.text || '').trim(),
+      isRead: Boolean(message.isRead),
+      attachments: Array.isArray(message.attachments) ? message.attachments : [],
       createdAt: message.createdAt ? new Date(message.createdAt).toISOString() : new Date().toISOString(),
     }))
   );
@@ -106,25 +126,65 @@ const flattenClassifiedReports = (ads = []) =>
     }))
   );
 
-const listClassifiedModuleDataFromMongo = async () => {
-  const records = await ClassifiedAd.find().sort({ createdAt: -1 });
-  const listings = records.map(serializeClassifiedAd);
+const listClassifiedModuleDataFromMongo = async (filters = {}, options = {}) => {
+  const { category, location, searchText, page = 1, limit = 20 } = { ...filters };
+  const { skip = (page - 1) * limit } = options;
+
+  let query = { isDraft: false };
+
+  if (category && category !== 'All') {
+    query.category = category;
+  }
+
+  if (location && location !== 'All') {
+    query.location = location;
+  }
+
+  if (searchText && searchText.trim()) {
+    const searchRegex = new RegExp(searchText.trim(), 'i');
+    query.$or = [
+      { title: searchRegex },
+      { description: searchRegex },
+      { tags: searchRegex },
+      { seller: searchRegex },
+    ];
+  }
+
+  const records = await ClassifiedAd.find(query)
+    .sort({ featured: -1, urgent: -1, createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  const total = await ClassifiedAd.countDocuments(query);
+
+  const listings = records.map((r, i) => serializeClassifiedAd(r, skip + i));
+
   return {
     classifiedsListings: listings,
-    classifiedsMessages: flattenClassifiedMessages(records.map((record, index) => ({
-      ...serializeClassifiedAd(record, index),
-      messages: record.messages || [],
-    }))),
-    classifiedsReports: flattenClassifiedReports(records.map((record, index) => ({
-      ...serializeClassifiedAd(record, index),
-      reports: record.reports || [],
-    }))),
+    classifiedsMessages: flattenClassifiedMessages(
+      records.map((record, index) => ({
+        ...serializeClassifiedAd(record, skip + index),
+        messages: record.messages || [],
+      }))
+    ),
+    classifiedsReports: flattenClassifiedReports(
+      records.map((record, index) => ({
+        ...serializeClassifiedAd(record, skip + index),
+        reports: record.reports || [],
+      }))
+    ),
+    pagination: {
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    },
   };
 };
 
-const listClassifiedModuleData = async () => {
+const listClassifiedModuleData = async (filters = {}, options = {}) => {
   if (useMongoClassifieds()) {
-    return listClassifiedModuleDataFromMongo();
+    return listClassifiedModuleDataFromMongo(filters, options);
   }
 
   const currentData = await devAppDataStore.readAppData();
@@ -146,8 +206,61 @@ const createClassifiedAd = async (payload) => {
     return null;
   }
 
-  const created = await ClassifiedAd.create(payload);
+  // Generate slug
+  const slug = generateSlug(payload.title);
+
+  // Set geolocation from city
+  const coordinates = getCoordinatesForCity(payload.location);
+
+  // Calculate spam score
+  const spamScore = calculateSpamScore(payload);
+  const flags = detectSuspiciousFlags(payload);
+
+  const adData = {
+    ...payload,
+    slug,
+    coordinates: { type: 'Point', coordinates },
+    spamScore,
+    flags,
+    moderationStatus: spamScore > 50 ? 'flagged' : 'pending',
+  };
+
+  const created = await ClassifiedAd.create(adData);
   return serializeClassifiedAd(created);
+};
+
+const updateClassifiedAd = async (listingId, payload) => {
+  if (!useMongoClassifieds()) {
+    return null;
+  }
+
+  const updateData = { ...payload };
+
+  // Regenerate slug if title changed
+  if (payload.title) {
+    updateData.slug = generateSlug(payload.title, listingId);
+  }
+
+  // Recalculate spam score if content changed
+  if (payload.title || payload.description) {
+    const ad = await ClassifiedAd.findById(listingId);
+    const fullListing = { ...ad.toObject(), ...updateData };
+    updateData.spamScore = calculateSpamScore(fullListing);
+    updateData.flags = detectSuspiciousFlags(fullListing);
+  }
+
+  // Update coordinates if location changed
+  if (payload.location) {
+    const coordinates = getCoordinatesForCity(payload.location);
+    updateData.coordinates = { type: 'Point', coordinates };
+  }
+
+  const updated = await ClassifiedAd.findByIdAndUpdate(listingId, updateData, {
+    new: true,
+    runValidators: true,
+  });
+
+  return updated ? serializeClassifiedAd(updated) : null;
 };
 
 const addClassifiedMessage = async (listingId, payload) => {
@@ -177,6 +290,23 @@ const addClassifiedReport = async (listingId, payload) => {
   }
 
   ad.reports.push(payload);
+  await ad.save();
+  return serializeClassifiedAd(ad);
+};
+
+const addClassifiedReview = async (listingId, payload) => {
+  if (!useMongoClassifieds()) {
+    return null;
+  }
+
+  const ad = await ClassifiedAd.findById(listingId);
+  if (!ad) {
+    return null;
+  }
+
+  ad.reviews.push(payload);
+  ad.totalReviews = ad.reviews.length;
+  ad.averageRating = ad.reviews.reduce((sum, r) => sum + r.rating, 0) / ad.reviews.length;
   await ad.save();
   return serializeClassifiedAd(ad);
 };
@@ -211,15 +341,163 @@ const findClassifiedAdById = async (listingId) => {
   return ad ? serializeClassifiedAd(ad) : null;
 };
 
+const findClassifiedAdBySlug = async (slug) => {
+  if (!useMongoClassifieds()) {
+    return null;
+  }
+
+  const ad = await ClassifiedAd.findOne({ slug });
+  return ad ? serializeClassifiedAd(ad) : null;
+};
+
+const findNearbyListings = async (coordinates = [0, 0], radiusKm = 50) => {
+  if (!useMongoClassifieds()) {
+    return [];
+  }
+
+  const listings = await ClassifiedAd.find({
+    coordinates: {
+      $near: {
+        $geometry: { type: 'Point', coordinates },
+        $maxDistance: radiusKm * 1000,
+      },
+    },
+  }).limit(20);
+
+  return listings.map(serializeClassifiedAd);
+};
+
+const searchClassifieds = async (query = {}, options = {}) => {
+  if (!useMongoClassifieds()) {
+    return [];
+  }
+
+  const {
+    text = '',
+    category = null,
+    location = null,
+    minPrice = 0,
+    maxPrice = Infinity,
+    condition = null,
+    sortBy = 'featured',
+    page = 1,
+    limit = 20,
+  } = query;
+
+  const { skip = (page - 1) * limit } = options;
+
+  let dbQuery = { isDraft: false, moderationStatus: { $ne: 'rejected' } };
+
+  if (text && text.trim()) {
+    const searchRegex = new RegExp(text.trim(), 'i');
+    dbQuery.$or = [
+      { title: searchRegex },
+      { description: searchRegex },
+      { tags: searchRegex },
+      { seller: searchRegex },
+    ];
+  }
+
+  if (category) {
+    dbQuery.category = category;
+  }
+
+  if (location) {
+    dbQuery.location = location;
+  }
+
+  if (minPrice > 0 || maxPrice < Infinity) {
+    dbQuery.price = { $gte: minPrice, $lte: maxPrice };
+  }
+
+  if (condition) {
+    dbQuery.condition = condition;
+  }
+
+  // Apply sorting
+  let sortOptions = {};
+  switch (sortBy) {
+    case 'latest':
+      sortOptions = { createdAt: -1 };
+      break;
+    case 'price-low':
+      sortOptions = { price: 1 };
+      break;
+    case 'price-high':
+      sortOptions = { price: -1 };
+      break;
+    case 'popular':
+      sortOptions = { chats: -1, favorites: -1 };
+      break;
+    case 'featured':
+    default:
+      sortOptions = { featured: -1, urgent: -1, createdAt: -1 };
+  }
+
+  const records = await ClassifiedAd.find(dbQuery)
+    .sort(sortOptions)
+    .skip(skip)
+    .limit(limit);
+
+  const total = await ClassifiedAd.countDocuments(dbQuery);
+
+  return {
+    listings: records.map((r, i) => serializeClassifiedAd(r, skip + i)),
+    pagination: {
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    },
+  };
+};
+
+const blockUser = async (listingId, userEmail) => {
+  if (!useMongoClassifieds()) {
+    return null;
+  }
+
+  const normalizedEmail = String(userEmail || '').trim().toLowerCase();
+  const updated = await ClassifiedAd.findByIdAndUpdate(
+    listingId,
+    { $addToSet: { blockedUsers: normalizedEmail } },
+    { new: true }
+  );
+
+  return updated ? serializeClassifiedAd(updated) : null;
+};
+
+const unblockUser = async (listingId, userEmail) => {
+  if (!useMongoClassifieds()) {
+    return null;
+  }
+
+  const normalizedEmail = String(userEmail || '').trim().toLowerCase();
+  const updated = await ClassifiedAd.findByIdAndUpdate(
+    listingId,
+    { $pull: { blockedUsers: normalizedEmail } },
+    { new: true }
+  );
+
+  return updated ? serializeClassifiedAd(updated) : null;
+};
+
 module.exports = {
   useMongoClassifieds,
   buildClassifiedPlanLabel,
   serializeClassifiedAd,
   listClassifiedModuleData,
   createClassifiedAd,
+  updateClassifiedAd,
   addClassifiedMessage,
   addClassifiedReport,
+  addClassifiedReview,
   moderateClassifiedAd,
   deleteClassifiedAd,
   findClassifiedAdById,
+  findClassifiedAdBySlug,
+  findNearbyListings,
+  searchClassifieds,
+  blockUser,
+  unblockUser,
 };

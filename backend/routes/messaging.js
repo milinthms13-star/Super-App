@@ -8,13 +8,69 @@ const Call = require('../models/Call');
 const EncryptionKey = require('../models/EncryptionKey');
 const FileStorage = require('../models/FileStorage');
 const AIReply = require('../models/AIReply');
+const ChatNotification = require('../models/ChatNotification');
+const MessagingSettings = require('../models/MessagingSettings');
 const User = require('../models/User');
 const { generateKeyPair, encryptMessage, decryptMessage, generateKeyFingerprint } = require('../utils/encryption');
 const { uploadToS3, generateSignedUrl, deleteFromS3 } = require('../utils/s3Storage');
 const { emitToUser, broadcast } = require('../config/websocket');
 const { authenticate } = require('../middleware/auth');
+const logger = require('../utils/logger');
 
 const router = express.Router();
+
+const normalizeObjectId = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value._id) {
+    return normalizeObjectId(value._id);
+  }
+
+  if (typeof value.toString === 'function') {
+    return value.toString();
+  }
+
+  return String(value);
+};
+
+const objectIdEquals = (value, other) => normalizeObjectId(value) === normalizeObjectId(other);
+
+const arrayHasObjectId = (values, candidate) =>
+  Array.isArray(values) && values.some((value) => objectIdEquals(value, candidate));
+
+const getDirectChatRecipientId = (chat, currentUserId) => {
+  if (!chat || chat.type !== 'direct') {
+    return '';
+  }
+
+  const otherParticipant = (chat.participants || []).find(
+    (participantId) => !objectIdEquals(participantId, currentUserId)
+  );
+
+  return normalizeObjectId(otherParticipant);
+};
+
+const emitToChatParticipants = async (chatId, event, data, excludeUserId = null) => {
+  const chat = await Chat.findById(chatId).select('participants');
+
+  if (!chat) {
+    return;
+  }
+
+  for (const participantId of chat.participants || []) {
+    if (excludeUserId && objectIdEquals(participantId, excludeUserId)) {
+      continue;
+    }
+
+    emitToUser(participantId, event, data);
+  }
+};
 
 // ============ CHAT ROUTES ============
 
@@ -113,28 +169,36 @@ router.get('/chats', authenticate, async (req, res, next) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const pageLimit = Math.min(parseInt(limit), 50);
-
-    let query = {
+    const normalizedSearch = String(search || '').trim().toLowerCase();
+    const query = {
       participants: req.user._id,
       isDeleted: false,
       archivedBy: { $ne: req.user._id }, // Exclude archived chats
     };
 
-    if (search && search.trim()) {
-      query.$or = [
-        { groupName: { $regex: search, $options: 'i' } },
-        { 'participants.name': { $regex: search, $options: 'i' } },
-      ];
-    }
-
-    const chats = await Chat.find(query)
+    const matchingChats = await Chat.find(query)
       .populate('participants', 'name avatar email')
       .populate('lastMessage')
-      .sort({ lastMessageAt: -1 })
-      .skip(skip)
-      .limit(pageLimit);
+      .sort({ lastMessageAt: -1 });
 
-    const total = await Chat.countDocuments(query);
+    const filteredChats = normalizedSearch
+      ? matchingChats.filter((chat) => {
+          const groupNameMatches = chat.groupName?.toLowerCase().includes(normalizedSearch);
+          const participantMatches = (chat.participants || []).some(
+            (participant) =>
+              !participant._id.equals(req.user._id) &&
+              (
+                participant.name?.toLowerCase().includes(normalizedSearch) ||
+                participant.email?.toLowerCase().includes(normalizedSearch)
+              )
+          );
+
+          return groupNameMatches || participantMatches;
+        })
+      : matchingChats;
+
+    const total = filteredChats.length;
+    const chats = filteredChats.slice(skip, skip + pageLimit);
 
     res.json({
       chats,
@@ -196,7 +260,7 @@ router.put('/chats/:chatId', authenticate, async (req, res, next) => {
     }
 
     // Verify user is admin
-    if (chat.type === 'group' && !chat.admins.includes(req.user._id)) {
+    if (chat.type === 'group' && !arrayHasObjectId(chat.admins, req.user._id)) {
       return res.status(403).json({ message: 'Only admins can update group chat' });
     }
 
@@ -231,12 +295,12 @@ router.post('/chats/:chatId/members', authenticate, async (req, res, next) => {
     }
 
     // Verify user is admin
-    if (!chat.admins.includes(req.user._id)) {
+    if (!arrayHasObjectId(chat.admins, req.user._id)) {
       return res.status(403).json({ message: 'Only admins can add members' });
     }
 
     // Check if user already in chat
-    if (chat.participants.includes(userId)) {
+    if (arrayHasObjectId(chat.participants, userId)) {
       return res.status(400).json({ message: 'User already in group' });
     }
 
@@ -272,7 +336,7 @@ router.delete('/chats/:chatId/members/:userId', authenticate, async (req, res, n
     }
 
     // Verify user is admin or removing themselves
-    if (!chat.admins.includes(req.user._id) && req.user._id.toString() !== userId) {
+    if (!arrayHasObjectId(chat.admins, req.user._id) && req.user._id.toString() !== userId) {
       return res.status(403).json({ message: 'Not authorized to remove member' });
     }
 
@@ -312,7 +376,7 @@ router.post('/messages', authenticate, async (req, res, next) => {
     }
 
     // Verify user is participant
-    if (!chat.participants.includes(req.user._id)) {
+    if (!arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized to send message in this chat' });
     }
 
@@ -352,6 +416,7 @@ router.post('/messages', authenticate, async (req, res, next) => {
           body: content ? content.substring(0, 100) : `[${messageType}]`,
         });
         await notification.save();
+        emitToUser(participant, 'notification:received', notification.toObject());
       }
     }
 
@@ -379,7 +444,7 @@ router.get('/messages/:chatId', authenticate, async (req, res, next) => {
     }
 
     // Verify user is participant
-    if (!chat.participants.includes(req.user._id)) {
+    if (!arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized to view messages' });
     }
 
@@ -521,6 +586,8 @@ router.put('/messages/:messageId', authenticate, async (req, res, next) => {
     await message.save();
     await message.populate('senderId', 'name avatar email');
 
+    await emitToChatParticipants(message.chatId, 'message:updated', message, req.user._id);
+
     logger.info(`Message edited: ${messageId}`);
     res.json({ message });
   } catch (err) {
@@ -553,6 +620,15 @@ router.delete('/messages/:messageId', authenticate, async (req, res, next) => {
     message.deletedBy = req.user._id;
 
     await message.save();
+    await emitToChatParticipants(
+      message.chatId,
+      'message:deleted',
+      {
+        messageId: message._id,
+        chatId: message.chatId,
+      },
+      req.user._id
+    );
 
     logger.info(`Message deleted: ${messageId}`);
     res.json({ message: 'Message deleted successfully' });
@@ -596,6 +672,8 @@ router.post('/messages/:messageId/reactions', authenticate, async (req, res, nex
     }
 
     await message.save();
+    await message.populate('senderId', 'name avatar email');
+    await emitToChatParticipants(message.chatId, 'message:updated', message, req.user._id);
 
     logger.info(`Reaction added to message ${messageId}`);
     res.json({ message });
@@ -616,12 +694,23 @@ router.get('/search/messages', authenticate, async (req, res, next) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const pageLimit = Math.min(parseInt(limit), 50);
 
+    const accessibleChatIds = await Chat.find({
+      participants: req.user._id,
+      isDeleted: false,
+      archivedBy: { $ne: req.user._id },
+    }).distinct('_id');
+
     let searchQuery = {
       content: { $regex: query, $options: 'i' },
       isDeleted: false,
+      chatId: { $in: accessibleChatIds },
     };
 
     if (chatId && mongoose.Types.ObjectId.isValid(chatId)) {
+      if (!accessibleChatIds.some((id) => objectIdEquals(id, chatId))) {
+        return res.status(403).json({ message: 'Not authorized to search this chat' });
+      }
+
       searchQuery.chatId = chatId;
     }
 
@@ -948,16 +1037,38 @@ router.post('/calls/initiate', authenticate, async (req, res, next) => {
   try {
     const { chatId, recipientId, callType } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(chatId) || !mongoose.Types.ObjectId.isValid(recipientId)) {
-      return res.status(400).json({ message: 'Invalid chat or recipient ID' });
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ message: 'Invalid chat ID' });
     }
 
     if (!['audio', 'video'].includes(callType)) {
       return res.status(400).json({ message: 'Invalid call type' });
     }
 
+    const chat = await Chat.findById(chatId).populate('participants', 'name avatar email');
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    if (!arrayHasObjectId(chat.participants, req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized to call in this chat' });
+    }
+
+    const resolvedRecipientId =
+      mongoose.Types.ObjectId.isValid(recipientId)
+        ? recipientId
+        : getDirectChatRecipientId(chat, req.user._id);
+
+    if (!mongoose.Types.ObjectId.isValid(resolvedRecipientId)) {
+      return res.status(400).json({ message: 'Recipient is required for this call' });
+    }
+
+    if (!arrayHasObjectId(chat.participants, resolvedRecipientId)) {
+      return res.status(400).json({ message: 'Recipient is not part of this chat' });
+    }
+
     // Check if recipient is online
-    const recipient = await User.findById(recipientId);
+    const recipient = await User.findById(resolvedRecipientId);
     if (!recipient) {
       return res.status(404).json({ message: 'Recipient not found' });
     }
@@ -966,23 +1077,31 @@ router.post('/calls/initiate', authenticate, async (req, res, next) => {
     const call = new Call({
       chatId,
       initiatorId: req.user._id,
-      recipientId,
+      recipientId: resolvedRecipientId,
       callType,
-      status: 'initiating',
+      status: 'ringing',
     });
 
     await call.save();
 
     // Emit call initiation via WebSocket
-    emitToUser(recipientId, 'call:incoming', {
+    emitToUser(resolvedRecipientId, 'call:incoming', {
+      _id: call._id,
       callId: call._id,
       initiatorId: req.user._id,
+      recipientId: resolvedRecipientId,
       chatId,
       callType,
+      status: call.status,
+      caller: {
+        _id: req.user._id,
+        name: req.user.name || req.user.email || 'User',
+        avatar: req.user.avatar || '',
+      },
       timestamp: new Date(),
     });
 
-    logger.info(`Call initiated: ${call._id} from ${req.user._id} to ${recipientId}`);
+    logger.info(`Call initiated: ${call._id} from ${req.user._id} to ${resolvedRecipientId}`);
     res.json({ call });
   } catch (err) {
     next(err);
@@ -1184,7 +1303,7 @@ router.post('/encryption/keys/generate', authenticate, async (req, res, next) =>
 
     // Check if user is in chat
     const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(req.user._id)) {
+    if (!chat || !arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized for this chat' });
     }
 
@@ -1235,7 +1354,7 @@ router.get('/encryption/keys/:chatId', authenticate, async (req, res, next) => {
 
     // Check if user is in chat
     const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(req.user._id)) {
+    if (!chat || !arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized for this chat' });
     }
 
@@ -1266,6 +1385,65 @@ router.post('/encryption/encrypt', authenticate, async (req, res, next) => {
       encryptedMessage: encrypted.encryptedMessageBase64,
       nonce: encrypted.nonceBase64,
       algorithm: encrypted.algorithm,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/encryption/status/:chatId', authenticate, async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ message: 'Invalid chat ID' });
+    }
+
+    const chat = await Chat.findById(chatId);
+    if (!chat || !arrayHasObjectId(chat.participants, req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized for this chat' });
+    }
+
+    const settings = await MessagingSettings.findOne({ userId: req.user._id });
+
+    res.json({
+      enabled: Boolean(settings?.encryption?.enabled),
+      algorithm: settings?.encryption?.algorithm || 'curve25519',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/encryption/toggle', authenticate, async (req, res, next) => {
+  try {
+    const { chatId, enabled } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ message: 'Invalid chat ID' });
+    }
+
+    const chat = await Chat.findById(chatId);
+    if (!chat || !arrayHasObjectId(chat.participants, req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized for this chat' });
+    }
+
+    const settings = await MessagingSettings.findOneAndUpdate(
+      { userId: req.user._id },
+      {
+        $set: {
+          'encryption.enabled': Boolean(enabled),
+        },
+      },
+      {
+        new: true,
+        upsert: true,
+      }
+    );
+
+    res.json({
+      enabled: Boolean(settings?.encryption?.enabled),
+      algorithm: settings?.encryption?.algorithm || 'curve25519',
     });
   } catch (err) {
     next(err);
@@ -1306,7 +1484,7 @@ router.post('/files/upload', authenticate, async (req, res, next) => {
 
     // Check if user is in chat
     const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(req.user._id)) {
+    if (!chat || !arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized for this chat' });
     }
 
@@ -1364,7 +1542,7 @@ router.get('/files/:fileId/download', authenticate, async (req, res, next) => {
 
     // Check if user has access to the chat
     const chat = await Chat.findById(file.chatId);
-    if (!chat || !chat.participants.includes(req.user._id)) {
+    if (!chat || !arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized to access this file' });
     }
 
@@ -1427,7 +1605,7 @@ router.get('/files/chat/:chatId', authenticate, async (req, res, next) => {
 
     // Check if user is in chat
     const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(req.user._id)) {
+    if (!chat || !arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized for this chat' });
     }
 
@@ -1475,7 +1653,7 @@ router.post('/ai/replies/generate', authenticate, async (req, res, next) => {
 
     // Check if user is in chat
     const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(req.user._id)) {
+    if (!chat || !arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized for this chat' });
     }
 

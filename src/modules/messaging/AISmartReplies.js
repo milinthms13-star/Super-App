@@ -6,61 +6,58 @@ const AISmartReplies = ({ chatId, messageId, onSelectReply }) => {
   const { apiCall } = useApp();
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [selectedSuggestion, setSelectedSuggestion] = useState(null);
+  const [error, setError] = useState('');
+  const [selectedSuggestion, setSelectedSuggestion] = useState('');
 
   useEffect(() => {
-    if (messageId) {
-      loadSuggestions();
+    if (!chatId || !messageId) {
+      setSuggestions([]);
+      return;
     }
-  }, [messageId]);
 
-  const loadSuggestions = async () => {
-    setLoading(true);
-    setError(null);
+    const loadSuggestions = async () => {
+      setLoading(true);
+      setError('');
 
-    try {
-      const response = await apiCall('post', `/messaging/ai/replies/generate`, {
-        chatId,
-        messageId,
-      });
+      try {
+        const response = await apiCall('/messaging/ai/replies/generate', 'POST', {
+          chatId,
+          messageId,
+        });
 
-      if (response.suggestions) {
-        setSuggestions(response.suggestions);
+        setSuggestions(
+          (response?.suggestions || []).map((suggestion) => ({
+            ...suggestion,
+            replyId: response?.replyId,
+          }))
+        );
+      } catch (loadError) {
+        console.error('Failed to load AI suggestions:', loadError);
+        setError('Failed to generate smart replies.');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Failed to load AI suggestions:', err);
-      setError('Failed to generate suggestions');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    loadSuggestions();
+  }, [apiCall, chatId, messageId]);
 
   const handleSelectSuggestion = async (suggestion) => {
     setSelectedSuggestion(suggestion.id);
     onSelectReply(suggestion.text);
 
-    // Rate the suggestion (optional background task)
-    try {
-      await apiCall('post', `/messaging/ai/replies/${suggestion.replyId}/rate`, {
-        suggestionId: suggestion.id,
-        rating: 5, // Default positive rating
-      });
-    } catch (err) {
-      console.error('Failed to rate suggestion:', err);
+    if (!suggestion.replyId) {
+      return;
     }
-  };
 
-  const getConfidenceColor = (confidence) => {
-    if (confidence >= 0.8) return '#28a745'; // Green
-    if (confidence >= 0.6) return '#ffc107'; // Yellow
-    return '#dc3545'; // Red
-  };
-
-  const getConfidenceLabel = (confidence) => {
-    if (confidence >= 0.8) return 'High';
-    if (confidence >= 0.6) return 'Medium';
-    return 'Low';
+    try {
+      await apiCall(`/messaging/ai/replies/${suggestion.replyId}/rate`, 'POST', {
+        suggestionId: suggestion.id,
+        rating: 5,
+      });
+    } catch (ratingError) {
+      console.error('Failed to rate suggestion:', ratingError);
+    }
   };
 
   if (loading) {
@@ -76,9 +73,6 @@ const AISmartReplies = ({ chatId, messageId, onSelectReply }) => {
     return (
       <div className="ai-suggestions-error">
         <p>{error}</p>
-        <button onClick={loadSuggestions} className="btn-retry">
-          Try Again
-        </button>
       </div>
     );
   }
@@ -90,50 +84,26 @@ const AISmartReplies = ({ chatId, messageId, onSelectReply }) => {
   return (
     <div className="ai-smart-replies">
       <div className="suggestions-header">
-        <span className="ai-icon">🤖</span>
         <span className="header-text">Smart Replies</span>
-        <button
-          className="btn-refresh"
-          onClick={loadSuggestions}
-          title="Generate new suggestions"
-        >
-          🔄
-        </button>
       </div>
-
       <div className="suggestions-list">
         {suggestions.map((suggestion) => (
           <div
             key={suggestion.id}
-            className={`suggestion-item ${
-              selectedSuggestion === suggestion.id ? 'selected' : ''
-            }`}
+            className={`suggestion-item ${selectedSuggestion === suggestion.id ? 'selected' : ''}`}
             onClick={() => handleSelectSuggestion(suggestion)}
           >
             <div className="suggestion-content">
               <p className="suggestion-text">{suggestion.text}</p>
               <div className="suggestion-meta">
-                <span
-                  className="confidence-indicator"
-                  style={{ backgroundColor: getConfidenceColor(suggestion.confidence) }}
-                  title={`Confidence: ${getConfidenceLabel(suggestion.confidence)}`}
-                >
-                  {getConfidenceLabel(suggestion.confidence)}
-                </span>
                 <span className="tone-badge">{suggestion.tone}</span>
               </div>
             </div>
-            <button className="btn-use-suggestion">
+            <button className="btn-use-suggestion" type="button">
               Use
             </button>
           </div>
         ))}
-      </div>
-
-      <div className="suggestions-footer">
-        <p className="disclaimer">
-          AI-generated suggestions • Rate them to improve future responses
-        </p>
       </div>
     </div>
   );

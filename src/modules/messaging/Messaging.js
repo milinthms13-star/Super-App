@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../contexts/AppContext';
+import { getStoredAuthToken } from '../../utils/auth';
 import '../../styles/Messaging.css';
 import ChatList from './ChatList';
 import ChatWindow from './ChatWindow';
@@ -7,11 +8,31 @@ import ContactsList from './ContactsList';
 import CallWindow from './CallWindow';
 import AISmartReplies from './AISmartReplies';
 import FileUpload from './FileUpload';
+import NotificationBell from './NotificationBell';
 import io from 'socket.io-client';
+
+const getId = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value._id) {
+    return getId(value._id);
+  }
+
+  return String(value);
+};
+
+const getOtherParticipant = (chat, currentUserId) =>
+  chat?.participants?.find((participant) => getId(participant) !== currentUserId) || null;
 
 const Messaging = () => {
   const { currentUser, apiCall } = useApp();
-  const [activeTab, setActiveTab] = useState('chats'); // chats, contacts
+  const [activeTab, setActiveTab] = useState('chats');
   const [chats, setChats] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -19,29 +40,30 @@ const Messaging = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
-  const [newChatUserId, setNewChatUserId] = useState('');
-
-  // Advanced features state
   const [socket, setSocket] = useState(null);
   const [isOnline, setIsOnline] = useState(false);
   const [activeCall, setActiveCall] = useState(null);
   const [incomingCall, setIncomingCall] = useState(null);
   const [showCallWindow, setShowCallWindow] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState([]);
   const [showAISuggestions, setShowAISuggestions] = useState(false);
   const [encryptionEnabled, setEncryptionEnabled] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set());
+  const [notifications, setNotifications] = useState([]);
+  const [focusedMessageId, setFocusedMessageId] = useState('');
 
   const socketRef = useRef(null);
+  const currentUserId = getId(currentUser);
+  const latestMessageId = messages[messages.length - 1]?._id;
 
   const updateChatPreview = useCallback((incomingMessage) => {
-    if (!incomingMessage?.chatId) {
+    const incomingChatId = getId(incomingMessage?.chatId);
+    if (!incomingChatId) {
       return;
     }
 
     setChats((prevChats) => {
-      const matchedChat = prevChats.find((chat) => chat._id === incomingMessage.chatId);
+      const matchedChat = prevChats.find((chat) => chat._id === incomingChatId);
       if (!matchedChat) {
         return prevChats;
       }
@@ -49,17 +71,16 @@ const Messaging = () => {
       const updatedChat = {
         ...matchedChat,
         lastMessage: incomingMessage,
-        updatedAt: incomingMessage.createdAt || matchedChat.updatedAt,
+        lastMessageAt: incomingMessage.createdAt || matchedChat.lastMessageAt,
       };
 
       return [
         updatedChat,
-        ...prevChats.filter((chat) => chat._id !== incomingMessage.chatId),
+        ...prevChats.filter((chat) => chat._id !== incomingChatId),
       ];
     });
   }, []);
 
-  // Load chats
   const loadChats = useCallback(async () => {
     try {
       setLoading(true);
@@ -74,7 +95,6 @@ const Messaging = () => {
     }
   }, [apiCall]);
 
-  // Load contacts
   const loadContacts = useCallback(async () => {
     try {
       const response = await apiCall('/messaging/contacts', 'GET');
@@ -86,7 +106,6 @@ const Messaging = () => {
     }
   }, [apiCall]);
 
-  // Load messages for selected chat
   const loadMessages = useCallback(async (chatId) => {
     try {
       const response = await apiCall(`/messaging/messages/${chatId}`, 'GET');
@@ -98,130 +117,328 @@ const Messaging = () => {
     }
   }, [apiCall]);
 
-  // Initial load
+  const loadNotifications = useCallback(async () => {
+    try {
+      const response = await apiCall('/messaging/notifications', 'GET');
+      if (response?.notifications) {
+        setNotifications(response.notifications);
+      }
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    }
+  }, [apiCall]);
+
+  const checkEncryptionStatus = useCallback(async (chatId) => {
+    try {
+      const response = await apiCall(`/messaging/encryption/status/${chatId}`, 'GET');
+      setEncryptionEnabled(Boolean(response?.enabled));
+    } catch (error) {
+      console.error('Error checking encryption status:', error);
+      setEncryptionEnabled(false);
+    }
+  }, [apiCall]);
+
   useEffect(() => {
     loadChats();
     loadContacts();
-  }, [loadChats, loadContacts]);
+    loadNotifications();
+  }, [loadChats, loadContacts, loadNotifications]);
 
-  // Load messages when chat is selected
   useEffect(() => {
     if (selectedChat?._id) {
       loadMessages(selectedChat._id);
-      loadAISuggestions(selectedChat._id);
       checkEncryptionStatus(selectedChat._id);
+      setShowAISuggestions(true);
+      return;
     }
-  }, [selectedChat, loadMessages]);
 
-  // WebSocket initialization
+    setMessages([]);
+    setShowAISuggestions(false);
+    setEncryptionEnabled(false);
+  }, [selectedChat, loadMessages, checkEncryptionStatus]);
+
   useEffect(() => {
-    if (currentUser) {
-      const newSocket = io(process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000', {
-        auth: {
-          token: localStorage.getItem('token'),
-        },
-      });
-
-      socketRef.current = newSocket;
-      setSocket(newSocket);
-
-      // Connection events
-      newSocket.on('connect', () => {
-        setIsOnline(true);
-        console.log('Connected to messaging server');
-      });
-
-      newSocket.on('disconnect', () => {
-        setIsOnline(false);
-        console.log('Disconnected from messaging server');
-      });
-
-      // Message events
-      newSocket.on('message:received', (message) => {
-        if (message.chatId === selectedChat?._id) {
-          setMessages(prev => [...prev, message]);
-        }
-        updateChatPreview(message);
-      });
-
-      newSocket.on('message:updated', (updatedMessage) => {
-        setMessages(prev => prev.map(msg =>
-          msg._id === updatedMessage._id ? updatedMessage : msg
-        ));
-      });
-
-      // Typing events
-      newSocket.on('user:typing:started', ({ userId, chatId }) => {
-        if (chatId === selectedChat?._id) {
-          setTypingUsers(prev => new Set([...prev, userId]));
-        }
-      });
-
-      newSocket.on('user:typing:stopped', ({ userId, chatId }) => {
-        if (chatId === selectedChat?._id) {
-          setTypingUsers(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(userId);
-            return newSet;
-          });
-        }
-      });
-
-      // Call events
-      newSocket.on('call:incoming', (callData) => {
-        setIncomingCall(callData);
-      });
-
-      newSocket.on('call:accepted', (callData) => {
-        setActiveCall(callData);
-        setShowCallWindow(true);
-        setIncomingCall(null);
-      });
-
-      newSocket.on('call:ended', () => {
-        setActiveCall(null);
-        setShowCallWindow(false);
-        setIncomingCall(null);
-      });
-
-      newSocket.on('call:ice-candidate', (signalData) => {
-        // Handle WebRTC signaling data
-        if (activeCall && showCallWindow) {
-          // Pass to CallWindow component via ref or callback
-        }
-      });
-
-      // Presence events
-      newSocket.on('user:online', ({ userId }) => {
-        setChats(prev => prev.map(chat => ({
-          ...chat,
-          participants: chat.participants.map(p =>
-            p.userId === userId ? { ...p, isOnline: true } : p
-          )
-        })));
-      });
-
-      newSocket.on('user:offline', ({ userId }) => {
-        setChats(prev => prev.map(chat => ({
-          ...chat,
-          participants: chat.participants.map(p =>
-            p.userId === userId ? { ...p, isOnline: false } : p
-          )
-        })));
-      });
-
-      return () => {
-        newSocket.disconnect();
-      };
+    if (!currentUser) {
+      return undefined;
     }
-  }, [currentUser, selectedChat, updateChatPreview]);
 
-  // Join chat room when selected
+    const newSocket = io(process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000', {
+      auth: {
+        token: getStoredAuthToken(),
+      },
+    });
+
+    socketRef.current = newSocket;
+    setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      setIsOnline(true);
+    });
+
+    newSocket.on('disconnect', () => {
+      setIsOnline(false);
+    });
+
+    newSocket.on('message:received', (message) => {
+      if (getId(message.chatId) === selectedChat?._id) {
+        setMessages((prevMessages) => {
+          if (prevMessages.some((existingMessage) => existingMessage._id === message._id)) {
+            return prevMessages;
+          }
+
+          return [...prevMessages, message];
+        });
+      }
+
+      updateChatPreview(message);
+    });
+
+    newSocket.on('message:updated', (updatedMessage) => {
+      setMessages((prevMessages) =>
+        prevMessages.map((message) => (
+          message._id === updatedMessage._id ? updatedMessage : message
+        ))
+      );
+      updateChatPreview(updatedMessage);
+    });
+
+    newSocket.on('message:deleted', ({ messageId, chatId }) => {
+      setMessages((prevMessages) =>
+        prevMessages.map((message) => (
+          message._id === messageId
+            ? {
+                ...message,
+                isDeleted: true,
+                content: '',
+              }
+            : message
+        ))
+      );
+
+      if (chatId === selectedChat?._id) {
+        loadMessages(chatId);
+      }
+    });
+
+    newSocket.on('message:read:updated', ({ messageId, userId, readAt }) => {
+      setMessages((prevMessages) =>
+        prevMessages.map((message) => {
+          if (message._id !== messageId) {
+            return message;
+          }
+
+          const nextDeliveryStatus = Array.isArray(message.deliveryStatus)
+            ? [...message.deliveryStatus]
+            : [];
+          const existingIndex = nextDeliveryStatus.findIndex(
+            (status) => getId(status.userId) === getId(userId)
+          );
+
+          if (existingIndex >= 0) {
+            nextDeliveryStatus[existingIndex] = {
+              ...nextDeliveryStatus[existingIndex],
+              status: 'seen',
+              seenAt: readAt,
+            };
+          } else {
+            nextDeliveryStatus.push({
+              userId,
+              status: 'seen',
+              seenAt: readAt,
+            });
+          }
+
+          return {
+            ...message,
+            deliveryStatus: nextDeliveryStatus,
+          };
+        })
+      );
+    });
+
+    newSocket.on('message:reaction:added', ({ messageId, userId, emoji }) => {
+      setMessages((prevMessages) =>
+        prevMessages.map((message) => {
+          if (message._id !== messageId) {
+            return message;
+          }
+
+          const alreadyPresent = (message.reactions || []).some(
+            (reaction) => getId(reaction.userId) === getId(userId) && reaction.emoji === emoji
+          );
+
+          if (alreadyPresent) {
+            return message;
+          }
+
+          return {
+            ...message,
+            reactions: [...(message.reactions || []), { userId, emoji }],
+          };
+        })
+      );
+    });
+
+    newSocket.on('message:reaction:removed', ({ messageId, userId, emoji }) => {
+      setMessages((prevMessages) =>
+        prevMessages.map((message) => (
+          message._id === messageId
+            ? {
+                ...message,
+                reactions: (message.reactions || []).filter(
+                  (reaction) =>
+                    !(
+                      getId(reaction.userId) === getId(userId) &&
+                      reaction.emoji === emoji
+                    )
+                ),
+              }
+            : message
+        ))
+      );
+    });
+
+    newSocket.on('user:typing:started', ({ userId, chatId }) => {
+      if (chatId === selectedChat?._id) {
+        setTypingUsers((prevUsers) => new Set([...prevUsers, userId]));
+      }
+    });
+
+    newSocket.on('user:typing:stopped', ({ userId, chatId }) => {
+      if (chatId === selectedChat?._id) {
+        setTypingUsers((prevUsers) => {
+          const nextUsers = new Set(prevUsers);
+          nextUsers.delete(userId);
+          return nextUsers;
+        });
+      }
+    });
+
+    newSocket.on('call:incoming', (callData) => {
+      setIncomingCall(callData || null);
+    });
+
+    newSocket.on('call:accepted', (callData) => {
+      setActiveCall((currentCall) => ({
+        ...(currentCall || {}),
+        ...callData,
+        _id: callData.callId || currentCall?._id,
+        status: 'accepted',
+        currentUserId,
+      }));
+      setShowCallWindow(true);
+      setIncomingCall(null);
+    });
+
+    newSocket.on('call:ended', () => {
+      setActiveCall(null);
+      setShowCallWindow(false);
+      setIncomingCall(null);
+    });
+
+    newSocket.on('user:online', ({ userId }) => {
+      setChats((prevChats) => prevChats.map((chat) => ({
+        ...chat,
+        participants: (chat.participants || []).map((participant) => (
+          getId(participant) === userId ? { ...participant, isOnline: true } : participant
+        )),
+      })));
+    });
+
+    newSocket.on('user:offline', ({ userId }) => {
+      setChats((prevChats) => prevChats.map((chat) => ({
+        ...chat,
+        participants: (chat.participants || []).map((participant) => (
+          getId(participant) === userId ? { ...participant, isOnline: false } : participant
+        )),
+      })));
+    });
+
+    newSocket.on('notification:received', (notification) => {
+      setNotifications((prevNotifications) => [notification, ...prevNotifications]);
+    });
+
+    return () => {
+      if (selectedChat?._id) {
+        newSocket.emit('chat:leave', selectedChat._id);
+      }
+
+      newSocket.disconnect();
+    };
+  }, [currentUser, currentUserId, loadMessages, selectedChat, updateChatPreview]);
+
   useEffect(() => {
     if (socket && selectedChat?._id) {
       socket.emit('chat:join', selectedChat._id);
     }
   }, [socket, selectedChat]);
+
+  useEffect(() => {
+    const unreadMessages = messages.filter((message) => {
+      if (getId(message.senderId) === currentUserId || message.isDeleted) {
+        return false;
+      }
+
+      return !(message.deliveryStatus || []).some(
+        (status) => getId(status.userId) === currentUserId && status.status === 'seen'
+      );
+    });
+
+    if (!selectedChat?._id || unreadMessages.length === 0) {
+      return;
+    }
+
+    const markMessagesRead = async () => {
+      try {
+        await apiCall(`/messaging/chats/${selectedChat._id}/mark-read`, 'PUT');
+        const seenAt = new Date().toISOString();
+        setMessages((prevMessages) =>
+          prevMessages.map((message) => {
+            if (getId(message.senderId) === currentUserId || message.isDeleted) {
+              return message;
+            }
+
+            const nextDeliveryStatus = Array.isArray(message.deliveryStatus)
+              ? [...message.deliveryStatus]
+              : [];
+            const existingIndex = nextDeliveryStatus.findIndex(
+              (status) => getId(status.userId) === currentUserId
+            );
+
+            if (existingIndex >= 0) {
+              nextDeliveryStatus[existingIndex] = {
+                ...nextDeliveryStatus[existingIndex],
+                status: 'seen',
+                seenAt,
+              };
+            } else {
+              nextDeliveryStatus.push({
+                userId: currentUserId,
+                status: 'seen',
+                seenAt,
+              });
+            }
+
+            return {
+              ...message,
+              deliveryStatus: nextDeliveryStatus,
+            };
+          })
+        );
+
+        unreadMessages.forEach((message) => {
+          socketRef.current?.emit('message:read', {
+            messageId: message._id,
+            chatId: selectedChat._id,
+          });
+        });
+      } catch (error) {
+        console.error('Error marking messages as read:', error);
+      }
+    };
+
+    markMessagesRead();
+  }, [apiCall, currentUserId, messages, selectedChat]);
 
   const handleSelectChat = (chat) => {
     setSelectedChat(chat);
@@ -235,10 +452,12 @@ const Messaging = () => {
       });
 
       if (response?.chat) {
-        setChats([response.chat, ...chats]);
+        setChats((prevChats) => {
+          const filteredChats = prevChats.filter((chat) => chat._id !== response.chat._id);
+          return [response.chat, ...filteredChats];
+        });
         setSelectedChat(response.chat);
         setShowNewChat(false);
-        setNewChatUserId('');
       }
     } catch (error) {
       console.error('Error creating chat:', error);
@@ -264,87 +483,152 @@ const Messaging = () => {
   };
 
   const handleSelectContact = (contact) => {
-    handleCreateDirectChat(contact._id);
+    const contactId = contact?.contactUserId?._id || contact?._id;
+
+    if (contactId) {
+      handleCreateDirectChat(contactId);
+    }
   };
 
-  // Advanced features handlers
-  const loadAISuggestions = async (chatId) => {
-    // AI suggestions are loaded per message, not per chat
-    // This will be called when a specific message is selected
-  };
-
-  const checkEncryptionStatus = async (chatId) => {
-    // Encryption status check - this might not be implemented yet
-    setEncryptionEnabled(false);
-  };
-
-  const handleSendMessage = async (content, messageType = 'text', fileData = null) => {
-    if (!selectedChat?._id || (!content.trim() && !fileData)) return;
+  const handleSendMessage = async (content, messageType = 'text', fileData = null, replyTo = null) => {
+    if (!selectedChat?._id || (!content?.trim() && !fileData)) {
+      return;
+    }
 
     try {
-      let messageData = {
+      const messageData = {
         chatId: selectedChat._id,
         content,
         messageType,
+        replyTo,
       };
 
       if (fileData) {
-        messageData.fileData = fileData;
-      }
-
-      if (encryptionEnabled) {
-        const encrypted = await apiCall('/messaging/encryption/encrypt', 'POST', {
-          chatId: selectedChat._id,
-          content,
-        });
-        messageData.content = encrypted.encryptedContent;
-        messageData.isEncrypted = true;
+        messageData.media = {
+          type: fileData.mimeType,
+          url: fileData.s3Url,
+          size: fileData.fileSize,
+        };
       }
 
       const response = await apiCall('/messaging/messages', 'POST', messageData);
 
       if (response?.message) {
-        setMessages([...messages, response.message]);
+        setMessages((prevMessages) => [...prevMessages, response.message]);
         updateChatPreview(response.message);
-
-        // Emit via WebSocket
-        if (socket) {
-          socket.emit('message:send', response.message);
-        }
-
-        // Refresh AI suggestions
-        loadAISuggestions(selectedChat._id);
       }
     } catch (error) {
       console.error('Error sending message:', error);
     }
   };
 
-  const handleTyping = (isTyping) => {
-    if (socket && selectedChat) {
-      socket.emit(isTyping ? 'user:typing' : 'user:typing:stopped', {
-        chatId: selectedChat._id,
+  const handleEditMessage = async (messageId, content) => {
+    try {
+      const response = await apiCall(`/messaging/messages/${messageId}`, 'PUT', {
+        content,
       });
+
+      if (response?.message) {
+        setMessages((prevMessages) =>
+          prevMessages.map((message) => (
+            message._id === response.message._id ? response.message : message
+          ))
+        );
+        updateChatPreview(response.message);
+      }
+    } catch (error) {
+      console.error('Error editing message:', error);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    try {
+      await apiCall(`/messaging/messages/${messageId}`, 'DELETE');
+      setMessages((prevMessages) =>
+        prevMessages.map((message) => (
+          message._id === messageId
+            ? { ...message, isDeleted: true, content: '' }
+            : message
+        ))
+      );
+      await loadChats();
+    } catch (error) {
+      console.error('Error deleting message:', error);
+    }
+  };
+
+  const handleAddReaction = async (messageId, emoji) => {
+    try {
+      const currentMessage = messages.find((message) => message._id === messageId);
+      const hadReaction = (currentMessage?.reactions || []).some(
+        (reaction) => getId(reaction.userId) === currentUserId && reaction.emoji === emoji
+      );
+
+      const response = await apiCall(`/messaging/messages/${messageId}/reactions`, 'POST', {
+        emoji,
+      });
+
+      if (response?.message) {
+        setMessages((prevMessages) =>
+          prevMessages.map((message) => (
+            message._id === response.message._id ? response.message : message
+          ))
+        );
+      }
+
+      socketRef.current?.emit(
+        hadReaction ? 'message:reaction:remove' : 'message:reaction:add',
+        {
+          messageId,
+          chatId: selectedChat?._id,
+          emoji,
+        }
+      );
+    } catch (error) {
+      console.error('Error updating reaction:', error);
+    }
+  };
+
+  const handleSearchMessages = async (query, chatId) => {
+    try {
+      const response = await apiCall('/messaging/search/messages', 'GET', {
+        query,
+        chatId: chatId || selectedChat?._id,
+      });
+      return response?.messages || [];
+    } catch (error) {
+      console.error('Error searching messages:', error);
+      return [];
+    }
+  };
+
+  const handleTyping = (isTyping) => {
+    if (socket && selectedChat?._id) {
+      socket.emit(isTyping ? 'user:typing' : 'user:typing:stopped', selectedChat._id);
     }
   };
 
   const handleStartCall = async (callType = 'audio') => {
-    if (!selectedChat) return;
+    if (!selectedChat?._id) {
+      return;
+    }
 
     try {
+      const otherParticipant = getOtherParticipant(selectedChat, currentUserId);
       const response = await apiCall('/messaging/calls/initiate', 'POST', {
         chatId: selectedChat._id,
+        recipientId: getId(otherParticipant),
         callType,
       });
 
       if (response?.call) {
-        setActiveCall(response.call);
+        setActiveCall({
+          ...response.call,
+          currentUserId,
+          initiatorId: response.call.initiatorId || currentUserId,
+          recipient: otherParticipant,
+        });
         setShowCallWindow(true);
-
-        // Emit via WebSocket
-        if (socket) {
-          socket.emit('call:initiate', response.call);
-        }
       }
     } catch (error) {
       console.error('Error starting call:', error);
@@ -352,96 +636,155 @@ const Messaging = () => {
   };
 
   const handleAcceptCall = async () => {
-    if (!incomingCall) return;
+    if (!incomingCall?._id) {
+      return;
+    }
 
     try {
-      await apiCall(`/messaging/calls/${incomingCall._id}/accept`, 'PUT');
-
-      setActiveCall(incomingCall);
+      const response = await apiCall(`/messaging/calls/${incomingCall._id}/accept`, 'POST');
+      setActiveCall({
+        ...(response?.call || incomingCall),
+        currentUserId,
+        caller: incomingCall.caller,
+      });
       setShowCallWindow(true);
       setIncomingCall(null);
-
-      if (socket) {
-        socket.emit('call:accept', incomingCall);
-      }
     } catch (error) {
       console.error('Error accepting call:', error);
     }
   };
 
   const handleDeclineCall = async () => {
-    if (!incomingCall) return;
+    if (!incomingCall?._id) {
+      return;
+    }
 
     try {
-      await apiCall(`/messaging/calls/${incomingCall._id}/decline`, 'PUT');
+      await apiCall(`/messaging/calls/${incomingCall._id}/decline`, 'POST');
       setIncomingCall(null);
-
-      if (socket) {
-        socket.emit('call:decline', incomingCall);
-      }
     } catch (error) {
       console.error('Error declining call:', error);
     }
   };
 
   const handleEndCall = async () => {
-    if (!activeCall) return;
+    if (!activeCall?._id) {
+      return;
+    }
 
     try {
-      await apiCall(`/messaging/calls/${activeCall._id}/end`, 'PUT');
+      await apiCall(`/messaging/calls/${activeCall._id}/end`, 'POST');
       setActiveCall(null);
       setShowCallWindow(false);
-
-      if (socket) {
-        socket.emit('call:end', activeCall);
-      }
     } catch (error) {
       console.error('Error ending call:', error);
     }
   };
 
   const handleFileUploaded = (uploadedFiles) => {
-    // Send file messages
-    uploadedFiles.forEach(file => {
+    uploadedFiles.forEach((file) => {
       handleSendMessage(`Shared a file: ${file.fileName}`, 'file', file);
     });
   };
 
-  const handleAISuggestionSelect = (suggestion) => {
-    handleSendMessage(suggestion.content);
+  const handleAISuggestionSelect = (replyText) => {
+    handleSendMessage(replyText);
     setShowAISuggestions(false);
   };
 
   const handleToggleEncryption = async () => {
+    if (!selectedChat?._id) {
+      return;
+    }
+
     try {
       const response = await apiCall('/messaging/encryption/toggle', 'POST', {
         chatId: selectedChat._id,
         enabled: !encryptionEnabled,
       });
 
-      setEncryptionEnabled(response.enabled);
+      setEncryptionEnabled(Boolean(response?.enabled));
     } catch (error) {
       console.error('Error toggling encryption:', error);
     }
   };
 
+  const handleClearAllNotifications = () => {
+    apiCall('/messaging/notifications/mark-all-read', 'PUT')
+      .then(() => {
+        setNotifications((prevNotifications) =>
+          prevNotifications.map((notification) => ({
+            ...notification,
+            isRead: true,
+          }))
+        );
+      })
+      .catch((error) => {
+        console.error('Error clearing notifications:', error);
+      });
+  };
+
+  const handleSelectNotification = async (notification) => {
+    const notificationId = notification?._id || notification?.id;
+    const notificationChatId = getId(notification?.chatId);
+    const notificationMessageId = getId(notification?.messageId);
+
+    try {
+      if (notificationId && !notification.isRead) {
+        await apiCall(`/messaging/notifications/${notificationId}/read`, 'PUT');
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+
+    setNotifications((prevNotifications) =>
+      prevNotifications.map((entry) => (
+        String(entry._id || entry.id) === String(notificationId)
+          ? { ...entry, isRead: true }
+          : entry
+      ))
+    );
+
+    if (notificationChatId) {
+      let targetChat = chats.find((chat) => chat._id === notificationChatId);
+
+      if (!targetChat) {
+        try {
+          const response = await apiCall(`/messaging/chats/${notificationChatId}`, 'GET');
+          if (response?.chat) {
+            targetChat = response.chat;
+            setChats((prevChats) => [response.chat, ...prevChats.filter((chat) => chat._id !== response.chat._id)]);
+          }
+        } catch (error) {
+          console.error('Error loading notification chat:', error);
+        }
+      }
+
+      if (targetChat) {
+        setSelectedChat(targetChat);
+        setActiveTab('chats');
+        setShowNewChat(false);
+      }
+    }
+
+    if (notificationMessageId) {
+      setFocusedMessageId(notificationMessageId);
+    }
+  };
+
   return (
     <div className="messaging-container">
-      {/* Connection status indicator */}
       <div className={`connection-status ${isOnline ? 'online' : 'offline'}`}>
         <span className="status-dot"></span>
         {isOnline ? 'Connected' : 'Disconnected'}
       </div>
 
-      {/* Incoming call notification */}
       {incomingCall && (
         <div className="incoming-call-notification">
           <div className="call-info">
-            <span className="caller-avatar">
-              {incomingCall.caller?.avatar || '👤'}
-            </span>
+            <span className="caller-avatar">{incomingCall.caller?.avatar || 'U'}</span>
             <div className="call-details">
-              <h4>{incomingCall.caller?.name}</h4>
+              <h4>{incomingCall.caller?.name || 'Unknown Caller'}</h4>
               <p>Incoming {incomingCall.callType} call</p>
             </div>
           </div>
@@ -457,21 +800,27 @@ const Messaging = () => {
       )}
 
       <div className="messaging-layout">
-        {/* Sidebar */}
         <div className="messaging-sidebar">
-          <div className="sidebar-tabs">
-            <button
-              className={`tab-btn ${activeTab === 'chats' ? 'active' : ''}`}
-              onClick={() => setActiveTab('chats')}
-            >
-              💬 Chats
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'contacts' ? 'active' : ''}`}
-              onClick={() => setActiveTab('contacts')}
-            >
-              👥 Contacts
-            </button>
+          <div className="sidebar-header">
+            <div className="sidebar-tabs">
+              <button
+                className={`tab-btn ${activeTab === 'chats' ? 'active' : ''}`}
+                onClick={() => setActiveTab('chats')}
+              >
+                Chats
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'contacts' ? 'active' : ''}`}
+                onClick={() => setActiveTab('contacts')}
+              >
+                Contacts
+              </button>
+            </div>
+            <NotificationBell
+              notifications={notifications}
+              onClear={handleClearAllNotifications}
+              onSelectNotification={handleSelectNotification}
+            />
           </div>
 
           {activeTab === 'chats' && (
@@ -496,7 +845,6 @@ const Messaging = () => {
           )}
         </div>
 
-        {/* Main chat window */}
         <div className="messaging-main">
           {showNewChat ? (
             <div className="new-chat-panel">
@@ -504,16 +852,14 @@ const Messaging = () => {
               <p>Select a contact to message</p>
               <div className="available-users">
                 {contacts
-                  .filter((c) => !c.isBlocked)
+                  .filter((contact) => !contact.isBlocked)
                   .map((contact) => (
                     <div
                       key={contact._id}
                       className="user-card"
                       onClick={() => handleCreateDirectChat(contact.contactUserId._id)}
                     >
-                      <span className="user-avatar">
-                        {contact.contactUserId?.avatar || '👤'}
-                      </span>
+                      <span className="user-avatar">{contact.contactUserId?.avatar || 'U'}</span>
                       <h4>{contact.contactUserId?.name}</h4>
                       <p>{contact.category}</p>
                     </div>
@@ -526,26 +872,28 @@ const Messaging = () => {
                 chat={selectedChat}
                 messages={messages}
                 onSendMessage={handleSendMessage}
+                onEditMessage={handleEditMessage}
+                onDeleteMessage={handleDeleteMessage}
+                onAddReaction={handleAddReaction}
+                onSearchMessages={handleSearchMessages}
                 onTyping={handleTyping}
                 typingUsers={typingUsers}
                 encryptionEnabled={encryptionEnabled}
                 onToggleEncryption={handleToggleEncryption}
                 onStartCall={handleStartCall}
                 onOpenFileUpload={() => setShowFileUpload(true)}
-                socket={socket}
+                focusedMessageId={focusedMessageId}
+                onFocusHandled={() => setFocusedMessageId('')}
               />
 
-              {/* AI Smart Replies */}
-              {showAISuggestions && aiSuggestions.length > 0 && (
+              {showAISuggestions && selectedChat?._id && latestMessageId && (
                 <AISmartReplies
-                  suggestions={aiSuggestions}
-                  onSelectSuggestion={handleAISuggestionSelect}
-                  onClose={() => setShowAISuggestions(false)}
-                  onRefresh={() => loadAISuggestions(selectedChat._id)}
+                  chatId={selectedChat._id}
+                  messageId={latestMessageId}
+                  onSelectReply={handleAISuggestionSelect}
                 />
               )}
 
-              {/* File Upload Modal */}
               {showFileUpload && (
                 <FileUpload
                   chatId={selectedChat?._id}
@@ -554,21 +902,22 @@ const Messaging = () => {
                 />
               )}
 
-              {/* Call Window */}
               {showCallWindow && activeCall && (
                 <CallWindow
                   call={activeCall}
                   onEndCall={handleEndCall}
-                  socket={socket}
+                  onAcceptCall={handleAcceptCall}
+                  onDeclineCall={handleDeclineCall}
                 />
               )}
             </>
           )}
         </div>
       </div>
+
+      {loading && <div className="messaging-loading">Loading chats...</div>}
     </div>
   );
 };
 
 export default Messaging;
-

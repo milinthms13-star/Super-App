@@ -24,9 +24,10 @@ describe('classifieds app-data helpers', () => {
         price: 8000,
         category: 'Vehicles',
         seller: 'Priya Singh',
+        location: 'Delhi',
         condition: 'Used',
         moderationStatus: 'approved',
-        mediaGallery: ['Primary image'],
+        mediaGallery: [],
       }),
     ]);
     expect(normalized.classifiedsMessages).toEqual([]);

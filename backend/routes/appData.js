@@ -8,13 +8,28 @@ const {
   useMongoClassifieds,
   listClassifiedModuleData,
   createClassifiedAd,
+  updateClassifiedAd,
   addClassifiedMessage,
   addClassifiedReport,
+  addClassifiedReview,
   moderateClassifiedAd,
   deleteClassifiedAd,
   findClassifiedAdById,
 } = require('../utils/classifiedStore');
-const { listRealEstateProperties } = require('../utils/realEstateStore');
+const {
+  listRealEstateProperties,
+  serializeRealEstateProperty,
+  useMongoRealEstate,
+  createRealEstateProperty,
+  updateRealEstateProperty,
+  addRealEstateLead,
+  addRealEstateMessage,
+  addRealEstateReview,
+  addRealEstateReport,
+  moderateRealEstateProperty,
+  deleteRealEstateProperty,
+  findRealEstatePropertyById,
+} = require('../utils/realEstateStore');
 const { listRestaurants } = require('../utils/restaurantStore');
 const User = require('../models/User');
 const devAuthStore = require('../utils/devAuthStore');
@@ -72,6 +87,18 @@ const globeMartSubcategorySchema = Joi.object({
   subcategory: Joi.string().trim().min(2).max(60).required(),
 });
 
+const classifiedsMediaItemSchema = Joi.alternatives().try(
+  Joi.string().allow('').trim(),
+  Joi.object({
+    id: Joi.string().allow('').trim().default(''),
+    url: Joi.string().allow('').trim().required(),
+    fileId: Joi.string().allow('').trim().default(''),
+    type: Joi.string().valid('image', 'video').default('image'),
+    order: Joi.number().integer().min(0).default(0),
+    uploadedAt: Joi.date().iso().optional(),
+  })
+);
+
 const classifiedsListingSchema = Joi.object({
   title: Joi.string().trim().min(3).max(140).required(),
   description: Joi.string().trim().min(10).max(1500).required(),
@@ -80,8 +107,16 @@ const classifiedsListingSchema = Joi.object({
   location: Joi.string().trim().min(2).max(120).required(),
   condition: Joi.string().valid('New', 'Like New', 'Used').default('Used'),
   mediaCount: Joi.number().integer().min(1).max(12).default(1),
+  mediaGallery: Joi.array().items(classifiedsMediaItemSchema).max(12).default([]),
   plan: Joi.string().valid('free', 'featured', 'urgent', 'subscription').default('free'),
 });
+
+const classifiedsListingUpdateSchema = classifiedsListingSchema
+  .fork(
+    ['title', 'description', 'price', 'category', 'location'],
+    (schema) => schema.optional()
+  )
+  .min(1);
 
 const classifiedsMessageSchema = Joi.object({
   text: Joi.string().trim().min(1).max(1000).required(),
@@ -91,7 +126,62 @@ const classifiedsReportSchema = Joi.object({
   reason: Joi.string().trim().min(3).max(300).required(),
 });
 
+const classifiedsReviewSchema = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).required(),
+  comment: Joi.string().trim().min(3).max(500).required(),
+});
+
 const classifiedsModerationSchema = Joi.object({
+  action: Joi.string().valid('approve', 'flag', 'reject').required(),
+});
+
+const realEstateListingSchema = Joi.object({
+  title: Joi.string().trim().min(3).max(140).required(),
+  intent: Joi.string().valid('sale', 'rent', 'project').default('sale'),
+  priceLabel: Joi.string().trim().min(2).max(80).required(),
+  location: Joi.string().trim().min(2).max(120).required(),
+  locality: Joi.string().allow('').trim().max(120).default(''),
+  type: Joi.string().trim().min(2).max(60).required(),
+  bedrooms: Joi.number().integer().min(0).max(20).default(0),
+  bathrooms: Joi.number().integer().min(0).max(20).default(0),
+  furnishing: Joi.string().trim().max(60).default('Semi Furnished'),
+  areaSqft: Joi.number().min(100).max(100000).required(),
+  description: Joi.string().allow('').trim().max(2000).default(''),
+  possession: Joi.string().allow('').trim().max(120).default(''),
+  amenities: Joi.array().items(Joi.string().trim().min(2).max(80)).max(20).default([]),
+  featured: Joi.boolean().default(false),
+  mediaCount: Joi.number().integer().min(0).max(50).default(0),
+  hasVideoTour: Joi.boolean().default(false),
+  status: Joi.string().valid('available', 'sold', 'rented').default('available'),
+  roleMode: Joi.string().valid('owner', 'agent', 'builder').default('owner'),
+});
+
+const realEstateListingUpdateSchema = realEstateListingSchema
+  .fork(
+    ['title', 'priceLabel', 'location', 'type', 'areaSqft'],
+    (schema) => schema.optional()
+  )
+  .min(1);
+
+const realEstateEnquirySchema = Joi.object({
+  message: Joi.string().allow('').trim().max(1000).default(''),
+  channel: Joi.string().valid('Enquiry', 'Call', 'Chat').default('Enquiry'),
+});
+
+const realEstateMessageSchema = Joi.object({
+  text: Joi.string().trim().min(1).max(1000).required(),
+});
+
+const realEstateReviewSchema = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).required(),
+  comment: Joi.string().trim().min(3).max(500).required(),
+});
+
+const realEstateReportSchema = Joi.object({
+  reason: Joi.string().trim().min(3).max(300).required(),
+});
+
+const realEstateModerationSchema = Joi.object({
   action: Joi.string().valid('approve', 'flag', 'reject').required(),
 });
 
@@ -165,6 +255,41 @@ const buildClassifiedPlanLabel = (plan = 'free') => {
   return 'Free';
 };
 
+const normalizeClassifiedMediaGallery = (mediaGallery = []) =>
+  (Array.isArray(mediaGallery) ? mediaGallery : [])
+    .map((item, index) => {
+      if (typeof item === 'string') {
+        const url = item.trim();
+        if (!url) {
+          return null;
+        }
+
+        return {
+          id: `classified-media-${index + 1}`,
+          url,
+          fileId: '',
+          type: 'image',
+          order: index,
+          uploadedAt: new Date().toISOString(),
+        };
+      }
+
+      const url = String(item?.url || '').trim();
+      if (!url) {
+        return null;
+      }
+
+      return {
+        id: String(item?.id || `classified-media-${index + 1}`).trim(),
+        url,
+        fileId: String(item?.fileId || '').trim(),
+        type: item?.type === 'video' ? 'video' : 'image',
+        order: Number.isFinite(Number(item?.order)) ? Number(item.order) : index,
+        uploadedAt: item?.uploadedAt || new Date().toISOString(),
+      };
+    })
+    .filter(Boolean);
+
 const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
   id: String(listing.id || `classified-${index + 1}`),
   title: String(listing.title || 'Marketplace Listing').trim(),
@@ -184,7 +309,7 @@ const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
   condition: String(listing.condition || 'Used').trim(),
   featured: Boolean(listing.featured),
   urgent: Boolean(listing.urgent),
-  verified: listing.verified !== false,
+  verified: Boolean(listing.verified),
   views: Number(listing.views || 0),
   favorites: Number(listing.favorites || 0),
   chats: Number(listing.chats || 0),
@@ -201,14 +326,23 @@ const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
     Array.isArray(listing.contactOptions) && listing.contactOptions.length > 0
       ? listing.contactOptions
       : ['Chat'],
-  mediaGallery:
-    Array.isArray(listing.mediaGallery) && listing.mediaGallery.length > 0
-      ? listing.mediaGallery
-      : ['Primary image'],
+  mediaGallery: normalizeClassifiedMediaGallery(listing.mediaGallery),
   monetizationPlan: String(
     listing.monetizationPlan ||
       buildClassifiedPlanLabel(listing.plan || (listing.featured ? 'featured' : 'free'))
   ).trim(),
+  reviews: Array.isArray(listing.reviews) ? listing.reviews : [],
+  averageRating:
+    Array.isArray(listing.reviews) && listing.reviews.length > 0
+      ? Number(listing.averageRating || (
+        listing.reviews.reduce((sum, review) => sum + Number(review?.rating || 0), 0) /
+        listing.reviews.length
+      ))
+      : Number(listing.averageRating || 0),
+  totalReviews: Number(
+    listing.totalReviews ||
+      (Array.isArray(listing.reviews) ? listing.reviews.length : 0)
+  ),
   moderationStatus: String(listing.moderationStatus || (listing.verified === false ? 'pending' : 'approved')).trim(),
   createdAt: String(listing.createdAt || new Date().toISOString()).trim(),
   updatedAt: String(listing.updatedAt || listing.createdAt || new Date().toISOString()).trim(),
@@ -245,6 +379,59 @@ const canManageClassifieds = (user = {}) =>
   user?.role === 'business' ||
   user?.registrationType === 'admin' ||
   user?.role === 'admin';
+
+const canManageRealEstate = (user = {}) =>
+  user?.email?.trim().toLowerCase() === ADMIN_EMAIL ||
+  user?.registrationType === 'entrepreneur' ||
+  user?.role === 'business' ||
+  user?.registrationType === 'admin' ||
+  user?.role === 'admin';
+
+const resolveRealEstateOwnerId = (user = {}) =>
+  String(
+    user?.id ||
+      user?.userId ||
+      user?.email ||
+      user?.phone ||
+      user?.businessName ||
+      user?.name ||
+      ''
+  ).trim();
+
+const resolveRealEstateSellerRole = (roleMode = 'owner', user = {}) => {
+  if (user?.email?.trim().toLowerCase() === ADMIN_EMAIL) {
+    return 'Admin';
+  }
+
+  if (roleMode === 'builder') {
+    return 'Builder';
+  }
+
+  if (roleMode === 'agent') {
+    return 'Agent';
+  }
+
+  return 'Owner';
+};
+
+const matchesRealEstateListingId = (listing = {}, listingId = '') =>
+  String(listing?._id || listing?.id || '') === String(listingId || '');
+
+const buildRealEstateModuleData = async () => ({
+  realestateProperties: await listRealEstateProperties(),
+});
+
+const isRealEstateListingOwner = (listing = {}, user = {}) => {
+  const normalizedUserEmail = String(user?.email || '').trim().toLowerCase();
+  const normalizedSellerEmail = String(listing?.sellerEmail || '').trim().toLowerCase();
+  const ownerId = String(listing?.ownerId || '').trim();
+  const resolvedOwnerId = resolveRealEstateOwnerId(user);
+
+  return Boolean(
+    (normalizedUserEmail && normalizedSellerEmail && normalizedUserEmail === normalizedSellerEmail) ||
+      (ownerId && resolvedOwnerId && ownerId === resolvedOwnerId)
+  );
+};
 
 const adminOnly = (req, res, next) => {
   if (req.user?.email?.trim().toLowerCase() !== ADMIN_EMAIL) {
@@ -951,7 +1138,17 @@ router.post('/classifieds/listings', authenticate, async (req, res) => {
     featured: value.plan === 'featured' || value.plan === 'subscription',
     urgent: value.plan === 'urgent',
     verified: req.user.email?.trim().toLowerCase() === ADMIN_EMAIL,
-    mediaGallery: Array.from({ length: value.mediaCount }, (_, index) => `Media ${index + 1}`),
+    mediaGallery:
+      normalizeClassifiedMediaGallery(value.mediaGallery).length > 0
+        ? normalizeClassifiedMediaGallery(value.mediaGallery)
+        : Array.from({ length: value.mediaCount }, (_, index) => ({
+            id: `classified-media-${index + 1}`,
+            url: '',
+            fileId: '',
+            type: 'image',
+            order: index,
+            uploadedAt: now,
+          })),
     contactOptions: ['Chat', 'Call'],
     languageSupport: ['English', 'Malayalam', 'Tamil', 'Hindi'],
     tags: [value.category, value.condition, 'New ad'],
@@ -959,6 +1156,9 @@ router.post('/classifieds/listings', authenticate, async (req, res) => {
     monetizationPlan: buildClassifiedPlanLabel(value.plan),
     moderationStatus:
       req.user.email?.trim().toLowerCase() === ADMIN_EMAIL ? 'approved' : 'pending',
+    reviews: [],
+    averageRating: 0,
+    totalReviews: 0,
     createdAt: now,
     updatedAt: now,
   });
@@ -998,6 +1198,119 @@ router.post('/classifieds/listings', authenticate, async (req, res) => {
     data: {
       moduleData: normalizeClassifiedsModule(nextData.moduleData),
       listing: createdListing,
+    },
+  });
+});
+
+router.patch('/classifieds/listings/:listingId', authenticate, async (req, res) => {
+  const { error, value } = classifiedsListingUpdateSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  if (useMongoClassifieds()) {
+    const matchedListing = await findClassifiedAdById(req.params.listingId);
+
+    if (!matchedListing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Classified listing not found.',
+      });
+    }
+
+    const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+    const isOwner = matchedListing.sellerEmail === req.user.email?.trim().toLowerCase();
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the seller or admin can update this listing.',
+      });
+    }
+
+    const updatedListing = await updateClassifiedAd(req.params.listingId, {
+      ...value,
+      mediaGallery: normalizeClassifiedMediaGallery(value.mediaGallery),
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await listClassifiedModuleData(),
+        listing: updatedListing,
+      },
+    });
+  }
+
+  const currentData = await devAppDataStore.readAppData();
+  const currentModuleData = normalizeClassifiedsModule(currentData.moduleData);
+  const matchedListing = currentModuleData.classifiedsListings.find(
+    (listing) => listing.id === req.params.listingId
+  );
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Classified listing not found.',
+    });
+  }
+
+  const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+  const isOwner = matchedListing.sellerEmail === req.user.email?.trim().toLowerCase();
+
+  if (!isAdmin && !isOwner) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only the seller or admin can update this listing.',
+    });
+  }
+
+  let updatedListing = null;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const latestModuleData = normalizeClassifiedsModule(latestData.moduleData);
+    const nextListings = latestModuleData.classifiedsListings.map((listing) => {
+      if (listing.id !== req.params.listingId) {
+        return listing;
+      }
+
+      updatedListing = normalizeClassifiedsListingRecord({
+        ...listing,
+        ...value,
+        mediaGallery:
+          value.mediaGallery !== undefined
+            ? normalizeClassifiedMediaGallery(value.mediaGallery)
+            : listing.mediaGallery,
+        featured:
+          value.plan !== undefined
+            ? value.plan === 'featured' || value.plan === 'subscription'
+            : listing.featured,
+        urgent: value.plan !== undefined ? value.plan === 'urgent' : listing.urgent,
+        monetizationPlan:
+          value.plan !== undefined ? buildClassifiedPlanLabel(value.plan) : listing.monetizationPlan,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return updatedListing;
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        ...latestModuleData,
+        classifiedsListings: nextListings,
+      },
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: normalizeClassifiedsModule(nextData.moduleData),
+      listing: updatedListing,
     },
   });
 });
@@ -1095,6 +1408,105 @@ router.post('/classifieds/listings/:listingId/messages', authenticate, async (re
     success: true,
     data: {
       moduleData: normalizedModuleData,
+    },
+  });
+});
+
+router.post('/classifieds/listings/:listingId/reviews', authenticate, async (req, res) => {
+  const { error, value } = classifiedsReviewSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  if (useMongoClassifieds()) {
+    const updatedListing = await addClassifiedReview(req.params.listingId, {
+      id:
+        typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `classified-review-${Date.now()}`,
+      buyerEmail: req.user.email,
+      buyerName: req.user.name?.trim() || 'Anonymous',
+      rating: value.rating,
+      comment: value.comment,
+      createdAt: new Date(),
+    });
+
+    if (!updatedListing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Classified listing not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await listClassifiedModuleData(),
+        listing: updatedListing,
+      },
+    });
+  }
+
+  let listingFound = false;
+  const nextData = await devAppDataStore.updateAppData(async (currentData) => {
+    const currentModuleData = normalizeClassifiedsModule(currentData.moduleData);
+    const now = new Date().toISOString();
+
+    const nextListings = currentModuleData.classifiedsListings.map((listing) => {
+      if (listing.id !== req.params.listingId) {
+        return listing;
+      }
+
+      listingFound = true;
+      const reviews = [
+        {
+          id:
+            typeof crypto.randomUUID === 'function'
+              ? crypto.randomUUID()
+              : `classified-review-${Date.now()}`,
+          buyerEmail: req.user.email,
+          buyerName: req.user.name?.trim() || 'Anonymous',
+          rating: value.rating,
+          comment: value.comment,
+          createdAt: now,
+        },
+        ...(Array.isArray(listing.reviews) ? listing.reviews : []),
+      ];
+
+      return normalizeClassifiedsListingRecord({
+        ...listing,
+        reviews,
+        totalReviews: reviews.length,
+        averageRating:
+          reviews.reduce((sum, review) => sum + Number(review?.rating || 0), 0) / reviews.length,
+        updatedAt: now,
+      });
+    });
+
+    return {
+      ...currentData,
+      moduleData: {
+        ...currentData.moduleData,
+        ...currentModuleData,
+        classifiedsListings: nextListings,
+      },
+    };
+  });
+
+  if (!listingFound) {
+    return res.status(404).json({
+      success: false,
+      message: 'Classified listing not found.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: normalizeClassifiedsModule(nextData.moduleData),
     },
   });
 });
@@ -1352,6 +1764,767 @@ router.delete('/classifieds/listings/:listingId', authenticate, async (req, res)
     success: true,
     data: {
       moduleData: normalizeClassifiedsModule(nextData.moduleData),
+    },
+  });
+});
+
+router.post('/realestate/listings', authenticate, async (req, res) => {
+  if (!canManageRealEstate(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Seller or admin access required to post real-estate listings.',
+    });
+  }
+
+  const { error, value } = realEstateListingSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const now = new Date().toISOString();
+  const sellerName = req.user.businessName?.trim() || req.user.name?.trim() || 'New Partner';
+  const sellerRole = resolveRealEstateSellerRole(value.roleMode, req.user);
+  const ownerId = resolveRealEstateOwnerId(req.user);
+  const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+  const numericPriceValue = Number(String(value.priceLabel || '').replace(/[^0-9.]/g, '')) || 0;
+  const listingPayload = {
+    title: value.title,
+    price: value.priceLabel,
+    priceLabel: value.priceLabel,
+    priceValue: numericPriceValue,
+    area: `${Number(value.areaSqft)} sq ft`,
+    areaSqft: Number(value.areaSqft),
+    location: value.location,
+    locality: value.locality || value.location,
+    type: value.type,
+    intent: value.intent,
+    image: 'Fresh listing',
+    bedrooms: Number(value.bedrooms || 0),
+    bathrooms:
+      Number.isFinite(Number(value.bathrooms)) && Number(value.bathrooms) >= 0
+        ? Number(value.bathrooms)
+        : Number(value.bedrooms || 0) > 0
+          ? Math.max(1, Number(value.bedrooms || 0) - 1)
+          : 0,
+    furnishing: value.furnishing,
+    amenities:
+      Array.isArray(value.amenities) && value.amenities.length > 0
+        ? value.amenities
+        : ['Photo upload ready', 'Lead capture', 'Map support'],
+    sellerName,
+    sellerRole,
+    sellerEmail: req.user.email,
+    ownerId,
+    developer: sellerRole === 'Builder' ? sellerName : '',
+    listedBy: sellerRole,
+    verified: isAdmin,
+    verificationStatus: isAdmin ? 'Verified' : 'Pending approval',
+    featured: isAdmin ? Boolean(value.featured) : false,
+    postedOn: now.slice(0, 10),
+    possession: value.possession || 'Ready to move',
+    description:
+      value.description ||
+      'Freshly posted listing waiting for admin review. Media, map pin, and legal checks can be attached in the next step.',
+    mapLabel: `${value.locality || value.location} growth corridor`,
+    rating: 0,
+    reviewCount: 0,
+    premiumPlan:
+      Boolean(value.featured) && isAdmin
+        ? 'Featured Listing'
+        : sellerRole === 'Builder' || sellerRole === 'Agent'
+          ? 'Agent Pro'
+          : 'Starter',
+    mediaCount: Number(value.mediaCount || 0),
+    hasVideoTour: Boolean(value.hasVideoTour),
+    projectUnits: value.intent === 'project' ? 1 : 1,
+    leads: [],
+    chatPreview: [],
+    similarTags: [value.type, value.location, value.intent].filter(Boolean),
+    reviews: [],
+    reports: [],
+    disputeCount: 0,
+    languageSupport: ['English', 'Malayalam'],
+    status: value.status,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (useMongoRealEstate()) {
+    const listing = await createRealEstateProperty(listingPayload);
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+      },
+    });
+  }
+
+  const createdListing = serializeRealEstateProperty({
+    id:
+      typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `realestate-${Date.now()}`,
+    ...listingPayload,
+  });
+
+  const nextData = await devAppDataStore.updateAppData(async (currentData) => ({
+    ...currentData,
+    moduleData: {
+      ...currentData.moduleData,
+      realestateProperties: [createdListing, ...(currentData.moduleData?.realestateProperties || [])],
+    },
+  }));
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+      listing: createdListing,
+    },
+  });
+});
+
+router.patch('/realestate/listings/:listingId', authenticate, async (req, res) => {
+  const { error, value } = realEstateListingUpdateSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  if (useMongoRealEstate()) {
+    const matchedListing = await findRealEstatePropertyById(req.params.listingId);
+
+    if (!matchedListing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Real-estate listing not found.',
+      });
+    }
+
+    const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+    if (!isAdmin && !isRealEstateListingOwner(matchedListing, req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the listing owner or admin can update this property.',
+      });
+    }
+
+    const updates = {
+      ...value,
+      price: value.priceLabel,
+      priceValue:
+        value.priceLabel !== undefined
+          ? Number(String(value.priceLabel || '').replace(/[^0-9.]/g, '')) || 0
+          : undefined,
+      area: value.areaSqft !== undefined ? `${Number(value.areaSqft)} sq ft` : undefined,
+      locality: value.locality || undefined,
+      updatedAt: new Date(),
+    };
+
+    Object.keys(updates).forEach((key) => updates[key] === undefined && delete updates[key]);
+
+    const listing = await updateRealEstateProperty(req.params.listingId, updates);
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+      },
+    });
+  }
+
+  const currentData = await devAppDataStore.readAppData();
+  const currentListings = Array.isArray(currentData.moduleData?.realestateProperties)
+    ? currentData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+    : [];
+  const matchedListing = currentListings.find((listing) =>
+    matchesRealEstateListingId(listing, req.params.listingId)
+  );
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+  if (!isAdmin && !isRealEstateListingOwner(matchedListing, req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only the listing owner or admin can update this property.',
+    });
+  }
+
+  let updatedListing = null;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      updatedListing = serializeRealEstateProperty({
+        ...listing,
+        ...value,
+        price: value.priceLabel !== undefined ? value.priceLabel : listing.price,
+        priceLabel: value.priceLabel !== undefined ? value.priceLabel : listing.priceLabel,
+        priceValue:
+          value.priceLabel !== undefined
+            ? Number(String(value.priceLabel || '').replace(/[^0-9.]/g, '')) || 0
+            : listing.priceValue,
+        area: value.areaSqft !== undefined ? `${Number(value.areaSqft)} sq ft` : listing.area,
+        locality: value.locality !== undefined ? value.locality || value.location || listing.location : listing.locality,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        ...listing,
+        ...value,
+        price: updatedListing.price,
+        priceLabel: updatedListing.priceLabel,
+        priceValue: updatedListing.priceValue,
+        area: updatedListing.area,
+        locality: updatedListing.locality,
+        updatedAt: updatedListing.updatedAt,
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+      listing: updatedListing,
+    },
+  });
+});
+
+router.post('/realestate/listings/:listingId/enquiries', authenticate, async (req, res) => {
+  const { error, value } = realEstateEnquirySchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const lead = {
+    id:
+      typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `realestate-lead-${Date.now()}`,
+    name: req.user.name?.trim() || 'Buyer',
+    email: req.user.email,
+    channel: value.channel,
+    priority: value.message ? 'Hot' : 'Warm',
+    message: value.message,
+    createdAt: new Date(),
+  };
+
+  if (useMongoRealEstate()) {
+    const listing = await addRealEstateLead(req.params.listingId, lead);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Real-estate listing not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+      },
+    });
+  }
+
+  let listingFound = false;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      listingFound = true;
+      return {
+        ...listing,
+        leads: [...(Array.isArray(listing.leads) ? listing.leads : []), lead],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  if (!listingFound) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+    },
+  });
+});
+
+router.post('/realestate/listings/:listingId/messages', authenticate, async (req, res) => {
+  const { error, value } = realEstateMessageSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const message = {
+    id:
+      typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `realestate-message-${Date.now()}`,
+    from: req.user.name?.trim() || 'You',
+    senderEmail: req.user.email,
+    text: value.text,
+    createdAt: new Date(),
+  };
+
+  if (useMongoRealEstate()) {
+    const listing = await addRealEstateMessage(req.params.listingId, message);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Real-estate listing not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+      },
+    });
+  }
+
+  let listingFound = false;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      listingFound = true;
+      return {
+        ...listing,
+        chatPreview: [...(Array.isArray(listing.chatPreview) ? listing.chatPreview : []), message],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  if (!listingFound) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+    },
+  });
+});
+
+router.post('/realestate/listings/:listingId/reviews', authenticate, async (req, res) => {
+  const { error, value } = realEstateReviewSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const review = {
+    id:
+      typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `realestate-review-${Date.now()}`,
+    author: req.user.name?.trim() || 'Buyer',
+    buyerEmail: req.user.email,
+    score: value.rating,
+    comment: value.comment,
+    createdAt: new Date(),
+  };
+
+  if (useMongoRealEstate()) {
+    const listing = await addRealEstateReview(req.params.listingId, review);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Real-estate listing not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+      },
+    });
+  }
+
+  let updatedListing = null;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      const reviews = [...(Array.isArray(listing.reviews) ? listing.reviews : []), review];
+      const averageRating =
+        reviews.reduce((sum, item) => sum + Number(item.score || 0), 0) / reviews.length;
+      updatedListing = serializeRealEstateProperty({
+        ...listing,
+        reviews,
+        reviewCount: reviews.length,
+        rating: averageRating,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        ...listing,
+        reviews,
+        reviewCount: updatedListing.reviewCount,
+        rating: updatedListing.rating,
+        updatedAt: updatedListing.updatedAt,
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  if (!updatedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+      listing: updatedListing,
+    },
+  });
+});
+
+router.post('/realestate/listings/:listingId/reports', authenticate, async (req, res) => {
+  const { error, value } = realEstateReportSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const report = {
+    id:
+      typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `realestate-report-${Date.now()}`,
+    reporterEmail: req.user.email,
+    reporterName: req.user.name?.trim() || 'User',
+    reason: value.reason,
+    status: 'open',
+    createdAt: new Date(),
+  };
+
+  if (useMongoRealEstate()) {
+    const listing = await addRealEstateReport(req.params.listingId, report);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Real-estate listing not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+      },
+    });
+  }
+
+  let updatedListing = null;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      const reports = [...(Array.isArray(listing.reports) ? listing.reports : []), report];
+      updatedListing = serializeRealEstateProperty({
+        ...listing,
+        reports,
+        disputeCount: reports.length,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        ...listing,
+        reports,
+        disputeCount: updatedListing.disputeCount,
+        updatedAt: updatedListing.updatedAt,
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  if (!updatedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+      listing: updatedListing,
+    },
+  });
+});
+
+router.patch('/realestate/listings/:listingId/moderation', authenticate, adminOnly, async (req, res) => {
+  const { error, value } = realEstateModerationSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const updates =
+    value.action === 'approve'
+      ? { verified: true, verificationStatus: 'Verified', updatedAt: new Date() }
+      : value.action === 'flag'
+        ? { verified: false, verificationStatus: 'Flagged', updatedAt: new Date() }
+        : { verified: false, verificationStatus: 'Rejected', updatedAt: new Date() };
+
+  if (useMongoRealEstate()) {
+    const listing = await moderateRealEstateProperty(req.params.listingId, updates);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Real-estate listing not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+      },
+    });
+  }
+
+  let listingFound = false;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      listingFound = true;
+      return {
+        ...listing,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  if (!listingFound) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+    },
+  });
+});
+
+router.delete('/realestate/listings/:listingId', authenticate, async (req, res) => {
+  if (useMongoRealEstate()) {
+    const matchedListing = await findRealEstatePropertyById(req.params.listingId);
+
+    if (!matchedListing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Real-estate listing not found.',
+      });
+    }
+
+    const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+    if (!isAdmin && !isRealEstateListingOwner(matchedListing, req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the listing owner or admin can delete this property.',
+      });
+    }
+
+    await deleteRealEstateProperty(req.params.listingId);
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+      },
+    });
+  }
+
+  const currentData = await devAppDataStore.readAppData();
+  const currentListings = Array.isArray(currentData.moduleData?.realestateProperties)
+    ? currentData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+    : [];
+  const matchedListing = currentListings.find((listing) =>
+    matchesRealEstateListingId(listing, req.params.listingId)
+  );
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+  if (!isAdmin && !isRealEstateListingOwner(matchedListing, req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only the listing owner or admin can delete this property.',
+    });
+  }
+
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => ({
+    ...latestData,
+    moduleData: {
+      ...latestData.moduleData,
+      realestateProperties: (latestData.moduleData?.realestateProperties || []).filter(
+        (listing) => !matchesRealEstateListingId(listing, req.params.listingId)
+      ),
+    },
+  }));
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
     },
   });
 });

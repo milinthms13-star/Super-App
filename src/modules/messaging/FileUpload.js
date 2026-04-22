@@ -3,11 +3,11 @@ import { useApp } from '../../contexts/AppContext';
 import './FileUpload.css';
 
 const FileUpload = ({ chatId, onFileUploaded, onClose }) => {
-  const { apiCall, currentUser } = useApp();
+  const { apiCall } = useApp();
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
   const fileInputRef = useRef(null);
 
   const allowedTypes = {
@@ -25,11 +25,11 @@ const FileUpload = ({ chatId, onFileUploaded, onClose }) => {
     ],
   };
 
-  const maxFileSize = 100 * 1024 * 1024; // 100MB
+  const maxFileSize = 100 * 1024 * 1024;
 
   const handleFileSelect = (event) => {
-    const files = Array.from(event.target.files);
-    const validFiles = files.filter(file => {
+    const files = Array.from(event.target.files || []);
+    const validFiles = files.filter((file) => {
       if (file.size > maxFileSize) {
         setError(`File "${file.name}" is too large. Maximum size is 100MB.`);
         return false;
@@ -46,116 +46,117 @@ const FileUpload = ({ chatId, onFileUploaded, onClose }) => {
 
     if (validFiles.length > 0) {
       setSelectedFiles(validFiles);
-      setError(null);
+      setError('');
     }
   };
 
-  const uploadFile = async (file) => {
-    try {
-      // Convert file to base64
-      const base64Data = await fileToBase64(file);
-
-      const response = await apiCall('post', '/messaging/files/upload', {
-        chatId,
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type,
-        fileData: base64Data,
-      });
-
-      return response.file;
-    } catch (err) {
-      throw new Error(`Failed to upload ${file.name}: ${err.message}`);
-    }
-  };
-
-  const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => {
-        const base64 = reader.result.split(',')[1];
+        const base64 = String(reader.result || '').split(',')[1] || '';
         resolve(base64);
       };
-      reader.onerror = (error) => reject(error);
+      reader.onerror = reject;
     });
+
+  const uploadFile = async (file) => {
+    const base64Data = await fileToBase64(file);
+    const response = await apiCall('/messaging/files/upload', 'POST', {
+      chatId,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+      fileData: base64Data,
+    });
+
+    return response.file;
   };
 
   const handleUpload = async () => {
-    if (selectedFiles.length === 0) return;
+    if (!chatId || selectedFiles.length === 0) {
+      return;
+    }
 
     setUploading(true);
-    setError(null);
+    setError('');
 
-    const progress = {};
-    selectedFiles.forEach(file => {
-      progress[file.name] = 0;
+    const initialProgress = {};
+    selectedFiles.forEach((file) => {
+      initialProgress[file.name] = 0;
     });
-    setUploadProgress(progress);
+    setUploadProgress(initialProgress);
 
     try {
-      const uploadPromises = selectedFiles.map(async (file) => {
+      const uploadedFiles = [];
+
+      for (const file of selectedFiles) {
         const uploadedFile = await uploadFile(file);
-        progress[file.name] = 100;
-        setUploadProgress({ ...progress });
-        return uploadedFile;
-      });
+        uploadedFiles.push(uploadedFile);
+        setUploadProgress((currentProgress) => ({
+          ...currentProgress,
+          [file.name]: 100,
+        }));
+      }
 
-      const uploadedFiles = await Promise.all(uploadPromises);
-
-      // Notify parent component
       if (onFileUploaded) {
         onFileUploaded(uploadedFiles);
       }
 
-      // Reset state
       setSelectedFiles([]);
       setUploadProgress({});
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
 
-      // Close modal after successful upload
-      setTimeout(() => {
-        if (onClose) onClose();
-      }, 1000);
-
-    } catch (err) {
-      setError(err.message);
+      if (onClose) {
+        onClose();
+      }
+    } catch (uploadError) {
+      setError(uploadError.message || 'Upload failed.');
     } finally {
       setUploading(false);
     }
   };
 
   const removeFile = (index) => {
-    const newFiles = selectedFiles.filter((_, i) => i !== index);
-    setSelectedFiles(newFiles);
+    setSelectedFiles((currentFiles) => currentFiles.filter((_, fileIndex) => fileIndex !== index));
   };
 
   const getFileIcon = (file) => {
     const type = file.type.split('/')[0];
     switch (type) {
-      case 'image': return '🖼️';
-      case 'video': return '🎥';
-      case 'audio': return '🎵';
-      default: return '📄';
+      case 'image':
+        return 'IMG';
+      case 'video':
+        return 'VID';
+      case 'audio':
+        return 'AUD';
+      default:
+        return 'FILE';
     }
   };
 
   const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) {
+      return '0 Bytes';
+    }
+
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    const index = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, index)).toFixed(2))} ${sizes[index]}`;
   };
 
   return (
     <div className="file-upload-overlay">
       <div className="file-upload-modal">
         <div className="upload-header">
-          <h3>📎 Share Files</h3>
-          <button className="btn-close" onClick={onClose}>✕</button>
+          <h3>Share Files</h3>
+          <button className="btn-close" onClick={onClose} type="button">
+            X
+          </button>
         </div>
 
         <div className="upload-content">
@@ -170,8 +171,7 @@ const FileUpload = ({ chatId, onFileUploaded, onClose }) => {
               id="file-input"
             />
             <label htmlFor="file-input" className="file-input-label">
-              <span className="upload-icon">📁</span>
-              <span>Choose files or drag & drop</span>
+              <span>Choose files</span>
               <span className="file-limits">Max 100MB per file</span>
             </label>
           </div>
@@ -181,7 +181,7 @@ const FileUpload = ({ chatId, onFileUploaded, onClose }) => {
               <h4>Selected Files ({selectedFiles.length})</h4>
               <div className="files-list">
                 {selectedFiles.map((file, index) => (
-                  <div key={index} className="file-item">
+                  <div key={file.name} className="file-item">
                     <div className="file-info">
                       <span className="file-icon">{getFileIcon(file)}</span>
                       <div className="file-details">
@@ -196,17 +196,16 @@ const FileUpload = ({ chatId, onFileUploaded, onClose }) => {
                             className="progress-bar"
                             style={{ width: `${uploadProgress[file.name]}%` }}
                           ></div>
-                          <span className="progress-text">
-                            {uploadProgress[file.name]}%
-                          </span>
+                          <span className="progress-text">{uploadProgress[file.name]}%</span>
                         </div>
                       )}
                       {!uploading && (
                         <button
                           className="btn-remove-file"
                           onClick={() => removeFile(index)}
+                          type="button"
                         >
-                          ✕
+                          Remove
                         </button>
                       )}
                     </div>
@@ -218,24 +217,20 @@ const FileUpload = ({ chatId, onFileUploaded, onClose }) => {
 
           {error && (
             <div className="upload-error">
-              <span className="error-icon">⚠️</span>
               <span>{error}</span>
             </div>
           )}
         </div>
 
         <div className="upload-footer">
-          <button
-            className="btn-cancel"
-            onClick={onClose}
-            disabled={uploading}
-          >
+          <button className="btn-cancel" onClick={onClose} disabled={uploading} type="button">
             Cancel
           </button>
           <button
             className="btn-upload"
             onClick={handleUpload}
             disabled={selectedFiles.length === 0 || uploading}
+            type="button"
           >
             {uploading ? 'Uploading...' : `Upload ${selectedFiles.length} File${selectedFiles.length !== 1 ? 's' : ''}`}
           </button>

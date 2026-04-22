@@ -312,6 +312,9 @@ const formatCompactNumber = (value) =>
     maximumFractionDigits: 1,
   }).format(Number(value || 0));
 
+const resolveErrorMessage = (error, fallbackMessage) =>
+  error?.response?.data?.message || error?.message || fallbackMessage;
+
 const getUserIdentity = (user) => {
   if (!user) {
     return {
@@ -381,10 +384,21 @@ const normalizeProperty = (property, index) => {
     typeof property?.bathrooms === "number"
       ? property.bathrooms
       : Number(property?.bathrooms) || 0;
+  const reviews = Array.isArray(property?.reviews) ? property.reviews : [];
+  const reviewCount =
+    typeof property?.reviewCount === "number" ? property.reviewCount : reviews.length;
+  const rating =
+    typeof property?.rating === "number"
+      ? property.rating
+      : reviews.length > 0
+        ? reviews.reduce((sum, review) => sum + Number(review?.score || 0), 0) / reviews.length
+        : 0;
+  const reports = Array.isArray(property?.reports) ? property.reports : [];
 
   return {
     id: property?.id || `property-${index + 1}`,
     title: property?.title || "Verified Property",
+    price: property?.price || property?.priceLabel || "Price on request",
     priceLabel: property?.priceLabel || property?.price || "Price on request",
     priceValue,
     location: property?.location || "Kerala",
@@ -412,6 +426,7 @@ const normalizeProperty = (property, index) => {
       property?.sellerEmail ||
       property?.sellerName ||
       `owner-${index + 1}`,
+    sellerEmail: property?.sellerEmail || "",
     sellerRole: property?.sellerRole || "Owner",
     developer: property?.developer || property?.sellerName || "Malabar Estates",
     listedBy: property?.listedBy || property?.sellerRole || "Owner",
@@ -421,8 +436,8 @@ const normalizeProperty = (property, index) => {
     postedOn: property?.postedOn || "2026-04-18",
     possession: property?.possession || "Ready to move",
     mapLabel: property?.mapLabel || `${property?.location || "Kerala"} growth corridor`,
-    rating: typeof property?.rating === "number" ? property.rating : 4.5,
-    reviewCount: typeof property?.reviewCount === "number" ? property.reviewCount : 24,
+    rating,
+    reviewCount,
     premiumPlan: property?.premiumPlan || "Featured Listing",
     projectUnits: typeof property?.projectUnits === "number" ? property.projectUnits : 1,
     leads: Array.isArray(property?.leads) ? property.leads : [],
@@ -441,26 +456,34 @@ const normalizeProperty = (property, index) => {
         : [property?.type || "Flat", property?.location || "Kerala"],
     mediaCount: typeof property?.mediaCount === "number" ? property.mediaCount : 8,
     hasVideoTour: Boolean(property?.hasVideoTour),
-    reviews:
-      Array.isArray(property?.reviews) && property.reviews.length > 0
-        ? property.reviews
-        : [
-            {
-              author: "Recent buyer",
-              score: 5,
-              comment: "Fast response and clean paperwork support.",
-            },
-          ],
+    reviews,
+    reports,
     languageSupport:
       Array.isArray(property?.languageSupport) && property.languageSupport.length > 0
         ? property.languageSupport
         : ["English", "Malayalam"],
+    disputeCount:
+      typeof property?.disputeCount === "number" ? property.disputeCount : reports.length,
     status: property?.status || "available",
   };
 };
 
 const RealEstate = () => {
-  const { currentUser, favorites, addToFavorites, removeFavorite, mockData } = useApp();
+  const {
+    currentUser,
+    favorites,
+    addToFavorites,
+    removeFavorite,
+    mockData,
+    createRealEstateListing = async () => null,
+    updateRealEstateListing = async () => null,
+    sendRealEstateEnquiry = async () => null,
+    sendRealEstateMessage = async () => null,
+    addRealEstateReview = async () => null,
+    reportRealEstateListing = async () => null,
+    moderateRealEstateListing = async () => null,
+    deleteRealEstateListing = async () => null,
+  } = useApp();
   const [activeRole, setActiveRole] = useState(() => getPreferredRoleMode(currentUser));
   const [searchText, setSearchText] = useState("");
   const [intentFilter, setIntentFilter] = useState("all");
@@ -474,16 +497,17 @@ const RealEstate = () => {
   const [statusMessage, setStatusMessage] = useState("");
   const [enquiryMessage, setEnquiryMessage] = useState("");
   const [chatInput, setChatInput] = useState("");
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewRating, setReviewRating] = useState("5");
+  const [reportReason, setReportReason] = useState("");
   const [listingForm, setListingForm] = useState(DEFAULT_LISTING_FORM);
-  const [customListings, setCustomListings] = useState([]);
-  const [propertyOverrides, setPropertyOverrides] = useState({});
   const [editListingId, setEditListingId] = useState("");
-  const [localMessages, setLocalMessages] = useState({});
-  const { ownerId: currentOwnerId, sellerName: currentSellerName } = useMemo(
-    () => getUserIdentity(currentUser),
-    [currentUser]
-  );
+  const { ownerId: currentOwnerId } = useMemo(() => getUserIdentity(currentUser), [currentUser]);
   const allowedRoleModes = useMemo(() => getAllowedRoleModes(currentUser), [currentUser]);
+  const currentUserEmail = useMemo(
+    () => String(currentUser?.email || "").trim().toLowerCase(),
+    [currentUser?.email]
+  );
 
   const sourceProperties = useMemo(() => {
     const incomingProperties = Array.isArray(mockData?.realestateProperties)
@@ -495,17 +519,8 @@ const RealEstate = () => {
   }, [mockData?.realestateProperties]);
 
   const properties = useMemo(
-    () =>
-      [...sourceProperties, ...customListings].map((property, index) =>
-        normalizeProperty(
-          {
-            ...property,
-            ...(propertyOverrides[property?.id] || {}),
-          },
-          index
-        )
-      ),
-    [customListings, propertyOverrides, sourceProperties]
+    () => sourceProperties.map((property, index) => normalizeProperty(property, index)),
+    [sourceProperties]
   );
 
   const locations = useMemo(
@@ -627,9 +642,7 @@ const RealEstate = () => {
     : [];
   const favoriteIds = new Set(propertyFavorites.map((item) => String(item.id)));
 
-  const selectedMessages = selectedProperty
-    ? [...selectedProperty.chatPreview, ...(localMessages[selectedProperty.id] || [])]
-    : [];
+  const selectedMessages = selectedProperty ? selectedProperty.chatPreview : [];
 
   const dashboardStats = useMemo(() => {
     const verifiedCount = properties.filter((property) => property.verified).length;
@@ -644,8 +657,29 @@ const RealEstate = () => {
     ];
   }, [properties]);
 
+  const visibleLeadProperties = useMemo(() => {
+    if (activeRole === "admin") {
+      return properties;
+    }
+
+    if (!["owner", "agent", "builder"].includes(activeRole)) {
+      return [];
+    }
+
+    return properties.filter((property) => {
+      const propertyOwnerId = String(property.ownerId || "").trim();
+      const propertySellerEmail = String(property.sellerEmail || "").trim().toLowerCase();
+      const normalizedOwnerId = String(currentOwnerId || "").trim();
+
+      return (
+        (propertyOwnerId && normalizedOwnerId && propertyOwnerId === normalizedOwnerId) ||
+        (propertySellerEmail && currentUserEmail && propertySellerEmail === currentUserEmail)
+      );
+    });
+  }, [activeRole, currentOwnerId, currentUserEmail, properties]);
+
   const leadBoard = useMemo(() => {
-    return properties
+    return visibleLeadProperties
       .flatMap((property) =>
         property.leads.map((lead) => ({
           ...lead,
@@ -655,7 +689,7 @@ const RealEstate = () => {
       )
       .sort((first, second) => (first.priority === "Hot" ? -1 : 1) - (second.priority === "Hot" ? -1 : 1))
       .slice(0, 6);
-  }, [properties]);
+  }, [visibleLeadProperties]);
 
   const similarProperties = useMemo(() => {
     if (!selectedProperty) {
@@ -670,6 +704,29 @@ const RealEstate = () => {
       )
       .slice(0, 3);
   }, [filteredProperties, selectedProperty]);
+
+  const canManageProperty = (property) => {
+    if (!property) {
+      return false;
+    }
+
+    if (activeRole === "admin") {
+      return true;
+    }
+
+    if (!["owner", "agent", "builder"].includes(activeRole)) {
+      return false;
+    }
+
+    const propertyOwnerId = String(property.ownerId || "").trim();
+    const propertySellerEmail = String(property.sellerEmail || "").trim().toLowerCase();
+    const normalizedOwnerId = String(currentOwnerId || "").trim();
+
+    return (
+      (propertyOwnerId && normalizedOwnerId && propertyOwnerId === normalizedOwnerId) ||
+      (propertySellerEmail && currentUserEmail && propertySellerEmail === currentUserEmail)
+    );
+  };
 
   const handleFavoriteToggle = (property) => {
     const favoriteId = `realestate-${property.id}`;
@@ -692,36 +749,41 @@ const RealEstate = () => {
     setStatusMessage(`${property.title} saved to favorites.`);
   };
 
-  const handleEnquirySubmit = () => {
+  const handleEnquirySubmit = async () => {
     if (!selectedProperty) {
       return;
     }
 
-    setStatusMessage(
-      enquiryMessage.trim()
-        ? `Enquiry sent to ${selectedProperty.sellerName}. Lead added to seller dashboard.`
-        : `Quick enquiry sent for ${selectedProperty.title}.`
-    );
-    setEnquiryMessage("");
+    try {
+      await sendRealEstateEnquiry(selectedProperty.id, {
+        message: enquiryMessage.trim(),
+        channel: "Enquiry",
+      });
+      setStatusMessage(
+        enquiryMessage.trim()
+          ? `Enquiry sent to ${selectedProperty.sellerName}. Lead added to seller dashboard.`
+          : `Quick enquiry sent for ${selectedProperty.title}.`
+      );
+      setEnquiryMessage("");
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Enquiry could not be sent."));
+    }
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!selectedProperty || !chatInput.trim()) {
       return;
     }
 
-    setLocalMessages((currentMessages) => ({
-      ...currentMessages,
-      [selectedProperty.id]: [
-        ...(currentMessages[selectedProperty.id] || []),
-        {
-          from: currentUser?.name || "You",
-          text: chatInput.trim(),
-        },
-      ],
-    }));
-    setStatusMessage(`Message delivered to ${selectedProperty.sellerName}.`);
-    setChatInput("");
+    try {
+      await sendRealEstateMessage(selectedProperty.id, {
+        text: chatInput.trim(),
+      });
+      setStatusMessage(`Message delivered to ${selectedProperty.sellerName}.`);
+      setChatInput("");
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Message could not be delivered."));
+    }
   };
 
   const handleListingInputChange = ({ target }) => {
@@ -731,45 +793,22 @@ const RealEstate = () => {
     }));
   };
 
-  const handleListingSubmit = (event) => {
+  const handleListingSubmit = async (event) => {
     event.preventDefault();
 
     const nextListing = {
-      id: editListingId || `custom-${Date.now()}`,
       title: listingForm.title.trim(),
       intent: listingForm.intent,
       priceLabel: listingForm.priceLabel.trim(),
-      priceValue: Number(String(listingForm.priceLabel).replace(/[^0-9.]/g, "")) || 85,
       location: listingForm.location.trim(),
       locality: listingForm.location.trim(),
       type: listingForm.type,
       areaSqft: Number(listingForm.areaSqft) || 1200,
-      area: `${Number(listingForm.areaSqft) || 1200} sq ft`,
       bedrooms: Number(listingForm.bedrooms) || 2,
-      bathrooms: Math.max(1, Number(listingForm.bedrooms) - 1),
+      bathrooms:
+        Number(listingForm.bedrooms) > 0 ? Math.max(1, Number(listingForm.bedrooms) - 1) : 0,
       furnishing: listingForm.furnishing,
-      sellerName: currentSellerName,
-      ownerId: currentOwnerId || currentSellerName,
-      sellerRole:
-        activeRole === "builder"
-          ? "Builder"
-          : activeRole === "owner"
-            ? "Owner"
-            : "Agent",
-      listedBy:
-        activeRole === "builder"
-          ? "Builder"
-          : activeRole === "owner"
-            ? "Owner"
-            : "Agent",
-      verificationStatus: "Pending approval",
-      verified: false,
-      featured: false,
-      description:
-        "Freshly posted listing waiting for admin review. Media, map pin, and legal checks can be attached in the next step.",
-      amenities: ["Photo upload ready", "Lead capture", "Map support"],
-      leads: [],
-      reviews: [],
+      roleMode: activeRole === "builder" ? "builder" : activeRole === "owner" ? "owner" : "agent",
     };
 
     if (!nextListing.title || !nextListing.location || !nextListing.priceLabel || !nextListing.type || !nextListing.areaSqft) {
@@ -777,23 +816,22 @@ const RealEstate = () => {
       return;
     }
 
-    if (editListingId) {
-      // Update existing
-      setCustomListings((currentListings) =>
-        currentListings.map((listing) =>
-          listing.id === editListingId ? { ...listing, ...nextListing } : listing
-        )
-      );
-      setStatusMessage("Listing updated successfully.");
-    } else {
-      // Add new
-      setCustomListings((currentListings) => [nextListing, ...currentListings]);
-      setSelectedPropertyId(nextListing.id);
-      setStatusMessage("Listing drafted successfully. It is now waiting for admin approval.");
-    }
+    try {
+      if (editListingId) {
+        const updatedListing = await updateRealEstateListing(editListingId, nextListing);
+        setSelectedPropertyId(updatedListing?.id || editListingId);
+        setStatusMessage("Listing updated successfully.");
+      } else {
+        const createdListing = await createRealEstateListing(nextListing);
+        setSelectedPropertyId(createdListing?.id || "");
+        setStatusMessage("Listing drafted successfully. It is now waiting for admin approval.");
+      }
 
-    setListingForm(DEFAULT_LISTING_FORM);
-    setEditListingId("");
+      setListingForm(DEFAULT_LISTING_FORM);
+      setEditListingId("");
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Listing could not be saved."));
+    }
   };
 
   const handleEditListing = (property) => {
@@ -810,33 +848,91 @@ const RealEstate = () => {
     });
   };
 
-  const handleAdminAction = (action) => {
+  const handleAdminAction = async (action) => {
     if (!selectedProperty) {
       return;
     }
 
-    if (action === "Approval") {
-      setPropertyOverrides((current) => ({
-        ...current,
-        [selectedProperty.id]: {
-          ...(current[selectedProperty.id] || {}),
-          verified: true,
-          verificationStatus: "Verified",
-        },
-      }));
-      setStatusMessage(`Listing approved for ${selectedProperty.title}.`);
-    } else if (action === "Reject") {
-      setPropertyOverrides((current) => ({
-        ...current,
-        [selectedProperty.id]: {
-          ...(current[selectedProperty.id] || {}),
-          verified: false,
-          verificationStatus: "Rejected",
-        },
-      }));
-      setStatusMessage(`Listing rejected for ${selectedProperty.title}.`);
-    } else {
+    if (action === "User verification") {
       setStatusMessage(`${action} completed for ${selectedProperty.title}.`);
+      return;
+    }
+
+    try {
+      await moderateRealEstateListing(
+        selectedProperty.id,
+        action === "Approval" ? "approve" : action === "Reject" ? "reject" : "flag"
+      );
+      setStatusMessage(
+        action === "Approval"
+          ? `Listing approved for ${selectedProperty.title}.`
+          : action === "Reject"
+            ? `Listing rejected for ${selectedProperty.title}.`
+            : `${action} completed for ${selectedProperty.title}.`
+      );
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Admin action could not be completed."));
+    }
+  };
+
+  const handleReviewSubmit = async () => {
+    if (!selectedProperty) {
+      return;
+    }
+
+    const normalizedComment = reviewComment.trim();
+    if (!normalizedComment) {
+      setStatusMessage("Add a short review comment before submitting.");
+      return;
+    }
+
+    try {
+      await addRealEstateReview(selectedProperty.id, {
+        rating: Number(reviewRating),
+        comment: normalizedComment,
+      });
+      setReviewComment("");
+      setReviewRating("5");
+      setStatusMessage(`Review submitted for ${selectedProperty.sellerName}.`);
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Review could not be submitted."));
+    }
+  };
+
+  const handleReportSubmit = async () => {
+    if (!selectedProperty) {
+      return;
+    }
+
+    const normalizedReason = reportReason.trim();
+    if (!normalizedReason) {
+      setStatusMessage("Add a report reason before flagging a listing.");
+      return;
+    }
+
+    try {
+      await reportRealEstateListing(selectedProperty.id, {
+        reason: normalizedReason,
+      });
+      setReportReason("");
+      setStatusMessage(`Fake listing report submitted for ${selectedProperty.title}.`);
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Listing report could not be submitted."));
+    }
+  };
+
+  const handleDeleteCurrentListing = async () => {
+    if (!selectedProperty) {
+      return;
+    }
+
+    try {
+      await deleteRealEstateListing(selectedProperty.id);
+      setEditListingId("");
+      setListingForm(DEFAULT_LISTING_FORM);
+      setStatusMessage(`${selectedProperty.title} was removed from the marketplace.`);
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Listing could not be deleted."));
     }
   };
 
@@ -1081,11 +1177,14 @@ const RealEstate = () => {
                     </div>
                     <div className="realestate-card-actions">
                       <span>{property.listedBy}</span>
-                      {["owner", "agent", "builder"].includes(activeRole) && property.ownerId === (currentOwnerId || currentSellerName) ? (
+                      {canManageProperty(property) ? (
                         <button
                           type="button"
                           className="realestate-inline-button"
-                          onClick={() => handleEditListing(property)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleEditListing(property);
+                          }}
                         >
                           Edit
                         </button>
@@ -1112,16 +1211,27 @@ const RealEstate = () => {
             <section className="realestate-surface-card">
               <div className="realestate-section-heading">
                 <h2>Lead management</h2>
-                <p>Buyers call, chat, or enquire while sellers get a prioritised dashboard.</p>
+                <p>
+                  {activeRole === "admin"
+                    ? "Admins can see marketplace-wide pipeline activity."
+                    : "Sellers see only leads for properties they own."}
+                </p>
               </div>
               <div className="realestate-lead-list">
-                {leadBoard.map((lead) => (
-                  <div key={`${lead.propertyId}-${lead.name}`} className="realestate-lead-item">
-                    <strong>{lead.name}</strong>
-                    <span>{lead.propertyTitle}</span>
-                    <span>{lead.channel} · {lead.priority}</span>
+                {leadBoard.length ? (
+                  leadBoard.map((lead) => (
+                    <div key={`${lead.propertyId}-${lead.name}`} className="realestate-lead-item">
+                      <strong>{lead.name}</strong>
+                      <span>{lead.propertyTitle}</span>
+                      <span>{lead.channel} / {lead.priority}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="realestate-lead-item">
+                    <strong>No active leads yet</strong>
+                    <span>New enquiries will appear here as buyers contact your listings.</span>
                   </div>
-                ))}
+                )}
               </div>
             </section>
 
@@ -1197,6 +1307,7 @@ const RealEstate = () => {
                 <label className="realestate-field">
                   <span>Bedrooms</span>
                   <select name="bedrooms" value={listingForm.bedrooms} onChange={handleListingInputChange}>
+                    <option value="0">Studio / NA</option>
                     <option value="1">1</option>
                     <option value="2">2</option>
                     <option value="3">3</option>
@@ -1327,13 +1438,33 @@ const RealEstate = () => {
                     <h2>{selectedProperty.title}</h2>
                     <p>{selectedProperty.location} · {selectedProperty.locality}</p>
                   </div>
-                  <button
-                    type="button"
-                    className="realestate-inline-button"
-                    onClick={() => handleFavoriteToggle(selectedProperty)}
-                  >
-                    {favoriteIds.has(`realestate-${selectedProperty.id}`) ? "Saved" : "Save"}
-                  </button>
+                  <div className="realestate-inline-actions">
+                    {canManageProperty(selectedProperty) ? (
+                      <button
+                        type="button"
+                        className="realestate-inline-button"
+                        onClick={() => handleEditListing(selectedProperty)}
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                    {canManageProperty(selectedProperty) ? (
+                      <button
+                        type="button"
+                        className="realestate-inline-button danger"
+                        onClick={handleDeleteCurrentListing}
+                      >
+                        Delete
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="realestate-inline-button"
+                      onClick={() => handleFavoriteToggle(selectedProperty)}
+                    >
+                      {favoriteIds.has(`realestate-${selectedProperty.id}`) ? "Saved" : "Save"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="realestate-detail-media">
@@ -1434,26 +1565,61 @@ const RealEstate = () => {
                     <p>Rate trusted agents and flag suspicious behavior quickly.</p>
                   </div>
                   <div className="realestate-review-list">
-                    {selectedProperty.reviews.map((review, index) => (
-                      <div key={`${review.author}-${index}`} className="realestate-review-item">
-                        <strong>{review.author}</strong>
-                        <span>{review.score} / 5</span>
-                        <p>{review.comment}</p>
+                    {selectedProperty.reviews.length ? (
+                      selectedProperty.reviews.map((review, index) => (
+                        <div key={`${review.author}-${index}`} className="realestate-review-item">
+                          <strong>{review.author}</strong>
+                          <span>{review.score} / 5</span>
+                          <p>{review.comment}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="realestate-review-item">
+                        <strong>No reviews yet</strong>
+                        <p>The first verified buyer review will appear here.</p>
                       </div>
-                    ))}
+                    )}
                   </div>
+                  <label className="realestate-field">
+                    <span>Review rating</span>
+                    <select value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}>
+                      {["5", "4", "3", "2", "1"].map((score) => (
+                        <option key={score} value={score}>
+                          {score} / 5
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="realestate-field">
+                    <span>Review comment</span>
+                    <textarea
+                      rows="3"
+                      value={reviewComment}
+                      onChange={(event) => setReviewComment(event.target.value)}
+                      placeholder="Share how responsive or trustworthy the listing owner was"
+                    />
+                  </label>
+                  <label className="realestate-field">
+                    <span>Report concern</span>
+                    <textarea
+                      rows="3"
+                      value={reportReason}
+                      onChange={(event) => setReportReason(event.target.value)}
+                      placeholder="Explain why the listing looks suspicious or inaccurate"
+                    />
+                  </label>
                   <div className="realestate-inline-actions">
                     <button
                       type="button"
                       className="realestate-inline-button"
-                      onClick={() => setStatusMessage(`Review submitted for ${selectedProperty.sellerName}.`)}
+                      onClick={handleReviewSubmit}
                     >
                       Rate agent / builder
                     </button>
                     <button
                       type="button"
                       className="realestate-inline-button danger"
-                      onClick={() => setStatusMessage(`Fake listing report submitted for ${selectedProperty.title}.`)}
+                      onClick={handleReportSubmit}
                     >
                       Report fake listing
                     </button>
@@ -1515,3 +1681,4 @@ const RealEstate = () => {
 };
 
 export default RealEstate;
+
