@@ -8,6 +8,7 @@ import {
   toggleReminderCompletion,
 } from "../../services/remindersService";
 import { LINK_PRESETS, normalizeCustomLink } from "../../utils/customLinks";
+import { formatReminderDueDate, toDateInputValue } from "./reminderUtils";
 
 const PRIORITIES = ["Low", "Medium", "High"];
 const CATEGORIES = ["Work", "Personal", "Urgent"];
@@ -27,54 +28,6 @@ const INITIAL_LINK_FORM = {
   title: "",
   url: "",
   description: "",
-};
-
-const SEED_TASKS = [
-  {
-    _id: "seed-1",
-    title: "Renew vendor payment",
-    description: "Monthly payment renewal for vendor services",
-    category: "Work",
-    priority: "High",
-    dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    dueTime: "17:30",
-    completed: false,
-    reminders: ["In-app", "SMS", "Call"],
-    status: "Escalation armed",
-    recurring: "none",
-  },
-  {
-    _id: "seed-2",
-    title: "Doctor follow-up",
-    description: "Follow up appointment with cardiologist",
-    category: "Personal",
-    priority: "Medium",
-    dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    dueTime: "09:00",
-    completed: false,
-    reminders: ["In-app", "SMS"],
-    status: "Reminder scheduled",
-    recurring: "none",
-  },
-];
-
-const formatDueDate = (dueDate, dueTime) => {
-  if (!dueDate) {
-    return "No due date";
-  }
-
-  const date = new Date(`${dueDate}T${dueTime || "09:00"}`);
-  const now = new Date();
-  const diffDays = Math.floor((date - now) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return `Today, ${dueTime || "09:00"}`;
-  }
-  if (diffDays === 1) {
-    return `Tomorrow, ${dueTime || "09:00"}`;
-  }
-
-  return `${date.toLocaleDateString("en-IN")} ${dueTime || ""}`.trim();
 };
 
 const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => {
@@ -101,8 +54,7 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
       } catch (err) {
         console.error("Failed to load reminders:", err);
         setError(err.message || "Failed to load reminders");
-        // Fallback to seed tasks on error
-        setTasks(SEED_TASKS);
+        setTasks([]);
       } finally {
         setLoading(false);
       }
@@ -192,7 +144,7 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
       description: task.description || "",
       category: task.category,
       priority: task.priority,
-      dueDate: task.dueDate,
+      dueDate: toDateInputValue(task.dueDate),
       dueTime: task.dueTime,
       reminders: task.reminders,
       recurring: task.recurring || "none",
@@ -565,7 +517,7 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
                       </span>
                     </div>
                     <p className="reminderalert-task-due">
-                      {formatDueDate(task.dueDate, task.dueTime)}
+                      {formatReminderDueDate(task.dueDate, task.dueTime)}
                     </p>
                     <div className="reminderalert-task-channels">
                       {task.reminders.map((reminder) => (

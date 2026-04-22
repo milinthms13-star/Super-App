@@ -6,6 +6,59 @@ const { authenticate } = require('../middleware/auth');
 const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
 
+const VALID_CATEGORIES = ['Work', 'Personal', 'Urgent'];
+const VALID_PRIORITIES = ['Low', 'Medium', 'High'];
+const VALID_REMINDERS = ['In-app', 'SMS', 'Call'];
+const VALID_RECURRING = ['none', 'daily', 'weekly', 'monthly'];
+
+const getReminderOwnerId = (user = {}) => String(user?._id || user?.id || '');
+
+const parseReminderDueDate = (value) => {
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const validateReminderFields = ({ title, category, priority, reminders, recurring, dueDate }, { partial = false } = {}) => {
+  if (!partial || title !== undefined) {
+    if (!String(title || '').trim()) {
+      return 'Title is required';
+    }
+  }
+
+  if (!partial || dueDate !== undefined) {
+    if (!dueDate) {
+      return 'Due date is required';
+    }
+    if (!parseReminderDueDate(dueDate)) {
+      return 'Invalid due date';
+    }
+  }
+
+  if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
+    return 'Invalid category';
+  }
+
+  if (priority !== undefined && !VALID_PRIORITIES.includes(priority)) {
+    return 'Invalid priority';
+  }
+
+  if (reminders !== undefined) {
+    if (!Array.isArray(reminders) || !reminders.length) {
+      return 'Select at least one reminder type';
+    }
+
+    if (!reminders.every((reminder) => VALID_REMINDERS.includes(reminder))) {
+      return 'Invalid reminder types';
+    }
+  }
+
+  if (recurring !== undefined && !VALID_RECURRING.includes(recurring)) {
+    return 'Invalid recurring option';
+  }
+
+  return '';
+};
+
 // Create rate limiter for reminders
 const reminderRateLimiter = createModerateRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -22,8 +75,8 @@ router.use(reminderRateLimiter);
 router.get('/', async (req, res) => {
   try {
     const { category, completed, limit = 50, skip = 0 } = req.query;
-
-    const query = { userId: req.user._id || req.user.id };
+    const ownerId = getReminderOwnerId(req.user);
+    const query = { userId: ownerId };
 
     if (category && category !== 'All') {
       query.category = category;
@@ -74,55 +127,30 @@ router.post('/', async (req, res) => {
       recurring = 'none'
     } = req.body;
 
-    // Validate required fields
-    if (!title || !dueDate) {
+    const validationMessage = validateReminderFields({
+      title,
+      category,
+      priority,
+      reminders,
+      recurring,
+      dueDate,
+    });
+
+    if (validationMessage) {
       return res.status(400).json({
         success: false,
-        message: 'Title and due date are required'
+        message: validationMessage
       });
     }
-
-    // Validate category and priority
-    const validCategories = ['Work', 'Personal', 'Urgent'];
-    const validPriorities = ['Low', 'Medium', 'High'];
-    const validReminders = ['In-app', 'SMS', 'Call'];
-    const validRecurring = ['none', 'daily', 'weekly', 'monthly'];
-
-    if (!validCategories.includes(category)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid category'
-      });
-    }
-
-    if (!validPriorities.includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid priority'
-      });
-    }
-
-    if (!reminders.every(r => validReminders.includes(r))) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid reminder types'
-      });
-    }
-
-    if (!validRecurring.includes(recurring)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid recurring option'
-      });
-    }
+    const ownerId = getReminderOwnerId(req.user);
 
     const reminder = new Reminder({
-      userId: req.user._id || req.user.id,
+      userId: ownerId,
       title: title.trim(),
       description: description?.trim(),
       category,
       priority,
-      dueDate: new Date(dueDate),
+      dueDate: parseReminderDueDate(dueDate),
       dueTime,
       reminders,
       recurring,
@@ -131,7 +159,7 @@ router.post('/', async (req, res) => {
 
     await reminder.save();
 
-    logger.info(`Reminder created: ${reminder.title} for user ${req.user.id}`);
+    logger.info(`Reminder created: ${reminder.title} for user ${ownerId}`);
 
     res.status(201).json({
       success: true,
@@ -151,9 +179,10 @@ router.post('/', async (req, res) => {
 // PUT /api/reminders/:id - Update a reminder
 router.put('/:id', async (req, res) => {
   try {
+    const ownerId = getReminderOwnerId(req.user);
     const reminder = await Reminder.findOne({
       _id: req.params.id,
-      userId: req.user._id || req.user.id
+      userId: ownerId
     });
 
     if (!reminder) {
@@ -175,12 +204,31 @@ router.put('/:id', async (req, res) => {
       completed
     } = req.body;
 
+    const validationMessage = validateReminderFields(
+      {
+        title,
+        category,
+        priority,
+        reminders,
+        recurring,
+        dueDate,
+      },
+      { partial: true }
+    );
+
+    if (validationMessage) {
+      return res.status(400).json({
+        success: false,
+        message: validationMessage
+      });
+    }
+
     // Update fields if provided
     if (title !== undefined) reminder.title = title.trim();
     if (description !== undefined) reminder.description = description?.trim();
     if (category !== undefined) reminder.category = category;
     if (priority !== undefined) reminder.priority = priority;
-    if (dueDate !== undefined) reminder.dueDate = new Date(dueDate);
+    if (dueDate !== undefined) reminder.dueDate = parseReminderDueDate(dueDate);
     if (dueTime !== undefined) reminder.dueTime = dueTime;
     if (reminders !== undefined) reminder.reminders = reminders;
     if (recurring !== undefined) reminder.recurring = recurring;
@@ -204,7 +252,7 @@ router.put('/:id', async (req, res) => {
 
     await reminder.save();
 
-    logger.info(`Reminder updated: ${reminder.title} for user ${req.user.id}`);
+    logger.info(`Reminder updated: ${reminder.title} for user ${ownerId}`);
 
     res.json({
       success: true,
@@ -224,9 +272,10 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/reminders/:id - Delete a reminder
 router.delete('/:id', async (req, res) => {
   try {
+    const ownerId = getReminderOwnerId(req.user);
     const reminder = await Reminder.findOneAndDelete({
       _id: req.params.id,
-      userId: req.user._id || req.user.id
+      userId: ownerId
     });
 
     if (!reminder) {
@@ -236,7 +285,7 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    logger.info(`Reminder deleted: ${reminder.title} for user ${req.user.id}`);
+    logger.info(`Reminder deleted: ${reminder.title} for user ${ownerId}`);
 
     res.json({
       success: true,
@@ -255,7 +304,7 @@ router.delete('/:id', async (req, res) => {
 // GET /api/reminders/stats - Get reminder statistics
 router.get('/stats/summary', async (req, res) => {
   try {
-    const userId = req.user._id || req.user.id;
+    const userId = getReminderOwnerId(req.user);
 
     const stats = await Reminder.aggregate([
       { $match: { userId: userId } },
@@ -310,3 +359,8 @@ router.get('/stats/summary', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.__testables = {
+  getReminderOwnerId,
+  parseReminderDueDate,
+  validateReminderFields,
+};

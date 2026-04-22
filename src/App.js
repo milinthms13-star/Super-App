@@ -17,6 +17,7 @@ import Messaging from "./modules/messaging/Messaging";
 import Classifieds from "./modules/classifieds/Classifieds";
 import RealEstate from "./modules/realestate/RealEstate";
 import FoodDelivery from "./modules/fooddelivery/FoodDelivery";
+import LocalMarket from "./modules/localmarket/LocalMarket";
 import RideSharing from "./modules/ridesharing/RideSharing";
 import Matrimonial from "./modules/matrimonial/Matrimonial";
 import SocialMedia from "./modules/socialmedia/SocialMedia";
@@ -728,6 +729,8 @@ function App() {
         return <RealEstate />;
       case "fooddelivery":
         return <FoodDelivery />;
+      case "localmarket":
+        return <LocalMarket />;
       case "ridesharing":
         return <RideSharing />;
       case "matrimonial":

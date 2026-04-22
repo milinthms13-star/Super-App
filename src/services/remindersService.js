@@ -1,13 +1,31 @@
 import axios from "axios";
+import { normalizeReminderRecord, toDateInputValue } from "../modules/reminderalert/reminderUtils";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
-const REMINDERS_ENDPOINT = `${API_BASE_URL}/reminders`;
 
 // Configure axios to send cookies with requests
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
 });
+
+const normalizeReminderResponse = (responseData) => {
+  if (Array.isArray(responseData?.data)) {
+    return {
+      ...responseData,
+      data: responseData.data.map((reminder) => normalizeReminderRecord(reminder)),
+    };
+  }
+
+  if (responseData?.data && typeof responseData.data === "object") {
+    return {
+      ...responseData,
+      data: normalizeReminderRecord(responseData.data),
+    };
+  }
+
+  return responseData;
+};
 
 /**
  * Fetch all reminders for the current user
@@ -35,7 +53,7 @@ export const fetchReminders = async (options = {}) => {
     }
 
     const response = await axiosInstance.get("/reminders", { params });
-    return response.data;
+    return normalizeReminderResponse(response.data);
   } catch (error) {
     console.error("Error fetching reminders:", error);
     throw new Error(
@@ -53,13 +71,10 @@ export const createReminder = async (reminderData) => {
   try {
     const payload = {
       ...reminderData,
-      // Ensure dueDate is a proper ISO string
-      dueDate: reminderData.dueDate instanceof Date 
-        ? reminderData.dueDate.toISOString()
-        : new Date(reminderData.dueDate).toISOString(),
+      dueDate: toDateInputValue(reminderData.dueDate),
     };
     const response = await axiosInstance.post("/reminders", payload);
-    return response.data;
+    return normalizeReminderResponse(response.data);
   } catch (error) {
     console.error("Error creating reminder:", error);
     throw new Error(
@@ -81,15 +96,13 @@ export const updateReminder = async (reminderId, reminderData) => {
     };
     // Convert dueDate if provided
     if (reminderData.dueDate) {
-      payload.dueDate = reminderData.dueDate instanceof Date 
-        ? reminderData.dueDate.toISOString()
-        : new Date(reminderData.dueDate).toISOString();
+      payload.dueDate = toDateInputValue(reminderData.dueDate);
     }
     const response = await axiosInstance.put(
       `/reminders/${reminderId}`,
       payload
     );
-    return response.data;
+    return normalizeReminderResponse(response.data);
   } catch (error) {
     console.error("Error updating reminder:", error);
     throw new Error(
@@ -126,7 +139,7 @@ export const toggleReminderCompletion = async (reminderId, completed) => {
     const response = await axiosInstance.put(`/reminders/${reminderId}`, {
       completed,
     });
-    return response.data;
+    return normalizeReminderResponse(response.data);
   } catch (error) {
     console.error("Error toggling reminder completion:", error);
     throw new Error(
@@ -136,10 +149,12 @@ export const toggleReminderCompletion = async (reminderId, completed) => {
   }
 };
 
-export default {
+const remindersService = {
   fetchReminders,
   createReminder,
   updateReminder,
   deleteReminder,
   toggleReminderCompletion,
 };
+
+export default remindersService;

@@ -22,7 +22,7 @@ const createRateLimiter = (options = {}) => {
   const handler = options.handler || defaultRateLimitHandler;
 
   // Clean up old entries periodically
-  setInterval(() => {
+  const cleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [key, data] of requestCounts.entries()) {
       if (now - data.firstRequestTime > windowMs * 2) {
@@ -30,6 +30,10 @@ const createRateLimiter = (options = {}) => {
       }
     }
   }, CLEANUP_INTERVAL);
+
+  if (typeof cleanupTimer.unref === 'function') {
+    cleanupTimer.unref();
+  }
 
   return (req, res, next) => {
     const key = keyGenerator(req);

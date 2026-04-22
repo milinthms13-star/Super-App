@@ -99,21 +99,22 @@ const buildAlertLog = (entry) => ({
 });
 
 const SOSAlert = () => {
-  const { currentUser, apiCall } = useApp();
-  const [contacts, setContacts] = useState(() => createInitialState(currentUser).contacts);
+const { currentUser, apiCall } = useApp();
+  const [contacts, setContacts] = useState([]);
   const [registeredContacts, setRegisteredContacts] = useState([]);
   const [history, setHistory] = useState([]);
-  const [settings, setSettings] = useState(() => createInitialState(currentUser).settings);
+  const [settings, setSettings] = useState({ silentMode: false, autoEscalation: true, shareLiveLocation: true });
   const [alertState, setAlertState] = useState({
     active: false,
     mode: "Standby",
     reason: QUICK_REASONS[0],
     startedAt: "",
-    locationIndex: 0,
     escalationLevel: 0,
     acknowledgedBy: "",
     channels: DELIVERY_CHANNELS,
     log: [],
+    currentLocation: null,
+    watchId: null,
   });
   const [contactForm, setContactForm] = useState({
     name: "",
@@ -123,133 +124,137 @@ const SOSAlert = () => {
     notifyBy: ["Push", "SMS"],
   });
   const [statusMessage, setStatusMessage] = useState("");
+  const [locationError, setLocationError] = useState(null);
+  const [currentPosition, setCurrentPosition] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadRegisteredContacts = async () => {
+    const loadData = async () => {
       try {
-        const response = await apiCall("/messaging/contacts", "GET", { limit: 100 });
-        if (!isMounted) {
-          return;
+        // Load SOS contacts
+        const contactsRes = await apiCall('/sos/contacts');
+        if (isMounted && contactsRes?.data) {
+          setContacts(contactsRes.data.map(c => ({ ...c, acknowledged: false })));
         }
 
-        setRegisteredContacts(Array.isArray(response?.contacts) ? response.contacts : []);
-      } catch (error) {
-        if (isMounted) {
-          setRegisteredContacts([]);
+        // Load history
+        const historyRes = await apiCall('/sos/history?limit=10');
+        if (isMounted && historyRes?.data) {
+          setHistory(historyRes.data);
         }
+
+        // Load messaging contacts
+        const messagingRes = await apiCall("/messaging/contacts", "GET", { limit: 100 });
+        if (isMounted) {
+          setRegisteredContacts(Array.isArray(messagingRes?.contacts) ? messagingRes.contacts : []);
+        }
+      } catch (error) {
+        console.error('Failed to load SOS data:', error);
       }
     };
 
-    loadRegisteredContacts();
+    loadData();
 
     return () => {
       isMounted = false;
     };
   }, [apiCall]);
 
-  useEffect(() => {
-    try {
-      const savedState = localStorage.getItem(STORAGE_KEY);
-      if (!savedState) {
-        return;
-      }
+  // Removed localStorage load - now using backend persistence
 
-      const parsed = JSON.parse(savedState);
-      if (Array.isArray(parsed.contacts)) {
-        setContacts(parsed.contacts);
-      }
-      if (Array.isArray(parsed.history)) {
-        setHistory(parsed.history);
-      }
-      if (parsed.settings) {
-        setSettings((current) => ({
-          ...current,
-          ...parsed.settings,
-        }));
-      }
-      if (parsed.alertState) {
-        setAlertState((current) => ({
-          ...current,
-          ...parsed.alertState,
-        }));
-      }
-    } catch (error) {
-      // Ignore corrupt local storage and continue with defaults.
+  // localStorage persistence removed - using backend
+
+  // Geolocation watch
+  useEffect(() => {
+    if (!settings.shareLiveLocation) return;
+
+    let watchId = null;
+    let positionTimeout;
+
+    const handleSuccess = (position) => {
+      setCurrentPosition(position);
+      setLocationError(null);
+      // Mock reverse geocode for display
+      setStatusMessage(`Live location ready: ${position.coords.accuracy?.toFixed(0)}m accuracy`);
+    };
+
+    const handleError = (error) => {
+      console.warn('Geolocation error:', error);
+      setLocationError(error.message);
+      setCurrentPosition(null);
+    };
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 30000,
+    };
+
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
+
+    if (settings.shareLiveLocation) {
+      watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, options);
+      positionTimeout = setTimeout(() => {
+        if (watchId) navigator.geolocation.clearWatch(watchId);
+      }, 300000); // 5min timeout
     }
-  }, []);
 
-  useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        contacts,
-        history,
-        settings,
-        alertState,
-      })
-    );
-  }, [alertState, contacts, history, settings]);
+    return () => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      if (positionTimeout) clearTimeout(positionTimeout);
+    };
+  }, [settings.shareLiveLocation]);
 
+  // Remove fake location cycling - now real geo
   useEffect(() => {
-    if (!alertState.active) {
-      return undefined;
-    }
+    if (!alertState.active) return;
 
     const interval = setInterval(() => {
-      setAlertState((current) => {
-        if (!current.active) {
-          return current;
-        }
+      const minutesActive = Math.round((Date.now() - new Date(alertState.startedAt).getTime()) / 60000);
+      const shouldEscalate = settings.autoEscalation && minutesActive >= 2 && alertState.escalationLevel < 3;
 
-        const nextLocationIndex = Math.min(
-          current.locationIndex + 1,
-          LOCATION_POINTS.length - 1
-        );
-        const minutesActive = Math.round((Date.now() - new Date(current.startedAt).getTime()) / 60000);
-        const shouldEscalate = settings.autoEscalation && minutesActive >= 1 && current.escalationLevel < 2;
+      const nextLog = [...alertState.log];
 
-        const nextLog = [...current.log];
+      if (shouldEscalate) {
+        nextLog.unshift(buildAlertLog(`Auto-escalation to level ${alertState.escalationLevel + 1}`));
+      }
 
-        if (nextLocationIndex !== current.locationIndex) {
-          nextLog.unshift(
-            buildAlertLog(`Live location updated to ${LOCATION_POINTS[nextLocationIndex]}.`)
-          );
-        }
+      if (currentPosition) {
+        nextLog.unshift(buildAlertLog(`Live location updated (${currentPosition.coords.accuracy?.toFixed(0)}m)`));
+      }
 
-        if (shouldEscalate) {
-          nextLog.unshift(
-            buildAlertLog(`Escalation level ${current.escalationLevel + 2} started automatically.`)
-          );
-        }
-
-        return {
-          ...current,
-          locationIndex: nextLocationIndex,
-          escalationLevel: shouldEscalate ? current.escalationLevel + 1 : current.escalationLevel,
-          mode: shouldEscalate ? "Escalated" : current.mode,
-          log: nextLog.slice(0, 8),
-        };
-      });
-    }, 15000);
+      setAlertState(prev => ({
+        ...prev,
+        escalationLevel: shouldEscalate ? prev.escalationLevel + 1 : prev.escalationLevel,
+        mode: shouldEscalate ? 'Escalated' : prev.mode,
+        log: nextLog.slice(0, 10),
+      }));
+    }, 30000); // Check every 30s
 
     return () => clearInterval(interval);
-  }, [alertState.active, settings.autoEscalation]);
+  }, [alertState.active, alertState.escalationLevel, alertState.startedAt, alertState.log.length, settings.autoEscalation, currentPosition]);
 
   const readinessScore = useMemo(
     () => getReadinessScore(contacts, settings),
     [contacts, settings]
   );
 
-  const activeLocation = LOCATION_POINTS[alertState.locationIndex] || LOCATION_POINTS[0];
   const activeContacts = contacts.filter((contact) => contact.notifyBy.length > 0);
+  const activeLocation =
+    alertState.currentLocation ||
+    (currentPosition
+      ? `${currentPosition.coords.accuracy?.toFixed(0)}m accuracy`
+      : locationError
+        ? "Location unavailable"
+        : "Detecting location");
+  const locationStatus = currentPosition ? `${currentPosition.coords.accuracy?.toFixed(0)}m` : locationError ? 'Error' : 'Loading...';
 
   const stats = [
     { label: "Trusted contacts", value: String(contacts.length) },
-    { label: "Registered app contacts", value: String(registeredContacts.length) },
-    { label: "Readiness score", value: `${readinessScore}%` },
-    { label: "Alert state", value: alertState.active ? alertState.mode : "Standby" },
+    { label: "App contacts", value: String(registeredContacts.length) },
+    { label: "Location ready", value: locationStatus },
+    { label: "Readiness", value: `${readinessScore}%` },
   ];
 
   const handleFormChange = (event) => {
@@ -271,7 +276,7 @@ const SOSAlert = () => {
     }));
   };
 
-  const handleAddContact = (event) => {
+  const handleAddContact = async (event) => {
     event.preventDefault();
 
     if (!contactForm.name.trim() || !contactForm.phone.trim()) {
@@ -279,30 +284,33 @@ const SOSAlert = () => {
       return;
     }
 
-    const newContact = {
-      id: `contact-${Date.now()}`,
-      name: contactForm.name.trim(),
-      relation: contactForm.relation.trim() || "Trusted contact",
-      phone: contactForm.phone.trim(),
-      priority: contactForm.priority,
-      notifyBy: contactForm.notifyBy.length ? contactForm.notifyBy : ["Push"],
-      acknowledged: false,
-    };
-
-    setContacts((current) => [...current, newContact]);
-    setContactForm({
-      name: "",
-      relation: "",
-      phone: "",
-      priority: "Backup",
-      notifyBy: ["Push", "SMS"],
-    });
-    setStatusMessage(`${newContact.name} is now part of your SOS safety circle.`);
+    try {
+      const response = await apiCall('/sos/contacts', 'POST', contactForm);
+      if (response?.data) {
+        setContacts(prev => [...prev, { ...response.data, acknowledged: false }]);
+        setContactForm({
+          name: "",
+          relation: "",
+          phone: "",
+          priority: "Backup",
+          notifyBy: ["Push", "SMS"],
+        });
+        setStatusMessage(`${contactForm.name} saved to your SOS safety circle.`);
+        loadData(); // Refresh list
+      }
+    } catch (error) {
+      setStatusMessage('Failed to save contact. Try again.');
+    }
   };
 
-  const handleRemoveContact = (contactId) => {
-    setContacts((current) => current.filter((contact) => contact.id !== contactId));
-    setStatusMessage("Trusted contact removed.");
+  const handleRemoveContact = async (contactId) => {
+    try {
+      await apiCall(`/sos/contacts/${contactId}`, 'DELETE');
+      setContacts(prev => prev.filter(c => c._id !== contactId));
+      setStatusMessage("Trusted contact removed.");
+    } catch (error) {
+      setStatusMessage('Failed to remove contact.');
+    }
   };
 
   const handleToggleSetting = (settingKey) => {
@@ -312,79 +320,79 @@ const SOSAlert = () => {
     }));
   };
 
+  const loadData = useCallback(async () => {
+    try {
+      const contactsRes = await apiCall('/sos/contacts');
+      if (contactsRes?.data) setContacts(contactsRes.data.map(c => ({ ...c, acknowledged: false })));
+      const historyRes = await apiCall('/sos/history?limit=10');
+      if (historyRes?.data) setHistory(historyRes.data);
+    } catch (error) {
+      console.error('Failed to refresh SOS data:', error);
+    }
+  }, [apiCall]);
+
   const handleTriggerSOS = useCallback(async () => {
+    if (!contacts.length) {
+      setStatusMessage('Add at least one trusted contact first.');
+      return;
+    }
+
     const startedAt = new Date().toISOString();
     const reason = alertState.reason;
     const channels = settings.silentMode ? ["Push", "SMS"] : DELIVERY_CHANNELS;
-    const nextHistoryItem = {
-      id: `alert-${Date.now()}`,
-      reason,
-      startedAt,
-      location: LOCATION_POINTS[0],
-      mode: settings.silentMode ? "Silent alert" : "Active alert",
-      outcome: "In progress",
-    };
+    const geoLocation = currentPosition ? {
+      longitude: currentPosition.coords.longitude,
+      latitude: currentPosition.coords.latitude,
+      location: `${currentPosition.coords.accuracy?.toFixed(0)}m accuracy`
+    } : null;
+
     const log = [
-      buildAlertLog(`SOS alert sent for ${reason.toLowerCase()}.`),
-      buildAlertLog(`Location shared from ${LOCATION_POINTS[0]}.`),
-      buildAlertLog(`Notifications queued for ${activeContacts.length} trusted contacts.`),
+      buildAlertLog(`SOS triggered for ${reason.toLowerCase()}.`),
+      buildAlertLog(geoLocation ? `Live location: ${geoLocation.location}` : 'Location unavailable'),
+      buildAlertLog(`Queued for ${contacts.length} trusted + app contacts.`),
     ];
-    const baseAlertState = {
+
+    setContacts(prev => prev.map(c => ({ ...c, acknowledged: false })));
+    setAlertState(prev => ({
+      ...prev,
       active: true,
-      mode: settings.silentMode ? "Silent alert" : "Active alert",
-      reason,
+      mode: settings.silentMode ? "Silent" : "Active",
       startedAt,
-      locationIndex: 0,
-      escalationLevel: 0,
-      acknowledgedBy: "",
+      reason,
       channels,
       log,
-    };
-
-    setContacts((current) => current.map((contact) => ({ ...contact, acknowledged: false })));
-    setAlertState(baseAlertState);
-    setHistory((current) => [nextHistoryItem, ...current]);
+      escalationLevel: 0,
+      currentLocation: geoLocation?.location || activeLocation,
+    }));
 
     try {
       const response = await apiCall("/sos/send-alert", "POST", {
         reason,
-        location: LOCATION_POINTS[0],
+        longitude: geoLocation?.longitude,
+        latitude: geoLocation?.latitude,
+        location: geoLocation?.location || 'Location unavailable',
         channels,
         timestamp: startedAt,
       });
 
-      const recipients = Array.isArray(response?.data?.recipients) ? response.data.recipients : [];
-      const onlineRecipientCount = Number(response?.data?.onlineRecipientCount || 0);
-      setAlertState((current) => ({
-        ...current,
+      const recipients = response?.data?.recipients || [];
+      setAlertState(prev => ({
+        ...prev,
         log: [
-          buildAlertLog(
-            `Emergency call request sent to ${recipients.length} registered contact${recipients.length === 1 ? "" : "s"}, ${onlineRecipientCount} online right now.`
-          ),
-          ...current.log,
+          buildAlertLog(`Dispatched to ${recipients.length} contacts (${response.data.onlineRecipientCount || 0} online).`),
+          ...prev.log,
         ].slice(0, 8),
       }));
-      setStatusMessage(
-        recipients.length > 0
-          ? `SOS alert is live. ${recipients.length} registered contact${recipients.length === 1 ? "" : "s"} received the emergency alert.`
-          : "SOS alert is live. Add registered contacts in LinkUp to trigger in-app emergency calls."
-      );
+      setStatusMessage(`SOS live. Incident ID: ${response.data.incidentId || 'N/A'}`);
     } catch (error) {
-      setAlertState((current) => ({
-        ...current,
-        log: [
-          buildAlertLog(
-            `Registered contact dispatch failed: ${error.response?.data?.message || error.message || "Unknown error"}.`
-          ),
-          ...current.log,
-        ].slice(0, 8),
+      const msg = error.response?.data?.message || error.message || "Dispatch error";
+      setAlertState(prev => ({
+        ...prev,
+        log: [buildAlertLog(`Dispatch failed: ${msg}`), ...prev.log].slice(0, 8),
       }));
-      setStatusMessage(
-        error.response?.data?.message ||
-          "SOS alert is active locally, but registered app contacts could not be reached."
-      );
+      setStatusMessage(`Local alert active. Backend: ${msg}`);
     }
-  }, [activeContacts.length, alertState.reason, apiCall, settings.silentMode]);
+  }, [contacts.length, alertState.reason, apiCall, settings.silentMode, currentPosition, activeLocation]);
 
   useEffect(() => {
     const handleExternalSOSRequest = () => {
@@ -453,7 +461,7 @@ const SOSAlert = () => {
           ? {
               ...item,
               resolvedAt,
-              location: activeLocation,
+              location: alertState.currentLocation || activeLocation,
               outcome: alertState.acknowledgedBy
                 ? `Resolved with ${alertState.acknowledgedBy}`
                 : "Resolved manually",
@@ -506,7 +514,11 @@ const SOSAlert = () => {
         ))}
       </section>
 
-      {statusMessage ? <div className="sos-status-banner">{statusMessage}</div> : null}
+{statusMessage ? (
+  <div className={`sos-status-banner ${locationError ? 'error' : ''}`}>
+    {locationError ? `Location: ${locationError}` : statusMessage}
+  </div>
+) : null}
 
       <section className="sos-layout">
         <div className="sos-main-column">
@@ -598,7 +610,7 @@ const SOSAlert = () => {
               <div className="sos-summary-grid">
                 <div>
                   <span>Location</span>
-                  <strong>{settings.shareLiveLocation || alertState.active ? activeLocation : "Hidden"}</strong>
+<strong>{currentPosition ? `${currentPosition.coords.accuracy?.toFixed(0)}m` : locationError ? 'N/A' : 'Loading...'}</strong>
                 </div>
                 <div>
                   <span>Escalation</span>

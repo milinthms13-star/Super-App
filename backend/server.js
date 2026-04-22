@@ -31,6 +31,15 @@ const messagingRoutes = require('./routes/messaging');
 const reminderRoutes = require('./routes/reminders');
 const diaryRoutes = require('./routes/diary');
 const sosRoutes = require('./routes/sos');
+const localmarketRoutes = require('./routes/localmarket');
+const wishlistShareRoutes = require('./routes/wishlistshare');
+const bulkOrderRoutes = require('./routes/bulkorders');
+const subscriptionRoutes = require('./routes/subscriptions');
+const reviewRoutes = require('./routes/reviews');
+const walletRoutes = require('./routes/wallet');
+const referralProgramRoutes = require('./routes/referralprogram');
+const giftCardRoutes = require('./routes/giftcards');
+const sellerAnalyticsRoutes = require('./routes/selleranalytics');
 
 const app = express();
 const server = http.createServer(app);
@@ -122,6 +131,15 @@ app.use('/api/messaging', messagingRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/diary', diaryRoutes);
 app.use('/api/sos', sosRoutes);
+app.use('/api/localmarket', localmarketRoutes);
+app.use('/api/wishlist-share', wishlistShareRoutes);
+app.use('/api/bulk-orders', bulkOrderRoutes);
+app.use('/api/referral', referralProgramRoutes);
+app.use('/api/gift-cards', giftCardRoutes);
+app.use('/api/seller-analytics', sellerAnalyticsRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/wallet', walletRoutes);
 
 const buildDir = path.join(__dirname, '../build');
 const buildIndexPath = path.join(buildDir, 'index.html');
@@ -207,7 +225,16 @@ const startServer = async () => {
   });
 };
 
-startServer();
+if (require.main === module) {
+  startServer().catch((error) => {
+    logger.error('Failed to start backend server:', error);
+    process.exit(1);
+  });
+}
 
 // Export for testing
-module.exports = { app, server, io: getIo() };
+module.exports = app;
+module.exports.app = app;
+module.exports.server = server;
+module.exports.io = getIo();
+module.exports.startServer = startServer;

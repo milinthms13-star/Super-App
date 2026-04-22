@@ -19,13 +19,15 @@ const TodoList = ({ category = "All", showCompleted = false }) => {
         setError(null);
         const response = await fetchReminders({
           category,
+          completed: showCompleted ? undefined : false,
           limit: 50,
         });
-        
-        const filteredReminders = showCompleted 
-          ? response.data 
-          : response.data.filter(r => !r.completed);
-        
+
+        const loadedReminders = Array.isArray(response.data) ? response.data : [];
+        const filteredReminders = showCompleted
+          ? loadedReminders
+          : loadedReminders.filter((reminder) => !reminder.completed);
+
         setReminders(filteredReminders);
       } catch (err) {
         console.error("Error loading reminders:", err);
@@ -40,10 +42,18 @@ const TodoList = ({ category = "All", showCompleted = false }) => {
 
   const handleToggleComplete = async (reminderId, currentStatus) => {
     try {
-      await toggleReminderCompletion(reminderId, !currentStatus);
-      setReminders(prev =>
-        prev.map(r => r._id === reminderId ? { ...r, completed: !currentStatus } : r)
-      );
+      const response = await toggleReminderCompletion(reminderId, !currentStatus);
+      const updatedReminder = response.data;
+
+      setReminders((prev) => {
+        if (!showCompleted && updatedReminder?.completed) {
+          return prev.filter((reminder) => reminder._id !== reminderId);
+        }
+
+        return prev.map((reminder) =>
+          reminder._id === reminderId ? updatedReminder : reminder
+        );
+      });
     } catch (err) {
       console.error("Error updating reminder:", err);
       setError(err.message || "Failed to update reminder");

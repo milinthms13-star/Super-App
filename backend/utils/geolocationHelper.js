@@ -120,12 +120,67 @@ const calculateBoundingBox = (coords = [0, 0], radiusKm = 50) => {
   };
 };
 
+/**
+ * Reverse geocode coordinates to address (client-side simulation - replace with real API)
+ */
+const reverseGeocode = async (longitude, latitude) => {
+  // TODO: Integrate real API (Google Maps, OpenStreetMap Nominatim, etc.)
+  // For now, return approximate based on coords
+  const nearbyCities = [
+    { coords: [76.2711, 9.9312], name: 'Kochi, Kerala' },
+    { coords: [72.8479, 8.5241], name: 'Trivandrum, Kerala' },
+    { coords: [76.2144, 10.5276], name: 'Thrissur, Kerala' },
+  ];
+
+  let closest = nearbyCities[0];
+  let minDist = Number.MAX_SAFE_INTEGER;
+
+  for (const city of nearbyCities) {
+    const dist = calculateDistance([longitude, latitude], city.coords);
+    if (dist < minDist) {
+      minDist = dist;
+      closest = city;
+    }
+  }
+
+  return {
+    formatted: closest.name,
+    city: closest.name.split(',')[0],
+    state: closest.name.split(',')[1]?.trim(),
+    country: 'India',
+    accuracy: `${minDist.toFixed(1)}km approximate`
+  };
+};
+
+/**
+ * SOS-specific: Get nearest police station or emergency service coords
+ */
+const getNearestEmergencyServices = async (longitude, latitude) => {
+  // Simulated - integrate with real emergency API
+  return [
+    {
+      name: 'Kochi City Police HQ',
+      coords: [76.2673, 9.9312],
+      phone: '+91 484 234 1700',
+      distance: calculateDistance([longitude, latitude], [76.2673, 9.9312]).toFixed(1)
+    },
+    {
+      name: 'Marine Drive Police Station',
+      coords: [76.2597, 9.9689],
+      phone: '+91 484 235 4001',
+      distance: calculateDistance([longitude, latitude], [76.2597, 9.9689]).toFixed(1)
+    }
+  ].sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+};
+
 module.exports = {
   calculateDistance,
   isValidCoordinates,
   getCoordinatesForCity,
   createGeoQuery,
   calculateBoundingBox,
+  reverseGeocode,
+  getNearestEmergencyServices,
   CITY_COORDINATES,
   EARTH_RADIUS_KM,
 };
