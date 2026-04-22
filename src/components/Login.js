@@ -398,7 +398,7 @@ const Login = ({
         } else if (isAdminFlow || (isLoginFlow && isAdminEmail && loginRole === "entrepreneur")) {
           mergedUser = {
             ...response.data.user,
-            name: "MalabarBazaar Admin",
+            name: "NilaHub Admin",
             email: ADMIN_EMAIL,
             avatar: "A",
             role: "admin",
@@ -530,9 +530,9 @@ const Login = ({
         )}
 
         <div className="login-header">
-          <img src="/logo.png" alt="MalabarBazaar" className="login-logo" />
+          <img src="/logo.png" alt="NilaHub" className="login-logo" />
           <p className="login-kicker">{headerKicker}</p>
-          <h1>MalabarBazaar</h1>
+          <h1>NilaHub</h1>
           <p className="login-subtitle">{loginSubtitle}</p>
         </div>
 

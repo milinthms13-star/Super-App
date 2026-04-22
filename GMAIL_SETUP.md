@@ -16,7 +16,7 @@ This guide walks you through setting up Gmail API for sending OTPs in developmen
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Click the **Project** dropdown at the top
 3. Click **NEW PROJECT**
-4. Enter project name: `MalabarBazaar`
+4. Enter project name: `NilaHub`
 5. Click **CREATE**
 6. Wait for the project to be created
 
@@ -40,7 +40,7 @@ This guide walks you through setting up Gmail API for sending OTPs in developmen
    - Choose **External** user type
    - Click **CREATE**
    - Fill in the form:
-     - App name: `MalabarBazaar`
+     - App name: `NilaHub`
      - User support email: `your-email@gmail.com`
      - Click **SAVE AND CONTINUE**
    - On the next screen, click **SAVE AND CONTINUE** (scopes are optional)
@@ -48,7 +48,7 @@ This guide walks you through setting up Gmail API for sending OTPs in developmen
    - Go back to create credentials
 4. Now create OAuth 2.0 Client ID:
    - Application type: **Desktop application**
-   - Name: `MalabarBazaar Desktop`
+   - Name: `NilaHub Desktop`
    - Click **CREATE**
 
 ---

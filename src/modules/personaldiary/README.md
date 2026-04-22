@@ -1,6 +1,6 @@
 # Personal Diary Application Module
 
-A comprehensive React-based diary and journaling module for MalabarBazaar platform that enables users to write, organize, and reflect on their personal experiences with mood tracking and advanced features.
+A comprehensive React-based diary and journaling module for the NilaHub platform that enables users to write, organize, and reflect on their personal experiences with mood tracking and advanced features.
 
 ## 📋 Features
 
@@ -201,7 +201,7 @@ DELETE /api/diary/:id                   // Delete entry
 ### CSS Structure
 - **Diary.css** contains all component styling
 - Responsive design with mobile-first approach
-- Gradient purple backgrounds matching MalabarBazaar theme
+- Gradient purple backgrounds matching NilaHub theme
 - CSS Grid for layouts
 
 ### Key Classes
@@ -248,7 +248,7 @@ DiaryEditor  DiaryEntryCard Calendar  MoodChart
 ## 🚀 Usage
 
 ### Accessing the Module
-1. Login to MalabarBazaar
+1. Login to NilaHub
 2. Navigate to "My Diary" from the sidebar
 3. Click "✍️ New Entry" to start writing
 
@@ -353,7 +353,7 @@ The diary module is fully responsive and optimized for:
 
 ## 🤝 Integration Notes
 
-- Uses existing MalabarBazaar authentication system
+- Uses existing NilaHub authentication system
 - Follows established API conventions
 - Integrates with AppContext for global state
 - Uses axios for HTTP requests with credentials

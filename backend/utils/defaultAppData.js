@@ -245,7 +245,7 @@ const DEFAULT_APP_DATA = {
         id: 'cl-msg-1',
         listingId: 'cl-1',
         from: 'Platform Bot',
-        senderEmail: 'system@malabarbazaar.local',
+        senderEmail: 'system@nilahub.local',
         text: 'Verified listing. You can chat or call the seller directly.',
         createdAt: '2026-04-19T10:00:00.000Z',
       },

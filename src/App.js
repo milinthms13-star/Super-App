@@ -638,7 +638,7 @@ function App() {
     return (
       <>
         <AnnouncementBar language={language} />
-        <div className="app-loading">Loading MalabarBazaar...</div>
+        <div className="app-loading">Loading NilaHub...</div>
       </>
     );
   }

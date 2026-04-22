@@ -66,8 +66,8 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
               className="nav-logo"
               onClick={() => handleModuleClick(isAdmin ? "admin-dashboard" : "dashboard")}
             >
-              <img src="/logo.png" alt="MalabarBazaar Logo" className="logo-image" />
-              <span>MalabarBazaar</span>
+              <img src="/logo.png" alt="NilaHub Logo" className="logo-image" />
+              <span>NilaHub</span>
             </div>
 
             <div className="nav-right">
@@ -138,7 +138,7 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
 
       <div className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <h3>MalabarBazaar</h3>
+          <h3>NilaHub</h3>
           <button className="close-btn" onClick={() => setIsSidebarOpen(false)}>
             {t("common.close", "Close")}
           </button>

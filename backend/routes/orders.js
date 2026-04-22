@@ -1092,7 +1092,7 @@ const createStripeCheckoutSession = async ({ amount, attemptId, user, orderData 
     'metadata[attemptId]': attemptId,
     'metadata[userEmail]': user.email,
     'line_items[0][price_data][currency]': 'inr',
-    'line_items[0][price_data][product_data][name]': 'MalabarBazaar Order',
+    'line_items[0][price_data][product_data][name]': 'NilaHub Order',
     'line_items[0][price_data][product_data][description]': `${orderData.items.length} item(s) with delivery`,
     'line_items[0][price_data][unit_amount]': String(amount),
     'line_items[0][quantity]': '1',

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes all the improvements made to the Classifieds module of the MalaBarbazaar application. These enhancements transform the module from a basic classified ads listing system into a sophisticated marketplace platform with advanced features for buyers, sellers, and administrators.
+This document describes all the improvements made to the Classifieds module of the NilaHub application. These enhancements transform the module from a basic classified ads listing system into a sophisticated marketplace platform with advanced features for buyers, sellers, and administrators.
 
 ## Major Features Implemented
 

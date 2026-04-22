@@ -1828,7 +1828,7 @@ const Classifieds = () => {
           seller={selectedSellerStore}
           listings={mockData.filter(l => l.seller === selectedSellerStore.name)}
           onListingClick={(listing) => {
-            setSelectedListing(listing);
+            setSelectedListingId(listing.id);
             setStoreOpen(false);
             addToast(`Viewing ${listing.title}`, 'info');
           }}
@@ -1885,9 +1885,17 @@ const Classifieds = () => {
             addToast('Template saved successfully', 'success');
           }}
           onApplyTemplate={(templateData) => {
-            setSelectedListing({ ...selectedListing, ...templateData });
+            setEditingListingId("");
+            setListingForm((currentForm) => ({
+              ...currentForm,
+              ...templateData,
+              price:
+                templateData.price !== undefined
+                  ? String(templateData.price)
+                  : currentForm.price,
+            }));
             setTemplatesOpen(false);
-            addToast('Template applied to current listing', 'info');
+            addToast('Template applied to the ad form', 'info');
           }}
           onDeleteTemplate={(templateId) => {
             setSavedTemplates(savedTemplates.filter(t => t.id !== templateId));

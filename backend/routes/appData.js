@@ -556,15 +556,15 @@ const sendRegistrationReviewEmail = async ({ to, applicantName, businessName, st
     return false;
   }
 
-  const subject = `MalabarBazaar registration update: ${status}`;
+  const subject = `NilaHub registration update: ${status}`;
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; color: #1a2332;">
-      <h2>MalabarBazaar Registration Review</h2>
+      <h2>NilaHub Registration Review</h2>
       <p>Hello ${applicantName || businessName || 'Entrepreneur'},</p>
       <p>Your entrepreneur registration for <strong>${businessName || 'your business account'}</strong> has been reviewed.</p>
       <p><strong>Status:</strong> ${status}</p>
       <p><strong>Reason:</strong> ${reason || 'No additional reason provided.'}</p>
-      <p>Please log in to MalabarBazaar for the latest account details.</p>
+      <p>Please log in to NilaHub for the latest account details.</p>
     </div>
   `;
 
@@ -591,7 +591,7 @@ const sendRegistrationReviewEmail = async ({ to, applicantName, businessName, st
   const transporter = getEmailService();
   const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
   await transporter.sendMail({
-    from: `MalabarBazaar <${fromAddress}>`,
+    from: `NilaHub <${fromAddress}>`,
     to,
     subject,
     html: htmlContent,

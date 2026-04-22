@@ -351,18 +351,18 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange }) => {
       ) : (
         <>
           <div className={`welcome-section ${isSeller ? "seller-welcome-section" : ""}`}>
-            <img src="/logo.png" alt="MalabarBazaar" className="welcome-logo" />
+            <img src="/logo.png" alt="NilaHub" className="welcome-logo" />
             {isSeller ? (
               <>
                 <h1>{businessName} Seller Dashboard</h1>
                 <p>
-                  Manage your subscribed MalabarBazaar business categories, monitor seller orders,
+                  Manage your subscribed NilaHub business categories, monitor seller orders,
                   and jump directly into the services your business registered for.
                 </p>
               </>
             ) : (
               <>
-                <h1>{t("dashboard.welcomeTitle", "Welcome to MalabarBazaar!")}</h1>
+                <h1>{t("dashboard.welcomeTitle", "Welcome to NilaHub!")}</h1>
                 <p>
                   {t(
                     "dashboard.welcomeDescription",

@@ -459,7 +459,7 @@ const CartPage = ({ onContinueShopping }) => {
         key: paymentSession.key,
         amount: paymentSession.order.amount,
         currency: paymentSession.order.currency,
-        name: "MalabarBazaar",
+        name: "NilaHub",
         description: "Secure order payment",
         order_id: paymentSession.order.id,
         prefill: {

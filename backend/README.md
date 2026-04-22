@@ -1,6 +1,6 @@
-# MalabarBazaar Backend
+# NilaHub Backend
 
-Backend foundation for the MalabarBazaar super app. It is being hardened toward production use with real authentication, persistence, security controls, and scalable service boundaries.
+Backend foundation for the NilaHub super app. It is being hardened toward production use with real authentication, persistence, security controls, and scalable service boundaries.
 
 ## 🚀 Features
 
@@ -185,7 +185,7 @@ CMD ["npm", "start"]
 ### PM2 (Process Manager)
 ```bash
 npm install -g pm2
-pm2 start server.js --name malabarbazaar-backend
+pm2 start server.js --name nilahub-backend
 pm2 startup
 pm2 save
 ```

@@ -265,7 +265,7 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
       loggedInUser || {
         id: 1,
         name: "Dhanya",
-        email: "dhanya@malabarbazaar.com",
+        email: "dhanya@nilahub.com",
         phone: "+91 9876543210",
         avatar: "U",
       },

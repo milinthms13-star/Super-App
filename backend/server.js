@@ -139,7 +139,7 @@ if (hasFrontendBuild) {
   app.get('/', (req, res) => {
     res.status(200).json({
       success: true,
-      message: 'MalabarBazaar backend is running. Frontend build is not deployed on this service.',
+      message: 'NilaHub backend is running. Frontend build is not deployed on this service.',
     });
   });
 }
@@ -201,7 +201,7 @@ const startServer = async () => {
   }
 
   server.listen(PORT, () => {
-    logger.info(`MalabarBazaar backend running on http://localhost:${PORT}`);
+    logger.info(`NilaHub backend running on http://localhost:${PORT}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Frontend URL: ${allowedOrigins.join(', ')}`);
   });

@@ -1,33 +1,48 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 const ImageLightbox = ({ images = [], initialIndex = 0, onClose }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isZoomed, setIsZoomed] = useState(false);
-
-  if (!images || images.length === 0) return null;
-
-  const currentImage = images[currentIndex];
+  const imageCount = images?.length || 0;
 
   const handlePrevious = () => {
-    setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    setCurrentIndex((prev) => (prev === 0 ? imageCount - 1 : prev - 1));
     setIsZoomed(false);
   };
 
   const handleNext = () => {
-    setCurrentIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    setCurrentIndex((prev) => (prev === imageCount - 1 ? 0 : prev + 1));
     setIsZoomed(false);
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'ArrowLeft') handlePrevious();
-    if (e.key === 'ArrowRight') handleNext();
-    if (e.key === 'Escape') onClose();
-  };
+  useEffect(() => {
+    if (!imageCount) {
+      return undefined;
+    }
 
-  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') {
+        setCurrentIndex((prev) => (prev === 0 ? imageCount - 1 : prev - 1));
+        setIsZoomed(false);
+      }
+      if (e.key === 'ArrowRight') {
+        setCurrentIndex((prev) => (prev === imageCount - 1 ? 0 : prev + 1));
+        setIsZoomed(false);
+      }
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [imageCount, onClose]);
+
+  if (!imageCount) {
+    return null;
+  }
+
+  const currentImage = images[currentIndex];
 
   return (
     <div className="lightbox-overlay" onClick={onClose}>

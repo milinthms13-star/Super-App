@@ -1,5 +1,5 @@
 {
-  "name": "malabarbazaar",
+  "name": "nilahub",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -59,8 +59,8 @@
     "wait-on": "^7.0.1"
   },
   "build": {
-    "appId": "com.malabarbazaar.app",
-    "productName": "Malabar Bazaar",
+    "appId": "com.nilahub.app",
+    "productName": "NilaHub",
     "directories": {
       "output": "dist",
       "buildResources": "assets"

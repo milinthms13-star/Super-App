@@ -17,13 +17,13 @@ const translations = {
       ],
     },
     launch: {
-      brand: "MalabarBazaar",
-      title: "Kerala Super App",
+      brand: "NilaHub",
+      title: "Kerala's Super App",
       intro:
         "Kerala's Super App, a unified platform to discover opportunities, offer services, and grow your income. Whether you're a real estate professional, driver, cook, service provider, or entrepreneur, manage multiple roles seamlessly from one place and reach customers across the globe.",
       languageLabel: "Language",
       login: "Login",
-      loginHelp: "Access your MalabarBazaar account with verified email.",
+      loginHelp: "Access your NilaHub account with verified email.",
       user: "Register as a User",
       userHelp: "Shop, book, chat, browse, and connect globally.",
       entrepreneur: "Register as an Entrepreneur",
@@ -83,7 +83,7 @@ const translations = {
       businessAccess: "Business access",
     },
     dashboard: {
-      welcomeTitle: "Welcome to MalabarBazaar!",
+      welcomeTitle: "Welcome to NilaHub!",
       welcomeDescription: "Kerala's first super app for global shopping, messaging, listings, homes, food, rides, matches, and social life",
       itemsInCart: "Items in Cart",
       ordersPlaced: "Orders Placed",
@@ -142,7 +142,7 @@ const translations = {
       ],
     },
     launch: {
-      brand: "MalabarBazaar",
+      brand: "NilaHub",
       title: "കേരള സൂപ്പർ ആപ്പ്",
       intro:
         "അവസരങ്ങൾ കണ്ടെത്താനും സേവനങ്ങൾ നൽകാനും വരുമാനം വളർത്താനും സഹായിക്കുന്ന കേരളത്തിന്റെ സൂപ്പർ ആപ്പ്. നിങ്ങൾ റിയൽ എസ്റ്റേറ്റ് പ്രൊഫഷണലോ ഡ്രൈവറോ കുക്കോ സേവനദാതാവോ സംരംഭകനോ ആയാലും, ഒരിടത്ത് നിന്ന് നിരവധി റോളുകൾ ലളിതമായി കൈകാര്യം ചെയ്ത് ലോകമെമ്പാടുമുള്ള ഉപഭോക്താക്കളിലെത്താം.",
@@ -199,13 +199,13 @@ const translations = {
       ],
     },
     launch: {
-      brand: "MalabarBazaar",
+      brand: "NilaHub",
       title: "केरल सुपर ऐप",
       intro:
         "केरल का सुपर ऐप, अवसर खोजने, सेवाएं देने और आय बढ़ाने के लिए एक unified platform. चाहे आप real estate professional, driver, cook, service provider या entrepreneur हों, एक ही जगह से कई भूमिकाएं आसानी से संभालें और दुनिया भर के ग्राहकों तक पहुंचें.",
       languageLabel: "भाषा",
       login: "लॉगिन",
-      loginHelp: "Verified email से अपने MalabarBazaar account में जाएं.",
+      loginHelp: "Verified email से अपने NilaHub account में जाएं.",
       user: "User के रूप में Register करें",
       userHelp: "Shop, book, chat, browse और globally connect करें.",
       entrepreneur: "Entrepreneur के रूप में Register करें",
@@ -256,13 +256,13 @@ const translations = {
       ],
     },
     launch: {
-      brand: "MalabarBazaar",
+      brand: "NilaHub",
       title: "تطبيق كيرالا الخارق",
       intro:
         "تطبيق كيرالا الخارق هو منصة موحدة لاكتشاف الفرص، تقديم الخدمات، وتنمية الدخل. سواء كنت متخصصا في العقارات أو سائقا أو طاهيا أو مقدم خدمات أو رائد أعمال، يمكنك إدارة أدوار متعددة بسهولة من مكان واحد والوصول إلى العملاء حول العالم.",
       languageLabel: "اللغة",
       login: "تسجيل الدخول",
-      loginHelp: "ادخل إلى حساب MalabarBazaar عبر بريد إلكتروني موثق.",
+      loginHelp: "ادخل إلى حساب NilaHub عبر بريد إلكتروني موثق.",
       user: "التسجيل كمستخدم",
       userHelp: "تسوق، احجز، تحدث، تصفح، وتواصل عالميا.",
       entrepreneur: "التسجيل كرائد أعمال",

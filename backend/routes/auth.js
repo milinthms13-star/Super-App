@@ -290,7 +290,7 @@ router.post('/send-otp', async (req, res) => {
 
       const htmlContent = `
         <div style="font-family: Arial, sans-serif; color: #1a2332;">
-          <h2>MalabarBazaar One-Time Password</h2>
+          <h2>NilaHub One-Time Password</h2>
           <p>Use the following OTP to complete your login:</p>
           <p style="font-size: 24px; font-weight: 700; color: #d4af37;">${otpCode}</p>
           <p>This code is valid for 15 minutes.</p>
@@ -299,14 +299,14 @@ router.post('/send-otp', async (req, res) => {
       `;
 
       if (process.env.EMAIL_SERVICE === 'gmail-api') {
-        await sendEmailViaGmail(email, 'Your MalabarBazaar OTP', htmlContent);
+        await sendEmailViaGmail(email, 'Your NilaHub OTP', htmlContent);
       } else if (process.env.EMAIL_SERVICE === 'ses') {
         const ses = getEmailService();
         await ses.sendEmail({
           Source: process.env.EMAIL_FROM || process.env.EMAIL_USER,
           Destination: { ToAddresses: [email] },
           Message: {
-            Subject: { Data: 'Your MalabarBazaar OTP' },
+            Subject: { Data: 'Your NilaHub OTP' },
             Body: {
               Html: {
                 Data: htmlContent,
@@ -318,9 +318,9 @@ router.post('/send-otp', async (req, res) => {
         const transporter = getEmailService();
         const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
         await transporter.sendMail({
-          from: `MalabarBazaar <${fromAddress}>`,
+          from: `NilaHub <${fromAddress}>`,
           to: email,
-          subject: 'Your MalabarBazaar OTP',
+          subject: 'Your NilaHub OTP',
           html: htmlContent,
         });
       }

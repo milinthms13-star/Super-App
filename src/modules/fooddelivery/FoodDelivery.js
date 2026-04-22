@@ -565,7 +565,7 @@ const FoodDelivery = () => {
   const customerOrders = useMemo(
     () =>
       orders.filter(
-        (order) => order.customerEmail === (currentUser?.email || "guest@malabarbazaar.local")
+        (order) => order.customerEmail === (currentUser?.email || "guest@nilahub.local")
       ),
     [currentUser?.email, orders]
   );
@@ -847,7 +847,7 @@ const FoodDelivery = () => {
       restaurantId: restaurant?.id || "restaurant",
       restaurantName: restaurant?.name || "Restaurant",
       customerName: currentUser?.name || "Guest Customer",
-      customerEmail: currentUser?.email || "guest@malabarbazaar.local",
+      customerEmail: currentUser?.email || "guest@nilahub.local",
       items: cartItems.map((item) => ({
         id: item.id,
         name: item.name,
@@ -1056,7 +1056,7 @@ const FoodDelivery = () => {
     <div className="fooddelivery-shell">
       <section className="fooddelivery-hero">
         <div className="fooddelivery-hero-copy">
-          <p className="fooddelivery-kicker">MalabarBazaar Module</p>
+          <p className="fooddelivery-kicker">NilaHub Module</p>
           <h1>{contentCopy.title}</h1>
           <p>{contentCopy.subtitle}</p>
           <div className="fooddelivery-pillrow">

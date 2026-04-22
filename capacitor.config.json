@@ -1,6 +1,6 @@
 {
-  "appId": "com.malabarbazaar.app",
-  "appName": "Malabar Bazaar",
+  "appId": "com.nilahub.app",
+  "appName": "NilaHub",
   "webDir": "build",
   "bundledWebRuntime": false,
   "server": {

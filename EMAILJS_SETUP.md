@@ -1,4 +1,4 @@
-# MalabarBazaar - EmailJS Setup Guide 📧
+# NilaHub - EmailJS Setup Guide 📧
 
 ## Overview
 The login system is now configured to send OTPs via email using EmailJS. This guide will help you set it up in 5 minutes.
@@ -26,14 +26,14 @@ The login system is now configured to send OTPs via email using EmailJS. This gu
 
 **Email Subject:**
 ```
-Your MalabarBazaar OTP Code: {{otp_code}}
+Your NilaHub OTP Code: {{otp_code}}
 ```
 
 **Email Content:**
 ```
 Hello {{user_name}},
 
-Your OTP for MalabarBazaar login is:
+Your OTP for NilaHub login is:
 
 {{otp_code}}
 
@@ -42,7 +42,7 @@ This code will expire in 10 minutes.
 If you didn't request this, please ignore this email.
 
 Best regards,
-MalabarBazaar Team
+NilaHub Team
 ```
 
 4. Save the template and copy the **Template ID** (looks like: `template_xxxxx`)
@@ -151,4 +151,4 @@ For more help:
 
 ---
 
-**Made with ❤️ for MalabarBazaar**
+**Made with ❤️ for NilaHub**
