@@ -30,7 +30,8 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
     { id: "socialmedia", label: t("modules.socialmedia", "VibeHub") },
     { id: "diary", label: t("modules.diary", "My Diary") },
     { id: "reminderalert", label: t("modules.reminderalert", "ReminderAlert - Todo List") },
-    { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center") },
+{ id: "sosalert", label: t("modules.sosalert", "SOS Safety Center") },
+    { id: "astrology", label: t("modules.astrology", "AstroNila") },
   ];
 
   const modules = isAdmin

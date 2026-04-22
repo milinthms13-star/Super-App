@@ -23,6 +23,7 @@ import Matrimonial from "./modules/matrimonial/Matrimonial";
 import SocialMedia from "./modules/socialmedia/SocialMedia";
 import ReminderAlert from "./modules/reminderalert/ReminderAlert";
 import SOSAlert from "./modules/sos/SOSAlert";
+import AstrologyHome from "./modules/astrology/AstrologyHome";
 import { Diary } from "./modules/personaldiary";
 import {
   CUSTOM_LINKS_STORAGE_KEY,
@@ -33,10 +34,10 @@ import {
   getStoredAuthToken,
   storeAuthToken,
 } from "./utils/auth";
+import { API_BASE_URL, BACKEND_BASE_URL } from "./utils/api";
 import "./App.css";
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
-const SOCKET_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
+const SOCKET_BASE_URL = BACKEND_BASE_URL;
 
 const EMPTY_APP_DATA = {
   businessCategories: [],
@@ -128,7 +129,7 @@ function App() {
       return undefined;
     }
 
-    const socket = io(process.env.REACT_APP_BACKEND_URL || SOCKET_BASE_URL, {
+    const socket = io(SOCKET_BASE_URL, {
       auth: {
         token: authToken,
       },
@@ -743,6 +744,8 @@ function App() {
         return <Diary />;
       case "sosalert":
         return <SOSAlert />;
+      case "astrology":
+        return <AstrologyHome />;
       default:
         return (
           <Dashboard

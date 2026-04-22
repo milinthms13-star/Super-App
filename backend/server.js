@@ -30,13 +30,26 @@ app.use('/uploads', express.static('uploads'));
 connectDB();
 
 // Health check
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    service: 'nilahub-backend',
+    health: '/health',
+    api: '/api',
+  });
+});
+
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 // API Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/appdata', require('./routes/appData'));
+const authRoutes = require('./routes/auth');
+const appDataRoutes = require('./routes/appData');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/appdata', appDataRoutes);
+app.use('/api/app-data', appDataRoutes);
 app.use('/api/bulkorders', require('./routes/bulkorders'));
 app.use('/api/diary', require('./routes/diary'));
 app.use('/api/files', require('./routes/files'));

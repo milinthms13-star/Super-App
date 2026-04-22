@@ -1,5 +1,4 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
-const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
+import { API_ORIGIN } from "../../utils/api";
 
 const IMAGE_URL_PATTERN = /^(https?:|data:|blob:)/i;
 

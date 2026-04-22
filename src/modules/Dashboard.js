@@ -141,7 +141,15 @@ const Icon = ({ type, className = "" }) => {
           <path d="M9 11h6" />
         </svg>
       );
-    case "external":
+case "astrology":
+      return (
+        <svg {...common}>
+          <path d="M12 2v20M2 12h20" />
+          <path d="M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M4.22 18.36l1.42-1.42M18.36 4.22l1.42-1.42" />
+          <circle cx="12" cy="12" r="10" />
+        </svg>
+      );
+  case "external":
       return (
         <svg {...common}>
           <path d="M14 5h5v5" />
@@ -239,9 +247,21 @@ const MODULE_CONFIG = [
     descriptionKey: "dashboard.moduleDescriptions.sosalert",
     fallbackDescription: "Emergency alerts with live location sharing, escalation, and trusted contact tracking",
   },
+  {
+    id: "astrology",
+    nameKey: "modules.astrology",
+    fallbackName: "AstroNila",
+    icon: "astrology",
+    descriptionKey: "dashboard.moduleDescriptions.astrology",
+    fallbackDescription: "Daily horoscope, Vedic insights, and personalized astrology readings for all zodiac signs",
+  },
 ];
 
-const openExternalLink = (url) => {
+const openExternalLink = (url = "") => {
+  if (!url) {
+    return;
+  }
+
   window.open(url, "_blank", "noopener,noreferrer");
 };
 

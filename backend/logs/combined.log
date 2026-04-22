@@ -2114,3 +2114,5 @@
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mEnvironment: test\u001b[39m","timestamp":"2026-04-23 02:10:05:105"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFrontend URL: http://localhost:3000, http://localhost:3001, http://localhost:3002\u001b[39m","timestamp":"2026-04-23 02:10:05:105"}
 {"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mFrontend build not found at C:\\Users\\Dhanya\\malabarbazaar\\build\\index.html. Serving API only.\u001b[39m","timestamp":"2026-04-23 02:23:10:2310"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mServer started on port 5000\u001b[39m","timestamp":"2026-04-23 03:35:27:3527"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mServer started on port 5000\u001b[39m","timestamp":"2026-04-23 04:06:12:612"}

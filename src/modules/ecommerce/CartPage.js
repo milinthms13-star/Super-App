@@ -5,9 +5,9 @@ import { useApp } from "../../contexts/AppContext";
 import { resolveProductImageSrc } from "./productImage";
 import { formatCurrency, isValidIndianPhone, isValidPincode } from "../../utils/ecommerceHelpers";
 import { sanitizeText } from "../../utils/xssProtection";
+import { API_BASE_URL } from "../../utils/api";
 import "../../styles/Ecommerce.css";
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const PINCODE_LENGTH = 6;
 const DEFAULT_COUNTRY = "India";
 

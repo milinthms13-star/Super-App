@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useApp } from '../../contexts/AppContext';
+import { API_BASE_URL } from '../../utils/api';
 import '../../styles/Ecommerce.css';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const Reviews = ({ productId, productName }) => {
   const { currentUser } = useApp();

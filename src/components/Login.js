@@ -2,9 +2,9 @@ import React, { useMemo, useState } from "react";
 import axios from "axios";
 import { getTranslation } from "../data/translations";
 import useVoice from "../hooks/useVoice";
+import { API_BASE_URL } from "../utils/api";
 import "../styles/Login.css";
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const ADMIN_EMAIL = "mgdhanyamohan@gmail.com";
 const IDENTITY_OPTIONS = [
   { value: "pan", label: "PAN Card" },

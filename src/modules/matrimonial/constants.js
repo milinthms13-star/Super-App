@@ -1,4 +1,6 @@
-export const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+import { API_BASE_URL as SHARED_API_BASE_URL } from "../../utils/api";
+
+export const API_BASE_URL = SHARED_API_BASE_URL;
 export const PROFILES_PER_PAGE = 10;
 
 export const DEFAULT_PREFERENCES = {

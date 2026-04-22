@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../utils/api";
 
 const AppContext = createContext();
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 const DEFAULT_PRODUCTS_LIMIT = 12;
 const DEFAULT_MANAGED_PRODUCTS_LIMIT = 12;
 const DEFAULT_ORDERS_LIMIT = 10;

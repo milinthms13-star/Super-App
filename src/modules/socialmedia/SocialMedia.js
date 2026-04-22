@@ -17,6 +17,7 @@ import {
 } from "./socialData";
 import "../../styles/SocialMedia.css";
 import io from 'socket.io-client';
+import { BACKEND_BASE_URL } from "../../utils/api";
 
 const TABS = [
   { id: "feed", label: "Feed", icon: "Feed" },
@@ -80,7 +81,7 @@ const SocialMedia = () => {
   // WebSocket initialization for real-time features
   useEffect(() => {
     if (currentUser) {
-      const newSocket = io(process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000', {
+      const newSocket = io(BACKEND_BASE_URL, {
         auth: {
           token: localStorage.getItem('token'),
         },

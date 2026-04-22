@@ -26,6 +26,7 @@ const LaunchPage = ({
     VibeHub: "socialmedia",
     "ReminderAlert - Todo List": "reminderalert",
     "SOS Safety Center": "sosalert",
+    "AstroNila": "astrology",
   };
 
   const filteredFeatures = launch.features.filter(([name]) => enabledModules.includes(moduleMapping[name]));
@@ -130,3 +131,4 @@ const LaunchPage = ({
 };
 
 export default LaunchPage;
+

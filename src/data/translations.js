@@ -74,7 +74,8 @@ const translations = {
       matrimonial: "SoulMatch",
       socialmedia: "VibeHub",
       reminderalert: "ReminderAlert - Todo List",
-      sosalert: "SOS Safety Center",
+sosalert: "SOS Safety Center",
+        astrology: "AstroNila",
       admin: "Admin Dashboard",
     },
     navigation: {
@@ -101,7 +102,8 @@ const translations = {
         matrimonial: "Find your perfect life partner with verified profiles",
         socialmedia: "Social space to connect, share, and grow across borders",
         reminderalert: "Smart task planning with alarms, SMS reminders, and automated call alerts",
-        sosalert: "Emergency alerts with live location sharing, escalation, and trusted contact tracking",
+sosalert: "Emergency alerts with live location sharing, escalation, and trusted contact tracking",
+        astrology: "Daily horoscope, Vedic insights, and personalized astrology readings for all zodiac signs",
       },
     },
     admin: {

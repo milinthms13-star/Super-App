@@ -10,6 +10,7 @@ import AISmartReplies from './AISmartReplies';
 import FileUpload from './FileUpload';
 import NotificationBell from './NotificationBell';
 import io from 'socket.io-client';
+import { BACKEND_BASE_URL } from '../../utils/api';
 
 const getId = (value) => {
   if (!value) {
@@ -162,7 +163,7 @@ const Messaging = () => {
       return undefined;
     }
 
-    const newSocket = io(process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000', {
+    const newSocket = io(BACKEND_BASE_URL, {
       auth: {
         token: getStoredAuthToken(),
       },
