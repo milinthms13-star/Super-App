@@ -23,6 +23,13 @@ const MOODS = [
 
 const CATEGORIES = ["All", "Personal", "Work", "Travel", "Health", "Relationships", "Other"];
 
+const stripHtml = (content = "") =>
+  String(content)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const Diary = () => {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -90,7 +97,7 @@ const Diary = () => {
       if (
         searchQuery &&
         !entry.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !entry.content.toLowerCase().includes(searchQuery.toLowerCase())
+        !stripHtml(entry.content).toLowerCase().includes(searchQuery.toLowerCase())
       ) {
         return false;
       }
@@ -104,10 +111,10 @@ const Diary = () => {
     });
   }, [entries, selectedCategory, selectedMood, searchQuery, selectedTags]);
 
-  const handleCreateEntry = async (entryData) => {
+  const handleCreateEntry = async (entryData, files = []) => {
     try {
       setSubmitting(true);
-      const response = await createDiaryEntry(entryData);
+      const response = await createDiaryEntry(entryData, files);
       setEntries((current) => [response.data, ...current]);
       setShowEditor(false);
       setEditingEntry(null);
@@ -120,10 +127,10 @@ const Diary = () => {
     }
   };
 
-  const handleUpdateEntry = async (entryData) => {
+  const handleUpdateEntry = async (entryData, files = []) => {
     try {
       setSubmitting(true);
-      const response = await updateDiaryEntry(editingEntry._id, entryData);
+      const response = await updateDiaryEntry(editingEntry._id, entryData, files);
       setEntries((current) =>
         current.map((entry) =>
           entry._id === editingEntry._id ? response.data : entry

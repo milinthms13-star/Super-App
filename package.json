@@ -10,8 +10,12 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.6.0",
+    "jspdf": "^4.2.1",
+    "papaparse": "^5.5.3",
+    "quill": "^2.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-quill": "^2.0.0",
     "react-scripts": "5.0.1",
     "socket.io-client": "^4.7.4",
     "web-vitals": "^2.1.4"
@@ -71,13 +75,22 @@
       "package.json"
     ],
     "win": {
-      "target": ["nsis", "zip"]
+      "target": [
+        "nsis",
+        "zip"
+      ]
     },
     "mac": {
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "linux": {
-      "target": ["AppImage", "deb"]
+      "target": [
+        "AppImage",
+        "deb"
+      ]
     }
   }
 }

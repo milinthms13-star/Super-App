@@ -8,6 +8,19 @@ const axiosInstance = axios.create({
   withCredentials: true,
 });
 
+const appendFormValue = (formData, key, value) => {
+  if (value === undefined || value === null) {
+    return;
+  }
+
+  if (Array.isArray(value) || (typeof value === "object" && !(value instanceof Date))) {
+    formData.append(key, JSON.stringify(value));
+    return;
+  }
+
+  formData.append(key, value);
+};
+
 /**
  * Fetch all diary entries
  * @param {Object} options - Query options
@@ -109,13 +122,24 @@ export const fetchDiaryEntry = async (entryId) => {
 };
 
 /**
- * Create a new diary entry
+ * Create a new diary entry (multipart for files)
  * @param {Object} entryData - Entry data
+ * @param {File[]} files - Optional files
  * @returns {Promise<Object>} - Created diary entry
  */
-export const createDiaryEntry = async (entryData) => {
+export const createDiaryEntry = async (entryData, files = []) => {
+  const formData = new FormData();
+  Object.keys(entryData).forEach((key) => {
+    appendFormValue(formData, key, entryData[key]);
+  });
+  files.forEach((file) => formData.append("attachments", file));
+  
   try {
-    const response = await axiosInstance.post("/diary", entryData);
+    const response = await axiosInstance.post("/diary", formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   } catch (error) {
     console.error("Error creating diary entry:", error);
@@ -126,14 +150,25 @@ export const createDiaryEntry = async (entryData) => {
 };
 
 /**
- * Update an existing diary entry
+ * Update an existing diary entry (multipart for files)
  * @param {string} entryId - ID of entry to update
  * @param {Object} entryData - Updated entry data
+ * @param {File[]} files - Optional new files
  * @returns {Promise<Object>} - Updated diary entry
  */
-export const updateDiaryEntry = async (entryId, entryData) => {
+export const updateDiaryEntry = async (entryId, entryData, files = []) => {
+  const formData = new FormData();
+  Object.keys(entryData).forEach((key) => {
+    appendFormValue(formData, key, entryData[key]);
+  });
+  files.forEach((file) => formData.append("attachments", file));
+  
   try {
-    const response = await axiosInstance.put(`/diary/${entryId}`, entryData);
+    const response = await axiosInstance.put(`/diary/${entryId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   } catch (error) {
     console.error("Error updating diary entry:", error);

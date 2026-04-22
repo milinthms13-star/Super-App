@@ -8,6 +8,13 @@ const MOOD_EMOJIS = {
   very_happy: "😄",
 };
 
+const stripHtml = (content = "") =>
+  String(content)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const DiaryEntryCard = ({ entry, onEdit, onDelete }) => {
   const getMoodColor = (mood) => {
     const colors = {
@@ -67,7 +74,7 @@ const DiaryEntryCard = ({ entry, onEdit, onDelete }) => {
         <span className="diary-category-badge">{entry.category}</span>
       </div>
 
-      <p className="diary-card-content">{truncateContent(entry.content)}</p>
+      <p className="diary-card-content">{truncateContent(stripHtml(entry.content))}</p>
 
       {entry.tags && entry.tags.length > 0 && (
         <div className="diary-card-tags">
@@ -79,6 +86,23 @@ const DiaryEntryCard = ({ entry, onEdit, onDelete }) => {
           {entry.tags.length > 3 && (
             <span className="diary-card-tag">+{entry.tags.length - 3}</span>
           )}
+        </div>
+      )}
+
+      {entry.attachments && entry.attachments.length > 0 && (
+        <div className="diary-card-attachments">
+          {entry.attachments.slice(0, 3).map((att, idx) => (
+            <div key={idx} className="attachment-mini">
+              {att.type === 'image' ? (
+                <img src={att.url} alt="attachment" style={{width: '40px', height: '40px'}} />
+              ) : (
+                <audio src={att.url} controls style={{width: '80px'}} />
+              )}
+              {entry.attachments.length > 3 && idx === 2 && (
+                <span>+{entry.attachments.length - 3}</span>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

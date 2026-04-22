@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 const MOODS = [
   { value: "very_sad", label: "😭 Very Sad", emoji: "😭" },
@@ -9,6 +11,13 @@ const MOODS = [
 ];
 
 const CATEGORIES = ["Personal", "Work", "Travel", "Health", "Relationships", "Other"];
+
+const getPlainTextContent = (content = "") =>
+  String(content)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
   const [formData, setFormData] = useState({
@@ -22,6 +31,8 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
   });
   const [tagInput, setTagInput] = useState("");
   const [errors, setErrors] = useState({});
+  const [selectedFiles, setSelectedFiles] = useState([]) ;
+  const [filePreviews, setFilePreviews] = useState([]) ;
 
   useEffect(() => {
     if (entry) {
@@ -37,6 +48,12 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
     }
   }, [entry]);
 
+  useEffect(() => {
+    return () => {
+      filePreviews.forEach((preview) => URL.revokeObjectURL(preview));
+    };
+  }, [filePreviews]);
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData((current) => ({
@@ -47,6 +64,19 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
       setErrors((current) => ({
         ...current,
         [name]: null,
+      }));
+    }
+  };
+
+  const handleQuillChange = (value) => {
+    setFormData((current) => ({
+      ...current,
+      content: value,
+    }));
+    if (errors.content) {
+      setErrors((current) => ({
+        ...current,
+        content: null,
       }));
     }
   };
@@ -73,7 +103,7 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
     if (!formData.title.trim()) {
       newErrors.title = "Title is required";
     }
-    if (!formData.content.trim()) {
+    if (!getPlainTextContent(formData.content)) {
       newErrors.content = "Content is required";
     }
     setErrors(newErrors);
@@ -83,7 +113,7 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
-      onSave(formData);
+      onSave(formData, selectedFiles);
     }
   };
 
@@ -171,19 +201,27 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
           {/* Content */}
           <div className="diary-form-group">
             <label>What's on your mind? *</label>
-            <textarea
-              name="content"
-              placeholder="Write your thoughts, memories, and feelings here..."
+            <ReactQuill
+              theme="snow"
               value={formData.content}
-              onChange={handleChange}
-              maxLength="50000"
-              rows="12"
+              onChange={handleQuillChange}
+              placeholder="Write your thoughts, memories, and feelings here..."
               disabled={submitting}
               className={errors.content ? "error" : ""}
+              modules={{
+                toolbar: [
+                  [{ 'header': [1, 2, false] }],
+                  ['bold', 'italic', 'underline','strike', 'blockquote'],
+                  [{'list': 'ordered'}, {'list': 'bullet'}, {'indent': '-1'}, {'indent': '+1'}],
+                  ['link', 'image'],
+                  ['clean']
+                ],
+              }}
+              style={{ height: '300px' }}
             />
             {errors.content && <span className="diary-error">{errors.content}</span>}
             <div className="diary-char-count">
-              {formData.content.length}/50000 characters
+              {getPlainTextContent(formData.content).length}/50000 characters
             </div>
           </div>
 
@@ -226,6 +264,40 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
                     ✕
                   </button>
                 </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Attachments */}
+          <div className="diary-form-group">
+            <label>Attachments (Images/Audio)</label>
+            <input
+              type="file"
+              multiple
+              accept="image/*,audio/*"
+              onChange={(e) => {
+                const files = Array.from(e.target.files);
+                setSelectedFiles(files);
+                const previews = files.map(file => URL.createObjectURL(file));
+                setFilePreviews(previews);
+              }}
+              disabled={submitting}
+            />
+            <div className="diary-attachments-preview">
+              {filePreviews.map((preview, idx) => (
+                <div key={idx} className="attachment-preview">
+                  {selectedFiles[idx].type.startsWith('image/') ? (
+                    <img src={preview} alt="preview" style={{width: '60px', height: '60px'}} />
+                  ) : (
+                    <audio src={preview} controls style={{width: '150px'}} />
+                  )}
+                  <button type="button" onClick={() => {
+                    const newFiles = selectedFiles.filter((_, i) => i !== idx);
+                    const newPreviews = filePreviews.filter((_, i) => i !== idx);
+                    setSelectedFiles(newFiles);
+                    setFilePreviews(newPreviews);
+                  }}>Remove</button>
+                </div>
               ))}
             </div>
           </div>

@@ -1,10 +1,12 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const router = express.Router();
 const DiaryEntry = require('../models/DiaryEntry');
 const { authenticate } = require('../middleware/auth');
 const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
+const multer = require('multer');
+const { uploadBufferToGridFS } = require('../utils/gridfs');
+const { analyzeMood } = require('../utils/aiMoodAnalyzer');
 
 // Create rate limiter for diary
 const diaryRateLimiter = createModerateRateLimiter({
@@ -189,18 +191,125 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Multer for attachments
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only images and audio allowed'), false);
+    }
+  }
+});
+
+const parseBooleanField = (value, fallback = false) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+
+  return fallback;
+};
+
+const parseTagsField = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((tag) => String(tag).toLowerCase().trim()).filter(Boolean);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map((tag) => String(tag).toLowerCase().trim()).filter(Boolean);
+      }
+    } catch (error) {
+      return value
+        .split(',')
+        .map((tag) => String(tag).toLowerCase().trim())
+        .filter(Boolean);
+    }
+  }
+
+  return [];
+};
+
+const storeDiaryAttachment = async ({ file, user }) => {
+  if (!file?.buffer?.length) {
+    return null;
+  }
+
+  try {
+    const storedFile = await uploadBufferToGridFS({
+      buffer: file.buffer,
+      filename: file.originalname || `diary-${Date.now()}`,
+      contentType: file.mimetype || 'application/octet-stream',
+      metadata: {
+        category: 'diary-attachment',
+        visibility: 'private',
+        ownerEmail: user?.email || '',
+      },
+    });
+
+    return {
+      type: file.mimetype.startsWith('image/') ? 'image' : 'audio',
+      url: `/api/files/private/${storedFile.id}`,
+      fileName: file.originalname,
+      fileSize: file.size,
+      uploadedAt: new Date()
+    };
+  } catch (error) {
+    if (error?.message?.includes('GridFS bucket has not been initialized')) {
+      const contentType = file.mimetype || 'application/octet-stream';
+      return {
+        type: file.mimetype.startsWith('image/') ? 'image' : 'audio',
+        url: `data:${contentType};base64,${file.buffer.toString('base64')}`,
+        fileName: file.originalname,
+        fileSize: file.size,
+        uploadedAt: new Date()
+      };
+    }
+
+    throw error;
+  }
+};
+
 // POST /api/diary - Create new diary entry
-router.post('/', async (req, res) => {
+router.post('/', upload.array('attachments', 5), async (req, res) => {
   try {
     const {
       title,
       content,
-      mood = 'neutral',
+      mood,
       category = 'Personal',
-      tags = [],
-      isDraft = false,
+      tags,
+      isDraft,
       entryDate
     } = req.body;
+
+    // Process attachments
+    const attachments = [];
+    for (const file of req.files || []) {
+      try {
+        const attachment = await storeDiaryAttachment({ file, user: req.user });
+        if (attachment) {
+          attachments.push(attachment);
+        }
+      } catch (err) {
+        logger.error('Attachment upload failed:', err);
+      }
+    }
 
     if (!title || !content) {
       return res.status(400).json({
@@ -211,13 +320,7 @@ router.post('/', async (req, res) => {
 
     const validMoods = ['very_sad', 'sad', 'neutral', 'happy', 'very_happy'];
     const validCategories = ['Personal', 'Work', 'Travel', 'Health', 'Relationships', 'Other'];
-
-    if (!validMoods.includes(mood)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid mood'
-      });
-    }
+    const normalizedMood = validMoods.includes(mood) ? mood : analyzeMood(content);
 
     if (!validCategories.includes(category)) {
       return res.status(400).json({
@@ -226,14 +329,17 @@ router.post('/', async (req, res) => {
       });
     }
 
+    const parsedIsDraft = parseBooleanField(isDraft, false);
+
     const entry = new DiaryEntry({
       userId: req.user._id || req.user.id,
       title: title.trim(),
       content: content.trim(),
-      mood,
+      mood: normalizedMood,
       category,
-      tags: Array.isArray(tags) ? tags.map(t => String(t).toLowerCase().trim()).filter(Boolean) : [],
-      isDraft,
+      tags: parseTagsField(tags),
+      isDraft: parsedIsDraft,
+      attachments,
       entryDate: entryDate ? new Date(entryDate) : new Date()
     });
 
@@ -244,7 +350,7 @@ router.post('/', async (req, res) => {
     res.status(201).json({
       success: true,
       data: entry,
-      message: isDraft ? 'Draft saved successfully' : 'Entry created successfully'
+      message: parsedIsDraft ? 'Draft saved successfully' : 'Entry created successfully'
     });
   } catch (error) {
     logger.error('Error creating diary entry:', error);
@@ -257,7 +363,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/diary/:id - Update diary entry
-router.put('/:id', async (req, res) => {
+router.put('/:id', upload.array('attachments', 5), async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
     const { title, content, mood, category, tags, isDraft, entryDate } = req.body;
@@ -274,15 +380,33 @@ router.put('/:id', async (req, res) => {
       });
     }
 
+    const newAttachments = [];
+    for (const file of req.files || []) {
+      try {
+        const attachment = await storeDiaryAttachment({ file, user: req.user });
+        if (attachment) {
+          newAttachments.push(attachment);
+        }
+      } catch (err) {
+        logger.error('Attachment upload failed:', err);
+      }
+    }
+
     if (title) entry.title = title.trim();
     if (content) entry.content = content.trim();
-    if (mood) entry.mood = mood;
-    if (category) entry.category = category;
-    if (Array.isArray(tags)) {
-      entry.tags = tags.map(t => String(t).toLowerCase().trim()).filter(Boolean);
+    if (mood) {
+      const validMoods = ['very_sad', 'sad', 'neutral', 'happy', 'very_happy'];
+      entry.mood = validMoods.includes(mood) ? mood : analyzeMood(content || entry.content || '');
     }
-    if (isDraft !== undefined) entry.isDraft = isDraft;
+    if (category) entry.category = category;
+    if (tags !== undefined) {
+      entry.tags = parseTagsField(tags);
+    }
+    if (isDraft !== undefined) entry.isDraft = parseBooleanField(isDraft, entry.isDraft);
     if (entryDate) entry.entryDate = new Date(entryDate);
+    if (newAttachments.length > 0) {
+      entry.attachments.push(...newAttachments);
+    }
 
     entry.updatedAt = new Date();
     await entry.save();
