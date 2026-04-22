@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 const RealEstateProperty = require('../models/RealEstateProperty');
 const { 
   serializeRealEstateProperty, 
@@ -9,7 +9,9 @@ const {
   normalizeRealEstateReview,
   normalizeRealEstateReport 
 } = require('../utils/realEstateStore');
-const rateLimiter = require('../middleware/rateLimiter');
+const { createModerateRateLimiter } = require('../middleware/rateLimiter');
+
+const rateLimiter = createModerateRateLimiter();
 
 // GET /api/realestate - List properties with filters
 router.get('/', async (req, res) => {
@@ -60,7 +62,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/realestate - Create new property (auth required)
-router.post('/', auth, rateLimiter, async (req, res) => {
+router.post('/', authenticate, rateLimiter, async (req, res) => {
   try {
     const propertyData = {
       ...req.body,
@@ -94,7 +96,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PATCH /api/realestate/:id - Update property (owner only)
-router.patch('/:id', auth, async (req, res) => {
+router.patch('/:id', authenticate, async (req, res) => {
   try {
     const property = await RealEstateProperty.findOne({
       _id: req.params.id,
@@ -212,7 +214,7 @@ router.post('/:id/reports', async (req, res) => {
 });
 
 // PATCH /api/realestate/:id/moderation - Admin moderate (approve/reject)
-router.patch('/:id/moderation', auth, async (req, res) => {
+router.patch('/:id/moderation', authenticate, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Admin access required' });
@@ -237,7 +239,7 @@ router.patch('/:id/moderation', auth, async (req, res) => {
 });
 
 // DELETE /api/realestate/:id - Delete property (owner/admin)
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const property = await RealEstateProperty.findOne({
       _id: req.params.id,

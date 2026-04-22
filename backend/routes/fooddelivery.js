@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
-const rateLimiter = require('../middleware/rateLimiter');
+const { authenticate } = require('../middleware/auth');
+const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const { getRestaurants, getMenuByRestaurant, createOrder, getOrdersByCustomer } = require('../utils/foodStore');
 const FoodOrder = require('../models/FoodOrder');
 const MenuItem = require('../models/MenuItem');
 const Restaurant = require('../models/Restaurant');
+
+const rateLimiter = createModerateRateLimiter();
 
 // GET /api/fooddelivery/restaurants
 router.get('/restaurants', rateLimiter, async (req, res) => {
@@ -28,7 +30,7 @@ router.get('/:restaurantId/menu', rateLimiter, async (req, res) => {
 });
 
 // POST /api/fooddelivery/order
-router.post('/order', auth, rateLimiter, async (req, res) => {
+router.post('/order', authenticate, rateLimiter, async (req, res) => {
   try {
     const orderData = {
       ...req.body,
@@ -42,7 +44,7 @@ router.post('/order', auth, rateLimiter, async (req, res) => {
 });
 
 // GET /api/fooddelivery/my-orders
-router.get('/my-orders', auth, async (req, res) => {
+router.get('/my-orders', authenticate, async (req, res) => {
   try {
     const orders = await getOrdersByCustomer(req.user.id);
     res.json({ success: true, data: orders });

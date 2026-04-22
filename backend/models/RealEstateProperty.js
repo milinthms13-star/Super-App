@@ -114,7 +114,7 @@ const realEstatePropertySchema = new mongoose.Schema({
   disputeCount: { type: Number, default: 0 },
   languageSupport: [{ type: String }],
   status: { 
-    type: string, 
+    type: String, 
     enum: ['available', 'sold', 'rented', 'reserved'], 
     default: 'available' 
   }
@@ -130,4 +130,3 @@ realEstatePropertySchema.index({ priceValue: 1 });
 realEstatePropertySchema.index({ rating: -1, reviewCount: -1 });
 
 module.exports = mongoose.models.RealEstateProperty || mongoose.model('RealEstateProperty', realEstatePropertySchema);
-

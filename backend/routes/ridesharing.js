@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
-const rateLimiter = require('../middleware/rateLimiter');
+const { authenticate } = require('../middleware/auth');
+const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const { getNearbyDrivers, createRideRequest, getRideRequests, updateDriverLocation } = require('../utils/rideSharingStore');
 const RideRequest = require('../models/RideRequest');
 
+const rateLimiter = createModerateRateLimiter();
+
 // POST /api/ridesharing/request
-router.post('/request', auth, rateLimiter, async (req, res) => {
+router.post('/request', authenticate, rateLimiter, async (req, res) => {
   try {
     const rideData = {
       ...req.body,
@@ -20,7 +22,7 @@ router.post('/request', auth, rateLimiter, async (req, res) => {
 });
 
 // GET /api/ridesharing/drivers/nearby
-router.get('/drivers/nearby', auth, async (req, res) => {
+router.get('/drivers/nearby', authenticate, async (req, res) => {
   try {
     const { lat, lng, radius } = req.query;
     const drivers = await getNearbyDrivers(Number(lat), Number(lng), Number(radius));
@@ -31,7 +33,7 @@ router.get('/drivers/nearby', auth, async (req, res) => {
 });
 
 // GET /api/ridesharing/requests
-router.get('/requests', auth, async (req, res) => {
+router.get('/requests', authenticate, async (req, res) => {
   try {
     const { status } = req.query;
     const requests = await getRideRequests(status);
@@ -42,7 +44,7 @@ router.get('/requests', auth, async (req, res) => {
 });
 
 // PUT /api/ridesharing/driver/location
-router.put('/driver/location', auth, async (req, res) => {
+router.put('/driver/location', authenticate, async (req, res) => {
   try {
     const { lat, lng } = req.body;
     // Assume req.user.driverId or logic
@@ -55,5 +57,3 @@ router.put('/driver/location', auth, async (req, res) => {
 });
 
 module.exports = router;
-</xai:function_call name="read_file">
-<parameter name="path">c:/Users/Dhanya/malabarbazaar/backend/server.js
