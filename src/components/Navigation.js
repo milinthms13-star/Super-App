@@ -66,7 +66,7 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
               className="nav-logo"
               onClick={() => handleModuleClick(isAdmin ? "admin-dashboard" : "dashboard")}
             >
-              <img src="/logo.png" alt="NilaHub Logo" className="logo-image" />
+              <img src="/logo.svg" alt="NilaHub Logo" className="logo-image" />
               <span>NilaHub</span>
             </div>
 

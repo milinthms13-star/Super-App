@@ -351,7 +351,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange }) => {
       ) : (
         <>
           <div className={`welcome-section ${isSeller ? "seller-welcome-section" : ""}`}>
-            <img src="/logo.png" alt="NilaHub" className="welcome-logo" />
+            <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
             {isSeller ? (
               <>
                 <h1>{businessName} Seller Dashboard</h1>

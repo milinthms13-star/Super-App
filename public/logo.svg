@@ -1,0 +1,64 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 256 256"
+  role="img"
+  aria-labelledby="title desc"
+  fill="none"
+>
+  <title id="title">NilaHub logo</title>
+  <desc id="desc">
+    A premium navy, teal, and gold emblem with a stylized N, a crescent moon,
+    and a glowing hub node.
+  </desc>
+  <defs>
+    <linearGradient id="bg" x1="32" y1="24" x2="224" y2="232" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#081525" />
+      <stop offset="0.5" stop-color="#122A46" />
+      <stop offset="1" stop-color="#0E5C61" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(76 60) rotate(90) scale(92)">
+      <stop stop-color="#FFE49B" />
+      <stop offset="1" stop-color="#FFE49B" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="mark" x1="74" y1="78" x2="196" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF8DF" />
+      <stop offset="1" stop-color="#F2C94C" />
+    </linearGradient>
+    <linearGradient id="node" x1="181" y1="164" x2="222" y2="203" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8AF1D8" />
+      <stop offset="1" stop-color="#29B9A3" />
+    </linearGradient>
+    <mask id="crescent-mask">
+      <rect width="256" height="256" fill="#000" />
+      <circle cx="188" cy="70" r="28" fill="#fff" />
+      <circle cx="200" cy="61" r="24" fill="#000" />
+    </mask>
+  </defs>
+
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#bg)" />
+  <circle cx="76" cy="60" r="92" fill="url(#glow)" opacity="0.22" />
+  <rect width="256" height="256" fill="#F6D36C" mask="url(#crescent-mask)" />
+
+  <path
+    d="M74 180V78L182 180V78"
+    stroke="url(#mark)"
+    stroke-width="18"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M182 180H206"
+    stroke="url(#node)"
+    stroke-width="10"
+    stroke-linecap="round"
+  />
+  <circle cx="216" cy="180" r="11" fill="url(#node)" />
+  <circle cx="216" cy="180" r="4" fill="#F7FCFB" />
+  <path
+    d="M58 202C88 188 121 188 154 202"
+    stroke="#77D8CD"
+    stroke-opacity="0.36"
+    stroke-width="8"
+    stroke-linecap="round"
+  />
+</svg>
