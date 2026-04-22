@@ -24,7 +24,8 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
     { id: "messaging", label: t("modules.messaging", "LinkUp") },
     { id: "classifieds", label: t("modules.classifieds", "TradePost") },
     { id: "realestate", label: t("modules.realestate", "HomeSphere") },
-    { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly") },
+{ id: "fooddelivery", label: t("modules.fooddelivery", "Feastly") },
+    { id: "localmarket", label: t("modules.localmarket", "Local Market") },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide") },
     { id: "matrimonial", label: t("modules.matrimonial", "SoulMatch") },
     { id: "socialmedia", label: t("modules.socialmedia", "VibeHub") },
@@ -32,6 +33,7 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
     { id: "reminderalert", label: t("modules.reminderalert", "ReminderAlert - Todo List") },
 { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center") },
     { id: "astrology", label: t("modules.astrology", "AstroNila") },
+
   ];
 
   const modules = isAdmin

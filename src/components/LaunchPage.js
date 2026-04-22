@@ -21,6 +21,7 @@ const LaunchPage = ({
     TradePost: "classifieds",
     HomeSphere: "realestate",
     Feastly: "fooddelivery",
+    "Local Market": "localmarket",
     SwiftRide: "ridesharing",
     SoulMatch: "matrimonial",
     VibeHub: "socialmedia",

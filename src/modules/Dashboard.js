@@ -133,12 +133,20 @@ const Icon = ({ type, className = "" }) => {
           <path d="M6 9a6 6 0 1 1 12 0c0 2.4.8 3.8 2 5H4c1.2-1.2 2-2.6 2-5Z" />
         </svg>
       );
-    case "sosalert":
+case "sosalert":
       return (
         <svg {...common}>
           <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.5-7 10-7 10Z" />
           <path d="M12 8v6" />
           <path d="M9 11h6" />
+        </svg>
+      );
+  case "localmarket":
+      return (
+        <svg {...common}>
+          <path d="M3 5h2l2 10h10l2-7H7" />
+          <circle cx="10" cy="19" r="1.5" />
+          <circle cx="17" cy="19" r="1.5" />
         </svg>
       );
 case "astrology":
@@ -206,6 +214,14 @@ const MODULE_CONFIG = [
     icon: "fooddelivery",
     descriptionKey: "dashboard.moduleDescriptions.fooddelivery",
     fallbackDescription: "Restaurant discovery and food delivery made simple",
+  },
+  {
+    id: "localmarket",
+    nameKey: "modules.localmarket",
+    fallbackName: "Local Market",
+    icon: "localmarket",
+    descriptionKey: "dashboard.moduleDescriptions.localmarket",
+    fallbackDescription: "Local vendors, fresh produce, handmade goods, and neighborhood services",
   },
   {
     id: "ridesharing",
