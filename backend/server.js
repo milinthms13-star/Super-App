@@ -65,6 +65,9 @@ app.use('/api/ridesharing', require('./routes/ridesharing'));
 // Add realestate route to main server
 app.use('/api/realestate', require('./routes/realestate'));
 
+// Astrology module routes
+app.use('/api/astrology', require('./routes/astrology'));
+
 // Error handler last
 app.use(errorHandler);
 
