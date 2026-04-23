@@ -13,7 +13,7 @@ const FileUpload = ({ chatId, onFileUploaded, onClose }) => {
   const allowedTypes = {
     image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
     video: ['video/mp4', 'video/webm', 'video/ogg'],
-    audio: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4'],
+    audio: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/webm', 'audio/x-m4a'],
     document: [
       'application/pdf',
       'application/msword',

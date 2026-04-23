@@ -11,8 +11,9 @@ const AIReply = require('../models/AIReply');
 const ChatNotification = require('../models/ChatNotification');
 const MessagingSettings = require('../models/MessagingSettings');
 const User = require('../models/User');
+const { ensureMessagingUser } = require('../utils/ensureMessagingUser');
 const { generateKeyPair, encryptMessage, decryptMessage, generateKeyFingerprint } = require('../utils/encryption');
-const { uploadToS3, generateSignedUrl, deleteFromS3 } = require('../utils/s3Storage');
+const { generateS3Key, uploadToS3, generateSignedUrl, deleteFromS3 } = require('../utils/s3Storage');
 const { generateAISuggestions } = require('../utils/aiChat');
 const { emitToUser } = require('../config/websocket');
 const { authenticate } = require('../middleware/auth');
@@ -86,10 +87,28 @@ const getAuthorizedChat = async (chatId, userId) => {
   };
 };
 
+const attachMessagingUser = async (req, res, next) => {
+  try {
+    const resolvedUser = await ensureMessagingUser(req.user);
+
+    if (!resolvedUser || !mongoose.Types.ObjectId.isValid(resolvedUser._id)) {
+      return res.status(503).json({
+        message: 'Messaging is temporarily unavailable. Please reconnect the database and try again.',
+      });
+    }
+
+    req.originalUser = req.user;
+    req.user = resolvedUser;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+};
+
 // ============ CHAT ROUTES ============
 
 // Create or get direct chat with another user
-router.post('/chats/direct', authenticate, async (req, res, next) => {
+router.post('/chats/direct', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { otherUserId } = req.body;
 
@@ -131,7 +150,7 @@ router.post('/chats/direct', authenticate, async (req, res, next) => {
 });
 
 // Create group chat
-router.post('/chats/group', authenticate, async (req, res, next) => {
+router.post('/chats/group', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { groupName, participantIds, groupIcon, groupDescription } = req.body;
 
@@ -177,7 +196,7 @@ router.post('/chats/group', authenticate, async (req, res, next) => {
 });
 
 // Get all chats for user
-router.get('/chats', authenticate, async (req, res, next) => {
+router.get('/chats', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { page = 1, limit = 20, search } = req.query;
 
@@ -229,7 +248,7 @@ router.get('/chats', authenticate, async (req, res, next) => {
 });
 
 // Get chat by ID
-router.get('/chats/:chatId', authenticate, async (req, res, next) => {
+router.get('/chats/:chatId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.params;
 
@@ -258,7 +277,7 @@ router.get('/chats/:chatId', authenticate, async (req, res, next) => {
 });
 
 // Update group chat
-router.put('/chats/:chatId', authenticate, async (req, res, next) => {
+router.put('/chats/:chatId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.params;
     const { groupName, groupIcon, groupDescription } = req.body;
@@ -293,7 +312,7 @@ router.put('/chats/:chatId', authenticate, async (req, res, next) => {
 });
 
 // Add member to group
-router.post('/chats/:chatId/members', authenticate, async (req, res, next) => {
+router.post('/chats/:chatId/members', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.params;
     const { userId } = req.body;
@@ -335,7 +354,7 @@ router.post('/chats/:chatId/members', authenticate, async (req, res, next) => {
 });
 
 // Remove member from group
-router.delete('/chats/:chatId/members/:userId', authenticate, async (req, res, next) => {
+router.delete('/chats/:chatId/members/:userId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId, userId } = req.params;
 
@@ -371,7 +390,7 @@ router.delete('/chats/:chatId/members/:userId', authenticate, async (req, res, n
 // ============ MESSAGE ROUTES ============
 
 // Send message
-router.post('/messages', authenticate, async (req, res, next) => {
+router.post('/messages', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId, content, messageType, media, replyTo } = req.body;
 
@@ -444,7 +463,7 @@ router.post('/messages', authenticate, async (req, res, next) => {
 });
 
 // Get messages from a chat
-router.get('/messages/:chatId', authenticate, async (req, res, next) => {
+router.get('/messages/:chatId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.params;
     const { page = 1, limit = 50 } = req.query;
@@ -494,7 +513,7 @@ router.get('/messages/:chatId', authenticate, async (req, res, next) => {
 });
 
 // Mark message as read
-router.put('/messages/:messageId/read', authenticate, async (req, res, next) => {
+router.put('/messages/:messageId/read', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { messageId } = req.params;
 
@@ -537,7 +556,7 @@ router.put('/messages/:messageId/read', authenticate, async (req, res, next) => 
 });
 
 // Mark all messages in chat as read
-router.put('/chats/:chatId/mark-read', authenticate, async (req, res, next) => {
+router.put('/chats/:chatId/mark-read', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.params;
 
@@ -580,7 +599,7 @@ router.put('/chats/:chatId/mark-read', authenticate, async (req, res, next) => {
 });
 
 // Edit message
-router.put('/messages/:messageId', authenticate, async (req, res, next) => {
+router.put('/messages/:messageId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { messageId } = req.params;
     const { content } = req.body;
@@ -630,7 +649,7 @@ router.put('/messages/:messageId', authenticate, async (req, res, next) => {
 });
 
 // Delete message
-router.delete('/messages/:messageId', authenticate, async (req, res, next) => {
+router.delete('/messages/:messageId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { messageId } = req.params;
 
@@ -672,7 +691,7 @@ router.delete('/messages/:messageId', authenticate, async (req, res, next) => {
 });
 
 // Add reaction to message
-router.post('/messages/:messageId/reactions', authenticate, async (req, res, next) => {
+router.post('/messages/:messageId/reactions', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { messageId } = req.params;
     const { emoji } = req.body;
@@ -726,7 +745,7 @@ router.post('/messages/:messageId/reactions', authenticate, async (req, res, nex
 });
 
 // Search messages
-router.get('/search/messages', authenticate, async (req, res, next) => {
+router.get('/search/messages', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { query, chatId, page = 1, limit = 20 } = req.query;
 
@@ -782,7 +801,7 @@ router.get('/search/messages', authenticate, async (req, res, next) => {
 // ============ CONTACT ROUTES ============
 
 // Get all contacts
-router.get('/contacts', authenticate, async (req, res, next) => {
+router.get('/contacts', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { page = 1, limit = 50, favorite } = req.query;
 
@@ -821,7 +840,7 @@ router.get('/contacts', authenticate, async (req, res, next) => {
 });
 
 // Add contact
-router.post('/contacts', authenticate, async (req, res, next) => {
+router.post('/contacts', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { contactUserId, displayName, category } = req.body;
 
@@ -864,7 +883,7 @@ router.post('/contacts', authenticate, async (req, res, next) => {
 });
 
 // Block contact
-router.put('/contacts/:contactUserId/block', authenticate, async (req, res, next) => {
+router.put('/contacts/:contactUserId/block', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { contactUserId } = req.params;
 
@@ -899,7 +918,7 @@ router.put('/contacts/:contactUserId/block', authenticate, async (req, res, next
 });
 
 // Unblock contact
-router.put('/contacts/:contactUserId/unblock', authenticate, async (req, res, next) => {
+router.put('/contacts/:contactUserId/unblock', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { contactUserId } = req.params;
 
@@ -929,7 +948,7 @@ router.put('/contacts/:contactUserId/unblock', authenticate, async (req, res, ne
 });
 
 // Delete contact
-router.delete('/contacts/:contactUserId', authenticate, async (req, res, next) => {
+router.delete('/contacts/:contactUserId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { contactUserId } = req.params;
 
@@ -952,7 +971,7 @@ router.delete('/contacts/:contactUserId', authenticate, async (req, res, next) =
 // ============ NOTIFICATION ROUTES ============
 
 // Get notifications
-router.get('/notifications', authenticate, async (req, res, next) => {
+router.get('/notifications', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { page = 1, limit = 20, unreadOnly } = req.query;
 
@@ -994,7 +1013,7 @@ router.get('/notifications', authenticate, async (req, res, next) => {
 });
 
 // Mark notification as read
-router.put('/notifications/:notificationId/read', authenticate, async (req, res, next) => {
+router.put('/notifications/:notificationId/read', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { notificationId } = req.params;
 
@@ -1020,7 +1039,7 @@ router.put('/notifications/:notificationId/read', authenticate, async (req, res,
 });
 
 // Mark all notifications as read
-router.put('/notifications/mark-all-read', authenticate, async (req, res, next) => {
+router.put('/notifications/mark-all-read', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const result = await ChatNotification.updateMany(
       { userId: req.user._id, isRead: false },
@@ -1037,7 +1056,7 @@ router.put('/notifications/mark-all-read', authenticate, async (req, res, next) 
 // ============ STATISTICS ============
 
 // Get chat statistics
-router.get('/stats', authenticate, async (req, res, next) => {
+router.get('/stats', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const totalChats = await Chat.countDocuments({
       participants: req.user._id,
@@ -1076,7 +1095,7 @@ router.get('/stats', authenticate, async (req, res, next) => {
 // ============ CALL ROUTES ============
 
 // Initiate a call
-router.post('/calls/initiate', authenticate, async (req, res, next) => {
+router.post('/calls/initiate', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId, recipientId, callType } = req.body;
 
@@ -1152,7 +1171,7 @@ router.post('/calls/initiate', authenticate, async (req, res, next) => {
 });
 
 // Accept incoming call
-router.post('/calls/:callId/accept', authenticate, async (req, res, next) => {
+router.post('/calls/:callId/accept', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { callId } = req.params;
     const { sdpAnswer } = req.body;
@@ -1208,7 +1227,7 @@ router.post('/calls/:callId/accept', authenticate, async (req, res, next) => {
 });
 
 // Decline incoming call
-router.post('/calls/:callId/decline', authenticate, async (req, res, next) => {
+router.post('/calls/:callId/decline', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { callId } = req.params;
     const { reason } = req.body;
@@ -1248,7 +1267,7 @@ router.post('/calls/:callId/decline', authenticate, async (req, res, next) => {
 });
 
 // End call
-router.post('/calls/:callId/end', authenticate, async (req, res, next) => {
+router.post('/calls/:callId/end', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { callId } = req.params;
 
@@ -1294,7 +1313,7 @@ router.post('/calls/:callId/end', authenticate, async (req, res, next) => {
 });
 
 // Get call history
-router.get('/calls/history', authenticate, async (req, res, next) => {
+router.get('/calls/history', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { page = 1, limit = 20 } = req.query;
 
@@ -1340,7 +1359,7 @@ router.get('/calls/history', authenticate, async (req, res, next) => {
 // ============ ENCRYPTION ROUTES ============
 
 // Generate encryption keys
-router.post('/encryption/keys/generate', authenticate, async (req, res, next) => {
+router.post('/encryption/keys/generate', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.body;
 
@@ -1391,7 +1410,7 @@ router.post('/encryption/keys/generate', authenticate, async (req, res, next) =>
 });
 
 // Get encryption keys for chat
-router.get('/encryption/keys/:chatId', authenticate, async (req, res, next) => {
+router.get('/encryption/keys/:chatId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.params;
 
@@ -1418,7 +1437,7 @@ router.get('/encryption/keys/:chatId', authenticate, async (req, res, next) => {
 });
 
 // Encrypt message
-router.post('/encryption/encrypt', authenticate, async (req, res, next) => {
+router.post('/encryption/encrypt', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { message, recipientPublicKey } = req.body;
 
@@ -1438,7 +1457,7 @@ router.post('/encryption/encrypt', authenticate, async (req, res, next) => {
   }
 });
 
-router.get('/encryption/status/:chatId', authenticate, async (req, res, next) => {
+router.get('/encryption/status/:chatId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.params;
 
@@ -1462,7 +1481,7 @@ router.get('/encryption/status/:chatId', authenticate, async (req, res, next) =>
   }
 });
 
-router.post('/encryption/toggle', authenticate, async (req, res, next) => {
+router.post('/encryption/toggle', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId, enabled } = req.body;
 
@@ -1498,7 +1517,7 @@ router.post('/encryption/toggle', authenticate, async (req, res, next) => {
 });
 
 // Decrypt message
-router.post('/encryption/decrypt', authenticate, async (req, res, next) => {
+router.post('/encryption/decrypt', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { encryptedMessage, nonce, senderPublicKey, recipientPrivateKey } = req.body;
 
@@ -1517,7 +1536,7 @@ router.post('/encryption/decrypt', authenticate, async (req, res, next) => {
 // ============ FILE STORAGE ROUTES ============
 
 // Upload file to S3
-router.post('/files/upload', authenticate, async (req, res, next) => {
+router.post('/files/upload', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId, fileName, fileSize, mimeType, fileData } = req.body;
 
@@ -1535,8 +1554,7 @@ router.post('/files/upload', authenticate, async (req, res, next) => {
       return res.status(403).json({ message: 'Not authorized for this chat' });
     }
 
-    // Generate S3 key
-    const s3Key = `messages/${req.user._id}/${chatId}/${Date.now()}-${fileName}`;
+    const s3Key = generateS3Key(req.user._id, chatId, fileName);
 
     // Upload to S3
     const uploadResult = await uploadToS3(Buffer.from(fileData, 'base64'), s3Key, {
@@ -1548,6 +1566,12 @@ router.post('/files/upload', authenticate, async (req, res, next) => {
       },
     });
 
+    const publicFileUrl = uploadResult.s3Url || (
+      uploadResult.publicUrlPath
+        ? `${req.protocol}://${req.get('host')}${uploadResult.publicUrlPath}`
+        : ''
+    );
+
     // Create file record
     const fileRecord = new FileStorage({
       uploadedBy: req.user._id,
@@ -1555,9 +1579,10 @@ router.post('/files/upload', authenticate, async (req, res, next) => {
       fileName,
       originalFileName: fileName,
       fileSize,
+      fileType: String(mimeType || '').split('/')[0] || 'file',
       mimeType,
       s3Key,
-      s3Url: uploadResult.s3Url,
+      s3Url: publicFileUrl,
       status: 'completed',
     });
 
@@ -1566,7 +1591,7 @@ router.post('/files/upload', authenticate, async (req, res, next) => {
     logger.info(`File uploaded: ${fileName} by ${req.user._id} in chat ${chatId}`);
     res.json({
       file: fileRecord,
-      uploadUrl: uploadResult.s3Url,
+      uploadUrl: publicFileUrl,
     });
   } catch (err) {
     next(err);
@@ -1574,7 +1599,7 @@ router.post('/files/upload', authenticate, async (req, res, next) => {
 });
 
 // Get signed URL for file download
-router.get('/files/:fileId/download', authenticate, async (req, res, next) => {
+router.get('/files/:fileId/download', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { fileId } = req.params;
 
@@ -1594,7 +1619,10 @@ router.get('/files/:fileId/download', authenticate, async (req, res, next) => {
     }
 
     // Generate signed URL
-    const signedUrl = generateSignedUrl(file.s3Key, 3600); // 1 hour expiry
+    const generatedUrl = generateSignedUrl(file.s3Key, 3600); // 1 hour expiry
+    const signedUrl = generatedUrl.startsWith('/uploads/')
+      ? `${req.protocol}://${req.get('host')}${generatedUrl}`
+      : generatedUrl;
 
     res.json({
       fileName: file.fileName,
@@ -1607,7 +1635,7 @@ router.get('/files/:fileId/download', authenticate, async (req, res, next) => {
 });
 
 // Delete file
-router.delete('/files/:fileId', authenticate, async (req, res, next) => {
+router.delete('/files/:fileId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { fileId } = req.params;
 
@@ -1641,7 +1669,7 @@ router.delete('/files/:fileId', authenticate, async (req, res, next) => {
 });
 
 // Get files for chat
-router.get('/files/chat/:chatId', authenticate, async (req, res, next) => {
+router.get('/files/chat/:chatId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId } = req.params;
     const { page = 1, limit = 20 } = req.query;
@@ -1690,7 +1718,7 @@ router.get('/files/chat/:chatId', authenticate, async (req, res, next) => {
 // ============ AI REPLIES ROUTES ============
 
 // Generate AI smart replies
-router.post('/ai/replies/generate', authenticate, async (req, res, next) => {
+router.post('/ai/replies/generate', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId, messageId } = req.body;
 
@@ -1748,7 +1776,7 @@ router.post('/ai/replies/generate', authenticate, async (req, res, next) => {
 });
 
 // Get AI reply suggestions
-router.get('/ai/replies/:messageId', authenticate, async (req, res, next) => {
+router.get('/ai/replies/:messageId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { messageId } = req.params;
 
@@ -1772,7 +1800,7 @@ router.get('/ai/replies/:messageId', authenticate, async (req, res, next) => {
 });
 
 // Rate AI suggestion
-router.post('/ai/replies/:replyId/rate', authenticate, async (req, res, next) => {
+router.post('/ai/replies/:replyId/rate', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { replyId } = req.params;
     const { suggestionId, rating } = req.body;
@@ -1807,7 +1835,7 @@ router.post('/ai/replies/:replyId/rate', authenticate, async (req, res, next) =>
 // ============ SETTINGS ROUTES ============
 
 // Get messaging settings
-router.get('/settings', authenticate, async (req, res, next) => {
+router.get('/settings', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     let settings = await MessagingSettings.findOne({ userId: req.user._id });
 
@@ -1823,7 +1851,7 @@ router.get('/settings', authenticate, async (req, res, next) => {
 });
 
 // Update messaging settings
-router.put('/settings', authenticate, async (req, res, next) => {
+router.put('/settings', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const updateData = req.body;
 

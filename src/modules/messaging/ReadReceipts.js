@@ -1,24 +1,9 @@
 import React from 'react';
-
-const getId = (value) => {
-  if (!value) {
-    return '';
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (value._id) {
-    return getId(value._id);
-  }
-
-  return String(value);
-};
+import { getEntityId } from './utils';
 
 const ReadReceipts = ({ deliveryStatus = [], currentUserId = '' }) => {
   const recipientStatuses = deliveryStatus.filter(
-    (status) => getId(status.userId) !== currentUserId
+    (status) => getEntityId(status.userId) !== currentUserId
   );
 
   if (recipientStatuses.length === 0) {

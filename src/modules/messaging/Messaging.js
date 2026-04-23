@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { getStoredAuthToken } from '../../utils/auth';
 import '../../styles/Messaging.css';
@@ -14,25 +14,10 @@ import VisibilitySettings from './VisibilitySettings';
 import ContactMeansSettings from './ContactMeansSettings';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
+import { getEntityId, inferMessageTypeFromMimeType, isSameEntity } from './utils';
 
-const getId = (value) => {
-  if (!value) {
-    return '';
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (value._id) {
-    return getId(value._id);
-  }
-
-  return String(value);
-};
-
-const getOtherParticipant = (chat, currentUserId) =>
-  chat?.participants?.find((participant) => getId(participant) !== currentUserId) || null;
+const getOtherParticipant = (chat, currentUser) =>
+  chat?.participants?.find((participant) => !isSameEntity(participant, currentUser)) || null;
 
 const Messaging = () => {
   const { currentUser, apiCall } = useApp();
@@ -61,15 +46,23 @@ const Messaging = () => {
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [pendingInvitations, setPendingInvitations] = useState([]);
   const [loadingInvitations, setLoadingInvitations] = useState(false);
+  const [sendingVoiceNote, setSendingVoiceNote] = useState(false);
 
   const socketRef = useRef(null);
   const activeCallRef = useRef(null);
   const incomingCallRef = useRef(null);
-  const currentUserId = getId(currentUser);
+  const currentUserId = getEntityId(currentUser);
+  const resolvedCurrentUserId = useMemo(() => {
+    const selectedChatParticipant = selectedChat?.participants?.find((participant) =>
+      isSameEntity(participant, currentUser)
+    );
+
+    return getEntityId(selectedChatParticipant) || currentUserId;
+  }, [currentUser, currentUserId, selectedChat]);
   const latestMessageId = messages[messages.length - 1]?._id;
 
   const updateChatPreview = useCallback((incomingMessage) => {
-    const incomingChatId = getId(incomingMessage?.chatId);
+    const incomingChatId = getEntityId(incomingMessage?.chatId);
     if (!incomingChatId) {
       return;
     }
@@ -164,11 +157,11 @@ const Messaging = () => {
         );
         if (response?.users) {
           const contactIds = new Set(
-            contacts.map((c) => getId(c.contactUserId))
+            contacts.map((contact) => getEntityId(contact.contactUserId))
           );
           const filtered = response.users.filter(
             (u) =>
-              getId(u._id) !== currentUserId && !contactIds.has(getId(u._id))
+              !isSameEntity(u, currentUser) && !contactIds.has(getEntityId(u))
           );
           setAvailableUsers(filtered);
         }
@@ -179,7 +172,7 @@ const Messaging = () => {
         setSearchingUsers(false);
       }
     },
-    [apiCall, contacts, currentUserId]
+    [apiCall, contacts, currentUser]
   );
 
   const handleAddContact = async (userId, userName, userEmail, userUsername) => {
@@ -296,7 +289,7 @@ const Messaging = () => {
     });
 
     newSocket.on('message:received', (message) => {
-      if (getId(message.chatId) === selectedChat?._id) {
+      if (getEntityId(message.chatId) === selectedChat?._id) {
         setMessages((prevMessages) => {
           if (prevMessages.some((existingMessage) => existingMessage._id === message._id)) {
             return prevMessages;
@@ -347,7 +340,7 @@ const Messaging = () => {
             ? [...message.deliveryStatus]
             : [];
           const existingIndex = nextDeliveryStatus.findIndex(
-            (status) => getId(status.userId) === getId(userId)
+            (status) => getEntityId(status.userId) === getEntityId(userId)
           );
 
           if (existingIndex >= 0) {
@@ -380,7 +373,7 @@ const Messaging = () => {
           }
 
           const alreadyPresent = (message.reactions || []).some(
-            (reaction) => getId(reaction.userId) === getId(userId) && reaction.emoji === emoji
+            (reaction) => getEntityId(reaction.userId) === getEntityId(userId) && reaction.emoji === emoji
           );
 
           if (alreadyPresent) {
@@ -404,7 +397,7 @@ const Messaging = () => {
                 reactions: (message.reactions || []).filter(
                   (reaction) =>
                     !(
-                      getId(reaction.userId) === getId(userId) &&
+                      getEntityId(reaction.userId) === getEntityId(userId) &&
                       reaction.emoji === emoji
                     )
                 ),
@@ -435,8 +428,8 @@ const Messaging = () => {
     });
 
     newSocket.on('call:accepted', (callData) => {
-      const acceptedCallId = getId(callData?.callId);
-      const pendingCallId = getId(
+      const acceptedCallId = getEntityId(callData?.callId);
+      const pendingCallId = getEntityId(
         activeCallRef.current?._id ||
         activeCallRef.current?.callId ||
         incomingCallRef.current?._id ||
@@ -452,20 +445,20 @@ const Messaging = () => {
         ...callData,
         _id: callData.callId || currentCall?._id,
         status: 'accepted',
-        currentUserId,
+        currentUserId: resolvedCurrentUserId,
       }));
       setShowCallWindow(true);
       setIncomingCall(null);
     });
 
     newSocket.on('call:ended', (callData) => {
-      const endedCallId = getId(callData?.callId);
+      const endedCallId = getEntityId(callData?.callId);
       if (!endedCallId) {
         return;
       }
 
-      const activeCallId = getId(activeCallRef.current?._id || activeCallRef.current?.callId);
-      const incomingCallId = getId(incomingCallRef.current?._id || incomingCallRef.current?.callId);
+      const activeCallId = getEntityId(activeCallRef.current?._id || activeCallRef.current?.callId);
+      const incomingCallId = getEntityId(incomingCallRef.current?._id || incomingCallRef.current?.callId);
 
       if (activeCallId && activeCallId === endedCallId) {
         setActiveCall(null);
@@ -481,7 +474,7 @@ const Messaging = () => {
       setChats((prevChats) => prevChats.map((chat) => ({
         ...chat,
         participants: (chat.participants || []).map((participant) => (
-          getId(participant) === userId ? { ...participant, isOnline: true } : participant
+          getEntityId(participant) === userId ? { ...participant, isOnline: true } : participant
         )),
       })));
     });
@@ -490,7 +483,7 @@ const Messaging = () => {
       setChats((prevChats) => prevChats.map((chat) => ({
         ...chat,
         participants: (chat.participants || []).map((participant) => (
-          getId(participant) === userId ? { ...participant, isOnline: false } : participant
+          getEntityId(participant) === userId ? { ...participant, isOnline: false } : participant
         )),
       })));
     });
@@ -529,7 +522,7 @@ const Messaging = () => {
 
       // Add to contacts
       setContacts((prevContacts) => {
-        const alreadyExists = prevContacts.some((contact) => getId(contact) === getId(newContact._id));
+        const alreadyExists = prevContacts.some((contact) => getEntityId(contact) === getEntityId(newContact));
         if (alreadyExists) {
           return prevContacts;
         }
@@ -567,7 +560,7 @@ const Messaging = () => {
 
       newSocket.disconnect();
     };
-  }, [currentUser, currentUserId, loadMessages, selectedChat, updateChatPreview]);
+  }, [currentUser, loadMessages, selectedChat, updateChatPreview]);
 
   useEffect(() => {
     if (socket && selectedChat?._id) {
@@ -577,12 +570,12 @@ const Messaging = () => {
 
   useEffect(() => {
     const unreadMessages = messages.filter((message) => {
-      if (getId(message.senderId) === currentUserId || message.isDeleted) {
+      if (isSameEntity(message.senderId, currentUser) || message.isDeleted) {
         return false;
       }
 
       return !(message.deliveryStatus || []).some(
-        (status) => getId(status.userId) === currentUserId && status.status === 'seen'
+        (status) => getEntityId(status.userId) === resolvedCurrentUserId && status.status === 'seen'
       );
     });
 
@@ -596,7 +589,7 @@ const Messaging = () => {
         const seenAt = new Date().toISOString();
         setMessages((prevMessages) =>
           prevMessages.map((message) => {
-            if (getId(message.senderId) === currentUserId || message.isDeleted) {
+            if (isSameEntity(message.senderId, currentUser) || message.isDeleted) {
               return message;
             }
 
@@ -604,7 +597,7 @@ const Messaging = () => {
               ? [...message.deliveryStatus]
               : [];
             const existingIndex = nextDeliveryStatus.findIndex(
-              (status) => getId(status.userId) === currentUserId
+              (status) => getEntityId(status.userId) === resolvedCurrentUserId
             );
 
             if (existingIndex >= 0) {
@@ -615,7 +608,7 @@ const Messaging = () => {
               };
             } else {
               nextDeliveryStatus.push({
-                userId: currentUserId,
+                userId: resolvedCurrentUserId,
                 status: 'seen',
                 seenAt,
               });
@@ -640,7 +633,7 @@ const Messaging = () => {
     };
 
     markMessagesRead();
-  }, [apiCall, currentUserId, messages, selectedChat]);
+  }, [apiCall, currentUser, messages, resolvedCurrentUserId, selectedChat]);
 
   const handleSelectChat = (chat) => {
     setSelectedChat(chat);
@@ -692,6 +685,36 @@ const Messaging = () => {
     }
   };
 
+  const fileToBase64 = useCallback(
+    (file) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => {
+          const base64Value = String(reader.result || '').split(',')[1] || '';
+          resolve(base64Value);
+        };
+        reader.onerror = reject;
+      }),
+    []
+  );
+
+  const uploadMessagingFile = useCallback(
+    async (file) => {
+      const fileData = await fileToBase64(file);
+      const response = await apiCall('/messaging/files/upload', 'POST', {
+        chatId: selectedChat?._id,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || 'application/octet-stream',
+        fileData,
+      });
+
+      return response?.file || null;
+    },
+    [apiCall, fileToBase64, selectedChat]
+  );
+
   const handleSendMessage = async (content, messageType = 'text', fileData = null, replyTo = null) => {
     if (!selectedChat?._id || (!content?.trim() && !fileData)) {
       return;
@@ -700,7 +723,7 @@ const Messaging = () => {
     try {
       const messageData = {
         chatId: selectedChat._id,
-        content,
+        content: content || fileData?.fileName || '',
         messageType,
         replyTo,
       };
@@ -719,8 +742,11 @@ const Messaging = () => {
         setMessages((prevMessages) => [...prevMessages, response.message]);
         updateChatPreview(response.message);
       }
+
+      return response?.message || null;
     } catch (error) {
       console.error('Error sending message:', error);
+      throw error;
     }
   };
 
@@ -763,7 +789,7 @@ const Messaging = () => {
     try {
       const currentMessage = messages.find((message) => message._id === messageId);
       const hadReaction = (currentMessage?.reactions || []).some(
-        (reaction) => getId(reaction.userId) === currentUserId && reaction.emoji === emoji
+        (reaction) => getEntityId(reaction.userId) === resolvedCurrentUserId && reaction.emoji === emoji
       );
 
       const response = await apiCall(`/messaging/messages/${messageId}/reactions`, 'POST', {
@@ -816,18 +842,18 @@ const Messaging = () => {
     }
 
     try {
-      const otherParticipant = getOtherParticipant(selectedChat, currentUserId);
+      const otherParticipant = getOtherParticipant(selectedChat, currentUser);
       const response = await apiCall('/messaging/calls/initiate', 'POST', {
         chatId: selectedChat._id,
-        recipientId: getId(otherParticipant),
+        recipientId: getEntityId(otherParticipant),
         callType,
       });
 
       if (response?.call) {
         setActiveCall({
           ...response.call,
-          currentUserId,
-          initiatorId: response.call.initiatorId || currentUserId,
+          currentUserId: resolvedCurrentUserId,
+          initiatorId: response.call.initiatorId || resolvedCurrentUserId,
           recipient: otherParticipant,
         });
         setShowCallWindow(true);
@@ -846,7 +872,7 @@ const Messaging = () => {
       const response = await apiCall(`/messaging/calls/${incomingCall._id}/accept`, 'POST');
       setActiveCall({
         ...(response?.call || incomingCall),
-        currentUserId,
+        currentUserId: resolvedCurrentUserId,
         caller: incomingCall.caller,
       });
       setShowCallWindow(true);
@@ -883,10 +909,39 @@ const Messaging = () => {
     }
   };
 
-  const handleFileUploaded = (uploadedFiles) => {
-    uploadedFiles.forEach((file) => {
-      handleSendMessage(`Shared a file: ${file.fileName}`, 'file', file);
-    });
+  const handleFileUploaded = async (uploadedFiles) => {
+    try {
+      for (const file of uploadedFiles) {
+        const messageType = inferMessageTypeFromMimeType(file?.mimeType);
+        const fallbackLabel = messageType === 'file' ? `Shared a file: ${file.fileName}` : file.fileName;
+        await handleSendMessage(fallbackLabel, messageType, file);
+      }
+    } catch (error) {
+      console.error('Error sending uploaded file:', error);
+      alert(error.message || 'Unable to send that file right now.');
+    }
+  };
+
+  const handleVoiceNoteRecorded = async (audioFile) => {
+    if (!audioFile || !selectedChat?._id) {
+      return;
+    }
+
+    try {
+      setSendingVoiceNote(true);
+      const uploadedFile = await uploadMessagingFile(audioFile);
+
+      if (!uploadedFile) {
+        throw new Error('Voice note upload failed.');
+      }
+
+      await handleSendMessage('Voice note', 'voice', uploadedFile);
+    } catch (error) {
+      console.error('Error sending voice note:', error);
+      alert(error.message || 'Unable to send voice note right now.');
+    } finally {
+      setSendingVoiceNote(false);
+    }
   };
 
   const handleAISuggestionSelect = (replyText) => {
@@ -928,8 +983,8 @@ const Messaging = () => {
 
   const handleSelectNotification = async (notification) => {
     const notificationId = notification?._id || notification?.id;
-    const notificationChatId = getId(notification?.chatId);
-    const notificationMessageId = getId(notification?.messageId);
+    const notificationChatId = getEntityId(notification?.chatId);
+    const notificationMessageId = getEntityId(notification?.messageId);
 
     try {
       if (notificationId && !notification.isRead) {
@@ -1211,6 +1266,8 @@ const Messaging = () => {
                 onToggleEncryption={handleToggleEncryption}
                 onStartCall={handleStartCall}
                 onOpenFileUpload={() => setShowFileUpload(true)}
+                onSendVoiceMessage={handleVoiceNoteRecorded}
+                sendingVoiceMessage={sendingVoiceNote}
                 focusedMessageId={focusedMessageId}
                 onFocusHandled={() => setFocusedMessageId('')}
               />

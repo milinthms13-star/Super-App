@@ -222,6 +222,45 @@ const getCache = async (key) => {
   return null;
 };
 
+// Generate a unique username for new user registration
+const generateUniqueUsername = async (email) => {
+  // Extract the local part of the email (before @)
+  const baseUsername = email.split('@')[0].toLowerCase().trim();
+  
+  // Validate and sanitize the base username
+  let username = baseUsername.replace(/[^a-z0-9_-]/g, '_').substring(0, 20);
+  
+  // If the sanitized username is empty or too short, use a prefixed version
+  if (!username || username.length < 3) {
+    username = 'user_' + Math.random().toString(36).substring(2, 8);
+  }
+  
+  // Check if username already exists
+  let counter = 0;
+  let finalUsername = username;
+  
+  while (true) {
+    const existingUser = await User.findOne({ username: finalUsername.toLowerCase() });
+    
+    if (!existingUser) {
+      return finalUsername;
+    }
+    
+    // If exists, append a number and try again
+    counter++;
+    finalUsername = `${username}_${counter}`;
+    
+    // Safety check to prevent infinite loops
+    if (counter > 100) {
+      // Fallback to random username
+      finalUsername = 'user_' + Math.random().toString(36).substring(2, 12);
+      break;
+    }
+  }
+  
+  return finalUsername;
+};
+
 // Send OTP endpoint
 router.post('/send-otp', async (req, res) => {
   try {
@@ -262,10 +301,14 @@ router.post('/send-otp', async (req, res) => {
       const otpToken = new OtpToken({ email, otpHash, expiresAt });
       await otpToken.save();
 
+      // Generate a unique username for the user at registration time
+      const username = await generateUniqueUsername(email);
+
       user = await User.findOneAndUpdate(
         { email },
         {
           email,
+          username,
           name: email.split('@')[0],
           avatar: 'User',
           registrationType: 'user',

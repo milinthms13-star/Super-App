@@ -6,11 +6,13 @@ const Chat = require('../models/Chat');
 const Call = require('../models/Call');
 const User = require('../models/User');
 const devAuthStore = require('../utils/devAuthStore');
+const { ensureMessagingUser } = require('../utils/ensureMessagingUser');
 const { getJwtSecret } = require('../middleware/auth');
 
 let io;
 const userSockets = new Map(); // userId -> Set of socket IDs
 const userStatus = new Map(); // userId -> { status, lastSeen }
+const normalizeUserKey = (userId) => (userId?.toString ? userId.toString() : String(userId || ''));
 
 const initializeWebSocket = (server, options = {}) => {
   const allowedSocketOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000,http://localhost:3001,http://localhost:3002')
@@ -58,8 +60,9 @@ const initializeWebSocket = (server, options = {}) => {
         return next(new Error('User not found'));
       }
 
-      socket.userId = user._id.toString();
-      socket.user = user;
+      const resolvedUser = await ensureMessagingUser(user);
+      socket.userId = resolvedUser?._id?.toString ? resolvedUser._id.toString() : user._id.toString();
+      socket.user = resolvedUser || user;
       next();
     } catch (error) {
       console.error('[WebSocket] Authentication error:', error.message);
@@ -349,7 +352,7 @@ const initializeWebSocket = (server, options = {}) => {
     socket.on('users:status:get', (userIds) => {
       const statuses = userIds.map((userId) => ({
         userId,
-        status: userStatus.get(userId) || { status: 'offline', lastSeen: null },
+        status: userStatus.get(normalizeUserKey(userId)) || { status: 'offline', lastSeen: null },
       }));
 
       socket.emit('users:status:response', statuses);
@@ -411,22 +414,23 @@ const initializeWebSocket = (server, options = {}) => {
 // ============== HELPER FUNCTIONS ==============
 
 const setUserOnline = (userId) => {
-  userStatus.set(userId, {
+  userStatus.set(normalizeUserKey(userId), {
     status: 'online',
     lastSeen: new Date(),
   });
 };
 
 const setUserOffline = (userId) => {
-  userStatus.set(userId, {
+  userStatus.set(normalizeUserKey(userId), {
     status: 'offline',
     lastSeen: new Date(),
   });
 };
 
 const updateUserStatus = (userId, data) => {
-  const currentStatus = userStatus.get(userId) || {};
-  userStatus.set(userId, {
+  const normalizedUserId = normalizeUserKey(userId);
+  const currentStatus = userStatus.get(normalizedUserId) || {};
+  userStatus.set(normalizedUserId, {
     ...currentStatus,
     status: data.status,
     activity: data.activity,
@@ -438,7 +442,7 @@ const updateUserStatus = (userId, data) => {
  * Emit to specific user
  */
 const emitToUser = (userId, event, data) => {
-  const sockets = userSockets.get(userId);
+  const sockets = userSockets.get(normalizeUserKey(userId));
   if (sockets && sockets.size > 0) {
     io.to(Array.from(sockets)).emit(event, data);
   }
@@ -455,7 +459,7 @@ const broadcast = (event, data) => {
  * Get user's online status
  */
 const getUserStatus = (userId) => {
-  return userStatus.get(userId) || { status: 'offline', lastSeen: null };
+  return userStatus.get(normalizeUserKey(userId)) || { status: 'offline', lastSeen: null };
 };
 
 /**

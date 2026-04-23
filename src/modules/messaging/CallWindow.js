@@ -1,22 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import './CallWindow.css';
-
-const getId = (value) => {
-  if (!value) {
-    return '';
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (value._id) {
-    return getId(value._id);
-  }
-
-  return String(value);
-};
+import { getEntityId } from './utils';
 
 const rtcConfiguration = {
   iceServers: [
@@ -41,7 +26,7 @@ const CallWindow = ({ call, onEndCall, onAcceptCall, onDeclineCall }) => {
   const peerConnectionRef = useRef(null);
   const durationIntervalRef = useRef(null);
 
-  const currentUserId = getId(call.currentUserId || currentUser);
+  const currentUserId = getEntityId(call.currentUserId || currentUser);
   const caller = call.caller || call.initiatorId || {};
   const recipient = call.recipient || call.recipientId || {};
 
@@ -76,7 +61,7 @@ const CallWindow = ({ call, onEndCall, onAcceptCall, onDeclineCall }) => {
         }
       };
 
-      if (getId(call.initiatorId) === currentUserId) {
+      if (getEntityId(call.initiatorId) === currentUserId) {
         const offer = await peerConnectionRef.current.createOffer();
         await peerConnectionRef.current.setLocalDescription(offer);
       }
@@ -208,8 +193,8 @@ const CallWindow = ({ call, onEndCall, onAcceptCall, onDeclineCall }) => {
     }
   };
 
-  const isIncomingCall = getId(call.recipientId) === currentUserId;
-  const otherParticipant = getId(call.initiatorId) === currentUserId ? recipient : caller;
+  const isIncomingCall = getEntityId(call.recipientId) === currentUserId;
+  const otherParticipant = getEntityId(call.initiatorId) === currentUserId ? recipient : caller;
 
   return (
     <div className="call-window-overlay">

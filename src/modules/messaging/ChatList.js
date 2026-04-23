@@ -1,21 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
-
-const getId = (value) => {
-  if (!value) {
-    return '';
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (value._id) {
-    return getId(value._id);
-  }
-
-  return String(value);
-};
+import { isSameEntity } from './utils';
 
 const ChatList = ({
   chats,
@@ -45,7 +30,7 @@ const ChatList = ({
   }, [searchQuery, chats]);
 
   const getOtherUser = (chat) =>
-    chat.participants?.find((participant) => getId(participant) !== getId(currentUser));
+    chat.participants?.find((participant) => !isSameEntity(participant, currentUser));
 
   const getChatTitle = (chat) => {
     if (chat.type === 'group') {

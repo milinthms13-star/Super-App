@@ -1,11 +1,5 @@
 import React from 'react';
-
-const getId = (value) => {
-  if (!value) return '';
-  if (typeof value === 'string') return value;
-  if (value._id) return getId(value._id);
-  return String(value);
-};
+import { getEntityId } from './utils';
 
 const MessageThread = ({ 
   message, 
@@ -19,8 +13,8 @@ const MessageThread = ({
   }
 
   const parentMessage = message.replyTo;
-  const isOwnReply = getId(message.senderId) === currentUserId;
-  const parentIsOwn = getId(parentMessage.senderId) === currentUserId;
+  const isOwnReply = getEntityId(message.senderId) === currentUserId;
+  const parentIsOwn = getEntityId(parentMessage.senderId) === currentUserId;
 
   return (
     <div className="message-thread">

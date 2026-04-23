@@ -4,22 +4,7 @@ import MessageSearch from './MessageSearch';
 import MessageContextMenu from './MessageContextMenu';
 import EmojiPicker from './EmojiPicker';
 import ReadReceipts from './ReadReceipts';
-
-const getId = (value) => {
-  if (!value) {
-    return '';
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (value._id) {
-    return getId(value._id);
-  }
-
-  return String(value);
-};
+import { getEntityId, isSameEntity } from './utils';
 
 const ChatWindow = ({
   chat,
@@ -37,6 +22,8 @@ const ChatWindow = ({
   onSearchMessages,
   focusedMessageId,
   onFocusHandled,
+  onSendVoiceMessage,
+  sendingVoiceMessage,
 }) => {
   const { currentUser } = useApp();
   const [messageInput, setMessageInput] = useState('');
@@ -47,9 +34,17 @@ const ChatWindow = ({
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
   const [replyingToMessage, setReplyingToMessage] = useState(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
   const messagesEndRef = useRef(null);
   const messageContainerRef = useRef(null);
-  const currentUserId = getId(currentUser);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const voiceChunksRef = useRef([]);
+  const currentUserId = getEntityId(currentUser);
+  const resolvedCurrentUserId = getEntityId(
+    chat?.participants?.find((participant) => isSameEntity(participant, currentUser))
+  ) || currentUserId;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -77,8 +72,17 @@ const ChatWindow = ({
     }
   }, [focusedMessageId, onFocusHandled]);
 
+  useEffect(() => () => {
+    mediaRecorderRef.current = null;
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  }, []);
+
   const getOtherParticipants = () =>
-    chat?.participants?.filter((participant) => getId(participant) !== currentUserId) || [];
+    chat?.participants?.filter((participant) => !isSameEntity(participant, currentUser)) || [];
 
   const getChatTitle = () => {
     if (chat?.type === 'group') {
@@ -126,6 +130,114 @@ const ChatWindow = ({
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
+    }
+  };
+
+  const stopVoiceCaptureStream = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
+  const buildVoiceFileFromChunks = (mimeType = 'audio/webm') => {
+    const voiceBlob = new Blob(voiceChunksRef.current, { type: mimeType });
+    const extension = mimeType.includes('ogg')
+      ? 'ogg'
+      : mimeType.includes('mp4')
+        ? 'm4a'
+        : 'webm';
+
+    return new File([voiceBlob], `voice-note-${Date.now()}.${extension}`, { type: mimeType });
+  };
+
+  const startVoiceRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setVoiceError('Voice notes are not supported in this browser.');
+      return;
+    }
+
+    try {
+      setVoiceError('');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const preferredMimeType = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ].find((candidate) => (
+        typeof MediaRecorder.isTypeSupported !== 'function' || MediaRecorder.isTypeSupported(candidate)
+      ));
+
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
+
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      voiceChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) {
+          voiceChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.start();
+      setIsRecordingVoice(true);
+    } catch (error) {
+      setVoiceError('Microphone access is required to record a voice note.');
+      stopVoiceCaptureStream();
+    }
+  };
+
+  const stopVoiceRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) {
+      return;
+    }
+
+    const recordedFile = await new Promise((resolve, reject) => {
+      recorder.onstop = () => {
+        const nextFile = buildVoiceFileFromChunks(recorder.mimeType || 'audio/webm');
+        resolve(nextFile);
+      };
+
+      recorder.onerror = () => {
+        reject(new Error('Voice recording failed.'));
+      };
+
+      recorder.stop();
+    });
+
+    setIsRecordingVoice(false);
+    stopVoiceCaptureStream();
+    mediaRecorderRef.current = null;
+    voiceChunksRef.current = [];
+
+    if (recordedFile && onSendVoiceMessage) {
+      await onSendVoiceMessage(recordedFile);
+    }
+  };
+
+  const handleVoiceButtonClick = async () => {
+    if (sendingVoiceMessage) {
+      return;
+    }
+
+    try {
+      if (isRecordingVoice) {
+        await stopVoiceRecording();
+        return;
+      }
+
+      await startVoiceRecording();
+    } catch (error) {
+      setVoiceError(error.message || 'Unable to send voice note.');
+      setIsRecordingVoice(false);
+      stopVoiceCaptureStream();
+      mediaRecorderRef.current = null;
+      voiceChunksRef.current = [];
     }
   };
 
@@ -288,7 +400,7 @@ const ChatWindow = ({
           </div>
         ) : (
           messages.map((message, index) => {
-            const isOwnMessage = getId(message.senderId) === currentUserId;
+            const isOwnMessage = isSameEntity(message.senderId, currentUser);
             const isEditing = editingMessageId === message._id;
 
             return (
@@ -344,8 +456,11 @@ const ChatWindow = ({
                             <video src={message.media?.url} controls />
                           </div>
                         )}
-                        {message.messageType === 'audio' && (
+                        {(message.messageType === 'audio' || message.messageType === 'voice') && (
                           <div className="message-media">
+                            {message.messageType === 'voice' && (
+                              <span className="voice-note-label">Voice note</span>
+                            )}
                             <audio src={message.media?.url} controls />
                           </div>
                         )}
@@ -388,7 +503,7 @@ const ChatWindow = ({
                     {isOwnMessage && (
                       <ReadReceipts
                         deliveryStatus={message.deliveryStatus}
-                        currentUserId={currentUserId}
+                        currentUserId={resolvedCurrentUserId}
                       />
                     )}
                     {!message.isDeleted && (
@@ -483,6 +598,15 @@ const ChatWindow = ({
             File
           </button>
           <button
+            className={`btn-action ${isRecordingVoice ? 'voice-recording' : ''}`}
+            title={isRecordingVoice ? 'Stop and send voice note' : 'Record voice note'}
+            onClick={handleVoiceButtonClick}
+            disabled={sendingVoiceMessage}
+            type="button"
+          >
+            {sendingVoiceMessage ? 'Sending...' : isRecordingVoice ? 'Stop Voice' : 'Voice'}
+          </button>
+          <button
             className="btn-send"
             onClick={handleSendMessage}
             disabled={!messageInput.trim()}
@@ -492,6 +616,11 @@ const ChatWindow = ({
             Send
           </button>
         </div>
+        {(isRecordingVoice || voiceError) && (
+          <div className={`voice-note-status ${voiceError ? 'error' : ''}`}>
+            {voiceError || 'Recording voice note... tap "Stop Voice" to send.'}
+          </div>
+        )}
         {encryptionEnabled && (
           <div className="encryption-indicator">
             <span className="encryption-text">Encryption enabled</span>

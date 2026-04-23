@@ -103,9 +103,16 @@ require('./utils/elasticsearch').ensureIndex().catch(console.error);
 // Error handler last
 app.use(errorHandler);
 
-// Handle 404
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// Serve React static files from build folder
+app.use(express.static(path.join(__dirname, '../build')));
+
+// SPA fallback: serve index.html for all unknown routes (React Router handles it)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../build/index.html'), (err) => {
+    if (err) {
+      res.status(500).json({ error: 'Failed to load application' });
+    }
+  });
 });
 
 const PORT = process.env.PORT || 5000;

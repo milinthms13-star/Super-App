@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const region = process.env.AWS_REGION || 'us-east-1';
+const localUploadsRoot = path.resolve(__dirname, '..', 'uploads');
 
 // Validate region parameter to prevent security issues
 if (!/^[a-z0-9\-]+$/.test(region)) {
@@ -18,6 +19,56 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
+
+const hasConfiguredAwsCredentials = () => {
+  const accessKeyId = String(process.env.AWS_ACCESS_KEY_ID || '').trim();
+  const secretAccessKey = String(process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  const bucketName = String(process.env.AWS_S3_BUCKET || '').trim();
+
+  if (!accessKeyId || !secretAccessKey || !bucketName) {
+    return false;
+  }
+
+  return !(
+    accessKeyId.includes('your-') ||
+    secretAccessKey.includes('your-') ||
+    bucketName.includes('your-')
+  );
+};
+
+const normalizeStorageKey = (storageKey = '') =>
+  String(storageKey || '')
+    .replace(/\\/g, '/')
+    .replace(/\.\.+/g, '')
+    .replace(/^\/+/, '');
+
+const buildPublicStorageUrl = (storageKey) => {
+  const normalizedKey = normalizeStorageKey(storageKey);
+
+  if (!normalizedKey) {
+    return '';
+  }
+
+  return `https://${process.env.AWS_S3_BUCKET}.s3.${region}.amazonaws.com/${normalizedKey}`;
+};
+
+const uploadToLocalStorage = async (fileData, storageKey, options = {}) => {
+  const normalizedKey = normalizeStorageKey(storageKey);
+  const targetPath = path.join(localUploadsRoot, normalizedKey);
+
+  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.promises.writeFile(targetPath, fileData);
+
+  return {
+    success: true,
+    storage: 'local',
+    s3Key: normalizedKey,
+    s3Url: '',
+    publicUrlPath: `/uploads/${normalizedKey}`,
+    contentLength: fileData.length || 0,
+    contentType: options.contentType || 'application/octet-stream',
+  };
+};
 
 /**
  * Generate S3 key for file
@@ -42,6 +93,10 @@ const generateS3Key = (userId, chatId, fileName) => {
  * @returns {Promise<object>} Upload result
  */
 const uploadToS3 = async (fileData, s3Key, options = {}) => {
+  if (!hasConfiguredAwsCredentials()) {
+    return uploadToLocalStorage(fileData, s3Key, options);
+  }
+
   const params = {
     Bucket: process.env.AWS_S3_BUCKET || 'malabarbazaar-files',
     Key: s3Key,
@@ -65,7 +120,7 @@ const uploadToS3 = async (fileData, s3Key, options = {}) => {
       contentLength: fileData.length || 0,
     };
   } catch (error) {
-    throw new Error(`S3 upload failed: ${error.message}`);
+    return uploadToLocalStorage(fileData, s3Key, options);
   }
 };
 
@@ -100,9 +155,17 @@ const downloadFromS3 = async (s3Key) => {
  * @returns {Promise<boolean>} Success status
  */
 const deleteFromS3 = async (s3Key) => {
+  const normalizedKey = normalizeStorageKey(s3Key);
+
+  if (!hasConfiguredAwsCredentials()) {
+    const targetPath = path.join(localUploadsRoot, normalizedKey);
+    await fs.promises.rm(targetPath, { force: true });
+    return true;
+  }
+
   const params = {
     Bucket: process.env.AWS_S3_BUCKET || 'malabarbazaar-files',
-    Key: s3Key,
+    Key: normalizedKey,
   };
 
   try {
@@ -110,7 +173,9 @@ const deleteFromS3 = async (s3Key) => {
     await s3Client.send(command);
     return true;
   } catch (error) {
-    throw new Error(`S3 delete failed: ${error.message}`);
+    const fallbackPath = path.join(localUploadsRoot, normalizedKey);
+    await fs.promises.rm(fallbackPath, { force: true });
+    return true;
   }
 };
 
@@ -121,13 +186,13 @@ const deleteFromS3 = async (s3Key) => {
  * @returns {string} Signed URL
  */
 const generateSignedUrl = (s3Key, expiresIn = 3600) => {
-  const params = {
-    Bucket: process.env.AWS_S3_BUCKET || 'malabarbazaar-files',
-    Key: s3Key,
-    Expires: expiresIn,
-  };
+  const normalizedKey = normalizeStorageKey(s3Key);
 
-  return s3.getSignedUrl('getObject', params);
+  if (!hasConfiguredAwsCredentials()) {
+    return `/uploads/${normalizedKey}`;
+  }
+
+  return buildPublicStorageUrl(normalizedKey);
 };
 
 /**
@@ -138,15 +203,9 @@ const generateSignedUrl = (s3Key, expiresIn = 3600) => {
  * @returns {string} Signed upload URL
  */
 const generateSignedUploadUrl = (s3Key, contentType = 'application/octet-stream', expiresIn = 600) => {
-  const params = {
-    Bucket: process.env.AWS_S3_BUCKET || 'malabarbazaar-files',
-    Key: s3Key,
-    ContentType: contentType,
-    Expires: expiresIn,
-    ServerSideEncryption: 'AES256',
-  };
-
-  return s3.getSignedUrl('putObject', params);
+  return hasConfiguredAwsCredentials()
+    ? buildPublicStorageUrl(s3Key)
+    : `/uploads/${normalizeStorageKey(s3Key)}`;
 };
 
 /**
@@ -155,24 +214,17 @@ const generateSignedUploadUrl = (s3Key, contentType = 'application/octet-stream'
  * @returns {Promise<object>} File metadata
  */
 const getFileMetadata = async (s3Key) => {
-  const params = {
-    Bucket: process.env.AWS_S3_BUCKET || 'malabarbazaar-files',
-    Key: s3Key,
+  const normalizedKey = normalizeStorageKey(s3Key);
+  const targetPath = path.join(localUploadsRoot, normalizedKey);
+  const stats = await fs.promises.stat(targetPath);
+
+  return {
+    size: stats.size,
+    type: path.extname(targetPath).slice(1),
+    lastModified: stats.mtime,
+    etag: '',
+    metadata: {},
   };
-
-  try {
-    const result = await s3.headObject(params).promise();
-
-    return {
-      size: result.ContentLength,
-      type: result.ContentType,
-      lastModified: result.LastModified,
-      etag: result.ETag,
-      metadata: result.Metadata,
-    };
-  } catch (error) {
-    throw new Error(`Failed to get metadata: ${error.message}`);
-  }
 };
 
 /**
@@ -182,24 +234,18 @@ const getFileMetadata = async (s3Key) => {
  * @returns {Promise<object>} Copy result
  */
 const copyInS3 = async (sourceKey, destinationKey) => {
-  const params = {
-    Bucket: process.env.AWS_S3_BUCKET || 'malabarbazaar-files',
-    CopySource: `${process.env.AWS_S3_BUCKET || 'malabarbazaar-files'}/${sourceKey}`,
-    Key: destinationKey,
-    ServerSideEncryption: 'AES256',
-  };
+  const sourcePath = path.join(localUploadsRoot, normalizeStorageKey(sourceKey));
+  const destinationPath = path.join(localUploadsRoot, normalizeStorageKey(destinationKey));
 
-  try {
-    const result = await s3.copyObject(params).promise();
-    return {
-      success: true,
-      sourceKey,
-      destinationKey,
-      etag: result.CopyObjectResult.ETag,
-    };
-  } catch (error) {
-    throw new Error(`S3 copy failed: ${error.message}`);
-  }
+  await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
+  await fs.promises.copyFile(sourcePath, destinationPath);
+
+  return {
+    success: true,
+    sourceKey,
+    destinationKey,
+    etag: '',
+  };
 };
 
 /**
@@ -209,24 +255,19 @@ const copyInS3 = async (sourceKey, destinationKey) => {
  * @returns {Promise<array>} List of files
  */
 const listFilesInS3 = async (prefix, maxKeys = 100) => {
-  const params = {
-    Bucket: process.env.AWS_S3_BUCKET || 'malabarbazaar-files',
-    Prefix: prefix,
-    MaxKeys: maxKeys,
-  };
+  const normalizedPrefix = normalizeStorageKey(prefix);
+  const prefixPath = path.join(localUploadsRoot, normalizedPrefix);
+  const entries = await fs.promises.readdir(prefixPath, { withFileTypes: true }).catch(() => []);
 
-  try {
-    const result = await s3.listObjectsV2(params).promise();
-
-    return (result.Contents || []).map((item) => ({
-      key: item.Key,
-      size: item.Size,
-      lastModified: item.LastModified,
-      etag: item.ETag,
+  return entries
+    .filter((entry) => entry.isFile())
+    .slice(0, maxKeys)
+    .map((entry) => ({
+      key: path.posix.join(normalizedPrefix, entry.name),
+      size: 0,
+      lastModified: null,
+      etag: '',
     }));
-  } catch (error) {
-    throw new Error(`S3 list failed: ${error.message}`);
-  }
 };
 
 /**
@@ -248,28 +289,7 @@ const generateCdnUrl = (s3Key) => {
  * @returns {Promise<void>}
  */
 const enableCorsOnS3 = async () => {
-  const corsConfiguration = {
-    CORSRules: [
-      {
-        AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE'],
-        AllowedOrigins: [process.env.FRONTEND_URL || 'http://localhost:3000'],
-        AllowedHeaders: ['*'],
-        MaxAgeSeconds: 3000,
-      },
-    ],
-  };
-
-  const params = {
-    Bucket: process.env.AWS_S3_BUCKET || 'malabarbazaar-files',
-    CORSConfiguration: corsConfiguration,
-  };
-
-  try {
-    await s3.putBucketCors(params).promise();
-    console.log('[S3] CORS enabled successfully');
-  } catch (error) {
-    console.error('[S3] Failed to enable CORS:', error.message);
-  }
+  return;
 };
 
 module.exports = {

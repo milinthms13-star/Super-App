@@ -667,7 +667,7 @@ const CartPage = ({ onContinueShopping = null }) => {
                 <div className="cart-item-details">
                   <h3>{item.name}</h3>
                   <p>{item.category}</p>
-                  {(item.batchLabel || item.batchLocation || item.expiryDate) && (
+                      {(item.batchLabel || item.batchLocation || item.expiryDate) && (
                     <p className="cart-item-meta">
                       {[
                         item.batchLabel ? `Batch ${item.batchLabel}` : "",
@@ -675,7 +675,7 @@ const CartPage = ({ onContinueShopping = null }) => {
                         item.expiryDate ? `Expiry ${String(item.expiryDate).slice(0, 10)}` : "",
                       ]
                         .filter(Boolean)
-                        .join(" � ")}
+                        .join(" · ")}
                     </p>
                   )}
                   <p className="cart-item-meta">
@@ -970,7 +970,7 @@ const CartPage = ({ onContinueShopping = null }) => {
                 onClick={() => setShowOrderConfirm(false)}
                 aria-label="Close confirmation dialog"
               >
-                �
+                ✕
               </button>
             </div>
 
