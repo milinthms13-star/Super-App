@@ -104,6 +104,7 @@ const { currentUser, apiCall } = useApp();
   const [registeredContacts, setRegisteredContacts] = useState([]);
   const [history, setHistory] = useState([]);
   const [settings, setSettings] = useState({ silentMode: false, autoEscalation: true, shareLiveLocation: true });
+  const [apiError, setApiError] = useState(null);
   const [alertState, setAlertState] = useState({
     active: false,
     mode: "Standby",
@@ -132,25 +133,45 @@ const { currentUser, apiCall } = useApp();
 
     const loadData = async () => {
       try {
+        if (!apiCall) {
+          throw new Error('API not available');
+        }
+
         // Load SOS contacts
-        const contactsRes = await apiCall('/sos/contacts');
+        const contactsRes = await apiCall('/sos/contacts').catch(err => {
+          console.warn('Failed to load contacts:', err);
+          return null;
+        });
         if (isMounted && contactsRes?.data) {
           setContacts(contactsRes.data.map(c => ({ ...c, acknowledged: false })));
         }
 
         // Load history
-        const historyRes = await apiCall('/sos/history?limit=10');
+        const historyRes = await apiCall('/sos/history?limit=10').catch(err => {
+          console.warn('Failed to load history:', err);
+          return null;
+        });
         if (isMounted && historyRes?.data) {
           setHistory(historyRes.data);
         }
 
         // Load messaging contacts
-        const messagingRes = await apiCall("/messaging/contacts", "GET", { limit: 100 });
+        const messagingRes = await apiCall("/messaging/contacts", "GET", { limit: 100 }).catch(err => {
+          console.warn('Failed to load messaging contacts:', err);
+          return null;
+        });
         if (isMounted) {
           setRegisteredContacts(Array.isArray(messagingRes?.contacts) ? messagingRes.contacts : []);
         }
+
+        if (isMounted) {
+          setApiError(null);
+        }
       } catch (error) {
         console.error('Failed to load SOS data:', error);
+        if (isMounted) {
+          setApiError(error.message || 'Failed to load SOS data');
+        }
       }
     };
 
@@ -478,6 +499,17 @@ const { currentUser, apiCall } = useApp();
     setStatusMessage("SOS resolved. Live sharing and escalation have been stopped.");
   };
 
+  // Add safeguards for rendering
+  if (!currentUser) {
+    return (
+      <div className="sos-page">
+        <div className="sos-status-banner error">
+          ⚠️ User not authenticated. Please log in to access SOS features.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="sos-page">
       <section className="sos-hero">
@@ -513,6 +545,12 @@ const { currentUser, apiCall } = useApp();
           </article>
         ))}
       </section>
+
+{apiError ? (
+  <div className="sos-status-banner error">
+    ⚠️ {apiError} - Some features may be unavailable
+  </div>
+) : null}
 
 {statusMessage ? (
   <div className={`sos-status-banner ${locationError ? 'error' : ''}`}>
