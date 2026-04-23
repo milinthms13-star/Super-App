@@ -1,10 +1,11 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import PropTypes from "prop-types";
 import { useApp } from "../../contexts/AppContext";
 import { resolveProductImageSrc } from "./productImage";
 import {
   formatFriendlyDate,
   formatCurrency,
+  formatCountdown,
   getReturnWindowText,
 } from "../../utils/ecommerceHelpers";
 import { sanitizeText } from "../../utils/xssProtection";
@@ -14,6 +15,7 @@ const ProductCard = ({ product, onOpenQuickView }) => {
   const [isAdded, setIsAdded] = useState(false);
   const [stockMessage, setStockMessage] = useState("");
   const [imageError, setImageError] = useState(false);
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
 
   const isSellerAccount =
     currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
@@ -46,10 +48,49 @@ const ProductCard = ({ product, onOpenQuickView }) => {
     ].filter(Boolean);
   }, [product.batchLabel, product.batchLocation, product.expiryDate]);
 
-  const productImageSrc = useMemo(() => resolveProductImageSrc(product.image), [product.image]);
+  const productImageSrc = useMemo(
+    () => resolveProductImageSrc(product.image, product.imageVariants),
+    [product.image, product.imageVariants]
+  );
   const showUpcomingDiscount = product.discountStatus === "upcoming";
   const showExpiredDiscount = product.discountStatus === "expired";
   const returnPolicyText = useMemo(() => getReturnWindowText(product), [product]);
+  const flashReservationExpiry = product.flashSale?.reservation?.expiresAt || null;
+  const flashSaleExpiry = product.flashSaleEndsAt || product.flashSale?.endsAt || null;
+
+  useEffect(() => {
+    if (!flashReservationExpiry && !flashSaleExpiry) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setCountdownNow(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [flashReservationExpiry, flashSaleExpiry]);
+
+  const flashSaleMeta = useMemo(() => {
+    const reservationEndsAt = flashReservationExpiry ? new Date(flashReservationExpiry) : null;
+    const saleEndsAt = flashSaleExpiry ? new Date(flashSaleExpiry) : null;
+    const reservationRemainingMs =
+      reservationEndsAt && !Number.isNaN(reservationEndsAt.getTime())
+        ? Math.max(0, reservationEndsAt.getTime() - countdownNow)
+        : 0;
+    const saleRemainingMs =
+      saleEndsAt && !Number.isNaN(saleEndsAt.getTime())
+        ? Math.max(0, saleEndsAt.getTime() - countdownNow)
+        : 0;
+
+    return {
+      reservationRemainingMs,
+      saleRemainingMs,
+      hasReservation: reservationRemainingMs > 0,
+      hasSaleCountdown: saleRemainingMs > 0,
+    };
+  }, [countdownNow, flashReservationExpiry, flashSaleExpiry]);
 
   // Memoize handlers to prevent unnecessary re-renders of child components
   const handleAddToCart = useCallback(() => {
@@ -92,6 +133,11 @@ const ProductCard = ({ product, onOpenQuickView }) => {
         {product.isDiscountActive && (
           <span className="product-discount-badge" aria-label={`${Math.round(Number(product.discountPercentage || 0))}% discount`}>
             {Math.round(Number(product.discountPercentage || 0))}% OFF
+          </span>
+        )}
+        {product.flashSaleActive && (
+          <span className="product-flash-badge" aria-label="Flash sale active">
+            Flash Sale
           </span>
         )}
         {productImageSrc && !imageError ? (
@@ -143,6 +189,19 @@ const ProductCard = ({ product, onOpenQuickView }) => {
             <p className="product-batch-meta">{batchMeta.join(" · ")}</p>
           )}
           <p className="product-return-policy">{returnPolicyText}</p>
+          {product.flashSaleActive && flashSaleMeta.hasSaleCountdown && (
+            <p className="product-flash-detail">
+              Ends in {formatCountdown(flashSaleMeta.saleRemainingMs)}
+              {Number(product.flashSaleRemainingStock || 0) > 0
+                ? ` · ${product.flashSaleRemainingStock} flash deal${product.flashSaleRemainingStock === 1 ? "" : "s"} left`
+                : ""}
+            </p>
+          )}
+          {flashSaleMeta.hasReservation && (
+            <p className="product-flash-reserved">
+              Reserved for you for {formatCountdown(flashSaleMeta.reservationRemainingMs)}
+            </p>
+          )}
         </div>
 
         {ratingInfo.reviews > 0 && (
@@ -244,7 +303,8 @@ ProductCard.propTypes = {
     stock: PropTypes.number,
     rating: PropTypes.number,
     reviews: PropTypes.number,
-    image: PropTypes.string,
+    image: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
+    imageVariants: PropTypes.object,
     category: PropTypes.string,
     subcategory: PropTypes.string,
     model: PropTypes.string,
@@ -263,6 +323,15 @@ ProductCard.propTypes = {
     discountStatus: PropTypes.oneOf(["active", "upcoming", "expired"]),
     discountStartDate: PropTypes.string,
     discountEndDate: PropTypes.string,
+    flashSaleActive: PropTypes.bool,
+    flashSaleEndsAt: PropTypes.string,
+    flashSaleRemainingStock: PropTypes.number,
+    flashSale: PropTypes.shape({
+      endsAt: PropTypes.string,
+      reservation: PropTypes.shape({
+        expiresAt: PropTypes.string,
+      }),
+    }),
   }).isRequired,
   onOpenQuickView: PropTypes.func,
 };

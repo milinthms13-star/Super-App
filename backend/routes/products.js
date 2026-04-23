@@ -181,12 +181,16 @@ const storeProductImage = async ({ file, sellerEmail }) => {
         ownerEmail: sellerEmail,
       },
     });
-    return `/api/files/public/${storedFile.id}`;
+    return buildStoredImagePayload({
+      image: `/api/files/public/${storedFile.id}`,
+      imageCdn: 'gridfs',
+    });
   } catch (gridFsError) {
     if (gridFsError?.message?.includes('GridFS bucket has not been initialized')) {
       const contentType = file.mimetype || 'image/jpeg';
       return buildStoredImagePayload({
         image: `data:${contentType};base64,${file.buffer.toString('base64')}`,
+        imageCdn: 'inline',
       });
     }
     throw gridFsError;

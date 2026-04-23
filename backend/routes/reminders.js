@@ -5,6 +5,8 @@ const Reminder = require('../models/Reminder');
 const { authenticate } = require('../middleware/auth');
 const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
+const voiceCallService = require('../services/voiceCallService');
+const voiceCallScheduler = require('../services/voiceCallScheduler');
 
 const VALID_CATEGORIES = ['Work', 'Personal', 'Urgent'];
 const VALID_PRIORITIES = ['Low', 'Medium', 'High'];
@@ -354,6 +356,268 @@ router.get('/stats/summary', async (req, res) => {
       success: false,
       message: 'Failed to fetch reminder statistics',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ============ VOICE CALL REMINDER ENDPOINTS ============
+
+// POST /api/reminders/voice-call - Create a reminder with voice call
+router.post('/voice-call', async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      category = 'Work',
+      priority = 'Medium',
+      dueDate,
+      dueTime,
+      reminders = ['Call'],
+      recurring = 'none',
+      recipientId,
+      recipientPhoneNumber,
+      voiceMessage,
+      messageType = 'text',
+      maxCallAttempts = 3
+    } = req.body;
+
+    const ownerId = getReminderOwnerId(req.user);
+
+    // Validate voice call specific fields
+    if (!recipientPhoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Recipient phone number is required for voice call reminders'
+      });
+    }
+
+    if (!voiceMessage || voiceMessage.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Voice message is required'
+      });
+    }
+
+    // Validate phone number format
+    if (!voiceCallService._isValidPhoneNumber(recipientPhoneNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid phone number format'
+      });
+    }
+
+    // Validate general reminder fields
+    const validationMessage = validateReminderFields({
+      title,
+      category,
+      priority,
+      reminders,
+      recurring,
+      dueDate
+    });
+
+    if (validationMessage) {
+      return res.status(400).json({
+        success: false,
+        message: validationMessage
+      });
+    }
+
+    // Create reminder with voice call fields
+    const reminder = new Reminder({
+      userId: ownerId,
+      title: title.trim(),
+      description: description?.trim(),
+      category,
+      priority,
+      dueDate: parseReminderDueDate(dueDate),
+      dueTime,
+      reminders,
+      recurring,
+      status: 'Reminder scheduled',
+      // Voice call fields
+      recipientId,
+      recipientPhoneNumber: voiceCallService.formatPhoneNumber(recipientPhoneNumber),
+      voiceMessage: voiceMessage.trim(),
+      messageType,
+      callStatus: 'pending',
+      maxCallAttempts,
+      senderName: req.user.name || 'Reminder Service'
+    });
+
+    // Set next call time
+    if (recurring !== 'none') {
+      reminder.nextCallTime = reminder.calculateNextCallTime();
+    } else {
+      reminder.nextCallTime = reminder.dueDate;
+    }
+
+    await reminder.save();
+
+    logger.info(`Voice call reminder created: ${reminder.title} for user ${ownerId}`);
+
+    res.status(201).json({
+      success: true,
+      data: reminder,
+      message: 'Voice call reminder created successfully'
+    });
+  } catch (error) {
+    logger.error('Error creating voice call reminder:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create voice call reminder',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/reminders/:id/voice-call-status - Get voice call status
+router.get('/:id/voice-call-status', async (req, res) => {
+  try {
+    const ownerId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({
+      _id: req.params.id,
+      userId: ownerId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    if (!reminder.recipientId || !reminder.recipientPhoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'This reminder does not have a voice call configured'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        title: reminder.title,
+        callStatus: reminder.callStatus,
+        recipientPhoneNumber: reminder.recipientPhoneNumber,
+        voiceMessage: reminder.voiceMessage.substring(0, 100) + '...',
+        lastCallTime: reminder.lastCallTime,
+        nextCallTime: reminder.nextCallTime,
+        callAttempts: reminder.callAttempts,
+        maxCallAttempts: reminder.maxCallAttempts,
+        callHistory: reminder.callHistory,
+        recurring: reminder.recurring
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching voice call status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch voice call status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/:id/trigger-call - Manually trigger voice call
+router.post('/:id/trigger-call', async (req, res) => {
+  try {
+    const ownerId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({
+      _id: req.params.id,
+      userId: ownerId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    if (!reminder.recipientPhoneNumber || !reminder.voiceMessage) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reminder is not configured for voice calls'
+      });
+    }
+
+    // Trigger the voice call
+    const result = await voiceCallScheduler.triggerManualCall(reminder._id);
+
+    res.json({
+      success: true,
+      data: result,
+      message: 'Voice call triggered successfully'
+    });
+  } catch (error) {
+    logger.error('Error triggering voice call:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to trigger voice call',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/voice/callback - Twilio webhook callback (no auth required)
+router.post('/voice/callback', async (req, res) => {
+  try {
+    const callData = await voiceCallService.handleCallStatusCallback(req.body);
+    
+    logger.info('Twilio callback received:', callData);
+
+    // Find and update reminder with call status
+    const reminder = await Reminder.findOne({
+      'callHistory.callId': callData.callId
+    });
+
+    if (reminder) {
+      reminder.lastCallTime = new Date();
+      reminder.callStatus = callData.status;
+      if (callData.recordingUrl) {
+        reminder.voiceNoteUrl = callData.recordingUrl;
+      }
+      await reminder.save();
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Error processing Twilio callback:', error);
+    res.status(200).json({ success: false }); // Always return 200 to Twilio
+  }
+});
+
+// POST /api/reminders/voice/acknowledge - Handle voice call acknowledgment
+router.post('/voice/acknowledge', async (req, res) => {
+  try {
+    const { Digits } = req.body;
+
+    logger.info(`Voice call acknowledgment received: ${Digits}`);
+
+    // User pressed a digit, so call was answered
+    res.json({ success: true, acknowledged: !!Digits });
+  } catch (error) {
+    logger.error('Error processing acknowledgment:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/reminders/voice/scheduler-status - Get scheduler status
+router.get('/voice/scheduler-status', async (req, res) => {
+  try {
+    // Only allow admins or for development
+    const status = voiceCallScheduler.getStatus();
+    res.json({
+      success: true,
+      data: status
+    });
+  } catch (error) {
+    logger.error('Error fetching scheduler status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch scheduler status'
     });
   }
 });

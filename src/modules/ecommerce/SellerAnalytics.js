@@ -1,401 +1,392 @@
-import React, { useState, useEffect } from 'react';
-import './SellerAnalytics.css';
+import React, { useEffect, useMemo, useState } from "react";
+import { useApp } from "../../contexts/AppContext";
+import { formatCurrency, formatDisplayDate } from "../../utils/ecommerceHelpers";
+import "./SellerAnalytics.css";
 
-const SellerAnalytics = ({ userEmail, sellerName }) => {
+const PERIODS = ["Today", "This Week", "This Month", "This Quarter", "This Year"];
+
+const SellerAnalytics = () => {
+  const { apiCall, currentUser } = useApp();
   const [analytics, setAnalytics] = useState(null);
-  const [trends, setTrends] = useState([]);
-  const [productPerformance, setProductPerformance] = useState([]);
-  const [customerInsights, setCustomerInsights] = useState(null);
-  const [inventoryMetrics, setInventoryMetrics] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [period, setPeriod] = useState('This Month');
+  const [period, setPeriod] = useState("This Month");
+  const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchAnalyticsData();
-  }, [userEmail, period]);
+    let isMounted = true;
 
-  const fetchAnalyticsData = async () => {
-    try {
+    const loadAnalytics = async () => {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const headers = { Authorization: `Bearer ${token}` };
+      setError("");
 
-      const [dashboardRes, trendsRes, productRes, customersRes, inventoryRes] =
-        await Promise.all([
-          fetch(`/api/seller-analytics/dashboard?period=${period}`, {
-            headers,
-          }),
-          fetch('/api/seller-analytics/trends/sales', { headers }),
-          fetch('/api/seller-analytics/products/performance', { headers }),
-          fetch('/api/seller-analytics/customers/insights', { headers }),
-          fetch('/api/seller-analytics/inventory/metrics', { headers }),
-        ]);
+      try {
+        const response = await apiCall("/selleranalytics/dashboard", "GET", { period });
+        if (!isMounted) {
+          return;
+        }
 
-      if (dashboardRes.ok) {
-        const data = await dashboardRes.json();
-        setAnalytics(data.data);
+        if (!response?.success || !response?.data) {
+          throw new Error("Analytics data is unavailable right now.");
+        }
+
+        setAnalytics(response.data);
+      } catch (fetchError) {
+        if (isMounted) {
+          setError(fetchError.message || "Analytics could not be loaded.");
+          setAnalytics(null);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      if (trendsRes.ok) {
-        const data = await trendsRes.json();
-        setTrends(data.data);
-      }
-      if (productRes.ok) {
-        const data = await productRes.json();
-        setProductPerformance(data.data);
-      }
-      if (customersRes.ok) {
-        const data = await customersRes.json();
-        setCustomerInsights(data.data);
-      }
-      if (inventoryRes.ok) {
-        const data = await inventoryRes.json();
-        setInventoryMetrics(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    loadAnalytics();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiCall, period]);
+
+  const trendPeak = useMemo(() => {
+    const trend = analytics?.sales?.revenueTrend || [];
+    return Math.max(1, ...trend.map((entry) => Number(entry.revenue || 0)));
+  }, [analytics]);
+
+  const heatPeak = useMemo(() => {
+    const heatmap = analytics?.geography?.heatmap || [];
+    return Math.max(1, ...heatmap.map((entry) => Number(entry.revenue || 0)));
+  }, [analytics]);
 
   if (loading) {
-    return <div className="loading">Loading analytics...</div>;
+    return (
+      <section className="seller-analytics-shell">
+        <div className="seller-analytics-loading">
+          <strong>Loading seller analytics...</strong>
+          <p>Revenue trends, product velocity, and regional demand are being prepared.</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="seller-analytics-shell">
+        <div className="seller-analytics-loading seller-analytics-error">
+          <strong>Analytics unavailable</strong>
+          <p>{error}</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (!analytics) {
+    return null;
   }
 
   return (
-    <div className="seller-analytics-container">
-      <div className="analytics-header">
-        <h1>📊 Seller Analytics Dashboard</h1>
-        <p>Track your sales, products, and customer insights</p>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          className="period-selector"
-        >
-          <option value="Today">Today</option>
-          <option value="This Week">This Week</option>
-          <option value="This Month">This Month</option>
-          <option value="This Quarter">This Quarter</option>
-          <option value="This Year">This Year</option>
-        </select>
+    <section className="seller-analytics-shell">
+      <div className="seller-analytics-header">
+        <div>
+          <span className="seller-analytics-kicker">Seller Analytics</span>
+          <h3>{currentUser?.businessName || currentUser?.name || "Your shop"} performance</h3>
+          <p>
+            Revenue, product velocity, and regional demand for {analytics.period.toLowerCase()}.
+          </p>
+        </div>
+        <label className="seller-analytics-period">
+          <span>Reporting Window</span>
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+            {PERIODS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <div className="analytics-tabs">
-        <button
-          className={`tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('dashboard')}
-        >
-          Dashboard
-        </button>
-        <button
-          className={`tab ${activeTab === 'products' ? 'active' : ''}`}
-          onClick={() => setActiveTab('products')}
-        >
-          Products
-        </button>
-        <button
-          className={`tab ${activeTab === 'customers' ? 'active' : ''}`}
-          onClick={() => setActiveTab('customers')}
-        >
-          Customers
-        </button>
-        <button
-          className={`tab ${activeTab === 'inventory' ? 'active' : ''}`}
-          onClick={() => setActiveTab('inventory')}
-        >
-          Inventory
-        </button>
-        <button
-          className={`tab ${activeTab === 'reviews' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reviews')}
-        >
-          Reviews
-        </button>
+      <div className="seller-analytics-tabs">
+        {[
+          { id: "overview", label: "Overview" },
+          { id: "products", label: "Products" },
+          { id: "regions", label: "Regions" },
+          { id: "reviews", label: "Reviews" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`seller-analytics-tab ${activeTab === tab.id ? "active" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {activeTab === 'dashboard' && (
-        <div className="dashboard-tab">
-          <div className="kpi-grid">
-            <div className="kpi-card">
-              <h4>Total Revenue</h4>
-              <p className="kpi-value">₹{analytics?.sales.totalRevenue || 0}</p>
-              <p className="kpi-detail">{analytics?.sales.totalOrders || 0} orders</p>
-            </div>
-            <div className="kpi-card">
-              <h4>Average Order Value</h4>
-              <p className="kpi-value">
-                ₹{Math.round(analytics?.sales.averageOrderValue || 0)}
-              </p>
-              <p className="kpi-detail">Per order</p>
-            </div>
-            <div className="kpi-card">
-              <h4>Customer Satisfaction</h4>
-              <p className="kpi-value">
-                {Math.round(analytics?.kpis.customerSatisfactionScore || 0)}%
-              </p>
-              <p className="kpi-detail">Based on {analytics?.reviews.totalReviews || 0} reviews</p>
-            </div>
-            <div className="kpi-card">
-              <h4>Order Fulfillment</h4>
-              <p className="kpi-value">
-                {Math.round(analytics?.kpis.orderFulfillmentRate || 0)}%
-              </p>
-              <p className="kpi-detail">Delivered orders</p>
-            </div>
-          </div>
+      {activeTab === "overview" && (
+        <div className="seller-analytics-grid">
+          <article className="seller-analytics-card seller-analytics-kpi">
+            <span>Revenue</span>
+            <strong>INR {formatCurrency(analytics.sales.totalRevenue)}</strong>
+            <small>{analytics.sales.totalOrders} seller order segment(s)</small>
+          </article>
+          <article className="seller-analytics-card seller-analytics-kpi">
+            <span>Average Order</span>
+            <strong>INR {formatCurrency(analytics.sales.averageOrderValue)}</strong>
+            <small>Repeat shoppers: {Math.round(analytics.kpis.repeatCustomerRate || 0)}%</small>
+          </article>
+          <article className="seller-analytics-card seller-analytics-kpi">
+            <span>Fulfillment Rate</span>
+            <strong>{Math.round(analytics.kpis.orderFulfillmentRate || 0)}%</strong>
+            <small>Delivered segments out of all seller-managed orders</small>
+          </article>
+          <article className="seller-analytics-card seller-analytics-kpi">
+            <span>Customer Satisfaction</span>
+            <strong>{Math.round(analytics.kpis.customerSatisfactionScore || 0)}%</strong>
+            <small>{(analytics.reviews.averageRating || 0).toFixed(1)} / 5 average rating</small>
+          </article>
 
-          <div className="order-status-section">
-            <h3>Order Status Breakdown</h3>
-            <div className="status-grid">
-              <div className="status-item">
-                <span>Pending</span>
-                <span className="count">{analytics?.sales.ordersByStatus.pending || 0}</span>
-              </div>
-              <div className="status-item">
-                <span>Processing</span>
-                <span className="count">{analytics?.sales.ordersByStatus.processing || 0}</span>
-              </div>
-              <div className="status-item">
-                <span>Shipped</span>
-                <span className="count">{analytics?.sales.ordersByStatus.shipped || 0}</span>
-              </div>
-              <div className="status-item">
-                <span>Delivered</span>
-                <span className="count">{analytics?.sales.ordersByStatus.delivered || 0}</span>
-              </div>
-              <div className="status-item">
-                <span>Cancelled</span>
-                <span className="count">{analytics?.sales.ordersByStatus.cancelled || 0}</span>
-              </div>
-              <div className="status-item">
-                <span>Returned</span>
-                <span className="count">{analytics?.sales.ordersByStatus.returned || 0}</span>
+          <article className="seller-analytics-card seller-analytics-span-2">
+            <div className="seller-analytics-card-heading">
+              <div>
+                <h4>Revenue Trend</h4>
+                <p>Orders and revenue contribution over time.</p>
               </div>
             </div>
-          </div>
-
-          <div className="metrics-section">
-            <h3>Key Metrics</h3>
-            <div className="metrics-grid">
-              <div className="metric">
-                <label>Return Rate</label>
-                <p>{Math.round(analytics?.kpis.returnRate || 0)}%</p>
-              </div>
-              <div className="metric">
-                <label>Cancellation Rate</label>
-                <p>{Math.round(analytics?.kpis.cancellationRate || 0)}%</p>
-              </div>
-              <div className="metric">
-                <label>Average Rating</label>
-                <p>{(analytics?.reviews.averageRating || 0).toFixed(2)} / 5</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="trends-section">
-            <h3>Revenue Trends</h3>
-            <div className="trends-list">
-              {trends.slice(-7).map((trend, idx) => (
-                <div key={idx} className="trend-item">
-                  <span className="date">{trend.date}</span>
-                  <div className="trend-bar">
-                    <div
-                      className="trend-fill"
-                      style={{
-                        width: `${Math.min(
-                          (trend.revenue / Math.max(...trends.map((t) => t.revenue), 1)) *
-                            100,
-                          100
-                        )}%`,
-                      }}
-                    ></div>
+            <div className="seller-analytics-trend-list">
+              {(analytics.sales.revenueTrend || []).length > 0 ? (
+                analytics.sales.revenueTrend.map((entry) => (
+                  <div className="seller-analytics-trend-row" key={entry.date}>
+                    <span>{entry.date}</span>
+                    <div className="seller-analytics-trend-bar">
+                      <div
+                        className="seller-analytics-trend-fill"
+                        style={{
+                          width: `${Math.max(6, (Number(entry.revenue || 0) / trendPeak) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <strong>INR {formatCurrency(entry.revenue)}</strong>
+                    <small>{entry.orderCount} orders</small>
                   </div>
-                  <span className="amount">₹{trend.revenue}</span>
-                  <span className="orders">{trend.orderCount} orders</span>
+                ))
+              ) : (
+                <p className="seller-analytics-empty">No sales trend yet for this period.</p>
+              )}
+            </div>
+          </article>
+
+          <article className="seller-analytics-card seller-analytics-span-2">
+            <div className="seller-analytics-card-heading">
+              <div>
+                <h4>Regional Heatmap</h4>
+                <p>Where seller demand is strongest based on order revenue.</p>
+              </div>
+            </div>
+            <div className="seller-analytics-region-grid">
+              {(analytics.geography.heatmap || []).slice(0, 6).map((region) => (
+                <div className="seller-analytics-region-card" key={region.label}>
+                  <div className="seller-analytics-region-top">
+                    <strong>{region.label}</strong>
+                    <span>{region.orderCount} orders</span>
+                  </div>
+                  <div className="seller-analytics-region-meter">
+                    <div
+                      className="seller-analytics-region-fill"
+                      style={{
+                        width: `${Math.max(8, (Number(region.revenue || 0) / heatPeak) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <small>INR {formatCurrency(region.revenue)}</small>
                 </div>
               ))}
             </div>
-          </div>
+          </article>
         </div>
       )}
 
-      {activeTab === 'products' && (
-        <div className="products-tab">
-          <h3>Top Selling Products</h3>
-          {analytics?.products.topSellingProducts.length > 0 ? (
-            <div className="products-list">
-              {analytics.products.topSellingProducts.map((product, idx) => (
-                <div key={idx} className="product-item">
-                  <div className="product-rank">{idx + 1}</div>
-                  <div className="product-info">
-                    <p className="product-name">{product.productName}</p>
-                    <p className="product-stats">
-                      {product.unitsSold} units | ₹{product.revenue} revenue
-                    </p>
+      {activeTab === "products" && (
+        <div className="seller-analytics-stack">
+          <article className="seller-analytics-card">
+            <div className="seller-analytics-card-heading">
+              <div>
+                <h4>Top Product Velocity</h4>
+                <p>Products moving fastest across orders and stock.</p>
+              </div>
+            </div>
+            <div className="seller-analytics-product-list">
+              {(analytics.products.topSellingProducts || []).map((product) => (
+                <div className="seller-analytics-product-row" key={product.productId}>
+                  <div>
+                    <strong>{product.productName}</strong>
+                    <p>{product.unitsSold} units sold</p>
                   </div>
-                  <div className="product-rating">
-                    <span className="rating">⭐ {product.rating.toFixed(1)}</span>
+                  <div>
+                    <strong>INR {formatCurrency(product.revenue)}</strong>
+                    <p>{product.stock} in stock</p>
                   </div>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="empty-state">No products yet</p>
-          )}
+          </article>
 
-          <h3 style={{ marginTop: '30px' }}>Product Performance</h3>
-          {productPerformance.length > 0 ? (
-            <div className="performance-table">
-              <table>
+          <article className="seller-analytics-card">
+            <div className="seller-analytics-card-heading">
+              <div>
+                <h4>Performance Table</h4>
+                <p>Velocity, CTR, and sell-through at a glance.</p>
+              </div>
+            </div>
+            <div className="seller-analytics-table-wrap">
+              <table className="seller-analytics-table">
                 <thead>
                   <tr>
                     <th>Product</th>
-                    <th>Views</th>
-                    <th>Clicks</th>
-                    <th>Conversion</th>
+                    <th>Units</th>
                     <th>Revenue</th>
-                    <th>Rating</th>
+                    <th>CTR</th>
+                    <th>Sell-Through</th>
+                    <th>Last Sold</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {productPerformance.map((product, idx) => (
-                    <tr key={idx}>
+                  {(analytics.products.productVelocity || []).slice(0, 8).map((product) => (
+                    <tr key={product.productId}>
                       <td>{product.productName}</td>
-                      <td>{product.views}</td>
-                      <td>{product.clicks}</td>
-                      <td>{product.conversionRate}%</td>
-                      <td>₹{product.revenue}</td>
-                      <td>⭐ {product.rating.toFixed(1)}</td>
+                      <td>{product.unitsSold}</td>
+                      <td>INR {formatCurrency(product.revenue)}</td>
+                      <td>{Math.round(product.conversionRate || 0)}%</td>
+                      <td>{Math.round(product.sellThroughRate || 0)}%</td>
+                      <td>{product.lastSoldAt ? formatDisplayDate(product.lastSoldAt) : "No sale yet"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : (
-            <p className="empty-state">No performance data yet</p>
-          )}
+          </article>
         </div>
       )}
 
-      {activeTab === 'customers' && (
-        <div className="customers-tab">
-          <div className="customer-summary">
-            <div className="summary-card">
-              <h4>Total Customers</h4>
-              <p className="big-number">{customerInsights?.totalCustomers || 0}</p>
-            </div>
-            <div className="summary-card">
-              <h4>Average Customer Value</h4>
-              <p className="big-number">₹{Math.round(customerInsights?.averageCustomerValue || 0)}</p>
-            </div>
-          </div>
-
-          <h3>Top Customers</h3>
-          {customerInsights?.topCustomers.length > 0 ? (
-            <div className="customers-list">
-              {customerInsights.topCustomers.map((customer, idx) => (
-                <div key={idx} className="customer-item">
-                  <div className="customer-rank">{idx + 1}</div>
-                  <div className="customer-info">
-                    <p className="customer-name">{customer.customerName}</p>
-                    <p className="customer-email">{customer.customerEmail}</p>
-                  </div>
-                  <div className="customer-stats">
-                    <span>{customer.totalOrders} orders</span>
-                    <span>₹{customer.totalSpent}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="empty-state">No customer data yet</p>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'inventory' && (
-        <div className="inventory-tab">
-          <div className="inventory-summary">
-            <div className="summary-card">
-              <h4>Total Items</h4>
-              <p className="big-number">{inventoryMetrics?.totalItems || 0}</p>
-            </div>
-            <div className="summary-card">
-              <h4>Out of Stock</h4>
-              <p className="big-number warning">{inventoryMetrics?.outOfStockItems || 0}</p>
-            </div>
-            <div className="summary-card">
-              <h4>Low Stock</h4>
-              <p className="big-number caution">{inventoryMetrics?.lowStockItems || 0}</p>
-            </div>
-            <div className="summary-card">
-              <h4>Inventory Value</h4>
-              <p className="big-number">₹{inventoryMetrics?.inventoryValue || 0}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'reviews' && (
-        <div className="reviews-tab">
-          <div className="review-summary">
-            <div className="summary-card">
-              <h4>Average Rating</h4>
-              <p className="big-number">
-                {(analytics?.reviews.averageRating || 0).toFixed(1)} / 5
-              </p>
-            </div>
-            <div className="summary-card">
-              <h4>Total Reviews</h4>
-              <p className="big-number">{analytics?.reviews.totalReviews || 0}</p>
-            </div>
-          </div>
-
-          <h3>Rating Distribution</h3>
-          <div className="rating-distribution">
-            {[5, 4, 3, 2, 1].map((rating) => (
-              <div key={rating} className="rating-row">
-                <span className="stars">{'⭐'.repeat(rating)}</span>
-                <div className="bar-container">
-                  <div
-                    className="bar"
-                    style={{
-                      width: `${
-                        (analytics?.reviews.ratingDistribution[`${rating}Star`] /
-                          (analytics?.reviews.totalReviews || 1)) *
-                        100
-                      }%`,
-                    }}
-                  ></div>
-                </div>
-                <span className="count">
-                  {analytics?.reviews.ratingDistribution[`${rating}Star`] || 0}
-                </span>
+      {activeTab === "regions" && (
+        <div className="seller-analytics-stack">
+          <article className="seller-analytics-card">
+            <div className="seller-analytics-card-heading">
+              <div>
+                <h4>Top States</h4>
+                <p>Revenue concentration by delivery state.</p>
               </div>
-            ))}
-          </div>
-
-          <h3 style={{ marginTop: '30px' }}>Recent Positive Reviews</h3>
-          {analytics?.reviews.positiveReviews.length > 0 ? (
-            <div className="reviews-list">
-              {analytics.reviews.positiveReviews.map((review, idx) => (
-                <div key={idx} className="review-item">
-                  <div className="review-header">
-                    <span className="customer">{review.customerName}</span>
-                    <span className="rating">{'⭐'.repeat(review.rating)}</span>
+            </div>
+            <div className="seller-analytics-product-list">
+              {(analytics.geography.topStates || []).map((state) => (
+                <div className="seller-analytics-product-row" key={state.state}>
+                  <div>
+                    <strong>{state.state}</strong>
+                    <p>{state.orderCount} orders</p>
                   </div>
-                  <p className="product">{review.productName}</p>
-                  <p className="comment">{review.comment}</p>
+                  <div>
+                    <strong>INR {formatCurrency(state.revenue)}</strong>
+                    <p>Regional demand</p>
+                  </div>
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="empty-state">No positive reviews yet</p>
-          )}
+          </article>
+
+          <article className="seller-analytics-card">
+            <div className="seller-analytics-card-heading">
+              <div>
+                <h4>Heatmap Details</h4>
+                <p>District-level delivery concentration.</p>
+              </div>
+            </div>
+            <div className="seller-analytics-region-grid">
+              {(analytics.geography.heatmap || []).map((region) => (
+                <div className="seller-analytics-region-card" key={region.label}>
+                  <div className="seller-analytics-region-top">
+                    <strong>{region.label}</strong>
+                    <span>{region.orderCount} orders</span>
+                  </div>
+                  <div className="seller-analytics-region-meter">
+                    <div
+                      className="seller-analytics-region-fill"
+                      style={{
+                        width: `${Math.max(8, (Number(region.revenue || 0) / heatPeak) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <small>INR {formatCurrency(region.revenue)}</small>
+                </div>
+              ))}
+            </div>
+          </article>
         </div>
       )}
-    </div>
+
+      {activeTab === "reviews" && (
+        <div className="seller-analytics-stack">
+          <article className="seller-analytics-card">
+            <div className="seller-analytics-card-heading">
+              <div>
+                <h4>Review Snapshot</h4>
+                <p>Customer sentiment across your seller catalog.</p>
+              </div>
+            </div>
+            <div className="seller-analytics-review-grid">
+              <div>
+                <span>Average Rating</span>
+                <strong>{(analytics.reviews.averageRating || 0).toFixed(1)} / 5</strong>
+              </div>
+              <div>
+                <span>Total Reviews</span>
+                <strong>{analytics.reviews.totalReviews || 0}</strong>
+              </div>
+              <div>
+                <span>5-Star Reviews</span>
+                <strong>{analytics.reviews.ratingDistribution.fiveStar || 0}</strong>
+              </div>
+              <div>
+                <span>1-2 Star Reviews</span>
+                <strong>
+                  {(analytics.reviews.ratingDistribution.oneStar || 0) +
+                    (analytics.reviews.ratingDistribution.twoStar || 0)}
+                </strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="seller-analytics-card">
+            <div className="seller-analytics-card-heading">
+              <div>
+                <h4>Recent Positive Reviews</h4>
+                <p>Approved high-rating reviews from your products.</p>
+              </div>
+            </div>
+            {(analytics.reviews.positiveReviews || []).length > 0 ? (
+              <div className="seller-analytics-review-list">
+                {analytics.reviews.positiveReviews.map((review) => (
+                  <div className="seller-analytics-review-card" key={review.reviewId}>
+                    <div className="seller-analytics-review-top">
+                      <strong>{review.customerName}</strong>
+                      <span>{review.rating}/5</span>
+                    </div>
+                    <p>{review.productName}</p>
+                    <small>{review.comment}</small>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="seller-analytics-empty">
+                Positive review cards will appear here as approved reviews arrive.
+              </p>
+            )}
+          </article>
+        </div>
+      )}
+    </section>
   );
 };
 

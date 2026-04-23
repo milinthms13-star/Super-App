@@ -462,6 +462,52 @@ function App() {
     }
   }, [isLoggedIn]);
 
+  useEffect(() => {
+    if (!isLoggedIn) {
+      return;
+    }
+
+    const query = new URLSearchParams(window.location.search);
+    const requestedModule = String(query.get("module") || "").trim();
+    if (!requestedModule) {
+      return;
+    }
+
+    const supportedModules = new Set([
+      "dashboard",
+      "ecommerce",
+      "cart",
+      "orders",
+      "returns",
+      "messaging",
+      "classifieds",
+      "realestate",
+      "fooddelivery",
+      "localmarket",
+      "ridesharing",
+      "matrimonial",
+      "socialmedia",
+      "reminderalert",
+      "diary",
+      "sosalert",
+      "astrology",
+      "support",
+    ]);
+
+    if (!supportedModules.has(requestedModule)) {
+      return;
+    }
+
+    setCurrentModule(requestedModule);
+    query.delete("module");
+    const nextQuery = query.toString();
+    window.history.replaceState(
+      {},
+      document.title,
+      `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`
+    );
+  }, [isLoggedIn]);
+
   const handleRegistrationSubmit = useCallback(
     async (application) => {
       const payload = new FormData();

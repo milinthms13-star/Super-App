@@ -69,6 +69,7 @@ app.use('/api/referralprogram', require('./routes/referralprogram'));
 app.use('/api/reminders', require('./routes/reminders'));
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/selleranalytics', require('./routes/selleranalytics'));
+app.use('/api/seller-analytics', require('./routes/selleranalytics'));
 app.use('/api/socialmedia', require('./routes/socialmedia'));
 app.use('/api/sos', require('./routes/sos'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
@@ -115,9 +116,14 @@ const server = require('http').createServer(app);
 const { initializeWebSocket } = require('./config/websocket');
 initializeWebSocket(server);
 
+// Initialize Voice Call Scheduler
+const voiceCallScheduler = require('./services/voiceCallScheduler');
+voiceCallScheduler.start();
+
 server.listen(PORT, () => {
   logger.info(`Server started on port ${PORT}`);
   logger.info(`WebSocket server initialized`);
+  logger.info(`Voice call scheduler started`);
 });
 
 process.on('unhandledRejection', (err) => {

@@ -1,7 +1,19 @@
 {
-  "short_name": "MalabarBazaar",
-  "name": "Malabar Bazaar - PWA Marketplace",
-  "description": "Complete e-commerce with AI recs, wallet, flash sales",
+  "id": "/",
+  "short_name": "NilaHub",
+  "name": "NilaHub Marketplace",
+  "description": "Marketplace PWA with flash sales, invoices, secure checkout, and offline cart support.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "theme_color": "#c18b2f",
+  "background_color": "#ffffff",
+  "orientation": "any",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["shopping", "business", "finance"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "favicon.ico",
@@ -15,64 +27,51 @@
       "purpose": "any maskable"
     },
     {
-      "src": "logo512.png", 
+      "src": "logo512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "start_url": "/?source=pwa",
-  "display": "standalone",
-  "theme_color": "#c18b2f",
-  "background_color": "#ffffff",
-  "orientation": "any",
-  "categories": ["shopping", "ecommerce"],
-  "lang": "en",
-  "dir": "ltr",
   "shortcuts": [
     {
-      "name": "GlobeMart",
+      "name": "Open Marketplace",
       "short_name": "Shop",
-      "description": "Marketplace",
-      "url": "/dashboard",
-      "icons": [{"src": "logo192.png", "sizes": "192x192"}]
+      "description": "Browse GlobeMart products",
+      "url": "/?source=pwa&module=ecommerce",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
-      "name": "Wallet",
-      "short_name": "Pay", 
-      "description": "Payments",
-      "url": "/wallet",
-      "icons": [{"src": "logo192.png", "sizes": "192x512"}]
+      "name": "Open Cart",
+      "short_name": "Cart",
+      "description": "Review your offline-ready shopping cart",
+      "url": "/?source=pwa&module=cart",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "View Orders",
+      "short_name": "Orders",
+      "description": "Track deliveries and download GST invoices",
+      "url": "/?source=pwa&module=orders",
+      "icons": [
+        {
+          "src": "logo192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
-  ],
-"name_shortcuts": {
-    "ml": {
-      "name": "മലബാർ ബസാറ്",
-      "short_name": "ഷോപ്പ്"
-    },
-    "hi": {
-      "name": "मलाबार बाज़ार",
-      "short_name": "दुकान"
-    },
-    "ta": {
-      "name": "மலபார் பஜார்",
-      "short_name": "கடை"
-    },
-    "ar": {
-      "name": "سوق ملابار",
-      "short_name": "متجر"
-    },
-    "te": {
-      "name": "మలబార్ బజార్",
-      "short_name": "షాప్"
-    },
-    "kn": {
-      "name": "ಮಲಬಾರ್ ಬಜಾರ್",
-      "short_name": "ಶಾಪ್"
-    },
-    "bn": {
-      "name": "মালাবার বাজার",
-      "short_name": "দোকান"
-    }
-  }
+  ]
 }

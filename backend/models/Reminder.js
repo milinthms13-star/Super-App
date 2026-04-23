@@ -61,6 +61,51 @@ const reminderSchema = new mongoose.Schema({
   notificationCount: {
     type: Number,
     default: 0
+  },
+  // Voice call reminder fields
+  recipientId: {
+    type: String,  // User ID of person receiving the reminder
+  },
+  recipientPhoneNumber: {
+    type: String,  // Phone number to call
+  },
+  voiceMessage: {
+    type: String,  // The message content (text or description)
+    maxlength: 2000
+  },
+  messageType: {
+    type: String,
+    enum: ['text', 'audio'],  // 'text' for TTS, 'audio' for pre-recorded
+    default: 'text'
+  },
+  voiceNoteUrl: {
+    type: String   // S3 URL if using pre-recorded audio
+  },
+  callStatus: {
+    type: String,
+    enum: ['pending', 'ringing', 'answered', 'failed', 'completed', 'no-answer'],
+    default: 'pending'
+  },
+  lastCallTime: {
+    type: Date
+  },
+  nextCallTime: {
+    type: Date   // Next scheduled call time for recurring reminders
+  },
+  callHistory: [{
+    callTime: Date,
+    status: String,  // 'answered', 'no-answer', 'failed'
+    duration: Number,  // in seconds
+    callId: String,  // Twilio call SID
+    error: String
+  }],
+  callAttempts: {
+    type: Number,
+    default: 0
+  },
+  maxCallAttempts: {
+    type: Number,
+    default: 3  // Maximum number of call attempts
   }
 }, {
   timestamps: true
@@ -70,6 +115,8 @@ const reminderSchema = new mongoose.Schema({
 reminderSchema.index({ userId: 1, dueDate: 1 });
 reminderSchema.index({ userId: 1, completed: 1 });
 reminderSchema.index({ userId: 1, category: 1 });
+reminderSchema.index({ recipientId: 1, callStatus: 1 });  // For finding pending calls
+reminderSchema.index({ nextCallTime: 1, callStatus: 1 });  // For scheduler to find due reminders
 
 // Virtual for formatted due date
 reminderSchema.virtual('formattedDueDate').get(function() {
@@ -108,6 +155,66 @@ reminderSchema.methods.needsNotification = function() {
   // Notify 5 minutes before due time
   const notifyTime = new Date(dueDateTime.getTime() - 5 * 60 * 1000);
   return now >= notifyTime && (!this.lastNotified || this.lastNotified < notifyTime);
+};
+
+// Method to calculate next call time for recurring reminders
+reminderSchema.methods.calculateNextCallTime = function(baseDate = null) {
+  const reference = baseDate || this.dueDate || new Date();
+  const next = new Date(reference);
+
+  switch(this.recurring) {
+    case 'daily':
+      next.setDate(next.getDate() + 1);
+      break;
+    case 'weekly':
+      next.setDate(next.getDate() + 7);
+      break;
+    case 'monthly':
+      next.setMonth(next.getMonth() + 1);
+      break;
+    case 'none':
+    default:
+      return null; // No recurring, no next call time
+  }
+
+  // Apply time if specified
+  if (this.dueTime) {
+    const [hours, minutes] = this.dueTime.split(':');
+    next.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+  }
+
+  return next;
+};
+
+// Method to check if voice call reminder is due
+reminderSchema.methods.isVoiceCallDue = function() {
+  if (this.completed || !this.recipientId || !this.recipientPhoneNumber) return false;
+  if (this.callAttempts >= this.maxCallAttempts) return false;
+  
+  const now = new Date();
+  const nextCall = this.nextCallTime || this.dueDate;
+  return nextCall && nextCall <= now && this.callStatus !== 'completed';
+};
+
+// Method to record a call attempt
+reminderSchema.methods.recordCallAttempt = function(status, callId, error = null) {
+  this.callHistory.push({
+    callTime: new Date(),
+    status,
+    callId,
+    error
+  });
+  
+  this.lastCallTime = new Date();
+  this.callAttempts += 1;
+  this.callStatus = status;
+
+  // Calculate next call time if recurring
+  if (this.recurring !== 'none') {
+    this.nextCallTime = this.calculateNextCallTime();
+  } else if (status === 'completed' || this.callAttempts >= this.maxCallAttempts) {
+    this.callStatus = 'completed';
+  }
 };
 
 module.exports = mongoose.model('Reminder', reminderSchema);

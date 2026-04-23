@@ -148,12 +148,75 @@ export const toggleReminderCompletion = async (reminderId, completed) => {
   }
 };
 
+/**
+ * Create a reminder with voice call
+ * @param {Object} reminderData - Reminder data including voice call fields
+ * @returns {Promise<Object>} - Created voice call reminder
+ */
+export const createVoiceCallReminder = async (reminderData) => {
+  try {
+    const payload = {
+      ...reminderData,
+      dueDate: toDateInputValue(reminderData.dueDate),
+      reminders: ['Call']  // Voice call reminders use 'Call' type
+    };
+    const response = await axiosInstance.post("/reminders/voice-call", payload);
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error creating voice call reminder:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to create voice call reminder"
+    );
+  }
+};
+
+/**
+ * Get voice call status for a reminder
+ * @param {string} reminderId - ID of the reminder
+ * @returns {Promise<Object>} - Voice call status details
+ */
+export const getVoiceCallStatus = async (reminderId) => {
+  try {
+    const response = await axiosInstance.get(
+      `/reminders/${reminderId}/voice-call-status`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching voice call status:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch voice call status"
+    );
+  }
+};
+
+/**
+ * Manually trigger a voice call for a reminder
+ * @param {string} reminderId - ID of the reminder
+ * @returns {Promise<Object>} - Call trigger result
+ */
+export const triggerVoiceCall = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(
+      `/reminders/${reminderId}/trigger-call`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error triggering voice call:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to trigger voice call"
+    );
+  }
+};
+
 const remindersService = {
   fetchReminders,
   createReminder,
   updateReminder,
   deleteReminder,
   toggleReminderCompletion,
+  createVoiceCallReminder,
+  getVoiceCallStatus,
+  triggerVoiceCall,
 };
 
 export default remindersService;

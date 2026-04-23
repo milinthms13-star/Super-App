@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useApp } from "../../contexts/AppContext";
 import ProductCard from "./ProductCard";
+import SellerAnalytics from "./SellerAnalytics";
 import { resolveProductImageSrc } from "./productImage";
 import {
   formatDisplayDate,
+  formatCountdown,
   formatISODate,
   titleCase,
   parseNumericInput,
@@ -12,6 +14,12 @@ import {
   getNextStatus,
   formatCurrency,
 } from "../../utils/ecommerceHelpers";
+import { API_BASE_URL } from "../../utils/api";
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  showServiceWorkerNotification,
+} from "../../pwaConfig";
 import { sanitizeText } from "../../utils/xssProtection";
 import "../../styles/Ecommerce.css";
 
@@ -221,6 +229,7 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
     syncSellerOrderStatus,
     updateItemReturnRequestStatus,
     addToCart,
+    fetchActiveFlashSales,
     loadMoreMarketplaceProducts,
     loadMoreManagedProducts,
     loadMoreSellerOrders,
@@ -229,9 +238,18 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
   const [selectedSubcategory, setSelectedSubcategory] = useState("All");
   const [selectedSeller, setSelectedSeller] = useState("All Businesses");
   const [marketplaceSearch, setMarketplaceSearch] = useState("");
+  const [marketplaceMinPrice, setMarketplaceMinPrice] = useState("");
+  const [marketplaceMaxPrice, setMarketplaceMaxPrice] = useState("");
+  const [marketplaceMinRating, setMarketplaceMinRating] = useState("0");
+  const [marketplaceInStockOnly, setMarketplaceInStockOnly] = useState(false);
   const [marketplaceSort, setMarketplaceSort] = useState("relevance");
   const [marketplaceView, setMarketplaceView] = useState("products");
   const [quickViewProduct, setQuickViewProduct] = useState(null);
+  const [activeFlashSales, setActiveFlashSales] = useState([]);
+  const [notificationPermission, setNotificationPermission] = useState(() =>
+    getNotificationPermission()
+  );
+  const [liveNow, setLiveNow] = useState(() => Date.now());
   const [sellerListingQuery, setSellerListingQuery] = useState("");
   const [sellerListingStatusFilter, setSellerListingStatusFilter] = useState("all");
   const [sellerListingCategoryFilter, setSellerListingCategoryFilter] = useState("All");
@@ -253,9 +271,14 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
   const productNameInputRef = useRef(null);
   const productImageInputRef = useRef(null);
   const sellerOrdersSectionRef = useRef(null);
+  const sellerAnalyticsSectionRef = useRef(null);
   const returnedProductsSectionRef = useRef(null);
   const sellerListingsSectionRef = useRef(null);
   const quickViewPanelRef = useRef(null);
+  const flashNotificationRegistryRef = useRef(new Set());
+  const isEntrepreneur =
+    currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
+  const currentBusinessName = currentUser?.businessName?.trim() || currentUser?.name || "Your Business";
 
   // Handle keyboard navigation for quick view modal
   useEffect(() => {
@@ -278,9 +301,71 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
     };
   }, [quickViewProduct]);
 
-  const isEntrepreneur =
-    currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
-  const currentBusinessName = currentUser?.businessName?.trim() || currentUser?.name || "Your Business";
+  useEffect(() => {
+    if (!quickViewProduct?.flashSaleActive && activeFlashSales.length === 0) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setLiveNow(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeFlashSales.length, quickViewProduct?.flashSaleActive]);
+
+  useEffect(() => {
+    if (isEntrepreneur) {
+      setActiveFlashSales([]);
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const loadFlashSales = async () => {
+      const sales = await fetchActiveFlashSales();
+      if (isMounted) {
+        setActiveFlashSales(Array.isArray(sales) ? sales : []);
+      }
+    };
+
+    loadFlashSales();
+    const refreshInterval = window.setInterval(loadFlashSales, 60000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(refreshInterval);
+    };
+  }, [fetchActiveFlashSales, isEntrepreneur]);
+
+  useEffect(() => {
+    if (notificationPermission !== "granted") {
+      return;
+    }
+
+    activeFlashSales.forEach((sale) => {
+      const notifyWindowMs = Math.max(0, Number(sale.notifyBeforeMinutes || 0)) * 60 * 1000;
+      const remainingMs = sale.endsAt ? Math.max(0, new Date(sale.endsAt).getTime() - liveNow) : 0;
+      const notificationKey = `${sale.id}:${sale.endsAt}`;
+
+      if (
+        notifyWindowMs > 0 &&
+        remainingMs > 0 &&
+        remainingMs <= notifyWindowMs &&
+        !flashNotificationRegistryRef.current.has(notificationKey)
+      ) {
+        flashNotificationRegistryRef.current.add(notificationKey);
+        showServiceWorkerNotification({
+          title: "Flash sale ending soon",
+          body: `${sale.name} wraps up in ${formatCountdown(remainingMs)}.`,
+          tag: `flash-sale-${sale.id}`,
+          data: { url: "/?source=pwa&module=ecommerce" },
+        });
+      }
+    });
+  }, [activeFlashSales, liveNow, notificationPermission]);
+
   const visibleProducts = mockData.ecommerceProducts;
   const visibleFavorites = favorites || [];
   const marketplaceProducts = marketplaceView === "favorites" ? visibleFavorites : visibleProducts;
@@ -310,69 +395,176 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
 
   const [esSearchResults, setEsSearchResults] = useState({ products: [], facets: {}, total: 0, loading: false });
   const [esSearchFallback, setEsSearchFallback] = useState(false);
+  const parseMarketplacePrice = (value) => Number(String(value || "").replace(/[^0-9.]/g, "")) || 0;
+  const hasRemoteMarketplaceFilters =
+    marketplaceView !== "favorites" &&
+    (
+      Boolean(marketplaceSearch.trim()) ||
+      selectedCategory !== "All" ||
+      selectedSeller !== "All Businesses" ||
+      Boolean(marketplaceMinPrice) ||
+      Boolean(marketplaceMaxPrice) ||
+      Number(marketplaceMinRating || 0) > 0 ||
+      marketplaceInStockOnly ||
+      marketplaceSort !== "relevance"
+    );
 
-  // Debounced ES search
   useEffect(() => {
     let timeoutId;
-    if (marketplaceSearch.trim() || selectedCategory !== 'All' || selectedSeller !== 'All Businesses') {
-      setEsSearchResults(prev => ({ ...prev, loading: true }));
+
+    if (hasRemoteMarketplaceFilters) {
+      setEsSearchResults((previous) => ({ ...previous, loading: true }));
       timeoutId = setTimeout(async () => {
         try {
           const params = new URLSearchParams({
             q: marketplaceSearch.trim(),
-            category: selectedCategory === 'All' ? '' : selectedCategory,
-            business: selectedSeller === 'All Businesses' ? '' : selectedSeller,
-            page: '1',
-            limit: '50'
+            category: selectedCategory === "All" ? "" : selectedCategory,
+            business: selectedSeller === "All Businesses" ? "" : selectedSeller,
+            minPrice: marketplaceMinPrice,
+            maxPrice: marketplaceMaxPrice,
+            minRating: marketplaceMinRating === "0" ? "" : marketplaceMinRating,
+            inStock: marketplaceInStockOnly ? "true" : "",
+            sort: marketplaceSort,
+            page: "1",
+            limit: "50",
           });
-          const response = await fetch(`/api/products/search?${params}`);
+          const response = await fetch(`${API_BASE_URL}/products/search?${params.toString()}`);
           const data = await response.json();
 
-          if (response.ok && data.products) {
+          if (response.ok && Array.isArray(data.products)) {
             setEsSearchResults({
               products: data.products || [],
               facets: data.facets || {},
               total: data.pagination?.total || 0,
-              loading: false
+              loading: false,
             });
-            setEsSearchFallback(false);
+            setEsSearchFallback(Boolean(data.fallback));
           } else {
             setEsSearchFallback(true);
           }
         } catch (error) {
           setEsSearchFallback(true);
         } finally {
-          setEsSearchResults(prev => ({ ...prev, loading: false }));
+          setEsSearchResults((previous) => ({ ...previous, loading: false }));
         }
       }, 300);
     } else {
       setEsSearchResults({ products: [], facets: {}, total: 0, loading: false });
+      setEsSearchFallback(false);
     }
-    return () => clearTimeout(timeoutId);
-  }, [marketplaceSearch, selectedCategory, selectedSeller]);
 
-  const filteredProducts = esSearchFallback || marketplaceView === 'favorites' 
-    ? marketplaceProducts.filter((product) => {
-        const normalizedSearch = marketplaceSearch.trim().toLowerCase();
-        const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
-        const matchesSubcategory = selectedSubcategory === "All" || product.subcategory === selectedSubcategory;
-        const matchesSeller = selectedSeller === "All Businesses" || product.businessName === selectedSeller;
-        const matchesSearch = !normalizedSearch || [
-          product.name, product.category, product.subcategory, product.model,
-          product.styleTheme, product.color, product.description, product.businessName, product.location
-        ].filter(Boolean).some(value => String(value).toLowerCase().includes(normalizedSearch));
-        return matchesCategory && matchesSubcategory && matchesSeller && matchesSearch;
-      })
-    : esSearchResults.products;
+    return () => clearTimeout(timeoutId);
+  }, [
+    hasRemoteMarketplaceFilters,
+    marketplaceInStockOnly,
+    marketplaceMaxPrice,
+    marketplaceMinPrice,
+    marketplaceMinRating,
+    marketplaceSearch,
+    marketplaceSort,
+    selectedCategory,
+    selectedSeller,
+  ]);
+
+  const applyMarketplaceFilters = (products = []) =>
+    (products || []).filter((product) => {
+      const normalizedSearch = marketplaceSearch.trim().toLowerCase();
+      const numericPrice = parseMarketplacePrice(product.price);
+      const numericMinPrice = marketplaceMinPrice === "" ? null : Number(marketplaceMinPrice);
+      const numericMaxPrice = marketplaceMaxPrice === "" ? null : Number(marketplaceMaxPrice);
+      const numericMinRating = Number(marketplaceMinRating || 0);
+
+      const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
+      const matchesSubcategory =
+        selectedSubcategory === "All" || product.subcategory === selectedSubcategory;
+      const matchesSeller =
+        selectedSeller === "All Businesses" || product.businessName === selectedSeller;
+      const matchesSearch =
+        !normalizedSearch ||
+        [
+          product.name,
+          product.category,
+          product.subcategory,
+          product.model,
+          product.styleTheme,
+          product.color,
+          product.description,
+          product.businessName,
+          product.location,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+      const matchesPriceFloor = numericMinPrice === null || numericPrice >= numericMinPrice;
+      const matchesPriceCeiling = numericMaxPrice === null || numericPrice <= numericMaxPrice;
+      const matchesRating = Number(product.rating || 0) >= numericMinRating;
+      const matchesStock = !marketplaceInStockOnly || Number(product.stock || 0) > 0;
+
+      return (
+        matchesCategory &&
+        matchesSubcategory &&
+        matchesSeller &&
+        matchesSearch &&
+        matchesPriceFloor &&
+        matchesPriceCeiling &&
+        matchesRating &&
+        matchesStock
+      );
+    });
+
+  const baseMarketplaceResults =
+    hasRemoteMarketplaceFilters && !esSearchFallback ? esSearchResults.products : marketplaceProducts;
+
+  const filteredProducts = useMemo(
+    () => applyMarketplaceFilters(baseMarketplaceResults),
+    [
+      baseMarketplaceResults,
+      marketplaceInStockOnly,
+      marketplaceMaxPrice,
+      marketplaceMinPrice,
+      marketplaceMinRating,
+      marketplaceSearch,
+      selectedCategory,
+      selectedSeller,
+      selectedSubcategory,
+    ]
+  );
+
+  const marketplaceFacetSummary = useMemo(() => {
+    const sellerCounts = new Map();
+    const categoryCounts = new Map();
+    const sourceProducts = baseMarketplaceResults || [];
+
+    sourceProducts.forEach((product) => {
+      const sellerName = product.businessName || "Marketplace Seller";
+      sellerCounts.set(sellerName, (sellerCounts.get(sellerName) || 0) + 1);
+      categoryCounts.set(product.category || "Other", (categoryCounts.get(product.category || "Other") || 0) + 1);
+    });
+
+    return {
+      sellers: Array.from(sellerCounts.entries()).map(([seller, count]) => ({ seller, count })),
+      categories: Array.from(categoryCounts.entries()).map(([category, count]) => ({ category, count })),
+      ratings: [
+        { key: "4_up", label: "4.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 4).length },
+        { key: "3_up", label: "3.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 3).length },
+        { key: "2_up", label: "2.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 2).length },
+      ],
+      priceRanges: [
+        { key: "under_500", label: "Under INR 500", count: sourceProducts.filter((product) => parseMarketplacePrice(product.price) < 500).length },
+        { key: "500_to_1000", label: "INR 500 - 1,000", count: sourceProducts.filter((product) => parseMarketplacePrice(product.price) >= 500 && parseMarketplacePrice(product.price) < 1000).length },
+        { key: "1000_to_2500", label: "INR 1,000 - 2,500", count: sourceProducts.filter((product) => parseMarketplacePrice(product.price) >= 1000 && parseMarketplacePrice(product.price) < 2500).length },
+        { key: "2500_plus", label: "INR 2,500+", count: sourceProducts.filter((product) => parseMarketplacePrice(product.price) >= 2500).length },
+      ],
+    };
+  }, [baseMarketplaceResults]);
+
   const sortedProducts = useMemo(() => {
     const products = [...filteredProducts];
-    const parsePrice = (value) => Number(String(value || "").replace(/[^0-9.]/g, "")) || 0;
 
     switch (marketplaceSort) {
       case "price-asc":
-        return products.sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
+        return products.sort((a, b) => parseMarketplacePrice(a.price) - parseMarketplacePrice(b.price));
       case "price-desc":
-        return products.sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
+        return products.sort((a, b) => parseMarketplacePrice(b.price) - parseMarketplacePrice(a.price));
       case "discount":
         return products.sort((a, b) => Number(b.discountPercentage || 0) - Number(a.discountPercentage || 0));
       case "rating":
@@ -467,7 +659,9 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
   const activeMarketplaceCount =
     marketplaceView === "favorites"
       ? sortedProducts.length
-      : marketplacePagination.totalItems || sortedProducts.length;
+      : hasRemoteMarketplaceFilters
+        ? esSearchResults.total || sortedProducts.length
+        : marketplacePagination.totalItems || sortedProducts.length;
 
   const businessCategories = useMemo(() => {
     const adminCategories = categoryRecords.map((category) => category.name).filter(Boolean);
@@ -1043,6 +1237,13 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
               <button
                 type="button"
                 className="seller-summary-link"
+                onClick={() => scrollToSection(sellerAnalyticsSectionRef)}
+              >
+                Revenue, velocity, and region insights
+              </button>
+              <button
+                type="button"
+                className="seller-summary-link"
                 onClick={() => scrollToSection(sellerOrdersSectionRef)}
               >
                 {sellerReturnRequestCount} return actions waiting
@@ -1265,6 +1466,72 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
               </div>
             </form>
           </article>
+        </section>
+      )}
+
+      {isEntrepreneur && (
+        <section ref={sellerAnalyticsSectionRef}>
+          <SellerAnalytics />
+        </section>
+      )}
+
+      {!isEntrepreneur && activeFlashSales.length > 0 && (
+        <section className="flash-sale-section">
+          <div className="section-heading shopper-heading">
+            <div>
+              <h3>Flash Sales</h3>
+              <p>Time-boxed deals with reservation windows and notification reminders.</p>
+            </div>
+            <div className="marketplace-summary">
+              <strong>{activeFlashSales.length}</strong>
+              <span>live campaigns</span>
+            </div>
+          </div>
+          <div className="flash-sale-grid">
+            {activeFlashSales.map((sale) => {
+              const saleRemainingMs = sale.endsAt
+                ? Math.max(0, new Date(sale.endsAt).getTime() - liveNow)
+                : Number(sale.timeRemainingMs || 0);
+
+              return (
+                <article className="flash-sale-card" key={sale.id}>
+                  <div className="flash-sale-top">
+                    <div>
+                      <span className="flash-sale-kicker">Flash window</span>
+                      <h4>{sale.name}</h4>
+                      <p>{sale.description || "Limited-time sale pricing is live now."}</p>
+                    </div>
+                    <div className="flash-sale-clock">
+                      <span>Ends in</span>
+                      <strong>{formatCountdown(saleRemainingMs)}</strong>
+                      <small>{sale.reservationWindowMinutes} min reservation</small>
+                    </div>
+                  </div>
+                  <div className="flash-sale-product-list">
+                    {(sale.products || []).slice(0, 3).map((product) => (
+                      <div className="flash-sale-product-row" key={`${sale.id}-${product.productId}`}>
+                        <div>
+                          <strong>{product.name}</strong>
+                          <p>
+                            INR {formatCurrency(product.salePrice)} from INR {formatCurrency(product.originalPrice)}
+                          </p>
+                        </div>
+                        <span>
+                          {product.remainingStock} left
+                          {product.reservation?.expiresAt
+                            ? ` · reserved until ${new Date(product.reservation.expiresAt).toLocaleTimeString("en-IN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}`
+                            : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         </section>
       )}
 

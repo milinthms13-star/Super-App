@@ -6,6 +6,9 @@ import {
   updateReminder,
   deleteReminder,
   toggleReminderCompletion,
+  createVoiceCallReminder,
+  getVoiceCallStatus,
+  triggerVoiceCall,
 } from "../../services/remindersService";
 import { LINK_PRESETS, normalizeCustomLink } from "../../utils/customLinks";
 import { formatReminderDueDate, toDateInputValue } from "./reminderUtils";
@@ -23,6 +26,12 @@ const INITIAL_FORM = {
   reminders: ["In-app"],
   recurring: "none",
 };
+const INITIAL_VOICE_CALL_FORM = {
+  recipientPhoneNumber: "",
+  voiceMessage: "",
+  messageType: "text",
+  isVoiceCall: false,
+};
 const INITIAL_LINK_FORM = {
   preset: "custom",
   title: "",
@@ -38,10 +47,12 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState("");
   const [formData, setFormData] = useState(INITIAL_FORM);
+  const [voiceCallData, setVoiceCallData] = useState(INITIAL_VOICE_CALL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [linkForm, setLinkForm] = useState(INITIAL_LINK_FORM);
   const [linkError, setLinkError] = useState(null);
+  const [voiceCallStatus, setVoiceCallStatus] = useState({});  // Track call status by reminder ID
 
   // Load reminders from backend on component mount
   useEffect(() => {
@@ -73,6 +84,7 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
 
   const resetForm = () => {
     setFormData(INITIAL_FORM);
+    setVoiceCallData(INITIAL_VOICE_CALL_FORM);
     setEditingTaskId("");
     setShowAddForm(false);
   };
@@ -96,6 +108,35 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
     }));
   };
 
+  const handleVoiceCallChange = (event) => {
+    const { name, value, checked, type } = event.target;
+
+    if (name === "isVoiceCall") {
+      setVoiceCallData((current) => ({
+        ...current,
+        isVoiceCall: checked,
+      }));
+      // Toggle Call in reminders
+      if (checked && !formData.reminders.includes("Call")) {
+        setFormData((current) => ({
+          ...current,
+          reminders: [...current.reminders, "Call"],
+        }));
+      } else if (!checked) {
+        setFormData((current) => ({
+          ...current,
+          reminders: current.reminders.filter((r) => r !== "Call"),
+        }));
+      }
+      return;
+    }
+
+    setVoiceCallData((current) => ({
+      ...current,
+      [name]: value,
+    }));
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitError(null);
@@ -103,6 +144,18 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
     if (!formData.title.trim() || !formData.dueDate) {
       setSubmitError("Title and due date are required");
       return;
+    }
+
+    // Validate voice call fields if enabled
+    if (voiceCallData.isVoiceCall) {
+      if (!voiceCallData.recipientPhoneNumber.trim()) {
+        setSubmitError("Phone number is required for voice call reminders");
+        return;
+      }
+      if (!voiceCallData.voiceMessage.trim()) {
+        setSubmitError("Voice message is required for voice call reminders");
+        return;
+      }
     }
 
     try {
@@ -121,11 +174,22 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
         );
       } else {
         // Create new reminder
-        const response = await createReminder({
-          ...formData,
-          dueDate: new Date(formData.dueDate),
-        });
-        setTasks((current) => [response.data, ...current]);
+        if (voiceCallData.isVoiceCall) {
+          // Create voice call reminder
+          const response = await createVoiceCallReminder({
+            ...formData,
+            ...voiceCallData,
+            dueDate: new Date(formData.dueDate),
+          });
+          setTasks((current) => [response.data, ...current]);
+        } else {
+          // Create regular reminder
+          const response = await createReminder({
+            ...formData,
+            dueDate: new Date(formData.dueDate),
+          });
+          setTasks((current) => [response.data, ...current]);
+        }
       }
 
       resetForm();
@@ -226,6 +290,21 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
 
   const handleRemoveCustomLink = (linkId) => {
     onCustomLinksChange((currentLinks) => currentLinks.filter((link) => link.id !== linkId));
+  };
+
+  const handleTriggerVoiceCall = async (taskId) => {
+    try {
+      await triggerVoiceCall(taskId);
+      // Refresh the reminder to get updated call status
+      const response = await getVoiceCallStatus(taskId);
+      setVoiceCallStatus((current) => ({
+        ...current,
+        [taskId]: response.data,
+      }));
+    } catch (err) {
+      console.error("Error triggering voice call:", err);
+      alert(err.message || "Failed to trigger voice call");
+    }
   };
 
   return (
@@ -342,6 +421,64 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
                 </label>
               ))}
             </div>
+
+            {formData.reminders.includes("Call") && (
+              <div className="reminderalert-panel" style={{ marginTop: "1.5rem", padding: "1.5rem", backgroundColor: "#f5f5f5", borderRadius: "8px" }}>
+                <h3 style={{ marginBottom: "1rem" }}>Voice Call Reminder Setup</h3>
+                
+                <label className="reminderalert-requirement-card">
+                  <h4>Recipient Phone Number</h4>
+                  <input
+                    type="tel"
+                    name="recipientPhoneNumber"
+                    value={voiceCallData.recipientPhoneNumber}
+                    onChange={handleVoiceCallChange}
+                    placeholder="+1 234-567-8900 or 23456789"
+                  />
+                  <small style={{ color: "#666", marginTop: "0.5rem", display: "block" }}>
+                    Enter the phone number where the automated call will be sent. Include country code if outside US.
+                  </small>
+                </label>
+
+                <label className="reminderalert-requirement-card">
+                  <h4>Message Type</h4>
+                  <select
+                    name="messageType"
+                    value={voiceCallData.messageType}
+                    onChange={handleVoiceCallChange}
+                  >
+                    <option value="text">Text-to-Speech (System reads the message)</option>
+                    <option value="audio">Pre-recorded Audio (Upload your own voice)</option>
+                  </select>
+                </label>
+
+                <label className="reminderalert-requirement-card">
+                  <h4>Voice Message</h4>
+                  <textarea
+                    name="voiceMessage"
+                    value={voiceCallData.voiceMessage}
+                    onChange={handleVoiceCallChange}
+                    placeholder="Enter the message that will be read or played. Example: Please remember to take your medicine at 2 PM today."
+                    rows="4"
+                    maxLength="500"
+                    style={{ width: "100%", padding: "0.75rem", fontFamily: "inherit" }}
+                  />
+                  <small style={{ color: "#666", marginTop: "0.5rem", display: "block" }}>
+                    {voiceCallData.voiceMessage.length}/500 characters
+                  </small>
+                </label>
+
+                <label className="reminderalert-requirement-card" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <input
+                    type="checkbox"
+                    name="isVoiceCall"
+                    checked={voiceCallData.isVoiceCall}
+                    onChange={handleVoiceCallChange}
+                  />
+                  <span>Enable automated voice call for this reminder</span>
+                </label>
+              </div>
+            )}
 
             <div className="reminderalert-filter-row">
               <button
@@ -524,6 +661,18 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
                         <span key={reminder}>{reminder}</span>
                       ))}
                     </div>
+
+                    {task.recipientPhoneNumber && (
+                      <div style={{ marginTop: "0.75rem", padding: "0.75rem", backgroundColor: "#f0f8ff", borderRadius: "4px", fontSize: "0.85rem" }}>
+                        <strong>Voice Call:</strong> {task.recipientPhoneNumber}
+                        {task.callStatus && (
+                          <div style={{ marginTop: "0.5rem", color: task.callStatus === "completed" ? "#28a745" : "#ff9800" }}>
+                            Status: {task.callStatus} ({task.callAttempts}/{task.maxCallAttempts} attempts)
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="reminderalert-filter-row">
                       <button
                         type="button"
@@ -539,6 +688,16 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
                       >
                         Edit
                       </button>
+                      {task.recipientPhoneNumber && (
+                        <button
+                          type="button"
+                          className="reminderalert-filter-chip"
+                          onClick={() => handleTriggerVoiceCall(task._id)}
+                          title="Manually trigger the voice call"
+                        >
+                          🔔 Call Now
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="reminderalert-filter-chip"

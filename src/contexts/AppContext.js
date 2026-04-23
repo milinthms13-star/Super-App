@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../utils/api";
+import { showServiceWorkerNotification } from "../pwaConfig";
 
 const AppContext = createContext();
 const STOREFRONT_STORAGE_KEY = "malabarbazaar-storefront";
@@ -18,6 +19,11 @@ const EMPTY_PAGINATION = {
 const EMPTY_PAYMENT_GATEWAYS = {
   stripe: { enabled: false, publishableKey: "" },
   razorpay: { enabled: false, keyId: "" },
+};
+const EMPTY_PAYMENT_SECURITY = {
+  tokenizedOnly: false,
+  threeDSecure: "unavailable",
+  rawCardStorage: true,
 };
 const EMPTY_MANAGED_PRODUCT_COUNTS = {
   total: 0,
@@ -306,17 +312,30 @@ const persistStorefrontSnapshot = (snapshot) => {
 };
 
 const syncStorefrontToServiceWorker = (cart) => {
-  if (typeof navigator === "undefined" || !navigator.serviceWorker?.controller) {
+  if (typeof navigator === "undefined" || !navigator.serviceWorker) {
     return;
   }
 
-  navigator.serviceWorker.controller.postMessage({
+  const payload = {
     type: "STORE_OFFLINE_CART",
     payload: {
       cart,
       updatedAt: new Date().toISOString(),
     },
-  });
+  };
+
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage(payload);
+    return;
+  }
+
+  navigator.serviceWorker.ready
+    .then((registration) => {
+      registration.active?.postMessage(payload);
+    })
+    .catch(() => {
+      // Keep storefront persistence resilient even if the SW is not ready yet.
+    });
 };
 
 axios.defaults.withCredentials = true;
@@ -345,6 +364,7 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState("");
   const [paymentGateways, setPaymentGateways] = useState(EMPTY_PAYMENT_GATEWAYS);
+  const [paymentSecurityConfig, setPaymentSecurityConfig] = useState(EMPTY_PAYMENT_SECURITY);
   const [checkoutStatus, setCheckoutStatus] = useState(EMPTY_CHECKOUT_STATUS);
   const [ordersPagination, setOrdersPagination] = useState({
     ...EMPTY_PAGINATION,
@@ -539,6 +559,7 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
   const fetchPaymentConfig = useCallback(async () => {
     if (!currentUserId) {
       setPaymentGateways(EMPTY_PAYMENT_GATEWAYS);
+      setPaymentSecurityConfig(EMPTY_PAYMENT_SECURITY);
       return;
     }
 
@@ -552,6 +573,10 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
           ...EMPTY_PAYMENT_GATEWAYS,
           ...(response.data.gateways || {}),
         });
+        setPaymentSecurityConfig({
+          ...EMPTY_PAYMENT_SECURITY,
+          ...(response.data.security || {}),
+        });
         return;
       }
     } catch (error) {
@@ -559,6 +584,7 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     }
 
     setPaymentGateways(EMPTY_PAYMENT_GATEWAYS);
+    setPaymentSecurityConfig(EMPTY_PAYMENT_SECURITY);
   }, [authHeaders, currentUserId]);
 
   const clearCheckoutStatus = useCallback(() => {
@@ -751,6 +777,19 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
       currentFavorites.filter((fav) => fav.id !== productId)
     );
   };
+
+  const notifyStorefrontEvent = useCallback(async ({ title = "", body = "", tag = "", url = "/" } = {}) => {
+    try {
+      await showServiceWorkerNotification({
+        title,
+        body,
+        tag,
+        data: { url },
+      });
+    } catch (error) {
+      // Notifications are optional; do not block commerce flows on them.
+    }
+  }, []);
 
   const createClassifiedListing = async (listingData) => {
     const response = await axios.post(`${API_BASE_URL}/app-data/classifieds/listings`, listingData, {
@@ -1023,6 +1062,12 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     setOrders((currentOrders) => [normalizedOrder, ...currentOrders]);
     setCart([]);
     await refreshProducts();
+    await notifyStorefrontEvent({
+      title: "Order placed",
+      body: "Your order was confirmed and the GST invoice is available from Orders.",
+      tag: `order-${normalizedOrder.id}`,
+      url: "/?source=pwa&module=orders",
+    });
     return normalizedOrder;
   };
 
@@ -1081,8 +1126,14 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     });
     setCart([]);
     await refreshProducts();
+    await notifyStorefrontEvent({
+      title: "Razorpay payment successful",
+      body: "Your order is confirmed and the GST invoice is ready in Orders.",
+      tag: `order-${newOrder.id}`,
+      url: "/?source=pwa&module=orders",
+    });
     return newOrder;
-  }, [authHeaders, refreshProducts]);
+  }, [authHeaders, notifyStorefrontEvent, refreshProducts]);
 
   const verifyStripePayment = useCallback(async (paymentData) => {
     const response = await axios.post(
@@ -1102,8 +1153,14 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     });
     setCart([]);
     await refreshProducts();
+    await notifyStorefrontEvent({
+      title: "Stripe payment successful",
+      body: "Your order is confirmed and the GST invoice is ready in Orders.",
+      tag: `order-${newOrder.id}`,
+      url: "/?source=pwa&module=orders",
+    });
     return newOrder;
-  }, [authHeaders, refreshProducts]);
+  }, [authHeaders, notifyStorefrontEvent, refreshProducts]);
 
   const createProduct = async (productData) => {
     const response = await axios.post(`${API_BASE_URL}/products`, productData, {
@@ -1392,6 +1449,27 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     setSavedAddresses(Array.isArray(nextAddresses) ? nextAddresses : []);
   }, []);
 
+  const downloadOrderInvoice = useCallback(async (orderId) => {
+    if (!orderId) {
+      throw new Error("Order ID is required to download the invoice.");
+    }
+
+    const response = await axios.get(`${API_BASE_URL}/orders/${encodeURIComponent(orderId)}/invoice`, {
+      headers: authHeaders,
+      responseType: "blob",
+    });
+
+    const blob = new Blob([response.data], { type: "application/pdf" });
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `invoice-${orderId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(objectUrl);
+  }, [authHeaders]);
+
   const apiCall = useCallback(async (endpoint, method = 'GET', data = null) => {
     const config = {
       method,
@@ -1507,6 +1585,7 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         productsLoading,
         productsError,
         paymentGateways,
+        paymentSecurityConfig,
         checkoutStatus,
         addToCart,
         removeFromCart,
@@ -1529,6 +1608,7 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         moderateRealEstateListing,
         deleteRealEstateListing,
         updateSavedAddresses,
+        downloadOrderInvoice,
         apiCall,
         fetchActiveFlashSales,
         placeOrder,

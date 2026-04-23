@@ -136,6 +136,20 @@ export const isValidPincode = (pincode) => {
 };
 
 /**
+ * Validate Indian GSTIN
+ * @param {string} gstin - GSTIN string
+ * @returns {boolean} True if valid GSTIN
+ */
+export const isValidGSTIN = (gstin) => {
+  const cleaned = String(gstin || "").trim().toUpperCase();
+  if (!cleaned) {
+    return false;
+  }
+
+  return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(cleaned);
+};
+
+/**
  * Parse numeric input safely
  * @param {string|number} value - Input value
  * @returns {number|null} Parsed number or null
@@ -209,4 +223,32 @@ export const titleCase = (value) => {
     .filter(Boolean)
     .map((part) => part[0].toUpperCase() + part.slice(1))
     .join(" ");
+};
+
+/**
+ * Format a countdown duration in milliseconds
+ * @param {number} value - Milliseconds remaining
+ * @returns {string} Human-friendly countdown string
+ */
+export const formatCountdown = (value) => {
+  const totalMs = Math.max(0, Number(value || 0));
+  const totalSeconds = Math.floor(totalMs / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  }
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+
+  return `${seconds}s`;
 };
