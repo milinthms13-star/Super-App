@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
-import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import ProductCard from "./ProductCard";
 import SellerAnalytics from "./SellerAnalytics";
@@ -22,7 +21,6 @@ import {
   showServiceWorkerNotification,
 } from "../../pwaConfig";
 import { sanitizeText } from "../../utils/xssProtection";
-import { getPathForModule } from "../../utils/moduleRoutes";
 import "../../styles/Ecommerce.css";
 
 const DEFAULT_PRODUCT_FORM = {
@@ -209,12 +207,7 @@ const buildProductFormState = (product) => ({
   image: product?.image || "",
 });
 
-const Ecommerce = ({
-  globeMartCategories = [],
-  onOpenOrders = null,
-  onOpenReturns = null,
-}) => {
-  const navigate = useNavigate();
+const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) => {
   const {
     currentUser,
     favorites,
@@ -286,22 +279,6 @@ const Ecommerce = ({
   const isEntrepreneur =
     currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
   const currentBusinessName = currentUser?.businessName?.trim() || currentUser?.name || "Your Business";
-  const handleOpenOrders = () => {
-    if (typeof onOpenOrders === "function") {
-      onOpenOrders();
-      return;
-    }
-
-    navigate(getPathForModule("orders"));
-  };
-  const handleOpenReturns = () => {
-    if (typeof onOpenReturns === "function") {
-      onOpenReturns();
-      return;
-    }
-
-    navigate(getPathForModule("returns"));
-  };
 
   // Handle keyboard navigation for quick view modal
   useEffect(() => {
@@ -1226,12 +1203,12 @@ const Ecommerce = ({
         </p>
       </div>
 
-      {!isEntrepreneur && (
+      {(onOpenOrders || onOpenReturns) && (
         <div className="globemart-subnav">
-          <button type="button" className="subnav-btn" onClick={handleOpenOrders}>
+          <button type="button" className="subnav-btn" onClick={() => onOpenOrders && onOpenOrders()}>
             Order History
           </button>
-          <button type="button" className="subnav-btn" onClick={handleOpenReturns}>
+          <button type="button" className="subnav-btn" onClick={() => onOpenReturns && onOpenReturns()}>
             Refunds & Returns
           </button>
         </div>
@@ -2681,6 +2658,12 @@ Ecommerce.propTypes = {
   ),
   onOpenOrders: PropTypes.func,
   onOpenReturns: PropTypes.func,
+};
+
+Ecommerce.defaultProps = {
+  globeMartCategories: [],
+  onOpenOrders: null,
+  onOpenReturns: null,
 };
 
 export default Ecommerce;

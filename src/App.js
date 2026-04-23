@@ -252,7 +252,6 @@ function AppShell() {
         }
 
         const restoredRegistrationType = authResponse.data.user.registrationType || "user";
-        const restoredAccount = null;
 
         const nextUser = {
           ...authResponse.data.user,
