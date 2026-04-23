@@ -1,11 +1,12 @@
 /* Dashboard Styles - Premium UI */
 .dashboard-container {
-  max-width: 1400px;
+  width: min(100%, 1400px);
   margin: 0 auto;
   padding: 2rem 1rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 .dashboard-container-compact {
@@ -101,13 +102,13 @@
 
 .stats-section {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 1rem;
   margin-bottom: 3rem;
 }
 
 .dashboard-container-compact .stats-section {
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 0.85rem;
   margin-bottom: 1rem;
 }
@@ -127,6 +128,7 @@
   border-left: 5px solid #FFD700;
   position: relative;
   overflow: hidden;
+  min-width: 0;
 }
 
 .dashboard-container-compact .stat-card {
@@ -208,6 +210,7 @@
   color: #FFD700;
   font-weight: 700;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  overflow-wrap: anywhere;
 }
 
 .dashboard-container-compact .stat-content h3 {
@@ -219,6 +222,7 @@
   color: #666;
   font-size: 1rem;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-container-compact .stat-content p {
@@ -227,13 +231,14 @@
 
 .dashboard-main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(320px, 0.95fr);
+  grid-template-columns: minmax(0, 1.75fr) minmax(280px, 0.95fr);
   gap: 1rem;
   align-items: start;
 }
 
 .modules-section {
   margin-bottom: 3rem;
+  min-width: 0;
 }
 
 .dashboard-container-compact .modules-section,
@@ -276,12 +281,12 @@
 
 .modules-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 1rem;
 }
 
 .dashboard-container-compact .modules-grid {
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
   gap: 0.85rem;
 }
 
@@ -299,6 +304,7 @@
   border-top: 4px solid #FFD700;
   position: relative;
   overflow: hidden;
+  min-width: 0;
 }
 
 .dashboard-container-compact .module-card {
@@ -374,6 +380,7 @@
   margin: 1rem 0;
   color: #333;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-container-compact .module-card h3 {
@@ -386,6 +393,7 @@
   margin-bottom: 1.5rem;
   font-size: 1rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-container-compact .module-card p {
@@ -408,6 +416,8 @@
   font-weight: 600;
   box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
   transition: transform 0.2s;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-container-compact .module-badge {
@@ -427,10 +437,12 @@
   padding: 2.5rem;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  min-width: 0;
 }
 
 .recent-orders-compact {
   height: 100%;
+  min-width: 0;
 }
 
 .dashboard-container-compact .recent-orders {
@@ -462,6 +474,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   padding: 1.5rem;
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   border-radius: 12px;
@@ -484,6 +497,7 @@
   color: #666;
   font-size: 0.95rem;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-container-compact .order-date,
@@ -499,6 +513,7 @@
   font-size: 0.85rem;
   font-weight: 600;
   box-shadow: 0 2px 4px rgba(21, 87, 36, 0.2);
+  flex-shrink: 0;
 }
 
 .order-status-confirmed {
@@ -525,6 +540,7 @@
   font-weight: 700;
   color: #333;
   font-size: 1.1rem;
+  overflow-wrap: anywhere;
 }
 
 .no-orders {
@@ -583,6 +599,16 @@
   width: 100%;
   padding: 0.7rem 1rem;
   margin-top: 0.75rem;
+}
+
+@media (max-width: 1180px) {
+  .dashboard-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-orders-compact {
+    height: auto;
+  }
 }
 
 @media (max-width: 768px) {

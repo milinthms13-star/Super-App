@@ -15,6 +15,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: #f5f5f5;
   color: #333;
+  overflow-x: clip;
 }
 
 code {
@@ -25,6 +26,7 @@ code {
 #root {
   width: 100%;
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 body {
@@ -35,4 +37,3 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-

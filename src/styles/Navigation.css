@@ -7,6 +7,7 @@
   z-index: 1000;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(18px);
+  overflow-x: clip;
 }
 
 .nav-container {
@@ -15,6 +16,8 @@
   padding: 0 1rem;
   display: grid;
   gap: 0.85rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .nav-top-row,
@@ -23,6 +26,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .nav-logo {
@@ -35,6 +40,7 @@
   align-items: center;
   gap: 0.75rem;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .nav-logo:hover {
@@ -56,6 +62,8 @@
   overflow-x: auto;
   padding: 0.2rem 0.05rem 0.45rem;
   scrollbar-width: thin;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .nav-link {
@@ -86,6 +94,7 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .cart-icon {
@@ -146,6 +155,7 @@
   transition: background 0.3s;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  max-width: 100%;
 }
 
 .user-profile:hover {
@@ -165,6 +175,7 @@
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   min-width: 200px;
+  max-width: min(320px, calc(100vw - 1rem));
   z-index: 1001;
   margin-top: 0.5rem;
   overflow: hidden;
@@ -219,6 +230,7 @@
 
 .user-name {
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .hamburger {
@@ -308,10 +320,12 @@
 @media (max-width: 768px) {
   .nav-top-row {
     align-items: flex-start;
+    flex-wrap: wrap;
   }
 
   .nav-bottom-row {
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .nav-menu {
@@ -357,6 +371,10 @@
     gap: 0.5rem;
     width: 100%;
     justify-content: space-between;
+  }
+
+  .user-profile {
+    margin-left: auto;
   }
 
   .cart-icon {
