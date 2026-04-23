@@ -85,8 +85,6 @@ app.use('/api/flashsales', require('./routes/flashsales'));
 // Initialize Elasticsearch index on startup
 require('./utils/elasticsearch').ensureIndex().catch(console.error);
 
-
-
 // Error handler last
 app.use(errorHandler);
 
@@ -97,8 +95,16 @@ app.use('*', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
+// Create HTTP server for both Express and Socket.io
+const server = require('http').createServer(app);
+
+// Initialize WebSocket
+const { initializeWebSocket } = require('./config/websocket');
+initializeWebSocket(server);
+
+server.listen(PORT, () => {
   logger.info(`Server started on port ${PORT}`);
+  logger.info(`WebSocket server initialized`);
 });
 
 process.on('unhandledRejection', (err) => {
