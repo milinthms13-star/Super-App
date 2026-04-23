@@ -1215,105 +1215,38 @@ const Ecommerce = ({
     }
   };
 
-  // Tab state management
-  const [activeTab, setActiveTab] = useState(isEntrepreneur ? "listings" : "marketplace");
-
   return (
     <div className="ecommerce-container">
-      {/* Sleek Header */}
-      <div className="ecommerce-hero">
-        <div className="hero-content">
-          <h1>GlobeMart</h1>
-          <p className="hero-subtitle">
-            {isEntrepreneur
-              ? `Manage your catalog for ${currentBusinessName}`
-              : "Browse curated products from verified sellers"}
-          </p>
+      <div className="ecommerce-header">
+        <h1>GlobeMart</h1>
+        <p>
+          {isEntrepreneur
+            ? `Manage your catalog for ${currentBusinessName}, get product approval first, and add stock batch details only when inventory arrives.`
+            : "Browse approved products from GlobeMart businesses and add them to your cart."}
+        </p>
+      </div>
+
+      {!isEntrepreneur && (
+        <div className="globemart-subnav">
+          <button type="button" className="subnav-btn" onClick={handleOpenOrders}>
+            Order History
+          </button>
+          <button type="button" className="subnav-btn" onClick={handleOpenReturns}>
+            Refunds & Returns
+          </button>
         </div>
-        {!isEntrepreneur && (
-          <div className="hero-stats">
-            <div className="stat-badge">
-              <span className="stat-number">{activeMarketplaceCount}</span>
-              <span className="stat-label">Products</span>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Tab Navigation */}
-      <div className="ecommerce-tabs">
-        {isEntrepreneur ? (
-          <>
-            <button
-              type="button"
-              className={`tab-button ${activeTab === "listings" ? "active" : ""}`}
-              onClick={() => setActiveTab("listings")}
-            >
-              📦 My Listings
-              <span className="tab-badge">{managedProductsPagination.totalItems || 0}</span>
-            </button>
-            <button
-              type="button"
-              className={`tab-button ${activeTab === "analytics" ? "active" : ""}`}
-              onClick={() => setActiveTab("analytics")}
-            >
-              📊 Analytics
-            </button>
-            <button
-              type="button"
-              className={`tab-button ${activeTab === "orders" ? "active" : ""}`}
-              onClick={() => setActiveTab("orders")}
-            >
-              🛒 Orders
-              <span className="tab-badge">{sellerOrdersPagination.totalItems || 0}</span>
-            </button>
-            <button
-              type="button"
-              className={`tab-button ${activeTab === "returns" ? "active" : ""}`}
-              onClick={() => setActiveTab("returns")}
-            >
-              ↩️ Returns
-              <span className="tab-badge">{sellerReturnRequestCount}</span>
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              className={`tab-button ${activeTab === "marketplace" ? "active" : ""}`}
-              onClick={() => setActiveTab("marketplace")}
-            >
-              🛍️ Browse Products
-            </button>
-            <button
-              type="button"
-              className={`tab-button ${activeTab === "favorites" ? "active" : ""}`}
-              onClick={() => setActiveTab("favorites")}
-            >
-              ♥️ Saved Items
-            </button>
-            <button
-              type="button"
-              className={`tab-button ${activeTab === "orders" ? "active" : ""}`}
-              onClick={() => setActiveTab("orders")}
-            >
-              📋 Order History
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* Products Error */}
       {productsError && <div className="products-notice">{productsError}</div>}
+      {isEntrepreneur && (
+        <div className="products-notice">
+          Product approval is separate from inventory. Create the catalog item first, then add stock batches with dispatch location, pricing, and optional expiry details.
+        </div>
+      )}
 
-      {/* ENTREPRENEUR - CREATE PRODUCT SECTION */}
-      {isEntrepreneur && activeTab === "listings" && (
-        <div className="tab-content">
-          <div className="products-notice">
-            Product approval is separate from inventory. Create the catalog item first, then add stock batches with dispatch location, pricing, and optional expiry details.
-          </div>
-          <section className="seller-layout">
-            <article className="seller-panel seller-summary-card">
+      {isEntrepreneur && (
+        <section className="seller-layout">
+          <article className="seller-panel seller-summary-card">
             <span className="seller-summary-label">Entrepreneur Workspace</span>
             <div className="seller-summary-hero">
               <div>
@@ -1566,16 +1499,12 @@ const Ecommerce = ({
             </form>
           </article>
         </section>
-        </div>
       )}
 
-      {/* ENTREPRENEUR - ANALYTICS SECTION */}
-      {isEntrepreneur && activeTab === "analytics" && (
-        <div className="tab-content">
-          <section ref={sellerAnalyticsSectionRef}>
-            <SellerAnalytics />
-          </section>
-        </div>
+      {isEntrepreneur && (
+        <section ref={sellerAnalyticsSectionRef}>
+          <SellerAnalytics />
+        </section>
       )}
 
       {!isEntrepreneur && activeFlashSales.length > 0 && (
@@ -1900,10 +1829,8 @@ const Ecommerce = ({
         </div>
       </div>
 
-      {/* ENTREPRENEUR - SELLER ORDERS & RETURNS */}
-      {isEntrepreneur && (activeTab === "orders" || activeTab === "returns" || activeTab === "listings") && (
-        <div className="tab-content">
-          <section className="seller-listings" ref={sellerOrdersSectionRef}>
+      {isEntrepreneur && (
+        <section className="seller-listings" ref={sellerOrdersSectionRef}>
           <div className="section-heading">
             <h3>Seller Orders</h3>
             <p>
@@ -2541,13 +2468,10 @@ const Ecommerce = ({
             </button>
           )}
         </section>
-        </div>
       )}
 
-      {/* SHOPPER - PRODUCTS DISPLAY */}
-      {!isEntrepreneur && (activeTab === "marketplace" || activeTab === "favorites") && (
-        <div className="tab-content">
-          <section>
+      {!isEntrepreneur && (
+        <section>
           <div className="section-heading shopper-heading">
             <div>
               <h3>{marketplaceView === "favorites" ? "Favorite Products" : "Approved Products"}</h3>
