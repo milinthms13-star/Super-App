@@ -1,6 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const auth = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 const SupportTicket = require('../models/SupportTicket');
 const User = require('../models/User');
 const logger = require('../utils/logger');
@@ -15,7 +15,7 @@ const generateTicketNumber = () => {
 };
 
 // ============ CREATE SUPPORT TICKET ============
-router.post('/create', auth, async (req, res, next) => {
+router.post('/create', authenticate, async (req, res, next) => {
   try {
     const { subject, description, module, category, priority, entityId, entityType, contactPhone, attachments } = req.body;
 
@@ -67,7 +67,7 @@ router.post('/create', auth, async (req, res, next) => {
 });
 
 // ============ GET ALL USER TICKETS ============
-router.get('/my-tickets', auth, async (req, res, next) => {
+router.get('/my-tickets', authenticate, async (req, res, next) => {
   try {
     const { status, module, page = 1, limit = 10, sortBy = 'createdAt' } = req.query;
 
@@ -106,7 +106,7 @@ router.get('/my-tickets', auth, async (req, res, next) => {
 });
 
 // ============ GET TICKET DETAILS ============
-router.get('/:ticketId', auth, async (req, res, next) => {
+router.get('/:ticketId', authenticate, async (req, res, next) => {
   try {
     const ticket = await SupportTicket.findById(req.params.ticketId)
       .populate('userId', 'name email')
@@ -130,7 +130,7 @@ router.get('/:ticketId', auth, async (req, res, next) => {
 });
 
 // ============ ADD MESSAGE TO TICKET ============
-router.post('/:ticketId/messages', auth, async (req, res, next) => {
+router.post('/:ticketId/messages', authenticate, async (req, res, next) => {
   try {
     const { content, attachments, isInternal } = req.body;
 
@@ -181,7 +181,7 @@ router.post('/:ticketId/messages', auth, async (req, res, next) => {
 });
 
 // ============ UPDATE TICKET STATUS ============
-router.patch('/:ticketId/status', auth, async (req, res, next) => {
+router.patch('/:ticketId/status', authenticate, async (req, res, next) => {
   try {
     const { status, resolutionNotes, satisfactionRating } = req.body;
 
@@ -227,7 +227,7 @@ router.patch('/:ticketId/status', auth, async (req, res, next) => {
 });
 
 // ============ ASSIGN TICKET (SUPPORT STAFF ONLY) ============
-router.patch('/:ticketId/assign', auth, async (req, res, next) => {
+router.patch('/:ticketId/assign', authenticate, async (req, res, next) => {
   try {
     if (req.user.role !== 'support' && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Only support staff can assign tickets' });
@@ -260,7 +260,7 @@ router.patch('/:ticketId/assign', auth, async (req, res, next) => {
 });
 
 // ============ ESCALATE TICKET (SUPPORT STAFF ONLY) ============
-router.patch('/:ticketId/escalate', auth, async (req, res, next) => {
+router.patch('/:ticketId/escalate', authenticate, async (req, res, next) => {
   try {
     if (req.user.role !== 'support' && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Only support staff can escalate tickets' });
@@ -296,7 +296,7 @@ router.patch('/:ticketId/escalate', auth, async (req, res, next) => {
 });
 
 // ============ GET ALL TICKETS (ADMIN/SUPPORT ONLY) ============
-router.get('/', auth, async (req, res, next) => {
+router.get('/', authenticate, async (req, res, next) => {
   try {
     if (req.user.role !== 'support' && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Unauthorized' });
@@ -340,7 +340,7 @@ router.get('/', auth, async (req, res, next) => {
 });
 
 // ============ GET SUPPORT STATISTICS (ADMIN/SUPPORT ONLY) ============
-router.get('/stats/overview', auth, async (req, res, next) => {
+router.get('/stats/overview', authenticate, async (req, res, next) => {
   try {
     if (req.user.role !== 'support' && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Unauthorized' });
