@@ -40,6 +40,7 @@ const orderSchema = Joi.object({
     houseName: Joi.string().trim().required(),
     addressLine: Joi.string().trim().required(),
   }).required(),
+  walletPayment: Joi.boolean().default(false),
   items: Joi.array()
     .items(
       Joi.object({
@@ -1344,19 +1345,42 @@ router.post('/', authenticate, async (req, res) => {
       }
     }
 
+    // Wallet one-click checkout
+    if (value.walletPayment) {
+      const balance = await require('../utils/wallet').getWalletBalance(req.user.email);
+      const numericAmount = parseFloat(value.amount.replace(/[^\d.]/g, ''));
+      if (balance < numericAmount) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient wallet balance. Need INR ${numericAmount.toFixed(2)}, have INR ${balance.toFixed(2)}`,
+        });
+      }
+    }
+
+    const paymentDetails = value.walletPayment 
+      ? { gateway: 'wallet', paymentStatus: 'Paid' }
+      : { gateway: 'cash_on_delivery', paymentStatus: 'Pending' };
+
     const order = await persistStockReductionAndCreateOrder({
       user: req.user,
       orderData: value,
-      paymentDetails: {
-        gateway: 'cash_on_delivery',
-        paymentStatus: 'Pending',
-      },
+      paymentDetails,
       status: 'Confirmed',
     });
 
+    // Deduct wallet if used
+    if (value.walletPayment) {
+      await require('../utils/wallet').deductWalletBalance(
+        req.user.email, 
+        parseFloat(value.amount.replace(/[^\d.]/g, '')), 
+        order.id, 
+        `Order #${order.id.slice(-8)}`
+      );
+    }
+
     return res.status(201).json({
       success: true,
-      message: 'Order placed successfully.',
+      message: value.walletPayment ? 'Order placed using Wallet balance.' : 'Order placed successfully.',
       order: serializeOrder(order),
     });
   } catch (error) {

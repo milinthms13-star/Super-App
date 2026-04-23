@@ -308,32 +308,61 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
     [visibleProducts]
   );
 
-  const filteredProducts = useMemo(() => marketplaceProducts.filter((product) => {
-    const normalizedSearch = marketplaceSearch.trim().toLowerCase();
-    const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
-    const matchesSubcategory =
-      selectedSubcategory === "All" || product.subcategory === selectedSubcategory;
-    const matchesSeller =
-      selectedSeller === "All Businesses" || product.businessName === selectedSeller;
-    const matchesSearch =
-      !normalizedSearch ||
-      [
-        product.name,
-        product.category,
-        product.subcategory,
-        product.model,
-        product.styleTheme,
-        product.color,
-        product.description,
-        product.businessName,
-        product.location,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+  const [esSearchResults, setEsSearchResults] = useState({ products: [], facets: {}, total: 0, loading: false });
+  const [esSearchFallback, setEsSearchFallback] = useState(false);
 
-    return matchesCategory && matchesSubcategory && matchesSeller && matchesSearch;
-  }), [marketplaceProducts, selectedCategory, selectedSubcategory, selectedSeller, marketplaceSearch]);
+  // Debounced ES search
+  useEffect(() => {
+    let timeoutId;
+    if (marketplaceSearch.trim() || selectedCategory !== 'All' || selectedSeller !== 'All Businesses') {
+      setEsSearchResults(prev => ({ ...prev, loading: true }));
+      timeoutId = setTimeout(async () => {
+        try {
+          const params = new URLSearchParams({
+            q: marketplaceSearch.trim(),
+            category: selectedCategory === 'All' ? '' : selectedCategory,
+            business: selectedSeller === 'All Businesses' ? '' : selectedSeller,
+            page: '1',
+            limit: '50'
+          });
+          const response = await fetch(`/api/products/search?${params}`);
+          const data = await response.json();
 
+            setEsSearchResults({
+              products: data.products || [],
+              facets: data.facets || {},
+              total: data.pagination?.total || 0,
+              loading: false
+            });
+            setEsSearchFallback(false);
+          } else {
+            setEsSearchFallback(true);
+          }
+        } catch (error) {
+          setEsSearchFallback(true);
+        } finally {
+          setEsSearchResults(prev => ({ ...prev, loading: false }));
+        }
+      }, 300);
+    } else {
+      setEsSearchResults({ products: [], facets: {}, total: 0, loading: false });
+    }
+    return () => clearTimeout(timeoutId);
+  }, [marketplaceSearch, selectedCategory, selectedSeller]);
+
+  const filteredProducts = esSearchFallback || marketplaceView === 'favorites' 
+    ? marketplaceProducts.filter((product) => {
+        const normalizedSearch = marketplaceSearch.trim().toLowerCase();
+        const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
+        const matchesSubcategory = selectedSubcategory === "All" || product.subcategory === selectedSubcategory;
+        const matchesSeller = selectedSeller === "All Businesses" || product.businessName === selectedSeller;
+        const matchesSearch = !normalizedSearch || [
+          product.name, product.category, product.subcategory, product.model,
+          product.styleTheme, product.color, product.description, product.businessName, product.location
+        ].filter(Boolean).some(value => String(value).toLowerCase().includes(normalizedSearch));
+        return matchesCategory && matchesSubcategory && matchesSeller && matchesSearch;
+      })
+    : esSearchResults.products;
   const sortedProducts = useMemo(() => {
     const products = [...filteredProducts];
     const parsePrice = (value) => Number(String(value || "").replace(/[^0-9.]/g, "")) || 0;
@@ -1269,15 +1298,20 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
           </div>
 
           <div className="marketplace-controls">
-            <label className="seller-filter marketplace-filter-card">
-              <span className="marketplace-filter-label">Search products</span>
-              <input
-                type="search"
-                value={marketplaceSearch}
-                onChange={(event) => setMarketplaceSearch(event.target.value)}
-                placeholder="Search by product, category, description, or business"
-              />
-            </label>
+    <label className="seller-filter marketplace-filter-card">
+      <span className="marketplace-filter-label">Search products</span>
+      <div className="es-search-container">
+        <input
+          type="search"
+          value={marketplaceSearch}
+          onChange={(event) => setMarketplaceSearch(event.target.value)}
+          placeholder="Search by product, category, description, or business"
+          className={esSearchResults.loading ? 'loading' : ''}
+        />
+        {esSearchResults.loading && <span className="search-spinner">🔍</span>}
+        {esSearchFallback && <span className="search-fallback">Fallback</span>}
+      </div>
+    </label>
 
             <label className="seller-filter marketplace-filter-card">
               <span className="marketplace-filter-label">Sort by</span>

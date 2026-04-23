@@ -42,6 +42,7 @@ const translations = {
         ["VibeHub", "Share updates, discover stories, and grow your network across borders."],
         ["ReminderAlert - Todo List", "Plan tasks, set alarms, and escalate reminders through app, SMS, and call alerts."],
         ["SOS Safety Center", "Trigger emergency alerts, share live location, and notify trusted contacts fast."],
+        ["AstroNila", "Daily horoscope, Vedic insights, and personalized astrology readings for all zodiac signs."],
       ],
     },
     login: {
@@ -169,8 +170,10 @@ sosalert: "SOS Safety Center",
         ["SwiftRide", "സൗകര്യപ്രദമായ യാത്രകളും റൈഡ് ഓപ്ഷനുകളും ബുക്ക് ചെയ്യൂ."],
         ["SoulMatch", "വെരിഫൈ ചെയ്ത വിവാഹ പ്രൊഫൈലുകളുമായി ബന്ധപ്പെടൂ."],
         ["VibeHub", "അപ്‌ഡേറ്റുകൾ പങ്കിടൂ, കഥകൾ കണ്ടെത്തൂ, ആഗോള നെറ്റ്വർക്ക് വളർത്തൂ."],
+        ["Local Market", "Discover local vendors, fresh produce, handmade goods, and neighborhood services."],
         ["ReminderAlert - Todo List", "Smart To-Do system with app alerts, SMS reminders, and automated calls."],
         ["SOS Safety Center", "Emergency alerts with live location sharing and trusted contact escalation."],
+        ["AstroNila", "Daily horoscope, Vedic insights, and personalized astrology readings for all zodiac signs."],
       ],
     },
     login: {

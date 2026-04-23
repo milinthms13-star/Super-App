@@ -1,15 +1,16 @@
 const DEFAULT_BUSINESS_CATEGORIES = [
-  { id: 'astrology', name: 'AstroNila', fee: 999, requiresFoodLicense: false },
   { id: 'ecommerce', name: 'GlobeMart', fee: 799, requiresFoodLicense: false },
   { id: 'messaging', name: 'LinkUp', fee: 999, requiresFoodLicense: false },
   { id: 'classifieds', name: 'TradePost', fee: 1299, requiresFoodLicense: false },
   { id: 'realestate', name: 'HomeSphere', fee: 1499, requiresFoodLicense: false },
   { id: 'fooddelivery', name: 'Feastly', fee: 1999, requiresFoodLicense: true },
+  { id: 'localmarket', name: 'Local Market', fee: 1299, requiresFoodLicense: false },
   { id: 'ridesharing', name: 'SwiftRide', fee: 1099, requiresFoodLicense: false },
   { id: 'matrimonial', name: 'SoulMatch', fee: 1599, requiresFoodLicense: false },
   { id: 'socialmedia', name: 'VibeHub', fee: 899, requiresFoodLicense: false },
   { id: 'reminderalert', name: 'ReminderAlert', fee: 1199, requiresFoodLicense: false },
   { id: 'sosalert', name: 'SOS FRS', fee: 1399, requiresFoodLicense: false },
+  { id: 'astrology', name: 'AstroNila', fee: 999, requiresFoodLicense: false },
 ];
 
 const DEFAULT_MODULE_DATA = {

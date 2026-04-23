@@ -31,6 +31,12 @@
       "requiresFoodLicense": true
     },
     {
+      "id": "localmarket",
+      "name": "Local Market",
+      "fee": 1299,
+      "requiresFoodLicense": false
+    },
+    {
       "id": "ridesharing",
       "name": "SwiftRide",
       "fee": 1099,
@@ -49,15 +55,21 @@
       "requiresFoodLicense": false
     },
     {
-      "id": "reminderalert",
-      "name": "ReminderAlert FRS",
+     "id": "reminderalert",
+      "name": "ReminderAlert",
       "fee": 1199,
       "requiresFoodLicense": false
     },
     {
       "id": "sosalert",
-      "name": "SOS FRS",
+      "name": "SOS",
       "fee": 1399,
+      "requiresFoodLicense": false
+    },
+    {
+      "id": "astrology",
+      "name": "AstroNila",
+      "fee": 999,
       "requiresFoodLicense": false
     }
   ],
@@ -108,11 +120,13 @@
     "classifieds",
     "realestate",
     "fooddelivery",
+    "localmarket",
     "ridesharing",
     "matrimonial",
     "socialmedia",
     "reminderalert",
-    "sosalert"
+    "sosalert",
+    "astrology"
   ],
   "registrationApplications": [
     {

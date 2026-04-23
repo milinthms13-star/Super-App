@@ -116,6 +116,38 @@ const bySign = (value = "") =>
   FALLBACK_SIGNS.find((entry) => entry.sign === String(value || "").trim().toLowerCase()) ||
   FALLBACK_SIGNS[0];
 
+const formatReadingDate = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value).trim())) {
+    return String(value).trim();
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+};
+
+const formatDateInputValue = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+};
+
+const getTodayReadingDate = () => formatReadingDate(new Date().toISOString());
+
 const normalizeSignPayload = (payload = {}) => {
   const fallback = bySign(payload.sign || payload.label);
 
@@ -131,37 +163,142 @@ const normalizeSignPayload = (payload = {}) => {
   };
 };
 
+const normalizeReadingPayload = (payload = {}) => {
+  const signPayload = normalizeSignPayload(payload);
+
+  return {
+    ...signPayload,
+    generatedAt: payload.generatedAt ? new Date(payload.generatedAt).toISOString() : "",
+    readingDate: formatReadingDate(payload.readingDate || payload.generatedAt) || getTodayReadingDate(),
+  };
+};
+
+const normalizeProfilePayload = (payload = {}) => ({
+  sign: String(payload.sign || "").trim().toLowerCase(),
+  birthDate: formatDateInputValue(payload.birthDate),
+  birthTime: String(payload.birthTime || "").trim(),
+  birthPlace: String(payload.birthPlace || "").trim(),
+  preferences: {
+    receiveDailyHoroscope: payload?.preferences?.receiveDailyHoroscope !== false,
+    favoriteTopics: Array.isArray(payload?.preferences?.favoriteTopics)
+      ? payload.preferences.favoriteTopics
+          .map((topic) => String(topic || "").trim())
+          .filter(Boolean)
+      : [],
+  },
+  savedReadings: Array.isArray(payload.savedReadings)
+    ? payload.savedReadings.map((reading) => normalizeReadingPayload(reading))
+    : [],
+  updatedAt: payload.updatedAt || "",
+});
+
+const buildServiceError = (error, fallbackData, defaultMessage) => {
+  const nextError = new Error(
+    error?.response?.data?.message || error?.message || defaultMessage || "Astrology request failed."
+  );
+  nextError.fallbackData = fallbackData;
+  nextError.cause = error;
+  return nextError;
+};
+
 export const astrologyService = {
+  getFallbackSigns() {
+    return FALLBACK_SIGNS.map((entry) => normalizeSignPayload(entry));
+  },
+
+  getFallbackSign(sign) {
+    return normalizeSignPayload(bySign(sign));
+  },
+
+  getFallbackReading(sign) {
+    return normalizeReadingPayload({
+      ...bySign(sign),
+      generatedAt: new Date().toISOString(),
+      readingDate: getTodayReadingDate(),
+    });
+  },
+
   async getSigns() {
+    const fallbackSigns = this.getFallbackSigns();
+
     try {
       const response = await axios.get(`${API_BASE_URL}/astrology/signs`);
       if (!response.data?.success || !Array.isArray(response.data.data)) {
-        return FALLBACK_SIGNS;
+        throw new Error("Live astrology signs could not be loaded.");
       }
 
       return response.data.data.map(normalizeSignPayload);
     } catch (error) {
-      return FALLBACK_SIGNS;
+      throw buildServiceError(
+        error,
+        fallbackSigns,
+        "Live astrology signs could not be loaded."
+      );
     }
   },
 
   async getDailyHoroscope(sign) {
+    const fallbackReading = this.getFallbackReading(sign);
+
     try {
       const response = await axios.get(
         `${API_BASE_URL}/astrology/daily/${encodeURIComponent(String(sign || "").toLowerCase())}`
       );
 
       if (!response.data?.success || !response.data?.data) {
-        return normalizeSignPayload(bySign(sign));
+        throw new Error("Live astrology is unavailable right now.");
       }
 
-      return normalizeSignPayload(response.data.data);
+      return normalizeReadingPayload(response.data.data);
     } catch (error) {
-      return normalizeSignPayload(bySign(sign));
+      throw buildServiceError(
+        error,
+        fallbackReading,
+        "Live astrology is unavailable right now."
+      );
     }
   },
 
-  getFallbackSign(sign) {
-    return normalizeSignPayload(bySign(sign));
+  async getProfile() {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/profile`);
+
+      if (!response.data?.success) {
+        throw new Error("Unable to load your astrology profile.");
+      }
+
+      return response.data.data ? normalizeProfilePayload(response.data.data) : null;
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to load your astrology profile.");
+    }
+  },
+
+  async updateProfile(payload = {}) {
+    const normalizedPayload = {
+      sign: String(payload.sign || "").trim().toLowerCase(),
+      birthDate: payload.birthDate || undefined,
+      birthTime: String(payload.birthTime || "").trim(),
+      birthPlace: String(payload.birthPlace || "").trim(),
+      preferences: {
+        receiveDailyHoroscope: payload?.preferences?.receiveDailyHoroscope !== false,
+        favoriteTopics: Array.isArray(payload?.preferences?.favoriteTopics)
+          ? payload.preferences.favoriteTopics
+              .map((topic) => String(topic || "").trim())
+              .filter(Boolean)
+          : [],
+      },
+    };
+
+    try {
+      const response = await axios.put(`${API_BASE_URL}/astrology/profile`, normalizedPayload);
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to save your astrology profile.");
+      }
+
+      return normalizeProfilePayload(response.data.data);
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to save your astrology profile.");
+    }
   },
 };

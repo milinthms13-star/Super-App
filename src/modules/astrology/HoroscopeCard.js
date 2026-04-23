@@ -1,6 +1,6 @@
 import React from "react";
 
-const HoroscopeCard = ({ sign, horoscope, loading = false, error = "" }) => {
+const HoroscopeCard = ({ sign, horoscope, loading = false, notice = "" }) => {
   const cardAccent = sign?.color || "#bd8b28";
   const label = sign?.label || sign?.sign || "Astrology";
   const description =
@@ -29,7 +29,7 @@ const HoroscopeCard = ({ sign, horoscope, loading = false, error = "" }) => {
       </div>
 
       {loading ? <p className="astrology-card-loading">Reading the chart...</p> : null}
-      {error ? <p className="astrology-card-error">{error}</p> : null}
+      {notice ? <p className="astrology-card-notice">{notice}</p> : null}
 
       {!loading ? <p className="astrology-card-body">{description}</p> : null}
 

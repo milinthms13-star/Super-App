@@ -1,9 +1,99 @@
 const express = require('express');
-const router = express.Router();
+const mongoose = require('mongoose');
 
 const { authenticate } = require('../middleware/auth');
 const AstrologyUserProfile = require('../models/AstrologyUserProfile');
-const { getSignDetails, normalizeSign, zodiacSigns } = require('../utils/astrologyData');
+const devAstrologyStore = require('../utils/devAstrologyStore');
+const {
+  getDailyHoroscope,
+  getSignDetails,
+  normalizeSign,
+  zodiacSigns,
+} = require('../utils/astrologyData');
+
+const router = express.Router();
+
+const shouldUseDevStore = () =>
+  process.env.NODE_ENV !== 'production' && mongoose.connection.readyState !== 1;
+
+const parseOptionalDate = (value) => {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? undefined : parsedDate;
+};
+
+const normalizeFavoriteTopics = (topics) =>
+  (Array.isArray(topics) ? topics : [])
+    .map((topic) => String(topic || '').trim())
+    .filter(Boolean);
+
+const normalizeSavedReading = (reading) => {
+  const sign = normalizeSign(reading?.sign);
+  const signDetails = getSignDetails(sign);
+  const horoscope = String(reading?.horoscope || '').trim();
+
+  if (!signDetails || !horoscope) {
+    return null;
+  }
+
+  return {
+    sign,
+    horoscope,
+    readingDate: parseOptionalDate(reading?.readingDate || reading?.generatedAt || new Date()) || new Date(),
+  };
+};
+
+const mergeSavedReadings = (existingReadings = [], nextReading) => {
+  const normalizedExisting = (Array.isArray(existingReadings) ? existingReadings : [])
+    .map((reading) => normalizeSavedReading(reading))
+    .filter(Boolean);
+  const normalizedNext = normalizeSavedReading(nextReading);
+
+  if (!normalizedNext) {
+    return normalizedExisting;
+  }
+
+  const nextDayKey = normalizedNext.readingDate.toISOString().slice(0, 10);
+  const dedupedReadings = normalizedExisting.filter((reading) => {
+    const existingDayKey = new Date(reading.readingDate).toISOString().slice(0, 10);
+    return !(reading.sign === normalizedNext.sign && existingDayKey === nextDayKey);
+  });
+
+  return [normalizedNext, ...dedupedReadings]
+    .sort((left, right) => new Date(right.readingDate) - new Date(left.readingDate))
+    .slice(0, 14);
+};
+
+const findProfileByUserId = async (userId) => {
+  if (shouldUseDevStore()) {
+    return devAstrologyStore.findProfile(userId);
+  }
+
+  return AstrologyUserProfile.findOne({ userId }).lean();
+};
+
+const saveProfileByUserId = async (userId, profile) => {
+  if (shouldUseDevStore()) {
+    return devAstrologyStore.saveProfile({
+      ...profile,
+      userId,
+    });
+  }
+
+  return AstrologyUserProfile.findOneAndUpdate(
+    { userId },
+    { $set: profile },
+    {
+      new: true,
+      upsert: true,
+      runValidators: true,
+      setDefaultsOnInsert: true,
+    }
+  ).lean();
+};
 
 router.get('/signs', (req, res) => {
   res.json({
@@ -13,10 +103,9 @@ router.get('/signs', (req, res) => {
 });
 
 router.get('/daily/:sign', (req, res) => {
-  const sign = normalizeSign(req.params.sign);
-  const signDetails = getSignDetails(sign);
+  const dailyReading = getDailyHoroscope(req.params.sign);
 
-  if (!signDetails) {
+  if (!dailyReading) {
     return res.status(400).json({
       success: false,
       message: 'Invalid zodiac sign',
@@ -25,17 +114,14 @@ router.get('/daily/:sign', (req, res) => {
 
   return res.json({
     success: true,
-    data: {
-      ...signDetails,
-      generatedAt: new Date().toISOString(),
-    },
+    data: dailyReading,
   });
 });
 
 router.get('/profile', authenticate, async (req, res) => {
   try {
     const userId = String(req.user._id || req.user.id);
-    const profile = await AstrologyUserProfile.findOne({ userId }).lean();
+    const profile = await findProfileByUserId(userId);
 
     return res.json({
       success: true,
@@ -52,7 +138,8 @@ router.get('/profile', authenticate, async (req, res) => {
 router.put('/profile', authenticate, async (req, res) => {
   try {
     const userId = String(req.user._id || req.user.id);
-    const sign = normalizeSign(req.body.sign);
+    const existingProfile = await findProfileByUserId(userId);
+    const sign = normalizeSign(req.body?.sign || existingProfile?.sign);
     const signDetails = getSignDetails(sign);
 
     if (!signDetails) {
@@ -62,33 +149,42 @@ router.put('/profile', authenticate, async (req, res) => {
       });
     }
 
-    const update = {
+    const birthDate =
+      req.body?.birthDate !== undefined
+        ? parseOptionalDate(req.body.birthDate)
+        : parseOptionalDate(existingProfile?.birthDate);
+    const favoriteTopics =
+      req.body?.preferences?.favoriteTopics !== undefined
+        ? normalizeFavoriteTopics(req.body.preferences.favoriteTopics)
+        : normalizeFavoriteTopics(existingProfile?.preferences?.favoriteTopics);
+    const receiveDailyHoroscope =
+      typeof req.body?.preferences?.receiveDailyHoroscope === 'boolean'
+        ? req.body.preferences.receiveDailyHoroscope
+        : typeof existingProfile?.preferences?.receiveDailyHoroscope === 'boolean'
+          ? existingProfile.preferences.receiveDailyHoroscope
+          : true;
+    const dailyReading = getDailyHoroscope(sign);
+
+    const nextProfile = {
       userId,
       sign,
-      birthDate: req.body.birthDate || undefined,
-      birthTime: req.body.birthTime || '',
-      birthPlace: req.body.birthPlace || '',
+      birthDate,
+      birthTime:
+        req.body?.birthTime !== undefined
+          ? String(req.body.birthTime || '').trim()
+          : String(existingProfile?.birthTime || ''),
+      birthPlace:
+        req.body?.birthPlace !== undefined
+          ? String(req.body.birthPlace || '').trim()
+          : String(existingProfile?.birthPlace || ''),
       preferences: {
-        receiveDailyHoroscope:
-          typeof req.body?.preferences?.receiveDailyHoroscope === 'boolean'
-            ? req.body.preferences.receiveDailyHoroscope
-            : true,
-        favoriteTopics: Array.isArray(req.body?.preferences?.favoriteTopics)
-          ? req.body.preferences.favoriteTopics
-          : [],
+        receiveDailyHoroscope,
+        favoriteTopics,
       },
+      savedReadings: mergeSavedReadings(existingProfile?.savedReadings, dailyReading),
     };
 
-    const profile = await AstrologyUserProfile.findOneAndUpdate(
-      { userId },
-      { $set: update },
-      {
-        new: true,
-        upsert: true,
-        runValidators: true,
-        setDefaultsOnInsert: true,
-      }
-    ).lean();
+    const profile = await saveProfileByUserId(userId, nextProfile);
 
     return res.json({
       success: true,
@@ -101,5 +197,11 @@ router.put('/profile', authenticate, async (req, res) => {
     });
   }
 });
+
+router.__testables = {
+  mergeSavedReadings,
+  normalizeSavedReading,
+  shouldUseDevStore,
+};
 
 module.exports = router;

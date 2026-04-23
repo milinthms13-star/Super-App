@@ -1,4 +1,5 @@
 const express = require('express');
+const { indexProduct, deleteProduct, searchProducts } = require('../utils/elasticsearch');
 const Joi = require('joi');
 const crypto = require('crypto');
 const multer = require('multer');
@@ -134,10 +135,25 @@ const extractFileIdFromProductImage = (imagePath = '') => {
   return match?.[1] || '';
 };
 
+const { uploadToCloudinary } = require('../utils/cloudinary');
+
 const storeProductImage = async ({ file, sellerEmail }) => {
   if (!file?.buffer?.length) {
     return '';
   }
+  
+  // Try Cloudinary first, fallback to GridFS
+  try {
+    return await uploadToCloudinary(file.buffer, file.originalname || `${crypto.randomUUID()}.jpg`, 'ecommerce/products', {
+      categorization: 'google_tagging',
+      quality: 'auto:good',
+      format: 'auto'
+    });
+  } catch (cloudinaryError) {
+    logger.warn('Cloudinary failed, using GridFS:', cloudinaryError.message);
+  }
+  
+  // Fallback GridFS
   try {
     const storedFile = await uploadBufferToGridFS({
       buffer: file.buffer,
@@ -149,15 +165,13 @@ const storeProductImage = async ({ file, sellerEmail }) => {
         ownerEmail: sellerEmail,
       },
     });
-
     return `/api/files/public/${storedFile.id}`;
-  } catch (error) {
-    if (error?.message?.includes('GridFS bucket has not been initialized')) {
+  } catch (gridFsError) {
+    if (gridFsError?.message?.includes('GridFS bucket has not been initialized')) {
       const contentType = file.mimetype || 'image/jpeg';
       return `data:${contentType};base64,${file.buffer.toString('base64')}`;
     }
-
-    throw error;
+    throw gridFsError;
   }
 };
 
@@ -373,6 +387,17 @@ const findStoredProductById = async (productId) => {
 };
 
 const createStoredProduct = async (payload) => {
+  const product = await (useMemoryProducts() 
+    ? devProductStore.createProduct(payload)
+    : (async () => {
+        const p = new Product(payload);
+        await p.save();
+        return p;
+      })()
+  );
+  await indexProduct(serializeProduct(product));
+  return product;
+
   if (useMemoryProducts()) {
     return devProductStore.createProduct(payload);
   }
@@ -383,6 +408,13 @@ const createStoredProduct = async (payload) => {
 };
 
 const updateStoredProduct = async (productId, updates) => {
+  const product = await (useMemoryProducts() 
+    ? devProductStore.updateProduct(productId, updates)
+    : Product.findByIdAndUpdate(productId, updates, { new: true, runValidators: true })
+  );
+  if (product) await indexProduct(serializeProduct(product));
+  return product;
+
   if (useMemoryProducts()) {
     return devProductStore.updateProduct(productId, updates);
   }
@@ -949,8 +981,67 @@ router.patch('/:productId/status', authenticate, async (req, res) => {
   }
 });
 
+// Elasticsearch search endpoint
+router.get('/search', async (req, res) => {
+  try {
+    const { q: query = '', category, business, page = 1, limit = 20 } = req.query;
+    const result = await searchProducts({ query, category, business, page: parseInt(page), limit: parseInt(limit) });
+    
+    res.json({
+      success: true,
+      products: result.products.map(serializeProduct),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: result.total
+      },
+      facets: {
+        categories: result.aggregations.categories || [],
+        businesses: result.aggregations.businesses || []
+      }
+    });
+  } catch (error) {
+    logger.error('ES search error:', error);
+    // Fallback to existing list endpoint
+    return res.status(503).json({
+      success: false,
+      message: 'Search temporarily unavailable, showing marketplace products',
+      fallback: true
+    });
+  }
+});
+
+// Cleanup on product delete (add to existing delete logic if exists, or new endpoint)
+router.delete('/:productId', authenticate, async (req, res) => {
+  try {
+    if (!assertEntrepreneurOrAdmin(req, res)) return;
+    
+    const product = await findStoredProductById(req.params.productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    
+    if (!isAdmin(req) && product.sellerEmail !== req.user.email) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+    
+    await deleteProduct(req.params.productId);
+    if (useMemoryProducts()) {
+      devProductStore.deleteProduct(req.params.productId);
+    } else {
+      await Product.findByIdAndDelete(req.params.productId);
+    }
+    
+    res.json({ success: true, message: 'Product deleted' });
+  } catch (error) {
+    logger.error('Delete error:', error);
+    res.status(500).json({ success: false, message: 'Delete failed' });
+  }
+});
+
 module.exports = router;
 module.exports.__testables = {
   buildBatchSummary,
   serializeProduct,
 };
+

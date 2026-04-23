@@ -80,6 +80,12 @@ app.use('/api/realestate', require('./routes/realestate'));
 
 // Astrology module routes
 app.use('/api/astrology', require('./routes/astrology'));
+app.use('/api/flashsales', require('./routes/flashsales'));
+
+// Initialize Elasticsearch index on startup
+require('./utils/elasticsearch').ensureIndex().catch(console.error);
+
+
 
 // Error handler last
 app.use(errorHandler);

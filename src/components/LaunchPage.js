@@ -2,6 +2,17 @@ import React from "react";
 import { getTranslation, languageOptions } from "../data/translations";
 import "../styles/LaunchPage.css";
 
+const moduleFallbacks = {
+  localmarket: {
+    title: "Local Market",
+    description: "Discover local vendors, fresh produce, handmade goods, and neighborhood services.",
+  },
+  astrology: {
+    title: "AstroNila",
+    description: "Daily horoscope, Vedic insights, and personalized astrology readings for all zodiac signs.",
+  },
+};
+
 const openExternalLink = (url) => {
   window.open(url, "_blank", "noopener,noreferrer");
 };
@@ -31,13 +42,27 @@ const LaunchPage = ({
   };
 
   const filteredFeatures = launch.features.filter(([name]) => enabledModules.includes(moduleMapping[name]));
+  const visibleModuleIds = new Set(
+    filteredFeatures.map(([name]) => moduleMapping[name]).filter(Boolean)
+  );
+  const missingEnabledFeatures = Object.entries(moduleFallbacks)
+    .filter(([moduleId]) => enabledModules.includes(moduleId) && !visibleModuleIds.has(moduleId))
+    .map(([moduleId, feature]) => ({
+      key: moduleId,
+      title: feature.title,
+      description: feature.description,
+      type: "module",
+      moduleId,
+    }));
   const featureCards = [
     ...filteredFeatures.map(([title, description]) => ({
       key: title,
       title,
       description,
       type: "module",
+      moduleId: moduleMapping[title],
     })),
+    ...missingEnabledFeatures,
     ...customLinks.map((link) => ({
       key: link.id,
       title: link.title,
@@ -115,7 +140,7 @@ const LaunchPage = ({
               onClick={() =>
                 feature.type === "external"
                   ? openExternalLink(feature.url)
-                  : onSelectRegistrationType("login", moduleMapping[feature.title])
+                  : onSelectRegistrationType("login", feature.moduleId || moduleMapping[feature.title])
               }
             >
               <h3>{feature.title}</h3>
@@ -132,4 +157,3 @@ const LaunchPage = ({
 };
 
 export default LaunchPage;
-
