@@ -52,6 +52,9 @@ const Messaging = () => {
   const [typingUsers, setTypingUsers] = useState(new Set());
   const [notifications, setNotifications] = useState([]);
   const [focusedMessageId, setFocusedMessageId] = useState('');
+  const [newChatSearchQuery, setNewChatSearchQuery] = useState('');
+  const [availableUsers, setAvailableUsers] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
 
   const socketRef = useRef(null);
   const activeCallRef = useRef(null);
@@ -140,6 +143,52 @@ const Messaging = () => {
       setEncryptionEnabled(false);
     }
   }, [apiCall]);
+
+  const searchUsers = useCallback(
+    async (query) => {
+      if (!query.trim()) {
+        setAvailableUsers([]);
+        return;
+      }
+      try {
+        setSearchingUsers(true);
+        const response = await apiCall(
+          `/socialmedia/search/users?q=${encodeURIComponent(query)}`,
+          'GET'
+        );
+        if (response?.users) {
+          const contactIds = new Set(
+            contacts.map((c) => getId(c.contactUserId))
+          );
+          const filtered = response.users.filter(
+            (u) =>
+              getId(u._id) !== currentUserId && !contactIds.has(getId(u._id))
+          );
+          setAvailableUsers(filtered);
+        }
+      } catch (error) {
+        console.error('Error searching users:', error);
+        setAvailableUsers([]);
+      } finally {
+        setSearchingUsers(false);
+      }
+    },
+    [apiCall, contacts, currentUserId]
+  );
+
+  const handleAddContact = async (userId, userName) => {
+    try {
+      await apiCall('/messaging/contacts', 'POST', {
+        contactUserId: userId,
+        displayName: userName,
+        category: 'personal',
+      });
+      await loadContacts();
+      handleCreateDirectChat(userId);
+    } catch (error) {
+      console.error('Error adding contact:', error);
+    }
+  };
 
   useEffect(() => {
     activeCallRef.current = activeCall;
@@ -885,22 +934,65 @@ const Messaging = () => {
           {showNewChat ? (
             <div className="new-chat-panel">
               <h3>Start a New Chat</h3>
-              <p>Select a contact to message</p>
-              <div className="available-users">
-                {contacts
-                  .filter((contact) => !contact.isBlocked)
-                  .map((contact) => (
-                    <div
-                      key={contact._id}
-                      className="user-card"
-                      onClick={() => handleCreateDirectChat(contact.contactUserId._id)}
-                    >
-                      <span className="user-avatar">{contact.contactUserId?.avatar || 'U'}</span>
-                      <h4>{contact.contactUserId?.name}</h4>
-                      <p>{contact.category}</p>
-                    </div>
-                  ))}
+              <div className="new-chat-search">
+                <input
+                  type="text"
+                  placeholder="🔍 Search for users to add..."
+                  value={newChatSearchQuery}
+                  onChange={(e) => {
+                    setNewChatSearchQuery(e.target.value);
+                    searchUsers(e.target.value);
+                  }}
+                  className="search-input"
+                />
               </div>
+
+              {newChatSearchQuery.trim() ? (
+                <div className="search-results">
+                  {searchingUsers ? (
+                    <p className="loading">Searching...</p>
+                  ) : availableUsers.length > 0 ? (
+                    availableUsers.map((user) => (
+                      <div key={user._id} className="user-search-result">
+                        <span className="user-avatar">{user.avatar || '👤'}</span>
+                        <div className="user-info">
+                          <h4>{user.name}</h4>
+                          <p>{user.email}</p>
+                        </div>
+                        <button
+                          className="btn-add-contact"
+                          onClick={() => handleAddContact(user._id, user.name)}
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="no-results">No users found. Try another search.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="available-users">
+                  <p className="section-title">Your Contacts</p>
+                  {contacts.filter((c) => !c.isBlocked).length > 0 ? (
+                    contacts
+                      .filter((contact) => !contact.isBlocked)
+                      .map((contact) => (
+                        <div
+                          key={contact._id}
+                          className="user-card"
+                          onClick={() => handleCreateDirectChat(contact.contactUserId._id)}
+                        >
+                          <span className="user-avatar">{contact.contactUserId?.avatar || '👤'}</span>
+                          <h4>{contact.contactUserId?.name}</h4>
+                          <p>{contact.category}</p>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="no-contacts">No contacts yet. Search above to add one!</p>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <>
