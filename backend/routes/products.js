@@ -397,14 +397,6 @@ const createStoredProduct = async (payload) => {
   );
   await indexProduct(serializeProduct(product));
   return product;
-
-  if (useMemoryProducts()) {
-    return devProductStore.createProduct(payload);
-  }
-
-  const product = new Product(payload);
-  await product.save();
-  return product;
 };
 
 const updateStoredProduct = async (productId, updates) => {
@@ -414,12 +406,6 @@ const updateStoredProduct = async (productId, updates) => {
   );
   if (product) await indexProduct(serializeProduct(product));
   return product;
-
-  if (useMemoryProducts()) {
-    return devProductStore.updateProduct(productId, updates);
-  }
-
-  return Product.findByIdAndUpdate(productId, updates, { new: true, runValidators: true });
 };
 
 const parsePagination = (query = {}, defaultLimit = DEFAULT_LIMIT) => {

@@ -328,6 +328,7 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
           const response = await fetch(`/api/products/search?${params}`);
           const data = await response.json();
 
+          if (response.ok && data.products) {
             setEsSearchResults({
               products: data.products || [],
               facets: data.facets || {},
