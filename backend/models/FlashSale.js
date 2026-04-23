@@ -40,6 +40,18 @@ const FlashSaleSchema = new mongoose.Schema({
     default: 1
   },
   totalUsesLimit: Number,
+  // Track uses per user for abuse prevention
+  userUses: [{
+    userId: String,
+    uses: {
+      type: Number,
+      default: 0
+    },
+    usedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   products: [{
     productId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -48,6 +60,10 @@ const FlashSaleSchema = new mongoose.Schema({
     originalPrice: Number,
     salePrice: Number,
     stockLimit: Number,
+    reservedStock: {
+      type: Number,
+      default: 0
+    },
     uses: {
       type: Number,
       default: 0
@@ -57,14 +73,6 @@ const FlashSaleSchema = new mongoose.Schema({
   createdBy: {
     type: String, // admin/seller email
     required: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
 }, {
   timestamps: true
@@ -72,6 +80,8 @@ const FlashSaleSchema = new mongoose.Schema({
 
 FlashSaleSchema.index({ startTime: 1, endTime: 1 });
 FlashSaleSchema.index({ status: 1, startTime: 1 });
+FlashSaleSchema.index({ 'products.productId': 1 });
+FlashSaleSchema.index({ 'userUses.userId': 1 });
 
 module.exports = mongoose.model('FlashSale', FlashSaleSchema);
 

@@ -1,7 +1,7 @@
 {
   "short_name": "MalabarBazaar",
-  "name": "Malabar Bazaar - PWA Marketplace", 
-CD  "description": "Complete e-commerce with AI recs, wallet, flash sales",
+  "name": "Malabar Bazaar - PWA Marketplace",
+  "description": "Complete e-commerce with AI recs, wallet, flash sales",
   "icons": [
     {
       "src": "favicon.ico",
@@ -27,6 +27,8 @@ CD  "description": "Complete e-commerce with AI recs, wallet, flash sales",
   "background_color": "#ffffff",
   "orientation": "any",
   "categories": ["shopping", "ecommerce"],
+  "lang": "en",
+  "dir": "ltr",
   "shortcuts": [
     {
       "name": "GlobeMart",
@@ -42,5 +44,35 @@ CD  "description": "Complete e-commerce with AI recs, wallet, flash sales",
       "url": "/wallet",
       "icons": [{"src": "logo192.png", "sizes": "192x512"}]
     }
-  ]
+  ],
+"name_shortcuts": {
+    "ml": {
+      "name": "മലബാർ ബസാറ്",
+      "short_name": "ഷോപ്പ്"
+    },
+    "hi": {
+      "name": "मलाबार बाज़ार",
+      "short_name": "दुकान"
+    },
+    "ta": {
+      "name": "மலபார் பஜார்",
+      "short_name": "கடை"
+    },
+    "ar": {
+      "name": "سوق ملابار",
+      "short_name": "متجر"
+    },
+    "te": {
+      "name": "మలబార్ బజార్",
+      "short_name": "షాప్"
+    },
+    "kn": {
+      "name": "ಮಲಬಾರ್ ಬಜಾರ್",
+      "short_name": "ಶಾಪ್"
+    },
+    "bn": {
+      "name": "মালাবার বাজার",
+      "short_name": "দোকান"
+    }
+  }
 }

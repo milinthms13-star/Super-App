@@ -15,21 +15,57 @@ const ensureFile = async () => {
   }
 };
 
+const { getRedisClient } = require('../config/redis');
+const logger = require('./logger');
+
+const PRODUCT_LIST_CACHE_KEY = 'devProducts:list';
+const PRODUCT_CACHE_TTL = 60; // 1min
+
 const readProducts = async () => {
+  const client = getRedisClient();
+  if (client) {
+    try {
+      const cached = await client.get(PRODUCT_LIST_CACHE_KEY);
+      if (cached) {
+        logger.debug('devProductStore cache HIT');
+        return JSON.parse(cached);
+      }
+    } catch (cacheErr) {
+      logger.warn('Redis read failed:', cacheErr.message);
+    }
+  }
+
   await ensureFile();
   const raw = await fs.readFile(dataFilePath, 'utf8');
+  const products = Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : [];
 
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    return [];
+  if (client) {
+    try {
+      await client.setEx(PRODUCT_LIST_CACHE_KEY, PRODUCT_CACHE_TTL, JSON.stringify(products));
+    } catch (cacheErr) {
+      logger.warn('Redis write failed:', cacheErr.message);
+    }
+  }
+
+  return products;
+};
+
+const invalidateProductCache = async () => {
+  const client = getRedisClient();
+  if (client) {
+    try {
+      await client.del(PRODUCT_LIST_CACHE_KEY);
+      logger.debug('Product cache invalidated');
+    } catch (err) {
+      logger.warn('Cache invalidate failed:', err.message);
+    }
   }
 };
 
 const writeProducts = async (products) => {
   await ensureFile();
   await fs.writeFile(dataFilePath, JSON.stringify(products, null, 2), 'utf8');
+  await invalidateProductCache();
 };
 
 const createId = () => crypto.randomUUID();
@@ -76,8 +112,33 @@ const updateProduct = async (productId, updates) => {
 };
 
 const findProductById = async (productId) => {
+  const client = getRedisClient();
+  const cacheKey = `devProduct:${productId}`;
+  
+  if (client) {
+    try {
+      const cached = await client.get(cacheKey);
+      if (cached) {
+        logger.debug(`devProduct single cache HIT: ${productId}`);
+        return JSON.parse(cached);
+      }
+    } catch (err) {
+      logger.warn('Redis single read failed:', err.message);
+    }
+  }
+
   const products = await readProducts();
-  return products.find((product) => product._id === productId) || null;
+  const product = products.find((p) => p._id === productId) || null;
+
+  if (client && product) {
+    try {
+      await client.setEx(cacheKey, PRODUCT_CACHE_TTL, JSON.stringify(product));
+    } catch (err) {
+      logger.warn('Redis single write failed:', err.message);
+    }
+  }
+
+  return product;
 };
 
 module.exports = {

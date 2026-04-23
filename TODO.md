@@ -1,6 +1,12 @@
-# Local Market Menu Integration TODO
+# MalabarBazaar Build TODO
 
-## Steps:
-- [ ] 1. Update src/data/translations.js (add to launch.features & dashboard.moduleDescriptions)
-- [ ] 2. Update src/components/LaunchPage.js (add moduleMapping entry)
-- [ 
+## Approved Plan Steps:
+1. [ ] Install frontend dependencies if needed (npm install)
+2. [x] Run frontend production build (npm run build)
+3. [ ] Verify build output (check build/ dir)
+4. [ ] Backend: No build needed, ready to run
+5. [ ] Optional: Test serve build
+6. [ ] Complete task
+
+Updated after step 2 completion.
+

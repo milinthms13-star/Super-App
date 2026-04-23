@@ -29,6 +29,12 @@ app.use('/uploads', express.static('uploads'));
 // Connect Database
 connectDB();
 
+// Init Redis
+const { connectRedis } = require('./config/redis');
+connectRedis().catch((err) => {
+  logger.warn('Redis init failed (optional):', err.message);
+});
+
 // Health check
 app.get('/', (req, res) => {
   res.status(200).json({

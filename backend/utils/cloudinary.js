@@ -10,22 +10,29 @@ cloudinary.config({
 
 async function uploadToCloudinary(buffer, filename, folder = 'products', options = {}) {
   try {
-    const result = await cloudinary.uploader.upload_stream(
-      {
-        folder,
-        public_id: filename.replace(/\.[^/.]+$/, ""),
-        resource_type: 'image',
-        format: 'auto',
-        quality: 'auto:good',
-        ...options
-      },
-      (error, result) => {
-        if (error) throw error;
-        return result;
-      }
-    ).end(buffer);
+    const result = await new Promise((resolve, reject) => {
+      cloudinary.uploader.upload_stream(
+        {
+          folder,
+          public_id: filename.replace(/\.[^/.]+$/, ""),
+          resource_type: 'image',
+          categorization: 'google_tagging',
+          quality: 'auto:good',
+          format: 'auto',
+          ...options
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      ).end(buffer);
+    });
 
-    return result.secure_url;
+    return {
+      url: result.secure_url,
+      public_id: result.public_id,
+      variants: generateImageVariants(result.public_id)
+    };
   } catch (error) {
     logger.error('Cloudinary upload failed:', error);
     throw error;
@@ -35,31 +42,39 @@ async function uploadToCloudinary(buffer, filename, folder = 'products', options
 async function generateImageVariants(publicId) {
   try {
     const transformations = [
-      { width: 400, height: 400, crop: 'fill', quality: 85 },
-      { width: 800, height: 800, crop: 'fill', quality: 90 },
-      { width: 1200, height: 1200, crop: 'fill', quality: 90 }
+      { width: 300, height: 300, crop: 'fill', quality: 80, fetch_format: 'auto' },
+      { width: 400, height: 400, crop: 'fill', quality: 85, fetch_format: 'auto' },
+      { width: 600, height: 600, crop: 'fill', quality: 90, fetch_format: 'auto' },
+      { width: 800, height: 800, crop: 'fill', quality: 90, fetch_format: 'auto' },
+      { width: 1200, height: 1200, crop: 'fill', quality: 90, fetch_format: 'auto' }
     ];
 
-    return transformations.map(t => cloudinary.url(publicId, { 
-      transformation: t,
-      fetch_format: 'auto'
-    }));
+    return {
+      thumbnail: cloudinary.url(publicId, transformations[0]),
+      small: cloudinary.url(publicId, transformations[1]),
+      medium: cloudinary.url(publicId, transformations[2]),
+      large: cloudinary.url(publicId, transformations[3]),
+      original: cloudinary.url(publicId, transformations[4])
+    };
   } catch (error) {
     logger.error('Variant generation failed:', error);
-    return [];
+    return null;
   }
 }
 
-function getOptimizedUrl(imageUrl, width = 400) {
-  if (!imageUrl || typeof imageUrl !== 'string') return imageUrl;
+function getOptimizedUrl(publicIdOrUrl, width = 400, height = null) {
+  if (!publicIdOrUrl) return '';
   
-  return cloudinary.url(imageUrl, {
+  const options = {
     width,
-    height: Math.round(width * 1.0),
-    crop: 'fill',
     quality: 'auto:good',
+    crop: 'fill',
     fetch_format: 'auto'
-  });
+  };
+  
+  if (height) options.height = height;
+  
+  return cloudinary.url(publicIdOrUrl, options);
 }
 
 module.exports = {

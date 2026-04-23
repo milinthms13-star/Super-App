@@ -1,4 +1,5 @@
 const express = require('express');
+const { cacheProducts, cacheSearch } = require('../middleware/redisCache');
 const { indexProduct, deleteProduct, searchProducts } = require('../utils/elasticsearch');
 const Joi = require('joi');
 const crypto = require('crypto');
@@ -199,7 +200,7 @@ const normalizeInventoryBatch = (batch, existingBatch = {}) => ({
   isActive: batch.isActive !== false && existingBatch.isActive !== false,
 });
 
-const buildBatchSummary = (inventoryBatches = []) => {
+const buildBatchSummary = async (product, inventoryBatches = []) => {
   const now = new Date();
   const eligibleBatches = Array.isArray(inventoryBatches)
     ? inventoryBatches.filter(
@@ -212,7 +213,7 @@ const buildBatchSummary = (inventoryBatches = []) => {
   const totalStock = eligibleBatches.reduce((sum, batch) => sum + Number(batch.stock || 0), 0);
   const latestBatch = eligibleBatches[0] || null;
   const mrp = Number(latestBatch?.mrp || 0);
-  const sellingPrice = Number(latestBatch?.price || 0);
+  let sellingPrice = Number(latestBatch?.price || 0);
   const discountStartDate = latestBatch?.discountStartDate || null;
   const discountEndDate = latestBatch?.discountEndDate || null;
   const parsedDiscountStartDate = discountStartDate ? new Date(discountStartDate) : null;
@@ -239,9 +240,39 @@ const buildBatchSummary = (inventoryBatches = []) => {
     : 0;
   const isDiscountActive =
     savedDiscountAmount > 0 && !isBeforeDiscountStart && !isAfterDiscountEnd;
-  const price = isDiscountActive ? sellingPrice : mrp || sellingPrice;
-  const discountAmount = isDiscountActive ? savedDiscountAmount : 0;
-  const discountPercentage = isDiscountActive ? savedDiscountPercentage : 0;
+
+  // Flash sale override (check active sales for this product)
+  const redis = getRedisClient();
+  let flashSalePrice = null;
+  if (redis && product.sellerEmail) {
+    try {
+      const activeSalesKey = `flash:active:${product._id || product.id}`;
+      const activeSaleIds = await redis.get(activeSalesKey);
+      if (activeSaleIds) {
+        const saleIds = JSON.parse(activeSaleIds);
+        for (const saleId of saleIds.slice(0, 3)) { // Top 3 only
+          const saleKey = `flashsale:${saleId}`;
+          const saleData = await redis.get(saleKey);
+          if (saleData) {
+            const sale = JSON.parse(saleData);
+            const saleProduct = sale.products.find(p => 
+              String(p.productId._id) === String(product._id || product.id)
+            );
+            if (saleProduct && sale.status === 'active') {
+              flashSalePrice = Number(saleProduct.salePrice);
+              break;
+            }
+          }
+        }
+      }
+    } catch (cacheErr) {
+      logger.debug('Flash sale cache miss:', cacheErr.message);
+    }
+  }
+
+  const price = flashSalePrice || (isDiscountActive ? sellingPrice : mrp || sellingPrice);
+  const discountAmount = flashSalePrice ? mrp - flashSalePrice : (isDiscountActive ? savedDiscountAmount : 0);
+  const discountPercentage = flashSalePrice ? ((mrp - flashSalePrice) / mrp * 100) : (isDiscountActive ? savedDiscountPercentage : 0);
 
   return {
     totalStock,
@@ -260,11 +291,12 @@ const buildBatchSummary = (inventoryBatches = []) => {
     location: latestBatch?.location || '',
     returnAllowed: Boolean(latestBatch?.returnAllowed),
     returnWindowDays: Number(latestBatch?.returnWindowDays || 0),
+    flashSaleActive: !!flashSalePrice,
   };
 };
 
-const serializeProduct = (product) => {
-  const batchSummary = buildBatchSummary(product.inventoryBatches);
+const serializeProduct = async (product) => {
+  const batchSummary = await buildBatchSummary(product, product.inventoryBatches);
   const fallbackPrice = Number(product.price || 0);
   const fallbackMrp = Number(product.mrp || product.price || 0);
   const fallbackStock = Math.max(0, Number(product.stock || 0));
@@ -466,11 +498,16 @@ const applyBatchAggregation = (product) => {
   };
 };
 
-router.get('/', async (req, res) => {
+router.get('/', cacheProducts, async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query, 16);
     const starterProducts = await listStarterProducts();
-    const starterApprovedProducts = starterProducts
+    const starterApprovedProducts = await Promise.all(
+      starterProducts.map(async (product) => ({
+        ...product,
+        batchSummary: await buildBatchSummary(product, product.inventoryBatches || [])
+      }))
+    );
       .filter(
         (product) =>
           (product.approvalStatus || 'approved') === 'approved' &&
@@ -486,16 +523,16 @@ router.get('/', async (req, res) => {
         updatedAt: product.updatedAt || null,
       }));
     const storedProducts = await listStoredProducts();
-    const approvedProducts = [...starterApprovedProducts, ...storedProducts]
-      .filter(
+    const approvedProducts = await Promise.all(
+      [...starterApprovedProducts, ...storedProducts].filter(
         (product) =>
           (product.approvalStatus || 'pending') === 'approved' &&
           product.isActive !== false
-      )
-      .map(serializeProduct)
-      .filter((product) => Number(product.stock || 0) > 0)
+      ).map(async (product) => await serializeProduct(product))
+    );
+    const availableProducts = approvedProducts.filter((product) => Number(product.stock || 0) > 0)
       .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
-    const pagedProducts = approvedProducts.slice(skip, skip + limit);
+    const pagedProducts = availableProducts.slice(skip, skip + limit);
 
     return res.json({
       success: true,
@@ -515,18 +552,19 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/manage', authenticate, async (req, res) => {
+router.get('/manage', authenticate, cacheProducts, async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const products = await listStoredProducts();
     const visibleProducts = isAdmin(req)
       ? products
       : products.filter((product) => product.sellerEmail === req.user.email);
-    const pagedProducts = visibleProducts.slice(skip, skip + limit);
+    const serializedProducts = await Promise.all(visibleProducts.map(serializeProduct));
+    const pagedProducts = serializedProducts.slice(skip, skip + limit);
 
     return res.json({
       success: true,
-      products: pagedProducts.map(serializeProduct),
+      products: pagedProducts,
       pagination: buildPaginationMeta({
         page,
         limit,
@@ -968,7 +1006,7 @@ router.patch('/:productId/status', authenticate, async (req, res) => {
 });
 
 // Elasticsearch search endpoint
-router.get('/search', async (req, res) => {
+router.get('/search', cacheSearch, async (req, res) => {
   try {
     const { q: query = '', category, business, page = 1, limit = 20 } = req.query;
     const result = await searchProducts({ query, category, business, page: parseInt(page), limit: parseInt(limit) });

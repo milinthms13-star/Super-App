@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { I18nextProvider, useTranslation } from 'react-i18next';
+import i18n from './i18n';
 import axios from "axios";
 import { io } from "socket.io-client";
 import { AppProvider } from "./contexts/AppContext";
@@ -78,6 +80,32 @@ function App() {
   const [incomingSosAlert, setIncomingSosAlert] = useState(null);
   const [globeMartCategoryEndpointAvailable, setGlobeMartCategoryEndpointAvailable] =
     useState(true);
+
+  const AppWithI18n = () => {
+    const { t, i18n } = useTranslation();
+    
+    useEffect(() => {
+      i18n.changeLanguage(language);
+    }, [language, i18n]);
+
+    return (
+      <>
+        <AnnouncementBar language={language} />
+        <Navigation
+          onModuleChange={setCurrentModule}
+          onLogout={handleLogout}
+          loggedInUser={loggedInUser}
+          currentModule={currentModule}
+          t={t}
+        />
+        <main className="main-content">
+          {appDataError && <div className="app-loading">{t('error') || appDataError}</div>}
+          {renderModule()}
+        </main>
+        {/* ... rest of JSX ... */}
+      </>
+    );
+  };
 
   const syncAppDataFromResponse = useCallback((data = {}) => {
     setBusinessCategories(Array.isArray(data.businessCategories) ? data.businessCategories : []);

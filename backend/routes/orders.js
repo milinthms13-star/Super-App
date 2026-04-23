@@ -1,9 +1,4 @@
-const express = require('express');
-const Joi = require('joi');
-const crypto = require('crypto');
-const mongoose = require('mongoose');
-const { authenticate } = require('../middleware/auth');
-const { createStrictRateLimiter } = require('../middleware/rateLimiter');
+const express = require('express');\nconst { cacheOrders } = require('../middleware/redisCache');\nconst Joi = require('joi');\nconst crypto = require('crypto');\nconst mongoose = require('mongoose');\nconst { authenticate } = require('../middleware/auth');\nconst { createStrictRateLimiter } = require('../middleware/rateLimiter');
 const Product = require('../models/Product');
 const devProductStore = require('../utils/devProductStore');
 const devAppDataStore = require('../utils/devAppDataStore');
@@ -1172,8 +1167,7 @@ const countSellerOpenFulfillments = ({ orders = [], user, req }) =>
     )
   ).length;
 
-router.get('/mine', authenticate, async (req, res) => {
-  try {
+router.get('/mine', authenticate, cacheOrders, async (req, res) => {\n  try {
     const { page, limit, skip } = parsePagination(req.query);
     const orders = await orderStore.listOrdersByEmail(req.user.email);
     const pagedOrders = orders.slice(skip, skip + limit);
@@ -1199,8 +1193,7 @@ router.get('/mine', authenticate, async (req, res) => {
   }
 });
 
-router.get('/manage', authenticate, async (req, res) => {
-  try {
+router.get('/manage', authenticate, cacheOrders, async (req, res) => {\n  try {
     const { page, limit, skip } = parsePagination(req.query);
     if (isAdmin(req)) {
       const allOrders = await orderStore.listOrders();

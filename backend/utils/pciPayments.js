@@ -10,7 +10,7 @@ const razorpay = new Razorpay({
 // PCI Compliance: NEVER store card details
 // Use tokenization + 3DS everywhere
 
-async function createStripePaymentIntent(amountInPaise, metadata = {}) {
+
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountInPaise,
