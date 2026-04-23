@@ -3,6 +3,7 @@ import axios from "axios";
 import { API_BASE_URL } from "../utils/api";
 
 const AppContext = createContext();
+const STOREFRONT_STORAGE_KEY = "malabarbazaar-storefront";
 const DEFAULT_PRODUCTS_LIMIT = 12;
 const DEFAULT_MANAGED_PRODUCTS_LIMIT = 12;
 const DEFAULT_ORDERS_LIMIT = 10;
@@ -224,6 +225,17 @@ const buildNormalizedProduct = (product, options = {}) => {
     batchId: product.batchId || "",
     batchLabel: product.batchLabel || "",
     batchLocation: product.batchLocation || product.location || "",
+    imageVariants: product.imageVariants || null,
+    imageCdn: product.imageCdn || "",
+    rating: Number(product.rating ?? 0),
+    reviews: Number(product.reviews ?? product.reviewCount ?? 0),
+    views: Number(product.views ?? 0),
+    clicks: Number(product.clicks ?? 0),
+    unitsSold: Number(product.unitsSold ?? 0),
+    flashSale: product.flashSale || null,
+    flashSaleActive: Boolean(product.flashSaleActive || product.flashSale?.saleId),
+    flashSaleEndsAt: product.flashSaleEndsAt || product.flashSale?.endsAt || null,
+    flashSaleRemainingStock: Number(product.flashSaleRemainingStock ?? product.flashSale?.remainingStock ?? 0),
     returnAllowed: Boolean(product.returnAllowed),
     returnWindowDays: Number(product.returnWindowDays ?? DEFAULT_RETURN_WINDOW_DAYS) || 0,
     inventoryBatch: product.inventoryBatch || null,
@@ -257,9 +269,60 @@ const buildModuleDataState = (incomingModuleData = {}, currentData = EMPTY_MODUL
         : [],
 });
 
+const canUseBrowserStorage = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+const readPersistedStorefront = () => {
+  if (!canUseBrowserStorage()) {
+    return { cart: [], favorites: [], savedAddresses: [] };
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(STOREFRONT_STORAGE_KEY);
+    const parsedValue = rawValue ? JSON.parse(rawValue) : {};
+    return {
+      cart: Array.isArray(parsedValue?.cart) ? parsedValue.cart : [],
+      favorites: Array.isArray(parsedValue?.favorites) ? parsedValue.favorites : [],
+      savedAddresses: Array.isArray(parsedValue?.savedAddresses) ? parsedValue.savedAddresses : [],
+    };
+  } catch (error) {
+    return { cart: [], favorites: [], savedAddresses: [] };
+  }
+};
+
+const persistStorefrontSnapshot = (snapshot) => {
+  if (!canUseBrowserStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(
+    STOREFRONT_STORAGE_KEY,
+    JSON.stringify({
+      cart: Array.isArray(snapshot?.cart) ? snapshot.cart : [],
+      favorites: Array.isArray(snapshot?.favorites) ? snapshot.favorites : [],
+      savedAddresses: Array.isArray(snapshot?.savedAddresses) ? snapshot.savedAddresses : [],
+      updatedAt: new Date().toISOString(),
+    })
+  );
+};
+
+const syncStorefrontToServiceWorker = (cart) => {
+  if (typeof navigator === "undefined" || !navigator.serviceWorker?.controller) {
+    return;
+  }
+
+  navigator.serviceWorker.controller.postMessage({
+    type: "STORE_OFFLINE_CART",
+    payload: {
+      cart,
+      updatedAt: new Date().toISOString(),
+    },
+  });
+};
+
 axios.defaults.withCredentials = true;
 
 export const AppProvider = ({ children, loggedInUser, language = "en", authToken = "" }) => {
+  const persistedStorefrontState = useMemo(() => readPersistedStorefront(), []);
   const currentUser = useMemo(
     () =>
       loggedInUser || {
@@ -272,9 +335,9 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     [loggedInUser]
   );
 
-  const [cart, setCart] = useState([]);
-  const [favorites, setFavorites] = useState([]);
-  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [cart, setCart] = useState(() => persistedStorefrontState.cart || []);
+  const [favorites, setFavorites] = useState(() => persistedStorefrontState.favorites || []);
+  const [savedAddresses, setSavedAddresses] = useState(() => persistedStorefrontState.savedAddresses || []);
   const [orders, setOrders] = useState([]);
   const [sellerOrders, setSellerOrders] = useState([]);
   const [moduleData, setModuleData] = useState(EMPTY_MODULE_DATA);
@@ -316,14 +379,17 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
   );
 
   useEffect(() => {
-    setCart(Array.isArray(loggedInUser?.cart) ? loggedInUser.cart : []);
-    setFavorites(Array.isArray(loggedInUser?.favorites) ? loggedInUser.favorites : []);
-    setSavedAddresses(Array.isArray(loggedInUser?.savedAddresses) ? loggedInUser.savedAddresses : []);
+    const persistedState = readPersistedStorefront();
+    setCart(Array.isArray(loggedInUser?.cart) ? loggedInUser.cart : persistedState.cart || []);
+    setFavorites(Array.isArray(loggedInUser?.favorites) ? loggedInUser.favorites : persistedState.favorites || []);
+    setSavedAddresses(Array.isArray(loggedInUser?.savedAddresses) ? loggedInUser.savedAddresses : persistedState.savedAddresses || []);
     storefrontHydratedRef.current = true;
   }, [loggedInUser]);
 
   useEffect(() => {
     if (!storefrontHydratedRef.current || !currentUserId) {
+      persistStorefrontSnapshot({ cart, favorites, savedAddresses });
+      syncStorefrontToServiceWorker(cart);
       return;
     }
 
@@ -337,6 +403,9 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
       } catch (error) {
         // Keep the UI responsive even if persistence fails temporarily.
       }
+
+      persistStorefrontSnapshot({ cart, favorites, savedAddresses });
+      syncStorefrontToServiceWorker(cart);
     };
 
     if (storefrontPersistTimeoutRef.current) {
@@ -931,6 +1000,9 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
           productId: item.productId || item.id,
           batchId: item.batchId || "",
           batchLabel: item.batchLabel || "",
+          flashSaleId: item.flashSaleId || item.flashSale?.saleId || "",
+          flashReservationId: item.flashReservationId || "",
+          flashReservationExpiresAt: item.flashReservationExpiresAt || null,
           location: item.batchLocation || item.location || "",
           expiryDate: item.expiryDate || null,
           returnAllowed: Boolean(item.returnAllowed),
@@ -969,6 +1041,9 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
           productId: item.productId || item.id,
           batchId: item.batchId || "",
           batchLabel: item.batchLabel || "",
+          flashSaleId: item.flashSaleId || item.flashSale?.saleId || "",
+          flashReservationId: item.flashReservationId || "",
+          flashReservationExpiresAt: item.flashReservationExpiresAt || null,
           location: item.batchLocation || item.location || "",
           expiryDate: item.expiryDate || null,
           returnAllowed: Boolean(item.returnAllowed),
@@ -1334,6 +1409,82 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     return response.data;
   }, [authHeaders]);
 
+  const trackProductMetric = useCallback(async (productId, metric = "view") => {
+    if (!productId) {
+      return null;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/products/${encodeURIComponent(productId)}/track`,
+        { metric },
+        { headers: authHeaders }
+      );
+
+      return response.data?.product || null;
+    } catch (error) {
+      return null;
+    }
+  }, [authHeaders]);
+
+  const fetchActiveFlashSales = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/flashsales`, {
+        headers: authHeaders,
+      });
+
+      return response.data?.data || [];
+    } catch (error) {
+      return [];
+    }
+  }, [authHeaders]);
+
+  const reserveFlashSaleItems = useCallback(async (items = []) => {
+    const flashSaleItems = (items || []).filter((item) => item.flashSale?.saleId || item.flashSaleId);
+    if (flashSaleItems.length === 0) {
+      return items;
+    }
+
+    const response = await axios.post(
+      `${API_BASE_URL}/flashsales/reserve/bulk`,
+      {
+        items: flashSaleItems.map((item) => ({
+          productId: item.productId || item.id,
+          flashSaleId: item.flashSale?.saleId || item.flashSaleId,
+          quantity: Number(item.quantity || 1),
+        })),
+      },
+      { headers: authHeaders }
+    );
+
+    const reservations = Array.isArray(response.data?.data) ? response.data.data : [];
+    const reservationMap = new Map(
+      reservations.map((reservation) => [`${reservation.saleId}:${reservation.productId}`, reservation])
+    );
+
+    return (items || []).map((item) => {
+      const reservation = reservationMap.get(
+        `${item.flashSale?.saleId || item.flashSaleId}:${item.productId || item.id}`
+      );
+
+      if (!reservation) {
+        return item;
+      }
+
+      return {
+        ...item,
+        price: Number(reservation.salePrice || item.price || 0),
+        flashSaleId: reservation.saleId,
+        flashReservationId: reservation.reservation?.reservationId || item.flashReservationId || "",
+        flashReservationExpiresAt: reservation.reservation?.expiresAt || item.flashReservationExpiresAt || null,
+        flashSale: {
+          ...(item.flashSale || {}),
+          ...reservation,
+        },
+      };
+    });
+  }, [authHeaders]);
+
   return (
     <AppContext.Provider
       value={{
@@ -1379,6 +1530,7 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         deleteRealEstateListing,
         updateSavedAddresses,
         apiCall,
+        fetchActiveFlashSales,
         placeOrder,
         initializePayment,
         verifyRazorpayPayment,
@@ -1395,6 +1547,8 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         syncSellerOrderStatus,
         requestItemReturn,
         updateItemReturnRequestStatus,
+        reserveFlashSaleItems,
+        trackProductMetric,
         loadMoreMarketplaceProducts,
         loadMoreManagedProducts,
         loadMoreOrders,

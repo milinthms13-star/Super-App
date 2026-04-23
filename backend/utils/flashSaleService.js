@@ -163,6 +163,7 @@ const buildFlashSaleState = (sale, productEntry, { userId = '', reservation = nu
 
   return {
     saleId: toObjectIdString(sale._id),
+    productId: toObjectIdString(productEntry.productId),
     name: sale.name || 'Flash Sale',
     description: sale.description || '',
     startsAt: sale.startTime || null,

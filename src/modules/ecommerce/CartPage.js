@@ -109,6 +109,7 @@ const CartPage = ({ onContinueShopping }) => {
     savedAddresses,
     updateSavedAddresses,
     verifyRazorpayPayment,
+    reserveFlashSaleItems,
   } = useApp();
   const isSellerAccount =
     currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
@@ -126,6 +127,7 @@ const CartPage = ({ onContinueShopping }) => {
   });
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [orderConfirmData, setOrderConfirmData] = useState(null);
+  const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false);
 
   // Fetch delivery constants from backend (ensures frontend/backend consistency)
   useEffect(() => {
@@ -157,18 +159,41 @@ const CartPage = ({ onContinueShopping }) => {
     [cart.length, totalItems, deliveryConstants]
   );
   const grandTotal = totalAmount + deliveryFee;
-  const buildOrderPayload = () => ({
-    amount: `INR ${grandTotal}`,
-    subtotal: `INR ${totalAmount}`,
-    deliveryFee: `INR ${deliveryFee}`,
-    deliveryAddress: buildFormattedAddress(deliveryForm),
-    deliveryDetails: {
-      ...deliveryForm,
-      receiverPhone: deliveryForm.receiverPhone.trim(),
-      pincode: deliveryForm.pincode.trim(),
-    },
-    items: cart,
-  });
+  const buildOrderPayload = (items = cart) => {
+    const subtotalAmount = (items || []).reduce(
+      (total, item) => total + Number(item.price || 0) * Number(item.quantity || 1),
+      0
+    );
+    const itemCount = (items || []).reduce((total, item) => total + Number(item.quantity || 1), 0);
+    const computedDeliveryFee =
+      items.length > 0 ? deliveryConstants.baseFee + itemCount * deliveryConstants.perItemFee : 0;
+
+    return {
+      amount: `INR ${subtotalAmount + computedDeliveryFee}`,
+      subtotal: `INR ${subtotalAmount}`,
+      deliveryFee: `INR ${computedDeliveryFee}`,
+      deliveryAddress: buildFormattedAddress(deliveryForm),
+      deliveryDetails: {
+        ...deliveryForm,
+        receiverPhone: deliveryForm.receiverPhone.trim(),
+        pincode: deliveryForm.pincode.trim(),
+      },
+      items,
+    };
+  };
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const validateAddressFormForSave = () => {
     if (!deliveryForm.receiverPhone.trim()) {
@@ -421,16 +446,35 @@ const CartPage = ({ onContinueShopping }) => {
       return;
     }
 
+    if (isOffline) {
+      setCheckoutMessage("You're offline. Your cart is saved locally, but checkout needs a connection.");
+      return;
+    }
+
     const validationMessage = validateDeliveryForm();
     if (validationMessage) {
       setCheckoutMessage(validationMessage);
       return;
     }
 
+    let nextItems = cart;
+    if (cart.some((item) => item.flashSale?.saleId || item.flashSaleId)) {
+      setCheckoutMessage("Reserving flash sale stock for checkout...");
+      try {
+        nextItems = await reserveFlashSaleItems(cart);
+        setCheckoutMessage("Flash sale items reserved for 15 minutes.");
+      } catch (error) {
+        setCheckoutMessage(
+          error.response?.data?.error || error.response?.data?.message || error.message || "Unable to reserve flash sale stock."
+        );
+        return;
+      }
+    }
+
     // Show order confirmation dialog instead of directly processing payment
-    setOrderConfirmData(buildOrderPayload());
+    setOrderConfirmData(buildOrderPayload(nextItems));
     setShowOrderConfirm(true);
-  }, [isSellerAccount, validateDeliveryForm, buildOrderPayload, clearCheckoutStatus]);
+  }, [buildOrderPayload, cart, clearCheckoutStatus, isOffline, isSellerAccount, reserveFlashSaleItems, validateDeliveryForm]);
 
   const handleConfirmOrder = async (retryAttempt = 0) => {
     setShowOrderConfirm(false);
@@ -550,6 +594,12 @@ const CartPage = ({ onContinueShopping }) => {
       {isSellerAccount && (
         <div className="products-notice">
           Seller login is for business management only. Shopping and checkout are disabled.
+        </div>
+      )}
+
+      {!isSellerAccount && isOffline && (
+        <div className="products-notice">
+          Offline mode is active. Your cart is stored locally and will be available when you reconnect.
         </div>
       )}
 
@@ -786,6 +836,9 @@ const CartPage = ({ onContinueShopping }) => {
 
             <div className="payment-methods">
               <p className="payment-methods-title">Choose Payment Method</p>
+              <p className="delivery-fee-note">
+                Online payments use hosted tokenized checkout with 3D Secure when supported. Raw card details are not stored in GlobeMart.
+              </p>
               <div className="payment-method-grid">
                 <button
                   type="button"
@@ -805,7 +858,7 @@ const CartPage = ({ onContinueShopping }) => {
                   <strong>Razorpay</strong>
                   <span>
                     {paymentGateways.razorpay.enabled
-                      ? "UPI, cards, netbanking, wallets"
+                      ? "UPI, cards, netbanking, wallets, tokenized checkout"
                       : "Not configured"}
                   </span>
                 </button>
@@ -818,7 +871,7 @@ const CartPage = ({ onContinueShopping }) => {
                   <strong>Stripe</strong>
                   <span>
                     {paymentGateways.stripe.enabled
-                      ? "Hosted checkout for cards"
+                      ? "Hosted card checkout with 3DS support"
                       : "Not configured"}
                   </span>
                 </button>
@@ -908,6 +961,14 @@ const CartPage = ({ onContinueShopping }) => {
                       <div>
                         <strong>{item.name}</strong>
                         <p>Qty: {item.quantity} x INR {item.price}</p>
+                        {item.flashSaleId && (
+                          <p>
+                            Flash sale locked
+                            {item.flashReservationExpiresAt
+                              ? ` until ${new Date(item.flashReservationExpiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                              : ""}
+                          </p>
+                        )}
                       </div>
                       <p>INR {Number(item.price || 0) * Number(item.quantity || 1)}</p>
                     </div>
