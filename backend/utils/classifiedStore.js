@@ -295,8 +295,6 @@ const addClassifiedReport = async (listingId, payload) => {
   return serializeClassifiedAd(ad);
 };
 
-const User = require('../models/User');
-
 const updateUserTotalRating = async (sellerEmail) => {
   if (!useMongoClassifieds() || !sellerEmail) return;
 
