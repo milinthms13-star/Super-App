@@ -573,4 +573,35 @@ router.post('/authorize-gmail-callback', async (req, res) => {
   }
 });
 
+// ============ DIAGNOSTIC ENDPOINT ============
+// Check if email exists in database (for debugging sync issues)
+router.get('/debug/user/:email', authenticate, async (req, res, next) => {
+  try {
+    const { email } = req.params;
+    
+    // Only allow in development or for admins
+    if (process.env.NODE_ENV === 'production' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).lean();
+    
+    res.json({
+      email,
+      exists: !!user,
+      user: user ? {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        registrationType: user.registrationType,
+      } : null,
+      message: user ? 'User found in database' : 'User NOT found in database',
+    });
+  } catch (error) {
+    logger.error('Debug endpoint error:', error);
+    res.status(500).json({ message: 'Error checking user', error: error.message });
+  }
+});
+
 module.exports = router;
