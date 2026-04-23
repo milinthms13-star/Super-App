@@ -45,6 +45,7 @@ const Login = ({
   const [registrationForm, setRegistrationForm] = useState({
     fullName: "",
     phone: "",
+    username: "",
     location: "",
     accountType: "business",
     businessName: "",
@@ -65,6 +66,8 @@ const Login = ({
     registrationFeeAccepted: false,
     agreeToTerms: false,
   });
+  const [usernameCheckStatus, setUsernameCheckStatus] = useState(null); // 'available', 'taken', 'checking', null
+  const [usernameError, setUsernameError] = useState("");
   const normalizedEmail = email.trim().toLowerCase();
   const isAdminEmail = normalizedEmail === ADMIN_EMAIL;
   const isAdminFlow = registrationType === "admin" || (registrationType === "entrepreneur" && isAdminEmail);
@@ -91,11 +94,58 @@ const Login = ({
 
   const validatePhone = (value) => /^\+?[0-9]{10,15}$/.test(value.replace(/\s+/g, ""));
 
+  const validateUsername = (value) => /^[a-zA-Z0-9_-]+$/.test(value) && value.length >= 3 && value.length <= 20;
+
+  const checkUsernameAvailability = async (username) => {
+    if (!username || username.length < 3) {
+      setUsernameError("Username must be at least 3 characters");
+      setUsernameCheckStatus(null);
+      return false;
+    }
+
+    if (!validateUsername(username)) {
+      setUsernameError("Username can only contain letters, numbers, underscores, and dashes");
+      setUsernameCheckStatus(null);
+      return false;
+    }
+
+    try {
+      setUsernameCheckStatus("checking");
+      setUsernameError("");
+      
+      const response = await axios.get(`${API_BASE_URL}/auth/check-username?username=${encodeURIComponent(username)}`);
+
+      if (response.data.available) {
+        setUsernameCheckStatus("available");
+        setUsernameError("");
+        return true;
+      } else {
+        setUsernameCheckStatus("taken");
+        setUsernameError(response.data.message || "Username is already taken");
+        return false;
+      }
+    } catch (err) {
+      setUsernameCheckStatus(null);
+      setUsernameError("Error checking username availability");
+      return false;
+    }
+  };
+
   const updateRegistrationForm = (field, value) => {
     setRegistrationForm((currentForm) => ({
       ...currentForm,
       [field]: value,
     }));
+
+    // Check username availability if username field changes
+    if (field === "username" && (isUserRegistrationFlow || isEntrepreneurRegistrationFlow)) {
+      if (value) {
+        checkUsernameAvailability(value);
+      } else {
+        setUsernameCheckStatus(null);
+        setUsernameError("");
+      }
+    }
   };
 
   const clearMessages = () => {
@@ -163,6 +213,21 @@ const Login = ({
         return;
       }
 
+      if (!registrationForm.username.trim()) {
+        setError("Please enter a unique username");
+        return;
+      }
+
+      if (!validateUsername(registrationForm.username)) {
+        setError("Username can only contain letters, numbers, underscores, and dashes (3-20 characters)");
+        return;
+      }
+
+      if (usernameCheckStatus !== "available") {
+        setError("Please choose an available username");
+        return;
+      }
+
       if (!registrationForm.agreeToTerms) {
         setError("Please accept the terms to continue");
         return;
@@ -182,6 +247,21 @@ const Login = ({
 
       if (!validatePhone(registrationForm.phone)) {
         setError("Please enter a valid phone number");
+        return;
+      }
+
+      if (!registrationForm.username.trim()) {
+        setError("Please enter a unique username");
+        return;
+      }
+
+      if (!validateUsername(registrationForm.username)) {
+        setError("Username can only contain letters, numbers, underscores, and dashes (3-20 characters)");
+        return;
+      }
+
+      if (usernameCheckStatus !== "available") {
+        setError("Please choose an available username");
         return;
       }
 
@@ -330,6 +410,7 @@ const Login = ({
             ...response.data.user,
             name: registrationForm.fullName.trim() || response.data.user.name,
             phone: registrationForm.phone.trim(),
+            username: registrationForm.username.trim().toLowerCase(),
             location: registrationForm.location.trim(),
             accountType: registrationForm.accountType,
             businessName: registrationForm.businessName.trim(),
@@ -354,6 +435,7 @@ const Login = ({
               applicantName: registrationForm.fullName.trim(),
               businessName: registrationForm.businessName.trim(),
               email,
+              username: registrationForm.username.trim().toLowerCase(),
               registrationType,
               phone: registrationForm.phone.trim(),
               location: registrationForm.location.trim(),
@@ -383,6 +465,7 @@ const Login = ({
             ...response.data.user,
             name: registrationForm.fullName.trim() || response.data.user.name,
             phone: registrationForm.phone.trim(),
+            username: registrationForm.username.trim().toLowerCase(),
             role: "user",
             registrationType: "user",
           };
@@ -391,6 +474,7 @@ const Login = ({
             await onRegistrationSubmit({
               applicantName: registrationForm.fullName.trim(),
               email,
+              username: registrationForm.username.trim().toLowerCase(),
               phone: registrationForm.phone.trim(),
               registrationType: "user",
             });
@@ -610,6 +694,33 @@ const Login = ({
                   autoComplete="tel"
                 />
               </div>
+
+              <div className="form-group">
+                <label htmlFor="username">
+                  <span>Username (Unique Global)</span>
+                </label>
+                <input
+                  type="text"
+                  id="username"
+                  placeholder="Enter a unique username (3-20 characters)"
+                  value={registrationForm.username}
+                  onChange={(event) => updateRegistrationForm("username", event.target.value)}
+                  className="form-input"
+                  autoComplete="username"
+                />
+                {usernameCheckStatus === "checking" && (
+                  <p className="helper-text" style={{ color: "#FF9500" }}>Checking availability...</p>
+                )}
+                {usernameCheckStatus === "available" && (
+                  <p className="helper-text" style={{ color: "#4CAF50" }}>✓ Username is available</p>
+                )}
+                {usernameCheckStatus === "taken" && (
+                  <p className="helper-text" style={{ color: "#F44336" }}>✗ {usernameError}</p>
+                )}
+                {usernameError && usernameCheckStatus !== "taken" && usernameCheckStatus !== "available" && (
+                  <p className="helper-text" style={{ color: "#F44336" }}>{usernameError}</p>
+                )}
+              </div>
             </>
           )}
 
@@ -691,6 +802,33 @@ const Login = ({
                   className="form-input"
                   autoComplete="tel"
                 />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="business-username">
+                  <span>Username (Unique Global)</span>
+                </label>
+                <input
+                  type="text"
+                  id="business-username"
+                  placeholder="Enter a unique username (3-20 characters)"
+                  value={registrationForm.username}
+                  onChange={(event) => updateRegistrationForm("username", event.target.value)}
+                  className="form-input"
+                  autoComplete="username"
+                />
+                {usernameCheckStatus === "checking" && (
+                  <p className="helper-text" style={{ color: "#FF9500" }}>Checking availability...</p>
+                )}
+                {usernameCheckStatus === "available" && (
+                  <p className="helper-text" style={{ color: "#4CAF50" }}>✓ Username is available</p>
+                )}
+                {usernameCheckStatus === "taken" && (
+                  <p className="helper-text" style={{ color: "#F44336" }}>✗ {usernameError}</p>
+                )}
+                {usernameError && usernameCheckStatus !== "taken" && usernameCheckStatus !== "available" && (
+                  <p className="helper-text" style={{ color: "#F44336" }}>{usernameError}</p>
+                )}
               </div>
 
               <div className="form-group">

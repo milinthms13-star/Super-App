@@ -606,4 +606,45 @@ router.get('/debug/user/:email', authenticate, async (req, res, next) => {
   }
 });
 
+// Username availability check
+router.get('/check-username', async (req, res) => {
+  try {
+    const { username } = req.query;
+
+    if (!username || username.length < 3 || username.length > 20) {
+      return res.status(400).json({
+        success: false,
+        available: false,
+        message: 'Username must be between 3 and 20 characters',
+      });
+    }
+
+    // Username must be alphanumeric with optional underscores/dashes
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+      return res.status(400).json({
+        success: false,
+        available: false,
+        message: 'Username can only contain letters, numbers, underscores, and dashes',
+      });
+    }
+
+    const existingUser = await User.findOne({ username: username.toLowerCase() });
+
+    res.json({
+      success: true,
+      available: !existingUser,
+      username: username.toLowerCase(),
+      message: existingUser ? 'Username is already taken' : 'Username is available',
+    });
+  } catch (error) {
+    logger.error('Username check error:', error);
+    res.status(500).json({
+      success: false,
+      available: false,
+      message: 'Error checking username availability',
+      error: error.message,
+    });
+  }
+});
+
 module.exports = router;

@@ -63,6 +63,7 @@ app.use('/api/giftcards', require('./routes/giftcards'));
 app.use('/api/health', require('./routes/health'));
 app.use('/api/localmarket', require('./routes/localmarket'));
 app.use('/api/messaging', require('./routes/messaging'));
+app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/referralprogram', require('./routes/referralprogram'));

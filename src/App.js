@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { I18nextProvider, useTranslation } from 'react-i18next';
-import i18n from './i18n';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import i18n from "./i18n";
 import axios from "axios";
 import { io } from "socket.io-client";
 import { AppProvider } from "./contexts/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AnnouncementBar from "./components/AnnouncementBar";
-import Navigation from "./components/Navigation";
+import Layout from "./components/Layout";
 import LaunchPage from "./components/LaunchPage";
 import Login from "./components/Login";
 import Dashboard from "./modules/Dashboard";
@@ -50,13 +50,46 @@ const EMPTY_APP_DATA = {
   enabledModules: [],
 };
 
+const MODULE_PATHS = {
+  dashboard: "/dashboard",
+  "admin-dashboard": "/admin-dashboard",
+  ecommerce: "/ecommerce",
+  cart: "/cart",
+  orders: "/orders",
+  returns: "/returns",
+  messaging: "/messaging",
+  classifieds: "/classifieds",
+  realestate: "/realestate",
+  fooddelivery: "/fooddelivery",
+  localmarket: "/localmarket",
+  ridesharing: "/ridesharing",
+  matrimonial: "/matrimonial",
+  socialmedia: "/socialmedia",
+  reminderalert: "/reminderalert",
+  diary: "/diary",
+  sosalert: "/sosalert",
+  astrology: "/astrology",
+  support: "/support",
+};
+
+const ROUTABLE_MODULES = new Set(Object.keys(MODULE_PATHS));
+
+const getProtectedModuleFromPathname = (pathname = "") =>
+  String(pathname)
+    .split("/")
+    .filter(Boolean)[0] || "";
+
+const getPathForModule = (moduleId = "", fallbackPath = MODULE_PATHS.dashboard) =>
+  MODULE_PATHS[moduleId] || fallbackPath;
+
 axios.defaults.withCredentials = true;
 
-function App() {
+function AppShell() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [authToken, setAuthToken] = useState(() => getStoredAuthToken());
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState(null);
-  const [currentModule, setCurrentModule] = useState("dashboard");
   const [pendingModule, setPendingModule] = useState("");
   const [authChecked, setAuthChecked] = useState(false);
   const [registrationType, setRegistrationType] = useState("");
@@ -81,32 +114,22 @@ function App() {
   const [incomingSosAlert, setIncomingSosAlert] = useState(null);
   const [globeMartCategoryEndpointAvailable, setGlobeMartCategoryEndpointAvailable] =
     useState(true);
+  const isAdminUser =
+    loggedInUser?.role === "admin" || loggedInUser?.registrationType === "admin";
+  const defaultAuthenticatedPath = isAdminUser
+    ? MODULE_PATHS["admin-dashboard"]
+    : MODULE_PATHS.dashboard;
 
-  const AppWithI18n = () => {
-    const { t, i18n } = useTranslation();
-    
-    useEffect(() => {
-      i18n.changeLanguage(language);
-    }, [language, i18n]);
+  useEffect(() => {
+    i18n.changeLanguage(language);
+  }, [language]);
 
-    return (
-      <>
-        <AnnouncementBar language={language} />
-        <Navigation
-          onModuleChange={setCurrentModule}
-          onLogout={handleLogout}
-          loggedInUser={loggedInUser}
-          currentModule={currentModule}
-          t={t}
-        />
-        <main className="main-content">
-          {appDataError && <div className="app-loading">{t('error') || appDataError}</div>}
-          {renderModule()}
-        </main>
-        {/* ... rest of JSX ... */}
-      </>
-    );
-  };
+  const navigateToModule = useCallback(
+    (moduleId, options = {}) => {
+      navigate(getPathForModule(moduleId, defaultAuthenticatedPath), options);
+    },
+    [defaultAuthenticatedPath, navigate]
+  );
 
   const syncAppDataFromResponse = useCallback((data = {}) => {
     setBusinessCategories(Array.isArray(data.businessCategories) ? data.businessCategories : []);
@@ -206,7 +229,6 @@ function App() {
             setAuthToken("");
             setIsLoggedIn(false);
             setLoggedInUser(null);
-            setCurrentModule("dashboard");
             setAuthChecked(true);
             return;
           }
@@ -254,9 +276,6 @@ function App() {
           setLanguage(nextUser.preferences?.language || "en");
           setLoggedInUser(nextUser);
           setIsLoggedIn(true);
-          setCurrentModule(
-            restoredRegistrationType === "admin" ? "admin-dashboard" : "dashboard"
-          );
         } catch (authError) {
           if (authError.response?.status && authError.response.status !== 401) {
             setAppDataError(
@@ -267,7 +286,6 @@ function App() {
           }
           setIsLoggedIn(false);
           setLoggedInUser(null);
-          setCurrentModule("dashboard");
         }
       } catch (error) {
         setAppDataError(
@@ -358,23 +376,34 @@ function App() {
 
       setLanguage(nextUser.preferences?.language || "en");
       setLoggedInUser(nextUser);
+      setIsLoggedIn(true);
+
+      const currentRouteModule = getProtectedModuleFromPathname(location.pathname);
+      const currentPathIsProtected = ROUTABLE_MODULES.has(currentRouteModule);
+      const defaultPathForRole =
+        resolvedRegistrationType === "admin"
+          ? MODULE_PATHS["admin-dashboard"]
+          : MODULE_PATHS.dashboard;
 
       const nextModule =
         resolvedRegistrationType === "admin"
           ? "admin-dashboard"
           : pendingModule && enabledModules.includes(pendingModule)
             ? pendingModule
-            : "dashboard";
+            : currentPathIsProtected
+              ? currentRouteModule
+              : "dashboard";
 
-      setCurrentModule(nextModule);
       setPendingModule("");
-      setIsLoggedIn(true);
+      navigate(getPathForModule(nextModule, defaultPathForRole), { replace: true });
     },
     [
       enabledModules,
       fetchAdminAppData,
       fetchPublicAppData,
       authToken,
+      location.pathname,
+      navigate,
       pendingModule,
       registrationType,
       syncAppDataFromResponse,
@@ -392,16 +421,16 @@ function App() {
     delete axios.defaults.headers.common.Authorization;
     setIsLoggedIn(false);
     setLoggedInUser(null);
-    setCurrentModule("dashboard");
     setPendingModule("");
     setRegistrationType("");
     setLanguage("en");
+    navigate("/", { replace: true });
   };
 
   const handleOpenEmergencyModule = useCallback((nextModule) => {
     setIncomingSosAlert(null);
-    setCurrentModule(nextModule);
-  }, []);
+    navigateToModule(nextModule);
+  }, [navigateToModule]);
 
   const handleSelectRegistrationType = (type, targetModule = "") => {
     setRegistrationType(type);
@@ -453,60 +482,48 @@ function App() {
       return;
     }
 
-    const query = new URLSearchParams(window.location.search);
+    const query = new URLSearchParams(location.search);
     const gateway = query.get("gateway");
     const paymentState = query.get("payment");
 
     if (gateway === "stripe" && (paymentState === "success" || paymentState === "cancelled")) {
-      setCurrentModule("orders");
+      if (location.pathname !== MODULE_PATHS.orders) {
+        navigate(
+          {
+            pathname: MODULE_PATHS.orders,
+            search: location.search,
+          },
+          { replace: true }
+        );
+      }
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (!isLoggedIn) {
       return;
     }
 
-    const query = new URLSearchParams(window.location.search);
+    const query = new URLSearchParams(location.search);
     const requestedModule = String(query.get("module") || "").trim();
     if (!requestedModule) {
       return;
     }
 
-    const supportedModules = new Set([
-      "dashboard",
-      "ecommerce",
-      "cart",
-      "orders",
-      "returns",
-      "messaging",
-      "classifieds",
-      "realestate",
-      "fooddelivery",
-      "localmarket",
-      "ridesharing",
-      "matrimonial",
-      "socialmedia",
-      "reminderalert",
-      "diary",
-      "sosalert",
-      "astrology",
-      "support",
-    ]);
-
-    if (!supportedModules.has(requestedModule)) {
+    if (!ROUTABLE_MODULES.has(requestedModule)) {
       return;
     }
 
-    setCurrentModule(requestedModule);
     query.delete("module");
     const nextQuery = query.toString();
-    window.history.replaceState(
-      {},
-      document.title,
-      `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`
+    navigate(
+      {
+        pathname: getPathForModule(requestedModule, defaultAuthenticatedPath),
+        search: nextQuery ? `?${nextQuery}` : "",
+      },
+      { replace: true }
     );
-  }, [isLoggedIn]);
+  }, [defaultAuthenticatedPath, isLoggedIn, location.search, navigate]);
 
   const handleRegistrationSubmit = useCallback(
     async (application) => {
@@ -754,100 +771,108 @@ function App() {
     );
   }
 
-  const renderModule = () => {
-    switch (currentModule) {
-      case "admin-dashboard":
-        return (
-          <AdminDashboard
-            businessCategories={businessCategories}
-            globeMartCategories={globeMartCategories}
-            registrationApplications={registrationApplications}
-            onReviewRegistration={handleReviewRegistration}
-            onUpdateCategoryFee={handleUpdateCategoryFee}
-            onCreateGlobeMartCategory={handleCreateGlobeMartCategory}
-            onAddGlobeMartSubcategory={handleAddGlobeMartSubcategory}
-            enabledModules={enabledModules}
-            onToggleModule={handleToggleModule}
-          />
-        );
-      case "dashboard":
-        return (
-          <Dashboard
-            enabledModules={enabledModules}
-            customLinks={customLinks}
-            onModuleChange={setCurrentModule}
-          />
-        );
-      case "ecommerce":
-        return (
-          <Ecommerce
-            globeMartCategories={globeMartCategories}
-            onOpenOrders={() => setCurrentModule("orders")}
-            onOpenReturns={() => setCurrentModule("returns")}
-          />
-        );
-      case "cart":
-        return <CartPage onContinueShopping={() => setCurrentModule("ecommerce")} />;
-      case "orders":
-        return (
-          <OrdersPage
-            onContinueShopping={() => setCurrentModule("ecommerce")}
-            onOpenReturns={() => setCurrentModule("returns")}
-          />
-        );
-      case "returns":
-        return <ReturnsPage onContinueShopping={() => setCurrentModule("ecommerce")} />;
-      case "messaging":
-        return <Messaging />;
-      case "classifieds":
-        return <Classifieds />;
-      case "realestate":
-        return <RealEstate />;
-      case "fooddelivery":
-        return <FoodDelivery />;
-      case "localmarket":
-        return <LocalMarket />;
-      case "ridesharing":
-        return <RideSharing />;
-      case "matrimonial":
-        return <Matrimonial onProfileUpdate={handleProfileUpdate} />;
-      case "socialmedia":
-        return <SocialMedia />;
-      case "reminderalert":
-        return <ReminderAlert customLinks={customLinks} onCustomLinksChange={setCustomLinks} />;
-      case "diary":
-        return <Diary />;
-      case "sosalert":
-        return <SOSAlert />;
-      case "astrology":
-        return <AstrologyHome />;
-      case "support":
-        return <Support />;
-      default:
-        return (
-          <Dashboard
-            enabledModules={enabledModules}
-            customLinks={customLinks}
-            onModuleChange={setCurrentModule}
-          />
-        );
-    }
-  };
-
   return (
     <ErrorBoundary>
       <AppProvider loggedInUser={loggedInUser} language={language} authToken={authToken}>
-        <AnnouncementBar language={language} />
-        <Navigation
-          onModuleChange={setCurrentModule}
-          onLogout={handleLogout}
-          loggedInUser={loggedInUser}
-          currentModule={currentModule}
-        />
-        <main className="main-content">
-          {appDataError && <div className="app-loading">{appDataError}</div>}
-          {renderModule()}
-        </main>
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <Layout
+                loggedInUser={loggedInUser}
+                onLogout={handleLogout}
+                language={language}
+                onModuleChange={navigateToModule}
+                appDataError={appDataError}
+              />
+            }
+          >
+            <Route index element={<Navigate to={defaultAuthenticatedPath} replace />} />
+            <Route
+              path="dashboard"
+              element={
+                isAdminUser ? (
+                  <Navigate to={MODULE_PATHS["admin-dashboard"]} replace />
+                ) : (
+                  <Dashboard
+                    enabledModules={enabledModules}
+                    customLinks={customLinks}
+                    onModuleChange={navigateToModule}
+                  />
+                )
+              }
+            />
+            <Route
+              path="admin-dashboard"
+              element={
+                isAdminUser ? (
+                  <AdminDashboard
+                    businessCategories={businessCategories}
+                    globeMartCategories={globeMartCategories}
+                    registrationApplications={registrationApplications}
+                    onReviewRegistration={handleReviewRegistration}
+                    onUpdateCategoryFee={handleUpdateCategoryFee}
+                    onCreateGlobeMartCategory={handleCreateGlobeMartCategory}
+                    onAddGlobeMartSubcategory={handleAddGlobeMartSubcategory}
+                    enabledModules={enabledModules}
+                    onToggleModule={handleToggleModule}
+                  />
+                ) : (
+                  <Navigate to={MODULE_PATHS.dashboard} replace />
+                )
+              }
+            />
+            <Route
+              path="ecommerce"
+              element={
+                <Ecommerce
+                  globeMartCategories={globeMartCategories}
+                  onOpenOrders={() => navigateToModule("orders")}
+                  onOpenReturns={() => navigateToModule("returns")}
+                />
+              }
+            />
+            <Route
+              path="cart"
+              element={<CartPage onContinueShopping={() => navigateToModule("ecommerce")} />}
+            />
+            <Route
+              path="orders"
+              element={
+                <OrdersPage
+                  onContinueShopping={() => navigateToModule("ecommerce")}
+                  onOpenReturns={() => navigateToModule("returns")}
+                />
+              }
+            />
+            <Route
+              path="returns"
+              element={<ReturnsPage onContinueShopping={() => navigateToModule("ecommerce")} />}
+            />
+            <Route path="messaging" element={<Messaging />} />
+            <Route path="classifieds" element={<Classifieds />} />
+            <Route path="realestate" element={<RealEstate />} />
+            <Route path="fooddelivery" element={<FoodDelivery />} />
+            <Route path="localmarket" element={<LocalMarket />} />
+            <Route path="ridesharing" element={<RideSharing />} />
+            <Route
+              path="matrimonial"
+              element={<Matrimonial onProfileUpdate={handleProfileUpdate} />}
+            />
+            <Route path="socialmedia" element={<SocialMedia />} />
+            <Route
+              path="reminderalert"
+              element={
+                <ReminderAlert customLinks={customLinks} onCustomLinksChange={setCustomLinks} />
+              }
+            />
+            <Route path="diary" element={<Diary />} />
+            <Route path="sosalert" element={<SOSAlert />} />
+            <Route path="astrology" element={<AstrologyHome />} />
+            <Route path="support" element={<Support />} />
+            <Route path="*" element={<Navigate to={defaultAuthenticatedPath} replace />} />
+          </Route>
+        </Routes>
         {incomingSosAlert ? (
           <div className="emergency-call-overlay">
             <div className="emergency-call-modal">
@@ -890,6 +915,14 @@ function App() {
         ) : null}
       </AppProvider>
     </ErrorBoundary>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
   );
 }
 

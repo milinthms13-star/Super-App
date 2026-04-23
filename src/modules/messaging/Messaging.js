@@ -9,6 +9,7 @@ import CallWindow from './CallWindow';
 import AISmartReplies from './AISmartReplies';
 import FileUpload from './FileUpload';
 import NotificationBell from './NotificationBell';
+import InvitationPanel from './InvitationPanel';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
 
@@ -55,6 +56,8 @@ const Messaging = () => {
   const [newChatSearchQuery, setNewChatSearchQuery] = useState('');
   const [availableUsers, setAvailableUsers] = useState([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
+  const [pendingInvitations, setPendingInvitations] = useState([]);
+  const [loadingInvitations, setLoadingInvitations] = useState(false);
 
   const socketRef = useRef(null);
   const activeCallRef = useRef(null);
@@ -176,17 +179,66 @@ const Messaging = () => {
     [apiCall, contacts, currentUserId]
   );
 
-  const handleAddContact = async (userId, userName) => {
+  const handleAddContact = async (userId, userName, userEmail, userUsername) => {
     try {
-      await apiCall('/messaging/contacts', 'POST', {
-        contactUserId: userId,
-        displayName: userName,
-        category: 'personal',
+      const response = await apiCall('/invitations/send', 'POST', {
+        recipientIdentifierType: 'username',
+        recipientIdentifier: userUsername || userEmail,
+        message: `Hi ${userName}, let's connect on LinkUp!`,
+        module: 'messaging',
       });
-      await loadContacts();
-      handleCreateDirectChat(userId);
+
+      if (response.success) {
+        alert(`Invitation sent to ${userName}! They'll receive it and can accept to connect.`);
+        setNewChatSearchQuery('');
+        setAvailableUsers([]);
+      }
     } catch (error) {
-      console.error('Error adding contact:', error);
+      console.error('Error sending invitation:', error);
+      alert('Failed to send invitation');
+    }
+  };
+
+  const loadInvitations = useCallback(async () => {
+    try {
+      setLoadingInvitations(true);
+      const response = await apiCall('/invitations/pending', 'GET');
+      if (response?.invitations) {
+        setPendingInvitations(response.invitations);
+      }
+    } catch (error) {
+      console.error('Error loading invitations:', error);
+    } finally {
+      setLoadingInvitations(false);
+    }
+  }, [apiCall]);
+
+  const handleAcceptInvitation = async (invitationId) => {
+    try {
+      const response = await apiCall(`/invitations/${invitationId}/accept`, 'POST', {});
+      if (response.success) {
+        alert('Invitation accepted! You can now chat with them.');
+        await loadInvitations();
+        await loadContacts();
+      }
+    } catch (error) {
+      console.error('Error accepting invitation:', error);
+      alert('Failed to accept invitation');
+    }
+  };
+
+  const handleRejectInvitation = async (invitationId) => {
+    try {
+      const response = await apiCall(`/invitations/${invitationId}/reject`, 'POST', {
+        reason: 'User rejected the invitation',
+      });
+      if (response.success) {
+        alert('Invitation rejected.');
+        await loadInvitations();
+      }
+    } catch (error) {
+      console.error('Error rejecting invitation:', error);
+      alert('Failed to reject invitation');
     }
   };
 
@@ -202,7 +254,8 @@ const Messaging = () => {
     loadChats();
     loadContacts();
     loadNotifications();
-  }, [loadChats, loadContacts, loadNotifications]);
+    loadInvitations();
+  }, [loadChats, loadContacts, loadNotifications, loadInvitations]);
 
   useEffect(() => {
     if (selectedChat?._id) {
@@ -441,6 +494,67 @@ const Messaging = () => {
 
     newSocket.on('notification:received', (notification) => {
       setNotifications((prevNotifications) => [notification, ...prevNotifications]);
+    });
+
+    // Invitation listeners
+    newSocket.on('invitation:received', (invitation) => {
+      // Add to pending invitations
+      setPendingInvitations((prevInvitations) => {
+        const alreadyExists = prevInvitations.some((inv) => inv._id === invitation._id);
+        if (alreadyExists) {
+          return prevInvitations;
+        }
+        return [invitation, ...prevInvitations];
+      });
+
+      // Show notification
+      setNotifications((prevNotifications) => [{
+        type: 'invitation',
+        message: `New invitation from ${invitation.senderInfo?.name || 'a user'}`,
+        timestamp: new Date(),
+        invitationId: invitation._id,
+      }, ...prevNotifications]);
+    });
+
+    newSocket.on('invitation:accepted', (data) => {
+      const { invitationId, newContact } = data;
+
+      // Remove from pending invitations
+      setPendingInvitations((prevInvitations) =>
+        prevInvitations.filter((inv) => inv._id !== invitationId)
+      );
+
+      // Add to contacts
+      setContacts((prevContacts) => {
+        const alreadyExists = prevContacts.some((contact) => getId(contact) === getId(newContact._id));
+        if (alreadyExists) {
+          return prevContacts;
+        }
+        return [...prevContacts, newContact];
+      });
+
+      // Show notification
+      setNotifications((prevNotifications) => [{
+        type: 'invitation-accepted',
+        message: `${newContact.name || newContact.username} accepted your invitation`,
+        timestamp: new Date(),
+      }, ...prevNotifications]);
+    });
+
+    newSocket.on('invitation:rejected', (data) => {
+      const { invitationId, senderName } = data;
+
+      // Remove from pending invitations
+      setPendingInvitations((prevInvitations) =>
+        prevInvitations.filter((inv) => inv._id !== invitationId)
+      );
+
+      // Show notification
+      setNotifications((prevNotifications) => [{
+        type: 'invitation-rejected',
+        message: `${senderName || 'A user'} rejected your invitation`,
+        timestamp: new Date(),
+      }, ...prevNotifications]);
     });
 
     return () => {
@@ -900,6 +1014,12 @@ const Messaging = () => {
               >
                 Contacts
               </button>
+              <button
+                className={`tab-btn ${activeTab === 'invitations' ? 'active' : ''}`}
+                onClick={() => setActiveTab('invitations')}
+              >
+                📬 ({pendingInvitations.length})
+              </button>
             </div>
             <NotificationBell
               notifications={notifications}
@@ -926,6 +1046,15 @@ const Messaging = () => {
               onBlockContact={handleBlockContact}
               onUnblockContact={handleUnblockContact}
               searchQuery={searchQuery}
+            />
+          )}
+
+          {activeTab === 'invitations' && (
+            <InvitationPanel
+              invitations={pendingInvitations}
+              onAccept={handleAcceptInvitation}
+              onReject={handleRejectInvitation}
+              loading={loadingInvitations}
             />
           )}
         </div>
@@ -961,9 +1090,9 @@ const Messaging = () => {
                         </div>
                         <button
                           className="btn-add-contact"
-                          onClick={() => handleAddContact(user._id, user.name)}
+                          onClick={() => handleAddContact(user._id, user.name, user.email, user.username)}
                         >
-                          + Add
+                          + Invite
                         </button>
                       </div>
                     ))
