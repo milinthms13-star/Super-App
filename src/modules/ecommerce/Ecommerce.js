@@ -2548,76 +2548,75 @@ const Ecommerce = ({
       {!isEntrepreneur && (activeTab === "marketplace" || activeTab === "favorites") && (
         <div className="tab-content">
           <section>
-            <div className="section-heading shopper-heading">
-              <div>
-                <h3>{marketplaceView === "favorites" ? "Favorite Products" : "Approved Products"}</h3>
-                <p>
-                  {productsLoading
-                    ? "Refreshing GlobeMart..."
-                    : marketplaceView === "favorites"
-                      ? `${sortedProducts.length} saved product${sortedProducts.length === 1 ? "" : "s"}`
-                      : `${activeMarketplaceCount} products available right now.`}
-                </p>
-              </div>
-              {hasActiveMarketplaceFacets && (
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => {
-                    setMarketplaceSearch("");
-                    setSelectedCategory("All");
-                    setSelectedSubcategory("All");
-                    setSelectedSeller("All Businesses");
-                    setMarketplaceMinPrice("");
-                    setMarketplaceMaxPrice("");
-                    setMarketplaceMinRating("0");
-                    setMarketplaceInStockOnly(false);
-                    setMarketplaceSort("relevance");
-                  }}
-                >
-                  Clear filters
-                </button>
+          <div className="section-heading shopper-heading">
+            <div>
+              <h3>{marketplaceView === "favorites" ? "Favorite Products" : "Approved Products"}</h3>
+              <p>
+                {productsLoading
+                  ? "Refreshing GlobeMart..."
+                  : marketplaceView === "favorites"
+                    ? `${sortedProducts.length} saved product${sortedProducts.length === 1 ? "" : "s"}`
+                    : `${activeMarketplaceCount} products available right now.`}
+              </p>
+            </div>
+            {hasActiveMarketplaceFacets && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  setMarketplaceSearch("");
+                  setSelectedCategory("All");
+                  setSelectedSubcategory("All");
+                  setSelectedSeller("All Businesses");
+                  setMarketplaceMinPrice("");
+                  setMarketplaceMaxPrice("");
+                  setMarketplaceMinRating("0");
+                  setMarketplaceInStockOnly(false);
+                  setMarketplaceSort("relevance");
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
+          {sortedProducts.length === 0 || productsLoading ? (
+            <div className={sortedProducts.length === 0 && !productsLoading ? "seller-empty-state" : "products-loading"}>
+              {productsLoading ? (
+                <>
+                  <p className="loading-spinner">Loading products...</p>
+                  <p className="loading-hint">This may take a moment. Please wait.</p>
+                </>
+              ) : (
+                <>
+                  <h4>{marketplaceView === "favorites" ? "No favorites yet" : "No products found"}</h4>
+                  <p>
+                    {marketplaceView === "favorites"
+                      ? "Heart products to save them here for quick access later."
+                      : "Try a different search, category, or seller filter to find products."}
+                  </p>
+                </>
               )}
             </div>
-
-            {sortedProducts.length === 0 || productsLoading ? (
-              <div className={sortedProducts.length === 0 && !productsLoading ? "seller-empty-state" : "products-loading"}>
-                {productsLoading ? (
-                  <>
-                    <p className="loading-spinner">Loading products...</p>
-                    <p className="loading-hint">This may take a moment. Please wait.</p>
-                  </>
-                ) : (
-                  <>
-                    <h4>{marketplaceView === "favorites" ? "No favorites yet" : "No products found"}</h4>
-                    <p>
-                      {marketplaceView === "favorites"
-                        ? "Heart products to save them here for quick access later."
-                        : "Try a different search, category, or seller filter to find products."}
-                    </p>
-                  </>
-                )}
+          ) : (
+            <>
+              <div className="products-grid">
+                {sortedProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    onOpenQuickView={() => setQuickViewProduct(product)}
+                  />
+                ))}
               </div>
-            ) : (
-              <>
-                <div className="products-grid">
-                  {sortedProducts.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      onOpenQuickView={() => setQuickViewProduct(product)}
-                    />
-                  ))}
-                </div>
-                {marketplaceView !== "favorites" && marketplacePagination.hasNextPage && (
-                  <button type="button" className="btn btn-outline" onClick={loadMoreMarketplaceProducts}>
-                    Load more products
-                  </button>
-                )}
-              </>
-            )}
-          </section>
-        </div>
+              {marketplaceView !== "favorites" && marketplacePagination.hasNextPage && (
+                <button type="button" className="btn btn-outline" onClick={loadMoreMarketplaceProducts}>
+                  Load more products
+                </button>
+              )}
+            </>
+          )}
+        </section>
       )}
 
       {quickViewProduct && (
