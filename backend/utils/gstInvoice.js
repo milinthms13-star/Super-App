@@ -132,6 +132,7 @@ class GSTInvoicing {
     };
     return taxRates[productCategory.toLowerCase()] || 18;
   }
+}
 
 module.exports = GSTInvoicing;
 

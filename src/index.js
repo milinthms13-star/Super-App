@@ -5,11 +5,13 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { register, installAppPrompt } from './pwaConfig';
 
+/* global google */
 function initGoogleTranslate() {
   if (typeof google !== 'undefined' && google.translate) {
     // Widget already loaded
     return;
   }
+
   
   // Detect user language preference
   const savedLang = localStorage.getItem('googtrans_selected_lang');
