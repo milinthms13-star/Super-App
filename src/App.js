@@ -9,25 +9,6 @@ import AnnouncementBar from "./components/AnnouncementBar";
 import Layout from "./components/Layout";
 import LaunchPage from "./components/LaunchPage";
 import Login from "./components/Login";
-import Dashboard from "./modules/Dashboard";
-import AdminDashboard from "./modules/admin/AdminDashboard";
-import Ecommerce from "./modules/ecommerce/Ecommerce";
-import CartPage from "./modules/ecommerce/CartPage";
-import OrdersPage from "./modules/ecommerce/OrdersPage";
-import ReturnsPage from "./modules/ecommerce/ReturnsPage";
-import Messaging from "./modules/messaging/Messaging";
-import Classifieds from "./modules/classifieds/Classifieds";
-import RealEstate from "./modules/realestate/RealEstate";
-import FoodDelivery from "./modules/fooddelivery/FoodDelivery";
-import LocalMarket from "./modules/localmarket/LocalMarket";
-import RideSharing from "./modules/ridesharing/RideSharing";
-import Matrimonial from "./modules/matrimonial/Matrimonial";
-import SocialMedia from "./modules/socialmedia/SocialMedia";
-import ReminderAlert from "./modules/reminderalert/ReminderAlert";
-import SOSAlert from "./modules/sos/SOSAlert";
-import AstrologyHome from "./modules/astrology/AstrologyHome";
-import Support from "./modules/support/Support";
-import { Diary } from "./modules/personaldiary";
 import {
   CUSTOM_LINKS_STORAGE_KEY,
   sanitizeCustomLinks,
@@ -45,6 +26,28 @@ import {
 } from "./utils/moduleRoutes";
 import { API_BASE_URL, BACKEND_BASE_URL } from "./utils/api";
 import "./App.css";
+
+const Dashboard = React.lazy(() => import("./modules/Dashboard"));
+const AdminDashboard = React.lazy(() => import("./modules/admin/AdminDashboard"));
+const Ecommerce = React.lazy(() => import("./modules/ecommerce/Ecommerce"));
+const CartPage = React.lazy(() => import("./modules/ecommerce/CartPage"));
+const OrdersPage = React.lazy(() => import("./modules/ecommerce/OrdersPage"));
+const ReturnsPage = React.lazy(() => import("./modules/ecommerce/ReturnsPage"));
+const Messaging = React.lazy(() => import("./modules/messaging/Messaging"));
+const Classifieds = React.lazy(() => import("./modules/classifieds/Classifieds"));
+const RealEstate = React.lazy(() => import("./modules/realestate/RealEstate"));
+const FoodDelivery = React.lazy(() => import("./modules/fooddelivery/FoodDelivery"));
+const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket"));
+const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
+const Matrimonial = React.lazy(() => import("./modules/matrimonial/Matrimonial"));
+const SocialMedia = React.lazy(() => import("./modules/socialmedia/SocialMedia"));
+const ReminderAlert = React.lazy(() => import("./modules/reminderalert/ReminderAlert"));
+const SOSAlert = React.lazy(() => import("./modules/sos/SOSAlert"));
+const AstrologyHome = React.lazy(() => import("./modules/astrology/AstrologyHome"));
+const Support = React.lazy(() => import("./modules/support/Support"));
+const Diary = React.lazy(() =>
+  import("./modules/personaldiary").then((module) => ({ default: module.Diary }))
+);
 
 const SOCKET_BASE_URL = BACKEND_BASE_URL;
 
@@ -136,6 +139,30 @@ function AppShell() {
     return response.data.data || {};
   }, []);
 
+  const loadPublicAppData = useCallback(async () => {
+    try {
+      const publicData = await fetchPublicAppData();
+      syncAppDataFromResponse(publicData);
+      setAppDataError("");
+    } catch (error) {
+      setAppDataError(
+        error.response?.data?.message || "Backend data could not be loaded. Please start the API server."
+      );
+    }
+  }, [fetchPublicAppData, syncAppDataFromResponse]);
+
+  const loadAdminAppData = useCallback(async () => {
+    try {
+      const adminData = await fetchAdminAppData();
+      syncAppDataFromResponse(adminData);
+      setAppDataError("");
+    } catch (error) {
+      setAppDataError(
+        error.response?.data?.message || "Admin data could not be loaded from the backend."
+      );
+    }
+  }, [fetchAdminAppData, syncAppDataFromResponse]);
+
   useEffect(() => {
     if (authToken) {
       axios.defaults.headers.common.Authorization = `Bearer ${authToken}`;
@@ -187,93 +214,91 @@ function AppShell() {
   }, [authToken, isLoggedIn]);
 
   useEffect(() => {
-    const bootstrapApp = async () => {
+    let isActive = true;
+
+    const bootstrapAuth = async () => {
+      if (!authToken) {
+        if (isActive) {
+          setAuthChecked(true);
+        }
+        void loadPublicAppData();
+        return;
+      }
+
+      axios.defaults.headers.common.Authorization = `Bearer ${authToken}`;
+      void loadPublicAppData();
+
       try {
-        const publicData = await fetchPublicAppData();
-        syncAppDataFromResponse(publicData);
-        setAppDataError("");
+        const authResponse = await axios.get(`${API_BASE_URL}/auth/me`, {
+          validateStatus: (status) => status === 200 || status === 401,
+        });
 
-        try {
-          const authResponse = await axios.get(`${API_BASE_URL}/auth/me`, {
-            validateStatus: (status) => status === 200 || status === 401,
-          });
+        if (!isActive) {
+          return;
+        }
 
-          if (authResponse.status === 401) {
-            clearStoredAuthToken();
-            setAuthToken("");
-            setIsLoggedIn(false);
-            setLoggedInUser(null);
-            setAuthChecked(true);
-            return;
-          }
-
-          if (!authResponse.data?.success || !authResponse.data.user) {
-            setAuthChecked(true);
-            return;
-          }
-
-          const restoredRegistrationType = authResponse.data.user.registrationType || "user";
-          let nextAppData = publicData;
-
-          if (restoredRegistrationType === "admin") {
-            try {
-              nextAppData = await fetchAdminAppData();
-              syncAppDataFromResponse(nextAppData);
-            } catch (error) {
-              setAppDataError(
-                error.response?.data?.message || "Admin data could not be loaded from the backend."
-              );
-            }
-          }
-
-          const restoredAccount =
-            restoredRegistrationType === "entrepreneur"
-              ? (nextAppData.registeredAccounts || []).find(
-                  (account) =>
-                    account.email === authResponse.data.user.email?.trim().toLowerCase()
-                )
-              : null;
-
-          const nextUser = {
-            ...authResponse.data.user,
-            ...(restoredAccount || {}),
-            registrationType: restoredRegistrationType,
-            role:
-              restoredRegistrationType === "admin"
-                ? "admin"
-                : restoredRegistrationType === "user"
-                  ? "user"
-                  : "business",
-            avatar: restoredRegistrationType === "admin" ? "A" : authResponse.data.user.avatar,
-          };
-
-          setLanguage(nextUser.preferences?.language || "en");
-          setLoggedInUser(nextUser);
-          setIsLoggedIn(true);
-        } catch (authError) {
-          if (authError.response?.status && authError.response.status !== 401) {
-            setAppDataError(
-              authError.response?.data?.message ||
-                authError.message ||
-                "Backend data could not be loaded. Please start the API server."
-            );
-          }
+        if (authResponse.status === 401) {
+          clearStoredAuthToken();
+          setAuthToken("");
           setIsLoggedIn(false);
           setLoggedInUser(null);
+          setAuthChecked(true);
+          return;
         }
-      } catch (error) {
-        setAppDataError(
-          error.response?.data?.message ||
-            error.message ||
-            "Backend data could not be loaded. Please start the API server."
-        );
-      } finally {
+
+        if (!authResponse.data?.success || !authResponse.data.user) {
+          setAuthChecked(true);
+          return;
+        }
+
+        const restoredRegistrationType = authResponse.data.user.registrationType || "user";
+        const restoredAccount = null;
+
+        const nextUser = {
+          ...authResponse.data.user,
+          registrationType: restoredRegistrationType,
+          role:
+            restoredRegistrationType === "admin"
+              ? "admin"
+              : restoredRegistrationType === "user"
+                ? "user"
+                : "business",
+          avatar: restoredRegistrationType === "admin" ? "A" : authResponse.data.user.avatar,
+        };
+
+        setLanguage(nextUser.preferences?.language || "en");
+        setLoggedInUser(nextUser);
+        setIsLoggedIn(true);
+        setAuthChecked(true);
+
+        if (restoredRegistrationType === "admin") {
+          void loadAdminAppData();
+        }
+      } catch (authError) {
+        if (!isActive) {
+          return;
+        }
+
+        if (authError.response?.status && authError.response.status !== 401) {
+          setAppDataError(
+            authError.response?.data?.message ||
+              authError.message ||
+              "Backend data could not be loaded. Please start the API server."
+          );
+        }
+
+        setIsLoggedIn(false);
+        setLoggedInUser(null);
         setAuthChecked(true);
       }
     };
 
-    bootstrapApp();
-  }, [fetchAdminAppData, fetchPublicAppData, syncAppDataFromResponse]);
+    bootstrapAuth();
+
+    return () => {
+      isActive = false;
+    };
+  }, [authToken, loadAdminAppData, loadPublicAppData]);
 
   const handleLoginSuccess = useCallback(
     async (user, _token, activeRole) => {
@@ -748,83 +773,85 @@ function AppShell() {
   return (
     <ErrorBoundary>
       <AppProvider loggedInUser={loggedInUser} language={language} authToken={authToken}>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <Layout
-                loggedInUser={loggedInUser}
-                onLogout={handleLogout}
-                language={language}
-                appDataError={appDataError}
+        <React.Suspense fallback={<div className="app-loading">Loading app modules...</div>}>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <Layout
+                  loggedInUser={loggedInUser}
+                  onLogout={handleLogout}
+                  language={language}
+                  appDataError={appDataError}
+                />
+              }
+            >
+              <Route index element={<Navigate to={defaultAuthenticatedPath} replace />} />
+              <Route
+                path="dashboard"
+                element={
+                  isAdminUser ? (
+                    <Navigate to={MODULE_PATHS["admin-dashboard"]} replace />
+                  ) : (
+                    <Dashboard
+                      enabledModules={enabledModules}
+                      customLinks={customLinks}
+                    />
+                  )
+                }
               />
-            }
-          >
-            <Route index element={<Navigate to={defaultAuthenticatedPath} replace />} />
-            <Route
-              path="dashboard"
-              element={
-                isAdminUser ? (
-                  <Navigate to={MODULE_PATHS["admin-dashboard"]} replace />
-                ) : (
-                  <Dashboard
-                    enabledModules={enabledModules}
-                    customLinks={customLinks}
-                  />
-                )
-              }
-            />
-            <Route
-              path="admin-dashboard"
-              element={
-                isAdminUser ? (
-                  <AdminDashboard
-                    businessCategories={businessCategories}
-                    globeMartCategories={globeMartCategories}
-                    registrationApplications={registrationApplications}
-                    onReviewRegistration={handleReviewRegistration}
-                    onUpdateCategoryFee={handleUpdateCategoryFee}
-                    onCreateGlobeMartCategory={handleCreateGlobeMartCategory}
-                    onAddGlobeMartSubcategory={handleAddGlobeMartSubcategory}
-                    enabledModules={enabledModules}
-                    onToggleModule={handleToggleModule}
-                  />
-                ) : (
-                  <Navigate to={MODULE_PATHS.dashboard} replace />
-                )
-              }
-            />
-            <Route
-              path="ecommerce"
-              element={<Ecommerce globeMartCategories={globeMartCategories} />}
-            />
-            <Route path="cart" element={<CartPage />} />
-            <Route path="orders" element={<OrdersPage />} />
-            <Route path="returns" element={<ReturnsPage />} />
-            <Route path="messaging" element={<Messaging />} />
-            <Route path="classifieds" element={<Classifieds />} />
-            <Route path="realestate" element={<RealEstate />} />
-            <Route path="fooddelivery" element={<FoodDelivery />} />
-            <Route path="localmarket" element={<LocalMarket />} />
-            <Route path="ridesharing" element={<RideSharing />} />
-            <Route
-              path="matrimonial"
-              element={<Matrimonial onProfileUpdate={handleProfileUpdate} />}
-            />
-            <Route path="socialmedia" element={<SocialMedia />} />
-            <Route
-              path="reminderalert"
-              element={
-                <ReminderAlert customLinks={customLinks} onCustomLinksChange={setCustomLinks} />
-              }
-            />
-            <Route path="diary" element={<Diary />} />
-            <Route path="sosalert" element={<SOSAlert />} />
-            <Route path="astrology" element={<AstrologyHome />} />
-            <Route path="support" element={<Support />} />
-            <Route path="*" element={<Navigate to={defaultAuthenticatedPath} replace />} />
-          </Route>
-        </Routes>
+              <Route
+                path="admin-dashboard"
+                element={
+                  isAdminUser ? (
+                    <AdminDashboard
+                      businessCategories={businessCategories}
+                      globeMartCategories={globeMartCategories}
+                      registrationApplications={registrationApplications}
+                      onReviewRegistration={handleReviewRegistration}
+                      onUpdateCategoryFee={handleUpdateCategoryFee}
+                      onCreateGlobeMartCategory={handleCreateGlobeMartCategory}
+                      onAddGlobeMartSubcategory={handleAddGlobeMartSubcategory}
+                      enabledModules={enabledModules}
+                      onToggleModule={handleToggleModule}
+                    />
+                  ) : (
+                    <Navigate to={MODULE_PATHS.dashboard} replace />
+                  )
+                }
+              />
+              <Route
+                path="ecommerce"
+                element={<Ecommerce globeMartCategories={globeMartCategories} />}
+              />
+              <Route path="cart" element={<CartPage />} />
+              <Route path="orders" element={<OrdersPage />} />
+              <Route path="returns" element={<ReturnsPage />} />
+              <Route path="messaging" element={<Messaging />} />
+              <Route path="classifieds" element={<Classifieds />} />
+              <Route path="realestate" element={<RealEstate />} />
+              <Route path="fooddelivery" element={<FoodDelivery />} />
+              <Route path="localmarket" element={<LocalMarket />} />
+              <Route path="ridesharing" element={<RideSharing />} />
+              <Route
+                path="matrimonial"
+                element={<Matrimonial onProfileUpdate={handleProfileUpdate} />}
+              />
+              <Route path="socialmedia" element={<SocialMedia />} />
+              <Route
+                path="reminderalert"
+                element={
+                  <ReminderAlert customLinks={customLinks} onCustomLinksChange={setCustomLinks} />
+                }
+              />
+              <Route path="diary" element={<Diary />} />
+              <Route path="sosalert" element={<SOSAlert />} />
+              <Route path="astrology" element={<AstrologyHome />} />
+              <Route path="support" element={<Support />} />
+              <Route path="*" element={<Navigate to={defaultAuthenticatedPath} replace />} />
+            </Route>
+          </Routes>
+        </React.Suspense>
         {incomingSosAlert ? (
           <div className="emergency-call-overlay">
             <div className="emergency-call-modal">
