@@ -3,9 +3,20 @@ import PropTypes from "prop-types";
 import axios from "axios";
 import { useApp } from "../../contexts/AppContext";
 import { resolveProductImageSrc } from "./productImage";
-import { formatCurrency, isValidIndianPhone, isValidPincode } from "../../utils/ecommerceHelpers";
+import {
+  formatCountdown,
+  formatCurrency,
+  isValidGSTIN,
+  isValidIndianPhone,
+  isValidPincode,
+} from "../../utils/ecommerceHelpers";
 import { sanitizeText } from "../../utils/xssProtection";
 import { API_BASE_URL } from "../../utils/api";
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  showServiceWorkerNotification,
+} from "../../pwaConfig";
 import "../../styles/Ecommerce.css";
 
 const PINCODE_LENGTH = 6;
@@ -24,6 +35,7 @@ const DEFAULT_DELIVERY_FORM = {
   district: "",
   houseName: "",
   addressLine: "",
+  gstin: "",
 };
 
 const buildFormattedAddress = (deliveryForm) =>
@@ -100,6 +112,7 @@ const CartPage = ({ onContinueShopping }) => {
     cart,
     currentUser,
     paymentGateways,
+    paymentSecurityConfig,
     checkoutStatus,
     clearCheckoutStatus,
     removeFromCart,
@@ -128,6 +141,10 @@ const CartPage = ({ onContinueShopping }) => {
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [orderConfirmData, setOrderConfirmData] = useState(null);
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false);
+  const [notificationPermission, setNotificationPermission] = useState(() =>
+    getNotificationPermission()
+  );
+  const [liveNow, setLiveNow] = useState(() => Date.now());
 
   // Fetch delivery constants from backend (ensures frontend/backend consistency)
   useEffect(() => {

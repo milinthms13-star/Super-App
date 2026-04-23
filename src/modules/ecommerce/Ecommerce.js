@@ -544,9 +544,9 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
       sellers: Array.from(sellerCounts.entries()).map(([seller, count]) => ({ seller, count })),
       categories: Array.from(categoryCounts.entries()).map(([category, count]) => ({ category, count })),
       ratings: [
-        { key: "4_up", label: "4.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 4).length },
-        { key: "3_up", label: "3.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 3).length },
-        { key: "2_up", label: "2.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 2).length },
+        { key: "4_up", value: 4, label: "4.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 4).length },
+        { key: "3_up", value: 3, label: "3.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 3).length },
+        { key: "2_up", value: 2, label: "2.0 & up", count: sourceProducts.filter((product) => Number(product.rating || 0) >= 2).length },
       ],
       priceRanges: [
         { key: "under_500", label: "Under INR 500", count: sourceProducts.filter((product) => parseMarketplacePrice(product.price) < 500).length },
@@ -556,6 +556,15 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
       ],
     };
   }, [baseMarketplaceResults]);
+  const hasActiveMarketplaceFacets =
+    selectedCategory !== "All" ||
+    selectedSubcategory !== "All" ||
+    selectedSeller !== "All Businesses" ||
+    Boolean(marketplaceSearch.trim()) ||
+    Boolean(marketplaceMinPrice) ||
+    Boolean(marketplaceMaxPrice) ||
+    Number(marketplaceMinRating || 0) > 0 ||
+    marketplaceInStockOnly;
 
   const sortedProducts = useMemo(() => {
     const products = [...filteredProducts];
@@ -1566,20 +1575,20 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
           </div>
 
           <div className="marketplace-controls">
-    <label className="seller-filter marketplace-filter-card">
-      <span className="marketplace-filter-label">Search products</span>
-      <div className="es-search-container">
-        <input
-          type="search"
-          value={marketplaceSearch}
-          onChange={(event) => setMarketplaceSearch(event.target.value)}
-          placeholder="Search by product, category, description, or business"
-          className={esSearchResults.loading ? 'loading' : ''}
-        />
-        {esSearchResults.loading && <span className="search-spinner">🔍</span>}
-        {esSearchFallback && <span className="search-fallback">Fallback</span>}
-      </div>
-    </label>
+            <label className="seller-filter marketplace-filter-card">
+              <span className="marketplace-filter-label">Search products</span>
+              <div className="es-search-container">
+                <input
+                  type="search"
+                  value={marketplaceSearch}
+                  onChange={(event) => setMarketplaceSearch(event.target.value)}
+                  placeholder="Search by product, category, description, or business"
+                  className={esSearchResults.loading ? "loading" : ""}
+                />
+                {esSearchResults.loading && <span className="search-spinner">🔍</span>}
+                {esSearchFallback && <span className="search-fallback">Fallback</span>}
+              </div>
+            </label>
 
             <label className="seller-filter marketplace-filter-card">
               <span className="marketplace-filter-label">Sort by</span>
@@ -1591,6 +1600,70 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
                 <option value="rating">Top Rated</option>
               </select>
             </label>
+
+            <div className="seller-filter marketplace-filter-card">
+              <span className="marketplace-filter-label">Price range</span>
+              <div className="marketplace-price-range">
+                <input
+                  type="number"
+                  min="0"
+                  value={marketplaceMinPrice}
+                  onChange={(event) => setMarketplaceMinPrice(event.target.value)}
+                  placeholder="Min INR"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  value={marketplaceMaxPrice}
+                  onChange={(event) => setMarketplaceMaxPrice(event.target.value)}
+                  placeholder="Max INR"
+                />
+              </div>
+            </div>
+
+            <label className="seller-filter marketplace-filter-card">
+              <span className="marketplace-filter-label">Minimum rating</span>
+              <select
+                value={marketplaceMinRating}
+                onChange={(event) => setMarketplaceMinRating(event.target.value)}
+              >
+                <option value="0">All ratings</option>
+                <option value="4">4.0 and above</option>
+                <option value="3">3.0 and above</option>
+                <option value="2">2.0 and above</option>
+              </select>
+            </label>
+
+            <div className="seller-filter marketplace-filter-card marketplace-toggle-card">
+              <span className="marketplace-filter-label">Stock and alerts</span>
+              <label className="marketplace-checkbox">
+                <input
+                  type="checkbox"
+                  checked={marketplaceInStockOnly}
+                  onChange={(event) => setMarketplaceInStockOnly(event.target.checked)}
+                />
+                <span>Show only in-stock items</span>
+              </label>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={async () => {
+                  const permission = await requestNotificationPermission();
+                  setNotificationPermission(permission);
+
+                  if (permission === "granted") {
+                    showServiceWorkerNotification({
+                      title: "Flash sale alerts enabled",
+                      body: "You will be notified when active deals are close to ending.",
+                      tag: "flash-alert-enabled",
+                      data: { url: "/?source=pwa&module=ecommerce" },
+                    });
+                  }
+                }}
+              >
+                {notificationPermission === "granted" ? "Alerts Enabled" : "Enable Alerts"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1606,6 +1679,11 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
                   onClick={() => setSelectedCategory(category)}
                 >
                   {category}
+                  {category !== "All" && (
+                    <small className="facet-pill">
+                      {marketplaceFacetSummary.categories.find((entry) => entry.category === category)?.count || 0}
+                    </small>
+                  )}
                 </button>
               ))}
             </div>
@@ -1622,6 +1700,11 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
                   onClick={() => setSelectedSeller(seller)}
                 >
                   {seller}
+                  {seller !== "All Businesses" && (
+                    <small className="facet-pill">
+                      {marketplaceFacetSummary.sellers.find((entry) => entry.seller === seller)?.count || 0}
+                    </small>
+                  )}
                 </button>
               ))}
             </div>
@@ -1655,6 +1738,71 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
               ))}
             </select>
           </label>
+
+          <div className="marketplace-filter-card">
+            <span className="marketplace-filter-label">Rating facets</span>
+            <div className="category-filters">
+              {marketplaceFacetSummary.ratings.map((rating) => (
+                <button
+                  key={rating.key}
+                  type="button"
+                  className={`filter-btn ${Number(marketplaceMinRating || 0) === rating.value ? "active" : ""}`}
+                  onClick={() => setMarketplaceMinRating(String(rating.value))}
+                >
+                  {rating.label}
+                  <small className="facet-pill">{rating.count}</small>
+                </button>
+              ))}
+              <button
+                type="button"
+                className={`filter-btn ${marketplaceMinRating === "0" ? "active" : ""}`}
+                onClick={() => setMarketplaceMinRating("0")}
+              >
+                All
+              </button>
+            </div>
+          </div>
+
+          <div className="marketplace-filter-card">
+            <span className="marketplace-filter-label">Price facets</span>
+            <div className="category-filters">
+              {marketplaceFacetSummary.priceRanges.map((range) => (
+                <button
+                  key={range.key}
+                  type="button"
+                  className="filter-btn"
+                  onClick={() => {
+                    if (range.key === "under_500") {
+                      setMarketplaceMinPrice("");
+                      setMarketplaceMaxPrice("500");
+                    } else if (range.key === "500_to_1000") {
+                      setMarketplaceMinPrice("500");
+                      setMarketplaceMaxPrice("1000");
+                    } else if (range.key === "1000_to_2500") {
+                      setMarketplaceMinPrice("1000");
+                      setMarketplaceMaxPrice("2500");
+                    } else {
+                      setMarketplaceMinPrice("2500");
+                      setMarketplaceMaxPrice("");
+                    }
+                  }}
+                >
+                  {range.label}
+                  <small className="facet-pill">{range.count}</small>
+                </button>
+              ))}
+              <button
+                type="button"
+                className="filter-btn"
+                onClick={() => {
+                  setMarketplaceMinPrice("");
+                  setMarketplaceMaxPrice("");
+                }}
+              >
+                Reset price
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2302,14 +2450,35 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
       {!isEntrepreneur && (
         <section>
           <div className="section-heading shopper-heading">
-            <h3>{marketplaceView === "favorites" ? "Favorite Products" : "Approved Products"}</h3>
-            <p>
-              {productsLoading
-                ? "Refreshing GlobeMart..."
-                : marketplaceView === "favorites"
-                  ? `${sortedProducts.length} saved product${sortedProducts.length === 1 ? "" : "s"}`
-                  : `${marketplacePagination.totalItems || sortedProducts.length} products available right now.`}
-            </p>
+            <div>
+              <h3>{marketplaceView === "favorites" ? "Favorite Products" : "Approved Products"}</h3>
+              <p>
+                {productsLoading
+                  ? "Refreshing GlobeMart..."
+                  : marketplaceView === "favorites"
+                    ? `${sortedProducts.length} saved product${sortedProducts.length === 1 ? "" : "s"}`
+                    : `${activeMarketplaceCount} products available right now.`}
+              </p>
+            </div>
+            {hasActiveMarketplaceFacets && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  setMarketplaceSearch("");
+                  setSelectedCategory("All");
+                  setSelectedSubcategory("All");
+                  setSelectedSeller("All Businesses");
+                  setMarketplaceMinPrice("");
+                  setMarketplaceMaxPrice("");
+                  setMarketplaceMinRating("0");
+                  setMarketplaceInStockOnly(false);
+                  setMarketplaceSort("relevance");
+                }}
+              >
+                Clear filters
+              </button>
+            )}
           </div>
 
           {sortedProducts.length === 0 || productsLoading ? (
@@ -2364,14 +2533,22 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
               className="quick-view-close"
               onClick={() => setQuickViewProduct(null)}
               aria-label="Close quick view"
-            >
-              �
-            </button>
+              >
+                �
+              </button>
             <div className="quick-view-content">
               <div className="quick-view-image">
-                {resolveProductImageSrc(quickViewProduct.image) ? (
+                {resolveProductImageSrc(
+                  quickViewProduct.image,
+                  quickViewProduct.imageVariants,
+                  "hero"
+                ) ? (
                   <img
-                    src={resolveProductImageSrc(quickViewProduct.image)}
+                    src={resolveProductImageSrc(
+                      quickViewProduct.image,
+                      quickViewProduct.imageVariants,
+                      "hero"
+                    )}
                     alt={quickViewProduct.name}
                     loading="lazy"
                   />
@@ -2413,6 +2590,30 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
                     </div>
                   )}
                 </div>
+                {quickViewProduct.flashSaleActive && (
+                  <div className="quick-view-flash-meta">
+                    <span className="product-flash-badge">Flash Sale Live</span>
+                    <p className="product-flash-detail">
+                      Ends in{" "}
+                      {formatCountdown(
+                        Math.max(
+                          0,
+                          new Date(
+                            quickViewProduct.flashSaleEndsAt || quickViewProduct.flashSale?.endsAt || liveNow
+                          ).getTime() - liveNow
+                        )
+                      )}
+                    </p>
+                    <p className="product-flash-reserved">
+                      {quickViewProduct.flashSale?.reservation?.expiresAt
+                        ? `Reserved until ${new Date(quickViewProduct.flashSale.reservation.expiresAt).toLocaleTimeString("en-IN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}`
+                        : `${quickViewProduct.flashSaleRemainingStock || 0} flash deal(s) left`}
+                    </p>
+                  </div>
+                )}
                 <div className="quick-view-actions">
                   <button
                     type="button"
