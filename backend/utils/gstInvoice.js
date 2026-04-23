@@ -3,136 +3,182 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 
-class GSTInvoicing {
-  static async generateGSTInvoice(order, customerGST = null) {
-    try {
-      const doc = new PDFDocument({ margin: 50 });
-      const filename = `invoice-${order.id}-${Date.now()}.pdf`;
-      const filepath = path.join(__dirname, '../invoices', filename);
-      
-      // Ensure invoices dir
-      if (!fs.existsSync(path.dirname(filepath))) {
-        fs.mkdirSync(path.dirname(filepath), { recursive: true });
-      }
+const INVOICE_DIR = path.join(__dirname, '..', 'invoices');
 
-      // Header
+const parseAmount = (value) => {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  const numericValue = Number(String(value || '').replace(/[^0-9.]/g, ''));
+  return Number.isFinite(numericValue) ? numericValue : 0;
+};
+
+const formatInr = (value) => `INR ${parseAmount(value).toFixed(2)}`;
+
+const ensureInvoiceDirectory = () => {
+  if (!fs.existsSync(INVOICE_DIR)) {
+    fs.mkdirSync(INVOICE_DIR, { recursive: true });
+  }
+};
+
+const getTaxRate = (category = 'default') => {
+  const normalizedCategory = String(category || '').trim().toLowerCase();
+  const taxRates = {
+    electronics: 18,
+    apparel: 12,
+    food: 5,
+    grocery: 5,
+    beauty: 18,
+    default: 18,
+  };
+
+  return taxRates[normalizedCategory] || taxRates.default;
+};
+
+const validateGSTIN = (gstin = '') => /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i.test(String(gstin || '').trim());
+
+const buildInvoiceRows = (order = {}) => {
+  const items = Array.isArray(order.items) ? order.items : [];
+
+  return items.map((item) => {
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const rate = parseAmount(item.price);
+    const taxableValue = quantity * rate;
+    const taxRate = getTaxRate(item.category);
+    const gstAmount = (taxableValue * taxRate) / 100;
+
+    return {
+      name: item.name || 'Product',
+      hsn: item.category || 'NA',
+      quantity,
+      rate,
+      taxableValue,
+      taxRate,
+      gstAmount,
+      total: taxableValue + gstAmount,
+    };
+  });
+};
+
+const generateGSTInvoice = async (order, options = {}) => {
+  try {
+    ensureInvoiceDirectory();
+
+    const invoiceId = options.invoiceId || `INV-${String(order.id || order._id || Date.now()).slice(-8).toUpperCase()}`;
+    const filename = `${invoiceId}.pdf`;
+    const filePath = path.join(INVOICE_DIR, filename);
+    const rows = buildInvoiceRows(order);
+    const subtotal = rows.reduce((sum, row) => sum + row.taxableValue, 0);
+    const totalTax = rows.reduce((sum, row) => sum + row.gstAmount, 0);
+    const grandTotal = parseAmount(order.amount || subtotal + totalTax);
+    const sellerFulfillment = Array.isArray(order.sellerFulfillments) ? order.sellerFulfillments[0] || {} : {};
+    const customerGSTIN = String(options.customerGSTIN || '').trim();
+
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+
+    await new Promise((resolve, reject) => {
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
       doc.fontSize(20).text('GST TAX INVOICE', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.fontSize(10).text(`Invoice ID: ${invoiceId}`, { align: 'right' });
+      doc.text(`Invoice Date: ${new Date().toLocaleDateString('en-IN')}`, { align: 'right' });
       doc.moveDown();
-      
-      // Seller details
-      doc.fontSize(12).text('Seller:', 50, 100);
-      const sellerFulfillment = order.sellerFulfillments[0];
-      doc.text(`${sellerFulfillment.sellerName || 'Seller'}`, 150, 100);
-      doc.text(`${sellerFulfillment.businessName || 'Business'}`, 150, 120);
-      doc.text('GSTIN: 32ABCDE1234F1Z5', 150, 140); // Replace with dynamic
-      
-      // Buyer details
-      doc.text('Buyer:', 400, 100);
-      doc.text(order.customerName, 480, 100);
-      doc.text(order.customerEmail, 480, 120);
-      
-      if (customerGST) {
-        doc.text(`GSTIN: ${customerGST}`, 480, 140);
+
+      doc.fontSize(12).text('Seller', 40, 110);
+      doc.fontSize(10)
+        .text(sellerFulfillment.businessName || sellerFulfillment.sellerName || 'Marketplace Seller', 40, 128)
+        .text(`Contact: ${sellerFulfillment.sellerEmail || 'Not available'}`, 40, 144)
+        .text(`GSTIN: ${options.sellerGSTIN || '32ABCDE1234F1Z5'}`, 40, 160);
+
+      doc.fontSize(12).text('Buyer', 320, 110);
+      doc.fontSize(10)
+        .text(order.customerName || 'Customer', 320, 128)
+        .text(order.customerEmail || 'Not available', 320, 144)
+        .text(`Address: ${order.deliveryAddress || 'Not available'}`, 320, 160, { width: 220 });
+
+      if (customerGSTIN && validateGSTIN(customerGSTIN)) {
+        doc.text(`GSTIN: ${customerGSTIN}`, 320, 194);
       }
 
-      // Invoice details
-      doc.moveDown(2);
-      doc.text(`Invoice #: ${order.id.slice(-8)}`, { continued: true });
-      doc.text(`Date: ${new Date().toLocaleDateString()}`, { align: 'right' });
-
-      // Table headers
-      const tableTop = doc.y + 20;
+      let y = 240;
       doc.fontSize(10)
-        .text('Description', 50, tableTop)
-        .text('HSN', 250, tableTop)
-        .text('Qty', 320, tableTop)
-        .text('Rate', 380, tableTop)
-        .text('Taxable Value', 440, tableTop)
-        .text('GST @%', 520, tableTop)
-        .text('GST Amt', 580, tableTop)
-        .text('Total', 640, tableTop);
+        .text('Item', 40, y)
+        .text('HSN', 210, y)
+        .text('Qty', 260, y)
+        .text('Rate', 300, y)
+        .text('Taxable', 360, y)
+        .text('GST %', 440, y)
+        .text('GST Amt', 490, y)
+        .text('Total', 550, y);
 
-      // Items table
-      let yPosition = tableTop + 20;
-      let subtotal = 0;
-      
-      order.items.forEach((item, index) => {
-        if (yPosition > 700) {
+      y += 18;
+      doc.moveTo(40, y - 4).lineTo(570, y - 4).strokeColor('#cccccc').stroke();
+
+      rows.forEach((row) => {
+        if (y > 740) {
           doc.addPage();
-          yPosition = 50;
+          y = 60;
         }
 
-        const rate = parseFloat(item.price || 0);
-        const qty = parseInt(item.quantity || 1);
-        const taxableValue = rate * qty;
-        const cgst = taxableValue * 0.09; // 18% total GST (9% CGST + 9% SGST)
-        const sgst = taxableValue * 0.09;
-        const total = taxableValue + cgst + sgst;
+        doc
+          .fontSize(9)
+          .fillColor('#111111')
+          .text(row.name, 40, y, { width: 160 })
+          .text(row.hsn, 210, y)
+          .text(String(row.quantity), 260, y)
+          .text(formatInr(row.rate), 300, y)
+          .text(formatInr(row.taxableValue), 360, y)
+          .text(`${row.taxRate}%`, 440, y)
+          .text(formatInr(row.gstAmount), 490, y)
+          .text(formatInr(row.total), 550, y);
 
-        doc.text(item.name || 'Product', 50, yPosition)
-          .text(item.category || 'NA', 250, yPosition)
-          .text(qty.toString(), 320, yPosition)
-          .text(`₹${rate.toFixed(2)}`, 380, yPosition)
-          .text(`₹${taxableValue.toFixed(2)}`, 440, yPosition)
-          .text('18%', 520, yPosition)
-          .text(`₹${(cgst + sgst).toFixed(2)}`, 580, yPosition)
-          .text(`₹${total.toFixed(2)}`, 640, yPosition);
-
-        subtotal += taxableValue;
-        yPosition += 20;
+        y += 22;
       });
 
-      // Totals
-      doc.moveDown();
-      doc.text(`Subtotal: ₹${subtotal.toFixed(2)}`, 440);
-      
-      const grandTotal = parseFloat(order.amount.replace(/[^\d.]/g, '')) || 0;
-      const totalGST = grandTotal - subtotal;
-      
-      doc.text(`Total GST (18%): ₹${totalGST.toFixed(2)}`, 440);
-      doc.text(`Grand Total: ₹${grandTotal.toFixed(2)}`, 440, { underline: true });
+      y += 20;
+      doc.moveTo(330, y - 8).lineTo(570, y - 8).strokeColor('#cccccc').stroke();
+      doc.fontSize(10)
+        .text(`Subtotal: ${formatInr(subtotal)}`, 360, y)
+        .text(`CGST: ${formatInr(totalTax / 2)}`, 360, y + 18)
+        .text(`SGST: ${formatInr(totalTax / 2)}`, 360, y + 36)
+        .font('Helvetica-Bold')
+        .text(`Grand Total: ${formatInr(grandTotal)}`, 360, y + 58);
 
-      // GST Summary table
-      yPosition += 30;
-      doc.text('GST BREAKUP:', 50, yPosition);
-      doc.text('CGST (9%):', 400, yPosition);
-      doc.text(`₹${(totalGST / 2).toFixed(2)}`, 500, yPosition);
-      doc.text('SGST (9%):', 400, yPosition + 20);
-      doc.text(`₹${(totalGST / 2).toFixed(2)}`, 500, yPosition + 20);
+      doc.font('Helvetica').fontSize(9).text(
+        'This invoice was auto-generated by Malabar Bazaar at order completion.',
+        40,
+        y + 110,
+        { align: 'center', width: 530 }
+      );
 
-      // Footer
-      doc.moveDown(3);
-      doc.fontSize(8).text('Thank you for your business!', { align: 'center' });
-      
-      // Save file
-      return new Promise((resolve, reject) => {
-        doc.pipe(fs.createWriteStream(filepath));
-        doc.end();
-        doc.on('end', () => resolve(filepath));
-        doc.on('error', reject);
-      });
+      doc.end();
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+      doc.on('error', reject);
+    });
 
-    } catch (error) {
-      logger.error('GST invoice generation failed:', error);
-      throw error;
-    }
-  }
-
-  static validateGSTIN(gstin) {
-    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}?$/i;
-    return gstinRegex.test(gstin);
-  }
-
-  static getTaxRates(productCategory = 'default') {
-    const taxRates = {
-      'electronics': 18,
-      'apparel': 12,
-      'food': 5,
-      'default': 18
+    return {
+      invoiceId,
+      fileName: filename,
+      filePath,
+      generatedAt: new Date().toISOString(),
+      subtotal,
+      totalTax,
+      grandTotal,
     };
-    return taxRates[productCategory.toLowerCase()] || 18;
+  } catch (error) {
+    logger.error('GST invoice generation failed:', error);
+    throw error;
   }
-}
+};
 
-module.exports = GSTInvoicing;
-
+module.exports = {
+  buildInvoiceRows,
+  formatInr,
+  generateGSTInvoice,
+  getTaxRate,
+  validateGSTIN,
+};

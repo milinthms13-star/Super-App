@@ -53,6 +53,10 @@ const PaymentAttemptSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    securityProfile: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
     verifiedAt: {
       type: Date,
       default: null,

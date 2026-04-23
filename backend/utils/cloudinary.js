@@ -8,17 +8,40 @@ cloudinary.config({
   secure: true
 });
 
+function isCloudinaryConfigured() {
+  return Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET
+  );
+}
+
+function getPublicIdBase(filename = '') {
+  return String(filename || `product-${Date.now()}`)
+    .replace(/\.[^/.]+$/, '')
+    .replace(/[^a-zA-Z0-9-_]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 120) || `product-${Date.now()}`;
+}
+
 async function uploadToCloudinary(buffer, filename, folder = 'products', options = {}) {
+  if (!isCloudinaryConfigured()) {
+    throw new Error('Cloudinary is not configured.');
+  }
+
   try {
     const result = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
           folder,
-          public_id: filename.replace(/\.[^/.]+$/, ""),
+          public_id: getPublicIdBase(filename),
           resource_type: 'image',
-          categorization: 'google_tagging',
           quality: 'auto:good',
-          format: 'auto',
+          fetch_format: 'auto',
+          use_filename: true,
+          unique_filename: true,
+          overwrite: false,
           ...options
         },
         (error, result) => {
@@ -30,8 +53,13 @@ async function uploadToCloudinary(buffer, filename, folder = 'products', options
 
     return {
       url: result.secure_url,
-      public_id: result.public_id,
-      variants: generateImageVariants(result.public_id)
+      publicId: result.public_id,
+      cdn: 'cloudinary',
+      webpUrl: cloudinary.url(result.public_id, {
+        secure: true,
+        transformation: [{ quality: 'auto:good', fetch_format: 'webp' }],
+      }),
+      variants: generateImageVariants(result.public_id),
     };
   } catch (error) {
     logger.error('Cloudinary upload failed:', error);
@@ -39,22 +67,34 @@ async function uploadToCloudinary(buffer, filename, folder = 'products', options
   }
 }
 
-async function generateImageVariants(publicId) {
+function generateImageVariants(publicId) {
   try {
-    const transformations = [
-      { width: 300, height: 300, crop: 'fill', quality: 80, fetch_format: 'auto' },
-      { width: 400, height: 400, crop: 'fill', quality: 85, fetch_format: 'auto' },
-      { width: 600, height: 600, crop: 'fill', quality: 90, fetch_format: 'auto' },
-      { width: 800, height: 800, crop: 'fill', quality: 90, fetch_format: 'auto' },
-      { width: 1200, height: 1200, crop: 'fill', quality: 90, fetch_format: 'auto' }
-    ];
+    const buildUrl = (width, height, extra = {}) => cloudinary.url(publicId, {
+      secure: true,
+      transformation: [{
+        width,
+        ...(height ? { height } : {}),
+        crop: 'fill',
+        quality: 'auto:good',
+        fetch_format: 'auto',
+        ...extra,
+      }],
+    });
 
     return {
-      thumbnail: cloudinary.url(publicId, transformations[0]),
-      small: cloudinary.url(publicId, transformations[1]),
-      medium: cloudinary.url(publicId, transformations[2]),
-      large: cloudinary.url(publicId, transformations[3]),
-      original: cloudinary.url(publicId, transformations[4])
+      thumbnail: buildUrl(160, 160),
+      small: buildUrl(320, 320),
+      medium: buildUrl(640, 640),
+      large: buildUrl(960, 960),
+      hero: buildUrl(1440, 960, { crop: 'limit' }),
+      webp: cloudinary.url(publicId, {
+        secure: true,
+        transformation: [{ width: 640, crop: 'limit', quality: 'auto:good', fetch_format: 'webp' }],
+      }),
+      original: cloudinary.url(publicId, {
+        secure: true,
+        transformation: [{ quality: 'auto:best', fetch_format: 'auto' }],
+      }),
     };
   } catch (error) {
     logger.error('Variant generation failed:', error);
@@ -78,6 +118,7 @@ function getOptimizedUrl(publicIdOrUrl, width = 400, height = null) {
 }
 
 module.exports = {
+  isCloudinaryConfigured,
   uploadToCloudinary,
   generateImageVariants,
   getOptimizedUrl

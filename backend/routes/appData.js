@@ -622,6 +622,27 @@ router.get('/public', async (req, res) => {
   });
 });
 
+router.get('/classifieds/user/:sellerEmail/rating', async (req, res) => {
+  try {
+    const sellerEmail = req.params.sellerEmail.toLowerCase().trim();
+    const user = await User.findOne({ email: sellerEmail }).select('classifiedsTotalRating classifiedsReviewCount');
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Seller not found' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        classifiedsTotalRating: user.classifiedsTotalRating,
+        classifiedsReviewCount: user.classifiedsReviewCount,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.get('/admin', authenticate, adminOnly, async (req, res) => {
   const appData = await devAppDataStore.readAppData();
   const classifiedsModuleData = await listClassifiedModuleData();

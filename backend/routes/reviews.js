@@ -1,7 +1,49 @@
 const express = require('express');
 const router = express.Router();
 const Review = require('../models/Review');
+const Product = require('../models/Product');
+const { indexProduct } = require('../utils/elasticsearch');
 const { authenticate } = require('../middleware/auth');
+
+const syncProductReviewStats = async (productId) => {
+  if (!productId) {
+    return null;
+  }
+
+  const [stats] = await Review.aggregate([
+    { $match: { productId: String(productId), status: 'Approved' } },
+    {
+      $group: {
+        _id: '$productId',
+        averageRating: { $avg: '$rating' },
+        reviewCount: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const nextRating = Number(stats?.averageRating || 0);
+  const nextReviewCount = Number(stats?.reviewCount || 0);
+
+  const product = await Product.findByIdAndUpdate(
+    productId,
+    {
+      rating: Number(nextRating.toFixed(2)),
+      reviewCount: nextReviewCount,
+    },
+    { new: true }
+  );
+
+  if (product) {
+    await indexProduct({
+      ...product.toObject(),
+      id: String(product._id),
+      reviews: nextReviewCount,
+      rating: Number(nextRating.toFixed(2)),
+    });
+  }
+
+  return product;
+};
 
 // Create review
 router.post('/create', authenticate, async (req, res) => {
@@ -27,6 +69,9 @@ router.post('/create', authenticate, async (req, res) => {
     });
 
     await review.save();
+    if (review.status === 'Approved') {
+      await syncProductReviewStats(productId);
+    }
     res.status(201).json({ success: true, data: review });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -118,7 +163,9 @@ router.delete('/:reviewId', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Review not found or unauthorized' });
     }
 
+    const productId = review.productId;
     await Review.deleteOne({ reviewId: req.params.reviewId });
+    await syncProductReviewStats(productId);
     res.json({ success: true, message: 'Review deleted' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -138,6 +185,7 @@ router.post('/:reviewId/helpful', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Review not found' });
     }
 
+    await syncProductReviewStats(review.productId);
     res.json({ success: true, data: review });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -165,6 +213,7 @@ router.post('/:reviewId/response', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Review not found' });
     }
 
+    await syncProductReviewStats(review.productId);
     res.json({ success: true, data: review });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

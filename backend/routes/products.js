@@ -8,9 +8,11 @@ const Product = require('../models/Product');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const devProductStore = require('../utils/devProductStore');
+const { getRedisClient } = require('../config/redis');
 const { deleteGridFSFile, uploadBufferToGridFS } = require('../utils/gridfs');
 const { ADMIN_EMAIL, PRODUCT_DEFAULT_LIMIT, PRODUCT_MAX_LIMIT, VALIDATION_PATTERNS, CONSTRAINTS } = require('../config/constants');
 const { validateProductData, validateDiscountDates, validateExpiryDate } = require('../utils/validators');
+const { getActiveFlashSaleForProduct } = require('../utils/flashSaleService');
 
 const router = express.Router();
 const DEFAULT_PAGE = 1;
@@ -138,17 +140,30 @@ const extractFileIdFromProductImage = (imagePath = '') => {
 
 const { uploadToCloudinary } = require('../utils/cloudinary');
 
+const buildStoredImagePayload = (imagePayload = {}) => ({
+  image: imagePayload?.image || '',
+  imageVariants: imagePayload?.imageVariants || null,
+  imagePublicId: imagePayload?.imagePublicId || '',
+  imageCdn: imagePayload?.imageCdn || '',
+});
+
 const storeProductImage = async ({ file, sellerEmail }) => {
   if (!file?.buffer?.length) {
-    return '';
+    return buildStoredImagePayload();
   }
   
   // Try Cloudinary first, fallback to GridFS
   try {
-    return await uploadToCloudinary(file.buffer, file.originalname || `${crypto.randomUUID()}.jpg`, 'ecommerce/products', {
+    const uploadedImage = await uploadToCloudinary(file.buffer, file.originalname || `${crypto.randomUUID()}.jpg`, 'ecommerce/products', {
       categorization: 'google_tagging',
       quality: 'auto:good',
       format: 'auto'
+    });
+    return buildStoredImagePayload({
+      image: uploadedImage.url,
+      imageVariants: uploadedImage.variants,
+      imagePublicId: uploadedImage.publicId,
+      imageCdn: uploadedImage.cdn,
     });
   } catch (cloudinaryError) {
     logger.warn('Cloudinary failed, using GridFS:', cloudinaryError.message);
@@ -170,7 +185,9 @@ const storeProductImage = async ({ file, sellerEmail }) => {
   } catch (gridFsError) {
     if (gridFsError?.message?.includes('GridFS bucket has not been initialized')) {
       const contentType = file.mimetype || 'image/jpeg';
-      return `data:${contentType};base64,${file.buffer.toString('base64')}`;
+      return buildStoredImagePayload({
+        image: `data:${contentType};base64,${file.buffer.toString('base64')}`,
+      });
     }
     throw gridFsError;
   }
@@ -200,22 +217,11 @@ const normalizeInventoryBatch = (batch, existingBatch = {}) => ({
   isActive: batch.isActive !== false && existingBatch.isActive !== false,
 });
 
-const buildBatchSummary = async (product, inventoryBatches = []) => {
-  const now = new Date();
-  const eligibleBatches = Array.isArray(inventoryBatches)
-    ? inventoryBatches.filter(
-        (batch) =>
-          batch?.isActive !== false &&
-          Number(batch.stock || 0) > 0 &&
-          !isBatchExpired(batch, now)
-      )
-    : [];
-  const totalStock = eligibleBatches.reduce((sum, batch) => sum + Number(batch.stock || 0), 0);
-  const latestBatch = eligibleBatches[0] || null;
-  const mrp = Number(latestBatch?.mrp || 0);
-  let sellingPrice = Number(latestBatch?.price || 0);
-  const discountStartDate = latestBatch?.discountStartDate || null;
-  const discountEndDate = latestBatch?.discountEndDate || null;
+const buildPricingSummary = (primarySource = {}, fallbackSource = {}, now = new Date()) => {
+  const mrp = Number(primarySource?.mrp ?? fallbackSource?.mrp ?? fallbackSource?.price ?? 0);
+  const sellingPrice = Number(primarySource?.price ?? fallbackSource?.price ?? 0);
+  const discountStartDate = primarySource?.discountStartDate ?? fallbackSource?.discountStartDate ?? null;
+  const discountEndDate = primarySource?.discountEndDate ?? fallbackSource?.discountEndDate ?? null;
   const parsedDiscountStartDate = discountStartDate ? new Date(discountStartDate) : null;
   const parsedDiscountEndDate = discountEndDate ? new Date(discountEndDate) : null;
   const isBeforeDiscountStart =
@@ -228,12 +234,17 @@ const buildBatchSummary = async (product, inventoryBatches = []) => {
       : false;
   const savedDiscountAmount = Math.max(
     0,
-    Number(latestBatch?.discountAmount ?? Math.max(0, mrp - sellingPrice))
+    Number(
+      primarySource?.discountAmount ??
+        fallbackSource?.discountAmount ??
+        Math.max(0, mrp - sellingPrice)
+    )
   );
   const savedDiscountPercentage = mrp > 0
     ? Number(
         (
-          latestBatch?.discountPercentage ??
+          primarySource?.discountPercentage ??
+          fallbackSource?.discountPercentage ??
           ((savedDiscountAmount / mrp) * 100)
         ).toFixed(2)
       )
@@ -241,38 +252,64 @@ const buildBatchSummary = async (product, inventoryBatches = []) => {
   const isDiscountActive =
     savedDiscountAmount > 0 && !isBeforeDiscountStart && !isAfterDiscountEnd;
 
-  // Flash sale override (check active sales for this product)
-  const redis = getRedisClient();
-  let flashSalePrice = null;
-  if (redis && product.sellerEmail) {
-    try {
-      const activeSalesKey = `flash:active:${product._id || product.id}`;
-      const activeSaleIds = await redis.get(activeSalesKey);
-      if (activeSaleIds) {
-        const saleIds = JSON.parse(activeSaleIds);
-        for (const saleId of saleIds.slice(0, 3)) { // Top 3 only
-          const saleKey = `flashsale:${saleId}`;
-          const saleData = await redis.get(saleKey);
-          if (saleData) {
-            const sale = JSON.parse(saleData);
-            const saleProduct = sale.products.find(p => 
-              String(p.productId._id) === String(product._id || product.id)
-            );
-            if (saleProduct && sale.status === 'active') {
-              flashSalePrice = Number(saleProduct.salePrice);
-              break;
-            }
-          }
-        }
-      }
-    } catch (cacheErr) {
-      logger.debug('Flash sale cache miss:', cacheErr.message);
-    }
-  }
+  return {
+    mrp,
+    sellingPrice,
+    price: isDiscountActive ? sellingPrice : mrp || sellingPrice,
+    discountAmount: isDiscountActive ? savedDiscountAmount : 0,
+    discountPercentage: isDiscountActive ? savedDiscountPercentage : 0,
+    savedDiscountAmount,
+    savedDiscountPercentage,
+    discountStartDate,
+    discountEndDate,
+    isDiscountActive,
+    discountStatus:
+      savedDiscountAmount <= 0
+        ? 'none'
+        : isDiscountActive
+          ? 'active'
+          : isBeforeDiscountStart
+            ? 'upcoming'
+            : isAfterDiscountEnd
+              ? 'expired'
+              : 'inactive',
+  };
+};
 
-  const price = flashSalePrice || (isDiscountActive ? sellingPrice : mrp || sellingPrice);
-  const discountAmount = flashSalePrice ? mrp - flashSalePrice : (isDiscountActive ? savedDiscountAmount : 0);
-  const discountPercentage = flashSalePrice ? ((mrp - flashSalePrice) / mrp * 100) : (isDiscountActive ? savedDiscountPercentage : 0);
+const buildBatchSummary = async (product, inventoryBatches = []) => {
+  const now = new Date();
+  const eligibleBatches = Array.isArray(inventoryBatches)
+    ? inventoryBatches.filter(
+        (batch) =>
+          batch?.isActive !== false &&
+          Number(batch.stock || 0) > 0 &&
+          !isBatchExpired(batch, now)
+      )
+    : [];
+  const totalStock = eligibleBatches.reduce((sum, batch) => sum + Number(batch.stock || 0), 0);
+  const latestBatch = eligibleBatches[0] || null;
+  const pricingSummary = buildPricingSummary(latestBatch || {}, product, now);
+  const {
+    mrp,
+    sellingPrice,
+    savedDiscountAmount,
+    savedDiscountPercentage,
+    discountStartDate,
+    discountEndDate,
+  } = pricingSummary;
+
+  const productId = product?._id?.toString?.() || product?._id || product?.id || '';
+  const flashSale = productId ? await getActiveFlashSaleForProduct(productId) : null;
+  const hasFlashSalePrice =
+    flashSale && Number.isFinite(Number(flashSale.salePrice)) && Number(flashSale.salePrice) >= 0;
+  const flashSalePrice = hasFlashSalePrice ? Number(flashSale.salePrice) : null;
+  const price = hasFlashSalePrice ? flashSalePrice : pricingSummary.price;
+  const discountAmount = hasFlashSalePrice
+    ? Math.max(0, mrp - flashSalePrice)
+    : pricingSummary.discountAmount;
+  const discountPercentage = hasFlashSalePrice
+    ? (mrp > 0 ? Number((((mrp - flashSalePrice) / mrp) * 100).toFixed(2)) : 0)
+    : pricingSummary.discountPercentage;
 
   return {
     totalStock,
@@ -286,12 +323,15 @@ const buildBatchSummary = async (product, inventoryBatches = []) => {
     savedDiscountPercentage,
     discountStartDate,
     discountEndDate,
+    isDiscountActive: hasFlashSalePrice || pricingSummary.isDiscountActive,
+    discountStatus: hasFlashSalePrice ? 'active' : pricingSummary.discountStatus,
     manufacturingDate: latestBatch?.manufacturingDate || null,
     expiryDate: latestBatch?.expiryDate || null,
     location: latestBatch?.location || '',
     returnAllowed: Boolean(latestBatch?.returnAllowed),
     returnWindowDays: Number(latestBatch?.returnWindowDays || 0),
-    flashSaleActive: !!flashSalePrice,
+    flashSaleActive: hasFlashSalePrice,
+    flashSale,
   };
 };
 
@@ -300,12 +340,15 @@ const serializeProduct = async (product) => {
   const fallbackPrice = Number(product.price || 0);
   const fallbackMrp = Number(product.mrp || product.price || 0);
   const fallbackStock = Math.max(0, Number(product.stock || 0));
+  const hasInventoryBatches = Array.isArray(product.inventoryBatches) && product.inventoryBatches.length > 0;
   const resolvedStock =
-    batchSummary.totalStock > 0 || Array.isArray(product.inventoryBatches)
+    hasInventoryBatches
       ? batchSummary.totalStock
       : fallbackStock;
-  const resolvedPrice = batchSummary.price || fallbackPrice;
-  const resolvedMrp = batchSummary.mrp || fallbackMrp;
+  const resolvedPrice = Number.isFinite(batchSummary.price) ? batchSummary.price : fallbackPrice;
+  const resolvedMrp = Number.isFinite(batchSummary.mrp) ? batchSummary.mrp : fallbackMrp;
+  const resolvedBatchLabel = product.batchLabel || batchSummary.latestBatch?.batchLabel || product.latestBatchLabel || '';
+  const resolvedBatchLocation = product.batchLocation || batchSummary.location || product.location || '';
 
   return {
     id: product._id?.toString?.() || product._id || product.id,
@@ -317,19 +360,27 @@ const serializeProduct = async (product) => {
     styleTheme: product.styleTheme || '',
     price: resolvedPrice,
     mrp: resolvedMrp,
+    sellingPrice: Number.isFinite(batchSummary.sellingPrice) ? batchSummary.sellingPrice : fallbackPrice,
     discountAmount: batchSummary.discountAmount,
     discountPercentage: batchSummary.discountPercentage,
     savedDiscountAmount: batchSummary.savedDiscountAmount || 0,
     savedDiscountPercentage: batchSummary.savedDiscountPercentage || 0,
     discountStartDate: batchSummary.discountStartDate || null,
     discountEndDate: batchSummary.discountEndDate || null,
+    isDiscountActive: Boolean(batchSummary.isDiscountActive),
+    discountStatus: batchSummary.discountStatus || 'none',
     description: product.description,
     expiryApplicable: product.expiryApplicable === true,
     image: product.image,
+    imageVariants: product.imageVariants || null,
+    imagePublicId: product.imagePublicId || '',
+    imageCdn: product.imageCdn || '',
     stock: resolvedStock,
     manufacturingDate: batchSummary.manufacturingDate,
     expiryDate: batchSummary.expiryDate,
-    location: batchSummary.location,
+    location: batchSummary.location || product.location || '',
+    batchLabel: resolvedBatchLabel,
+    batchLocation: resolvedBatchLocation,
     returnAllowed: batchSummary.latestBatch
       ? batchSummary.returnAllowed
       : Boolean(product.returnAllowed),
@@ -337,7 +388,7 @@ const serializeProduct = async (product) => {
       batchSummary.latestBatch && batchSummary.returnWindowDays > 0
         ? batchSummary.returnWindowDays
         : Number(product.returnWindowDays || 0),
-    latestBatchLabel: batchSummary.latestBatch?.batchLabel || '',
+    latestBatchLabel: resolvedBatchLabel,
     inventoryBatches: Array.isArray(product.inventoryBatches)
       ? product.inventoryBatches.map((batch, index) => ({
           id: getBatchIdentifier(batch) || `${product._id?.toString?.() || product.id || 'product'}-batch-${index}`,
@@ -365,10 +416,21 @@ const serializeProduct = async (product) => {
     isActive: product.isActive !== false,
     approvalStatus: product.approvalStatus || 'pending',
     moderationNote: product.moderationNote || '',
+    rating: Number(product.rating || 0),
+    reviews: Number(product.reviewCount || 0),
+    views: Number(product.views || 0),
+    clicks: Number(product.clicks || 0),
+    unitsSold: Number(product.unitsSold || 0),
+    flashSale: batchSummary.flashSale || null,
+    flashSaleEndsAt: batchSummary.flashSale?.endsAt || null,
+    flashSaleRemainingStock: Number(batchSummary.flashSale?.remainingStock || 0),
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
   };
 };
+
+const serializeProducts = (products = []) =>
+  Promise.all((products || []).map((product) => serializeProduct(product)));
 
 const resolveRole = (req) =>
   (
@@ -427,7 +489,8 @@ const createStoredProduct = async (payload) => {
         return p;
       })()
   );
-  await indexProduct(serializeProduct(product));
+  const serializedProduct = await serializeProduct(product);
+  await indexProduct(serializedProduct);
   return product;
 };
 
@@ -436,7 +499,10 @@ const updateStoredProduct = async (productId, updates) => {
     ? devProductStore.updateProduct(productId, updates)
     : Product.findByIdAndUpdate(productId, updates, { new: true, runValidators: true })
   );
-  if (product) await indexProduct(serializeProduct(product));
+  if (product) {
+    const serializedProduct = await serializeProduct(product);
+    await indexProduct(serializedProduct);
+  }
   return product;
 };
 
@@ -484,8 +550,8 @@ const listStarterProducts = async () => {
     : [];
 };
 
-const applyBatchAggregation = (product) => {
-  const batchSummary = buildBatchSummary(product.inventoryBatches);
+const applyBatchAggregation = async (product) => {
+  const batchSummary = await buildBatchSummary(product, product.inventoryBatches);
   return {
     ...product,
     stock: batchSummary.totalStock,
@@ -498,39 +564,142 @@ const applyBatchAggregation = (product) => {
   };
 };
 
+const filterProductsLocally = (products = [], filters = {}) => {
+  const normalizedQuery = String(filters.query || '').trim().toLowerCase();
+  const normalizedCategory = String(filters.category || '').trim();
+  const normalizedBusiness = String(filters.business || '').trim();
+  const normalizedMinPrice = Number.parseFloat(filters.minPrice);
+  const normalizedMaxPrice = Number.parseFloat(filters.maxPrice);
+  const normalizedMinRating = Number.parseFloat(filters.minRating);
+  const inStockOnly = filters.inStock === 'true';
+
+  let filteredProducts = (products || []).filter((product) => {
+    const matchesQuery =
+      !normalizedQuery ||
+      [
+        product.name,
+        product.description,
+        product.category,
+        product.subcategory,
+        product.model,
+        product.color,
+        product.styleTheme,
+        product.businessName,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedQuery));
+
+    const matchesCategory = !normalizedCategory || product.category === normalizedCategory;
+    const matchesBusiness = !normalizedBusiness || product.businessName === normalizedBusiness;
+    const matchesMinPrice = !Number.isFinite(normalizedMinPrice) || Number(product.price || 0) >= normalizedMinPrice;
+    const matchesMaxPrice = !Number.isFinite(normalizedMaxPrice) || Number(product.price || 0) <= normalizedMaxPrice;
+    const matchesMinRating = !Number.isFinite(normalizedMinRating) || Number(product.rating || 0) >= normalizedMinRating;
+    const matchesStock = !inStockOnly || Number(product.stock || 0) > 0;
+
+    return (
+      matchesQuery &&
+      matchesCategory &&
+      matchesBusiness &&
+      matchesMinPrice &&
+      matchesMaxPrice &&
+      matchesMinRating &&
+      matchesStock
+    );
+  });
+
+  switch (filters.sort) {
+    case 'price-asc':
+      filteredProducts = filteredProducts.sort((left, right) => Number(left.price || 0) - Number(right.price || 0));
+      break;
+    case 'price-desc':
+      filteredProducts = filteredProducts.sort((left, right) => Number(right.price || 0) - Number(left.price || 0));
+      break;
+    case 'discount':
+      filteredProducts = filteredProducts.sort((left, right) => Number(right.discountPercentage || 0) - Number(left.discountPercentage || 0));
+      break;
+    case 'rating':
+      filteredProducts = filteredProducts.sort((left, right) => Number(right.rating || 0) - Number(left.rating || 0));
+      break;
+    case 'newest':
+      filteredProducts = filteredProducts.sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
+      break;
+    default:
+      break;
+  }
+
+  return filteredProducts;
+};
+
+const buildLocalFacets = (products = []) => ({
+  categories: Array.from(
+    (products || []).reduce((map, product) => {
+      const key = product.category || 'Uncategorized';
+      map.set(key, (map.get(key) || 0) + 1);
+      return map;
+    }, new Map())
+  ).map(([key, doc_count]) => ({ key, doc_count })),
+  businesses: Array.from(
+    (products || []).reduce((map, product) => {
+      const key = product.businessName || 'Unknown';
+      map.set(key, (map.get(key) || 0) + 1);
+      return map;
+    }, new Map())
+  ).map(([key, doc_count]) => ({ key, doc_count })),
+  ratings: [
+    {
+      key: '4_up',
+      doc_count: (products || []).filter((product) => Number(product.rating || 0) >= 4).length,
+    },
+    {
+      key: '3_up',
+      doc_count: (products || []).filter((product) => Number(product.rating || 0) >= 3 && Number(product.rating || 0) < 4).length,
+    },
+    {
+      key: '2_up',
+      doc_count: (products || []).filter((product) => Number(product.rating || 0) >= 2 && Number(product.rating || 0) < 3).length,
+    },
+    {
+      key: 'below_2',
+      doc_count: (products || []).filter((product) => Number(product.rating || 0) < 2).length,
+    },
+  ],
+  priceRanges: [
+    { key: 'under_500', doc_count: (products || []).filter((product) => Number(product.price || 0) < 500).length },
+    { key: '500_to_1000', doc_count: (products || []).filter((product) => Number(product.price || 0) >= 500 && Number(product.price || 0) < 1000).length },
+    { key: '1000_to_2500', doc_count: (products || []).filter((product) => Number(product.price || 0) >= 1000 && Number(product.price || 0) < 2500).length },
+    { key: '2500_plus', doc_count: (products || []).filter((product) => Number(product.price || 0) >= 2500).length },
+  ],
+});
+
 router.get('/', cacheProducts, async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query, 16);
     const starterProducts = await listStarterProducts();
-    const starterApprovedProducts = await Promise.all(
-      starterProducts.map(async (product) => ({
-        ...product,
-        batchSummary: await buildBatchSummary(product, product.inventoryBatches || [])
-      }))
-    ).then(products =>
-      products.filter(
-        (product) =>
-          (product.approvalStatus || 'approved') === 'approved' &&
-          product.isActive !== false &&
-          Number(product.stock || 0) > 0
-      )
-      .map((product) => ({
-        ...product,
-        approvalStatus: product.approvalStatus || 'approved',
-        moderationNote: product.moderationNote || '',
-        isActive: product.isActive !== false,
-        createdAt: product.createdAt || null,
-        updatedAt: product.updatedAt || null,
-      }))
+    const starterApprovedProducts = await serializeProducts(
+      starterProducts
+        .filter(
+          (product) =>
+            (product.approvalStatus || 'approved') === 'approved' &&
+            product.isActive !== false
+        )
+        .map((product) => ({
+          ...product,
+          approvalStatus: product.approvalStatus || 'approved',
+          moderationNote: product.moderationNote || '',
+          isActive: product.isActive !== false,
+          createdAt: product.createdAt || null,
+          updatedAt: product.updatedAt || null,
+        }))
     );
     const storedProducts = await listStoredProducts();
-    const approvedProducts = await Promise.all(
-      [...starterApprovedProducts, ...storedProducts].filter(
+    const approvedStoredProducts = await serializeProducts(
+      storedProducts.filter(
         (product) =>
           (product.approvalStatus || 'pending') === 'approved' &&
           product.isActive !== false
-      ).map(async (product) => await serializeProduct(product))
+      )
     );
+    const approvedProducts = [...starterApprovedProducts, ...approvedStoredProducts];
     const availableProducts = approvedProducts.filter((product) => Number(product.stock || 0) > 0)
       .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0));
     const pagedProducts = availableProducts.slice(skip, skip + limit);
@@ -541,7 +710,7 @@ router.get('/', cacheProducts, async (req, res) => {
       pagination: buildPaginationMeta({
         page,
         limit,
-        totalItems: approvedProducts.length,
+        totalItems: availableProducts.length,
       }),
     });
   } catch (error) {
@@ -560,7 +729,7 @@ router.get('/manage', authenticate, cacheProducts, async (req, res) => {
     const visibleProducts = isAdmin(req)
       ? products
       : products.filter((product) => product.sellerEmail === req.user.email);
-    const serializedProducts = await Promise.all(visibleProducts.map(serializeProduct));
+    const serializedProducts = await serializeProducts(visibleProducts);
     const pagedProducts = serializedProducts.slice(skip, skip + limit);
 
     return res.json({
@@ -583,7 +752,7 @@ router.get('/manage', authenticate, cacheProducts, async (req, res) => {
 });
 
 router.post('/', authenticate, upload.single('imageFile'), async (req, res) => {
-  let uploadedImagePath = '';
+  let uploadedImagePayload = buildStoredImagePayload();
   try {
     if (!assertEntrepreneurOrAdmin(req, res)) {
       return;
@@ -599,10 +768,9 @@ router.post('/', authenticate, upload.single('imageFile'), async (req, res) => {
 
     const product = await createStoredProduct({
       ...value,
-      image:
-        req.file
-          ? ((uploadedImagePath = await storeProductImage({ file: req.file, sellerEmail: req.user.email })), uploadedImagePath)
-          : value.image || '',
+      ...(req.file
+        ? ((uploadedImagePayload = await storeProductImage({ file: req.file, sellerEmail: req.user.email })), uploadedImagePayload)
+        : buildStoredImagePayload({ image: value.image || '' })),
       price: 0,
       mrp: 0,
       stock: 0,
@@ -618,10 +786,10 @@ router.post('/', authenticate, upload.single('imageFile'), async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Product submitted successfully for approval.',
-      product: serializeProduct(product),
+      product: await serializeProduct(product),
     });
   } catch (error) {
-    await deleteGridFSFile(extractFileIdFromProductImage(uploadedImagePath));
+    await deleteGridFSFile(extractFileIdFromProductImage(uploadedImagePayload.image));
     logger.error('products create error:', error);
     return res.status(500).json({
       success: false,
@@ -631,7 +799,7 @@ router.post('/', authenticate, upload.single('imageFile'), async (req, res) => {
 });
 
 router.put('/:productId', authenticate, upload.single('imageFile'), async (req, res) => {
-  let uploadedImagePath = '';
+  let uploadedImagePayload = buildStoredImagePayload();
   try {
     if (!assertEntrepreneurOrAdmin(req, res)) {
       return;
@@ -660,13 +828,22 @@ router.put('/:productId', authenticate, upload.single('imageFile'), async (req, 
       });
     }
 
-    uploadedImagePath = req.file
+    uploadedImagePayload = req.file
       ? await storeProductImage({ file: req.file, sellerEmail: existingProduct.sellerEmail })
-      : '';
+      : buildStoredImagePayload();
 
     const updatedProduct = await updateStoredProduct(req.params.productId, {
       ...value,
-      image: uploadedImagePath || value.image || existingProduct.image || '',
+      ...(
+        req.file
+          ? uploadedImagePayload
+          : buildStoredImagePayload({
+              image: value.image || existingProduct.image || '',
+              imageVariants: existingProduct.imageVariants || null,
+              imagePublicId: existingProduct.imagePublicId || '',
+              imageCdn: existingProduct.imageCdn || '',
+            })
+      ),
       price: existingProduct.price || 0,
       mrp: existingProduct.mrp || 0,
       stock: existingProduct.stock || 0,
@@ -678,17 +855,17 @@ router.put('/:productId', authenticate, upload.single('imageFile'), async (req, 
       moderationNote: isAdmin(req) ? existingProduct.moderationNote : '',
     });
 
-    if (uploadedImagePath && existingProduct.image && existingProduct.image !== uploadedImagePath) {
+    if (uploadedImagePayload.image && existingProduct.image && existingProduct.image !== uploadedImagePayload.image) {
       await deleteGridFSFile(extractFileIdFromProductImage(existingProduct.image));
     }
 
     return res.json({
       success: true,
       message: 'Product updated successfully.',
-      product: serializeProduct(updatedProduct),
+      product: await serializeProduct(updatedProduct),
     });
   } catch (error) {
-    await deleteGridFSFile(extractFileIdFromProductImage(uploadedImagePath));
+    await deleteGridFSFile(extractFileIdFromProductImage(uploadedImagePayload.image));
     logger.error('products update error:', error);
     return res.status(500).json({
       success: false,
@@ -754,7 +931,7 @@ router.patch('/:productId/inventory', authenticate, async (req, res) => {
 
     const updatedProduct = await updateStoredProduct(
       req.params.productId,
-      applyBatchAggregation({
+      await applyBatchAggregation({
         ...existingProduct,
         inventoryBatches,
       })
@@ -763,7 +940,7 @@ router.patch('/:productId/inventory', authenticate, async (req, res) => {
     return res.json({
       success: true,
       message: 'Stock batch added successfully.',
-      product: serializeProduct(updatedProduct),
+      product: await serializeProduct(updatedProduct),
     });
   } catch (error) {
     logger.error('products inventory error:', error);
@@ -832,7 +1009,7 @@ router.patch('/:productId/inventory/:batchId', authenticate, async (req, res) =>
 
     const updatedProduct = await updateStoredProduct(
       req.params.productId,
-      applyBatchAggregation({
+      await applyBatchAggregation({
         ...existingProduct,
         inventoryBatches,
       })
@@ -841,7 +1018,7 @@ router.patch('/:productId/inventory/:batchId', authenticate, async (req, res) =>
     return res.json({
       success: true,
       message: 'Stock batch updated successfully.',
-      product: serializeProduct(updatedProduct),
+      product: await serializeProduct(updatedProduct),
     });
   } catch (error) {
     logger.error('products inventory update error:', error);
@@ -898,7 +1075,7 @@ router.patch('/:productId/inventory/:batchId/availability', authenticate, async 
 
     const updatedProduct = await updateStoredProduct(
       req.params.productId,
-      applyBatchAggregation({
+      await applyBatchAggregation({
         ...existingProduct,
         inventoryBatches,
       })
@@ -907,7 +1084,7 @@ router.patch('/:productId/inventory/:batchId/availability', authenticate, async 
     return res.json({
       success: true,
       message: value.isActive ? 'Stock batch enabled successfully.' : 'Stock batch disabled successfully.',
-      product: serializeProduct(updatedProduct),
+      product: await serializeProduct(updatedProduct),
     });
   } catch (error) {
     logger.error('products inventory availability error:', error);
@@ -954,7 +1131,7 @@ router.patch('/:productId/availability', authenticate, async (req, res) => {
     return res.json({
       success: true,
       message: value.isActive ? 'Product enabled successfully.' : 'Product disabled successfully.',
-      product: serializeProduct(updatedProduct),
+      product: await serializeProduct(updatedProduct),
     });
   } catch (error) {
     logger.error('products availability error:', error);
@@ -995,7 +1172,7 @@ router.patch('/:productId/status', authenticate, async (req, res) => {
     return res.json({
       success: true,
       message: 'Product moderation status updated.',
-      product: serializeProduct(updatedProduct),
+      product: await serializeProduct(updatedProduct),
     });
   } catch (error) {
     logger.error('products moderation error:', error);
@@ -1009,29 +1186,128 @@ router.patch('/:productId/status', authenticate, async (req, res) => {
 // Elasticsearch search endpoint
 router.get('/search', cacheSearch, async (req, res) => {
   try {
-    const { q: query = '', category, business, page = 1, limit = 20 } = req.query;
-    const result = await searchProducts({ query, category, business, page: parseInt(page), limit: parseInt(limit) });
-    
+    const {
+      q: query = '',
+      category,
+      business,
+      seller = '',
+      minPrice = '',
+      maxPrice = '',
+      minRating = '',
+      inStock = '',
+      sort = 'relevance',
+      page = 1,
+      limit = 20,
+    } = req.query;
+    const parsedPage = Math.max(DEFAULT_PAGE, Number.parseInt(page, 10) || DEFAULT_PAGE);
+    const parsedLimit = Math.min(MAX_LIMIT, Math.max(1, Number.parseInt(limit, 10) || DEFAULT_LIMIT));
+    const result = await searchProducts({
+      query,
+      category,
+      business,
+      seller,
+      minPrice,
+      maxPrice,
+      minRating,
+      inStock,
+      sort,
+      page: parsedPage,
+      limit: parsedLimit,
+    });
+    const serializedSearchResults = await serializeProducts(result.products);
+     
     res.json({
       success: true,
-      products: result.products.map(serializeProduct),
+      products: serializedSearchResults,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parsedPage,
+        limit: parsedLimit,
         total: result.total
       },
       facets: {
         categories: result.aggregations.categories || [],
-        businesses: result.aggregations.businesses || []
+        businesses: result.aggregations.businesses || [],
+        ratings: result.aggregations.ratings || [],
+        priceRanges: result.aggregations.priceRanges || [],
       }
     });
   } catch (error) {
     logger.error('ES search error:', error);
-    // Fallback to existing list endpoint
-    return res.status(503).json({
+    const starterProducts = await listStarterProducts();
+    const storedProducts = await listStoredProducts();
+    const approvedProducts = await serializeProducts([
+      ...starterProducts.filter((product) => (product.approvalStatus || 'approved') === 'approved' && product.isActive !== false),
+      ...storedProducts.filter((product) => (product.approvalStatus || 'pending') === 'approved' && product.isActive !== false),
+    ]);
+
+    const filteredProducts = filterProductsLocally(approvedProducts, {
+      query: req.query.q,
+      category: req.query.category,
+      business: req.query.business,
+      minPrice: req.query.minPrice,
+      maxPrice: req.query.maxPrice,
+      minRating: req.query.minRating,
+      inStock: req.query.inStock,
+      sort: req.query.sort,
+    });
+    const pageMeta = buildPaginationMeta({
+      page: Math.max(DEFAULT_PAGE, Number.parseInt(req.query.page, 10) || DEFAULT_PAGE),
+      limit: Math.min(MAX_LIMIT, Math.max(1, Number.parseInt(req.query.limit, 10) || DEFAULT_LIMIT)),
+      totalItems: filteredProducts.length,
+    });
+    const pagedProducts = filteredProducts.slice(
+      (pageMeta.page - 1) * pageMeta.limit,
+      (pageMeta.page - 1) * pageMeta.limit + pageMeta.limit
+    );
+
+    return res.json({
+      success: true,
+      fallback: true,
+      message: 'Search is using the local marketplace index fallback.',
+      products: pagedProducts,
+      pagination: {
+        page: pageMeta.page,
+        limit: pageMeta.limit,
+        total: filteredProducts.length,
+      },
+      facets: buildLocalFacets(filteredProducts),
+    });
+  }
+});
+
+router.post('/:productId/track', async (req, res) => {
+  try {
+    const metric = String(req.body?.metric || 'view').trim().toLowerCase();
+    if (!['view', 'click'].includes(metric)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Metric must be "view" or "click".',
+      });
+    }
+
+    const product = await findStoredProductById(req.params.productId);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found.',
+      });
+    }
+
+    const updates = metric === 'click'
+      ? { clicks: Number(product.clicks || 0) + 1 }
+      : { views: Number(product.views || 0) + 1 };
+
+    const updatedProduct = await updateStoredProduct(req.params.productId, updates);
+
+    return res.json({
+      success: true,
+      product: await serializeProduct(updatedProduct),
+    });
+  } catch (error) {
+    logger.error('products track error:', error);
+    return res.status(500).json({
       success: false,
-      message: 'Search temporarily unavailable, showing marketplace products',
-      fallback: true
+      message: 'Unable to track product engagement.',
     });
   }
 });
@@ -1052,7 +1328,7 @@ router.delete('/:productId', authenticate, async (req, res) => {
     
     await deleteProduct(req.params.productId);
     if (useMemoryProducts()) {
-      devProductStore.deleteProduct(req.params.productId);
+      await devProductStore.deleteProduct(req.params.productId);
     } else {
       await Product.findByIdAndDelete(req.params.productId);
     }
@@ -1069,4 +1345,3 @@ module.exports.__testables = {
   buildBatchSummary,
   serializeProduct,
 };
-

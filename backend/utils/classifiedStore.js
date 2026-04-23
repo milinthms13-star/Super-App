@@ -4,6 +4,7 @@ const devAppDataStore = require('./devAppDataStore');
 const { generateSlug } = require('./slugGenerator');
 const { calculateSpamScore, detectSuspiciousFlags } = require('./spamDetector');
 const { calculatePopularityScore, calculateSellerScore } = require('./analyticsHelper');
+const User = require('../models/User');
 const { getCoordinatesForCity } = require('./geolocationHelper');
 
 const useMongoClassifieds = () => mongoose.connection.readyState === 1;
@@ -44,8 +45,8 @@ const serializeClassifiedAd = (record, index = 0) => {
     seller: String(plainRecord.seller || 'Trusted Seller').trim(),
     sellerRole: String(plainRecord.sellerRole || 'Seller').trim(),
     sellerEmail: String(plainRecord.sellerEmail || '').trim().toLowerCase(),
-    sellerRating: Number(plainRecord.sellerRating || 5),
-    sellerReviewCount: Number(plainRecord.sellerReviewCount || 0),
+    sellerTotalRating: Number(plainRecord.classifiedsTotalRating || plainRecord.sellerTotalRating || 5),
+    sellerReviewCount: Number(plainRecord.classifiedsReviewCount || plainRecord.sellerReviewCount || 0),
     sellerVerificationLevel: String(plainRecord.sellerVerificationLevel || 'unverified').trim(),
     location: String(plainRecord.location || 'Kerala').trim(),
     locality: String(plainRecord.locality || plainRecord.location || 'Prime area').trim(),
@@ -294,6 +295,34 @@ const addClassifiedReport = async (listingId, payload) => {
   return serializeClassifiedAd(ad);
 };
 
+const User = require('../models/User');
+
+const updateUserTotalRating = async (sellerEmail) => {
+  if (!useMongoClassifieds() || !sellerEmail) return;
+
+  const sellerAds = await ClassifiedAd.find({ sellerEmail }).lean();
+  if (sellerAds.length === 0) return;
+
+  let totalRatingSum = 0;
+  let totalCount = 0;
+  sellerAds.forEach(ad => {
+    if (ad.averageRating && ad.totalReviews > 0) {
+      totalRatingSum += ad.averageRating * ad.totalReviews;
+      totalCount += ad.totalReviews;
+    }
+  });
+
+  const newTotalRating = totalCount > 0 ? Math.round((totalRatingSum / totalCount) * 10) / 10 : 5.0;
+
+  await User.findOneAndUpdate(
+    { email: sellerEmail },
+    { 
+      classifiedsTotalRating: newTotalRating,
+      classifiedsReviewCount: totalCount 
+    }
+  );
+};
+
 const addClassifiedReview = async (listingId, payload) => {
   if (!useMongoClassifieds()) {
     return null;
@@ -308,6 +337,10 @@ const addClassifiedReview = async (listingId, payload) => {
   ad.totalReviews = ad.reviews.length;
   ad.averageRating = ad.reviews.reduce((sum, r) => sum + r.rating, 0) / ad.reviews.length;
   await ad.save();
+
+  // Update seller's total rating
+  await updateUserTotalRating(ad.sellerEmail);
+
   return serializeClassifiedAd(ad);
 };
 

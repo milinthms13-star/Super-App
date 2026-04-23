@@ -4,7 +4,7 @@ import "../../styles/SOSAlert.css";
 
 const STORAGE_KEY = "malabarbazaar-sos-state";
 const QUICK_REASONS = ["Medical", "Unsafe situation", "Travel check-in", "Vehicle breakdown"];
-const DELIVERY_CHANNELS = ["Push", "SMS", "Call"];
+const DELIVERY_CHANNELS = ["Push", "SMS", "WhatsApp", "Call"];
 const LOCATION_POINTS = [
   "Marine Drive, Kochi",
   "MG Road signal, Kochi",

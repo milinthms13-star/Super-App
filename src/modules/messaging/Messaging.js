@@ -54,6 +54,8 @@ const Messaging = () => {
   const [focusedMessageId, setFocusedMessageId] = useState('');
 
   const socketRef = useRef(null);
+  const activeCallRef = useRef(null);
+  const incomingCallRef = useRef(null);
   const currentUserId = getId(currentUser);
   const latestMessageId = messages[messages.length - 1]?._id;
 
@@ -138,6 +140,14 @@ const Messaging = () => {
       setEncryptionEnabled(false);
     }
   }, [apiCall]);
+
+  useEffect(() => {
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
+
+  useEffect(() => {
+    incomingCallRef.current = incomingCall;
+  }, [incomingCall]);
 
   useEffect(() => {
     loadChats();
@@ -320,6 +330,18 @@ const Messaging = () => {
     });
 
     newSocket.on('call:accepted', (callData) => {
+      const acceptedCallId = getId(callData?.callId);
+      const pendingCallId = getId(
+        activeCallRef.current?._id ||
+        activeCallRef.current?.callId ||
+        incomingCallRef.current?._id ||
+        incomingCallRef.current?.callId
+      );
+
+      if (!acceptedCallId || !pendingCallId || pendingCallId !== acceptedCallId) {
+        return;
+      }
+
       setActiveCall((currentCall) => ({
         ...(currentCall || {}),
         ...callData,
@@ -331,10 +353,23 @@ const Messaging = () => {
       setIncomingCall(null);
     });
 
-    newSocket.on('call:ended', () => {
-      setActiveCall(null);
-      setShowCallWindow(false);
-      setIncomingCall(null);
+    newSocket.on('call:ended', (callData) => {
+      const endedCallId = getId(callData?.callId);
+      if (!endedCallId) {
+        return;
+      }
+
+      const activeCallId = getId(activeCallRef.current?._id || activeCallRef.current?.callId);
+      const incomingCallId = getId(incomingCallRef.current?._id || incomingCallRef.current?.callId);
+
+      if (activeCallId && activeCallId === endedCallId) {
+        setActiveCall(null);
+        setShowCallWindow(false);
+      }
+
+      if (incomingCallId && incomingCallId === endedCallId) {
+        setIncomingCall(null);
+      }
     });
 
     newSocket.on('user:online', ({ userId }) => {

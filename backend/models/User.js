@@ -145,10 +145,24 @@ const UserSchema = new mongoose.Schema(
         language: 'en',
       }),
     },
+    classifiedsTotalRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: 5.0
+    },
+    classifiedsReviewCount: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
   },
   {
     timestamps: true,
   }
 );
+
+UserSchema.index({ classifiedsTotalRating: -1 });
+UserSchema.index({ classifiedsReviewCount: 1 });
 
 module.exports = mongoose.model('User', UserSchema);

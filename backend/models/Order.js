@@ -50,6 +50,18 @@ const OrderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    paymentSecurity: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    invoice: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    notifications: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
     status: {
       type: String,
       default: 'Confirmed',

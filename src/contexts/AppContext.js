@@ -741,6 +741,21 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     return response.data.data?.listing;
   };
 
+  const getSellerRating = async (sellerEmail) => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/app-data/classifieds/user/${encodeURIComponent(sellerEmail)}/rating`,
+        { headers: authHeaders }
+      );
+      if (response.data?.success) {
+        return response.data.data;
+      }
+    } catch (error) {
+      console.warn('Seller rating fetch failed:', sellerEmail);
+    }
+    return { classifiedsTotalRating: 5.0, classifiedsReviewCount: 0 };
+  };
+
   const updateClassifiedListing = async (listingId, listingData) => {
     const response = await axios.patch(
       `${API_BASE_URL}/app-data/classifieds/listings/${encodeURIComponent(listingId)}`,

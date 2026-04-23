@@ -84,9 +84,16 @@ app.use('/api/ridesharing', require('./routes/ridesharing'));
 // Add realestate route to main server
 app.use('/api/realestate', require('./routes/realestate'));
 
+// Voice API (new)
+app.use('/api/voice', require('./routes/voice'));
+app.use('/api/voice-input', require('./routes/voiceInput'));
+
 // Astrology module routes
 app.use('/api/astrology', require('./routes/astrology'));
+
 app.use('/api/flashsales', require('./routes/flashsales'));
+app.use('/api/support', require('./routes/support'));
+
 
 // Initialize Elasticsearch index on startup
 require('./utils/elasticsearch').ensureIndex().catch(console.error);

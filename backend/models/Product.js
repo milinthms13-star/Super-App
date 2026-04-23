@@ -76,10 +76,54 @@ const ProductSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    imageVariants: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    imagePublicId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    imageCdn: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     stock: {
       type: Number,
       min: 0,
       default: 0,
+    },
+    rating: {
+      type: Number,
+      min: 0,
+      max: 5,
+      default: 0,
+    },
+    reviewCount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    views: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    clicks: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    unitsSold: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    lastSoldAt: {
+      type: Date,
+      default: null,
     },
     manufacturingDate: {
       type: Date,

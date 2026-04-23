@@ -1,32 +1,66 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const stripeSdk = require('stripe');
 const Razorpay = require('razorpay');
 const logger = require('./logger');
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
+const getStripeClient = () => {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error('Stripe is not configured.');
+  }
+
+  return stripeSdk(process.env.STRIPE_SECRET_KEY);
+};
+
+const getRazorpayClient = () => {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    throw new Error('Razorpay is not configured.');
+  }
+
+  return new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
+};
+
+const buildPaymentSecurityProfile = (gateway = '') => ({
+  gateway,
+  tokenized: true,
+  tokenizationMode:
+    gateway === 'stripe'
+      ? 'stripe-hosted-checkout'
+      : gateway === 'razorpay'
+        ? 'razorpay-hosted-checkout'
+        : gateway === 'wallet'
+          ? 'wallet-balance'
+          : 'hosted-checkout',
+  threeDSecure: ['cash_on_delivery', 'wallet'].includes(gateway) ? 'not_applicable' : 'required',
+  cardDataStored: false,
+  pciScope: 'saq-a-like-hosted-checkout',
 });
 
-// PCI Compliance: NEVER store card details
-// Use tokenization + 3DS everywhere
-
-
+async function createStripePaymentIntent(amountInPaise, metadata = {}) {
   try {
+    const stripe = getStripeClient();
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountInPaise,
       currency: 'inr',
       metadata: {
         ...metadata,
-        integration_check: 'accept_a_payment' // Stripe compliance check
+        tokenized: 'true',
       },
       automatic_payment_methods: {
         enabled: true,
       },
+      payment_method_options: {
+        card: {
+          request_three_d_secure: 'any',
+        },
+      },
     });
 
     return {
-      client_secret: paymentIntent.client_secret,
-      payment_intent_id: paymentIntent.id
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+      securityProfile: buildPaymentSecurityProfile('stripe'),
     };
   } catch (error) {
     logger.error('Stripe PaymentIntent failed:', error);
@@ -36,50 +70,53 @@ const razorpay = new Razorpay({
 
 async function verifyStripePaymentIntent(paymentIntentId) {
   try {
+    const stripe = getStripeClient();
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    
-    if (paymentIntent.status === 'succeeded') {
-      return {
-        success: true,
-        payment_intent: {
-          id: paymentIntent.id,
-          amount: paymentIntent.amount,
-          status: paymentIntent.status,
-          customer: paymentIntent.customer || null
-        }
-      };
-    }
 
-    throw new Error(`Payment not completed: ${paymentIntent.status}`);
+    return {
+      success: paymentIntent.status === 'succeeded',
+      paymentIntent: {
+        id: paymentIntent.id,
+        amount: paymentIntent.amount,
+        status: paymentIntent.status,
+        customer: paymentIntent.customer || null,
+      },
+      securityProfile: buildPaymentSecurityProfile('stripe'),
+    };
   } catch (error) {
     logger.error('Stripe verification failed:', error);
     throw error;
   }
 }
 
-async function createRazorpayPaymentIntent(amountInPaise, currency = 'INR', receipt = null) {
+async function createRazorpayPaymentIntent(amountInPaise, currency = 'INR', receipt = null, notes = {}) {
   try {
-    const options = {
+    const razorpay = getRazorpayClient();
+    const order = await razorpay.orders.create({
       amount: amountInPaise,
       currency,
       receipt: receipt || `receipt_${Date.now()}`,
-    };
+      notes: {
+        ...notes,
+        tokenized: 'true',
+      },
+    });
 
-    const order = await razorpay.orders.create(options);
     return {
-      razorpay_order_id: order.id,
-      razorpay_amount: order.amount,
-      razorpay_currency: order.currency
+      razorpayOrderId: order.id,
+      razorpayAmount: order.amount,
+      razorpayCurrency: order.currency,
+      securityProfile: buildPaymentSecurityProfile('razorpay'),
     };
   } catch (error) {
     logger.error('Razorpay order creation failed:', error);
-    throw new Error(`Razorpay initialization failed: ${error.description}`);
+    throw new Error(`Razorpay initialization failed: ${error.description || error.message}`);
   }
 }
 
 module.exports = {
+  buildPaymentSecurityProfile,
+  createRazorpayPaymentIntent,
   createStripePaymentIntent,
   verifyStripePaymentIntent,
-  createRazorpayPaymentIntent
 };
-

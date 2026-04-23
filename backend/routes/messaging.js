@@ -13,7 +13,8 @@ const MessagingSettings = require('../models/MessagingSettings');
 const User = require('../models/User');
 const { generateKeyPair, encryptMessage, decryptMessage, generateKeyFingerprint } = require('../utils/encryption');
 const { uploadToS3, generateSignedUrl, deleteFromS3 } = require('../utils/s3Storage');
-const { emitToUser, broadcast } = require('../config/websocket');
+const { generateAISuggestions } = require('../utils/aiChat');
+const { emitToUser } = require('../config/websocket');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
@@ -70,6 +71,19 @@ const emitToChatParticipants = async (chatId, event, data, excludeUserId = null)
 
     emitToUser(participantId, event, data);
   }
+};
+
+const getAuthorizedChat = async (chatId, userId) => {
+  const chat = await Chat.findById(chatId);
+
+  if (!chat) {
+    return { chat: null, authorized: false };
+  }
+
+  return {
+    chat,
+    authorized: arrayHasObjectId(chat.participants, userId),
+  };
 };
 
 // ============ CHAT ROUTES ============
@@ -403,6 +417,8 @@ router.post('/messages', authenticate, async (req, res, next) => {
     chat.lastMessageAt = new Date();
     await chat.save();
 
+    await emitToChatParticipants(chatId, 'message:received', message, req.user._id);
+
     // Create notifications for other participants
     for (const participant of chat.participants) {
       if (!participant.equals(req.user._id)) {
@@ -492,6 +508,15 @@ router.put('/messages/:messageId/read', authenticate, async (req, res, next) => 
       return res.status(404).json({ message: 'Message not found' });
     }
 
+    const { chat, authorized } = await getAuthorizedChat(message.chatId, req.user._id);
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ message: 'Not authorized to update this message' });
+    }
+
     // Update delivery status
     const deliveryIndex = message.deliveryStatus.findIndex((d) =>
       d.userId.equals(req.user._id)
@@ -518,6 +543,15 @@ router.put('/chats/:chatId/mark-read', authenticate, async (req, res, next) => {
 
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
       return res.status(400).json({ message: 'Invalid chat ID' });
+    }
+
+    const { chat, authorized } = await getAuthorizedChat(chatId, req.user._id);
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ message: 'Not authorized to update this chat' });
     }
 
     const result = await Message.updateMany(
@@ -651,6 +685,15 @@ router.post('/messages/:messageId/reactions', authenticate, async (req, res, nex
 
     if (!message) {
       return res.status(404).json({ message: 'Message not found' });
+    }
+
+    const { chat, authorized } = await getAuthorizedChat(message.chatId, req.user._id);
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ message: 'Not authorized to react to this message' });
     }
 
     // Check if user already reacted with this emoji
@@ -1231,13 +1274,17 @@ router.post('/calls/:callId/end', authenticate, async (req, res, next) => {
 
     await call.save();
 
-    // Emit call end
-    broadcast('call:ended', {
+    const callEndedEvent = {
       callId: call._id,
       endedBy: req.user._id,
       duration: call.duration,
       timestamp: new Date(),
-    });
+    };
+
+    emitToUser(call.initiatorId, 'call:ended', callEndedEvent);
+    if (!objectIdEquals(call.recipientId, call.initiatorId)) {
+      emitToUser(call.recipientId, 'call:ended', callEndedEvent);
+    }
 
     logger.info(`Call ended: ${callId}`);
     res.json({ call });
@@ -1669,7 +1716,7 @@ router.post('/ai/replies/generate', authenticate, async (req, res, next) => {
     // Get user settings
     const settings = await MessagingSettings.findOne({ userId: req.user._id });
 
-    // Generate AI suggestions (mock implementation - replace with actual AI service)
+    // Real AI suggestions via aiChat.js
     const suggestions = await generateAISuggestions(recentMessages, settings?.ai?.suggestionTone || 'casual');
 
     // Save AI reply record
@@ -1806,17 +1853,6 @@ router.put('/settings', authenticate, async (req, res, next) => {
 });
 
 // ============ HELPER FUNCTIONS ============
-
-// Mock AI suggestion generation (replace with actual AI service)
-async function generateAISuggestions(messages, tone = 'casual') {
-  const suggestions = [
-    { id: '1', text: 'Thanks for sharing that!', confidence: 0.85, tone },
-    { id: '2', text: 'That sounds interesting. Tell me more.', confidence: 0.78, tone },
-    { id: '3', text: 'I understand. What are your thoughts?', confidence: 0.72, tone },
-  ];
-
-  return suggestions;
-}
 
 // Extract keywords from messages
 function extractKeywords(messages) {

@@ -1,10 +1,19 @@
-const express = require('express');\nconst { cacheOrders } = require('../middleware/redisCache');\nconst Joi = require('joi');\nconst crypto = require('crypto');\nconst mongoose = require('mongoose');\nconst { authenticate } = require('../middleware/auth');\nconst { createStrictRateLimiter } = require('../middleware/rateLimiter');
+const express = require('express');
+const { cacheOrders } = require('../middleware/redisCache');
+const Joi = require('joi');
+const crypto = require('crypto');
+const mongoose = require('mongoose');
+const { authenticate } = require('../middleware/auth');
+const { createStrictRateLimiter } = require('../middleware/rateLimiter');
 const Product = require('../models/Product');
 const devProductStore = require('../utils/devProductStore');
 const devAppDataStore = require('../utils/devAppDataStore');
 const Order = require('../models/Order');
 const orderStore = require('../utils/orderStore');
 const paymentAttemptStore = require('../utils/paymentAttemptStore');
+const GSTInvoicing = require('../utils/gstInvoice');
+const { buildPaymentSecurityProfile } = require('../utils/pciPayments');
+const { consumeFlashSaleReservation, getActiveFlashSaleForProduct } = require('../utils/flashSaleService');
 const logger = require('../utils/logger');
 const { ADMIN_EMAIL, ORDER_STATUSES, DEFAULT_PAGE, DEFAULT_LIMIT, MAX_LIMIT, ORDER_CURRENCY, DELIVERY_BASE_FEE, DELIVERY_PER_ITEM_FEE, MILLISECONDS_IN_DAY, ORDER_STATUS_RANK } = require('../config/constants');
 const { validateDeliveryAddress, validateReturnRequest, validatePhone, validatePincode } = require('../utils/validators');
@@ -42,6 +51,9 @@ const orderSchema = Joi.object({
         id: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
         productId: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
         batchId: Joi.string().allow('').trim().optional(),
+        flashSaleId: Joi.string().allow('').trim().optional(),
+        flashReservationId: Joi.string().allow('').trim().optional(),
+        flashReservationExpiresAt: Joi.alternatives().try(Joi.string(), Joi.date()).allow('', null).optional(),
         name: Joi.string().allow('').trim().default(''),
         quantity: Joi.number().integer().min(1).required(),
         price: Joi.number().min(0).optional(),
@@ -287,6 +299,9 @@ const derivePaymentSummary = (paymentDetails = null) => {
   };
 };
 
+const buildInvoiceDownloadUrl = (orderId) =>
+  orderId ? `/api/orders/${encodeURIComponent(orderId)}/invoice` : '';
+
 const serializeOrder = (order) => {
   const sellerFulfillments = buildNormalizedSellerFulfillments(
     order.sellerFulfillments,
@@ -315,6 +330,14 @@ const serializeOrder = (order) => {
     gateway: paymentSummary.gateway,
     paymentMethod: paymentSummary.paymentMethod,
     paymentStatus: paymentSummary.paymentStatus,
+    paymentSecurity: order.paymentSecurity || buildPaymentSecurityProfile(paymentSummary.gateway),
+    invoice: order.invoice
+      ? {
+          ...order.invoice,
+          downloadUrl: buildInvoiceDownloadUrl(order.id),
+        }
+      : null,
+    notifications: Array.isArray(order.notifications) ? order.notifications : [],
     status: deriveOrderStatusFromFulfillments(sellerFulfillments),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt || order.createdAt || null,
@@ -479,16 +502,43 @@ const resolveBatchBackedPrice = ({ product = {}, batchId = '' }) => {
   return roundCurrency(hasActiveDiscount ? batchSellingPrice : batchMrp || batchSellingPrice);
 };
 
-const getAuthoritativeUnitPrice = ({ item, product }) => {
-  const hasInventoryBatches = Array.isArray(product?.inventoryBatches) && product.inventoryBatches.length > 0;
-  if (hasInventoryBatches) {
-    return resolveBatchBackedPrice({
-      product,
-      batchId: getRequestedBatchId(item),
-    });
+const getAuthoritativeFlashSaleState = async ({ item, product, userEmail = '' }) => {
+  const productId = product?._id || product?.id || item?.productId || item?.id;
+  const flashSaleId = String(item?.flashSaleId || '').trim();
+  if (!productId) {
+    return null;
   }
 
-  return roundCurrency(product?.price || 0);
+  return getActiveFlashSaleForProduct(productId, {
+    userId: userEmail,
+    saleId: flashSaleId,
+  });
+};
+
+const getAuthoritativeUnitPrice = async ({ item, product, userEmail = '' }) => {
+  const flashSale = await getAuthoritativeFlashSaleState({ item, product, userEmail });
+  if (flashSale && Number.isFinite(Number(flashSale.salePrice))) {
+    return {
+      unitPrice: roundCurrency(flashSale.salePrice),
+      flashSale,
+    };
+  }
+
+  const hasInventoryBatches = Array.isArray(product?.inventoryBatches) && product.inventoryBatches.length > 0;
+  if (hasInventoryBatches) {
+    return {
+      unitPrice: resolveBatchBackedPrice({
+        product,
+        batchId: getRequestedBatchId(item),
+      }),
+      flashSale: null,
+    };
+  }
+
+  return {
+    unitPrice: roundCurrency(product?.price || 0),
+    flashSale: null,
+  };
 };
 
 const getFrontendBaseUrl = () => {
@@ -544,6 +594,9 @@ const buildEnrichedOrderItems = ({ items, starterProductMap, dbProducts }) =>
       name: item.name || sourceProduct.name || '',
       quantity: Number(item.quantity || 1),
       price: Number(item.price || 0),
+      flashSaleId: item.flashSaleId || '',
+      flashReservationId: item.flashReservationId || '',
+      flashReservationExpiresAt: item.flashReservationExpiresAt || null,
       sellerKey,
       sellerEmail: sourceProduct.sellerEmail || '',
       sellerName: sourceProduct.sellerName || '',
@@ -734,7 +787,7 @@ const fetchProviderShipmentStatus = async ({ provider, trackingNumber, shipmentI
   };
 };
 
-const validateOrderItemsAgainstStock = async (items) => {
+const validateOrderItemsAgainstStock = async (items, userEmail = '') => {
   const appData = await devAppDataStore.readAppData();
   const starterProducts = Array.isArray(appData.moduleData?.ecommerceProducts)
     ? appData.moduleData.ecommerceProducts
@@ -798,10 +851,15 @@ const validateOrderItemsAgainstStock = async (items) => {
       }
 
       resolvedItems.push({
-        item,
+        item: {
+          ...item,
+          flashSaleId: item.flashSaleId || '',
+          flashReservationId: item.flashReservationId || '',
+          flashReservationExpiresAt: item.flashReservationExpiresAt || null,
+        },
         productLookupId: normalizedId,
         sourceProduct,
-        unitPrice: getAuthoritativeUnitPrice({ item, product: sourceProduct }),
+        ...(await getAuthoritativeUnitPrice({ item, product: sourceProduct, userEmail })),
       });
     }
 
@@ -815,7 +873,7 @@ const validateOrderItemsAgainstStock = async (items) => {
 };
 
 const buildAuthoritativeOrderSummary = ({ resolvedItems = [] }) => {
-  const normalizedItems = resolvedItems.map(({ item, productLookupId, sourceProduct, unitPrice }) => {
+  const normalizedItems = resolvedItems.map(({ item, productLookupId, sourceProduct, unitPrice, flashSale }) => {
     const quantity = Number(item.quantity || 1);
     return {
       ...item,
@@ -825,6 +883,9 @@ const buildAuthoritativeOrderSummary = ({ resolvedItems = [] }) => {
       quantity,
       price: unitPrice,
       lineTotal: roundCurrency(unitPrice * quantity),
+      flashSaleId: item.flashSaleId || flashSale?.saleId || '',
+      flashReservationId: item.flashReservationId || flashSale?.reservation?.reservationId || '',
+      flashReservationExpiresAt: item.flashReservationExpiresAt || flashSale?.reservation?.expiresAt || null,
     };
   });
   const totalItems = normalizedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
@@ -860,6 +921,7 @@ const createStoredOrderPayload = ({
   enrichedItems,
   sellerFulfillments,
   paymentDetails,
+  paymentSecurity,
 }) => ({
   customerEmail: user.email,
   customerName: user.name || user.email,
@@ -871,6 +933,8 @@ const createStoredOrderPayload = ({
   items: enrichedItems,
   sellerFulfillments,
   paymentDetails,
+  paymentSecurity,
+  notifications: [],
   status: deriveOrderStatusFromFulfillments(sellerFulfillments),
 });
 
@@ -878,6 +942,7 @@ const createOrderWithMongoTransaction = async ({
   user,
   orderData,
   paymentDetails = null,
+  paymentSecurity = null,
   authoritativeOrder,
   starterProductMap,
   dbProducts,
@@ -939,6 +1004,7 @@ const createOrderWithMongoTransaction = async ({
         enrichedItems,
         sellerFulfillments,
         paymentDetails,
+        paymentSecurity,
       });
 
       const [order] = await Order.create([payload], { session });
@@ -951,8 +1017,97 @@ const createOrderWithMongoTransaction = async ({
   return createdOrder;
 };
 
+const consumeFlashSaleItems = async ({ items = [], userEmail = '' }) => {
+  for (const item of items) {
+    if (!item.flashSaleId) {
+      continue;
+    }
+
+    await consumeFlashSaleReservation({
+      saleId: item.flashSaleId,
+      productId: item.productId || item.id,
+      quantity: item.quantity || 1,
+      userId: userEmail,
+      reservationId: item.flashReservationId || '',
+    });
+  }
+};
+
+const updateProductSalesMetrics = async (items = []) => {
+  const salesByProduct = items.reduce((accumulator, item) => {
+    const productId = String(item.productId || item.id || '').trim();
+    if (!productId) {
+      return accumulator;
+    }
+
+    accumulator.set(productId, (accumulator.get(productId) || 0) + Number(item.quantity || 0));
+    return accumulator;
+  }, new Map());
+
+  const now = new Date();
+  for (const [productId, quantity] of salesByProduct.entries()) {
+    if (useMemoryProducts()) {
+      const currentProduct = await devProductStore.findProductById(productId);
+      if (!currentProduct) {
+        continue;
+      }
+
+      await devProductStore.updateProduct(productId, {
+        unitsSold: Number(currentProduct.unitsSold || 0) + quantity,
+        lastSoldAt: now.toISOString(),
+      });
+      continue;
+    }
+
+    await Product.findByIdAndUpdate(productId, {
+      $inc: { unitsSold: quantity },
+      $set: { lastSoldAt: now },
+    });
+  }
+};
+
+const ensureInvoiceForOrder = async (order) => {
+  if (!order?.id || order?.invoice?.filePath) {
+    return order;
+  }
+
+  try {
+    const invoiceMeta = await GSTInvoicing.generateGSTInvoice(order, {
+      customerGSTIN: order.deliveryDetails?.gstin || '',
+    });
+
+    return orderStore.updateOrder(order.id, {
+      invoice: {
+        ...invoiceMeta,
+        status: 'generated',
+      },
+      notifications: [
+        ...(Array.isArray(order.notifications) ? order.notifications : []),
+        {
+          type: 'invoice_generated',
+          createdAt: new Date().toISOString(),
+          message: 'GST invoice generated for this order.',
+        },
+      ],
+    });
+  } catch (error) {
+    logger.warn(`Invoice generation skipped for order ${order?.id}: ${error.message}`);
+    return order;
+  }
+};
+
+const finalizeCompletedOrder = async (order) => {
+  if (!order) {
+    return order;
+  }
+
+  await updateProductSalesMetrics(order.items || []);
+  return ensureInvoiceForOrder(order);
+};
+
 const persistStockReductionAndCreateOrder = async ({ user, orderData, paymentDetails = null, status = 'Confirmed' }) => {
-  const stockCheck = await validateOrderItemsAgainstStock(orderData.items);
+  const paymentSecurity = buildPaymentSecurityProfile(paymentDetails?.gateway || 'cash_on_delivery');
+  const stockCheck = await validateOrderItemsAgainstStock(orderData.items, user.email);
   if (!stockCheck.success) {
     const error = new Error(stockCheck.message);
     error.statusCode = stockCheck.statusCode;
@@ -961,6 +1116,11 @@ const persistStockReductionAndCreateOrder = async ({ user, orderData, paymentDet
 
   const { starterProducts, starterProductMap, dbProducts, resolvedItems } = stockCheck;
   const authoritativeOrder = buildAuthoritativeOrderSummary({ resolvedItems });
+
+  await consumeFlashSaleItems({
+    items: authoritativeOrder.items,
+    userEmail: user.email,
+  });
 
   if (
     canUseMongoOrderTransaction({
@@ -972,13 +1132,14 @@ const persistStockReductionAndCreateOrder = async ({ user, orderData, paymentDet
       user,
       orderData,
       paymentDetails,
+      paymentSecurity,
       status,
       authoritativeOrder,
       starterProductMap,
       dbProducts,
     });
 
-    return order;
+    return finalizeCompletedOrder(order);
   }
 
   const nextStarterProducts = starterProducts.map((product) => {
@@ -1048,9 +1209,10 @@ const persistStockReductionAndCreateOrder = async ({ user, orderData, paymentDet
       enrichedItems,
       sellerFulfillments,
       paymentDetails,
+      paymentSecurity,
       status,
     })
-  );
+  ).then(finalizeCompletedOrder);
 };
 
 const createRazorpayOrder = async ({ amount, receipt, notes }) => {
@@ -1087,11 +1249,17 @@ const createStripeCheckoutSession = async ({ amount, attemptId, user, orderData 
     'customer_email': user.email,
     'metadata[attemptId]': attemptId,
     'metadata[userEmail]': user.email,
+    'billing_address_collection': 'required',
+    'payment_method_types[0]': 'card',
+    'payment_method_collection': 'always',
     'line_items[0][price_data][currency]': 'inr',
     'line_items[0][price_data][product_data][name]': 'NilaHub Order',
     'line_items[0][price_data][product_data][description]': `${orderData.items.length} item(s) with delivery`,
     'line_items[0][price_data][unit_amount]': String(amount),
     'line_items[0][quantity]': '1',
+    'payment_intent_data[metadata][attemptId]': attemptId,
+    'payment_intent_data[metadata][userEmail]': user.email,
+    'payment_intent_data[payment_method_options][card][request_three_d_secure]': 'any',
   });
 
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
@@ -1130,6 +1298,11 @@ const fetchStripeCheckoutSession = async (sessionId) => {
 const serializePaymentConfig = () => ({
   success: true,
   gateways: getPaymentConfig(),
+  security: {
+    tokenizedOnly: true,
+    threeDSecure: 'required_for_online_payments',
+    rawCardStorage: false,
+  },
 });
 
 const parsePagination = (query = {}, defaultLimit = DEFAULT_LIMIT) => {
@@ -1167,7 +1340,8 @@ const countSellerOpenFulfillments = ({ orders = [], user, req }) =>
     )
   ).length;
 
-router.get('/mine', authenticate, cacheOrders, async (req, res) => {\n  try {
+router.get('/mine', authenticate, cacheOrders, async (req, res) => {
+  try {
     const { page, limit, skip } = parsePagination(req.query);
     const orders = await orderStore.listOrdersByEmail(req.user.email);
     const pagedOrders = orders.slice(skip, skip + limit);
@@ -1193,7 +1367,8 @@ router.get('/mine', authenticate, cacheOrders, async (req, res) => {\n  try {
   }
 });
 
-router.get('/manage', authenticate, cacheOrders, async (req, res) => {\n  try {
+router.get('/manage', authenticate, cacheOrders, async (req, res) => {
+  try {
     const { page, limit, skip } = parsePagination(req.query);
     if (isAdmin(req)) {
       const allOrders = await orderStore.listOrders();
@@ -1247,6 +1422,50 @@ router.get('/manage', authenticate, cacheOrders, async (req, res) => {\n  try {
     return res.status(500).json({
       success: false,
       message: 'Unable to fetch seller orders.',
+    });
+  }
+});
+
+router.get('/:orderId/invoice', authenticate, async (req, res) => {
+  try {
+    const existingOrder = await orderStore.findOrderById(req.params.orderId);
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    const ownsOrder =
+      String(existingOrder?.customerEmail || '').trim().toLowerCase() ===
+      String(req.user?.email || '').trim().toLowerCase();
+    const canManageAsSeller =
+      isSellerRole(req) &&
+      buildNormalizedSellerFulfillments(existingOrder.sellerFulfillments, existingOrder.items).some((fulfillment) =>
+        sellerOwnsFulfillment({ fulfillment, user: req.user, req })
+      );
+
+    if (!ownsOrder && !isAdmin(req) && !canManageAsSeller) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to download this invoice.',
+      });
+    }
+
+    const orderWithInvoice = await ensureInvoiceForOrder(existingOrder);
+    if (!orderWithInvoice?.invoice?.filePath) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invoice is not available for this order yet.',
+      });
+    }
+
+    return res.download(orderWithInvoice.invoice.filePath, orderWithInvoice.invoice.fileName || undefined);
+  } catch (error) {
+    logger.error('invoice download error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to download the invoice right now.',
     });
   }
 });
@@ -1420,7 +1639,7 @@ router.post('/payments/create', paymentRateLimiter, authenticate, async (req, re
       });
     }
 
-    const stockCheck = await validateOrderItemsAgainstStock(value.items);
+    const stockCheck = await validateOrderItemsAgainstStock(value.items, req.user.email);
     if (!stockCheck.success) {
       return res.status(stockCheck.statusCode).json({
         success: false,
@@ -1445,6 +1664,7 @@ router.post('/payments/create', paymentRateLimiter, authenticate, async (req, re
         deliveryFee: authoritativeOrder.deliveryFee,
       },
       paymentStatus: 'pending',
+      securityProfile: buildPaymentSecurityProfile(value.gateway),
     });
 
     if (value.gateway === 'razorpay') {
@@ -1468,6 +1688,7 @@ router.post('/payments/create', paymentRateLimiter, authenticate, async (req, re
         attemptId: attempt.id,
         key: paymentConfig.razorpay.keyId,
         order: razorpayOrder,
+        securityProfile: buildPaymentSecurityProfile('razorpay'),
       });
     }
 
@@ -1489,6 +1710,7 @@ router.post('/payments/create', paymentRateLimiter, authenticate, async (req, re
       attemptId: attempt.id,
       sessionId: session.id,
       checkoutUrl: session.url,
+      securityProfile: buildPaymentSecurityProfile('stripe'),
     });
   } catch (error) {
     logger.error('payment create error:', error);
@@ -1996,10 +2218,15 @@ router.patch('/:orderId/status', authenticate, async (req, res) => {
           : existingOrder.deliveredAt || null,
     });
 
+    const orderWithInvoice =
+      deriveOrderStatusFromFulfillments(nextSellerFulfillments) === 'Delivered'
+        ? await ensureInvoiceForOrder(updatedOrder)
+        : updatedOrder;
+
     return res.json({
       success: true,
       message: 'Seller fulfillment status updated successfully.',
-      order: serializeOrder(updatedOrder),
+      order: serializeOrder(orderWithInvoice),
     });
   } catch (error) {
     logger.error('order status update error:', error);
@@ -2113,10 +2340,15 @@ router.patch('/:orderId/status/sync', authenticate, async (req, res) => {
           : existingOrder.deliveredAt || null,
     });
 
+    const orderWithInvoice =
+      deriveOrderStatusFromFulfillments(nextSellerFulfillments) === 'Delivered'
+        ? await ensureInvoiceForOrder(updatedOrder)
+        : updatedOrder;
+
     return res.json({
       success: true,
       message: `Seller fulfillment synced from ${value.provider}.`,
-      order: serializeOrder(updatedOrder),
+      order: serializeOrder(orderWithInvoice),
       providerStatus: providerStatus.externalStatus,
     });
   } catch (error) {

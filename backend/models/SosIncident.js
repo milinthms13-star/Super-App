@@ -46,7 +46,7 @@ const sosIncidentSchema = new mongoose.Schema({
   notificationsSent: [{
     type: {
       type: String,
-      enum: ['push', 'sms', 'call']
+enum: ['push', 'sms', 'call', 'whatsapp']
     },
     to: String, // phone or userId.toString()
     status: String, // sent, delivered, failed

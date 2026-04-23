@@ -1,8 +1,31 @@
+jest.mock('../utils/elasticsearch', () => ({
+  indexProduct: jest.fn().mockResolvedValue(undefined),
+  deleteProduct: jest.fn().mockResolvedValue(undefined),
+  searchProducts: jest.fn().mockResolvedValue({
+    products: [],
+    total: 0,
+    aggregations: { categories: [], businesses: [] },
+  }),
+}));
+
+jest.mock('../config/redis', () => ({
+  getRedisClient: jest.fn(() => null),
+}));
+
+jest.mock('../utils/cloudinary', () => ({
+  uploadToCloudinary: jest.fn().mockResolvedValue('https://example.com/product.jpg'),
+}));
+
+jest.mock('../utils/gridfs', () => ({
+  deleteGridFSFile: jest.fn().mockResolvedValue(undefined),
+  uploadBufferToGridFS: jest.fn().mockResolvedValue({ id: '507f1f77bcf86cd799439011' }),
+}));
+
 const { __testables } = require('./products');
 
 describe('product serialization', () => {
-  test('preserves starter-product stock when there are no inventory batches', () => {
-    const serialized = __testables.serializeProduct({
+  test('preserves starter-product stock when there are no inventory batches', async () => {
+    const serialized = await __testables.serializeProduct({
       id: 'starter-1',
       name: 'Starter Product',
       category: 'Groceries',
@@ -18,8 +41,8 @@ describe('product serialization', () => {
     expect(serialized.mrp).toBe(150);
   });
 
-  test('promotes active batch return policy to the product summary', () => {
-    const serialized = __testables.serializeProduct({
+  test('promotes active batch return policy to the product summary', async () => {
+    const serialized = await __testables.serializeProduct({
       id: 'batch-1',
       name: 'Batch-backed Product',
       category: 'Snacks',

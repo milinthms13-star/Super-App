@@ -7,6 +7,8 @@ const SosIncident = require('../models/SosIncident');
 const { authenticate } = require('../middleware/auth');
 const { emitToUser, getUserStatus } = require('../config/websocket');
 const logger = require('../utils/logger');
+const { sendSMS } = require('../utils/sendSMS');
+const { sendWhatsApp } = require('../utils/sendWhatsApp');
 
 const router = express.Router();
 
@@ -220,6 +222,32 @@ router.post('/send-alert', authenticate, async (req, res) => {
         email: recipient.email,
         online: recipientStatus.status === 'online',
       });
+    }
+
+    // SMS/WhatsApp for SosContacts (all trusted contacts, even non-app users)
+    const sosContacts = await SosContact.find({ userId });
+    for (const sosContact of sosContacts) {
+      const phone = sosContact.phone;
+      
+      if (channels.includes('SMS') && phone) {
+        const smsResult = await sendSMS(phone, `${reason} at ${location || 'your location'}`, incident._id.toString());
+        incident.notificationsSent.push({
+          type: 'sms',
+          to: phone,
+          status: smsResult.status,
+          timestamp: new Date()
+        });
+      }
+      
+      if (channels.includes('WhatsApp') && phone && phone.startsWith('+91')) {
+        const waResult = await sendWhatsApp(phone, reason, incident._id.toString());
+        incident.notificationsSent.push({
+          type: 'whatsapp',
+          to: phone,
+          status: waResult.status || (waResult.success ? 'sent' : 'failed'),
+          timestamp: new Date()
+        });
+      }
     }
 
     // Log all notifications and save incident

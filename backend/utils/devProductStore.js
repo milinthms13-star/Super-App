@@ -20,6 +20,7 @@ const logger = require('./logger');
 
 const PRODUCT_LIST_CACHE_KEY = 'devProducts:list';
 const PRODUCT_CACHE_TTL = 60; // 1min
+const buildProductCacheKey = (productId) => `devProduct:${productId}`;
 
 const readProducts = async () => {
   const client = getRedisClient();
@@ -50,11 +51,14 @@ const readProducts = async () => {
   return products;
 };
 
-const invalidateProductCache = async () => {
+const invalidateProductCache = async (productId = '') => {
   const client = getRedisClient();
   if (client) {
     try {
       await client.del(PRODUCT_LIST_CACHE_KEY);
+      if (productId) {
+        await client.del(buildProductCacheKey(productId));
+      }
       logger.debug('Product cache invalidated');
     } catch (err) {
       logger.warn('Cache invalidate failed:', err.message);
@@ -62,10 +66,10 @@ const invalidateProductCache = async () => {
   }
 };
 
-const writeProducts = async (products) => {
+const writeProducts = async (products, productId = '') => {
   await ensureFile();
   await fs.writeFile(dataFilePath, JSON.stringify(products, null, 2), 'utf8');
-  await invalidateProductCache();
+  await invalidateProductCache(productId);
 };
 
 const createId = () => crypto.randomUUID();
@@ -87,7 +91,7 @@ const createProduct = async (product) => {
   const products = await readProducts();
   const nextProduct = normalizeProduct(product);
   products.unshift(nextProduct);
-  await writeProducts(products);
+  await writeProducts(products, nextProduct._id);
   return nextProduct;
 };
 
@@ -107,13 +111,13 @@ const updateProduct = async (productId, updates) => {
   };
 
   products[index] = nextProduct;
-  await writeProducts(products);
+  await writeProducts(products, productId);
   return nextProduct;
 };
 
 const findProductById = async (productId) => {
   const client = getRedisClient();
-  const cacheKey = `devProduct:${productId}`;
+  const cacheKey = buildProductCacheKey(productId);
   
   if (client) {
     try {
@@ -141,9 +145,22 @@ const findProductById = async (productId) => {
   return product;
 };
 
+const deleteProduct = async (productId) => {
+  const products = await readProducts();
+  const nextProducts = products.filter((product) => product._id !== productId);
+
+  if (nextProducts.length === products.length) {
+    return false;
+  }
+
+  await writeProducts(nextProducts, productId);
+  return true;
+};
+
 module.exports = {
   listProducts,
   createProduct,
   updateProduct,
   findProductById,
+  deleteProduct,
 };

@@ -26,6 +26,7 @@ import SocialMedia from "./modules/socialmedia/SocialMedia";
 import ReminderAlert from "./modules/reminderalert/ReminderAlert";
 import SOSAlert from "./modules/sos/SOSAlert";
 import AstrologyHome from "./modules/astrology/AstrologyHome";
+import Support from "./modules/support/Support";
 import { Diary } from "./modules/personaldiary";
 import {
   CUSTOM_LINKS_STORAGE_KEY,
@@ -774,6 +775,8 @@ function App() {
         return <SOSAlert />;
       case "astrology":
         return <AstrologyHome />;
+      case "support":
+        return <Support />;
       default:
         return (
           <Dashboard
