@@ -1,13 +1,22 @@
 // backend/utils/s3Storage.js
-const AWS = require('aws-sdk');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-1',
+const region = process.env.AWS_REGION || 'us-east-1';
+
+// Validate region parameter to prevent security issues
+if (!/^[a-z0-9\-]+$/.test(region)) {
+  throw new Error('Invalid AWS region provided');
+}
+
+const s3Client = new S3Client({
+  region,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
 });
 
 /**
@@ -39,20 +48,19 @@ const uploadToS3 = async (fileData, s3Key, options = {}) => {
     Body: fileData,
     ContentType: options.contentType || 'application/octet-stream',
     Metadata: options.metadata || {},
-    // Enable encryption
     ServerSideEncryption: 'AES256',
-    // Optional: Add tags
-    Tagging: options.tags ? Object.entries(options.tags).map(([k, v]) => `${k}=${v}`).join('&') : undefined,
+    ...(options.tags && { Tagging: Object.entries(options.tags).map(([k, v]) => `${k}=${v}`).join('&') }),
     ...options,
   };
 
   try {
-    const result = await s3.upload(params).promise();
+    const command = new PutObjectCommand(params);
+    const result = await s3Client.send(command);
 
     return {
       success: true,
-      s3Key: result.Key,
-      s3Url: result.Location,
+      s3Key: s3Key,
+      s3Url: `https://${params.Bucket}.s3.${region}.amazonaws.com/${s3Key}`,
       etag: result.ETag,
       contentLength: fileData.length || 0,
     };
@@ -73,8 +81,14 @@ const downloadFromS3 = async (s3Key) => {
   };
 
   try {
-    const result = await s3.getObject(params).promise();
-    return result.Body;
+    const command = new GetObjectCommand(params);
+    const result = await s3Client.send(command);
+    // Convert the response body stream to buffer
+    const chunks = [];
+    for await (const chunk of result.Body) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
   } catch (error) {
     throw new Error(`S3 download failed: ${error.message}`);
   }
@@ -92,7 +106,8 @@ const deleteFromS3 = async (s3Key) => {
   };
 
   try {
-    await s3.deleteObject(params).promise();
+    const command = new DeleteObjectCommand(params);
+    await s3Client.send(command);
     return true;
   } catch (error) {
     throw new Error(`S3 delete failed: ${error.message}`);
