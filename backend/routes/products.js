@@ -507,8 +507,8 @@ router.get('/', cacheProducts, async (req, res) => {
         ...product,
         batchSummary: await buildBatchSummary(product, product.inventoryBatches || [])
       }))
-    );
-      .filter(
+    ).then(products =>
+      products.filter(
         (product) =>
           (product.approvalStatus || 'approved') === 'approved' &&
           product.isActive !== false &&
@@ -521,7 +521,8 @@ router.get('/', cacheProducts, async (req, res) => {
         isActive: product.isActive !== false,
         createdAt: product.createdAt || null,
         updatedAt: product.updatedAt || null,
-      }));
+      }))
+    );
     const storedProducts = await listStoredProducts();
     const approvedProducts = await Promise.all(
       [...starterApprovedProducts, ...storedProducts].filter(
