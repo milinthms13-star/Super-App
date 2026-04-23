@@ -10,6 +10,8 @@ import AISmartReplies from './AISmartReplies';
 import FileUpload from './FileUpload';
 import NotificationBell from './NotificationBell';
 import InvitationPanel from './InvitationPanel';
+import VisibilitySettings from './VisibilitySettings';
+import ContactMeansSettings from './ContactMeansSettings';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
 
@@ -35,6 +37,7 @@ const getOtherParticipant = (chat, currentUserId) =>
 const Messaging = () => {
   const { currentUser, apiCall } = useApp();
   const [activeTab, setActiveTab] = useState('chats');
+  const [activeSettingsTab, setActiveSettingsTab] = useState('visibility');
   const [chats, setChats] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -1020,6 +1023,12 @@ const Messaging = () => {
               >
                 📬 ({pendingInvitations.length})
               </button>
+              <button
+                className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
+                onClick={() => setActiveTab('settings')}
+              >
+                ⚙️
+              </button>
             </div>
             <NotificationBell
               notifications={notifications}
@@ -1057,6 +1066,31 @@ const Messaging = () => {
               loading={loadingInvitations}
             />
           )}
+
+          {activeTab === 'settings' && (
+            <div className="settings-panel">
+              <div className="settings-tabs">
+                <button
+                  className={`settings-tab-btn ${activeSettingsTab === 'visibility' ? 'active' : ''}`}
+                  onClick={() => setActiveSettingsTab('visibility')}
+                >
+                  📍 Visibility
+                </button>
+                <button
+                  className={`settings-tab-btn ${activeSettingsTab === 'contact' ? 'active' : ''}`}
+                  onClick={() => setActiveSettingsTab('contact')}
+                >
+                  💬 Contact
+                </button>
+              </div>
+              {activeSettingsTab === 'visibility' && (
+                <VisibilitySettings user={currentUser} onUpdate={() => {}} />
+              )}
+              {activeSettingsTab === 'contact' && (
+                <ContactMeansSettings user={currentUser} onUpdate={() => {}} />
+              )}
+            </div>
+          )}
         </div>
 
         <div className="messaging-main">
@@ -1081,21 +1115,59 @@ const Messaging = () => {
                   {searchingUsers ? (
                     <p className="loading">Searching...</p>
                   ) : availableUsers.length > 0 ? (
-                    availableUsers.map((user) => (
-                      <div key={user._id} className="user-search-result">
-                        <span className="user-avatar">{user.avatar || '👤'}</span>
-                        <div className="user-info">
-                          <h4>{user.name}</h4>
-                          <p>{user.email}</p>
+                    availableUsers.map((user) => {
+                      const visibility = user.visibility || {
+                        visibleViaEmail: true,
+                        visibleViaPhone: true,
+                        visibleViaUsername: true,
+                      };
+                      const contactMeans = user.contactMeans || {
+                        availableForChat: true,
+                        availableForVoiceCall: true,
+                        availableForVideoCall: true,
+                      };
+                      const visibleMethods = [];
+                      if (visibility.visibleViaEmail) visibleMethods.push('📧');
+                      if (visibility.visibleViaPhone) visibleMethods.push('📱');
+                      if (visibility.visibleViaUsername) visibleMethods.push('👤');
+
+                      const availableMeans = [];
+                      if (contactMeans.availableForChat) availableMeans.push('💬');
+                      if (contactMeans.availableForVoiceCall) availableMeans.push('📞');
+                      if (contactMeans.availableForVideoCall) availableMeans.push('📹');
+
+                      return (
+                        <div key={user._id} className="user-search-result">
+                          <span className="user-avatar">{user.avatar || '👤'}</span>
+                          <div className="user-info">
+                            <h4>{user.name}</h4>
+                            <p>{user.email}</p>
+                            <div className="badges-row">
+                              <div className="visibility-badges">
+                                {visibleMethods.map((method, idx) => (
+                                  <span key={idx} className="visibility-badge" title="Can find you via this method">
+                                    {method}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="contact-means-badges">
+                                {availableMeans.map((means, idx) => (
+                                  <span key={idx} className="contact-means-badge" title="Available for this contact method">
+                                    {means}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            className="btn-add-contact"
+                            onClick={() => handleAddContact(user._id, user.name, user.email, user.username)}
+                          >
+                            + Invite
+                          </button>
                         </div>
-                        <button
-                          className="btn-add-contact"
-                          onClick={() => handleAddContact(user._id, user.name, user.email, user.username)}
-                        >
-                          + Invite
-                        </button>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="no-results">No users found. Try another search.</p>
                   )}

@@ -3,18 +3,23 @@ import axios from "axios";
 import CartPage from "./CartPage";
 
 const mockUseApp = jest.fn();
+const mockNavigate = jest.fn();
 
 jest.mock("axios");
 
 jest.mock("../../contexts/AppContext", () => ({
   useApp: () => mockUseApp(),
 }));
+jest.mock("react-router-dom", () => ({
+  useNavigate: () => mockNavigate,
+}), { virtual: true });
 
 jest.mock("./productImage", () => ({
   resolveProductImageSrc: (image) => image ? `http://api.local${image}` : "",
 }));
 
 beforeEach(() => {
+  mockNavigate.mockClear();
   axios.get.mockResolvedValue({
     data: {
       success: true,
@@ -47,6 +52,7 @@ beforeEach(() => {
 
 describe("CartPage", () => {
   const mockOnContinueShopping = jest.fn();
+  const renderWithRouter = (ui) => render(ui);
 
   const fillRequiredAddressFields = () => {
     fireEvent.change(screen.getByPlaceholderText(/Enter receiver phone number/i), {
@@ -70,12 +76,12 @@ describe("CartPage", () => {
   };
 
   it("renders cart page with heading", () => {
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
     expect(screen.getByText("Cart")).toBeInTheDocument();
   });
 
   it("shows empty cart message when no items", () => {
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
     expect(screen.getByText("Your cart is empty")).toBeInTheDocument();
   });
 
@@ -96,7 +102,7 @@ describe("CartPage", () => {
       ],
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
     expect(screen.getByText("Product 1")).toBeInTheDocument();
   });
 
@@ -117,7 +123,7 @@ describe("CartPage", () => {
       ],
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
     
     expect(screen.getAllByText(/Subtotal/).length).toBeGreaterThan(0);
     expect(screen.getByText(/^Delivery Fee$/)).toBeInTheDocument();
@@ -142,7 +148,7 @@ describe("CartPage", () => {
       ],
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
     
     const removeButton = screen.getByRole("button", { name: /Remove/i });
     fireEvent.click(removeButton);
@@ -167,7 +173,7 @@ describe("CartPage", () => {
       ],
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
     
     expect(screen.getByText("Cash on Delivery")).toBeInTheDocument();
     expect(screen.getByText("Razorpay")).toBeInTheDocument();
@@ -190,7 +196,7 @@ describe("CartPage", () => {
       ],
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
     
     const checkoutButton = screen.getByRole("button", { name: /Place COD Order/i });
     fireEvent.click(checkoutButton);
@@ -223,7 +229,7 @@ describe("CartPage", () => {
       ],
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
 
     fillRequiredAddressFields();
     fireEvent.click(screen.getByRole("button", { name: /place cod order/i }));
@@ -241,7 +247,7 @@ describe("CartPage", () => {
       currentUser: { registrationType: "entrepreneur" },
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
     
     expect(screen.getByText(/Seller login is for business management only/)).toBeInTheDocument();
     expect(screen.getByText(/Shopping Disabled/)).toBeInTheDocument();
@@ -266,7 +272,7 @@ describe("CartPage", () => {
       ],
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
 
     fillRequiredAddressFields();
     const labelInput = screen.getByPlaceholderText(/Label this address/i);
@@ -299,7 +305,7 @@ describe("CartPage", () => {
       ],
     });
 
-    render(<CartPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<CartPage onContinueShopping={mockOnContinueShopping} />);
 
     fireEvent.click(screen.getByRole("button", { name: /save address/i }));
 

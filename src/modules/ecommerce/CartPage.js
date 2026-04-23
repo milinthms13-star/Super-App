@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import PropTypes from "prop-types";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import { resolveProductImageSrc } from "./productImage";
 import {
@@ -17,6 +18,7 @@ import {
   requestNotificationPermission,
   showServiceWorkerNotification,
 } from "../../pwaConfig";
+import { getPathForModule } from "../../utils/moduleRoutes";
 import "../../styles/Ecommerce.css";
 
 const PINCODE_LENGTH = 6;
@@ -107,7 +109,8 @@ const loadRazorpayScript = () =>
     document.body.appendChild(script);
   });
 
-const CartPage = ({ onContinueShopping }) => {
+const CartPage = ({ onContinueShopping = null }) => {
+  const navigate = useNavigate();
   const {
     cart,
     currentUser,
@@ -145,6 +148,14 @@ const CartPage = ({ onContinueShopping }) => {
     getNotificationPermission()
   );
   const [liveNow, setLiveNow] = useState(() => Date.now());
+  const handleContinueShopping = () => {
+    if (typeof onContinueShopping === "function") {
+      onContinueShopping();
+      return;
+    }
+
+    navigate(getPathForModule("ecommerce"));
+  };
 
   // Fetch delivery constants from backend (ensures frontend/backend consistency)
   useEffect(() => {
@@ -624,7 +635,7 @@ const CartPage = ({ onContinueShopping }) => {
         <div className="cart-panel empty-cart">
           <h2>Shopping Disabled</h2>
           <p>Switch to a customer account if you want to purchase products.</p>
-          <button type="button" className="filter-btn active" onClick={onContinueShopping}>
+          <button type="button" className="filter-btn active" onClick={handleContinueShopping}>
             Back to Workspace
           </button>
         </div>
@@ -632,7 +643,7 @@ const CartPage = ({ onContinueShopping }) => {
         <div className="cart-panel empty-cart">
           <h2>Your cart is empty</h2>
           <p>Add products from GlobeMart to see them here.</p>
-          <button type="button" className="filter-btn active" onClick={onContinueShopping}>
+          <button type="button" className="filter-btn active" onClick={handleContinueShopping}>
             Continue Shopping
           </button>
         </div>
@@ -939,7 +950,7 @@ const CartPage = ({ onContinueShopping }) => {
                     ? "Pay with Stripe"
                     : "Pay with Razorpay"}
               </button>
-              <button type="button" className="btn btn-outline" onClick={onContinueShopping}>
+              <button type="button" className="btn btn-outline" onClick={handleContinueShopping}>
                 Continue Shopping
               </button>
             </div>
@@ -1034,7 +1045,7 @@ const CartPage = ({ onContinueShopping }) => {
 };
 
 CartPage.propTypes = {
-  onContinueShopping: PropTypes.func.isRequired,
+  onContinueShopping: PropTypes.func,
 };
 
 export default CartPage;

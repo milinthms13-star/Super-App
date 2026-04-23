@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from "react";
 import PropTypes from "prop-types";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import { formatDisplayDate, isItemReturnEligible, getReturnWindowText } from "../../utils/ecommerceHelpers";
 import { sanitizeText } from "../../utils/xssProtection";
+import { getPathForModule } from "../../utils/moduleRoutes";
 import "../../styles/Ecommerce.css";
 
 const RETURN_REASONS = [
@@ -32,13 +34,22 @@ const getReturnStatusLabel = (returnRequest) => {
 
 const getReturnItemKey = (orderId, itemId) => `${String(orderId)}::${String(itemId)}`;
 
-const ReturnsPage = ({ onContinueShopping }) => {
+const ReturnsPage = ({ onContinueShopping = null }) => {
+  const navigate = useNavigate();
   const { orders, requestItemReturn } = useApp();
   const [returnForms, setReturnForms] = useState({});
   const [submittingMap, setSubmittingMap] = useState({});
   const [feedbackMap, setFeedbackMap] = useState({});
   const [showReturnConfirm, setShowReturnConfirm] = useState(false);
   const [returnConfirmData, setReturnConfirmData] = useState(null);
+  const handleContinueShopping = () => {
+    if (typeof onContinueShopping === "function") {
+      onContinueShopping();
+      return;
+    }
+
+    navigate(getPathForModule("ecommerce"));
+  };
 
   const orderItems = useMemo(
     () =>
@@ -147,7 +158,7 @@ const ReturnsPage = ({ onContinueShopping }) => {
       </div>
 
       <div className="ecommerce-header-actions">
-        <button type="button" className="btn btn-outline" onClick={onContinueShopping}>
+        <button type="button" className="btn btn-outline" onClick={handleContinueShopping}>
           Back to GlobeMart
         </button>
       </div>
@@ -293,7 +304,7 @@ const ReturnsPage = ({ onContinueShopping }) => {
       </section>
 
       <div className="seller-card-actions">
-        <button type="button" className="btn btn-outline" onClick={onContinueShopping}>
+        <button type="button" className="btn btn-outline" onClick={handleContinueShopping}>
           Back to Dashboard
         </button>
       </div>
@@ -376,7 +387,7 @@ const ReturnsPage = ({ onContinueShopping }) => {
 };
 
 ReturnsPage.propTypes = {
-  onContinueShopping: PropTypes.func.isRequired,
+  onContinueShopping: PropTypes.func,
 };
 
 export default ReturnsPage;

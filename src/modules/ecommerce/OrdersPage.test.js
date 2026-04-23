@@ -2,12 +2,17 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import OrdersPage from "./OrdersPage";
 
 const mockUseApp = jest.fn();
+const mockNavigate = jest.fn();
 
 jest.mock("../../contexts/AppContext", () => ({
   useApp: () => mockUseApp(),
 }));
+jest.mock("react-router-dom", () => ({
+  useNavigate: () => mockNavigate,
+}), { virtual: true });
 
 beforeEach(() => {
+  mockNavigate.mockClear();
   mockUseApp.mockReturnValue({
     orders: [],
     ordersPagination: { totalItems: 0 },
@@ -20,14 +25,15 @@ beforeEach(() => {
 describe("OrdersPage", () => {
   const mockOnContinueShopping = jest.fn();
   const mockOnOpenReturns = jest.fn();
+  const renderWithRouter = (ui) => render(ui);
 
   it("renders orders page with heading", () => {
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     expect(screen.getByText("Order History")).toBeInTheDocument();
   });
 
   it("shows empty state when no orders", () => {
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     expect(screen.getByText("No orders yet")).toBeInTheDocument();
   });
 
@@ -60,7 +66,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     expect(screen.getByText(/Order order-001/)).toBeInTheDocument();
     expect(screen.getByText("Delivered")).toBeInTheDocument();
@@ -98,7 +104,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     const searchInput = screen.getByPlaceholderText(/Search by order ID/i);
     fireEvent.change(searchInput, { target: { value: "order-001" } });
@@ -139,7 +145,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     const filterSelect = screen.getByLabelText(/Filter by status/i);
     fireEvent.change(filterSelect, { target: { value: "delivered" } });
@@ -172,7 +178,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     const detailsButton = screen.getByRole("button", { name: /View details/i });
     fireEvent.click(detailsButton);
@@ -202,7 +208,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     expect(screen.getByText("Confirmed")).toBeInTheDocument();
     expect(screen.getByText("Packed")).toBeInTheDocument();
@@ -241,7 +247,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     expect(screen.getByText(/Return by/)).toBeInTheDocument();
   });
@@ -267,7 +273,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     const filterSelect = screen.getByLabelText(/Filter by status/i);
     fireEvent.change(filterSelect, { target: { value: "confirmed" } });
@@ -307,7 +313,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     const detailsButton = screen.getByRole("button", { name: /View details/i });
     fireEvent.click(detailsButton);
@@ -350,7 +356,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     // XSS payloads should be escaped
     expect(screen.getByText("&lt;script&gt;alert('xss')&lt;/script&gt;Malicious Product")).toBeInTheDocument();
@@ -378,7 +384,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     const detailsButton = screen.getByRole("button", { name: /View details/i });
     fireEvent.click(detailsButton);
@@ -418,7 +424,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     expect(screen.getByText("Fast Seller")).toBeInTheDocument();
     expect(screen.getByText(/SR123456789/)).toBeInTheDocument();
@@ -434,7 +440,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     expect(screen.getByText("Order placed successfully!")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Dismiss/i })).toBeInTheDocument();
@@ -450,7 +456,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: mockClearCheckoutStatus,
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     fireEvent.click(screen.getByRole("button", { name: /Dismiss/i }));
     expect(mockClearCheckoutStatus).toHaveBeenCalled();
@@ -477,7 +483,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     const continueButton = screen.getByRole("button", { name: /Continue Shopping/i });
     fireEvent.click(continueButton);
@@ -506,7 +512,7 @@ describe("OrdersPage", () => {
       clearCheckoutStatus: jest.fn(),
     });
 
-    render(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
+    renderWithRouter(<OrdersPage onContinueShopping={mockOnContinueShopping} onOpenReturns={mockOnOpenReturns} />);
     
     const manageReturnsButton = screen.getByRole("button", { name: /Manage Returns/i });
     fireEvent.click(manageReturnsButton);

@@ -12,12 +12,20 @@ const UserSchema = new mongoose.Schema(
     },
     username: {
       type: String,
-      required: false,
+      required: true,
       unique: true,
-      sparse: true,
       lowercase: true,
       trim: true,
       index: true,
+      minlength: 3,
+      maxlength: 20,
+      match: /^[a-zA-Z0-9_-]+$/,
+    },
+    chatUsername: {
+      type: String,
+      required: false,
+      lowercase: true,
+      trim: true,
       minlength: 3,
       maxlength: 20,
       match: /^[a-zA-Z0-9_-]+$/,
@@ -108,6 +116,34 @@ const UserSchema = new mongoose.Schema(
         default: false,
       },
     },
+    visibility: {
+      visibleViaPhone: {
+        type: Boolean,
+        default: true,
+      },
+      visibleViaEmail: {
+        type: Boolean,
+        default: true,
+      },
+      visibleViaUsername: {
+        type: Boolean,
+        default: true,
+      },
+    },
+    contactMeans: {
+      availableForChat: {
+        type: Boolean,
+        default: true,
+      },
+      availableForVoiceCall: {
+        type: Boolean,
+        default: true,
+      },
+      availableForVideoCall: {
+        type: Boolean,
+        default: true,
+      },
+    },
     premiumOnlyContact: {
       type: Boolean,
       default: false,
@@ -168,6 +204,18 @@ const UserSchema = new mongoose.Schema(
       min: 0,
       default: 0
     },
+    invitationsSent: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Invitation',
+      }
+    ],
+    invitationsReceived: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Invitation',
+      }
+    ],
   },
   {
     timestamps: true,

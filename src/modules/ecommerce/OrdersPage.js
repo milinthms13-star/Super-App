@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from "react";
 import PropTypes from "prop-types";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import { normalizeOrderStatus, formatDisplayDate, getReturnWindowText, formatCurrency } from "../../utils/ecommerceHelpers";
 import { sanitizeText } from "../../utils/xssProtection";
+import { getPathForModule } from "../../utils/moduleRoutes";
 import "../../styles/Ecommerce.css";
 
 const ORDER_STEPS = ["Confirmed", "Packed", "Shipped", "Delivered"];
@@ -34,7 +36,8 @@ const getReturnStatusLabel = (item) => {
   return getReturnWindowText(item);
 };
 
-const OrdersPage = ({ onContinueShopping, onOpenReturns }) => {
+const OrdersPage = ({ onContinueShopping = null, onOpenReturns = null }) => {
+  const navigate = useNavigate();
   const {
     orders,
     ordersPagination,
@@ -45,6 +48,22 @@ const OrdersPage = ({ onContinueShopping, onOpenReturns }) => {
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const handleContinueShopping = () => {
+    if (typeof onContinueShopping === "function") {
+      onContinueShopping();
+      return;
+    }
+
+    navigate(getPathForModule("ecommerce"));
+  };
+  const handleOpenReturns = () => {
+    if (typeof onOpenReturns === "function") {
+      onOpenReturns();
+      return;
+    }
+
+    navigate(getPathForModule("returns"));
+  };
 
   // Filter and search orders - memoized to prevent unnecessary recalculations
   const filteredOrders = useMemo(() => orders.filter((order) => {
@@ -82,7 +101,7 @@ const OrdersPage = ({ onContinueShopping, onOpenReturns }) => {
       )}
 
       <div className="ecommerce-header-actions">
-        <button type="button" className="btn btn-outline" onClick={onContinueShopping}>
+        <button type="button" className="btn btn-outline" onClick={handleContinueShopping}>
           Back to GlobeMart
         </button>
       </div>
@@ -117,7 +136,7 @@ const OrdersPage = ({ onContinueShopping, onOpenReturns }) => {
           <h4>No orders yet</h4>
           <p>Your completed purchases and live delivery updates will appear here.</p>
           <div className="seller-card-actions">
-            <button type="button" className="btn btn-primary" onClick={onContinueShopping}>
+            <button type="button" className="btn btn-primary" onClick={handleContinueShopping}>
               Start Shopping
             </button>
           </div>
@@ -305,10 +324,10 @@ const OrdersPage = ({ onContinueShopping, onOpenReturns }) => {
               )}
 
               <div className="seller-card-actions">
-                <button type="button" className="btn btn-outline" onClick={onOpenReturns}>
+                <button type="button" className="btn btn-outline" onClick={handleOpenReturns}>
                   Manage Returns
                 </button>
-                <button type="button" className="btn btn-primary" onClick={onContinueShopping}>
+                <button type="button" className="btn btn-primary" onClick={handleContinueShopping}>
                   Continue Shopping
                 </button>
               </div>
@@ -330,12 +349,8 @@ const OrdersPage = ({ onContinueShopping, onOpenReturns }) => {
 };
 
 OrdersPage.propTypes = {
-  onContinueShopping: PropTypes.func.isRequired,
+  onContinueShopping: PropTypes.func,
   onOpenReturns: PropTypes.func,
-};
-
-OrdersPage.defaultProps = {
-  onOpenReturns: null,
 };
 
 export default OrdersPage;

@@ -1,11 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
+import { getPathForModule, getProtectedModuleFromPathname } from "../utils/moduleRoutes";
 import "../styles/Navigation.css";
 
-const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) => {
+const Navigation = ({ onLogout, loggedInUser }) => {
   const { currentUser, cart } = useApp();
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -13,6 +17,8 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
   const isAdmin = displayUser?.role === "admin" || displayUser?.registrationType === "admin";
   const isSeller =
     displayUser?.registrationType === "entrepreneur" || displayUser?.role === "business";
+  const defaultHomeModule = isAdmin ? "admin-dashboard" : "dashboard";
+  const currentModule = getProtectedModuleFromPathname(location.pathname) || defaultHomeModule;
   const subscribedCategoryIds = (displayUser?.selectedBusinessCategories || [])
     .map((category) => category?.id)
     .filter(Boolean);
@@ -24,16 +30,15 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
     { id: "messaging", label: t("modules.messaging", "LinkUp") },
     { id: "classifieds", label: t("modules.classifieds", "TradePost") },
     { id: "realestate", label: t("modules.realestate", "HomeSphere") },
-{ id: "fooddelivery", label: t("modules.fooddelivery", "Feastly") },
+    { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly") },
     { id: "localmarket", label: t("modules.localmarket", "Local Market") },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide") },
     { id: "matrimonial", label: t("modules.matrimonial", "SoulMatch") },
     { id: "socialmedia", label: t("modules.socialmedia", "VibeHub") },
     { id: "diary", label: t("modules.diary", "My Diary") },
     { id: "reminderalert", label: t("modules.reminderalert", "ReminderAlert - Todo List") },
-{ id: "sosalert", label: t("modules.sosalert", "SOS Safety Center") },
+    { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center") },
     { id: "astrology", label: t("modules.astrology", "AstroNila") },
-
   ];
 
   const modules = isAdmin
@@ -46,13 +51,18 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
           subscribedCategoryIds.includes(module.id)
       );
 
+  useEffect(() => {
+    setIsSidebarOpen(false);
+    setShowUserMenu(false);
+  }, [location.pathname]);
+
   const handleModuleClick = (moduleId) => {
-    onModuleChange(moduleId);
+    navigate(getPathForModule(moduleId, getPathForModule(defaultHomeModule)));
     setIsSidebarOpen(false);
   };
 
   const handleSOSButtonClick = () => {
-    onModuleChange("sosalert");
+    navigate(getPathForModule("sosalert", getPathForModule(defaultHomeModule)));
     setIsSidebarOpen(false);
 
     window.setTimeout(() => {
@@ -67,7 +77,7 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
           <div className="nav-top-row">
             <div
               className="nav-logo"
-              onClick={() => handleModuleClick(isAdmin ? "admin-dashboard" : "dashboard")}
+              onClick={() => handleModuleClick(defaultHomeModule)}
             >
               <img src="/logo.svg" alt="NilaHub Logo" className="logo-image" />
               <span>NilaHub</span>
@@ -77,7 +87,7 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
               {!isAdmin && !isSeller && (
                 <button
                   type="button"
-                  className="cart-icon cart-button"
+                  className={`cart-icon cart-button ${currentModule === "cart" ? "cart-button-active" : ""}`}
                   onClick={() => handleModuleClick("cart")}
                 >
                   {t("navigation.cart", "Cart")} {cartItemCount}
@@ -128,8 +138,9 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
               {modules.map((module) => (
                 <button
                   key={module.id}
-                  className="nav-link"
+                  className={`nav-link ${currentModule === module.id ? "nav-link-active" : ""}`}
                   onClick={() => handleModuleClick(module.id)}
+                  aria-current={currentModule === module.id ? "page" : undefined}
                 >
                   {module.label}
                 </button>
@@ -150,8 +161,9 @@ const Navigation = ({ onModuleChange, onLogout, loggedInUser, currentModule }) =
           {modules.map((module) => (
             <button
               key={module.id}
-              className="sidebar-link"
+              className={`sidebar-link ${currentModule === module.id ? "sidebar-link-active" : ""}`}
               onClick={() => handleModuleClick(module.id)}
+              aria-current={currentModule === module.id ? "page" : undefined}
             >
               {module.label}
             </button>

@@ -88,6 +88,13 @@
   transform: translateY(-1px);
 }
 
+.nav-link-active {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: rgba(255, 215, 0, 0.5);
+  color: #fff1b8;
+  box-shadow: inset 0 0 0 1px rgba(255, 215, 0, 0.2);
+}
+
 .nav-right {
   display: flex;
   gap: 0.8rem;
@@ -111,6 +118,12 @@
   border: none;
   cursor: pointer;
   font-family: inherit;
+}
+
+.cart-button-active {
+  background: rgba(255, 215, 0, 0.18);
+  border-color: rgba(255, 215, 0, 0.45);
+  color: #ffe082;
 }
 
 .sos-alert-button {
@@ -314,6 +327,12 @@
 .sidebar-link:hover {
   background: #f0f0f0;
   color: #FFD700;
+}
+
+.sidebar-link-active {
+  background: #fff5d0;
+  color: #8a6b00;
+  font-weight: 700;
 }
 
 /* Responsive Design */

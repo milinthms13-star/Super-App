@@ -1,7 +1,9 @@
 import React, { useRef, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
 import { formatCurrency } from "../utils/ecommerceHelpers";
+import { getPathForModule } from "../utils/moduleRoutes";
 import "../styles/Dashboard.css";
 
 const normalizeOrderStatus = (status) => {
@@ -281,7 +283,8 @@ const openExternalLink = (url = "") => {
   window.open(url, "_blank", "noopener,noreferrer");
 };
 
-const Dashboard = ({ enabledModules, customLinks = [], onModuleChange }) => {
+const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) => {
+  const navigate = useNavigate();
   const {
     currentUser,
     cart,
@@ -326,10 +329,18 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange }) => {
   const sellerReturnedListings = sellerListings.filter((product) => isReturnedForReview(product));
   const visibleSellerListings = sellerListings.filter((product) => !isReturnedForReview(product));
   const sellerFulfillmentPendingCount = sellerOrderStats.openFulfillmentCount || 0;
+  const handleModuleNavigation = (moduleId) => {
+    if (typeof onModuleChange === "function") {
+      onModuleChange(moduleId);
+      return;
+    }
+
+    navigate(getPathForModule(moduleId));
+  };
 
   const handleOrdersCardClick = () => {
     if (!isSeller) {
-      onModuleChange?.("orders");
+      handleModuleNavigation("orders");
       return;
     }
 
@@ -455,7 +466,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange }) => {
           </>
         ) : (
           <>
-            <button type="button" className="stat-card stat-card-button" onClick={() => onModuleChange?.("cart")}>
+            <button
+              type="button"
+              className="stat-card stat-card-button"
+              onClick={() => handleModuleNavigation("cart")}
+            >
               <span className="stat-icon"><Icon type="cart" className="stat-icon-svg" /></span>
               <div className="stat-content">
                 <h3>{cartItemCount}</h3>
@@ -507,7 +522,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange }) => {
                 onClick={() =>
                   module.cardType === "external"
                     ? openExternalLink(module.url)
-                    : onModuleChange?.(module.id)
+                    : handleModuleNavigation(module.id)
                 }
               >
                 <div className="module-icon">
@@ -568,7 +583,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange }) => {
                 Load more orders
               </button>
             )}
-            <button type="button" className="btn btn-outline dashboard-return-btn" onClick={() => onModuleChange?.("returns")}>
+            <button
+              type="button"
+              className="btn btn-outline dashboard-return-btn"
+              onClick={() => handleModuleNavigation("returns")}
+            >
               Open Returns & Refunds
             </button>
           </div>
@@ -703,7 +722,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange }) => {
           )
         )}
         {!isSeller && (
-          <button type="button" className="btn btn-outline dashboard-return-btn" onClick={() => onModuleChange?.("returns")}>
+          <button
+            type="button"
+            className="btn btn-outline dashboard-return-btn"
+            onClick={() => handleModuleNavigation("returns")}
+          >
             Open Returns & Refunds
           </button>
         )}

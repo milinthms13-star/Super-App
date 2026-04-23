@@ -59,6 +59,54 @@ router.post('/send', authenticate, async (req, res, next) => {
     if (recipient) {
       recipientUserId = recipient._id;
 
+      // Check if recipient is visible via this contact method
+      const isVisibleVia = (visibility, method) => {
+        switch (method) {
+          case 'phone':
+            return visibility?.visibleViaPhone !== false;
+          case 'email':
+            return visibility?.visibleViaEmail !== false;
+          case 'username':
+            return visibility?.visibleViaUsername !== false;
+          default:
+            return false;
+        }
+      };
+
+      if (!isVisibleVia(recipient.visibility, recipientIdentifierType)) {
+        return res.status(403).json({
+          success: false,
+          message: `This user is not accepting invitations via ${recipientIdentifierType}. Try contacting them through another method.`,
+        });
+      }
+
+      // Check if recipient accepts the requested means of contact
+      const contactMeansRequested = req.body.contactMeans || 'chat'; // Default to chat
+      const isAvailableFor = (contactMeans, means) => {
+        switch (means) {
+          case 'chat':
+            return contactMeans?.availableForChat !== false;
+          case 'voiceCall':
+            return contactMeans?.availableForVoiceCall !== false;
+          case 'videoCall':
+            return contactMeans?.availableForVideoCall !== false;
+          default:
+            return false;
+        }
+      };
+
+      if (!isAvailableFor(recipient.contactMeans, contactMeansRequested)) {
+        return res.status(403).json({
+          success: false,
+          message: `This user is not accepting ${contactMeansRequested}s. Try reaching out through another method.`,
+          availableMeans: {
+            chat: recipient.contactMeans?.availableForChat !== false,
+            voiceCall: recipient.contactMeans?.availableForVoiceCall !== false,
+            videoCall: recipient.contactMeans?.availableForVideoCall !== false,
+          },
+        });
+      }
+
       // Check if they're already contacts
       const Contact = require('../models/Contact');
       const existingContact = await Contact.findOne({
@@ -98,6 +146,7 @@ router.post('/send', authenticate, async (req, res, next) => {
       recipientIdentifierType,
       message: message || '',
       module: module || 'messaging',
+      contactMeans: req.body.contactMeans || 'chat',
     });
 
     await invitation.save();

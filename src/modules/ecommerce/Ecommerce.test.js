@@ -3,19 +3,26 @@ import Ecommerce from "./Ecommerce";
 
 const mockUseApp = jest.fn();
 const mockUpdateItemReturnRequestStatus = jest.fn(() => Promise.resolve());
+const mockNavigate = jest.fn();
 
 jest.mock("../../contexts/AppContext", () => ({
   useApp: () => mockUseApp(),
 }));
 
 jest.mock("./ProductCard", () => () => <div data-testid="product-card" />);
+jest.mock("react-router-dom", () => ({
+  useNavigate: () => mockNavigate,
+}), { virtual: true });
 
 beforeAll(() => {
   window.HTMLElement.prototype.scrollIntoView = jest.fn();
 });
 
+const renderWithRouter = (ui) => render(ui);
+
 describe("Ecommerce seller review workflow", () => {
   beforeEach(() => {
+    mockNavigate.mockClear();
     mockUpdateItemReturnRequestStatus.mockClear();
     mockUseApp.mockReturnValue({
       currentUser: {
@@ -110,7 +117,7 @@ describe("Ecommerce seller review workflow", () => {
   });
 
   test("shows returned products in a dedicated seller review section", () => {
-    render(<Ecommerce globeMartCategories={["Snacks", "Pickles"]} />);
+    renderWithRouter(<Ecommerce globeMartCategories={["Snacks", "Pickles"]} />);
 
     expect(screen.getByRole("heading", { name: /returned for review/i })).toBeInTheDocument();
     expect(screen.getAllByText("Returned Chips").length).toBeGreaterThan(0);
@@ -120,7 +127,7 @@ describe("Ecommerce seller review workflow", () => {
   });
 
   test("shows seller-side return requests inside seller orders", () => {
-    render(<Ecommerce globeMartCategories={["Snacks", "Pickles"]} />);
+    renderWithRouter(<Ecommerce globeMartCategories={["Snacks", "Pickles"]} />);
 
     expect(screen.getAllByText(/return requests/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/packet arrived torn/i)).toBeInTheDocument();
@@ -129,7 +136,7 @@ describe("Ecommerce seller review workflow", () => {
   });
 
   test("lets the seller approve a return request", async () => {
-    render(<Ecommerce globeMartCategories={["Snacks", "Pickles"]} />);
+    renderWithRouter(<Ecommerce globeMartCategories={["Snacks", "Pickles"]} />);
 
     fireEvent.click(screen.getByRole("button", { name: /approve return/i }));
 
@@ -143,7 +150,7 @@ describe("Ecommerce seller review workflow", () => {
   });
 
   test("shows subcategory and style fields in the seller product form", () => {
-    render(
+    renderWithRouter(
       <Ecommerce
         globeMartCategories={[
           {
@@ -165,7 +172,7 @@ describe("Ecommerce seller review workflow", () => {
   });
 
   test("scrolls to the returned review section when the left summary card is clicked", () => {
-    render(<Ecommerce globeMartCategories={["Snacks", "Pickles"]} />);
+    renderWithRouter(<Ecommerce globeMartCategories={["Snacks", "Pickles"]} />);
 
     fireEvent.click(screen.getByRole("button", { name: /returned for review/i }));
 

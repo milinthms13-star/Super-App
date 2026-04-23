@@ -369,6 +369,34 @@
   letter-spacing: 0;
 }
 
+.username-status {
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.username-status.checking {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.username-status.available {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.username-status.taken {
+  background: #fee;
+  color: #c33;
+}
+
+.username-error {
+  color: #c33;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-5px); }

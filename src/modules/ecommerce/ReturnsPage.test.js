@@ -3,13 +3,20 @@ import ReturnsPage from "./ReturnsPage";
 
 const mockRequestItemReturn = jest.fn(() => Promise.resolve());
 const mockUseApp = jest.fn();
+const mockNavigate = jest.fn();
 
 jest.mock("../../contexts/AppContext", () => ({
   useApp: () => mockUseApp(),
 }));
+jest.mock("react-router-dom", () => ({
+  useNavigate: () => mockNavigate,
+}), { virtual: true });
+
+const renderWithRouter = (ui) => render(ui);
 
 describe("ReturnsPage", () => {
   beforeEach(() => {
+    mockNavigate.mockClear();
     mockRequestItemReturn.mockClear();
     mockUseApp.mockReturnValue({
       orders: [
@@ -37,7 +44,7 @@ describe("ReturnsPage", () => {
   });
 
   test("submits a return request for an eligible item", async () => {
-    render(<ReturnsPage onContinueShopping={jest.fn()} />);
+    renderWithRouter(<ReturnsPage onContinueShopping={jest.fn()} />);
 
     fireEvent.change(screen.getByLabelText(/reason/i), {
       target: { value: "not_satisfied" },
@@ -103,7 +110,7 @@ describe("ReturnsPage", () => {
       requestItemReturn: mockRequestItemReturn,
     });
 
-    render(<ReturnsPage onContinueShopping={jest.fn()} />);
+    renderWithRouter(<ReturnsPage onContinueShopping={jest.fn()} />);
 
     const detailsInputs = screen.getAllByLabelText(/issue details/i);
     fireEvent.change(detailsInputs[0], { target: { value: "First order issue" } });
@@ -113,7 +120,7 @@ describe("ReturnsPage", () => {
   });
 
   test("displays return eligible items", () => {
-    render(<ReturnsPage onContinueShopping={jest.fn()} />);
+    renderWithRouter(<ReturnsPage onContinueShopping={jest.fn()} />);
     expect(screen.getByText("Banana Chips")).toBeInTheDocument();
     expect(screen.getByText(/Snacks/)).toBeInTheDocument();
   });
@@ -124,7 +131,7 @@ describe("ReturnsPage", () => {
       requestItemReturn: mockRequestItemReturn,
     });
 
-    render(<ReturnsPage onContinueShopping={jest.fn()} />);
+    renderWithRouter(<ReturnsPage onContinueShopping={jest.fn()} />);
     expect(screen.getByText("No eligible items right now")).toBeInTheDocument();
     expect(screen.getByText("No return requests yet")).toBeInTheDocument();
   });
@@ -160,7 +167,7 @@ describe("ReturnsPage", () => {
       requestItemReturn: mockRequestItemReturn,
     });
 
-    render(<ReturnsPage onContinueShopping={jest.fn()} />);
+    renderWithRouter(<ReturnsPage onContinueShopping={jest.fn()} />);
     expect(screen.getByText(/Return Approved/)).toBeInTheDocument();
     expect(screen.getByText(/Package was damaged/)).toBeInTheDocument();
   });
@@ -190,13 +197,13 @@ describe("ReturnsPage", () => {
       requestItemReturn: mockRequestItemReturn,
     });
 
-    render(<ReturnsPage onContinueShopping={jest.fn()} />);
+    renderWithRouter(<ReturnsPage onContinueShopping={jest.fn()} />);
     // XSS payload should be escaped and rendered as text
     expect(screen.getByRole("heading", { name: /product/i })).toBeInTheDocument();
   });
 
   test("requires details before submitting return", async () => {
-    render(<ReturnsPage onContinueShopping={jest.fn()} />);
+    renderWithRouter(<ReturnsPage onContinueShopping={jest.fn()} />);
 
     fireEvent.click(screen.getByRole("button", { name: /request return & refund/i }));
 
@@ -207,7 +214,7 @@ describe("ReturnsPage", () => {
 
   test("calls onContinueShopping when back button clicked", () => {
     const mockOnContinueShopping = jest.fn();
-    render(<ReturnsPage onContinueShopping={mockOnContinueShopping} />);
+    renderWithRouter(<ReturnsPage onContinueShopping={mockOnContinueShopping} />);
 
     fireEvent.click(screen.getByRole("button", { name: /back to dashboard/i }));
     expect(mockOnContinueShopping).toHaveBeenCalled();

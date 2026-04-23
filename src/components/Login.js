@@ -32,6 +32,12 @@ const Login = ({
   const [success, setSuccess] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [loginRole, setLoginRole] = useState("user");
+  const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false);
+  const [setupUsername, setSetupUsername] = useState("");
+  const [setupUsernameStatus, setSetupUsernameStatus] = useState(null); // 'available', 'taken', 'checking', null
+  const [setupUsernameError, setSetupUsernameError] = useState("");
+  const [verifiedUser, setVerifiedUser] = useState(null);
+  const [verifiedToken, setVerifiedToken] = useState(null);
   const {
     recognitionSupported,
     speechSupported,
@@ -127,6 +133,41 @@ const Login = ({
     } catch (err) {
       setUsernameCheckStatus(null);
       setUsernameError("Error checking username availability");
+      return false;
+    }
+  };
+
+  const checkSetupUsernameAvailability = async (username) => {
+    if (!username || username.length < 3) {
+      setSetupUsernameError("Username must be at least 3 characters");
+      setSetupUsernameStatus(null);
+      return false;
+    }
+
+    if (!validateUsername(username)) {
+      setSetupUsernameError("Username can only contain letters, numbers, underscores, and dashes");
+      setSetupUsernameStatus(null);
+      return false;
+    }
+
+    try {
+      setSetupUsernameStatus("checking");
+      setSetupUsernameError("");
+      
+      const response = await axios.get(`${API_BASE_URL}/auth/check-username?username=${encodeURIComponent(username)}`);
+
+      if (response.data.available) {
+        setSetupUsernameStatus("available");
+        setSetupUsernameError("");
+        return true;
+      } else {
+        setSetupUsernameStatus("taken");
+        setSetupUsernameError(response.data.message || "Username is already taken");
+        return false;
+      }
+    } catch (err) {
+      setSetupUsernameStatus(null);
+      setSetupUsernameError("Error checking username availability");
       return false;
     }
   };
@@ -403,6 +444,16 @@ const Login = ({
       });
 
       if (response.data.success && response.data.token && response.data.user) {
+        // Check if username setup is needed for first-time login users
+        if (response.data.needsUsernameSetup && isLoginFlow) {
+          setVerifiedUser(response.data.user);
+          setVerifiedToken(response.data.token);
+          setNeedsUsernameSetup(true);
+          setSuccess("OTP verified! Now please create your username.");
+          setLoading(false);
+          return;
+        }
+
         let mergedUser = response.data.user;
 
         if (isEntrepreneurRegistrationFlow) {
@@ -524,6 +575,67 @@ const Login = ({
     setDevOtp("");
   };
 
+  const handleSetUsername = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (!setupUsername) {
+      setSetupUsernameError("Please enter a username");
+      return;
+    }
+
+    if (!validateUsername(setupUsername)) {
+      setSetupUsernameError("Username can only contain letters, numbers, underscores, and dashes (3-20 characters)");
+      return;
+    }
+
+    if (setupUsernameStatus !== "available") {
+      setSetupUsernameError("Please choose an available username");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/auth/set-username`,
+        { username: setupUsername.trim().toLowerCase() },
+        {
+          headers: {
+            Authorization: `Bearer ${verifiedToken}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        const mergedUser = {
+          ...verifiedUser,
+          username: response.data.user.username,
+          name: registeredAccount?.name || response.data.user.name,
+          role: loginRole === "entrepreneur" ? "business" : "user",
+          registrationType: loginRole,
+        };
+
+        onLoginSuccess(
+          mergedUser,
+          verifiedToken,
+          loginRole
+        );
+      } else {
+        setSetupUsernameError(response.data.message || "Failed to set username");
+      }
+    } catch (err) {
+      if (!err.response) {
+        setSetupUsernameError("Backend is not running. Please start the API server and try again.");
+      } else {
+        setSetupUsernameError(err.response.data?.message || "Unable to set username. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const { login: loginCopy, direction } = getTranslation(language);
   const registrationLabel = registrationType === "entrepreneur"
     ? isAdminFlow ? "Admin" : loginCopy.entrepreneur
@@ -620,7 +732,7 @@ const Login = ({
           <p className="login-subtitle">{loginSubtitle}</p>
         </div>
 
-        <form className="login-form" onSubmit={otpSent ? handleVerifyOtp : handleSendOtp}>
+        <form className="login-form" onSubmit={needsUsernameSetup ? handleSetUsername : (otpSent ? handleVerifyOtp : handleSendOtp)}>
           <div className="form-intro">
             <div className="intro-heading-row">
               <h2>{formTitle}</h2>
@@ -1078,7 +1190,7 @@ const Login = ({
             </label>
           )}
 
-          {otpSent && (
+          {otpSent && !needsUsernameSetup && (
             <div className="form-group">
               <label htmlFor="otp">
                 <span>Enter OTP sent to your email</span>
@@ -1108,6 +1220,45 @@ const Login = ({
             </div>
           )}
 
+          {needsUsernameSetup && (
+            <div className="form-group">
+              <label htmlFor="setupUsername">
+                <span>Create your global username</span>
+                {renderFieldVoiceActions("setupUsername", setupUsername || "Username", (value) => setSetupUsername(value))}
+              </label>
+              <input
+                type="text"
+                id="setupUsername"
+                placeholder="Enter a unique username (3-20 characters)"
+                value={setupUsername}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSetupUsername(value);
+                  if (value) {
+                    checkSetupUsernameAvailability(value);
+                  } else {
+                    setSetupUsernameStatus(null);
+                    setSetupUsernameError("");
+                  }
+                }}
+                className="form-input"
+                autoComplete="username"
+              />
+              {setupUsernameStatus === "checking" && (
+                <div className="username-status checking">Checking availability...</div>
+              )}
+              {setupUsernameStatus === "available" && (
+                <div className="username-status available">✓ Username is available</div>
+              )}
+              {setupUsernameStatus === "taken" && (
+                <div className="username-status taken">✗ Username is taken</div>
+              )}
+              {setupUsernameError && (
+                <div className="username-error">{setupUsernameError}</div>
+              )}
+            </div>
+          )}
+
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}
           {devOtp && (
@@ -1119,24 +1270,31 @@ const Login = ({
 
           <div className="form-actions">
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {otpSent
-                ? loading ? "Verifying..." : "Verify OTP"
-                : loading
-                  ? "Sending OTP..."
-                  : isUserRegistrationFlow || isEntrepreneurRegistrationFlow
-                    ? "Continue to Verification"
-                    : isLoginFlow
-                      ? "Send Login OTP"
-                    : isAdminFlow
-                      ? "Send Admin OTP"
-                      : "Send OTP"}
+              {needsUsernameSetup
+                ? loading ? "Setting username..." : "Complete Profile"
+                : otpSent
+                  ? loading ? "Verifying..." : "Verify OTP"
+                  : loading
+                    ? "Sending OTP..."
+                    : isUserRegistrationFlow || isEntrepreneurRegistrationFlow
+                      ? "Continue to Verification"
+                      : isLoginFlow
+                        ? "Send Login OTP"
+                      : isAdminFlow
+                        ? "Send Admin OTP"
+                        : "Send OTP"}
             </button>
 
-            {otpSent && (
+            {(otpSent || needsUsernameSetup) && (
               <button
                 type="button"
                 className="btn btn-outline"
-                onClick={resetOtpFlow}
+                onClick={needsUsernameSetup ? () => {
+                  setNeedsUsernameSetup(false);
+                  setSetupUsername("");
+                  setSetupUsernameStatus(null);
+                  setSetupUsernameError("");
+                } : resetOtpFlow}
                 disabled={loading}
               >
                 Back

@@ -1,4 +1,37 @@
 const mongoose = require('mongoose');
+const { INVITATION_CONFIG } = require('../config/constants');
+
+// Helper function to check if user is visible via a specific channel
+const isUserVisibleVia = (user, identifierType) => {
+  if (!user) return false;
+  
+  switch (identifierType) {
+    case 'phone':
+      return user.visibility?.visibleViaPhone !== false;
+    case 'email':
+      return user.visibility?.visibleViaEmail !== false;
+    case 'username':
+      return user.visibility?.visibleViaUsername !== false;
+    default:
+      return false;
+  }
+};
+
+// Helper function to check if user accepts a specific means of contact
+const isUserAvailableFor = (user, contactMeans) => {
+  if (!user) return false;
+  
+  switch (contactMeans) {
+    case 'chat':
+      return user.contactMeans?.availableForChat !== false;
+    case 'voiceCall':
+      return user.contactMeans?.availableForVoiceCall !== false;
+    case 'videoCall':
+      return user.contactMeans?.availableForVideoCall !== false;
+    default:
+      return false;
+  }
+};
 
 const InvitationSchema = new mongoose.Schema(
   {
@@ -51,9 +84,15 @@ const InvitationSchema = new mongoose.Schema(
       enum: ['messaging', 'social', 'general'],
       default: 'messaging',
     },
+    contactMeans: {
+      type: String,
+      enum: ['chat', 'voiceCall', 'videoCall'],
+      default: 'chat',
+    },
     expiresAt: {
       type: Date,
-      default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      default: () => new Date(Date.now() + INVITATION_CONFIG.EXPIRY_DAYS * 24 * 60 * 60 * 1000),
+      index: true,
     },
     acceptedAt: {
       type: Date,
@@ -91,4 +130,8 @@ InvitationSchema.pre('find', function () {
   this.where({ expiresAt: { $gte: new Date() } });
 });
 
-module.exports = mongoose.model('Invitation', InvitationSchema);
+const InvitationModel = mongoose.model('Invitation', InvitationSchema);
+
+module.exports = InvitationModel;
+module.exports.isUserVisibleVia = isUserVisibleVia;
+module.exports.isUserAvailableFor = isUserAvailableFor;

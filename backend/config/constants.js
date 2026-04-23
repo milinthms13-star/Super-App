@@ -50,6 +50,14 @@ const CONSTRAINTS = {
   MAX_PINCODE_LENGTH: 6,
 };
 
+// Invitation Configuration (Admin-configurable)
+const INVITATION_CONFIG = {
+  EXPIRY_DAYS: parseInt(process.env.INVITATION_EXPIRY_DAYS || '30'),
+  MAX_PENDING_INVITATIONS_PER_USER: 50,
+  MIN_USERNAME_LENGTH: 3,
+  MAX_USERNAME_LENGTH: 20,
+};
+
 module.exports = {
   ADMIN_EMAIL,
   ORDER_STATUSES,
@@ -65,4 +73,5 @@ module.exports = {
   MILLISECONDS_IN_DAY,
   VALIDATION_PATTERNS,
   CONSTRAINTS,
+  INVITATION_CONFIG,
 };

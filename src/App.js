@@ -37,6 +37,12 @@ import {
   getStoredAuthToken,
   storeAuthToken,
 } from "./utils/auth";
+import {
+  getPathForModule,
+  getProtectedModuleFromPathname,
+  MODULE_PATHS,
+  ROUTABLE_MODULES,
+} from "./utils/moduleRoutes";
 import { API_BASE_URL, BACKEND_BASE_URL } from "./utils/api";
 import "./App.css";
 
@@ -49,38 +55,6 @@ const EMPTY_APP_DATA = {
   registeredAccounts: [],
   enabledModules: [],
 };
-
-const MODULE_PATHS = {
-  dashboard: "/dashboard",
-  "admin-dashboard": "/admin-dashboard",
-  ecommerce: "/ecommerce",
-  cart: "/cart",
-  orders: "/orders",
-  returns: "/returns",
-  messaging: "/messaging",
-  classifieds: "/classifieds",
-  realestate: "/realestate",
-  fooddelivery: "/fooddelivery",
-  localmarket: "/localmarket",
-  ridesharing: "/ridesharing",
-  matrimonial: "/matrimonial",
-  socialmedia: "/socialmedia",
-  reminderalert: "/reminderalert",
-  diary: "/diary",
-  sosalert: "/sosalert",
-  astrology: "/astrology",
-  support: "/support",
-};
-
-const ROUTABLE_MODULES = new Set(Object.keys(MODULE_PATHS));
-
-const getProtectedModuleFromPathname = (pathname = "") =>
-  String(pathname)
-    .split("/")
-    .filter(Boolean)[0] || "";
-
-const getPathForModule = (moduleId = "", fallbackPath = MODULE_PATHS.dashboard) =>
-  MODULE_PATHS[moduleId] || fallbackPath;
 
 axios.defaults.withCredentials = true;
 
@@ -782,7 +756,6 @@ function AppShell() {
                 loggedInUser={loggedInUser}
                 onLogout={handleLogout}
                 language={language}
-                onModuleChange={navigateToModule}
                 appDataError={appDataError}
               />
             }
@@ -797,7 +770,6 @@ function AppShell() {
                   <Dashboard
                     enabledModules={enabledModules}
                     customLinks={customLinks}
-                    onModuleChange={navigateToModule}
                   />
                 )
               }
@@ -824,31 +796,11 @@ function AppShell() {
             />
             <Route
               path="ecommerce"
-              element={
-                <Ecommerce
-                  globeMartCategories={globeMartCategories}
-                  onOpenOrders={() => navigateToModule("orders")}
-                  onOpenReturns={() => navigateToModule("returns")}
-                />
-              }
+              element={<Ecommerce globeMartCategories={globeMartCategories} />}
             />
-            <Route
-              path="cart"
-              element={<CartPage onContinueShopping={() => navigateToModule("ecommerce")} />}
-            />
-            <Route
-              path="orders"
-              element={
-                <OrdersPage
-                  onContinueShopping={() => navigateToModule("ecommerce")}
-                  onOpenReturns={() => navigateToModule("returns")}
-                />
-              }
-            />
-            <Route
-              path="returns"
-              element={<ReturnsPage onContinueShopping={() => navigateToModule("ecommerce")} />}
-            />
+            <Route path="cart" element={<CartPage />} />
+            <Route path="orders" element={<OrdersPage />} />
+            <Route path="returns" element={<ReturnsPage />} />
             <Route path="messaging" element={<Messaging />} />
             <Route path="classifieds" element={<Classifieds />} />
             <Route path="realestate" element={<RealEstate />} />

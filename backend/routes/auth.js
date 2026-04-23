@@ -416,6 +416,9 @@ router.post('/verify-otp', async (req, res) => {
       });
     }
 
+    // Check if username setup is needed (for first-time users)
+    const needsUsernameSetup = !user.username;
+
     // Clear rate limiting on successful verification
     await setCache(getCacheKey(email, 'otp_attempts'), 0, 900);
     await setCache(getCacheKey(email, 'otp_verify_failures'), 0, 900);
@@ -429,6 +432,7 @@ router.post('/verify-otp', async (req, res) => {
       message: 'OTP verified successfully',
       token,
       user: serializeUser(user),
+      needsUsernameSetup,
     });
 
   } catch (error) {
@@ -643,6 +647,382 @@ router.get('/check-username', async (req, res) => {
       available: false,
       message: 'Error checking username availability',
       error: error.message,
+    });
+  }
+});
+
+/**
+ * Set Username for Current User (First-time setup)
+ * POST /api/auth/set-username
+ * Body: { username }
+ */
+router.post('/set-username', authenticate, async (req, res) => {
+  try {
+    const { username } = req.body;
+    const userId = req.user._id;
+
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username is required',
+      });
+    }
+
+    if (username.length < 3 || username.length > 20) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username must be between 3 and 20 characters',
+      });
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username can only contain letters, numbers, underscores, and dashes',
+      });
+    }
+
+    const normalizedUsername = username.toLowerCase().trim();
+
+    // Check if username already exists
+    const existingUser = await User.findOne({ 
+      username: normalizedUsername,
+      _id: { $ne: userId } // Exclude current user
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username is already taken',
+      });
+    }
+
+    // Update user with username
+    const user = useMemoryAuth()
+      ? await devAuthStore.updateUserUsername(userId, normalizedUsername)
+      : await User.findByIdAndUpdate(
+          userId,
+          { username: normalizedUsername },
+          { new: true }
+        );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    logger.info(`Username set for user ${userId}: ${normalizedUsername}`);
+
+    res.json({
+      success: true,
+      message: 'Username set successfully',
+      user: serializeUser(user),
+    });
+  } catch (error) {
+    logger.error('Error setting username:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Unable to set username',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+/**
+ * Set Chat-Specific Username
+ * POST /api/auth/set-chat-username
+ * Body: { chatUsername }
+ */
+router.post('/set-chat-username', authenticate, async (req, res) => {
+  try {
+    const { chatUsername } = req.body;
+    const userId = req.user._id;
+
+    // Allow empty chat username (to unset it)
+    if (chatUsername && (chatUsername.length < 3 || chatUsername.length > 20)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chat username must be between 3 and 20 characters',
+      });
+    }
+
+    if (chatUsername && !/^[a-zA-Z0-9_-]+$/.test(chatUsername)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chat username can only contain letters, numbers, underscores, and dashes',
+      });
+    }
+
+    const normalizedChatUsername = chatUsername ? chatUsername.toLowerCase().trim() : null;
+
+    // Check if chat username already exists (if setting, not unsetting)
+    if (normalizedChatUsername) {
+      const existingUser = await User.findOne({ 
+        chatUsername: normalizedChatUsername,
+        _id: { $ne: userId } // Exclude current user
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Chat username is already taken',
+        });
+      }
+    }
+
+    // Update user with chat username
+    const user = useMemoryAuth()
+      ? await devAuthStore.updateUserChatUsername(userId, normalizedChatUsername)
+      : await User.findByIdAndUpdate(
+          userId,
+          { chatUsername: normalizedChatUsername },
+          { new: true }
+        );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    logger.info(`Chat username updated for user ${userId}: ${normalizedChatUsername || 'unset'}`);
+
+    res.json({
+      success: true,
+      message: normalizedChatUsername ? 'Chat username set successfully' : 'Chat username removed',
+      user: serializeUser(user),
+    });
+  } catch (error) {
+    logger.error('Error setting chat username:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Unable to set chat username',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+/**
+ * Check Chat Username Availability
+ * GET /api/auth/check-chat-username
+ * Query: { chatUsername }
+ */
+router.get('/check-chat-username', async (req, res) => {
+  try {
+    const { chatUsername } = req.query;
+
+    if (!chatUsername || chatUsername.length < 3 || chatUsername.length > 20) {
+      return res.status(400).json({
+        success: false,
+        available: false,
+        message: 'Chat username must be between 3 and 20 characters',
+      });
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(chatUsername)) {
+      return res.status(400).json({
+        success: false,
+        available: false,
+        message: 'Chat username can only contain letters, numbers, underscores, and dashes',
+      });
+    }
+
+    const existingUser = await User.findOne({ chatUsername: chatUsername.toLowerCase() });
+
+    res.json({
+      success: true,
+      available: !existingUser,
+      chatUsername: chatUsername.toLowerCase(),
+      message: existingUser ? 'Chat username is already taken' : 'Chat username is available',
+    });
+  } catch (error) {
+    logger.error('Chat username check error:', error);
+    res.status(500).json({
+      success: false,
+      available: false,
+      message: 'Error checking chat username availability',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * Get User Visibility Settings
+ * GET /api/auth/visibility
+ */
+router.get('/visibility', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      visibility: user.visibility || {
+        visibleViaPhone: true,
+        visibleViaEmail: true,
+        visibleViaUsername: true,
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching visibility settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching visibility settings',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+/**
+ * Update User Visibility Settings
+ * POST /api/auth/visibility
+ * Body: { visibleViaPhone, visibleViaEmail, visibleViaUsername }
+ */
+router.post('/visibility', authenticate, async (req, res) => {
+  try {
+    const { visibleViaPhone, visibleViaEmail, visibleViaUsername } = req.body;
+    const userId = req.user._id;
+
+    // Ensure at least one visibility method is enabled
+    const enabledMethods = [visibleViaPhone, visibleViaEmail, visibleViaUsername].filter(v => v === true).length;
+    if (enabledMethods === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one visibility method must be enabled',
+      });
+    }
+
+    const updatedVisibility = {
+      visibleViaPhone: visibleViaPhone === true,
+      visibleViaEmail: visibleViaEmail === true,
+      visibleViaUsername: visibleViaUsername === true,
+    };
+
+    const user = useMemoryAuth()
+      ? await devAuthStore.updateUserVisibility(userId, updatedVisibility)
+      : await User.findByIdAndUpdate(
+          userId,
+          { visibility: updatedVisibility },
+          { new: true }
+        );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    logger.info(`Visibility settings updated for user ${userId}:`, updatedVisibility);
+
+    res.json({
+      success: true,
+      message: 'Visibility settings updated successfully',
+      visibility: user.visibility,
+    });
+  } catch (error) {
+    logger.error('Error updating visibility settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Unable to update visibility settings',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+/**
+ * Get User Contact Means Preferences
+ * GET /api/auth/contact-means
+ */
+router.get('/contact-means', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      contactMeans: user.contactMeans || {
+        availableForChat: true,
+        availableForVoiceCall: true,
+        availableForVideoCall: true,
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching contact means settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching contact means settings',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+/**
+ * Update User Contact Means Preferences
+ * POST /api/auth/contact-means
+ * Body: { availableForChat, availableForVoiceCall, availableForVideoCall }
+ */
+router.post('/contact-means', authenticate, async (req, res) => {
+  try {
+    const { availableForChat, availableForVoiceCall, availableForVideoCall } = req.body;
+    const userId = req.user._id;
+
+    // Ensure at least one contact means is enabled
+    const enabledMeans = [availableForChat, availableForVoiceCall, availableForVideoCall].filter(v => v === true).length;
+    if (enabledMeans === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one contact means must be enabled',
+      });
+    }
+
+    const updatedContactMeans = {
+      availableForChat: availableForChat === true,
+      availableForVoiceCall: availableForVoiceCall === true,
+      availableForVideoCall: availableForVideoCall === true,
+    };
+
+    const user = useMemoryAuth()
+      ? await devAuthStore.updateUserContactMeans(userId, updatedContactMeans)
+      : await User.findByIdAndUpdate(
+          userId,
+          { contactMeans: updatedContactMeans },
+          { new: true }
+        );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    logger.info(`Contact means settings updated for user ${userId}:`, updatedContactMeans);
+
+    res.json({
+      success: true,
+      message: 'Contact means settings updated successfully',
+      contactMeans: user.contactMeans,
+    });
+  } catch (error) {
+    logger.error('Error updating contact means settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Unable to update contact means settings',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 });
