@@ -393,12 +393,16 @@ router.delete('/chats/:chatId/members/:userId', authenticate, attachMessagingUse
 router.post('/messages', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId, content, messageType, media, replyTo } = req.body;
+    const normalizedMessageType =
+      typeof messageType === 'string' && messageType.trim() ? messageType.trim() : 'text';
+    const normalizedContent = typeof content === 'string' ? content.trim() : '';
+    const normalizedReplyTo = normalizeObjectId(replyTo);
 
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
       return res.status(400).json({ message: 'Invalid chat ID' });
     }
 
-    if (messageType === 'text' && (!content || !content.trim())) {
+    if (normalizedMessageType === 'text' && !normalizedContent) {
       return res.status(400).json({ message: 'Message content is required' });
     }
 
@@ -413,28 +417,45 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
       return res.status(403).json({ message: 'Not authorized to send message in this chat' });
     }
 
+    const participantIds = Array.from(
+      new Set(
+        (chat.participants || [])
+          .map((participant) => normalizeObjectId(participant))
+          .filter((participantId) => mongoose.Types.ObjectId.isValid(participantId))
+      )
+    );
+
     const message = new Message({
       chatId,
       senderId: req.user._id,
-      messageType,
-      content: content ? content.trim() : '',
+      messageType: normalizedMessageType,
+      content: normalizedContent,
       media: media || undefined,
-      replyTo: replyTo && mongoose.Types.ObjectId.isValid(replyTo) ? replyTo : undefined,
-      deliveryStatus: chat.participants.map((userId) => ({
+      replyTo:
+        normalizedReplyTo && mongoose.Types.ObjectId.isValid(normalizedReplyTo)
+          ? normalizedReplyTo
+          : undefined,
+      deliveryStatus: participantIds.map((userId) => ({
         userId,
-        status: userId.equals(req.user._id) ? 'seen' : 'sent',
-        seenAt: userId.equals(req.user._id) ? new Date() : undefined,
-        deliveredAt: userId.equals(req.user._id) ? new Date() : undefined,
+        status: objectIdEquals(userId, req.user._id) ? 'seen' : 'sent',
+        seenAt: objectIdEquals(userId, req.user._id) ? new Date() : undefined,
+        deliveredAt: objectIdEquals(userId, req.user._id) ? new Date() : undefined,
       })),
     });
 
     await message.save();
     await message.populate('senderId', 'name avatar email');
 
-    // Update chat's last message
-    chat.lastMessage = message._id;
-    chat.lastMessageAt = new Date();
-    await chat.save();
+    // Update chat preview without re-validating the entire chat document.
+    await Chat.updateOne(
+      { _id: chatId },
+      {
+        $set: {
+          lastMessage: message._id,
+          lastMessageAt: new Date(),
+        },
+      }
+    );
 
     // Try to emit socket event, but don't fail if it doesn't work
     try {
@@ -445,8 +466,8 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
 
     // Create notifications for other participants (not for sender)
     try {
-      for (const participant of chat.participants) {
-        if (!participant.equals(req.user._id)) {
+      for (const participant of participantIds) {
+        if (!objectIdEquals(participant, req.user._id)) {
           const notification = new ChatNotification({
             userId: participant,
             messageId: message._id,
@@ -454,7 +475,7 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
             senderId: req.user._id,
             notificationType: 'message',
             title: `New message from ${req.user.name || 'User'}`,
-            body: content ? content.substring(0, 100) : `[${messageType}]`,
+            body: normalizedContent ? normalizedContent.substring(0, 100) : `[${normalizedMessageType}]`,
           });
           await notification.save();
           emitToUser(participant, 'notification:received', notification.toObject());

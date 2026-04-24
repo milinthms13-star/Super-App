@@ -19,6 +19,8 @@ import { getEntityId, inferMessageTypeFromMimeType, isSameEntity } from './utils
 const getOtherParticipant = (chat, currentUser) =>
   chat?.participants?.find((participant) => !isSameEntity(participant, currentUser)) || null;
 
+const isMongoObjectId = (value) => /^[a-f0-9]{24}$/i.test(getEntityId(value));
+
 const Messaging = () => {
   const { currentUser, apiCall } = useApp();
   const [activeTab, setActiveTab] = useState('chats');
@@ -59,7 +61,19 @@ const Messaging = () => {
 
     return getEntityId(selectedChatParticipant) || currentUserId;
   }, [currentUser, currentUserId, selectedChat]);
-  const latestMessageId = messages[messages.length - 1]?._id;
+  const latestMessageId = useMemo(() => {
+    const latestReplyableMessage = [...messages]
+      .reverse()
+      .find(
+        (message) =>
+          !message?.isDeleted &&
+          !message?.isPending &&
+          isMongoObjectId(message?._id) &&
+          !isSameEntity(message?.senderId, currentUser)
+      );
+
+    return latestReplyableMessage?._id || '';
+  }, [currentUser, messages]);
 
   const updateChatPreview = useCallback((incomingMessage) => {
     const incomingChatId = getEntityId(incomingMessage?.chatId);
@@ -770,12 +784,14 @@ const Messaging = () => {
       return;
     }
 
+    const tempMessageId = `temp_${Date.now()}`;
+
     try {
       const messageData = {
         chatId: selectedChat._id,
         content: content || fileData?.fileName || '',
         messageType,
-        replyTo,
+        replyTo: getEntityId(replyTo) || null,
       };
 
       if (fileData) {
@@ -786,9 +802,6 @@ const Messaging = () => {
         };
       }
 
-      // Create temporary message ID for optimistic update
-      const tempMessageId = `temp_${Date.now()}`;
-      
       // OPTIMISTIC UPDATE: Add message to UI immediately (before API response)
       const optimisticMessage = {
         _id: tempMessageId,
@@ -797,7 +810,7 @@ const Messaging = () => {
         content: messageData.content,
         messageType,
         media: messageData.media,
-        replyTo,
+        replyTo: replyTo || null,
         createdAt: new Date().toISOString(),
         isPending: true, // Mark as pending
         deliveryStatus: selectedChat.participants.map((userId) => ({
@@ -834,7 +847,10 @@ const Messaging = () => {
       return response?.message || null;
     } catch (error) {
       console.error('❌ Error sending message:', error);
-      // Message will be removed when optimistic update fails
+      setMessages((prevMessages) =>
+        prevMessages.filter((message) => message._id !== tempMessageId)
+      );
+      loadChats();
       throw error;
     }
   };
