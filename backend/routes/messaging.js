@@ -436,8 +436,10 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     chat.lastMessageAt = new Date();
     await chat.save();
 
-    // Emit to ALL chat participants, including the sender (so they see their own message via socket)
-    await emitToChatParticipants(chatId, 'message:received', message);
+    // Emit to all participants
+    for (const participant of chat.participants) {
+      emitToUser(participant, 'message:received', message);
+    }
 
     // Create notifications for other participants (not for sender)
     for (const participant of chat.participants) {

@@ -289,14 +289,23 @@ const Messaging = () => {
     });
 
     newSocket.on('message:received', (message) => {
+      console.log('🔔 Socket message:received event:', message);
+      console.log('📍 Current selected chat ID:', selectedChat?._id);
+      console.log('📍 Incoming message chat ID:', message.chatId);
+      
       if (getEntityId(message.chatId) === selectedChat?._id) {
+        console.log('✅ Message is for selected chat, adding to messages');
         setMessages((prevMessages) => {
           if (prevMessages.some((existingMessage) => existingMessage._id === message._id)) {
+            console.log('⏭️ Message already exists in array, skipping duplicate');
             return prevMessages;
           }
 
+          console.log('📋 Adding message to array');
           return [...prevMessages, message];
         });
+      } else {
+        console.log('⏸️ Message is for different chat, not adding to messages array');
       }
 
       // Ensure the chat exists in the chat list
@@ -305,30 +314,35 @@ const Messaging = () => {
         const chatExists = prevChats.some((chat) => getEntityId(chat._id) === chatIdStr);
         
         if (!chatExists) {
+          console.log('⚠️ Chat not found in list, fetching from backend...');
           // Chat doesn't exist, fetch it from backend and add to list
           // Use setTimeout to avoid issues with stale closure
           setTimeout(() => {
             apiCall(`/messaging/chats/${chatIdStr}`, 'GET')
               .then((response) => {
                 if (response?.chat) {
+                  console.log('✅ Fetched chat:', response.chat);
                   setChats((latestChats) => {
                     // Double-check the chat doesn't exist
                     const stillMissing = !latestChats.some((chat) => getEntityId(chat._id) === chatIdStr);
                     if (stillMissing) {
+                      console.log('✅ Adding fetched chat to list');
                       const updatedChats = [response.chat, ...latestChats];
                       // Now update the chat preview after adding the chat
                       setTimeout(() => updateChatPreview(message), 0);
                       return updatedChats;
                     }
+                    console.log('ℹ️ Chat already exists, not adding duplicate');
                     return latestChats;
                   });
                 }
               })
               .catch((error) => {
-                console.error('Error fetching chat for received message:', error);
+                console.error('❌ Error fetching chat for received message:', error);
               });
           }, 0);
         } else {
+          console.log('✅ Chat already exists in list');
           // Chat exists, update it immediately
           updateChatPreview(message);
         }
@@ -752,6 +766,7 @@ const Messaging = () => {
 
   const handleSendMessage = async (content, messageType = 'text', fileData = null, replyTo = null) => {
     if (!selectedChat?._id || (!content?.trim() && !fileData)) {
+      console.warn('Cannot send message: missing chat ID or content');
       return;
     }
 
@@ -771,16 +786,25 @@ const Messaging = () => {
         };
       }
 
+      console.log('📤 Sending message:', messageData);
       const response = await apiCall('/messaging/messages', 'POST', messageData);
+      console.log('📬 Server response:', response);
 
       if (response?.message) {
-        setMessages((prevMessages) => [...prevMessages, response.message]);
+        console.log('✅ Adding message to local state:', response.message);
+        setMessages((prevMessages) => {
+          const updated = [...prevMessages, response.message];
+          console.log('📋 Updated messages array:', updated);
+          return updated;
+        });
         updateChatPreview(response.message);
+      } else {
+        console.error('❌ No message in response:', response);
       }
 
       return response?.message || null;
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('❌ Error sending message:', error);
       throw error;
     }
   };
