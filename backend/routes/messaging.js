@@ -436,30 +436,38 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     chat.lastMessageAt = new Date();
     await chat.save();
 
-    // Send to ALL participants via socket (including sender)
-    await emitToChatParticipants(chatId, 'message:received', message);
+    // Try to emit socket event, but don't fail if it doesn't work
+    try {
+      await emitToChatParticipants(chatId, 'message:received', message);
+    } catch (socketErr) {
+      logger.warn(`Socket emit failed: ${socketErr.message}`);
+    }
 
     // Create notifications for other participants (not for sender)
-    for (const participant of chat.participants) {
-      if (!participant.equals(req.user._id)) {
-        const notification = new ChatNotification({
-          userId: participant,
-          messageId: message._id,
-          chatId,
-          senderId: req.user._id,
-          notificationType: 'message',
-          title: `New message from ${req.user.name || 'User'}`,
-          body: content ? content.substring(0, 100) : `[${messageType}]`,
-        });
-        await notification.save();
-        emitToUser(participant, 'notification:received', notification.toObject());
+    try {
+      for (const participant of chat.participants) {
+        if (!participant.equals(req.user._id)) {
+          const notification = new ChatNotification({
+            userId: participant,
+            messageId: message._id,
+            chatId,
+            senderId: req.user._id,
+            notificationType: 'message',
+            title: `New message from ${req.user.name || 'User'}`,
+            body: content ? content.substring(0, 100) : `[${messageType}]`,
+          });
+          await notification.save();
+          emitToUser(participant, 'notification:received', notification.toObject());
+        }
       }
+    } catch (notifErr) {
+      logger.warn(`Notification failed: ${notifErr.message}`);
     }
 
     logger.info(`Message sent in chat ${chatId} by ${req.user._id}`);
     res.status(201).json({ message: message.toObject() });
   } catch (err) {
-    logger.error(`Error sending message: ${err.message}`);
+    logger.error(`Error sending message: ${err.message}`, err);
     next(err);
   }
 });
