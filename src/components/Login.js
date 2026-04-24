@@ -389,14 +389,6 @@ const Login = ({
       return;
     }
 
-    if (isLoginFlow) {
-      const isAdminEntrepreneurLogin = isAdminEmail && loginRole === "entrepreneur";
-      if (!isAdminEntrepreneurLogin && (!registeredAccount || !registeredAccount.roles.includes(loginRole))) {
-        setError(`This email is not registered as a ${loginRole}.`);
-        return;
-      }
-    }
-
     setLoading(true);
 
     try {
@@ -1169,12 +1161,6 @@ const Login = ({
           {(registrationType === "entrepreneur" || isAdminFlow) && !otpSent && (
             <p className="helper-text admin-helper">
               The {businessCategoryCount} available business categories are used for registration here. Admin access is included with <strong>{ADMIN_EMAIL}</strong>.
-            </p>
-          )}
-
-          {isLoginFlow && !otpSent && registeredAccount && (
-            <p className="helper-text admin-helper">
-              Registered roles for this email: <strong>{registeredAccount.roles.join(", ")}</strong>
             </p>
           )}
 

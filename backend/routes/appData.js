@@ -46,6 +46,37 @@ const upload = multer({
   },
 });
 
+// Fetch registered accounts from MongoDB instead of app-data.json
+const getRegisteredAccountsFromDB = async () => {
+  try {
+    const users = await User.find(
+      { registrationType: { $in: ['user', 'entrepreneur', 'business'] } },
+      {
+        email: 1,
+        name: 1,
+        roles: 1,
+        businessName: 1,
+        phone: 1,
+        location: 1,
+        selectedBusinessCategories: 1,
+      }
+    ).lean();
+
+    return users.map(user => ({
+      email: user.email,
+      name: user.name || '',
+      roles: user.roles || [user.role || 'user'],
+      businessName: user.businessName || '',
+      phone: user.phone || '',
+      location: user.location || '',
+      selectedBusinessCategories: user.selectedBusinessCategories || [],
+    }));
+  } catch (error) {
+    console.error('Error fetching registered accounts from DB:', error);
+    return [];
+  }
+};
+
 const applicationSchema = Joi.object({
   applicantName: Joi.string().trim().required(),
   businessName: Joi.string().allow('').trim().default(''),
@@ -606,6 +637,7 @@ router.get('/public', async (req, res) => {
   const classifiedsModuleData = await listClassifiedModuleData();
   const realestateProperties = await listRealEstateProperties();
   const restaurants = await listRestaurants();
+  const registeredAccounts = await getRegisteredAccountsFromDB();
 
   return res.json({
     success: true,
@@ -613,7 +645,7 @@ router.get('/public', async (req, res) => {
       businessCategories: appData.businessCategories,
       globeMartCategories: normalizeGlobeMartCategories(appData.globeMartCategories),
       enabledModules: appData.enabledModules,
-      registeredAccounts: appData.registeredAccounts,
+      registeredAccounts: registeredAccounts,
       moduleData: {
         ...appData.moduleData,
         ...classifiedsModuleData,
@@ -650,6 +682,7 @@ router.get('/admin', authenticate, adminOnly, async (req, res) => {
   const classifiedsModuleData = await listClassifiedModuleData();
   const realestateProperties = await listRealEstateProperties();
   const restaurants = await listRestaurants();
+  const registeredAccounts = await getRegisteredAccountsFromDB();
 
   return res.json({
     success: true,
@@ -658,7 +691,7 @@ router.get('/admin', authenticate, adminOnly, async (req, res) => {
       globeMartCategories: normalizeGlobeMartCategories(appData.globeMartCategories),
       enabledModules: appData.enabledModules,
       registrationApplications: appData.registrationApplications,
-      registeredAccounts: appData.registeredAccounts,
+      registeredAccounts: registeredAccounts,
       moduleData: {
         ...appData.moduleData,
         ...classifiedsModuleData,

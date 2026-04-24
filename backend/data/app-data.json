@@ -154,37 +154,7 @@
       "status": "Pending Review"
     }
   ],
-  "registeredAccounts": [
-    {
-      "email": "mgdhanyamohan@gmail.com",
-      "name": "dhanya mohan",
-      "roles": [
-        "user"
-      ],
-      "businessName": "",
-      "phone": "7907714368",
-      "location": "",
-      "selectedBusinessCategories": []
-    },
-    {
-      "email": "malavikaaditi3@gmail.com",
-      "name": "malavika",
-      "roles": [
-        "entrepreneur"
-      ],
-      "businessName": "Malu",
-      "phone": "7907714368",
-      "location": "kollam",
-      "selectedBusinessCategories": [
-        {
-          "id": "ecommerce",
-          "name": "GlobeMart",
-          "fee": 799,
-          "requiresFoodLicense": false
-        }
-      ]
-    }
-  ],
+  "registeredAccounts": [],
   "moduleData": {
     "ecommerceProducts": [
       {

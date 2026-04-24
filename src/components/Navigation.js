@@ -5,7 +5,9 @@ import useI18n from "../hooks/useI18n";
 import { getPathForModule, getProtectedModuleFromPathname } from "../utils/moduleRoutes";
 import "../styles/Navigation.css";
 
-const Navigation = ({ onLogout, loggedInUser }) => {
+const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary"]);
+
+const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const { currentUser, cart } = useApp();
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -22,6 +24,7 @@ const Navigation = ({ onLogout, loggedInUser }) => {
   const subscribedCategoryIds = (displayUser?.selectedBusinessCategories || [])
     .map((category) => category?.id)
     .filter(Boolean);
+  const enabledModuleIds = new Set(Array.isArray(enabledModules) ? enabledModules : []);
   const cartItemCount = cart.reduce((total, item) => total + Number(item.quantity || 1), 0);
 
   const allBusinessModules = [
@@ -40,16 +43,20 @@ const Navigation = ({ onLogout, loggedInUser }) => {
     { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center") },
     { id: "astrology", label: t("modules.astrology", "AstroNila") },
   ];
+  const isModuleVisible = (moduleId) =>
+    ALWAYS_VISIBLE_MODULE_IDS.has(moduleId) || enabledModuleIds.has(moduleId);
 
   const modules = isAdmin
     ? [{ id: "admin-dashboard", label: t("modules.admin", "Admin Dashboard") }]
     : allBusinessModules.filter(
         (module) =>
-          !isSeller ||
-          module.id === "dashboard" ||
-          module.sellerVisible === true ||
-          subscribedCategoryIds.includes(module.id)
+          isModuleVisible(module.id) &&
+          (!isSeller ||
+            module.id === "dashboard" ||
+            module.sellerVisible === true ||
+            subscribedCategoryIds.includes(module.id))
       );
+  const showSosButton = enabledModuleIds.has("sosalert");
 
   useEffect(() => {
     setIsSidebarOpen(false);
@@ -62,6 +69,10 @@ const Navigation = ({ onLogout, loggedInUser }) => {
   };
 
   const handleSOSButtonClick = () => {
+    if (!showSosButton) {
+      return;
+    }
+
     navigate(getPathForModule("sosalert", getPathForModule(defaultHomeModule)));
     setIsSidebarOpen(false);
 
@@ -93,14 +104,16 @@ const Navigation = ({ onLogout, loggedInUser }) => {
                   {t("navigation.cart", "Cart")} {cartItemCount}
                 </button>
               )}
-              <button
-                type="button"
-                className="sos-alert-button"
-                onClick={handleSOSButtonClick}
-                title="Open SOS Safety Center and trigger the emergency workflow"
-              >
-                SOS
-              </button>
+              {showSosButton ? (
+                <button
+                  type="button"
+                  className="sos-alert-button"
+                  onClick={handleSOSButtonClick}
+                  title="Open SOS Safety Center and trigger the emergency workflow"
+                >
+                  SOS
+                </button>
+              ) : null}
               <div className="user-profile" onClick={() => setShowUserMenu(!showUserMenu)}>
                 <span className="user-avatar">{displayUser.avatar}</span>
                 <span className="user-name">{displayUser.name || displayUser.email}</span>

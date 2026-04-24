@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import i18n from "./i18n";
 import axios from "axios";
@@ -93,6 +93,13 @@ function AppShell() {
     useState(true);
   const isAdminUser =
     loggedInUser?.role === "admin" || loggedInUser?.registrationType === "admin";
+  const toggleControlledModuleIds = useMemo(
+    () =>
+      new Set(
+        businessCategories.map((category) => category?.id).filter(Boolean)
+      ),
+    [businessCategories]
+  );
   const defaultAuthenticatedPath = isAdminUser
     ? MODULE_PATHS["admin-dashboard"]
     : MODULE_PATHS.dashboard;
@@ -100,6 +107,30 @@ function AppShell() {
   useEffect(() => {
     i18n.changeLanguage(language);
   }, [language]);
+
+  useEffect(() => {
+    if (!authChecked || !isLoggedIn || isAdminUser) {
+      return;
+    }
+
+    const activeRouteModule = getProtectedModuleFromPathname(location.pathname);
+    if (!toggleControlledModuleIds.has(activeRouteModule)) {
+      return;
+    }
+
+    if (!enabledModules.includes(activeRouteModule)) {
+      navigate(defaultAuthenticatedPath, { replace: true });
+    }
+  }, [
+    authChecked,
+    defaultAuthenticatedPath,
+    enabledModules,
+    isAdminUser,
+    isLoggedIn,
+    location.pathname,
+    navigate,
+    toggleControlledModuleIds,
+  ]);
 
   const navigateToModule = useCallback(
     (moduleId, options = {}) => {
@@ -388,7 +419,9 @@ function AppShell() {
           ? "admin-dashboard"
           : pendingModule && enabledModules.includes(pendingModule)
             ? pendingModule
-            : currentPathIsProtected
+            : currentPathIsProtected &&
+                (!toggleControlledModuleIds.has(currentRouteModule) ||
+                  enabledModules.includes(currentRouteModule))
               ? currentRouteModule
               : "dashboard";
 
@@ -405,6 +438,7 @@ function AppShell() {
       pendingModule,
       registrationType,
       syncAppDataFromResponse,
+      toggleControlledModuleIds,
     ]
   );
 
@@ -782,6 +816,7 @@ function AppShell() {
                   onLogout={handleLogout}
                   language={language}
                   appDataError={appDataError}
+                  enabledModules={enabledModules}
                 />
               }
             >

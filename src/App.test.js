@@ -323,6 +323,8 @@ test("shows Local Market and AstroNila on the launch page when they are enabled"
 
   expect(await screen.findByRole("button", { name: /local market/i })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /astronila/i })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /linkup/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /feastly/i })).not.toBeInTheDocument();
 });
 
 test("shows login as user or entrepreneur options", async () => {
@@ -438,6 +440,32 @@ test("shows saved custom links on the dashboard for logged in users", async () =
   expect(
     await screen.findByRole("button", { name: /gmail jump into gmail from the dashboard\./i })
   ).toBeInTheDocument();
+});
+
+test("home navigation hides modules disabled by the admin", async () => {
+  mockAxiosForApp({
+    authUser: {
+      id: "1",
+      email: "person@example.com",
+      name: "Person",
+      avatar: "P",
+      registrationType: "user",
+      role: "user",
+    },
+    publicAppData: createPublicAppData({
+      enabledModules: ["ecommerce", "messaging"],
+    }),
+  });
+
+  render(<App />);
+
+  expect(
+    await screen.findByRole("heading", { level: 1, name: /welcome to nilahub/i })
+  ).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: /globemart/i }).length).toBeGreaterThan(0);
+  expect(screen.getAllByRole("button", { name: /linkup/i }).length).toBeGreaterThan(0);
+  expect(screen.queryByRole("button", { name: /feastly/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^sos$/i })).not.toBeInTheDocument();
 });
 
 test("admin can create GlobeMart product categories", async () => {
