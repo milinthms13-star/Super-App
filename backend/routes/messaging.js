@@ -26,12 +26,20 @@ const normalizeObjectId = (value) => {
     return '';
   }
 
-  if (typeof value === 'string') {
-    return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value);
   }
 
-  if (value._id) {
+  if (typeof value.toHexString === 'function') {
+    return value.toHexString();
+  }
+
+  if (value._id && value._id !== value) {
     return normalizeObjectId(value._id);
+  }
+
+  if (value.id && value.id !== value) {
+    return normalizeObjectId(value.id);
   }
 
   if (typeof value.toString === 'function') {
