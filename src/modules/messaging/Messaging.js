@@ -21,6 +21,64 @@ const getOtherParticipant = (chat, currentUser) =>
 
 const isMongoObjectId = (value) => /^[a-f0-9]{24}$/i.test(getEntityId(value));
 
+const getMessageMediaSignature = (message = {}) => {
+  const media = message?.media || {};
+  return [media.url || '', media.type || '', String(media.size || '')].join('::');
+};
+
+const isMatchingOptimisticMessage = (pendingMessage, confirmedMessage) => {
+  if (!pendingMessage?.isPending || !confirmedMessage) {
+    return false;
+  }
+
+  if (getEntityId(pendingMessage.chatId) !== getEntityId(confirmedMessage.chatId)) {
+    return false;
+  }
+
+  if (!isSameEntity(pendingMessage.senderId, confirmedMessage.senderId)) {
+    return false;
+  }
+
+  if ((pendingMessage.messageType || 'text') !== (confirmedMessage.messageType || 'text')) {
+    return false;
+  }
+
+  if ((pendingMessage.content || '') !== (confirmedMessage.content || '')) {
+    return false;
+  }
+
+  return getMessageMediaSignature(pendingMessage) === getMessageMediaSignature(confirmedMessage);
+};
+
+const mergeConfirmedMessage = (currentMessages = [], confirmedMessage) => {
+  const confirmedMessageId = getEntityId(confirmedMessage);
+  let replacedPendingMessage = false;
+  const nextMessages = [];
+
+  currentMessages.forEach((message) => {
+    if (confirmedMessageId && getEntityId(message) === confirmedMessageId) {
+      if (!nextMessages.some((existingMessage) => getEntityId(existingMessage) === confirmedMessageId)) {
+        nextMessages.push(confirmedMessage);
+      }
+      return;
+    }
+
+    if (!replacedPendingMessage && isMatchingOptimisticMessage(message, confirmedMessage)) {
+      nextMessages.push(confirmedMessage);
+      replacedPendingMessage = true;
+      return;
+    }
+
+    nextMessages.push(message);
+  });
+
+  if (!nextMessages.some((message) => getEntityId(message) === confirmedMessageId)) {
+    nextMessages.push(confirmedMessage);
+  }
+
+  return nextMessages;
+};
+
 const Messaging = () => {
   const { currentUser, apiCall } = useApp();
   const [activeTab, setActiveTab] = useState('chats');
@@ -310,13 +368,16 @@ const Messaging = () => {
       if (getEntityId(message.chatId) === selectedChat?._id) {
         console.log('✅ Message is for selected chat, adding to messages');
         setMessages((prevMessages) => {
-          if (prevMessages.some((existingMessage) => existingMessage._id === message._id)) {
+          if (prevMessages.some((existingMessage) => (
+            existingMessage._id === message._id ||
+            isMatchingOptimisticMessage(existingMessage, message)
+          ))) {
             console.log('⏭️ Message already exists in array, skipping duplicate');
-            return prevMessages;
+            return mergeConfirmedMessage(prevMessages, message);
           }
 
           console.log('📋 Adding message to array');
-          return [...prevMessages, message];
+          return mergeConfirmedMessage(prevMessages, message);
         });
       } else {
         console.log('⏸️ Message is for different chat, not adding to messages array');
@@ -830,11 +891,7 @@ const Messaging = () => {
       if (response?.message) {
         // Replace temp message with real message from server
         console.log('✅ Replacing temp message with real message:', response.message);
-        setMessages((prevMessages) =>
-          prevMessages.map((msg) =>
-            msg._id === tempMessageId ? response.message : msg
-          )
-        );
+        setMessages((prevMessages) => mergeConfirmedMessage(prevMessages, response.message));
         updateChatPreview(response.message);
       } else {
         // Remove optimistic message on error
@@ -1034,6 +1091,10 @@ const Messaging = () => {
     }
 
     try {
+      if (!audioFile.size) {
+        throw new Error('No audio was recorded. Please try again.');
+      }
+
       setSendingVoiceNote(true);
       const uploadedFile = await uploadMessagingFile(audioFile);
 

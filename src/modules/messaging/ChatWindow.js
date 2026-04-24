@@ -41,6 +41,7 @@ const ChatWindow = ({
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const voiceChunksRef = useRef([]);
+  const voiceRecordingStartedAtRef = useRef(0);
   const currentUserId = getEntityId(currentUser);
   const resolvedCurrentUserId = getEntityId(
     chat?.participants?.find((participant) => isSameEntity(participant, currentUser))
@@ -74,6 +75,7 @@ const ChatWindow = ({
 
   useEffect(() => () => {
     mediaRecorderRef.current = null;
+    voiceRecordingStartedAtRef.current = 0;
 
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -142,6 +144,10 @@ const ChatWindow = ({
 
   const buildVoiceFileFromChunks = (mimeType = 'audio/webm') => {
     const voiceBlob = new Blob(voiceChunksRef.current, { type: mimeType });
+    if (!voiceChunksRef.current.length || voiceBlob.size === 0) {
+      return null;
+    }
+
     const extension = mimeType.includes('ogg')
       ? 'ogg'
       : mimeType.includes('mp4')
@@ -183,10 +189,12 @@ const ChatWindow = ({
         }
       };
 
-      recorder.start();
+      recorder.start(250);
+      voiceRecordingStartedAtRef.current = Date.now();
       setIsRecordingVoice(true);
     } catch (error) {
       setVoiceError('Microphone access is required to record a voice note.');
+      voiceRecordingStartedAtRef.current = 0;
       stopVoiceCaptureStream();
     }
   };
@@ -199,13 +207,35 @@ const ChatWindow = ({
 
     const recordedFile = await new Promise((resolve, reject) => {
       recorder.onstop = () => {
-        const nextFile = buildVoiceFileFromChunks(recorder.mimeType || 'audio/webm');
-        resolve(nextFile);
+        window.setTimeout(() => {
+          const nextFile = buildVoiceFileFromChunks(recorder.mimeType || 'audio/webm');
+          if (!nextFile) {
+            const recordingDuration = Date.now() - voiceRecordingStartedAtRef.current;
+            reject(
+              new Error(
+                recordingDuration < 400
+                  ? 'Record for a little longer before sending the voice note.'
+                  : 'No audio was captured. Please try recording again.'
+              )
+            );
+            return;
+          }
+
+          resolve(nextFile);
+        }, 0);
       };
 
       recorder.onerror = () => {
         reject(new Error('Voice recording failed.'));
       };
+
+      if (typeof recorder.requestData === 'function' && recorder.state === 'recording') {
+        try {
+          recorder.requestData();
+        } catch (error) {
+          // Ignore requestData errors and fall back to the stop event.
+        }
+      }
 
       recorder.stop();
     });
@@ -214,6 +244,7 @@ const ChatWindow = ({
     stopVoiceCaptureStream();
     mediaRecorderRef.current = null;
     voiceChunksRef.current = [];
+    voiceRecordingStartedAtRef.current = 0;
 
     if (recordedFile && onSendVoiceMessage) {
       await onSendVoiceMessage(recordedFile);
@@ -238,6 +269,7 @@ const ChatWindow = ({
       stopVoiceCaptureStream();
       mediaRecorderRef.current = null;
       voiceChunksRef.current = [];
+      voiceRecordingStartedAtRef.current = 0;
     }
   };
 
