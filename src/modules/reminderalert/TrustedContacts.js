@@ -82,7 +82,7 @@ const TrustedContacts = ({ onContactsUpdate }) => {
     setSuccessMessage(null);
 
     if (!inviteForm.recipientId.trim()) {
-      setSubmitError("Please enter a contact ID or username.");
+      setSubmitError("Please enter an email, username, or user ID.");
       return;
     }
 
@@ -227,13 +227,13 @@ const TrustedContacts = ({ onContactsUpdate }) => {
               <form className="trusted-contacts-form" onSubmit={handleSendInvite}>
                 <div className="trusted-contacts-form-grid">
                   <label className="trusted-contacts-field trusted-contacts-field-wide">
-                    <span>Contact ID or username</span>
+                    <span>Email, username, or user ID</span>
                     <input
                       type="text"
                       name="recipientId"
                       value={inviteForm.recipientId}
                       onChange={handleInviteFormChange}
-                      placeholder="Enter a username or user ID"
+                      placeholder="Enter an email, username, or user ID"
                       disabled={submitting}
                     />
                   </label>

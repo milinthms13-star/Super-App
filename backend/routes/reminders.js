@@ -56,6 +56,8 @@ const VALID_PRIORITIES = ['Low', 'Medium', 'High'];
 const VALID_REMINDERS = ['In-app', 'SMS', 'Call'];
 const VALID_RECURRING = ['none', 'daily', 'weekly', 'monthly'];
 const VALID_FILE_TYPES = ['voice', 'image', 'document', 'video', 'audio'];
+const VALID_TRUSTED_CONTACT_RELATIONSHIPS = ['family', 'friend', 'caregiver', 'colleague', 'other'];
+const TRUSTED_CONTACT_DEFAULT_MESSAGE = 'I would like to add you as a trusted contact for my reminders';
 
 const getReminderOwnerId = (user = {}) => String(user?._id || user?.id || '');
 
@@ -103,6 +105,28 @@ const validateReminderFields = ({ title, category, priority, reminders, recurrin
   }
 
   return '';
+};
+
+const normalizeTrustedContactIdentifier = (value) => String(value || '').trim();
+
+const resolveTrustedContactRecipient = async (UserModel, recipientIdentifier) => {
+  const normalizedIdentifier = normalizeTrustedContactIdentifier(recipientIdentifier);
+
+  if (!normalizedIdentifier) {
+    return null;
+  }
+
+  if (mongoose.Types.ObjectId.isValid(normalizedIdentifier)) {
+    const userById = await UserModel.findById(normalizedIdentifier);
+    if (userById) {
+      return userById;
+    }
+  }
+
+  const normalizedLookup = normalizedIdentifier.toLowerCase();
+  const lookupField = normalizedLookup.includes('@') ? 'email' : 'username';
+
+  return UserModel.findOne({ [lookupField]: normalizedLookup });
 };
 
 // Create rate limiter for reminders
@@ -697,55 +721,96 @@ router.post('/trusted-contacts/invite', async (req, res) => {
   try {
     const senderId = getReminderOwnerId(req.user);
     const { recipientId, message, relationship = 'other' } = req.body;
+    const recipientIdentifier = normalizeTrustedContactIdentifier(recipientId);
 
-    if (!recipientId) {
+    if (!recipientIdentifier) {
       return res.status(400).json({
         success: false,
-        message: 'Recipient ID is required'
+        message: 'Email, username, or user ID is required'
       });
     }
 
-    if (senderId === recipientId) {
+    if (!VALID_TRUSTED_CONTACT_RELATIONSHIPS.includes(relationship)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid relationship'
+      });
+    }
+
+    const User = require('../models/User');
+    const recipient = await resolveTrustedContactRecipient(User, recipientIdentifier);
+
+    if (!recipient) {
+      return res.status(404).json({
+        success: false,
+        message: 'No user found for that email, username, or user ID'
+      });
+    }
+
+    const resolvedRecipientId = String(recipient._id);
+
+    if (senderId === resolvedRecipientId) {
       return res.status(400).json({
         success: false,
         message: 'Cannot add yourself as a trusted contact'
       });
     }
 
-    // Check if User exists
-    const User = require('../models/User');
-    const recipient = await User.findById(recipientId);
-    if (!recipient) {
-      return res.status(404).json({
-        success: false,
-        message: 'Recipient user not found'
-      });
-    }
-
-    // Check if relationship already exists
     const existing = await TrustedReminderContact.findOne({
       senderId,
-      recipientId,
-      status: { $in: ['pending', 'accepted'] }
+      recipientId: resolvedRecipientId
     });
 
     if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: 'This user is already a trusted contact or invite is pending'
+      if (existing.status === 'accepted') {
+        return res.status(400).json({
+          success: false,
+          message: 'This user is already your trusted contact'
+        });
+      }
+
+      if (existing.status === 'pending') {
+        return res.status(400).json({
+          success: false,
+          message: 'An invite is already pending for this user'
+        });
+      }
+
+      if (existing.status === 'blocked') {
+        return res.status(403).json({
+          success: false,
+          message: 'This trusted contact request is blocked'
+        });
+      }
+
+      existing.status = 'pending';
+      existing.relationship = relationship;
+      existing.message = String(message || TRUSTED_CONTACT_DEFAULT_MESSAGE).trim() || TRUSTED_CONTACT_DEFAULT_MESSAGE;
+      existing.acceptedAt = undefined;
+      existing.rejectedAt = undefined;
+      existing.blockedAt = undefined;
+      existing.lastInteractionAt = new Date();
+      await existing.save();
+
+      logger.info(`Trusted contact invite re-sent from ${senderId} to ${resolvedRecipientId}`);
+
+      return res.status(201).json({
+        success: true,
+        data: existing,
+        message: 'Invite sent successfully'
       });
     }
 
     const trustedContact = new TrustedReminderContact({
       senderId,
-      recipientId,
-      message: message || 'I would like to add you as a trusted contact for my reminders',
+      recipientId: resolvedRecipientId,
+      message: String(message || TRUSTED_CONTACT_DEFAULT_MESSAGE).trim() || TRUSTED_CONTACT_DEFAULT_MESSAGE,
       relationship
     });
 
     await trustedContact.save();
 
-    logger.info(`Trusted contact invite sent from ${senderId} to ${recipientId}`);
+    logger.info(`Trusted contact invite sent from ${senderId} to ${resolvedRecipientId}`);
 
     res.status(201).json({
       success: true,
@@ -754,6 +819,14 @@ router.post('/trusted-contacts/invite', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error sending trusted contact invite:', error);
+
+    if (error?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'This user is already your trusted contact or already has a pending invite'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Failed to send invite',
@@ -1268,4 +1341,6 @@ module.exports.__testables = {
   getReminderOwnerId,
   parseReminderDueDate,
   validateReminderFields,
+  normalizeTrustedContactIdentifier,
+  resolveTrustedContactRecipient,
 };
