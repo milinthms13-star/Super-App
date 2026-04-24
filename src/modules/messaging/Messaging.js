@@ -220,6 +220,7 @@ const Messaging = () => {
   const [selectedContactForScheduledBlock, setSelectedContactForScheduledBlock] = useState(null);
 
   // Chatroom states
+  const [loadingChatrooms, setLoadingChatrooms] = useState(false);
   const [chatrooms, setChatrooms] = useState([]);
   const [selectedChatroom, setSelectedChatroom] = useState(null);
   const [showChatroomCreation, setShowChatroomCreation] = useState(false);
@@ -402,6 +403,43 @@ const Messaging = () => {
     } catch (error) {
       console.error('Error loading contacts:', error);
     }
+  }, [apiCall]);
+
+  const loadChatrooms = useCallback(async () => {
+    try {
+      setLoadingChatrooms(true);
+      const response = await apiCall('/messaging/chatrooms/my-rooms', 'GET');
+
+      if (response?.chatrooms) {
+        setChatrooms(response.chatrooms);
+      }
+    } catch (error) {
+      console.error('Error loading chatrooms:', error);
+    } finally {
+      setLoadingChatrooms(false);
+    }
+  }, [apiCall]);
+
+  const loadChatroomDetails = useCallback(async (chatroomId) => {
+    const resolvedChatroomId = getEntityId(chatroomId);
+
+    if (!resolvedChatroomId) {
+      setSelectedChatroom(null);
+      return null;
+    }
+
+    try {
+      const response = await apiCall(`/messaging/chatrooms/${resolvedChatroomId}`, 'GET');
+
+      if (response?.chatroom) {
+        setSelectedChatroom(response.chatroom);
+        return response.chatroom;
+      }
+    } catch (error) {
+      console.error('Error loading chatroom details:', error);
+    }
+
+    return null;
   }, [apiCall]);
 
   const loadMessages = useCallback(async (chatId, options = {}) => {
@@ -597,6 +635,12 @@ const Messaging = () => {
   useEffect(() => {
     loadContacts(contactFilterType);
   }, [contactFilterType, loadContacts]);
+
+  useEffect(() => {
+    if (activeTab === 'chatrooms') {
+      loadChatrooms();
+    }
+  }, [activeTab, loadChatrooms]);
 
   useEffect(() => {
     const syncNotificationPermission = () => {
@@ -1129,6 +1173,89 @@ const Messaging = () => {
     setSelectedChat(chat);
     setShowNewChat(false);
   };
+
+  const handleSelectChatroom = useCallback((chatroom) => {
+    setSelectedChatroom(chatroom);
+    setShowChatroomCreation(false);
+    setShowChatroomBrowser(false);
+
+    if (chatroom?._id) {
+      loadChatroomDetails(chatroom._id);
+    }
+  }, [loadChatroomDetails]);
+
+  const handleOpenChatroomCreation = useCallback(() => {
+    setShowChatroomCreation(true);
+    setShowChatroomBrowser(false);
+  }, []);
+
+  const handleOpenChatroomBrowser = useCallback(() => {
+    setShowChatroomBrowser(true);
+    setShowChatroomCreation(false);
+  }, []);
+
+  const handleCloseChatroomWorkspace = useCallback(() => {
+    setShowChatroomCreation(false);
+    setShowChatroomBrowser(false);
+  }, []);
+
+  const handleChatroomCreated = useCallback(async (chatroom) => {
+    setActiveTab('chatrooms');
+    setShowChatroomCreation(false);
+    setShowChatroomBrowser(false);
+    await loadChatrooms();
+
+    if (chatroom?._id) {
+      setSelectedChatroom(chatroom);
+      await loadChatroomDetails(chatroom._id);
+    }
+  }, [loadChatroomDetails, loadChatrooms]);
+
+  const handleJoinChatroom = useCallback(async (chatroom) => {
+    setActiveTab('chatrooms');
+    setShowChatroomCreation(false);
+    setShowChatroomBrowser(false);
+    await loadChatrooms();
+
+    if (chatroom?._id) {
+      setSelectedChatroom(chatroom);
+      await loadChatroomDetails(chatroom._id);
+    }
+  }, [loadChatroomDetails, loadChatrooms]);
+
+  const handleChatroomAccessRequested = useCallback(() => {
+    loadChatrooms();
+  }, [loadChatrooms]);
+
+  const handleLeaveChatroom = useCallback(async (chatroomId) => {
+    const resolvedChatroomId = getEntityId(chatroomId);
+
+    setChatrooms((prevChatrooms) =>
+      prevChatrooms.filter((room) => getEntityId(room) !== resolvedChatroomId)
+    );
+    setSelectedChatroom((prevChatroom) => (
+      getEntityId(prevChatroom) === resolvedChatroomId ? null : prevChatroom
+    ));
+    setShowChatroomCreation(false);
+    setShowChatroomBrowser(false);
+
+    await loadChatrooms();
+  }, [loadChatrooms]);
+
+  const handleRefreshChatroom = useCallback(async (chatroomId) => {
+    const resolvedChatroomId = getEntityId(chatroomId) || getEntityId(selectedChatroom);
+
+    if (!resolvedChatroomId) {
+      return null;
+    }
+
+    const [chatroomDetails] = await Promise.all([
+      loadChatroomDetails(resolvedChatroomId),
+      loadChatrooms(),
+    ]);
+
+    return chatroomDetails;
+  }, [loadChatroomDetails, loadChatrooms, selectedChatroom]);
 
   const handleShowOlderMessages = useCallback(async () => {
     if (!selectedChat?._id || loadingOlderMessages || selectedChatClearedAt) {
@@ -1772,6 +1899,13 @@ const Messaging = () => {
                 Chats
               </button>
               <button
+                className={`tab-btn ${activeTab === 'chatrooms' ? 'active' : ''}`}
+                onClick={() => setActiveTab('chatrooms')}
+                type="button"
+              >
+                Chatrooms
+              </button>
+              <button
                 className={`tab-btn ${activeTab === 'contacts' ? 'active' : ''}`}
                 onClick={() => setActiveTab('contacts')}
                 type="button"
@@ -1820,6 +1954,19 @@ const Messaging = () => {
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               clearedChats={clearedChats}
+            />
+          )}
+
+          {activeTab === 'chatrooms' && (
+            <ChatroomList
+              chatrooms={chatrooms}
+              selectedChatroom={selectedChatroom}
+              onSelectChatroom={handleSelectChatroom}
+              onNewChatroom={handleOpenChatroomCreation}
+              onBrowseChatrooms={handleOpenChatroomBrowser}
+              searchQuery={chatroomSearchQuery}
+              onSearchChange={setChatroomSearchQuery}
+              loading={loadingChatrooms}
             />
           )}
 
@@ -1876,7 +2023,27 @@ const Messaging = () => {
         </div>
 
         <div className="messaging-main">
-          {showNewChat ? (
+          {activeTab === 'chatrooms' ? (
+            showChatroomCreation ? (
+              <ChatroomCreation
+                onChatroomCreated={handleChatroomCreated}
+                onCancel={handleCloseChatroomWorkspace}
+              />
+            ) : showChatroomBrowser ? (
+              <ChatroomBrowser
+                onJoinChatroom={handleJoinChatroom}
+                onRequestAccess={handleChatroomAccessRequested}
+                onCancel={handleCloseChatroomWorkspace}
+              />
+            ) : (
+              <ChatroomPanel
+                chatroom={selectedChatroom}
+                onLeaveChatroom={handleLeaveChatroom}
+                onClose={() => setSelectedChatroom(null)}
+                onRefreshChatroom={handleRefreshChatroom}
+              />
+            )
+          ) : showNewChat ? (
             newChatMode === 'group' ? (
               <GroupCreation
                 onGroupCreated={handleGroupCreated}

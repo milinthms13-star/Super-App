@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { getAvatarLabel, getEntityId } from './utils';
 
@@ -6,6 +6,7 @@ const ChatroomPanel = ({
   chatroom,
   onLeaveChatroom,
   onClose,
+  onRefreshChatroom,
 }) => {
   const { apiCall, currentUser } = useApp();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -15,21 +16,10 @@ const ChatroomPanel = ({
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  useEffect(() => {
-    if (!chatroom) return;
-
-    const admin = chatroom.admins?.some((a) =>
-      getEntityId(a) === getEntityId(currentUser)
-    );
-    setIsAdmin(admin);
-
-    if (admin) {
-      loadPendingRequests();
-    }
-  }, [chatroom, currentUser]);
-
   const loadPendingRequests = useCallback(async () => {
-    if (!chatroom?._id) return;
+    if (!chatroom?._id) {
+      return;
+    }
 
     try {
       setLoadingRequests(true);
@@ -41,12 +31,40 @@ const ChatroomPanel = ({
       if (response?.pendingRequests) {
         setPendingRequests(response.pendingRequests);
       }
-    } catch (error) {
-      console.error('Error loading pending requests:', error);
+    } catch (loadError) {
+      console.error('Error loading pending requests:', loadError);
     } finally {
       setLoadingRequests(false);
     }
   }, [apiCall, chatroom?._id]);
+
+  useEffect(() => {
+    if (!chatroom) {
+      setIsAdmin(false);
+      setPendingRequests([]);
+      setActiveTab('info');
+      setError('');
+      setSuccessMessage('');
+      return;
+    }
+
+    setActiveTab('info');
+    setError('');
+    setSuccessMessage('');
+
+    const admin = chatroom.admins?.some(
+      (entry) => getEntityId(entry) === getEntityId(currentUser)
+    );
+
+    setIsAdmin(admin);
+
+    if (admin) {
+      loadPendingRequests();
+      return;
+    }
+
+    setPendingRequests([]);
+  }, [chatroom, currentUser, loadPendingRequests]);
 
   const handleApproveRequest = async (userId) => {
     try {
@@ -57,11 +75,14 @@ const ChatroomPanel = ({
       );
 
       setSuccessMessage('Request approved!');
-      setPendingRequests((prev) => prev.filter((r) => r.userId._id !== userId));
+      setPendingRequests((prevRequests) =>
+        prevRequests.filter((request) => request.userId._id !== userId)
+      );
+      await onRefreshChatroom?.(chatroom._id);
 
       setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (error) {
-      setError(error?.message || 'Failed to approve request');
+    } catch (approveError) {
+      setError(approveError?.message || 'Failed to approve request');
     }
   };
 
@@ -75,11 +96,14 @@ const ChatroomPanel = ({
       );
 
       setSuccessMessage('Request rejected');
-      setPendingRequests((prev) => prev.filter((r) => r.userId._id !== userId));
+      setPendingRequests((prevRequests) =>
+        prevRequests.filter((request) => request.userId._id !== userId)
+      );
+      await onRefreshChatroom?.(chatroom._id);
 
       setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (error) {
-      setError(error?.message || 'Failed to reject request');
+    } catch (rejectError) {
+      setError(rejectError?.message || 'Failed to reject request');
     }
   };
 
@@ -96,13 +120,14 @@ const ChatroomPanel = ({
       );
 
       setSuccessMessage('Member blocked successfully');
+      await onRefreshChatroom?.(chatroom._id);
       setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (error) {
-      setError(error?.message || 'Failed to block member');
+    } catch (blockError) {
+      setError(blockError?.message || 'Failed to block member');
     }
   };
 
-  const handleLeaveChatroom = async () => {
+  const handleLeaveCurrentChatroom = async () => {
     if (!window.confirm('Leave this chatroom? You will need to rejoin if it is public.')) {
       return;
     }
@@ -111,8 +136,8 @@ const ChatroomPanel = ({
       setError('');
       await apiCall(`/messaging/chatrooms/${chatroom._id}/leave`, 'POST');
       onLeaveChatroom(chatroom._id);
-    } catch (error) {
-      setError(error?.message || 'Failed to leave chatroom');
+    } catch (leaveError) {
+      setError(leaveError?.message || 'Failed to leave chatroom');
     }
   };
 
@@ -134,8 +159,7 @@ const ChatroomPanel = ({
           <div>
             <h3>{chatroom.name}</h3>
             <p className="chatroom-meta">
-              {chatroom.isPrivate ? '🔒 Private' : '🌐 Public'} •
-              {` ${chatroom.memberCount} members`}
+              {chatroom.isPrivate ? 'Private' : 'Public'} | {chatroom.memberCount} members
             </p>
           </div>
         </div>
@@ -145,7 +169,7 @@ const ChatroomPanel = ({
           title="Close"
           type="button"
         >
-          ✕
+          x
         </button>
       </div>
 
@@ -155,7 +179,7 @@ const ChatroomPanel = ({
           onClick={() => setActiveTab('info')}
           type="button"
         >
-          ℹ️ Info
+          Info
         </button>
         {isAdmin && (
           <button
@@ -163,7 +187,7 @@ const ChatroomPanel = ({
             onClick={() => setActiveTab('admin')}
             type="button"
           >
-            ⚙️ Admin
+            Admin
           </button>
         )}
         <button
@@ -171,7 +195,7 @@ const ChatroomPanel = ({
           onClick={() => setActiveTab('members')}
           type="button"
         >
-          👥 Members ({chatroom.members?.length || 0})
+          Members ({chatroom.members?.length || 0})
         </button>
       </div>
 
@@ -212,7 +236,7 @@ const ChatroomPanel = ({
             <div className="chatroom-panel-actions">
               <button
                 className="btn btn-danger"
-                onClick={handleLeaveChatroom}
+                onClick={handleLeaveCurrentChatroom}
                 type="button"
               >
                 Leave Chatroom
@@ -256,14 +280,14 @@ const ChatroomPanel = ({
                           onClick={() => handleApproveRequest(request.userId._id)}
                           type="button"
                         >
-                          ✓ Approve
+                          Approve
                         </button>
                         <button
                           className="btn btn-danger btn-sm"
                           onClick={() => handleRejectRequest(request.userId._id)}
                           type="button"
                         >
-                          ✕ Reject
+                          Reject
                         </button>
                       </div>
                     </div>
@@ -281,8 +305,8 @@ const ChatroomPanel = ({
             <div className="members-list">
               {chatroom.members?.map((member) => {
                 const isCreator = getEntityId(member) === getEntityId(chatroom.createdBy);
-                const memberAdmin = chatroom.admins?.some((a) =>
-                  getEntityId(a) === getEntityId(member)
+                const memberAdmin = chatroom.admins?.some(
+                  (entry) => getEntityId(entry) === getEntityId(member)
                 );
 
                 return (
@@ -318,7 +342,7 @@ const ChatroomPanel = ({
                           type="button"
                           title="Block this member"
                         >
-                          🚫
+                          Block
                         </button>
                       )}
                   </div>

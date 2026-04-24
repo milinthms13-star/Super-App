@@ -18,6 +18,7 @@ import { formatReminderDueDate } from '../reminderUtils';
  * @param {function} props.onEdit - Edit handler
  * @param {function} props.onDelete - Delete handler
  * @param {function} props.onToggleCompletion - Toggle completion handler
+ * @param {function} props.onTriggerVoiceCall - Voice call trigger handler
  * 
  * @example
  * <ReminderCard
@@ -25,6 +26,7 @@ import { formatReminderDueDate } from '../reminderUtils';
  *   onEdit={handleEdit}
  *   onDelete={handleDelete}
  *   onToggleCompletion={handleToggleCompletion}
+ *   onTriggerVoiceCall={handleTriggerVoiceCall}
  * />
  */
 const ReminderCard = React.memo(
@@ -32,7 +34,8 @@ const ReminderCard = React.memo(
     reminder,
     onEdit,
     onDelete,
-    onToggleCompletion
+    onToggleCompletion,
+    onTriggerVoiceCall
   }) => {
     const priorityColor = {
       Low: '#10b981',
@@ -57,6 +60,12 @@ const ReminderCard = React.memo(
     const handleToggle = useCallback(() => {
       onToggleCompletion(reminder._id, reminder.completed);
     }, [reminder._id, reminder.completed, onToggleCompletion]);
+
+    const handleTriggerVoiceCall = useCallback(() => {
+      if (onTriggerVoiceCall) {
+        onTriggerVoiceCall(reminder._id);
+      }
+    }, [reminder._id, onTriggerVoiceCall]);
 
     return (
       <article
@@ -103,6 +112,16 @@ const ReminderCard = React.memo(
           </div>
 
           <div className="reminderalert-task-actions" role="group" aria-label="Actions">
+            {reminder.recipientPhoneNumber && (
+              <button
+                className="reminderalert-action-btn voice-call"
+                onClick={handleTriggerVoiceCall}
+                title={`Trigger voice call to ${reminder.recipientPhoneNumber}`}
+                aria-label={`Trigger voice call for ${reminder.title}`}
+              >
+                📞
+              </button>
+            )}
             <button
               className="reminderalert-action-btn edit"
               onClick={handleEdit}

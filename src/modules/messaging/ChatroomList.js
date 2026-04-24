@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { getAvatarLabel, getEntityId } from './utils';
+import React, { useEffect, useState } from 'react';
+import { getAvatarLabel } from './utils';
 
 const ChatroomList = ({
   chatrooms,
@@ -9,6 +9,7 @@ const ChatroomList = ({
   onBrowseChatrooms,
   searchQuery,
   onSearchChange,
+  loading = false,
 }) => {
   const [filteredChatrooms, setFilteredChatrooms] = useState(chatrooms);
 
@@ -38,7 +39,7 @@ const ChatroomList = ({
             title="Browse public chatrooms"
             type="button"
           >
-            🔍
+            Browse
           </button>
           <button
             className="btn-icon primary"
@@ -46,7 +47,7 @@ const ChatroomList = ({
             title="Create new chatroom"
             type="button"
           >
-            ➕
+            Create
           </button>
         </div>
       </div>
@@ -56,13 +57,17 @@ const ChatroomList = ({
           type="text"
           placeholder="Search chatrooms..."
           value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
+          onChange={(event) => onSearchChange(event.target.value)}
           className="search-input"
         />
       </div>
 
       <div className="chatroom-list">
-        {filteredChatrooms.length > 0 ? (
+        {loading ? (
+          <div className="empty-chatrooms">
+            <p>Loading chatrooms...</p>
+          </div>
+        ) : filteredChatrooms.length > 0 ? (
           filteredChatrooms.map((room) => (
             <div
               key={room._id}
@@ -77,11 +82,9 @@ const ChatroomList = ({
               <div className="chatroom-item-info">
                 <h4 className="chatroom-item-name">
                   {room.name}
-                  {room.isPrivate && <span className="private-badge">🔒</span>}
+                  {room.isPrivate && <span className="private-badge">(Private)</span>}
                 </h4>
-                <p className="chatroom-item-members">
-                  👥 {room.memberCount} members
-                </p>
+                <p className="chatroom-item-members">{room.memberCount} members</p>
               </div>
             </div>
           ))

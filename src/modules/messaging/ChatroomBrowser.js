@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { getAvatarLabel, getEntityId } from './utils';
 
@@ -7,7 +7,7 @@ const ChatroomBrowser = ({
   onRequestAccess,
   onCancel,
 }) => {
-  const { apiCall, currentUser } = useApp();
+  const { apiCall } = useApp();
   const [chatrooms, setChatrooms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,7 +19,6 @@ const ChatroomBrowser = ({
   const [myRooms, setMyRooms] = useState(new Set());
   const [error, setError] = useState('');
 
-  // Load user's chatrooms first
   useEffect(() => {
     loadMyRooms();
   }, []);
@@ -28,11 +27,11 @@ const ChatroomBrowser = ({
     try {
       const response = await apiCall('/messaging/chatrooms/my-rooms', 'GET');
       if (response?.chatrooms) {
-        const roomIds = new Set(response.chatrooms.map(r => getEntityId(r._id)));
+        const roomIds = new Set(response.chatrooms.map((room) => getEntityId(room._id)));
         setMyRooms(roomIds);
       }
-    } catch (error) {
-      console.error('Error loading my rooms:', error);
+    } catch (loadError) {
+      console.error('Error loading my rooms:', loadError);
     }
   };
 
@@ -58,8 +57,8 @@ const ChatroomBrowser = ({
         setTotalPages(response.pagination?.pages || 1);
         setPage(pageNum);
       }
-    } catch (error) {
-      console.error('Error loading chatrooms:', error);
+    } catch (loadError) {
+      console.error('Error loading chatrooms:', loadError);
       setError('Failed to load chatrooms');
     } finally {
       setLoading(false);
@@ -74,15 +73,19 @@ const ChatroomBrowser = ({
     try {
       setJoiningRoom(chatroomId);
       const response = await apiCall(`/messaging/chatrooms/${chatroomId}/join`, 'POST');
-      
+
       if (response?.chatroom) {
         await loadMyRooms();
-        onJoinChatroom(response.chatroom);
+
+        if (typeof onJoinChatroom === 'function') {
+          onJoinChatroom(response.chatroom);
+        }
+
         setError('');
       }
-    } catch (error) {
-      setError(error?.message || 'Failed to join chatroom');
-      console.error('Error joining chatroom:', error);
+    } catch (joinError) {
+      setError(joinError?.message || 'Failed to join chatroom');
+      console.error('Error joining chatroom:', joinError);
     } finally {
       setJoiningRoom(null);
     }
@@ -91,30 +94,33 @@ const ChatroomBrowser = ({
   const handleRequestAccess = async (chatroomId) => {
     try {
       setRequestingRoom(chatroomId);
-      const response = await apiCall(`/messaging/chatrooms/${chatroomId}/request-join`, 'POST');
-      
-      if (onRequestAccess) {
+      await apiCall(`/messaging/chatrooms/${chatroomId}/request-join`, 'POST');
+
+      if (typeof onRequestAccess === 'function') {
         onRequestAccess(chatroomId);
       }
+
       setError('');
       alert('Access request sent. Waiting for admin approval.');
-    } catch (error) {
-      setError(error?.message || 'Failed to request access');
-      console.error('Error requesting access:', error);
+    } catch (requestError) {
+      setError(requestError?.message || 'Failed to request access');
+      console.error('Error requesting access:', requestError);
     } finally {
       setRequestingRoom(null);
     }
   };
 
   const toggleTag = (tag) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    setSelectedTags((prevTags) =>
+      prevTags.includes(tag)
+        ? prevTags.filter((entry) => entry !== tag)
+        : [...prevTags, tag]
     );
     setPage(1);
   };
 
-  const handleSearch = (e) => {
-    setSearchQuery(e.target.value);
+  const handleSearch = (event) => {
+    setSearchQuery(event.target.value);
     setPage(1);
   };
 
@@ -129,7 +135,7 @@ const ChatroomBrowser = ({
           type="button"
           aria-label="Close chatroom browser"
         >
-          ✕
+          x
         </button>
       </div>
 
@@ -152,7 +158,7 @@ const ChatroomBrowser = ({
           <div className="chatroom-grid">
             {chatrooms.map((room) => {
               const isMember = myRooms.has(getEntityId(room._id));
-              
+
               return (
                 <div key={room._id} className="chatroom-card">
                   <div className="chatroom-card-header">
@@ -160,7 +166,7 @@ const ChatroomBrowser = ({
                       {getAvatarLabel(room.name, room.name, '', room.icon, 'C')}
                     </div>
                     <span className={`room-type-badge ${room.isPrivate ? 'private' : 'public'}`}>
-                      {room.isPrivate ? '🔒 Private' : '🌐 Public'}
+                      {room.isPrivate ? 'Private' : 'Public'}
                     </span>
                   </div>
 
@@ -171,7 +177,7 @@ const ChatroomBrowser = ({
                     )}
 
                     <div className="chatroom-stats">
-                      <span className="stat">👥 {room.memberCount} members</span>
+                      <span className="stat">{room.memberCount} members</span>
                       {room.maxMembers > 0 && (
                         <span className="stat">max: {room.maxMembers}</span>
                       )}
@@ -195,7 +201,7 @@ const ChatroomBrowser = ({
                   <div className="chatroom-card-footer">
                     {isMember ? (
                       <button className="btn btn-success" disabled>
-                        ✓ Member
+                        Member
                       </button>
                     ) : room.isPrivate ? (
                       <button
@@ -233,7 +239,7 @@ const ChatroomBrowser = ({
             disabled={page === 1 || loading}
             className="btn-pagination"
           >
-            ← Previous
+            Previous
           </button>
 
           <span className="page-info">
@@ -245,7 +251,7 @@ const ChatroomBrowser = ({
             disabled={page === totalPages || loading}
             className="btn-pagination"
           >
-            Next →
+            Next
           </button>
         </div>
       )}
