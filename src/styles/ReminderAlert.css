@@ -10,24 +10,39 @@
 }
 
 .reminderalert-current-time {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 999;
+  max-width: 1240px;
+  margin: 0 auto 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  position: relative;
+  z-index: 1;
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 16px;
-  padding: 12px 18px;
+  border-radius: 24px;
+  padding: 1rem 1.15rem;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  min-width: 200px;
 }
 
 .reminderalert-time-display {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.reminderalert-time-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.reminderalert-time-actions .reminderalert-add-btn,
+.reminderalert-time-actions .reminderalert-filter-chip {
+  white-space: nowrap;
 }
 
 .reminderalert-time-label {
@@ -658,6 +673,71 @@
   color: #0f766e;
 }
 
+/* VOICE RECORDER SECTION */
+.reminderalert-voice-recorder-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 1rem;
+  background: rgba(15, 118, 110, 0.04);
+  border-radius: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.15);
+}
+
+.voice-note-recorder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.voice-recorder-btn {
+  padding: 10px 16px;
+  border: 2px solid #0f766e;
+  border-radius: 8px;
+  background: white;
+  color: #0f766e;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.95rem;
+}
+
+.voice-recorder-btn:hover {
+  background: #0f766e;
+  color: white;
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.25);
+}
+
+.voice-recorder-btn:active {
+  transform: scale(0.98);
+}
+
+.voice-note-recorder audio {
+  width: 100%;
+  max-width: 300px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.reminderalert-voice-note-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 8px;
+  border-left: 3px solid #10b981;
+}
+
+.reminderalert-voice-note-label {
+  margin: 0;
+  color: #0f8b66;
+  font-weight: 600;
+  font-size: 0.9rem;
+  flex: 1;
+}
+
 @media (max-width: 1080px) {
   .reminderalert-stats-grid,
   .reminderalert-requirement-grid,
@@ -912,10 +992,9 @@
   }
 
   .reminderalert-current-time {
-    top: 10px;
-    right: 10px;
-    padding: 8px 12px;
-    min-width: 160px;
+    align-items: stretch;
+    flex-direction: column;
+    padding: 0.95rem 1rem;
   }
 
   .reminderalert-time-display > strong {
@@ -968,6 +1047,16 @@
   .reminderalert-hero-actions .reminderalert-add-btn,
   .reminderalert-hero-actions .reminderalert-filter-chip {
     width: 100%;
+    text-align: center;
+  }
+
+  .reminderalert-time-actions {
+    justify-content: stretch;
+  }
+
+  .reminderalert-time-actions .reminderalert-add-btn,
+  .reminderalert-time-actions .reminderalert-filter-chip {
+    flex: 1 1 100%;
     text-align: center;
   }
 }

@@ -4470,26 +4470,53 @@
 }
 
 .sidebar-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.8rem;
   position: relative;
   z-index: 3;
 }
 
 .sidebar-tabs {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
   min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .sidebar-tabs .tab-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
   min-width: 0;
+  min-height: 44px;
+  padding: 0.75rem 0.85rem;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .sidebar-tools {
+  display: flex;
   justify-content: flex-end;
-  min-width: fit-content;
+  min-width: 0;
+}
+
+.notification-bell-container {
+  margin-right: 0;
+}
+
+.notification-bell-btn {
+  min-height: 42px;
+  padding: 0.7rem 1rem;
+  white-space: nowrap;
 }
 
 .chat-list-header,
@@ -4548,12 +4575,14 @@
 }
 
 @media (max-width: 900px) {
-  .sidebar-header {
-    grid-template-columns: 1fr;
-  }
-
   .sidebar-tools {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .sidebar-tabs {
+    grid-template-columns: 1fr;
   }
 }
 

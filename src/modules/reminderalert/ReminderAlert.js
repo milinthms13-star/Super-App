@@ -15,6 +15,7 @@ import {
 } from "../../services/remindersService";
 import { formatReminderDueDate, toDateInputValue } from "./reminderUtils";
 import TrustedContacts from "./TrustedContacts";
+import VoiceNoteRecorder from "../../components/VoiceNoteRecorder";
 
 const PRIORITIES = ["Low", "Medium", "High"];
 const CATEGORIES = ["Work", "Personal", "Urgent"];
@@ -57,25 +58,72 @@ const INITIAL_VOICE_CALL_FORM = {
   recipientPhoneNumber: "",
   voiceMessage: "",
   messageType: "text",
+  voiceNoteUrl: "",
+};
+
+const padDatePart = (value) => String(value).padStart(2, "0");
+
+const getLocalDateInputValue = (value = new Date()) =>
+  `${value.getFullYear()}-${padDatePart(value.getMonth() + 1)}-${padDatePart(value.getDate())}`;
+
+const getLocalTimeInputValue = (value = new Date()) =>
+  `${padDatePart(value.getHours())}:${padDatePart(value.getMinutes())}`;
+
+const getDueDateTime = (dueDate, dueTime = "") => {
+  const dateValue = toDateInputValue(dueDate);
+  if (!dateValue) {
+    return null;
+  }
+
+  const [year, month, day] = dateValue.split("-").map((part) => parseInt(part, 10));
+  if ([year, month, day].some((part) => Number.isNaN(part))) {
+    return null;
+  }
+
+  const dueDateTime = new Date(year, month - 1, day);
+  if (Number.isNaN(dueDateTime.getTime())) {
+    return null;
+  }
+
+  if (dueTime) {
+    const [hours, minutes] = String(dueTime)
+      .split(":")
+      .map((part) => parseInt(part, 10));
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      return null;
+    }
+
+    dueDateTime.setHours(hours, minutes, 0, 0);
+  } else {
+    dueDateTime.setHours(0, 0, 0, 0);
+  }
+
+  return dueDateTime;
+};
+
+const formatDateTimeLabel = (value) => {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    return "";
+  }
+
+  return value.toLocaleString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 const getReminderTimestamp = (task = {}) => {
-  const baseDate = new Date(task.dueDate);
-  if (Number.isNaN(baseDate.getTime())) {
+  const dueDateTime = getDueDateTime(task.dueDate, task.dueTime || "09:00");
+  if (!dueDateTime) {
     return Number.POSITIVE_INFINITY;
   }
 
-  if (task.dueTime) {
-    const [hours, minutes] = String(task.dueTime)
-      .split(":")
-      .map((value) => parseInt(value, 10));
-
-    if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
-      baseDate.setHours(hours, minutes, 0, 0);
-    }
-  }
-
-  return baseDate.getTime();
+  return dueDateTime.getTime();
 };
 
 const ReminderAlert = () => {
@@ -92,6 +140,24 @@ const ReminderAlert = () => {
   const [trustedContacts, setTrustedContacts] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [countdown, setCountdown] = useState(null);
+  const currentDateLabel = currentTime.toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const currentClockLabel = currentTime.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const dueDateTimePreview = useMemo(
+    () =>
+      formData.dueDate && formData.dueTime
+        ? getDueDateTime(formData.dueDate, formData.dueTime)
+        : null,
+    [formData.dueDate, formData.dueTime]
+  );
 
   useEffect(() => {
     const loadReminders = async () => {
@@ -136,40 +202,37 @@ const ReminderAlert = () => {
 
   // Calculate countdown when form has due date and time
   useEffect(() => {
-    if (formData.dueDate && formData.dueTime) {
-      const [hours, minutes] = formData.dueTime.split(":").map(Number);
-      const dueDateTime = new Date(formData.dueDate);
-      dueDateTime.setHours(hours, minutes, 0, 0);
-
-      const now = new Date();
-      const diffMs = dueDateTime - now;
-
-      if (diffMs > 0) {
-        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const hours_rem = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
-        const mins = Math.floor((diffMs / 1000 / 60) % 60);
-        const secs = Math.floor((diffMs / 1000) % 60);
-
-        setCountdown({
-          days,
-          hours: hours_rem,
-          minutes: mins,
-          seconds: secs,
-          isPast: false,
-        });
-      } else {
-        setCountdown({
-          days: 0,
-          hours: 0,
-          minutes: 0,
-          seconds: 0,
-          isPast: true,
-        });
-      }
-    } else {
+    if (!dueDateTimePreview) {
       setCountdown(null);
+      return;
     }
-  }, [formData.dueDate, formData.dueTime, currentTime]);
+
+    const diffMs = dueDateTimePreview.getTime() - currentTime.getTime();
+
+    if (diffMs > 0) {
+      const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diffMs / 1000 / 60) % 60);
+      const seconds = Math.floor((diffMs / 1000) % 60);
+
+      setCountdown({
+        days,
+        hours,
+        minutes,
+        seconds,
+        isPast: false,
+      });
+      return;
+    }
+
+    setCountdown({
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      isPast: true,
+    });
+  }, [currentTime, dueDateTimePreview]);
 
   const visibleTasks = useMemo(() => {
     const filteredTasks =
@@ -224,6 +287,28 @@ const ReminderAlert = () => {
     setShowAddForm(true);
   };
 
+  const applyCurrentDate = () => {
+    setFormData((current) => ({
+      ...current,
+      dueDate: getLocalDateInputValue(currentTime),
+    }));
+  };
+
+  const applyCurrentTime = () => {
+    setFormData((current) => ({
+      ...current,
+      dueTime: getLocalTimeInputValue(currentTime),
+    }));
+  };
+
+  const applyCurrentDateTime = () => {
+    setFormData((current) => ({
+      ...current,
+      dueDate: getLocalDateInputValue(currentTime),
+      dueTime: getLocalTimeInputValue(currentTime),
+    }));
+  };
+
   const handleFormChange = (event) => {
     const { name, value, checked, type } = event.target;
 
@@ -243,6 +328,7 @@ const ReminderAlert = () => {
           recipientPhoneNumber: "",
           voiceMessage: "",
           messageType: "text",
+          voiceNoteUrl: "",
         }));
       }
       return;
@@ -303,8 +389,13 @@ const ReminderAlert = () => {
         return;
       }
 
-      if (!voiceCallData.voiceMessage.trim()) {
+      if (voiceCallData.messageType === "text" && !voiceCallData.voiceMessage.trim()) {
         setSubmitError("Add the spoken message for the call reminder.");
+        return;
+      }
+
+      if (voiceCallData.messageType === "audio" && !voiceCallData.voiceNoteUrl) {
+        setSubmitError("Record or upload a voice note for the audio reminder.");
         return;
       }
     }
@@ -320,6 +411,9 @@ const ReminderAlert = () => {
           : "",
         voiceMessage: formData.reminders.includes("Call") ? voiceCallData.voiceMessage : "",
         messageType: formData.reminders.includes("Call") ? voiceCallData.messageType : "text",
+        voiceNoteUrl: formData.reminders.includes("Call") && voiceCallData.messageType === "audio"
+          ? voiceCallData.voiceNoteUrl
+          : "",
       };
 
       let savedTask = null;
@@ -437,10 +531,38 @@ const ReminderAlert = () => {
     <div className="reminderalert-page">
       <div className="reminderalert-current-time">
         <div className="reminderalert-time-display">
-          <p className="reminderalert-time-label">Current</p>
-          <strong>{currentTime.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}</strong>
-          <p className="reminderalert-time-clock">{currentTime.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
+          <p className="reminderalert-time-label">Current date and time</p>
+          <strong>{currentDateLabel}</strong>
+          <p className="reminderalert-time-clock">{currentClockLabel}</p>
         </div>
+        {showAddForm && (
+          <div className="reminderalert-time-actions">
+            <button
+              type="button"
+              className="reminderalert-filter-chip"
+              onClick={applyCurrentDate}
+              disabled={submitting}
+            >
+              Use current date
+            </button>
+            <button
+              type="button"
+              className="reminderalert-filter-chip"
+              onClick={applyCurrentTime}
+              disabled={submitting}
+            >
+              Use current time
+            </button>
+            <button
+              type="button"
+              className="reminderalert-add-btn"
+              onClick={applyCurrentDateTime}
+              disabled={submitting}
+            >
+              Use now
+            </button>
+          </div>
+        )}
       </div>
 
       <section className="reminderalert-hero">
@@ -600,6 +722,7 @@ const ReminderAlert = () => {
                       onChange={handleFormChange}
                       disabled={submitting}
                     />
+                    <small className="reminderalert-inline-meta">Today: {currentDateLabel}</small>
                   </label>
 
                   <label className="reminderalert-field">
@@ -611,6 +734,7 @@ const ReminderAlert = () => {
                       onChange={handleFormChange}
                       disabled={submitting}
                     />
+                    <small className="reminderalert-inline-meta">Now: {currentClockLabel}</small>
                   </label>
 
                   <label className="reminderalert-field">
@@ -749,21 +873,60 @@ const ReminderAlert = () => {
                         </select>
                       </label>
 
-                      <label className="reminderalert-field reminderalert-field-full">
-                        <span>Spoken message</span>
-                        <textarea
-                          name="voiceMessage"
-                          value={voiceCallData.voiceMessage}
-                          onChange={handleVoiceCallChange}
-                          placeholder="Example: Please remember to take your medicine at 2 PM."
-                          rows="4"
-                          maxLength="500"
-                          disabled={submitting}
-                        />
-                        <small className="reminderalert-inline-meta">
-                          {voiceCallData.voiceMessage.length}/500 characters
-                        </small>
-                      </label>
+                      {voiceCallData.messageType === "text" && (
+                        <label className="reminderalert-field reminderalert-field-full">
+                          <span>Spoken message</span>
+                          <textarea
+                            name="voiceMessage"
+                            value={voiceCallData.voiceMessage}
+                            onChange={handleVoiceCallChange}
+                            placeholder="Example: Please remember to take your medicine at 2 PM."
+                            rows="4"
+                            maxLength="500"
+                            disabled={submitting}
+                          />
+                          <small className="reminderalert-inline-meta">
+                            {voiceCallData.voiceMessage.length}/500 characters
+                          </small>
+                        </label>
+                      )}
+
+                      {voiceCallData.messageType === "audio" && (
+                        <div className="reminderalert-field reminderalert-field-full">
+                          <span>Record or upload voice note</span>
+                          <div className="reminderalert-voice-recorder-section">
+                            <VoiceNoteRecorder
+                              module="reminder"
+                              contextId={editingTaskId || "new"}
+                              recipientId={voiceCallData.recipientPhoneNumber}
+                              onSend={(voiceNote) => {
+                                setVoiceCallData((current) => ({
+                                  ...current,
+                                  voiceNoteUrl: voiceNote?.url || voiceNote,
+                                }));
+                              }}
+                            />
+                            {voiceCallData.voiceNoteUrl && (
+                              <div className="reminderalert-voice-note-preview">
+                                <p className="reminderalert-voice-note-label">✓ Voice note recorded</p>
+                                <button
+                                  type="button"
+                                  className="reminderalert-filter-chip"
+                                  onClick={() =>
+                                    setVoiceCallData((current) => ({
+                                      ...current,
+                                      voiceNoteUrl: "",
+                                    }))
+                                  }
+                                  disabled={submitting}
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </section>
                 )}
@@ -924,7 +1087,68 @@ const ReminderAlert = () => {
         </div>
 
         <aside className="reminderalert-secondary-column">
-          {showAddForm && countdown && (
+          <article className="reminderalert-panel reminderalert-countdown-panel">
+            <div className="reminderalert-panel-heading">
+              <p>Countdown</p>
+              <h2>Time to remind</h2>
+            </div>
+            {!showAddForm ? (
+              <div className="reminderalert-callout">
+                <strong>Countdown preview is available</strong>
+                <p>Open the reminder editor, then choose a due date and due time to start the live countdown.</p>
+              </div>
+            ) : !formData.dueDate ? (
+              <div className="reminderalert-callout">
+                <strong>Add a due date</strong>
+                <p>Select the reminder day to unlock the countdown preview.</p>
+              </div>
+            ) : !formData.dueTime ? (
+              <div className="reminderalert-callout">
+                <strong>Add a due time</strong>
+                <p>Pick the exact time and the countdown will start updating every second.</p>
+              </div>
+            ) : countdown?.isPast ? (
+              <div className="reminderalert-countdown-expired">
+                <p>Time has already passed</p>
+                <small>Please select a future date and time</small>
+              </div>
+            ) : countdown ? (
+              <div className="reminderalert-countdown-display">
+                <div className="reminderalert-countdown-item">
+                  <span className="reminderalert-countdown-value">{countdown.days}</span>
+                  <span className="reminderalert-countdown-label">Days</span>
+                </div>
+                <div className="reminderalert-countdown-separator">:</div>
+                <div className="reminderalert-countdown-item">
+                  <span className="reminderalert-countdown-value">{String(countdown.hours).padStart(2, "0")}</span>
+                  <span className="reminderalert-countdown-label">Hours</span>
+                </div>
+                <div className="reminderalert-countdown-separator">:</div>
+                <div className="reminderalert-countdown-item">
+                  <span className="reminderalert-countdown-value">{String(countdown.minutes).padStart(2, "0")}</span>
+                  <span className="reminderalert-countdown-label">Minutes</span>
+                </div>
+                <div className="reminderalert-countdown-separator">:</div>
+                <div className="reminderalert-countdown-item">
+                  <span className="reminderalert-countdown-value">{String(countdown.seconds).padStart(2, "0")}</span>
+                  <span className="reminderalert-countdown-label">Seconds</span>
+                </div>
+              </div>
+            ) : (
+              <div className="reminderalert-callout">
+                <strong>Countdown unavailable</strong>
+                <p>Check the due date and time fields, then try again.</p>
+              </div>
+            )}
+            {dueDateTimePreview && (
+              <div className="reminderalert-countdown-info">
+                <p>
+                  <strong>Reminder set for:</strong> {formatDateTimeLabel(dueDateTimePreview)}
+                </p>
+              </div>
+            )}
+          </article>
+          {false && (
             <article className="reminderalert-panel reminderalert-countdown-panel">
               <div className="reminderalert-panel-heading">
                 <p>Countdown</p>
