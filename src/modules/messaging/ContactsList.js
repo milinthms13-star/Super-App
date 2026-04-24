@@ -11,15 +11,9 @@ const ContactsList = ({
   onSearchChange,
   onFilterChange,
   onScheduleBlock,
+  filterType = 'all',
 }) => {
   const [filteredContacts, setFilteredContacts] = useState(contacts);
-  const [filterType, setFilterType] = useState('all');
-
-  useEffect(() => {
-    if (onFilterChange) {
-      onFilterChange(filterType);
-    }
-  }, [filterType, onFilterChange]);
 
   useEffect(() => {
     let filtered = contacts;
@@ -54,21 +48,21 @@ const ContactsList = ({
         <div className="contacts-filters">
           <button
             className={`filter-btn ${filterType === 'all' ? 'active' : ''}`}
-            onClick={() => setFilterType('all')}
+            onClick={() => onFilterChange && onFilterChange('all')}
             type="button"
           >
             All
           </button>
           <button
             className={`filter-btn ${filterType === 'favorites' ? 'active' : ''}`}
-            onClick={() => setFilterType('favorites')}
+            onClick={() => onFilterChange && onFilterChange('favorites')}
             type="button"
           >
             Favorites
           </button>
           <button
             className={`filter-btn ${filterType === 'blocked' ? 'active' : ''}`}
-            onClick={() => setFilterType('blocked')}
+            onClick={() => onFilterChange && onFilterChange('blocked')}
             type="button"
           >
             Blocked

@@ -173,6 +173,7 @@ const Messaging = () => {
   const [notificationPermission, setNotificationPermission] = useState(() =>
     getNotificationPermission()
   );
+  const [contactFilterType, setContactFilterType] = useState('all');
   const [focusedMessageId, setFocusedMessageId] = useState('');
   const [newChatSearchQuery, setNewChatSearchQuery] = useState('');
   const [availableUsers, setAvailableUsers] = useState([]);
@@ -320,11 +321,16 @@ const Messaging = () => {
     }
   }, [apiCall]);
 
-  const loadContacts = useCallback(async (showBlocked = false) => {
+  const loadContacts = useCallback(async (filterType = 'all') => {
     try {
-      const url = showBlocked
-        ? '/messaging/contacts?showBlocked=true'
-        : '/messaging/contacts';
+      let url = '/messaging/contacts';
+
+      if (filterType === 'blocked') {
+        url = '/messaging/contacts?showBlocked=true';
+      } else if (filterType === 'favorites') {
+        url = '/messaging/contacts?favorite=true';
+      }
+
       const response = await apiCall(url, 'GET');
       if (response?.contacts) {
         setContacts(response.contacts);
@@ -460,7 +466,7 @@ const Messaging = () => {
       if (response.success) {
         alert('Invitation accepted! You can now chat with them.');
         await loadInvitations();
-        await loadContacts();
+        await loadContacts(contactFilterType);
       }
     } catch (error) {
       console.error('Error accepting invitation:', error);
@@ -498,10 +504,13 @@ const Messaging = () => {
 
   useEffect(() => {
     loadChats();
-    loadContacts();
     loadNotifications();
     loadInvitations();
-  }, [loadChats, loadContacts, loadNotifications, loadInvitations]);
+  }, [loadChats, loadNotifications, loadInvitations]);
+
+  useEffect(() => {
+    loadContacts(contactFilterType);
+  }, [contactFilterType, loadContacts]);
 
   useEffect(() => {
     const syncNotificationPermission = () => {
@@ -1137,10 +1146,14 @@ const Messaging = () => {
     setNewChatMode('direct'); // Reset mode
   };
 
+  const handleContactFilterChange = useCallback((nextFilterType) => {
+    setContactFilterType(nextFilterType || 'all');
+  }, []);
+
   const handleBlockContact = async (userId) => {
     try {
       await apiCall(`/messaging/contacts/${userId}/block`, 'PUT');
-      await loadContacts();
+      await loadContacts(contactFilterType);
     } catch (error) {
       console.error('Error blocking contact:', error);
     }
@@ -1149,7 +1162,7 @@ const Messaging = () => {
   const handleUnblockContact = async (userId) => {
     try {
       await apiCall(`/messaging/contacts/${userId}/unblock`, 'PUT');
-      await loadContacts();
+      await loadContacts(contactFilterType);
     } catch (error) {
       console.error('Error unblocking contact:', error);
     }
@@ -1158,7 +1171,7 @@ const Messaging = () => {
   const handleToggleFavorite = async (userId) => {
     try {
       await apiCall(`/messaging/contacts/${userId}/favorite`, 'PUT');
-      await loadContacts();
+      await loadContacts(contactFilterType);
     } catch (error) {
       console.error('Error toggling favorite:', error);
     }
@@ -1719,6 +1732,7 @@ const Messaging = () => {
           {activeTab === 'contacts' && (
             <ContactsList
               contacts={contacts}
+              filterType={contactFilterType}
               onSelectContact={handleSelectContact}
               onBlockContact={handleBlockContact}
               onUnblockContact={handleUnblockContact}
@@ -1726,13 +1740,7 @@ const Messaging = () => {
               onScheduleBlock={handleScheduleBlock}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
-              onFilterChange={(filterType) => {
-                if (filterType === 'blocked') {
-                  loadContacts(true);
-                } else {
-                  loadContacts(false);
-                }
-              }}
+              onFilterChange={handleContactFilterChange}
             />
           )}
 
@@ -1979,7 +1987,7 @@ const Messaging = () => {
           <ScheduledBlockManager
             contact={selectedContactForScheduledBlock}
             onClose={() => setShowScheduledBlockManager(false)}
-            onBlockAdded={() => loadContacts()}
+            onBlockAdded={() => loadContacts(contactFilterType)}
           />
         </div>
       )}

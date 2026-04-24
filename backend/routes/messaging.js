@@ -883,6 +883,62 @@ router.delete('/messages/:messageId', authenticate, attachMessagingUser, async (
   }
 });
 
+// Delete all messages in a chat
+router.delete('/chats/:chatId/messages', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ message: 'Invalid chat ID' });
+    }
+
+    const { chat, authorized } = await getAuthorizedChat(chatId, req.user._id);
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ message: 'Not authorized to clear this chat' });
+    }
+
+    // Mark all messages as deleted
+    const result = await Message.updateMany(
+      {
+        chatId,
+        isDeleted: false,
+      },
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedBy: req.user._id,
+        },
+      }
+    );
+
+    logger.info(`All messages deleted from chat ${chatId} by ${req.user._id}. Deleted: ${result.modifiedCount}`);
+
+    // Notify all participants
+    await emitToChatParticipants(
+      chatId,
+      'chat:cleared',
+      {
+        chatId,
+        clearedBy: req.user._id,
+        deletedCount: result.modifiedCount,
+      },
+      req.user._id
+    );
+
+    res.json({
+      message: 'All messages deleted successfully',
+      deletedCount: result.modifiedCount,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Add reaction to message
 router.post('/messages/:messageId/reactions', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
