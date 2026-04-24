@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
-import { isSameEntity } from './utils';
+import { getAvatarLabel, isSameEntity } from './utils';
 
 const ChatList = ({
   chats,
@@ -42,25 +42,51 @@ const ChatList = ({
 
   const getChatAvatar = (chat) => {
     if (chat.type === 'group') {
-      return chat.groupIcon || 'GRP';
+      return getAvatarLabel(chat.groupName, 'GR');
     }
 
-    return getOtherUser(chat)?.avatar || 'USR';
+    const otherUser = getOtherUser(chat);
+    return getAvatarLabel(otherUser?.name, otherUser?.username, otherUser?.avatar, 'U');
+  };
+
+  const getChatPreview = (chat) => {
+    const lastMessage = chat.lastMessage;
+    if (!lastMessage) {
+      return 'No messages yet';
+    }
+
+    switch (lastMessage.messageType) {
+      case 'voice':
+        return 'Voice note';
+      case 'audio':
+        return 'Audio message';
+      case 'image':
+        return 'Photo shared';
+      case 'video':
+        return 'Video shared';
+      case 'file':
+        return lastMessage.content || 'File shared';
+      default:
+        return lastMessage.content?.substring(0, 50) || 'No messages yet';
+    }
   };
 
   return (
     <div className="chat-list-container">
       <div className="chat-list-header">
-        <h2>Chats</h2>
+        <div className="chat-list-header-copy">
+          <h2>LinkUp</h2>
+          <p className="chat-list-subtitle">Private chats, voice notes, and quick replies</p>
+        </div>
         <button className="btn-new-chat" onClick={onNewChat} title="Start new chat" type="button">
-          New
+          New Chat
         </button>
       </div>
 
       <div className="chat-search">
         <input
           type="text"
-          placeholder="Search chats..."
+          placeholder="Search chats or names..."
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
           className="search-input"
@@ -78,19 +104,19 @@ const ChatList = ({
               <span className="chat-avatar">{getChatAvatar(chat)}</span>
               <div className="chat-item-info">
                 <h4 className="chat-title">{getChatTitle(chat)}</h4>
-                <p className="chat-preview">
-                  {chat.lastMessage?.content?.substring(0, 50) || 'No messages yet'}
-                </p>
+                <p className="chat-preview">{getChatPreview(chat)}</p>
               </div>
-              {chat.unreadCount > 0 && <span className="unread-badge">{chat.unreadCount}</span>}
-              <span className="chat-time">
-                {chat.lastMessageAt
-                  ? new Date(chat.lastMessageAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
-                  : ''}
-              </span>
+              <div className="chat-item-meta">
+                {chat.unreadCount > 0 && <span className="unread-badge">{chat.unreadCount}</span>}
+                <span className="chat-time">
+                  {chat.lastMessageAt
+                    ? new Date(chat.lastMessageAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : ''}
+                </span>
+              </div>
             </div>
           ))
         ) : (

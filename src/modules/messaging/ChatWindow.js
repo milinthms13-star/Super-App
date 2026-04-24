@@ -4,7 +4,7 @@ import MessageSearch from './MessageSearch';
 import MessageContextMenu from './MessageContextMenu';
 import EmojiPicker from './EmojiPicker';
 import ReadReceipts from './ReadReceipts';
-import { getEntityId, isSameEntity } from './utils';
+import { getAvatarLabel, getEntityId, isSameEntity } from './utils';
 
 const ChatWindow = ({
   chat,
@@ -100,6 +100,20 @@ const ChatWindow = ({
     }
 
     return getOtherParticipants()[0]?.isOnline ? 'Active now' : 'Available';
+  };
+
+  const getChatAvatar = () => {
+    if (chat?.type === 'group') {
+      return getAvatarLabel(chat.groupName, 'GR');
+    }
+
+    const otherParticipant = getOtherParticipants()[0];
+    return getAvatarLabel(
+      otherParticipant?.name,
+      otherParticipant?.username,
+      otherParticipant?.avatar,
+      'U'
+    );
   };
 
   const handleSendMessage = () => {
@@ -385,9 +399,12 @@ const ChatWindow = ({
   return (
     <div className="chat-window">
       <div className="chat-window-header">
-        <div className="chat-header-info">
-          <h3>{getChatTitle()}</h3>
-          <p className="chat-status">{getChatInfo()}</p>
+        <div className="chat-header-profile">
+          <span className="chat-header-avatar">{getChatAvatar()}</span>
+          <div className="chat-header-info">
+            <h3>{getChatTitle()}</h3>
+            <p className="chat-status">{getChatInfo()}</p>
+          </div>
         </div>
         <div className="chat-header-actions">
           <button
@@ -445,7 +462,14 @@ const ChatWindow = ({
                 onContextMenu={(event) => handleContextMenu(event, message, isOwnMessage)}
               >
                 {!isOwnMessage && (
-                  <span className="message-avatar">{message.senderId?.avatar || 'U'}</span>
+                  <span className="message-avatar">
+                    {getAvatarLabel(
+                      message.senderId?.name,
+                      message.senderId?.username,
+                      message.senderId?.avatar,
+                      'U'
+                    )}
+                  </span>
                 )}
 
                 <div className="message-content">

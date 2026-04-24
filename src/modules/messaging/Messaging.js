@@ -14,7 +14,7 @@ import VisibilitySettings from './VisibilitySettings';
 import ContactMeansSettings from './ContactMeansSettings';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
-import { getEntityId, inferMessageTypeFromMimeType, isSameEntity } from './utils';
+import { getAvatarLabel, getEntityId, inferMessageTypeFromMimeType, isSameEntity } from './utils';
 
 const getOtherParticipant = (chat, currentUser) =>
   chat?.participants?.find((participant) => !isSameEntity(participant, currentUser)) || null;
@@ -1206,7 +1206,14 @@ const Messaging = () => {
       {incomingCall && (
         <div className="incoming-call-notification">
           <div className="call-info">
-            <span className="caller-avatar">{incomingCall.caller?.avatar || 'U'}</span>
+            <span className="caller-avatar">
+              {getAvatarLabel(
+                incomingCall.caller?.name,
+                incomingCall.caller?.username,
+                incomingCall.caller?.avatar,
+                'U'
+              )}
+            </span>
             <div className="call-details">
               <h4>{incomingCall.caller?.name || 'Unknown Caller'}</h4>
               <p>Incoming {incomingCall.callType} call</p>
@@ -1230,26 +1237,30 @@ const Messaging = () => {
               <button
                 className={`tab-btn ${activeTab === 'chats' ? 'active' : ''}`}
                 onClick={() => setActiveTab('chats')}
+                type="button"
               >
                 Chats
               </button>
               <button
                 className={`tab-btn ${activeTab === 'contacts' ? 'active' : ''}`}
                 onClick={() => setActiveTab('contacts')}
+                type="button"
               >
                 Contacts
               </button>
               <button
                 className={`tab-btn ${activeTab === 'invitations' ? 'active' : ''}`}
                 onClick={() => setActiveTab('invitations')}
+                type="button"
               >
-                📬 ({pendingInvitations.length})
+                {`Invites${pendingInvitations.length > 0 ? ` (${pendingInvitations.length})` : ''}`}
               </button>
               <button
                 className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
+                type="button"
               >
-                ⚙️
+                Settings
               </button>
             </div>
             <NotificationBell
@@ -1277,6 +1288,7 @@ const Messaging = () => {
               onBlockContact={handleBlockContact}
               onUnblockContact={handleUnblockContact}
               searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
             />
           )}
 
@@ -1295,14 +1307,16 @@ const Messaging = () => {
                 <button
                   className={`settings-tab-btn ${activeSettingsTab === 'visibility' ? 'active' : ''}`}
                   onClick={() => setActiveSettingsTab('visibility')}
+                  type="button"
                 >
-                  📍 Visibility
+                  Visibility
                 </button>
                 <button
                   className={`settings-tab-btn ${activeSettingsTab === 'contact' ? 'active' : ''}`}
                   onClick={() => setActiveSettingsTab('contact')}
+                  type="button"
                 >
-                  💬 Contact
+                  Contact
                 </button>
               </div>
               {activeSettingsTab === 'visibility' && (
@@ -1318,11 +1332,16 @@ const Messaging = () => {
         <div className="messaging-main">
           {showNewChat ? (
             <div className="new-chat-panel">
-              <h3>Start a New Chat</h3>
+              <div className="new-chat-header-copy">
+                <h3>Start a New Chat</h3>
+                <p className="new-chat-intro">
+                  Search for people, send a LinkUp invite, or jump into a conversation with someone you already know.
+                </p>
+              </div>
               <div className="new-chat-search">
                 <input
                   type="text"
-                  placeholder="🔍 Search for users to add..."
+                  placeholder="Search for people to invite..."
                   value={newChatSearchQuery}
                   onChange={(e) => {
                     setNewChatSearchQuery(e.target.value);
@@ -1349,18 +1368,18 @@ const Messaging = () => {
                         availableForVideoCall: true,
                       };
                       const visibleMethods = [];
-                      if (visibility.visibleViaEmail) visibleMethods.push('📧');
-                      if (visibility.visibleViaPhone) visibleMethods.push('📱');
-                      if (visibility.visibleViaUsername) visibleMethods.push('👤');
+                      if (visibility.visibleViaEmail) visibleMethods.push('Email');
+                      if (visibility.visibleViaPhone) visibleMethods.push('Phone');
+                      if (visibility.visibleViaUsername) visibleMethods.push('Username');
 
                       const availableMeans = [];
-                      if (contactMeans.availableForChat) availableMeans.push('💬');
-                      if (contactMeans.availableForVoiceCall) availableMeans.push('📞');
-                      if (contactMeans.availableForVideoCall) availableMeans.push('📹');
+                      if (contactMeans.availableForChat) availableMeans.push('Chat');
+                      if (contactMeans.availableForVoiceCall) availableMeans.push('Voice');
+                      if (contactMeans.availableForVideoCall) availableMeans.push('Video');
 
                       return (
                         <div key={user._id} className="user-search-result">
-                          <span className="user-avatar">{user.avatar || '👤'}</span>
+                          <span className="user-avatar">{getAvatarLabel(user.name, user.username, user.avatar, 'U')}</span>
                           <div className="user-info">
                             <h4>{user.name}</h4>
                             <p>{user.email}</p>
@@ -1406,7 +1425,7 @@ const Messaging = () => {
                           className="user-card"
                           onClick={() => handleCreateDirectChat(contact.contactUserId._id)}
                         >
-                          <span className="user-avatar">{contact.contactUserId?.avatar || '👤'}</span>
+                          <span className="user-avatar">{getAvatarLabel(contact.displayName, contact.contactUserId?.name, contact.contactUserId?.username, contact.contactUserId?.avatar, 'U')}</span>
                           <h4>{contact.contactUserId?.name}</h4>
                           <p>{contact.category}</p>
                         </div>
