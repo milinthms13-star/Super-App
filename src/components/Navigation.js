@@ -40,6 +40,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "socialmedia", label: t("modules.socialmedia", "VibeHub") },
     { id: "diary", label: t("modules.diary", "My Diary") },
     { id: "reminderalert", label: t("modules.reminderalert", "ReminderAlert - Todo List") },
+    { id: "quicklinks", label: t("modules.quicklinks", "Quick Links") },
     { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center") },
     { id: "astrology", label: t("modules.astrology", "AstroNila") },
   ];

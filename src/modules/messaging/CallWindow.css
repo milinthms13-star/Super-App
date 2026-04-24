@@ -97,6 +97,10 @@
   background: linear-gradient(180deg, #111827, #1e293b);
 }
 
+.call-hidden-audio {
+  display: none;
+}
+
 .audio-avatar {
   width: 96px;
   height: 96px;

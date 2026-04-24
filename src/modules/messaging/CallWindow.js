@@ -20,6 +20,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
   const screenVideoRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
@@ -92,6 +93,23 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
     }, 1000);
   }, [call.startedAt]);
 
+  const attachStreamToMediaElement = useCallback(async (element, stream, { muted = false } = {}) => {
+    if (!element || !stream) {
+      return;
+    }
+
+    element.srcObject = stream;
+    element.muted = muted;
+
+    if (typeof element.play === 'function') {
+      try {
+        await element.play();
+      } catch (error) {
+        console.warn('Unable to autoplay call media:', error);
+      }
+    }
+  }, []);
+
   const stopLocalStream = useCallback(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -108,6 +126,10 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
 
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
+    }
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
     }
   }, []);
 
@@ -205,14 +227,14 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
     localStreamRef.current = stream;
 
     if (localVideoRef.current) {
-      localVideoRef.current.srcObject = stream;
+      await attachStreamToMediaElement(localVideoRef.current, stream, { muted: true });
     }
 
     const localVideoTrack = stream.getVideoTracks()[0];
     setIsVideoEnabled(Boolean(localVideoTrack?.enabled));
 
     return stream;
-  }, [call.callType]);
+  }, [attachStreamToMediaElement, call.callType]);
 
   const ensurePeerConnection = useCallback(async () => {
     if (peerConnectionRef.current) {
@@ -228,13 +250,22 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
     });
 
     peerConnection.ontrack = (event) => {
+      const syncRemoteStream = (stream) => {
+        remoteStreamRef.current = stream;
+
+        if (remoteVideoRef.current) {
+          void attachStreamToMediaElement(remoteVideoRef.current, stream);
+        }
+
+        if (remoteAudioRef.current) {
+          void attachStreamToMediaElement(remoteAudioRef.current, stream);
+        }
+      };
+
       const remoteStream = event.streams?.[0];
 
       if (remoteStream) {
-        remoteStreamRef.current = remoteStream;
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-        }
+        syncRemoteStream(remoteStream);
         return;
       }
 
@@ -243,9 +274,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
       }
 
       remoteStreamRef.current.addTrack(event.track);
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = remoteStreamRef.current;
-      }
+      syncRemoteStream(remoteStreamRef.current);
     };
 
     peerConnection.onicecandidate = (event) => {
@@ -277,7 +306,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
     };
 
     return peerConnection;
-  }, [emitSignal, ensureLocalStream]);
+  }, [attachStreamToMediaElement, emitSignal, ensureLocalStream]);
 
   const startOutgoingOffer = useCallback(async () => {
     if (!isCaller || offerSentRef.current) {
@@ -491,7 +520,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
       screenStreamRef.current = displayStream;
 
       if (screenVideoRef.current) {
-        screenVideoRef.current.srcObject = displayStream;
+        await attachStreamToMediaElement(screenVideoRef.current, displayStream, { muted: true });
       }
 
       const screenTrack = displayStream.getVideoTracks()[0];
@@ -573,6 +602,12 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
 
           {call.callType === 'audio' && (
             <div className="audio-call-container">
+              <audio
+                ref={remoteAudioRef}
+                className="call-hidden-audio"
+                autoPlay
+                playsInline
+              />
               <div className="audio-avatar">
                 <span className="avatar-icon">
                   {getAvatarLabel(

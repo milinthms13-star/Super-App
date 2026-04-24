@@ -1211,23 +1211,34 @@
 }
 
 .filter-btn {
-  padding: 0.4rem 0.75rem;
-  border: 1px solid #ddd;
+  padding: 0.5rem 1rem;
+  border: 2px solid #ddd;
   background: white;
-  border-radius: 15px;
+  border-radius: 20px;
   cursor: pointer;
-  font-size: 0.85rem;
-  transition: all 0.3s;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  color: #333;
+  user-select: none;
+  white-space: nowrap;
 }
 
 .filter-btn.active {
   background: #667eea;
   color: white;
   border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
 .filter-btn:hover {
   border-color: #667eea;
+  color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.filter-btn:active {
+  transform: scale(0.98);
 }
 
 .contacts-list {
@@ -1274,6 +1285,25 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.contact-name {
+  margin: 0 0 0.15rem 0 !important;
+  font-size: 0.95rem !important;
+  color: #333 !important;
+  font-weight: 600 !important;
+}
+
+.contact-identifier {
+  margin: 0.1rem 0 0.1rem 0;
+  font-size: 0.8rem;
+  color: #667eea;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .contact-category {
@@ -1282,23 +1312,93 @@
   color: #999;
 }
 
+.contact-email {
+  margin: 0.15rem 0 0 0;
+  font-size: 0.75rem;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: none;
+}
+
 .contact-actions {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .btn-action-sm {
   background: none;
-  border: none;
-  font-size: 1.2rem;
+  border: 1px solid transparent;
+  font-size: 1rem;
   cursor: pointer;
-  padding: 0.4rem;
+  padding: 0.5rem;
   border-radius: 50%;
-  transition: background 0.3s;
+  transition: all 0.3s ease;
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  color: #333;
 }
 
 .btn-action-sm:hover {
   background: #f0f0f0;
+  border-color: #ddd;
+  transform: scale(1.1);
+}
+
+.btn-action-sm:active {
+  transform: scale(0.95);
+}
+
+.favorite-btn {
+  font-size: 1.2rem;
+}
+
+.favorite-btn:hover {
+  background: #ffe6e6;
+}
+
+.schedule-btn {
+  font-size: 1rem;
+}
+
+.schedule-btn:hover {
+  background: #e6f0ff;
+}
+
+.block-btn {
+  background: #ff6b6b;
+  color: white;
+  border-color: #ff6b6b;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+}
+
+.block-btn:hover {
+  background: #ff5252;
+  border-color: #ff5252;
+}
+
+.unblock-btn {
+  background: #51cf66;
+  color: white;
+  border-color: #51cf66;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+}
+
+.unblock-btn:hover {
+  background: #40c057;
+  border-color: #40c057;
+}
 }
 
 .empty-contacts {

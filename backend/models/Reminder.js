@@ -106,7 +106,77 @@ const reminderSchema = new mongoose.Schema({
   maxCallAttempts: {
     type: Number,
     default: 3  // Maximum number of call attempts
-  }
+  },
+  // Trusted contacts feature - sharing reminders with trusted persons
+  sharedWithTrustedContacts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  // Track which trusted contacts have accepted/acknowledged this reminder
+  trustedContactAcknowledgments: [{
+    contactId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    acknowledged: {
+      type: Boolean,
+      default: false
+    },
+    acknowledgedAt: {
+      type: Date,
+      sparse: true
+    }
+  }],
+  // File attachments - voice notes, images, documents
+  attachments: [{
+    _id: {
+      type: mongoose.Schema.Types.ObjectId,
+      auto: true,
+    },
+    fileName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    fileType: {
+      type: String,
+      enum: ['voice', 'image', 'document', 'video', 'audio'],
+      required: true,
+    },
+    mimeType: {
+      type: String,
+      default: 'application/octet-stream',
+    },
+    fileUrl: {
+      type: String,
+      required: true, // S3 or cloud storage URL
+    },
+    fileSize: {
+      type: Number, // Size in bytes
+    },
+    duration: {
+      type: Number, // For audio/video files, duration in seconds
+      sparse: true,
+    },
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    uploadedByName: {
+      type: String, // Store name for quick display
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      sparse: true,
+    },
+  }]
 }, {
   timestamps: true
 });
@@ -117,6 +187,7 @@ reminderSchema.index({ userId: 1, completed: 1 });
 reminderSchema.index({ userId: 1, category: 1 });
 reminderSchema.index({ recipientId: 1, callStatus: 1 });  // For finding pending calls
 reminderSchema.index({ nextCallTime: 1, callStatus: 1 });  // For scheduler to find due reminders
+reminderSchema.index({ "attachments._id": 1 });  // For finding reminders by attachment ID
 
 // Virtual for formatted due date
 reminderSchema.virtual('formattedDueDate').get(function() {
@@ -215,6 +286,31 @@ reminderSchema.methods.recordCallAttempt = function(status, callId, error = null
   } else if (status === 'completed' || this.callAttempts >= this.maxCallAttempts) {
     this.callStatus = 'completed';
   }
+};
+
+// Method to add attachment to reminder
+reminderSchema.methods.addAttachment = function(attachmentData) {
+  if (!this.attachments) {
+    this.attachments = [];
+  }
+  this.attachments.push(attachmentData);
+  return this;
+};
+
+// Method to remove attachment from reminder
+reminderSchema.methods.removeAttachment = function(attachmentId) {
+  if (this.attachments) {
+    this.attachments = this.attachments.filter(
+      (att) => att._id.toString() !== attachmentId.toString()
+    );
+  }
+  return this;
+};
+
+// Method to get attachments by type
+reminderSchema.methods.getAttachmentsByType = function(fileType) {
+  if (!this.attachments) return [];
+  return this.attachments.filter((att) => att.fileType === fileType);
 };
 
 module.exports = mongoose.model('Reminder', reminderSchema);

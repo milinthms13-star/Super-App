@@ -1074,7 +1074,7 @@ router.get('/contacts', authenticate, attachMessagingUser, async (req, res, next
     }
 
     const contacts = await Contact.find(query)
-      .populate('contactUserId', 'name avatar email status')
+      .populate('contactUserId', 'name username email avatar status')
       .sort({ lastInteractionAt: -1 })
       .skip(skip)
       .limit(pageLimit);
@@ -1198,6 +1198,34 @@ router.put('/contacts/:contactUserId/unblock', authenticate, attachMessagingUser
 
     logger.info(`Contact unblocked: ${contactUserId} by ${req.user._id}`);
     res.json({ contact });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Toggle favorite contact
+router.put('/contacts/:contactUserId/favorite', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { contactUserId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(contactUserId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    const contact = await Contact.findOne({
+      userId: req.user._id,
+      contactUserId,
+    });
+
+    if (!contact) {
+      return res.status(404).json({ message: 'Contact not found' });
+    }
+
+    contact.isFavorite = !contact.isFavorite;
+    await contact.save();
+
+    logger.info(`Contact favorite toggled: ${contactUserId} by ${req.user._id}, isFavorite: ${contact.isFavorite}`);
+    res.json({ contact, isFavorite: contact.isFavorite });
   } catch (err) {
     next(err);
   }
@@ -2284,6 +2312,543 @@ router.put('/settings', authenticate, attachMessagingUser, async (req, res, next
 
     logger.info(`Messaging settings updated for user ${req.user._id}`);
     res.json({ settings });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ============ CHATROOM ROUTES ============
+
+const Chatroom = require('../models/Chatroom');
+
+// Create a new chatroom
+router.post('/chatrooms', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { name, description, isPrivate, tags } = req.body;
+
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ message: 'Chatroom name is required' });
+    }
+
+    const chatroom = new Chatroom({
+      name: name.trim(),
+      description: description ? description.trim() : '',
+      isPrivate: Boolean(isPrivate),
+      createdBy: req.user._id,
+      admins: [req.user._id],
+      members: [req.user._id],
+      tags: tags ? tags.map(t => t.toLowerCase()) : [],
+    });
+
+    await chatroom.save();
+    await chatroom.populate('createdBy', 'name username avatar');
+
+    logger.info(`Chatroom created: ${chatroom._id} by ${req.user._id}`);
+    res.status(201).json({ chatroom });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get public chatrooms (paginated & searchable)
+router.get('/chatrooms/public/list', authenticate, async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, search, tags } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const pageLimit = Math.min(parseInt(limit), 100);
+
+    let query = {
+      isPrivate: false,
+      isActive: true,
+    };
+
+    if (search) {
+      query.$text = { $search: search };
+    }
+
+    if (tags) {
+      const tagArray = tags.split(',').map(t => t.toLowerCase().trim());
+      query.tags = { $in: tagArray };
+    }
+
+    const chatrooms = await Chatroom.find(query)
+      .populate('createdBy', 'name username avatar')
+      .sort({ memberCount: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(pageLimit);
+
+    const total = await Chatroom.countDocuments(query);
+
+    res.json({
+      chatrooms,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: pageLimit,
+        pages: Math.ceil(total / pageLimit),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get user's chatrooms
+router.get('/chatrooms/my-rooms', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const chatrooms = await Chatroom.find({
+      members: req.user._id,
+      isActive: true,
+    })
+      .populate('createdBy', 'name username avatar')
+      .populate('admins', 'name username avatar')
+      .sort({ lastMessageAt: -1 });
+
+    res.json({ chatrooms });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get chatroom details
+router.get('/chatrooms/:chatroomId', authenticate, async (req, res, next) => {
+  try {
+    const { chatroomId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
+      return res.status(400).json({ message: 'Invalid chatroom ID' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId)
+      .populate('createdBy', 'name username avatar')
+      .populate('admins', 'name username avatar')
+      .populate('members', 'name username avatar');
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // For private rooms, only allow members to view details
+    if (chatroom.isPrivate && !chatroom.members.includes(req.user._id)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const isMember = chatroom.members.some(m => m._id.equals(req.user._id));
+    const isAdmin = chatroom.admins.some(a => a._id.equals(req.user._id));
+
+    res.json({ 
+      chatroom,
+      isMember,
+      isAdmin,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Join public chatroom
+router.post('/chatrooms/:chatroomId/join', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
+      return res.status(400).json({ message: 'Invalid chatroom ID' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Check if private
+    if (chatroom.isPrivate) {
+      return res.status(403).json({ message: 'This is a private chatroom. Please request access.' });
+    }
+
+    // Check if already member
+    if (chatroom.members.includes(req.user._id)) {
+      return res.status(400).json({ message: 'Already a member of this chatroom' });
+    }
+
+    // Check if blocked
+    if (chatroom.blockedMembers.includes(req.user._id)) {
+      return res.status(403).json({ message: 'You are blocked from joining this chatroom' });
+    }
+
+    // Check max members
+    if (chatroom.maxMembers > 0 && chatroom.memberCount >= chatroom.maxMembers) {
+      return res.status(403).json({ message: 'Chatroom is full' });
+    }
+
+    chatroom.members.push(req.user._id);
+    chatroom.memberCount = chatroom.members.length;
+    await chatroom.save();
+
+    await chatroom.populate('createdBy', 'name username avatar');
+
+    logger.info(`User ${req.user._id} joined public chatroom ${chatroomId}`);
+    res.json({ 
+      chatroom,
+      message: 'Successfully joined chatroom',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Request to join private chatroom
+router.post('/chatrooms/:chatroomId/request-join', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
+      return res.status(400).json({ message: 'Invalid chatroom ID' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Check if not private
+    if (!chatroom.isPrivate) {
+      return res.status(400).json({ message: 'Use /join endpoint for public chatrooms' });
+    }
+
+    // Check if already member
+    if (chatroom.members.includes(req.user._id)) {
+      return res.status(400).json({ message: 'Already a member' });
+    }
+
+    // Check if blocked
+    if (chatroom.blockedMembers.includes(req.user._id)) {
+      return res.status(403).json({ message: 'You are blocked from this chatroom' });
+    }
+
+    // Check if already requested
+    const existingRequest = chatroom.pendingRequests.find(r => r.userId.equals(req.user._id));
+    if (existingRequest) {
+      if (existingRequest.status === 'pending') {
+        return res.status(400).json({ message: 'You already have a pending request' });
+      }
+      if (existingRequest.status === 'rejected') {
+        return res.status(400).json({ message: 'Your previous request was rejected' });
+      }
+    }
+
+    chatroom.pendingRequests.push({
+      userId: req.user._id,
+      requestedAt: new Date(),
+      status: 'pending',
+    });
+
+    chatroom.stats.totalJoinRequests += 1;
+    await chatroom.save();
+
+    logger.info(`User ${req.user._id} requested to join private chatroom ${chatroomId}`);
+    
+    // Notify admins
+    for (const adminId of chatroom.admins) {
+      emitToUser(adminId.toString(), 'chatroom-join-request', {
+        chatroomId: chatroom._id,
+        chatroomName: chatroom.name,
+        userId: req.user._id,
+        userName: req.user.name,
+      });
+    }
+
+    res.json({ message: 'Join request sent. Waiting for admin approval.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get pending requests (admin only)
+router.get('/chatrooms/:chatroomId/pending-requests', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
+      return res.status(400).json({ message: 'Invalid chatroom ID' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Check if admin
+    if (!chatroom.admins.includes(req.user._id)) {
+      return res.status(403).json({ message: 'Only admins can view pending requests' });
+    }
+
+    await chatroom.populate('pendingRequests.userId', 'name username avatar email');
+
+    const pendingOnly = chatroom.pendingRequests.filter(r => r.status === 'pending');
+
+    res.json({ pendingRequests: pendingOnly });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Approve join request (admin)
+router.post('/chatrooms/:chatroomId/approve-request/:userId', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId, userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId) || !mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid IDs' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Check if admin
+    if (!chatroom.admins.includes(req.user._id)) {
+      return res.status(403).json({ message: 'Only admins can approve requests' });
+    }
+
+    // Find request
+    const requestIndex = chatroom.pendingRequests.findIndex(r => r.userId.equals(userId));
+    if (requestIndex === -1) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    // Check max members
+    if (chatroom.maxMembers > 0 && chatroom.memberCount >= chatroom.maxMembers) {
+      return res.status(403).json({ message: 'Chatroom is full' });
+    }
+
+    // Update request status and add to members
+    chatroom.pendingRequests[requestIndex].status = 'approved';
+    if (!chatroom.members.includes(userId)) {
+      chatroom.members.push(userId);
+      chatroom.memberCount = chatroom.members.length;
+    }
+
+    await chatroom.save();
+
+    logger.info(`Admin ${req.user._id} approved ${userId} for chatroom ${chatroomId}`);
+
+    // Notify user
+    emitToUser(userId, 'chatroom-request-approved', {
+      chatroomId: chatroom._id,
+      chatroomName: chatroom.name,
+    });
+
+    res.json({ message: 'Request approved. User added to chatroom.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Reject join request (admin)
+router.post('/chatrooms/:chatroomId/reject-request/:userId', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId, userId } = req.params;
+    const { reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId) || !mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid IDs' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Check if admin
+    if (!chatroom.admins.includes(req.user._id)) {
+      return res.status(403).json({ message: 'Only admins can reject requests' });
+    }
+
+    // Find and update request
+    const requestIndex = chatroom.pendingRequests.findIndex(r => r.userId.equals(userId));
+    if (requestIndex === -1) {
+      return res.status(404).json({ message: 'Request not found' });
+    }
+
+    chatroom.pendingRequests[requestIndex].status = 'rejected';
+    await chatroom.save();
+
+    logger.info(`Admin ${req.user._id} rejected ${userId} for chatroom ${chatroomId}`);
+
+    // Notify user
+    emitToUser(userId, 'chatroom-request-rejected', {
+      chatroomId: chatroom._id,
+      chatroomName: chatroom.name,
+      reason: reason || 'Your request was rejected',
+    });
+
+    res.json({ message: 'Request rejected' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Leave chatroom
+router.post('/chatrooms/:chatroomId/leave', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
+      return res.status(400).json({ message: 'Invalid chatroom ID' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Remove user from members
+    const index = chatroom.members.findIndex(m => m.equals(req.user._id));
+    if (index === -1) {
+      return res.status(400).json({ message: 'Not a member of this chatroom' });
+    }
+
+    chatroom.members.splice(index, 1);
+    chatroom.memberCount = chatroom.members.length;
+
+    // If creator leaves, promote first admin (if exists)
+    if (chatroom.createdBy.equals(req.user._id) && chatroom.members.length > 0) {
+      if (chatroom.admins.length === 1) {
+        chatroom.createdBy = chatroom.members[0];
+      }
+      const adminIndex = chatroom.admins.findIndex(a => a.equals(req.user._id));
+      if (adminIndex !== -1) {
+        chatroom.admins.splice(adminIndex, 1);
+      }
+    } else {
+      // Remove from admins if applicable
+      const adminIndex = chatroom.admins.findIndex(a => a.equals(req.user._id));
+      if (adminIndex !== -1) {
+        chatroom.admins.splice(adminIndex, 1);
+      }
+    }
+
+    // Deactivate room if no members
+    if (chatroom.members.length === 0) {
+      chatroom.isActive = false;
+    }
+
+    await chatroom.save();
+
+    logger.info(`User ${req.user._id} left chatroom ${chatroomId}`);
+    res.json({ message: 'Left chatroom successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update chatroom (admin only)
+router.put('/chatrooms/:chatroomId', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId } = req.params;
+    const { name, description, tags, settings } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
+      return res.status(400).json({ message: 'Invalid chatroom ID' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Check if admin
+    if (!chatroom.admins.includes(req.user._id)) {
+      return res.status(403).json({ message: 'Only admins can update chatroom' });
+    }
+
+    if (name) chatroom.name = name.trim();
+    if (description) chatroom.description = description.trim();
+    if (tags) chatroom.tags = tags.map(t => t.toLowerCase());
+    if (settings) chatroom.settings = { ...chatroom.settings, ...settings };
+
+    await chatroom.save();
+
+    logger.info(`Chatroom ${chatroomId} updated by admin ${req.user._id}`);
+    res.json({ chatroom, message: 'Chatroom updated successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Block member from chatroom (admin)
+router.post('/chatrooms/:chatroomId/block-member/:userId', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId, userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId) || !mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid IDs' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Check if admin
+    if (!chatroom.admins.includes(req.user._id)) {
+      return res.status(403).json({ message: 'Only admins can block members' });
+    }
+
+    // Add to blocked
+    if (!chatroom.blockedMembers.includes(userId)) {
+      chatroom.blockedMembers.push(userId);
+    }
+
+    // Remove from members and admins
+    chatroom.members = chatroom.members.filter(m => !m.equals(userId));
+    chatroom.admins = chatroom.admins.filter(a => !a.equals(userId));
+    chatroom.memberCount = chatroom.members.length;
+
+    await chatroom.save();
+
+    logger.info(`User ${userId} blocked from chatroom ${chatroomId}`);
+    res.json({ message: 'Member blocked successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete chatroom (admin only)
+router.delete('/chatrooms/:chatroomId', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatroomId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chatroomId)) {
+      return res.status(400).json({ message: 'Invalid chatroom ID' });
+    }
+
+    const chatroom = await Chatroom.findById(chatroomId);
+
+    if (!chatroom) {
+      return res.status(404).json({ message: 'Chatroom not found' });
+    }
+
+    // Check if creator
+    if (!chatroom.createdBy.equals(req.user._id)) {
+      return res.status(403).json({ message: 'Only creator can delete chatroom' });
+    }
+
+    // Soft delete
+    chatroom.isActive = false;
+    await chatroom.save();
+
+    logger.info(`Chatroom ${chatroomId} deleted by creator ${req.user._id}`);
+    res.json({ message: 'Chatroom deleted successfully' });
   } catch (err) {
     next(err);
   }

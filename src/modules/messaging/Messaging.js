@@ -3,6 +3,7 @@ import { useApp } from '../../contexts/AppContext';
 import { getStoredAuthToken } from '../../utils/auth';
 import '../../styles/Messaging.css';
 import '../../styles/GroupCreation.css';
+import '../../styles/Chatrooms.css';
 import ChatList from './ChatList';
 import ChatWindow from './ChatWindow';
 import ContactsList from './ContactsList';
@@ -15,6 +16,10 @@ import VisibilitySettings from './VisibilitySettings';
 import ContactMeansSettings from './ContactMeansSettings';
 import GroupCreation from './GroupCreation';
 import ScheduledBlockManager from './ScheduledBlockManager';
+import ChatroomCreation from './ChatroomCreation';
+import ChatroomBrowser from './ChatroomBrowser';
+import ChatroomList from './ChatroomList';
+import ChatroomPanel from './ChatroomPanel';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
 import {
@@ -104,6 +109,32 @@ const DEFAULT_MESSAGE_PAGINATION = {
   total: 0,
   limit: MESSAGE_PAGE_SIZE,
 };
+const EMERGENCY_CALL_STORAGE_KEY = 'malabarbazaar-emergency-call';
+
+const readPendingEmergencyCall = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(EMERGENCY_CALL_STORAGE_KEY);
+    return rawValue ? JSON.parse(rawValue) : null;
+  } catch (error) {
+    return null;
+  }
+};
+
+const clearPendingEmergencyCall = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(EMERGENCY_CALL_STORAGE_KEY);
+  } catch (error) {
+    // Ignore storage cleanup failures so emergency calls still open.
+  }
+};
 
 const buildNotificationTitle = (notification = {}) => {
   if (notification.title) {
@@ -188,6 +219,14 @@ const Messaging = () => {
   const [showScheduledBlockManager, setShowScheduledBlockManager] = useState(false);
   const [selectedContactForScheduledBlock, setSelectedContactForScheduledBlock] = useState(null);
 
+  // Chatroom states
+  const [chatrooms, setChatrooms] = useState([]);
+  const [selectedChatroom, setSelectedChatroom] = useState(null);
+  const [showChatroomCreation, setShowChatroomCreation] = useState(false);
+  const [showChatroomBrowser, setShowChatroomBrowser] = useState(false);
+  const [chatroomSearchQuery, setChatroomSearchQuery] = useState('');
+
+
   const socketRef = useRef(null);
   const activeCallRef = useRef(null);
   const incomingCallRef = useRef(null);
@@ -217,6 +256,31 @@ const Messaging = () => {
 
     return latestReplyableMessage?._id || '';
   }, [currentUser, messages]);
+
+  const activateEmergencyIncomingCall = useCallback((callData = {}) => {
+    const emergencyCallId = getEntityId(callData?._id || callData?.callId);
+    if (!emergencyCallId) {
+      return;
+    }
+
+    setIncomingCall((currentCall) => {
+      const currentCallId = getEntityId(currentCall?._id || currentCall?.callId);
+      if (currentCallId && currentCallId === emergencyCallId) {
+        return currentCall;
+      }
+
+      return callData;
+    });
+    setActiveTab('chats');
+    setShowNewChat(false);
+
+    if (callData?.chatId) {
+      const matchingChat = chats.find((chat) => chat._id === callData.chatId);
+      if (matchingChat) {
+        setSelectedChat(matchingChat);
+      }
+    }
+  }, [chats]);
 
   const updateChatPreview = useCallback((incomingMessage) => {
     const incomingChatId = getEntityId(incomingMessage?.chatId);
@@ -498,6 +562,28 @@ const Messaging = () => {
   }, [incomingCall]);
 
   useEffect(() => {
+    const applyPendingEmergencyCall = (callData = readPendingEmergencyCall()) => {
+      if (!callData) {
+        return;
+      }
+
+      activateEmergencyIncomingCall(callData);
+      clearPendingEmergencyCall();
+    };
+
+    const handleEmergencyCallEvent = (event) => {
+      applyPendingEmergencyCall(event?.detail || null);
+    };
+
+    applyPendingEmergencyCall();
+    window.addEventListener('malabarbazaar:emergency-call', handleEmergencyCallEvent);
+
+    return () => {
+      window.removeEventListener('malabarbazaar:emergency-call', handleEmergencyCallEvent);
+    };
+  }, [activateEmergencyIncomingCall]);
+
+  useEffect(() => {
     clearedChatsRef.current = clearedChats;
     saveClearedChats(clearedChats);
   }, [clearedChats]);
@@ -548,11 +634,19 @@ const Messaging = () => {
       return undefined;
     }
 
-    const newSocket = io(BACKEND_BASE_URL, {
-      auth: {
-        token: getStoredAuthToken(),
-      },
-    });
+    const newSocket =
+      typeof io === 'function'
+        ? io(BACKEND_BASE_URL, {
+            auth: {
+              token: getStoredAuthToken(),
+            },
+          })
+        : null;
+
+    if (!newSocket) {
+      setIsOnline(false);
+      return undefined;
+    }
 
     socketRef.current = newSocket;
     setSocket(newSocket);

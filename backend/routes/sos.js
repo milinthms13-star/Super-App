@@ -1,16 +1,54 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const Chat = require('../models/Chat');
 const Call = require('../models/Call');
-const Contact = require('../models/Contact');
 const SosContact = require('../models/SosContact');
 const SosIncident = require('../models/SosIncident');
+const User = require('../models/User');
 const { authenticate } = require('../middleware/auth');
-const { emitToUser, getUserStatus } = require('../config/websocket');
+const { emitToUser } = require('../config/websocket');
 const logger = require('../utils/logger');
 const { sendSMS } = require('../utils/sendSMS');
 const { sendWhatsApp } = require('../utils/sendWhatsApp');
+const { ensureMessagingUser } = require('../utils/ensureMessagingUser');
+const voiceCallService = require('../services/voiceCallService');
 
 const router = express.Router();
+const isMongoObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ''));
+
+const formatCoordinate = (value) => {
+  const numericValue = Number.parseFloat(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(5) : '';
+};
+
+const buildMapsUrl = (latitude, longitude) =>
+  `https://www.google.com/maps?q=${latitude},${longitude}`;
+
+const buildSharedLocation = ({ location, latitude, longitude, accuracy, mapsUrl }) => {
+  const parsedLatitude = Number.parseFloat(latitude);
+  const parsedLongitude = Number.parseFloat(longitude);
+  const hasCoordinates = Number.isFinite(parsedLatitude) && Number.isFinite(parsedLongitude);
+  const parsedAccuracy = Number.parseFloat(accuracy);
+  const coordinateText = hasCoordinates
+    ? `${formatCoordinate(parsedLatitude)}, ${formatCoordinate(parsedLongitude)}`
+    : '';
+  const accuracyText = Number.isFinite(parsedAccuracy) ? `${Math.round(parsedAccuracy)}m accuracy` : '';
+  const locationText = String(location || '').trim() || (
+    coordinateText
+      ? `${coordinateText}${accuracyText ? ` (${accuracyText})` : ''}`
+      : 'Location unavailable'
+  );
+  const resolvedMapsUrl = mapsUrl || (hasCoordinates ? buildMapsUrl(parsedLatitude, parsedLongitude) : '');
+
+  return {
+    latitude: hasCoordinates ? parsedLatitude : null,
+    longitude: hasCoordinates ? parsedLongitude : null,
+    accuracy: Number.isFinite(parsedAccuracy) ? Math.round(parsedAccuracy) : null,
+    locationText,
+    mapsUrl: resolvedMapsUrl,
+    shareText: resolvedMapsUrl ? `${locationText}. Map: ${resolvedMapsUrl}` : locationText,
+  };
+};
 
 const getOrCreateDirectChat = async (currentUserId, otherUserId) => {
   let chat = await Chat.findOne({
@@ -29,10 +67,49 @@ const getOrCreateDirectChat = async (currentUserId, otherUserId) => {
   return chat;
 };
 
+const getPhoneLookupVariants = (value = '') => {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    return [];
+  }
+
+  const formattedValue = voiceCallService.formatPhoneNumber(rawValue);
+  const digitsOnly = formattedValue.replace(/\D/g, '');
+  const localDigits = digitsOnly.length > 10 ? digitsOnly.slice(-10) : digitsOnly;
+
+  return [...new Set([
+    rawValue,
+    formattedValue,
+    digitsOnly ? `+${digitsOnly}` : '',
+    digitsOnly,
+    localDigits,
+  ])].filter(Boolean);
+};
+
+const findAppUserByPhone = async (phone, excludedUserId = null) => {
+  const variants = getPhoneLookupVariants(phone);
+  if (variants.length === 0) {
+    return null;
+  }
+
+  const query = {
+    phone: { $in: variants },
+  };
+
+  if (excludedUserId && isMongoObjectId(excludedUserId)) {
+    query._id = { $ne: excludedUserId };
+  }
+
+  return User.findOne(query).select('name email avatar phone contactMeans');
+};
+
 // GET /api/sos/contacts - List user's trusted SOS contacts
 router.get('/contacts', authenticate, async (req, res) => {
   try {
-    const contacts = await SosContact.find({ userId: req.user._id }).sort({ priority: 1, createdAt: -1 });
+    const contacts = await SosContact.find({
+      userId: req.user._id,
+      isActive: true,
+    }).sort({ priority: 1, createdAt: -1 });
     res.json({
       success: true,
       data: contacts
@@ -46,10 +123,14 @@ router.get('/contacts', authenticate, async (req, res) => {
 // POST /api/sos/contacts - Add SOS contact
 router.post('/contacts', authenticate, async (req, res) => {
   try {
+    const notifyBy = Array.isArray(req.body.notifyBy) && req.body.notifyBy.length > 0
+      ? [...new Set(req.body.notifyBy)]
+      : ['SMS'];
+
     const contactData = {
       userId: req.user._id,
       ...req.body,
-      notifyBy: req.body.notifyBy || ['Push', 'SMS']
+      notifyBy,
     };
     const contact = new SosContact(contactData);
     await contact.save();
@@ -108,13 +189,23 @@ router.post('/send-alert', authenticate, async (req, res) => {
       location,
       longitude,
       latitude,
-      channels = ['Push', 'Call'],
+      accuracy,
+      mapsUrl,
+      channels = ['SMS', 'Call'],
       timestamp = new Date().toISOString(),
     } = req.body;
 
-    const userId = req.user._id;
-    const userName = req.user.name || req.user.email;
-    const userPhone = req.user.phone || '';
+    const senderUser = await ensureMessagingUser(req.user);
+    const userId = senderUser?._id || req.user._id;
+    const userName = senderUser?.name || req.user.name || req.user.email;
+    const userPhone = senderUser?.phone || req.user.phone || '';
+    const sharedLocation = buildSharedLocation({
+      location,
+      latitude,
+      longitude,
+      accuracy,
+      mapsUrl,
+    });
 
     // Create SOS incident record
     const incident = new SosIncident({
@@ -122,158 +213,203 @@ router.post('/send-alert', authenticate, async (req, res) => {
       reason,
       location: {
         type: 'Point',
-        coordinates: longitude && latitude ? [parseFloat(longitude), parseFloat(latitude)] : undefined
+        coordinates:
+          Number.isFinite(sharedLocation.longitude) && Number.isFinite(sharedLocation.latitude)
+            ? [sharedLocation.longitude, sharedLocation.latitude]
+            : undefined,
       }
     });
     await incident.save();
-    incident.history.push({ event: 'triggered', data: { channels, location, timestamp } });
+    incident.history.push({
+      event: 'triggered',
+      data: {
+        channels,
+        location: sharedLocation.locationText,
+        mapsUrl: sharedLocation.mapsUrl,
+        accuracy: sharedLocation.accuracy,
+        timestamp,
+      },
+    });
     await incident.save();
 
-    const contacts = await Contact.find({
+    const sosContacts = await SosContact.find({
       userId,
-      isBlocked: false,
-    }).populate('contactUserId', 'name avatar email phone');
+      isActive: true,
+    }).sort({ priority: 1, createdAt: -1 });
 
-    const registeredContacts = contacts.filter((contact) => contact.contactUserId?._id);
-
-    if (registeredContacts.length === 0) {
+    if (sosContacts.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No registered app contacts found. Add trusted contacts in LinkUp first.',
+        message: 'No SOS trusted contacts found. Add trusted contacts in the SOS module first.',
       });
     }
 
+    const normalizedChannels = Array.isArray(channels) && channels.length > 0
+      ? [...new Set(channels)]
+      : ['SMS', 'Call'];
     const recipients = [];
+    let videoRecipientCount = 0;
 
-    for (const contact of registeredContacts) {
-      const recipient = contact.contactUserId;
-      const chat = await getOrCreateDirectChat(userId, recipient._id);
-      const call = new Call({
-        chatId: chat._id,
-        initiatorId: userId,
-        recipientId: recipient._id,
-        callType: 'audio',
-        status: 'ringing',
-      });
-      await call.save();
-
-      const recipientStatus = getUserStatus(recipient._id.toString());
-      const alertPayload = {
-        alertId: `sos-${call._id}`,
-        incidentId: incident._id.toString(),
-        callId: call._id.toString(),
-        chatId: chat._id.toString(),
-        fromUser: {
-          id: userId.toString(),
-          name: userName,
-          avatar: req.user.avatar || 'SOS',
-          email: req.user.email,
-          phone: userPhone,
-        },
-        location,
-        reason,
-        channels,
-        timestamp,
-        online: recipientStatus.status === 'online',
-      };
-
-      emitToUser(recipient._id.toString(), 'notification:received', {
-        userId: recipient._id.toString(),
-        title: `SOS from ${userName}`,
-        body: `${reason} at ${location}`,
-        type: 'sos-alert',
-        actionData: alertPayload,
-      });
-
-      emitToUser(recipient._id.toString(), 'sos:incoming', alertPayload);
-      emitToUser(recipient._id.toString(), 'call:incoming', {
-        callId: call._id.toString(),
-        initiatorId: userId.toString(),
-        recipientId: recipient._id.toString(),
-        chatId: chat._id.toString(),
-        callType: 'audio',
-        status: 'ringing',
-        emergency: true,
-        caller: {
-          id: userId.toString(),
-          name: userName,
-          avatar: req.user.avatar || 'SOS',
-          email: req.user.email,
-          phone: userPhone,
-        },
-        sosAlert: {
-          reason,
-          location,
-          timestamp,
-        },
-      });
-
-      // Log app contact notification to incident
-      incident.notificationsSent.push({
-        type: 'push',
-        to: recipient._id.toString(),
-        status: 'sent',
-        timestamp: new Date()
-      });
-
-      recipients.push({
-        id: recipient._id.toString(),
-        name: contact.displayName || recipient.name || recipient.email,
-        email: recipient.email,
-        online: recipientStatus.status === 'online',
-      });
-    }
-
-    // SMS/WhatsApp for SosContacts (all trusted contacts, even non-app users)
-    const sosContacts = await SosContact.find({ userId });
     for (const sosContact of sosContacts) {
-      const phone = sosContact.phone;
-      
-      if (channels.includes('SMS') && phone) {
-        const smsResult = await sendSMS(phone, `${reason} at ${location || 'your location'}`, incident._id.toString());
+      const rawPhone = sosContact.phone || '';
+      const phone = rawPhone ? voiceCallService.formatPhoneNumber(rawPhone) : rawPhone;
+      const deliveryChannels = (Array.isArray(sosContact.notifyBy) ? sosContact.notifyBy : [])
+        .filter((channel) => normalizedChannels.includes(channel));
+      const deliveryStatus = {};
+      const matchedAppUser = deliveryChannels.includes('Call')
+        ? await findAppUserByPhone(phone, userId)
+        : null;
+
+      if (deliveryChannels.includes('SMS') && phone) {
+        const smsResult = await sendSMS(
+          phone,
+          `${reason} at ${sharedLocation.shareText}`,
+          incident._id.toString()
+        );
         incident.notificationsSent.push({
           type: 'sms',
           to: phone,
           status: smsResult.status,
-          timestamp: new Date()
+          timestamp: new Date(),
         });
+        deliveryStatus.SMS = smsResult.status;
       }
-      
-      if (channels.includes('WhatsApp') && phone && phone.startsWith('+91')) {
-        const waResult = await sendWhatsApp(phone, reason, incident._id.toString());
+
+      if (deliveryChannels.includes('WhatsApp') && phone) {
+        const waResult = await sendWhatsApp(
+          phone,
+          `${reason}\nLocation: ${sharedLocation.shareText}`,
+          incident._id.toString()
+        );
         incident.notificationsSent.push({
           type: 'whatsapp',
           to: phone,
           status: waResult.status || (waResult.success ? 'sent' : 'failed'),
-          timestamp: new Date()
+          timestamp: new Date(),
         });
+        deliveryStatus.WhatsApp = waResult.status || (waResult.success ? 'sent' : 'failed');
       }
+
+      if (deliveryChannels.includes('Call') && phone) {
+        const callResult = await voiceCallService.initiateVoiceCall({
+          reminderId: incident._id.toString(),
+          recipientPhoneNumber: phone,
+          voiceMessage: `SOS alert from ${userName}. Reason: ${reason}. Last known location: ${sharedLocation.locationText}. Please contact them immediately.`,
+          messageType: 'text',
+          senderName: userName,
+        });
+
+        incident.notificationsSent.push({
+          type: 'call',
+          to: phone,
+          status: callResult.status || 'failed',
+          timestamp: new Date(),
+        });
+        deliveryStatus.Call = callResult.status || 'failed';
+      }
+
+      if (
+        deliveryChannels.includes('Call') &&
+        matchedAppUser?._id &&
+        matchedAppUser.contactMeans?.availableForVideoCall !== false &&
+        isMongoObjectId(userId)
+      ) {
+        const emergencyChat = await getOrCreateDirectChat(userId, matchedAppUser._id);
+        const emergencyVideoCall = new Call({
+          chatId: emergencyChat._id,
+          initiatorId: userId,
+          recipientId: matchedAppUser._id,
+          callType: 'video',
+          status: 'ringing',
+        });
+
+        await emergencyVideoCall.save();
+
+        emitToUser(matchedAppUser._id.toString(), 'call:incoming', {
+          _id: emergencyVideoCall._id,
+          callId: emergencyVideoCall._id,
+          initiatorId: userId,
+          recipientId: matchedAppUser._id,
+          chatId: emergencyChat._id,
+          callType: 'video',
+          status: emergencyVideoCall.status,
+          emergency: true,
+          caller: {
+            _id: userId,
+            name: userName,
+            avatar: senderUser?.avatar || req.user.avatar || 'SOS',
+            email: senderUser?.email || req.user.email,
+            phone: userPhone,
+          },
+          sosAlert: {
+            incidentId: incident._id.toString(),
+            reason,
+            location: sharedLocation.locationText,
+            mapsUrl: sharedLocation.mapsUrl,
+            accuracy: sharedLocation.accuracy,
+            timestamp,
+            liveLocation: {
+              latitude: sharedLocation.latitude,
+              longitude: sharedLocation.longitude,
+              mapsUrl: sharedLocation.mapsUrl,
+              accuracy: sharedLocation.accuracy,
+            },
+          },
+          timestamp: new Date().toISOString(),
+        });
+
+        incident.notificationsSent.push({
+          type: 'call',
+          to: matchedAppUser._id.toString(),
+          status: 'video-ringing',
+          timestamp: new Date(),
+        });
+        deliveryStatus.Video = 'ringing';
+        videoRecipientCount += 1;
+      }
+
+      recipients.push({
+        id: sosContact._id.toString(),
+        name: sosContact.name,
+        phone,
+        relation: sosContact.relation || '',
+        priority: sosContact.priority,
+        channels: deliveryChannels,
+        appUserId: matchedAppUser?._id?.toString() || '',
+        videoCallStatus: deliveryStatus.Video || '',
+        deliveryStatus,
+      });
     }
 
     // Log all notifications and save incident
     await incident.save();
 
-    logger.info('SOS alert dispatched to registered contacts', {
+    logger.info('SOS alert dispatched to trusted contacts', {
       userId: userId.toString(),
       userName,
-      location,
+      location: sharedLocation.locationText,
       reason,
       incidentId: incident._id.toString(),
       recipientCount: recipients.length,
+      videoRecipientCount,
     });
 
     return res.status(200).json({
       success: true,
-      message: 'SOS alert dispatched to registered contacts',
+      message: 'SOS alert dispatched to trusted contacts',
       data: {
+        incidentId: incident._id.toString(),
         userId: userId.toString(),
         userName,
         userPhone,
         timestamp,
-        location,
+        location: sharedLocation.locationText,
+        mapsUrl: sharedLocation.mapsUrl,
+        accuracy: sharedLocation.accuracy,
         reason,
         recipientCount: recipients.length,
-        onlineRecipientCount: recipients.filter((recipient) => recipient.online).length,
+        videoRecipientCount,
+        deliveryCount: incident.notificationsSent.length,
         recipients,
       },
     });

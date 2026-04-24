@@ -14,6 +14,7 @@ export const MODULE_PATHS = {
   matrimonial: "/matrimonial",
   socialmedia: "/socialmedia",
   reminderalert: "/reminderalert",
+  quicklinks: "/quicklinks",
   diary: "/diary",
   sosalert: "/sosalert",
   astrology: "/astrology",

@@ -7,11 +7,55 @@ const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
 const voiceCallService = require('../services/voiceCallService');
 const voiceCallScheduler = require('../services/voiceCallScheduler');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// File upload configuration
+const uploadDir = path.join(__dirname, '../uploads/reminders');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'reminder-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  // Allow specific file types
+  const allowedMimes = [
+    'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/webm',
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    'video/mp4', 'video/webm', 'video/quicktime',
+    'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain', 'text/csv'
+  ];
+
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only audio, image, video, and document files are allowed.'));
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max file size
+});
 
 const VALID_CATEGORIES = ['Work', 'Personal', 'Urgent'];
 const VALID_PRIORITIES = ['Low', 'Medium', 'High'];
 const VALID_REMINDERS = ['In-app', 'SMS', 'Call'];
 const VALID_RECURRING = ['none', 'daily', 'weekly', 'monthly'];
+const VALID_FILE_TYPES = ['voice', 'image', 'document', 'video', 'audio'];
 
 const getReminderOwnerId = (user = {}) => String(user?._id || user?.id || '');
 
@@ -618,6 +662,582 @@ router.get('/voice/scheduler-status', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch scheduler status'
+    });
+  }
+});
+
+// ============ TRUSTED CONTACTS ENDPOINTS ============
+
+// Import TrustedReminderContact model
+const TrustedReminderContact = require('../models/TrustedReminderContact');
+
+// POST /api/reminders/trusted-contacts/invite - Send invite to become trusted contact
+router.post('/trusted-contacts/invite', async (req, res) => {
+  try {
+    const senderId = getReminderOwnerId(req.user);
+    const { recipientId, message, relationship = 'other' } = req.body;
+
+    if (!recipientId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Recipient ID is required'
+      });
+    }
+
+    if (senderId === recipientId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot add yourself as a trusted contact'
+      });
+    }
+
+    // Check if User exists
+    const User = require('../models/User');
+    const recipient = await User.findById(recipientId);
+    if (!recipient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Recipient user not found'
+      });
+    }
+
+    // Check if relationship already exists
+    const existing = await TrustedReminderContact.findOne({
+      senderId,
+      recipientId,
+      status: { $in: ['pending', 'accepted'] }
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'This user is already a trusted contact or invite is pending'
+      });
+    }
+
+    const trustedContact = new TrustedReminderContact({
+      senderId,
+      recipientId,
+      message: message || 'I would like to add you as a trusted contact for my reminders',
+      relationship
+    });
+
+    await trustedContact.save();
+
+    logger.info(`Trusted contact invite sent from ${senderId} to ${recipientId}`);
+
+    res.status(201).json({
+      success: true,
+      data: trustedContact,
+      message: 'Invite sent successfully'
+    });
+  } catch (error) {
+    logger.error('Error sending trusted contact invite:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send invite',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/reminders/trusted-contacts/sent - Get sent invites
+router.get('/trusted-contacts/sent', async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+
+    const invites = await TrustedReminderContact.find({
+      senderId: userId
+    })
+      .populate('recipientId', 'username email name profilePicture')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: invites
+    });
+  } catch (error) {
+    logger.error('Error fetching sent invites:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch invites',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/reminders/trusted-contacts/received - Get received invites
+router.get('/trusted-contacts/received', async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+
+    const invites = await TrustedReminderContact.find({
+      recipientId: userId,
+      status: 'pending'
+    })
+      .populate('senderId', 'username email name profilePicture')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: invites
+    });
+  } catch (error) {
+    logger.error('Error fetching received invites:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch invites',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/reminders/trusted-contacts/accepted - Get accepted trusted contacts
+router.get('/trusted-contacts/accepted', async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+
+    const accepted = await TrustedReminderContact.find({
+      senderId: userId,
+      status: 'accepted'
+    })
+      .populate('recipientId', 'username email name profilePicture')
+      .sort({ acceptedAt: -1 });
+
+    res.json({
+      success: true,
+      data: accepted
+    });
+  } catch (error) {
+    logger.error('Error fetching accepted trusted contacts:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch trusted contacts',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/trusted-contacts/:id/accept - Accept invite
+router.post('/trusted-contacts/:id/accept', async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const inviteId = req.params.id;
+
+    const invite = await TrustedReminderContact.findOne({
+      _id: inviteId,
+      recipientId: userId,
+      status: 'pending'
+    });
+
+    if (!invite) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invite not found'
+      });
+    }
+
+    invite.status = 'accepted';
+    invite.acceptedAt = new Date();
+    invite.lastInteractionAt = new Date();
+    await invite.save();
+
+    logger.info(`Trusted contact invite accepted from ${userId}`);
+
+    res.json({
+      success: true,
+      data: invite,
+      message: 'Invite accepted'
+    });
+  } catch (error) {
+    logger.error('Error accepting invite:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to accept invite',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/trusted-contacts/:id/reject - Reject invite
+router.post('/trusted-contacts/:id/reject', async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const inviteId = req.params.id;
+
+    const invite = await TrustedReminderContact.findOne({
+      _id: inviteId,
+      recipientId: userId,
+      status: 'pending'
+    });
+
+    if (!invite) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invite not found'
+      });
+    }
+
+    invite.status = 'rejected';
+    invite.rejectedAt = new Date();
+    await invite.save();
+
+    logger.info(`Trusted contact invite rejected by ${userId}`);
+
+    res.json({
+      success: true,
+      data: invite,
+      message: 'Invite rejected'
+    });
+  } catch (error) {
+    logger.error('Error rejecting invite:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reject invite',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// DELETE /api/reminders/trusted-contacts/:id - Remove trusted contact
+router.delete('/trusted-contacts/:id', async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const contactId = req.params.id;
+
+    const contact = await TrustedReminderContact.findOne({
+      _id: contactId,
+      senderId: userId
+    });
+
+    if (!contact) {
+      return res.status(404).json({
+        success: false,
+        message: 'Trusted contact not found'
+      });
+    }
+
+    await TrustedReminderContact.deleteOne({ _id: contactId });
+
+    // Remove from shared reminders
+    await Reminder.updateMany(
+      { userId, sharedWithTrustedContacts: contact.recipientId },
+      { $pull: { sharedWithTrustedContacts: contact.recipientId } }
+    );
+
+    logger.info(`Trusted contact removed by ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Trusted contact removed'
+    });
+  } catch (error) {
+    logger.error('Error removing trusted contact:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove trusted contact',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// PUT /api/reminders/:id/share-with-contacts - Share reminder with trusted contacts
+router.put('/:id/share-with-contacts', async (req, res) => {
+  try {
+    const ownerId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const { contactIds = [] } = req.body;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: ownerId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    // Validate that all contact IDs are accepted trusted contacts
+    const validContacts = await TrustedReminderContact.find({
+      senderId: ownerId,
+      recipientId: { $in: contactIds },
+      status: 'accepted'
+    });
+
+    if (validContacts.length !== contactIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'One or more contacts are not accepted trusted contacts'
+      });
+    }
+
+    reminder.sharedWithTrustedContacts = contactIds;
+    reminder.trustedContactAcknowledgments = contactIds.map(id => ({
+      contactId: id,
+      acknowledged: false
+    }));
+
+    await reminder.save();
+
+    logger.info(`Reminder ${reminderId} shared with ${contactIds.length} trusted contacts`);
+
+    res.json({
+      success: true,
+      data: reminder,
+      message: 'Reminder shared successfully'
+    });
+  } catch (error) {
+    logger.error('Error sharing reminder:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to share reminder',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/reminders/shared-with-me - Get reminders shared with me
+router.get('/shared-with-me/list', async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+
+    const reminders = await Reminder.find({
+      sharedWithTrustedContacts: userId
+    })
+      .populate('userId', 'username email name profilePicture')
+      .sort({ dueDate: 1, createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: reminders
+    });
+  } catch (error) {
+    logger.error('Error fetching shared reminders:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch shared reminders',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ============ FILE ATTACHMENT ENDPOINTS ============
+
+// POST /api/reminders/:id/attachments - Upload file attachment to reminder
+router.post('/:id/attachments', authenticate, upload.single('file'), async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file provided'
+      });
+    }
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      // Clean up uploaded file
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    // Determine file type based on MIME type
+    let fileType = 'document';
+    if (req.file.mimetype.startsWith('audio/')) {
+      fileType = 'audio';
+    } else if (req.file.mimetype.startsWith('image/')) {
+      fileType = 'image';
+    } else if (req.file.mimetype.startsWith('video/')) {
+      fileType = 'video';
+    }
+
+    // Construct file URL (assuming files are served from /uploads/reminders/)
+    const fileUrl = `/uploads/reminders/${req.file.filename}`;
+
+    // Extract metadata
+    const { description, duration } = req.body;
+
+    const attachment = {
+      fileName: req.file.originalname,
+      fileType,
+      mimeType: req.file.mimetype,
+      fileUrl,
+      fileSize: req.file.size,
+      uploadedBy: userId,
+      uploadedByName: req.user?.name || req.user?.username || 'User',
+      description: description || '',
+      ...(duration && { duration: parseInt(duration) })
+    };
+
+    reminder.addAttachment(attachment);
+    await reminder.save();
+
+    logger.info(`File attachment added to reminder ${reminderId}`);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        reminderId,
+        attachment: reminder.attachments[reminder.attachments.length - 1]
+      },
+      message: 'File uploaded successfully'
+    });
+  } catch (error) {
+    // Clean up uploaded file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    logger.error('Error uploading file:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload file',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/reminders/:id/attachments - Get all attachments for a reminder
+router.get('/:id/attachments', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+
+    const reminder = await Reminder.findOne({
+      $or: [
+        { _id: reminderId, userId: userId },
+        { _id: reminderId, sharedWithTrustedContacts: userId }
+      ]
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: reminder.attachments || []
+    });
+  } catch (error) {
+    logger.error('Error fetching attachments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch attachments',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// DELETE /api/reminders/:id/attachments/:attachmentId - Delete attachment from reminder
+router.delete('/:id/attachments/:attachmentId', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const attachmentId = req.params.attachmentId;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    // Find and remove attachment
+    const attachment = reminder.attachments.find(
+      (att) => att._id.toString() === attachmentId
+    );
+
+    if (!attachment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Attachment not found'
+      });
+    }
+
+    // Delete file from disk
+    const filePath = path.join(__dirname, '..', attachment.fileUrl);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    reminder.removeAttachment(attachmentId);
+    await reminder.save();
+
+    logger.info(`Attachment deleted from reminder ${reminderId}`);
+
+    res.json({
+      success: true,
+      message: 'Attachment deleted successfully'
+    });
+  } catch (error) {
+    logger.error('Error deleting attachment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete attachment',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/reminders/:id/attachments/type/:type - Get attachments by type
+router.get('/:id/attachments/type/:type', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const fileType = req.params.type;
+
+    if (!VALID_FILE_TYPES.includes(fileType)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid file type. Must be one of: ${VALID_FILE_TYPES.join(', ')}`
+      });
+    }
+
+    const reminder = await Reminder.findOne({
+      $or: [
+        { _id: reminderId, userId: userId },
+        { _id: reminderId, sharedWithTrustedContacts: userId }
+      ]
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    const attachments = reminder.getAttachmentsByType(fileType);
+
+    res.json({
+      success: true,
+      data: attachments
+    });
+  } catch (error) {
+    logger.error('Error fetching attachments by type:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch attachments',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

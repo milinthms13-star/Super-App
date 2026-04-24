@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "../../styles/ReminderAlert.css";
+import "../../styles/TrustedContacts.css";
 import {
   fetchReminders,
   createReminder,
@@ -9,9 +10,11 @@ import {
   createVoiceCallReminder,
   getVoiceCallStatus,
   triggerVoiceCall,
+  getAcceptedTrustedContacts,
+  shareReminderWithContacts,
 } from "../../services/remindersService";
-import { LINK_PRESETS, normalizeCustomLink } from "../../utils/customLinks";
 import { formatReminderDueDate, toDateInputValue } from "./reminderUtils";
+import TrustedContacts from "./TrustedContacts";
 
 const PRIORITIES = ["Low", "Medium", "High"];
 const CATEGORIES = ["Work", "Personal", "Urgent"];
@@ -25,6 +28,7 @@ const INITIAL_FORM = {
   dueTime: "",
   reminders: ["In-app"],
   recurring: "none",
+  sharedWithTrustedContacts: [],
 };
 const INITIAL_VOICE_CALL_FORM = {
   recipientPhoneNumber: "",
@@ -32,14 +36,8 @@ const INITIAL_VOICE_CALL_FORM = {
   messageType: "text",
   isVoiceCall: false,
 };
-const INITIAL_LINK_FORM = {
-  preset: "custom",
-  title: "",
-  url: "",
-  description: "",
-};
 
-const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => {
+const ReminderAlert = () => {
   const [activeFilter, setActiveFilter] = useState("All");
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,9 +48,9 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
   const [voiceCallData, setVoiceCallData] = useState(INITIAL_VOICE_CALL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [linkForm, setLinkForm] = useState(INITIAL_LINK_FORM);
-  const [linkError, setLinkError] = useState(null);
   const [voiceCallStatus, setVoiceCallStatus] = useState({});  // Track call status by reminder ID
+  const [trustedContacts, setTrustedContacts] = useState([]); // List of accepted trusted contacts
+  const [showTrustedContacts, setShowTrustedContacts] = useState(false); // Toggle trusted contacts panel
 
   // Load reminders from backend on component mount
   useEffect(() => {
@@ -72,6 +70,21 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
     };
 
     loadReminders();
+  }, []);
+
+  // Load trusted contacts
+  useEffect(() => {
+    const loadTrustedContacts = async () => {
+      try {
+        const response = await getAcceptedTrustedContacts();
+        setTrustedContacts(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        console.error("Failed to load trusted contacts:", err);
+        // Don't show error for this, just silently fail
+      }
+    };
+
+    loadTrustedContacts();
   }, []);
 
   const visibleTasks = useMemo(() => {
@@ -98,6 +111,16 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
         reminders: checked
           ? [...current.reminders, value]
           : current.reminders.filter((item) => item !== value),
+      }));
+      return;
+    }
+
+    if (type === "checkbox" && name === "sharedWithTrustedContacts") {
+      setFormData((current) => ({
+        ...current,
+        sharedWithTrustedContacts: checked
+          ? [...current.sharedWithTrustedContacts, value]
+          : current.sharedWithTrustedContacts.filter((item) => item !== value),
       }));
       return;
     }
@@ -167,6 +190,12 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
           ...formData,
           dueDate: new Date(formData.dueDate),
         });
+        
+        // Share with trusted contacts if selected
+        if (formData.sharedWithTrustedContacts && formData.sharedWithTrustedContacts.length > 0) {
+          await shareReminderWithContacts(editingTaskId, formData.sharedWithTrustedContacts);
+        }
+        
         setTasks((current) =>
           current.map((task) =>
             task._id === editingTaskId ? response.data : task
@@ -174,6 +203,7 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
         );
       } else {
         // Create new reminder
+        let reminderId;
         if (voiceCallData.isVoiceCall) {
           // Create voice call reminder
           const response = await createVoiceCallReminder({
@@ -181,6 +211,7 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
             ...voiceCallData,
             dueDate: new Date(formData.dueDate),
           });
+          reminderId = response.data._id;
           setTasks((current) => [response.data, ...current]);
         } else {
           // Create regular reminder
@@ -188,7 +219,13 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
             ...formData,
             dueDate: new Date(formData.dueDate),
           });
+          reminderId = response.data._id;
           setTasks((current) => [response.data, ...current]);
+        }
+
+        // Share with trusted contacts if selected
+        if (formData.sharedWithTrustedContacts && formData.sharedWithTrustedContacts.length > 0) {
+          await shareReminderWithContacts(reminderId, formData.sharedWithTrustedContacts);
         }
       }
 
@@ -212,6 +249,7 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
       dueTime: task.dueTime,
       reminders: task.reminders,
       recurring: task.recurring || "none",
+      sharedWithTrustedContacts: task.sharedWithTrustedContacts || [],
     });
     setShowAddForm(true);
   };
@@ -241,56 +279,7 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
     }
   };
 
-  const handleLinkFormChange = (event) => {
-    const { name, value } = event.target;
 
-    if (name === "preset") {
-      const preset = LINK_PRESETS[value] || LINK_PRESETS.custom;
-      setLinkForm({
-        preset: value,
-        title: preset.title,
-        url: preset.url,
-        description: preset.description,
-      });
-      setLinkError(null);
-      return;
-    }
-
-    setLinkForm((current) => ({
-      ...current,
-      [name]: value,
-    }));
-    setLinkError(null);
-  };
-
-  const handleAddCustomLink = (event) => {
-    event.preventDefault();
-
-    const nextLink = normalizeCustomLink({
-      id: `custom-link-${Date.now()}`,
-      ...linkForm,
-    });
-
-    if (!nextLink.title || !nextLink.url) {
-      setLinkError("Link title and URL are required.");
-      return;
-    }
-
-    try {
-      new URL(nextLink.url);
-    } catch (validationError) {
-      setLinkError("Enter a valid URL like https://facebook.com or mail.google.com.");
-      return;
-    }
-
-    onCustomLinksChange((currentLinks) => [...currentLinks, nextLink]);
-    setLinkForm(INITIAL_LINK_FORM);
-    setLinkError(null);
-  };
-
-  const handleRemoveCustomLink = (linkId) => {
-    onCustomLinksChange((currentLinks) => currentLinks.filter((link) => link.id !== linkId));
-  };
 
   const handleTriggerVoiceCall = async (taskId) => {
     try {
@@ -422,6 +411,30 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
               ))}
             </div>
 
+            {trustedContacts.length > 0 && (
+              <div className="reminderalert-panel" style={{ marginTop: "1.5rem", padding: "1.5rem", backgroundColor: "#f0f8ff", borderRadius: "8px" }}>
+                <h3 style={{ marginBottom: "1rem" }}>🔗 Share with Trusted Contacts</h3>
+                <div className="reminderalert-role-stack">
+                  {trustedContacts.map((contact) => (
+                    <label className="reminderalert-role-card" key={contact._id}>
+                      <h3>{contact.recipientId?.name || contact.recipientId?.username || "Contact"}</h3>
+                      <ul>
+                        <li>
+                          <input
+                            type="checkbox"
+                            name="sharedWithTrustedContacts"
+                            value={contact.recipientId?._id}
+                            checked={formData.sharedWithTrustedContacts.includes(contact.recipientId?._id)}
+                            onChange={handleFormChange}
+                          />
+                        </li>
+                      </ul>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {formData.reminders.includes("Call") && (
               <div className="reminderalert-panel" style={{ marginTop: "1.5rem", padding: "1.5rem", backgroundColor: "#f5f5f5", borderRadius: "8px" }}>
                 <h3 style={{ marginBottom: "1rem" }}>Voice Call Reminder Setup</h3>
@@ -511,111 +524,6 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
         <div className="reminderalert-primary-column">
           <article className="reminderalert-panel">
             <div className="reminderalert-panel-heading">
-              <p>Quick links</p>
-              <h2>Add Facebook, Gmail, or any custom shortcut</h2>
-            </div>
-
-            <form className="reminderalert-link-form" onSubmit={handleAddCustomLink}>
-              {linkError ? (
-                <div style={{ color: "#d32f2f", marginBottom: "1rem", fontSize: "0.9rem" }}>
-                  {linkError}
-                </div>
-              ) : null}
-
-              <div className="reminderalert-requirement-grid">
-                <label className="reminderalert-requirement-card">
-                  <h3>Service</h3>
-                  <select name="preset" value={linkForm.preset} onChange={handleLinkFormChange}>
-                    {Object.entries(LINK_PRESETS).map(([value, preset]) => (
-                      <option key={value} value={value}>
-                        {preset.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="reminderalert-requirement-card">
-                  <h3>Link title</h3>
-                  <input
-                    type="text"
-                    name="title"
-                    value={linkForm.title}
-                    onChange={handleLinkFormChange}
-                    placeholder="Facebook, Gmail, Business mail"
-                  />
-                </label>
-                <label className="reminderalert-requirement-card">
-                  <h3>URL</h3>
-                  <input
-                    type="text"
-                    name="url"
-                    value={linkForm.url}
-                    onChange={handleLinkFormChange}
-                    placeholder="https://mail.google.com/"
-                  />
-                </label>
-                <label className="reminderalert-requirement-card">
-                  <h3>Description</h3>
-                  <input
-                    type="text"
-                    name="description"
-                    value={linkForm.description}
-                    onChange={handleLinkFormChange}
-                    placeholder="Optional card description for launch and home page"
-                  />
-                </label>
-              </div>
-
-              <div className="reminderalert-filter-row">
-                <button type="submit" className="reminderalert-filter-chip active">
-                  Save quick link
-                </button>
-              </div>
-            </form>
-
-            <div className="reminderalert-task-list">
-              {customLinks.length ? (
-                customLinks.map((link) => (
-                  <article className="reminderalert-task-card" key={link.id}>
-                    <div className="reminderalert-task-topline">
-                      <div>
-                        <h3>{link.title}</h3>
-                        <p>{link.description || "Custom shortcut for launch and home page."}</p>
-                      </div>
-                      <span className="reminderalert-task-status">Quick link</span>
-                    </div>
-                    <p className="reminderalert-task-due">{link.url}</p>
-                    <div className="reminderalert-filter-row">
-                      <button
-                        type="button"
-                        className="reminderalert-filter-chip"
-                        onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
-                      >
-                        Open
-                      </button>
-                      <button
-                        type="button"
-                        className="reminderalert-filter-chip"
-                        onClick={() => handleRemoveCustomLink(link.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className="reminderalert-callout">
-                  <strong>No quick links yet</strong>
-                  <p>
-                    Save Gmail, Facebook, or any website here and it will appear on the launch page
-                    and home page next to the fixed categories.
-                  </p>
-                </div>
-              )}
-            </div>
-          </article>
-
-          <article className="reminderalert-panel">
-            <div className="reminderalert-panel-heading">
               <p>Task board</p>
               <h2>Your reminders</h2>
             </div>
@@ -673,6 +581,12 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
                       </div>
                     )}
 
+                    {task.sharedWithTrustedContacts && task.sharedWithTrustedContacts.length > 0 && (
+                      <div style={{ marginTop: "0.75rem", padding: "0.75rem", backgroundColor: "#f0f8ff", borderRadius: "4px", fontSize: "0.85rem" }}>
+                        <strong>🔗 Shared with {task.sharedWithTrustedContacts.length} trusted contact{task.sharedWithTrustedContacts.length > 1 ? "s" : ""}</strong>
+                      </div>
+                    )}
+
                     <div className="reminderalert-filter-row">
                       <button
                         type="button"
@@ -716,6 +630,13 @@ const ReminderAlert = ({ customLinks = [], onCustomLinksChange = () => {} }) => 
               )}
             </div>
           </article>
+        </div>
+      </section>
+
+      {/* Trusted Contacts Section */}
+      <section className="reminderalert-layout">
+        <div className="reminderalert-primary-column">
+          <TrustedContacts onContactsUpdate={setTrustedContacts} />
         </div>
       </section>
     </div>

@@ -42,6 +42,7 @@ const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing")
 const Matrimonial = React.lazy(() => import("./modules/matrimonial/Matrimonial"));
 const SocialMedia = React.lazy(() => import("./modules/socialmedia/SocialMedia"));
 const ReminderAlert = React.lazy(() => import("./modules/reminderalert/ReminderAlert"));
+const QuickLinks = React.lazy(() => import("./modules/quicklinks/QuickLinks"));
 const SOSAlert = React.lazy(() => import("./modules/sos/SOSAlert"));
 const AstrologyHome = React.lazy(() => import("./modules/astrology/AstrologyHome"));
 const Support = React.lazy(() => import("./modules/support/Support"));
@@ -50,6 +51,42 @@ const Diary = React.lazy(() =>
 );
 
 const SOCKET_BASE_URL = BACKEND_BASE_URL;
+const EMERGENCY_CALL_STORAGE_KEY = "malabarbazaar-emergency-call";
+
+const buildPendingEmergencyCall = (alert = {}) => {
+  const emergencyCall = alert?.emergencyCall || {};
+  const callId = alert?.callId || emergencyCall.callId || emergencyCall._id || "";
+
+  if (!callId) {
+    return null;
+  }
+
+  return {
+    _id: callId,
+    callId,
+    chatId: alert?.chatId || emergencyCall.chatId || "",
+    initiatorId:
+      alert?.fromUser?.id ||
+      alert?.fromUser?._id ||
+      emergencyCall.initiatorId ||
+      "",
+    recipientId: emergencyCall.recipientId || "",
+    callType: alert?.callType || emergencyCall.callType || "video",
+    status: emergencyCall.status || alert?.status || "ringing",
+    emergency: true,
+    caller: alert?.fromUser || emergencyCall.caller || {},
+    timestamp: alert?.timestamp || emergencyCall.timestamp || new Date().toISOString(),
+    sosAlert: {
+      incidentId: alert?.incidentId || emergencyCall?.sosAlert?.incidentId || "",
+      reason: alert?.reason || emergencyCall?.sosAlert?.reason || "Emergency support requested",
+      location: alert?.location || emergencyCall?.sosAlert?.location || "Current Location",
+      mapsUrl: alert?.mapsUrl || emergencyCall?.sosAlert?.mapsUrl || "",
+      accuracy: alert?.accuracy || emergencyCall?.sosAlert?.accuracy || null,
+      timestamp: alert?.timestamp || emergencyCall?.sosAlert?.timestamp || new Date().toISOString(),
+      liveLocation: emergencyCall?.sosAlert?.liveLocation || null,
+    },
+  };
+};
 
 const EMPTY_APP_DATA = {
   businessCategories: [],
@@ -221,21 +258,39 @@ function AppShell() {
     });
 
     socket.on("sos:incoming", (payload) => {
-      setIncomingSosAlert(payload || null);
+      if (!payload) {
+        setIncomingSosAlert(null);
+        return;
+      }
+
+      setIncomingSosAlert({
+        ...payload,
+        callId: payload.callId || payload.emergencyCall?.callId || "",
+        chatId: payload.chatId || payload.emergencyCall?.chatId || "",
+        callType: payload.callType || payload.emergencyCall?.callType || "audio",
+        mapsUrl: payload.mapsUrl || payload.sosAlert?.mapsUrl || "",
+        accuracy: payload.accuracy || payload.sosAlert?.accuracy || null,
+      });
     });
 
     socket.on("call:incoming", (payload) => {
       if (payload?.emergency) {
-        setIncomingSosAlert((currentAlert) => currentAlert || {
-          alertId: `sos-${payload.callId}`,
+        setIncomingSosAlert((currentAlert) => ({
+          ...(currentAlert || {}),
+          alertId: currentAlert?.alertId || `sos-${payload.callId}`,
+          incidentId: currentAlert?.incidentId || payload.sosAlert?.incidentId || "",
           callId: payload.callId,
           chatId: payload.chatId,
+          callType: payload.callType || "video",
           fromUser: payload.caller,
-          location: payload.sosAlert?.location || "Current Location",
-          reason: payload.sosAlert?.reason || "Emergency support requested",
-          timestamp: payload.sosAlert?.timestamp || new Date().toISOString(),
+          location: payload.sosAlert?.location || currentAlert?.location || "Current Location",
+          reason: payload.sosAlert?.reason || currentAlert?.reason || "Emergency support requested",
+          timestamp: payload.sosAlert?.timestamp || currentAlert?.timestamp || new Date().toISOString(),
+          mapsUrl: payload.sosAlert?.mapsUrl || currentAlert?.mapsUrl || "",
+          accuracy: payload.sosAlert?.accuracy || currentAlert?.accuracy || null,
           online: true,
-        });
+          emergencyCall: payload,
+        }));
       }
     });
 
@@ -460,9 +515,25 @@ function AppShell() {
   };
 
   const handleOpenEmergencyModule = useCallback((nextModule) => {
+    if (nextModule === "messaging" && incomingSosAlert) {
+      const pendingEmergencyCall = buildPendingEmergencyCall(incomingSosAlert);
+
+      if (pendingEmergencyCall) {
+        sessionStorage.setItem(
+          EMERGENCY_CALL_STORAGE_KEY,
+          JSON.stringify(pendingEmergencyCall)
+        );
+        window.dispatchEvent(
+          new CustomEvent("malabarbazaar:emergency-call", {
+            detail: pendingEmergencyCall,
+          })
+        );
+      }
+    }
+
     setIncomingSosAlert(null);
     navigateToModule(nextModule);
-  }, [navigateToModule]);
+  }, [incomingSosAlert, navigateToModule]);
 
   const handleSelectRegistrationType = (type, targetModule = "") => {
     setRegistrationType(type);
@@ -874,8 +945,12 @@ function AppShell() {
               <Route path="socialmedia" element={<SocialMedia />} />
               <Route
                 path="reminderalert"
+                element={<ReminderAlert />}
+              />
+              <Route
+                path="quicklinks"
                 element={
-                  <ReminderAlert customLinks={customLinks} onCustomLinksChange={setCustomLinks} />
+                  <QuickLinks customLinks={customLinks} onCustomLinksChange={setCustomLinks} />
                 }
               />
               <Route path="diary" element={<Diary />} />
@@ -895,7 +970,7 @@ function AppShell() {
                 {incomingSosAlert.reason} near {incomingSosAlert.location}.
               </p>
               <p className="emergency-call-meta">
-                In-app SOS call requested at {new Date(incomingSosAlert.timestamp).toLocaleTimeString("en-IN", {
+                In-app SOS {incomingSosAlert.callType === "video" ? "video call" : "call"} requested at {new Date(incomingSosAlert.timestamp).toLocaleTimeString("en-IN", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
@@ -904,16 +979,16 @@ function AppShell() {
                 <button
                   type="button"
                   className="emergency-call-primary"
-                  onClick={() => handleOpenEmergencyModule("sosalert")}
+                  onClick={() => handleOpenEmergencyModule("messaging")}
                 >
-                  Open SOS Center
+                  {incomingSosAlert.callType === "video" ? "Join Emergency Video Call" : "Open Messaging"}
                 </button>
                 <button
                   type="button"
                   className="emergency-call-secondary"
-                  onClick={() => handleOpenEmergencyModule("messaging")}
+                  onClick={() => handleOpenEmergencyModule("sosalert")}
                 >
-                  Open Messaging
+                  Open SOS Center
                 </button>
                 <button
                   type="button"

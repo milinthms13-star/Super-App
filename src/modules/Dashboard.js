@@ -135,7 +135,14 @@ const Icon = ({ type, className = "" }) => {
           <path d="M6 9a6 6 0 1 1 12 0c0 2.4.8 3.8 2 5H4c1.2-1.2 2-2.6 2-5Z" />
         </svg>
       );
-case "sosalert":
+    case "quicklinks":
+      return (
+        <svg {...common}>
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+      );
+    case "sosalert":
       return (
         <svg {...common}>
           <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.5-7 10-7 10Z" />
@@ -256,6 +263,14 @@ const MODULE_CONFIG = [
     icon: "reminderalert",
     descriptionKey: "dashboard.moduleDescriptions.reminderalert",
     fallbackDescription: "Smart task planning with alarms, SMS reminders, and automated call alerts",
+  },
+  {
+    id: "quicklinks",
+    nameKey: "modules.quicklinks",
+    fallbackName: "Quick Links",
+    icon: "quicklinks",
+    descriptionKey: "dashboard.moduleDescriptions.quicklinks",
+    fallbackDescription: "Save and manage shortcuts to your favorite websites and services",
   },
   {
     id: "sosalert",

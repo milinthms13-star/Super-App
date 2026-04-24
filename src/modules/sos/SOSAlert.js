@@ -2,55 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import "../../styles/SOSAlert.css";
 
-const STORAGE_KEY = "malabarbazaar-sos-state";
 const QUICK_REASONS = ["Medical", "Unsafe situation", "Travel check-in", "Vehicle breakdown"];
-const DELIVERY_CHANNELS = ["Push", "SMS", "WhatsApp", "Call"];
-const LOCATION_POINTS = [
-  "Marine Drive, Kochi",
-  "MG Road signal, Kochi",
-  "North Railway Station, Kochi",
-  "Kaloor Junction, Kochi",
-];
-
-const buildSeedContacts = (currentUser) => [
-  {
-    id: "contact-1",
-    name: "Akhila Nair",
-    relation: "Sister",
-    phone: "+91 98765 11111",
-    priority: "Primary",
-    notifyBy: ["Push", "SMS", "Call"],
-    acknowledged: false,
-  },
-  {
-    id: "contact-2",
-    name: currentUser?.name ? `${currentUser.name}'s Friend` : "Niyas Rahman",
-    relation: "Friend",
-    phone: "+91 98765 22222",
-    priority: "Backup",
-    notifyBy: ["Push", "SMS"],
-    acknowledged: false,
-  },
-  {
-    id: "contact-3",
-    name: "Home Security Desk",
-    relation: "Support",
-    phone: "+91 98765 33333",
-    priority: "Escalation",
-    notifyBy: ["Call", "SMS"],
-    acknowledged: false,
-  },
-];
-
-const createInitialState = (currentUser) => ({
-  contacts: buildSeedContacts(currentUser),
-  history: [],
-  settings: {
-    silentMode: false,
-    autoEscalation: true,
-    shareLiveLocation: true,
-  },
-});
+const DELIVERY_CHANNELS = ["SMS", "WhatsApp", "Call"];
+const LOCATION_OPTIONS = {
+  enableHighAccuracy: true,
+  timeout: 10000,
+  maximumAge: 30000,
+};
 
 const formatTimestamp = (value) =>
   new Date(value).toLocaleTimeString("en-IN", {
@@ -98,10 +56,81 @@ const buildAlertLog = (entry) => ({
   entry,
 });
 
+const getSosItemId = (item) => item?._id || item?.id || "";
+
+const formatCoordinate = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(5) : "";
+};
+
+const buildMapsUrl = (latitude, longitude) =>
+  `https://www.google.com/maps?q=${latitude},${longitude}`;
+
+const buildLiveLocationPayload = (position) => {
+  const latitude = Number(position?.coords?.latitude);
+  const longitude = Number(position?.coords?.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  const accuracy = Number(position?.coords?.accuracy);
+  const coordinateText = `${formatCoordinate(latitude)}, ${formatCoordinate(longitude)}`;
+  const accuracyText = Number.isFinite(accuracy) ? `${Math.round(accuracy)}m accuracy` : "";
+  const mapsUrl = buildMapsUrl(latitude, longitude);
+
+  return {
+    latitude,
+    longitude,
+    accuracy: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
+    coordinateText,
+    mapsUrl,
+    locationText: accuracyText ? `${coordinateText} (${accuracyText})` : coordinateText,
+  };
+};
+
+const formatIncidentLocation = (location) => {
+  if (typeof location === "string" && location.trim()) {
+    return location;
+  }
+
+  if (Array.isArray(location?.coordinates) && location.coordinates.length === 2) {
+    const [longitude, latitude] = location.coordinates;
+    const latText = Number.isFinite(latitude) ? latitude.toFixed(4) : latitude;
+    const longText = Number.isFinite(longitude) ? longitude.toFixed(4) : longitude;
+    return `${latText}, ${longText}`;
+  }
+
+  return "Location shared";
+};
+
+const getIncidentOutcome = (incident) => {
+  if (incident?.outcome) {
+    return incident.outcome;
+  }
+
+  switch (incident?.status) {
+    case "resolved":
+      return "Resolved";
+    case "acknowledged":
+      return "Acknowledged";
+    case "escalated":
+      return "Escalated";
+    case "active":
+      return "In progress";
+    default:
+      return incident?.status || "In progress";
+  }
+};
+
+const getLocationDisplayText = (position) => {
+  const liveLocation = buildLiveLocationPayload(position);
+  return liveLocation?.locationText || "";
+};
+
 const SOSAlert = () => {
-const { currentUser, apiCall } = useApp();
+  const { currentUser, apiCall } = useApp();
   const [contacts, setContacts] = useState([]);
-  const [registeredContacts, setRegisteredContacts] = useState([]);
   const [history, setHistory] = useState([]);
   const [settings, setSettings] = useState({ silentMode: false, autoEscalation: true, shareLiveLocation: true });
   const [apiError, setApiError] = useState(null);
@@ -122,7 +151,7 @@ const { currentUser, apiCall } = useApp();
     relation: "",
     phone: "",
     priority: "Backup",
-    notifyBy: ["Push", "SMS"],
+    notifyBy: ["SMS", "Call"],
   });
   const [statusMessage, setStatusMessage] = useState("");
   const [locationError, setLocationError] = useState(null);
@@ -131,7 +160,7 @@ const { currentUser, apiCall } = useApp();
   useEffect(() => {
     let isMounted = true;
 
-    const loadData = async () => {
+    const loadInitialData = async () => {
       try {
         if (!apiCall) {
           throw new Error('API not available');
@@ -155,15 +184,6 @@ const { currentUser, apiCall } = useApp();
           setHistory(historyRes.data);
         }
 
-        // Load messaging contacts
-        const messagingRes = await apiCall("/messaging/contacts", "GET", { limit: 100 }).catch(err => {
-          console.warn('Failed to load messaging contacts:', err);
-          return null;
-        });
-        if (isMounted) {
-          setRegisteredContacts(Array.isArray(messagingRes?.contacts) ? messagingRes.contacts : []);
-        }
-
         if (isMounted) {
           setApiError(null);
         }
@@ -175,7 +195,7 @@ const { currentUser, apiCall } = useApp();
       }
     };
 
-    loadData();
+    loadInitialData();
 
     return () => {
       isMounted = false;
@@ -188,7 +208,11 @@ const { currentUser, apiCall } = useApp();
 
   // Geolocation watch
   useEffect(() => {
-    if (!settings.shareLiveLocation) return;
+    if (!settings.shareLiveLocation) {
+      setCurrentPosition(null);
+      setLocationError(null);
+      return undefined;
+    }
 
     let watchId = null;
     let positionTimeout;
@@ -196,8 +220,12 @@ const { currentUser, apiCall } = useApp();
     const handleSuccess = (position) => {
       setCurrentPosition(position);
       setLocationError(null);
-      // Mock reverse geocode for display
-      setStatusMessage(`Live location ready: ${position.coords.accuracy?.toFixed(0)}m accuracy`);
+      const liveLocation = buildLiveLocationPayload(position);
+      setStatusMessage(
+        liveLocation
+          ? `Live location ready: ${liveLocation.locationText}`
+          : `Live location ready: ${position.coords.accuracy?.toFixed(0)}m accuracy`
+      );
     };
 
     const handleError = (error) => {
@@ -206,16 +234,10 @@ const { currentUser, apiCall } = useApp();
       setCurrentPosition(null);
     };
 
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 30000,
-    };
-
-    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, LOCATION_OPTIONS);
 
     if (settings.shareLiveLocation) {
-      watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, options);
+      watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, LOCATION_OPTIONS);
       positionTimeout = setTimeout(() => {
         if (watchId) navigator.geolocation.clearWatch(watchId);
       }, 300000); // 5min timeout
@@ -261,19 +283,34 @@ const { currentUser, apiCall } = useApp();
     [contacts, settings]
   );
 
-  const activeContacts = contacts.filter((contact) => contact.notifyBy.length > 0);
+  const activeContacts = contacts.filter((contact) => (contact.notifyBy || []).length > 0);
+  const configuredChannelCount = useMemo(
+    () => new Set(activeContacts.flatMap((contact) => contact.notifyBy || [])).size,
+    [activeContacts]
+  );
+  const currentLiveLocation = settings.shareLiveLocation ? buildLiveLocationPayload(currentPosition) : null;
   const activeLocation =
     alertState.currentLocation ||
-    (currentPosition
-      ? `${currentPosition.coords.accuracy?.toFixed(0)}m accuracy`
+    (currentLiveLocation
+      ? currentLiveLocation.locationText
+      : !settings.shareLiveLocation
+        ? "Location sharing off"
+        : currentPosition
+          ? getLocationDisplayText(currentPosition)
+          : locationError
+            ? "Location unavailable"
+            : "Detecting location");
+  const locationStatus = currentLiveLocation
+    ? currentLiveLocation.coordinateText
+    : !settings.shareLiveLocation
+      ? "Off"
       : locationError
-        ? "Location unavailable"
-        : "Detecting location");
-  const locationStatus = currentPosition ? `${currentPosition.coords.accuracy?.toFixed(0)}m` : locationError ? 'Error' : 'Loading...';
+        ? 'Error'
+        : 'Loading...';
 
   const stats = [
     { label: "Trusted contacts", value: String(contacts.length) },
-    { label: "App contacts", value: String(registeredContacts.length) },
+    { label: "Delivery channels", value: String(configuredChannelCount) },
     { label: "Location ready", value: locationStatus },
     { label: "Readiness", value: `${readinessScore}%` },
   ];
@@ -314,7 +351,7 @@ const { currentUser, apiCall } = useApp();
           relation: "",
           phone: "",
           priority: "Backup",
-          notifyBy: ["Push", "SMS"],
+          notifyBy: ["SMS", "Call"],
         });
         setStatusMessage(`${contactForm.name} saved to your SOS safety circle.`);
         loadData(); // Refresh list
@@ -327,7 +364,7 @@ const { currentUser, apiCall } = useApp();
   const handleRemoveContact = async (contactId) => {
     try {
       await apiCall(`/sos/contacts/${contactId}`, 'DELETE');
-      setContacts(prev => prev.filter(c => c._id !== contactId));
+      setContacts((prev) => prev.filter((contact) => getSosItemId(contact) !== contactId));
       setStatusMessage("Trusted contact removed.");
     } catch (error) {
       setStatusMessage('Failed to remove contact.');
@@ -352,6 +389,30 @@ const { currentUser, apiCall } = useApp();
     }
   }, [apiCall]);
 
+  const captureLiveLocation = useCallback(async () => {
+    if (!settings.shareLiveLocation || !navigator.geolocation) {
+      return null;
+    }
+
+    const fallbackLocation = buildLiveLocationPayload(currentPosition);
+
+    try {
+      const latestPosition = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, LOCATION_OPTIONS);
+      });
+
+      setCurrentPosition(latestPosition);
+      setLocationError(null);
+      return buildLiveLocationPayload(latestPosition);
+    } catch (error) {
+      console.warn('Unable to capture live SOS location:', error);
+      if (!fallbackLocation) {
+        setLocationError(error.message || 'Unable to capture location');
+      }
+      return fallbackLocation;
+    }
+  }, [currentPosition, settings.shareLiveLocation]);
+
   const handleTriggerSOS = useCallback(async () => {
     if (!contacts.length) {
       setStatusMessage('Add at least one trusted contact first.');
@@ -360,17 +421,19 @@ const { currentUser, apiCall } = useApp();
 
     const startedAt = new Date().toISOString();
     const reason = alertState.reason;
-    const channels = settings.silentMode ? ["Push", "SMS"] : DELIVERY_CHANNELS;
-    const geoLocation = currentPosition ? {
-      longitude: currentPosition.coords.longitude,
-      latitude: currentPosition.coords.latitude,
-      location: `${currentPosition.coords.accuracy?.toFixed(0)}m accuracy`
-    } : null;
+    const channels = settings.silentMode ? ["SMS", "WhatsApp"] : DELIVERY_CHANNELS;
+    const geoLocation = await captureLiveLocation();
 
     const log = [
       buildAlertLog(`SOS triggered for ${reason.toLowerCase()}.`),
-      buildAlertLog(geoLocation ? `Live location: ${geoLocation.location}` : 'Location unavailable'),
-      buildAlertLog(`Queued for ${contacts.length} trusted + app contacts.`),
+      buildAlertLog(
+        geoLocation
+          ? `Live location shared: ${geoLocation.locationText}`
+          : settings.shareLiveLocation
+            ? 'Live location unavailable'
+            : 'Location sharing disabled'
+      ),
+      buildAlertLog(`Queued for ${contacts.length} trusted contact${contacts.length === 1 ? "" : "s"}.`),
     ];
 
     setContacts(prev => prev.map(c => ({ ...c, acknowledged: false })));
@@ -383,7 +446,7 @@ const { currentUser, apiCall } = useApp();
       channels,
       log,
       escalationLevel: 0,
-      currentLocation: geoLocation?.location || activeLocation,
+      currentLocation: geoLocation?.locationText || activeLocation,
     }));
 
     try {
@@ -391,20 +454,31 @@ const { currentUser, apiCall } = useApp();
         reason,
         longitude: geoLocation?.longitude,
         latitude: geoLocation?.latitude,
-        location: geoLocation?.location || 'Location unavailable',
+        accuracy: geoLocation?.accuracy,
+        mapsUrl: geoLocation?.mapsUrl,
+        location: geoLocation?.locationText || 'Location unavailable',
         channels,
         timestamp: startedAt,
       });
 
       const recipients = response?.data?.recipients || [];
+      const recipientLabel = `${recipients.length} trusted contact${recipients.length === 1 ? "" : "s"}`;
+      const videoRecipientCount =
+        Number(response?.data?.videoRecipientCount || 0) ||
+        recipients.filter((recipient) => recipient.videoCallStatus === "ringing").length;
       setAlertState(prev => ({
         ...prev,
         log: [
-          buildAlertLog(`Dispatched to ${recipients.length} contacts (${response.data.onlineRecipientCount || 0} online).`),
+          ...(videoRecipientCount > 0
+            ? [buildAlertLog(`Emergency video call started for ${videoRecipientCount} trusted contact${videoRecipientCount === 1 ? "" : "s"}.`)]
+            : []),
+          buildAlertLog(`Dispatched to ${recipientLabel}.`),
           ...prev.log,
         ].slice(0, 8),
       }));
-      setStatusMessage(`SOS live. Incident ID: ${response.data.incidentId || 'N/A'}`);
+      setStatusMessage(
+        `SOS live. ${recipientLabel} notified.${videoRecipientCount > 0 ? ` Emergency video call sent to ${videoRecipientCount} contact${videoRecipientCount === 1 ? "" : "s"}.` : ""} Incident ID: ${response.data.incidentId || 'N/A'}`
+      );
     } catch (error) {
       const msg = error.response?.data?.message || error.message || "Dispatch error";
       setAlertState(prev => ({
@@ -413,7 +487,15 @@ const { currentUser, apiCall } = useApp();
       }));
       setStatusMessage(`Local alert active. Backend: ${msg}`);
     }
-  }, [contacts.length, alertState.reason, apiCall, settings.silentMode, currentPosition, activeLocation]);
+  }, [
+    activeLocation,
+    alertState.reason,
+    apiCall,
+    captureLiveLocation,
+    contacts.length,
+    settings.shareLiveLocation,
+    settings.silentMode,
+  ]);
 
   useEffect(() => {
     const handleExternalSOSRequest = () => {
@@ -434,14 +516,14 @@ const { currentUser, apiCall } = useApp();
   }, [alertState.active, handleTriggerSOS]);
 
   const handleAcknowledge = (contactId) => {
-    const contact = contacts.find((item) => item.id === contactId);
+    const contact = contacts.find((item) => getSosItemId(item) === contactId);
     if (!contact || !alertState.active) {
       return;
     }
 
     setContacts((current) =>
       current.map((item) =>
-        item.id === contactId ? { ...item, acknowledged: true } : item
+        getSosItemId(item) === contactId ? { ...item, acknowledged: true } : item
       )
     );
     setAlertState((current) => ({
@@ -648,7 +730,7 @@ const { currentUser, apiCall } = useApp();
               <div className="sos-summary-grid">
                 <div>
                   <span>Location</span>
-<strong>{currentPosition ? `${currentPosition.coords.accuracy?.toFixed(0)}m` : locationError ? 'N/A' : 'Loading...'}</strong>
+                  <strong>{activeLocation}</strong>
                 </div>
                 <div>
                   <span>Escalation</span>
@@ -675,9 +757,7 @@ const { currentUser, apiCall } = useApp();
             </div>
 
             <div className="sos-status-banner">
-              {registeredContacts.length > 0
-                ? `${registeredContacts.length} registered app contact${registeredContacts.length === 1 ? "" : "s"} in LinkUp can receive automatic in-app SOS call alerts.`
-                : "No registered LinkUp contacts found yet. Add contacts there to ring them automatically during SOS."}
+              SOS trusted contacts are managed here independently. If a trusted contact's phone matches an app account, SOS can also start an emergency video call for them.
             </div>
 
             <form className="sos-contact-form" onSubmit={handleAddContact}>
@@ -746,14 +826,14 @@ const { currentUser, apiCall } = useApp();
 
             <div className="sos-contact-list">
               {contacts.map((contact) => (
-                <article className="sos-contact-card" key={contact.id}>
+                <article className="sos-contact-card" key={getSosItemId(contact) || contact.phone}>
                   <div>
                     <h3>{contact.name}</h3>
                     <p>
                       {contact.relation} - {contact.phone}
                     </p>
                     <div className="sos-channel-row">
-                      {contact.notifyBy.map((channel) => (
+                      {(contact.notifyBy || []).map((channel) => (
                         <span key={channel}>{channel}</span>
                       ))}
                     </div>
@@ -763,7 +843,7 @@ const { currentUser, apiCall } = useApp();
                     <button
                       type="button"
                       className="sos-text-action"
-                      onClick={() => handleAcknowledge(contact.id)}
+                      onClick={() => handleAcknowledge(getSosItemId(contact))}
                       disabled={!alertState.active}
                     >
                       {contact.acknowledged ? "Acknowledged" : "Mark responded"}
@@ -810,14 +890,14 @@ const { currentUser, apiCall } = useApp();
             <div className="sos-history-list">
               {history.length ? (
                 history.map((item) => (
-                  <article className="sos-history-card" key={item.id}>
+                  <article className="sos-history-card" key={getSosItemId(item) || item.createdAt}>
                     <div>
                       <h3>{item.reason}</h3>
-                      <p>{item.mode}</p>
+                      <p>{item.mode || item.status || "Active"}</p>
                     </div>
-                    <p>{item.location}</p>
-                    <p>{formatDateTime(item.startedAt)}</p>
-                    <span className="sos-history-outcome">{item.outcome}</span>
+                    <p>{formatIncidentLocation(item.location)}</p>
+                    <p>{formatDateTime(item.startedAt || item.createdAt)}</p>
+                    <span className="sos-history-outcome">{getIncidentOutcome(item)}</span>
                   </article>
                 ))
               ) : (

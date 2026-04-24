@@ -27,8 +27,8 @@ const sosContactSchema = new mongoose.Schema({
   },
   notifyBy: [{
     type: String,
-    enum: ['Push', 'SMS', 'Call'],
-    default: ['Push']
+    enum: ['SMS', 'WhatsApp', 'Call'],
+    default: ['SMS']
   }],
   isActive: {
     type: Boolean,
