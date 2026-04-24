@@ -89,6 +89,31 @@ const buildLiveLocationPayload = (position) => {
   };
 };
 
+const REVERSE_GEOCODE_URL = "https://api.bigdatacloud.net/data/reverse-geocode-client";
+
+const fetchReverseGeocode = async (latitude, longitude) => {
+  // Ensure coordinates are valid numbers before fetching
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  try {
+    const url = `${REVERSE_GEOCODE_URL}?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      // Throw an error to be caught by the calling function
+      throw new Error(`Geocoding API request failed with status ${response.status}`);
+    }
+    const data = await response.json();
+    // Return the most specific location name available
+    return data.locality || data.city || data.principalSubdivision || null;
+  } catch (error) {
+    console.warn("Reverse geocoding failed:", error);
+    // Return null on failure so the UI can fall back gracefully
+    return null;
+  }
+};
+
 const formatIncidentLocation = (location) => {
   if (typeof location === "string" && location.trim()) {
     return location;
@@ -156,6 +181,7 @@ const SOSAlert = () => {
   const [statusMessage, setStatusMessage] = useState("");
   const [locationError, setLocationError] = useState(null);
   const [currentPosition, setCurrentPosition] = useState(null);
+  const [locationName, setLocationName] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -202,10 +228,6 @@ const SOSAlert = () => {
     };
   }, [apiCall]);
 
-  // Removed localStorage load - now using backend persistence
-
-  // localStorage persistence removed - using backend
-
   // Geolocation watch
   useEffect(() => {
     if (!settings.shareLiveLocation) {
@@ -217,7 +239,7 @@ const SOSAlert = () => {
     let watchId = null;
     let positionTimeout;
 
-    const handleSuccess = (position) => {
+    const handleSuccess = async (position) => {
       setCurrentPosition(position);
       setLocationError(null);
       const liveLocation = buildLiveLocationPayload(position);
@@ -226,6 +248,15 @@ const SOSAlert = () => {
           ? `Live location ready: ${liveLocation.locationText}`
           : `Live location ready: ${position.coords.accuracy?.toFixed(0)}m accuracy`
       );
+
+      // Fetch the human-readable location name
+      const locality = await fetchReverseGeocode(
+        position.coords.latitude,
+        position.coords.longitude
+      );
+      if (locality) {
+        setLocationName(locality);
+      }
     };
 
     const handleError = (error) => {
@@ -300,7 +331,9 @@ const SOSAlert = () => {
           : locationError
             ? "Location unavailable"
             : "Detecting location");
-  const locationStatus = currentLiveLocation
+  const locationStatus = locationName
+    ? locationName
+    : currentLiveLocation
     ? currentLiveLocation.coordinateText
     : !settings.shareLiveLocation
       ? "Off"
@@ -644,169 +677,145 @@ const SOSAlert = () => {
         <div className="sos-main-column">
           <article className="sos-panel">
             <div className="sos-panel-heading">
-              <p>Emergency controls</p>
-              <h2>Trigger and manage an alert</h2>
+              <h2>Emergency Controls</h2>
+              <p>
+                {alertState.active
+                  ? "An alert is in progress. Use the controls below to manage the incident."
+                  : "Select a reason and trigger an alert. Your trusted contacts will be notified."}
+              </p>
             </div>
 
-            <div className="sos-controls-grid">
-              <label className="sos-field">
-                <span>Alert reason</span>
-                <select
-                  value={alertState.reason}
-                  onChange={(event) =>
-                    setAlertState((current) => ({ ...current, reason: event.target.value }))
-                  }
-                >
-                  {QUICK_REASONS.map((reason) => (
-                    <option key={reason} value={reason}>
-                      {reason}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="sos-toggle-stack">
+            {!alertState.active ? (
+              <div className="sos-trigger-form">
+                <div className="sos-form-group">
+                  <label htmlFor="reason">Reason for alert</label>
+                  <select
+                    id="reason"
+                    name="reason"
+                    value={alertState.reason}
+                    onChange={(e) => setAlertState(prev => ({ ...prev, reason: e.target.value }))}
+                  >
+                    {QUICK_REASONS.map((reason) => (
+                      <option key={reason} value={reason}>
+                        {reason}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button
-                  type="button"
-                  className={`sos-toggle ${settings.silentMode ? "active" : ""}`}
-                  onClick={() => handleToggleSetting("silentMode")}
+                  className="sos-trigger-button"
+                  onClick={handleTriggerSOS}
+                  disabled={!contacts.length}
                 >
-                  Silent mode {settings.silentMode ? "On" : "Off"}
-                </button>
-                <button
-                  type="button"
-                  className={`sos-toggle ${settings.shareLiveLocation ? "active" : ""}`}
-                  onClick={() => handleToggleSetting("shareLiveLocation")}
-                >
-                  Live location {settings.shareLiveLocation ? "On" : "Off"}
-                </button>
-                <button
-                  type="button"
-                  className={`sos-toggle ${settings.autoEscalation ? "active" : ""}`}
-                  onClick={() => handleToggleSetting("autoEscalation")}
-                >
-                  Auto-escalation {settings.autoEscalation ? "On" : "Off"}
+                  Trigger SOS Alert
                 </button>
               </div>
-            </div>
-
-            <div className="sos-action-row">
-              <button
-                type="button"
-                className="sos-primary-action"
-                onClick={handleTriggerSOS}
-                disabled={!contacts.length || alertState.active}
-              >
-                {alertState.active ? "SOS is active" : "Send SOS alert"}
-              </button>
-              <button
-                type="button"
-                className="sos-secondary-action"
-                onClick={handleEscalate}
-                disabled={!alertState.active}
-              >
-                Escalate now
-              </button>
-              <button
-                type="button"
-                className="sos-secondary-action"
-                onClick={handleResolve}
-                disabled={!alertState.active}
-              >
-                Mark safe
-              </button>
-            </div>
-
-            <div className="sos-incident-card">
-              <div className="sos-incident-topline">
-                <div>
-                  <h3>Current incident</h3>
-                  <p>{alertState.active ? alertState.reason : "No active SOS alert"}</p>
-                </div>
-                <span className={`sos-alert-status ${alertState.active ? "live" : "idle"}`}>
-                  {alertState.active ? alertState.mode : "Standby"}
-                </span>
+            ) : (
+              <div className="sos-active-controls">
+                <button className="sos-control-button" onClick={handleEscalate}>
+                  Escalate Alert
+                </button>
+                <button className="sos-control-button resolve" onClick={handleResolve}>
+                  Mark as Safe / Resolve
+                </button>
               </div>
-              <div className="sos-summary-grid">
-                <div>
-                  <span>Location</span>
-                  <strong>{activeLocation}</strong>
-                </div>
-                <div>
-                  <span>Escalation</span>
-                  <strong>Level {alertState.escalationLevel + 1}</strong>
-                </div>
-                <div>
-                  <span>Response</span>
-                  <strong>{alertState.acknowledgedBy || "Awaiting acknowledgement"}</strong>
-                </div>
-              </div>
-
-              <div className="sos-channel-row">
-                {alertState.channels.map((channel) => (
-                  <span key={channel}>{channel}</span>
-                ))}
-              </div>
-            </div>
+            )}
           </article>
 
           <article className="sos-panel">
             <div className="sos-panel-heading">
-              <p>Trusted contacts</p>
-              <h2>Manage who gets notified</h2>
+              <h2>Alert Log</h2>
+              <p>
+                {alertState.active
+                  ? "Live activity feed from your active SOS alert."
+                  : "Your alert history will appear here once an alert is triggered."}
+              </p>
             </div>
+            <ul className="sos-log-list">
+              {alertState.log.map((item) => (
+                <li key={item.id}>
+                  <span className="sos-log-timestamp">{formatTimestamp(item.timestamp)}</span>
+                  <p>{item.entry}</p>
+                </li>
+              ))}
+            </ul>
+          </article>
+        </div>
 
-            <div className="sos-status-banner">
-              SOS trusted contacts are managed here independently. If a trusted contact's phone matches an app account, SOS can also start an emergency video call for them.
+        <div className="sos-sidebar-column">
+          <article className="sos-panel">
+            <div className="sos-panel-heading">
+              <h2>Trusted Contacts</h2>
+              <p>Manage your safety circle. Add at least one primary contact.</p>
             </div>
-
+            <ul className="sos-contact-list">
+              {contacts.map((contact) => (
+                <li key={getSosItemId(contact)}>
+                  <div className="sos-contact-info">
+                    <strong>{contact.name}</strong>
+                    <span>
+                      {contact.relation} - {contact.phone}
+                    </span>
+                  </div>
+                  <div className="sos-contact-actions">
+                    {alertState.active && !contact.acknowledged && (
+                      <button
+                        className="sos-acknowledge-button"
+                        onClick={() => handleAcknowledge(getSosItemId(contact))}
+                      >
+                        Ack
+                      </button>
+                    )}
+                    <button
+                      className="sos-remove-button"
+                      onClick={() => handleRemoveContact(getSosItemId(contact))}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
             <form className="sos-contact-form" onSubmit={handleAddContact}>
-              <div className="sos-form-grid">
-                <label className="sos-field">
-                  <span>Name</span>
-                  <input
-                    name="name"
-                    type="text"
-                    value={contactForm.name}
-                    onChange={handleFormChange}
-                    placeholder="Contact name"
-                  />
-                </label>
-                <label className="sos-field">
-                  <span>Relation</span>
-                  <input
-                    name="relation"
-                    type="text"
-                    value={contactForm.relation}
-                    onChange={handleFormChange}
-                    placeholder="Sister, friend, parent"
-                  />
-                </label>
-                <label className="sos-field">
-                  <span>Phone</span>
-                  <input
-                    name="phone"
-                    type="text"
-                    value={contactForm.phone}
-                    onChange={handleFormChange}
-                    placeholder="+91 98765 00000"
-                  />
-                </label>
-                <label className="sos-field">
-                  <span>Priority</span>
-                  <select name="priority" value={contactForm.priority} onChange={handleFormChange}>
-                    {["Primary", "Backup", "Escalation"].map((priority) => (
-                      <option key={priority} value={priority}>
-                        {priority}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div className="sos-form-group">
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Contact Name"
+                  value={contactForm.name}
+                  onChange={handleFormChange}
+                  required
+                />
+                <input
+                  type="text"
+                  name="phone"
+                  placeholder="Phone Number"
+                  value={contactForm.phone}
+                  onChange={handleFormChange}
+                  required
+                />
               </div>
-
+              <div className="sos-form-group">
+                <input
+                  type="text"
+                  name="relation"
+                  placeholder="Relation (e.g., Friend)"
+                  value={contactForm.relation}
+                  onChange={handleFormChange}
+                />
+                <select
+                  name="priority"
+                  value={contactForm.priority}
+                  onChange={handleFormChange}
+                >
+                  <option>Primary</option>
+                  <option>Backup</option>
+                </select>
+              </div>
               <div className="sos-checkbox-group">
+                <span>Notify by:</span>
                 {DELIVERY_CHANNELS.map((channel) => (
-                  <label key={channel} className="sos-checkbox">
+                  <label key={channel}>
                     <input
                       type="checkbox"
                       name="notifyBy"
@@ -818,114 +827,67 @@ const SOSAlert = () => {
                   </label>
                 ))}
               </div>
-
-              <button type="submit" className="sos-secondary-action compact">
-                Add trusted contact
-              </button>
+              <button type="submit">Add Contact</button>
             </form>
+          </article>
 
-            <div className="sos-contact-list">
-              {contacts.map((contact) => (
-                <article className="sos-contact-card" key={getSosItemId(contact) || contact.phone}>
-                  <div>
-                    <h3>{contact.name}</h3>
-                    <p>
-                      {contact.relation} - {contact.phone}
-                    </p>
-                    <div className="sos-channel-row">
-                      {(contact.notifyBy || []).map((channel) => (
-                        <span key={channel}>{channel}</span>
-                      ))}
-                    </div>
+          <article className="sos-panel">
+            <div className="sos-panel-heading">
+              <h2>Alert History</h2>
+              <p>Review your past 10 SOS incidents.</p>
+            </div>
+            <ul className="sos-history-list">
+              {history.map((item) => (
+                <li key={getSosItemId(item)}>
+                  <div className="sos-history-info">
+                    <strong>{item.reason}</strong>
+                    <span>{formatDateTime(item.timestamp)}</span>
                   </div>
-                  <div className="sos-contact-actions">
-                    <span className="sos-priority-badge">{contact.priority}</span>
-                    <button
-                      type="button"
-                      className="sos-text-action"
-                      onClick={() => handleAcknowledge(getSosItemId(contact))}
-                      disabled={!alertState.active}
-                    >
-                      {contact.acknowledged ? "Acknowledged" : "Mark responded"}
-                    </button>
-                    <button
-                      type="button"
-                      className="sos-text-action danger"
-                      onClick={() => handleRemoveContact(contact.id)}
-                    >
-                      Remove
-                    </button>
+                  <div className="sos-history-outcome">
+                    <span>{getIncidentOutcome(item)}</span>
+                    <small>{formatIncidentLocation(item.location)}</small>
                   </div>
-                </article>
+                </li>
               ))}
+            </ul>
+          </article>
+
+          <article className="sos-panel">
+            <div className="sos-panel-heading">
+              <h2>Preferences</h2>
+              <p>Customize your alert settings.</p>
+            </div>
+            <div className="sos-settings-list">
+              <div className="sos-setting-item">
+                <label htmlFor="shareLiveLocation">Share live location</label>
+                <input
+                  type="checkbox"
+                  id="shareLiveLocation"
+                  checked={settings.shareLiveLocation}
+                  onChange={() => handleToggleSetting("shareLiveLocation")}
+                />
+              </div>
+              <div className="sos-setting-item">
+                <label htmlFor="autoEscalation">Auto-escalate after 2 mins</label>
+                <input
+                  type="checkbox"
+                  id="autoEscalation"
+                  checked={settings.autoEscalation}
+                  onChange={() => handleToggleSetting("autoEscalation")}
+                />
+              </div>
+              <div className="sos-setting-item">
+                <label htmlFor="silentMode">Silent mode (no calls)</label>
+                <input
+                  type="checkbox"
+                  id="silentMode"
+                  checked={settings.silentMode}
+                  onChange={() => handleToggleSetting("silentMode")}
+                />
+              </div>
             </div>
           </article>
         </div>
-
-        <aside className="sos-side-column">
-          <article className="sos-panel">
-            <div className="sos-panel-heading">
-              <p>Alert log</p>
-              <h2>Live activity feed</h2>
-            </div>
-            <div className="sos-log-list">
-              {alertState.log.length ? (
-                alertState.log.map((item) => (
-                  <div className="sos-log-item" key={item.id}>
-                    <strong>{formatTimestamp(item.timestamp)}</strong>
-                    <p>{item.entry}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="sos-empty-state">No active alert yet. Your next SOS event will appear here.</div>
-              )}
-            </div>
-          </article>
-
-          <article className="sos-panel">
-            <div className="sos-panel-heading">
-              <p>Recent incidents</p>
-              <h2>Alert history</h2>
-            </div>
-            <div className="sos-history-list">
-              {history.length ? (
-                history.map((item) => (
-                  <article className="sos-history-card" key={getSosItemId(item) || item.createdAt}>
-                    <div>
-                      <h3>{item.reason}</h3>
-                      <p>{item.mode || item.status || "Active"}</p>
-                    </div>
-                    <p>{formatIncidentLocation(item.location)}</p>
-                    <p>{formatDateTime(item.startedAt || item.createdAt)}</p>
-                    <span className="sos-history-outcome">{getIncidentOutcome(item)}</span>
-                  </article>
-                ))
-              ) : (
-                <div className="sos-empty-state">No previous incidents. Test the module to verify your safety flow.</div>
-              )}
-            </div>
-          </article>
-
-          <article className="sos-panel">
-            <div className="sos-panel-heading">
-              <p>Safety checklist</p>
-              <h2>Readiness signals</h2>
-            </div>
-            <ul className="sos-list">
-              <li>{currentUser?.name || "User"} profile is ready for emergency notification.</li>
-              <li>{contacts.length} trusted contacts are configured for response routing.</li>
-              <li>{settings.shareLiveLocation ? "Live location is enabled." : "Live location is currently disabled."}</li>
-              <li>{settings.autoEscalation ? "Auto-escalation is armed." : "Manual escalation only."}</li>
-            </ul>
-            <div className="sos-callout">
-              <strong>Recommendation</strong>
-              <p>
-                Keep at least one primary contact and one backup contact so the module can escalate
-                if the first responder is unavailable.
-              </p>
-            </div>
-          </article>
-        </aside>
       </section>
     </div>
   );
