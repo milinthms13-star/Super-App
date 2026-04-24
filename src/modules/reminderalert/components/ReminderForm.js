@@ -121,9 +121,9 @@ const ReminderForm = React.memo(({
     if (e.key === 'Tab') {
       trapFocus(e, formRef.current);
     }
-  }, []);
+  }, [handleSubmit, onCancel]);
 
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = useCallback(async (e) => {
     if (e && e.preventDefault) {
       e.preventDefault();
     }
@@ -148,11 +148,7 @@ const ReminderForm = React.memo(({
     }
 
     setFormErrors({});
-    announceToScreenReader(
-      editingTaskId ? 'Reminder updated successfully' : 'Reminder created successfully',
-      'polite'
-    );
-    onSubmit();
+    await onSubmit();
   }, [formData, voiceCallData, editingTaskId, onSubmit]);
 
   const resolveVoiceNoteUrl = (voiceNote) => {

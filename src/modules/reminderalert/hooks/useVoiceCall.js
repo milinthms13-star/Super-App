@@ -64,7 +64,7 @@ export const useVoiceCall = () => {
     } catch (err) {
       const formattedError = formatErrorForUser(err);
       setError(formattedError);
-      throw err;
+      throw formattedError;
     } finally {
       setLoading(false);
     }
@@ -83,7 +83,7 @@ export const useVoiceCall = () => {
     } catch (err) {
       const formattedError = formatErrorForUser(err);
       setError(formattedError);
-      throw err;
+      throw formattedError;
     } finally {
       setLoading(false);
     }
@@ -101,7 +101,7 @@ export const useVoiceCall = () => {
     } catch (err) {
       const formattedError = formatErrorForUser(err);
       setError(formattedError);
-      throw err;
+      throw formattedError;
     } finally {
       setLoading(false);
     }

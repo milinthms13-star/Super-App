@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { formatErrorForUser } from '../../../services/errors';
 import {
   fetchReminders,
@@ -11,8 +11,7 @@ import {
 const initialState = {
   reminders: [],
   loading: true,
-  error: null,
-  retryCount: 0
+  error: null
 };
 
 /**
@@ -23,7 +22,6 @@ const initialState = {
  * @param {Array} state.reminders - Array of reminders
  * @param {boolean} state.loading - Loading indicator
  * @param {Object} state.error - Error object or null
- * @param {number} state.retryCount - Retry counter
  * 
  * @param {Object} action - Action object
  * @param {string} action.type - Action type
@@ -51,16 +49,16 @@ const reminderReducer = (state, action) => {
   switch (action.type) {
     case 'SET_REMINDERS':
       return { ...state, reminders: action.payload, loading: false, error: null };
-    
+
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
-    
+
     case 'SET_ERROR':
       return { ...state, error: action.payload, loading: false };
-    
+
     case 'ADD_REMINDER':
       return { ...state, reminders: [action.payload, ...state.reminders] };
-    
+
     case 'UPDATE_REMINDER':
       return {
         ...state,
@@ -68,19 +66,13 @@ const reminderReducer = (state, action) => {
           r._id === action.payload._id ? action.payload : r
         )
       };
-    
+
     case 'DELETE_REMINDER':
       return {
         ...state,
         reminders: state.reminders.filter(r => r._id !== action.payload)
       };
-    
-    case 'INCREMENT_RETRY':
-      return { ...state, retryCount: state.retryCount + 1 };
-    
-    case 'RESET_RETRY':
-      return { ...state, retryCount: 0 };
-    
+
     default:
       return state;
   }
@@ -142,28 +134,41 @@ const reminderReducer = (state, action) => {
 export const useReminders = () => {
   const [state, dispatch] = useReducer(reminderReducer, initialState);
   const [filter, setFilter] = useState('All');
-  const [retryTimer, setRetryTimer] = useState(null);
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef(null);
+
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
 
   // Load reminders
   const load = useCallback(async (options = {}) => {
+    clearRetryTimer();
     dispatch({ type: 'SET_LOADING', payload: true });
+
     try {
       const response = await fetchReminders({ category: filter, ...options });
       dispatch({ type: 'SET_REMINDERS', payload: response.data });
-      dispatch({ type: 'RESET_RETRY' });
+      retryCountRef.current = 0;
     } catch (error) {
       const formattedError = formatErrorForUser(error);
       dispatch({ type: 'SET_ERROR', payload: formattedError });
-      
+
       // Auto-retry for retryable errors
-      if (formattedError.canRetry && state.retryCount < 3) {
-        dispatch({ type: 'INCREMENT_RETRY' });
-        const delay = Math.pow(2, state.retryCount) * 1000; // Exponential backoff
-        const timer = setTimeout(() => load(options), delay);
-        setRetryTimer(timer);
+      if (formattedError.canRetry && retryCountRef.current < 3) {
+        const delay = Math.pow(2, retryCountRef.current) * 1000; // Exponential backoff
+        retryCountRef.current += 1;
+
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          load(options);
+        }, delay);
       }
     }
-  }, [filter, state.retryCount]);
+  }, [filter, clearRetryTimer]);
 
   // Create reminder
   const create = useCallback(async (reminderData) => {
@@ -222,9 +227,10 @@ export const useReminders = () => {
 
   // Retry loading
   const retry = useCallback(() => {
-    dispatch({ type: 'RESET_RETRY' });
+    clearRetryTimer();
+    retryCountRef.current = 0;
     load();
-  }, [load]);
+  }, [load, clearRetryTimer]);
 
   // Load on mount and when filter changes
   useEffect(() => {
@@ -234,9 +240,9 @@ export const useReminders = () => {
   // Cleanup timer on unmount
   useEffect(() => {
     return () => {
-      if (retryTimer) clearTimeout(retryTimer);
+      clearRetryTimer();
     };
-  }, [retryTimer]);
+  }, [clearRetryTimer]);
 
   return {
     reminders: state.reminders,

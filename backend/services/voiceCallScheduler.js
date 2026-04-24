@@ -48,7 +48,6 @@ class VoiceCallScheduler {
 
     logger.info(`Voice call scheduler started (interval: ${this.checkIntervalMs}ms, grace window: ${this.graceWindowMs}ms)`);
   }
-  }
 
   /**
    * Stop the scheduler service

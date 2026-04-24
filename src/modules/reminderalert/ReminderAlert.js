@@ -16,6 +16,8 @@ import ReminderStats from './components/ReminderStats';
 import CountdownTimer from './components/CountdownTimer';
 import ErrorAlert from './components/ErrorAlert';
 import TrustedContacts from './TrustedContacts';
+import { announceToScreenReader } from './utils/a11y';
+import { validateReminderForm } from './validation';
 import { toDateInputValue } from './reminderUtils';
 
 const INITIAL_FORM = {
@@ -195,14 +197,16 @@ const ReminderAlert = () => {
     const { name, value, checked, type } = event.target;
 
     if (type === 'checkbox' && name === 'reminders') {
-      const nextReminderChannels = checked
-        ? [...formData.reminders, value]
-        : formData.reminders.filter(item => item !== value);
+      setFormData(current => {
+        const nextReminderChannels = checked
+          ? [...current.reminders, value]
+          : current.reminders.filter(item => item !== value);
 
-      setFormData(current => ({
-        ...current,
-        reminders: nextReminderChannels,
-      }));
+        return {
+          ...current,
+          reminders: nextReminderChannels,
+        };
+      });
 
       if (!checked && value === 'Call') {
         setVoiceCallData(current => ({
@@ -338,6 +342,26 @@ const ReminderAlert = () => {
     }
     setSubmitError(null);
 
+    const validationData = {
+      ...formData,
+      recipientPhoneNumber: formData.reminders.includes('Call')
+        ? voiceCallData.recipientPhoneNumber
+        : '',
+      voiceMessage: formData.reminders.includes('Call') ? voiceCallData.voiceMessage : '',
+      messageType: formData.reminders.includes('Call') ? voiceCallData.messageType : 'text',
+    };
+
+    const { isValid, errors } = validateReminderForm(validationData);
+    if (!isValid) {
+      const validationMessage = Object.values(errors).join('. ');
+      setSubmitError(validationMessage);
+      announceToScreenReader(
+        `Reminder form validation failed: ${Object.values(errors).join(', ')}`,
+        'assertive'
+      );
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -378,6 +402,10 @@ const ReminderAlert = () => {
         await loadReminders();
       }
 
+      announceToScreenReader(
+        editingTaskId ? 'Reminder updated successfully' : 'Reminder created successfully',
+        'polite'
+      );
       closeEditor();
     } catch (err) {
       console.error('Error saving reminder:', err);
