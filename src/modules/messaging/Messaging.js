@@ -315,7 +315,10 @@ const Messaging = () => {
                     // Double-check the chat doesn't exist
                     const stillMissing = !latestChats.some((chat) => getEntityId(chat._id) === chatIdStr);
                     if (stillMissing) {
-                      return [response.chat, ...latestChats];
+                      const updatedChats = [response.chat, ...latestChats];
+                      // Now update the chat preview after adding the chat
+                      setTimeout(() => updateChatPreview(message), 0);
+                      return updatedChats;
                     }
                     return latestChats;
                   });
@@ -325,12 +328,13 @@ const Messaging = () => {
                 console.error('Error fetching chat for received message:', error);
               });
           }, 0);
+        } else {
+          // Chat exists, update it immediately
+          updateChatPreview(message);
         }
 
         return prevChats;
       });
-
-      updateChatPreview(message);
     });
 
     newSocket.on('message:updated', (updatedMessage) => {
