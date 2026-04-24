@@ -2,17 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import "../../styles/ReminderAlert.css";
 import "../../styles/TrustedContacts.css";
 import {
-  fetchReminders,
-  createReminder,
-  updateReminder,
-  deleteReminder,
-  toggleReminderCompletion,
   createVoiceCallReminder,
   getVoiceCallStatus,
   triggerVoiceCall,
   getAcceptedTrustedContacts,
   shareReminderWithContacts,
 } from "../../services/remindersService";
+import { useReminders } from "./hooks/useReminders";
+import { validateReminderForm } from "./validation";
+import ErrorAlert from "./components/ErrorAlert";
 import { formatReminderDueDate, toDateInputValue } from "./reminderUtils";
 import TrustedContacts from "./TrustedContacts";
 import VoiceNoteRecorder from "../../components/VoiceNoteRecorder";
@@ -146,10 +144,21 @@ const getReminderTimestamp = (task = {}) => {
 };
 
 const ReminderAlert = () => {
-  const [activeFilter, setActiveFilter] = useState("All");
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Use the new custom hook for reminder management
+  const {
+    reminders: tasks,
+    loading,
+    error,
+    filter: activeFilter,
+    setFilter: setActiveFilter,
+    create: createReminder,
+    update: updateReminder,
+    remove: deleteReminder,
+    toggleCompletion: toggleReminderCompletion,
+    clearError,
+    retry
+  } = useReminders();
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState("");
   const [formData, setFormData] = useState(INITIAL_FORM);
@@ -177,25 +186,6 @@ const ReminderAlert = () => {
         : null,
     [formData.dueDate, formData.dueTime]
   );
-
-  useEffect(() => {
-    const loadReminders = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await fetchReminders({ limit: 100 });
-        setTasks(Array.isArray(response.data) ? response.data : []);
-      } catch (err) {
-        console.error("Failed to load reminders:", err);
-        setError(err.message || "Failed to load reminders");
-        setTasks([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadReminders();
-  }, []);
 
   useEffect(() => {
     const loadTrustedContacts = async () => {
@@ -409,26 +399,21 @@ const ReminderAlert = () => {
     event.preventDefault();
     setSubmitError(null);
 
-    if (!formData.title.trim() || !formData.dueDate) {
-      setSubmitError("Title and due date are required.");
+    // Use comprehensive validation
+    const validationData = {
+      ...formData,
+      recipientPhoneNumber: voiceCallData.recipientPhoneNumber,
+      voiceMessage: voiceCallData.voiceMessage,
+      messageType: voiceCallData.messageType
+    };
+
+    const { isValid, errors } = validateReminderForm(validationData);
+    
+    if (!isValid) {
+      // Display first error message to user
+      const firstError = Object.values(errors)[0];
+      setSubmitError(firstError);
       return;
-    }
-
-    if (formData.reminders.includes("Call")) {
-      if (!voiceCallData.recipientPhoneNumber.trim()) {
-        setSubmitError("Add a phone number for voice call reminders.");
-        return;
-      }
-
-      if (voiceCallData.messageType === "text" && !voiceCallData.voiceMessage.trim()) {
-        setSubmitError("Add the spoken message for the call reminder.");
-        return;
-      }
-
-      if (voiceCallData.messageType === "audio" && !voiceCallData.voiceNoteUrl) {
-        setSubmitError("Record or upload a voice note for the audio reminder.");
-        return;
-      }
     }
 
     try {
@@ -632,7 +617,13 @@ const ReminderAlert = () => {
               </button>
             )}
           </div>
-          {error && <div className="reminderalert-alert reminderalert-alert-error">{error}</div>}
+          {error && (
+            <ErrorAlert
+              error={error}
+              onDismiss={clearError}
+              onRetry={error.canRetry ? retry : null}
+            />
+          )}
         </div>
 
         <aside className="reminderalert-highlight-card">
