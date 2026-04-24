@@ -1046,6 +1046,8 @@
   align-items: center;
   padding: 1rem;
   border-bottom: 1px solid #eee;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
 }
 
 .chat-list-header h2 {
@@ -1061,6 +1063,8 @@
   padding: 0.5rem;
   border-radius: 50%;
   transition: background 0.3s;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .btn-new-chat:hover {
@@ -3505,6 +3509,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-list-header-copy h2,
