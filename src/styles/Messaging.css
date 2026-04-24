@@ -1447,6 +1447,11 @@
   color: white;
 }
 
+.message.sent.pending .message-bubble {
+  opacity: 0.7;
+  background: linear-gradient(135deg, #999 0%, #666 100%);
+}
+
 .message-bubble p {
   margin: 0;
 }
@@ -3164,9 +3169,15 @@
 }
 
 .message-edited-label,
+.message-pending-label,
 .message-deleted-text {
   font-size: 0.72rem;
   color: #777;
+}
+
+.message-pending-label {
+  color: #ffa500;
+  font-style: italic;
 }
 
 .message.deleted .message-bubble {

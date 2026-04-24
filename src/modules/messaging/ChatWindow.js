@@ -408,7 +408,7 @@ const ChatWindow = ({
                 key={message._id || index}
                 className={`message ${isOwnMessage ? 'sent' : 'received'} ${
                   message.isDeleted ? 'deleted' : ''
-                }`}
+                } ${message.isPending ? 'pending' : ''}`}
                 data-message-id={message._id}
                 onContextMenu={(event) => handleContextMenu(event, message, isOwnMessage)}
               >
@@ -497,10 +497,13 @@ const ChatWindow = ({
                         minute: '2-digit',
                       })}
                     </span>
+                    {message.isPending && (
+                      <span className="message-pending-label">Sending...</span>
+                    )}
                     {message.edits?.length > 0 && !message.isDeleted && (
                       <span className="message-edited-label">Edited</span>
                     )}
-                    {isOwnMessage && (
+                    {isOwnMessage && !message.isPending && (
                       <ReadReceipts
                         deliveryStatus={message.deliveryStatus}
                         currentUserId={resolvedCurrentUserId}

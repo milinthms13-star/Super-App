@@ -786,25 +786,55 @@ const Messaging = () => {
         };
       }
 
-      console.log('📤 Sending message:', messageData);
+      // Create temporary message ID for optimistic update
+      const tempMessageId = `temp_${Date.now()}`;
+      
+      // OPTIMISTIC UPDATE: Add message to UI immediately (before API response)
+      const optimisticMessage = {
+        _id: tempMessageId,
+        chatId: selectedChat._id,
+        senderId: currentUser,
+        content: messageData.content,
+        messageType,
+        media: messageData.media,
+        replyTo,
+        createdAt: new Date().toISOString(),
+        isPending: true, // Mark as pending
+        deliveryStatus: selectedChat.participants.map((userId) => ({
+          userId,
+          status: isSameEntity(userId, currentUser) ? 'seen' : 'sending',
+        })),
+      };
+
+      console.log('📤 Optimistic message added:', optimisticMessage);
+      setMessages((prevMessages) => [...prevMessages, optimisticMessage]);
+      updateChatPreview(optimisticMessage);
+
+      console.log('📤 Sending message to server:', messageData);
       const response = await apiCall('/messaging/messages', 'POST', messageData);
       console.log('📬 Server response:', response);
 
       if (response?.message) {
-        console.log('✅ Adding message to local state:', response.message);
-        setMessages((prevMessages) => {
-          const updated = [...prevMessages, response.message];
-          console.log('📋 Updated messages array:', updated);
-          return updated;
-        });
+        // Replace temp message with real message from server
+        console.log('✅ Replacing temp message with real message:', response.message);
+        setMessages((prevMessages) =>
+          prevMessages.map((msg) =>
+            msg._id === tempMessageId ? response.message : msg
+          )
+        );
         updateChatPreview(response.message);
       } else {
-        console.error('❌ No message in response:', response);
+        // Remove optimistic message on error
+        console.error('❌ Server error - removing optimistic message');
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => msg._id !== tempMessageId)
+        );
       }
 
       return response?.message || null;
     } catch (error) {
       console.error('❌ Error sending message:', error);
+      // Message will be removed when optimistic update fails
       throw error;
     }
   };
