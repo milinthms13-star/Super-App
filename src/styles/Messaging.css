@@ -4460,3 +4460,100 @@
   }
 }
 
+/* Keep sidebar controls in their own click-safe rows. */
+.messaging-sidebar,
+.chat-list-container,
+.contacts-list-container,
+.chats-list,
+.contacts-list {
+  min-height: 0;
+}
+
+.sidebar-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  position: relative;
+  z-index: 3;
+}
+
+.sidebar-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sidebar-tabs .tab-btn {
+  min-width: 0;
+}
+
+.sidebar-tools {
+  justify-content: flex-end;
+  min-width: fit-content;
+}
+
+.chat-list-header,
+.contacts-header {
+  position: relative;
+  z-index: 2;
+}
+
+.chat-list-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.contacts-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.btn-new-chat {
+  position: relative;
+  z-index: 3;
+  align-self: flex-start;
+  width: fit-content;
+}
+
+.contacts-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0;
+  position: relative;
+  z-index: 3;
+}
+
+.filter-btn {
+  position: relative;
+  z-index: 1;
+}
+
+.chat-search,
+.contacts-search {
+  position: relative;
+  z-index: 1;
+}
+
+.empty-chats,
+.empty-contacts {
+  min-height: 200px;
+  height: auto;
+  padding: 1.25rem;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .sidebar-header {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-tools {
+    justify-content: flex-start;
+  }
+}
+

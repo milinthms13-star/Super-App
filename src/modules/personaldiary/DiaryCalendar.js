@@ -81,6 +81,7 @@ const DiaryCalendar = ({
   const [formState, setFormState] = useState(() => createInitialFormState(new Date()));
   const [editingItemId, setEditingItemId] = useState("");
   const [formError, setFormError] = useState("");
+  const [showModal, setShowModal] = useState(false);
 
   const daysInMonth = new Date(
     currentDate.getFullYear(),
@@ -131,11 +132,13 @@ const DiaryCalendar = ({
     setEditingItemId("");
     setFormError("");
     setFormState(createInitialFormState(dateValue));
+    setShowModal(false);
   };
 
   const handleSelectDate = (dateValue) => {
     setSelectedDate(dateValue);
     resetForm(dateValue);
+    setShowModal(true);
   };
 
   const handleChangeMonth = (monthOffset) => {
@@ -322,234 +325,234 @@ const DiaryCalendar = ({
         })}
       </div>
 
-      <div className="diary-calendar-planner">
-        <section className="diary-calendar-compose">
-          <div className="diary-calendar-panel-header">
+      <div className={`diary-calendar-modal-overlay ${showModal ? 'active' : ''}`} onClick={() => setShowModal(false)}>
+        <div className="diary-calendar-modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="diary-calendar-modal-header">
             <div>
               <p className="diary-calendar-panel-eyebrow">Selected day</p>
               <h4>{formatDateHeading(selectedDate)}</h4>
             </div>
             <button
               type="button"
-              className="diary-calendar-reset-btn"
-              onClick={() => resetForm(selectedDate)}
-              disabled={submitting}
+              className="diary-calendar-modal-close"
+              onClick={() => setShowModal(false)}
+              title="Close"
             >
-              Clear form
+              ✕
             </button>
           </div>
 
-          {formError && <div className="diary-calendar-error">{formError}</div>}
-
-          <form className="diary-calendar-form" onSubmit={handleSubmit}>
-            <div className="diary-calendar-form-row">
-              <label className="diary-calendar-field">
-                <span>Type</span>
-                <select
-                  name="type"
-                  value={formState.type}
-                  onChange={handleFormChange}
-                  disabled={submitting}
-                >
-                  <option value="note">Note</option>
-                  <option value="reminder">Reminder</option>
-                </select>
-              </label>
-
-              <label className="diary-calendar-field diary-calendar-field-grow">
-                <span>Title</span>
-                <input
-                  type="text"
-                  name="title"
-                  value={formState.title}
-                  onChange={handleFormChange}
-                  placeholder="What do you want to remember?"
-                  disabled={submitting}
-                  maxLength="120"
-                />
-              </label>
-            </div>
-
-            <label className="diary-calendar-field">
-              <span>Notes</span>
-              <textarea
-                name="note"
-                value={formState.note}
-                onChange={handleFormChange}
-                placeholder="Add a short note for this date"
-                disabled={submitting}
-                rows="4"
-                maxLength="1500"
-              />
-            </label>
-
-            {formState.type === "reminder" && (
-              <label className="diary-calendar-field">
-                <span>Reminder time</span>
-                <input
-                  type="datetime-local"
-                  name="reminderAt"
-                  value={formState.reminderAt}
-                  onChange={handleFormChange}
-                  disabled={submitting}
-                />
-              </label>
-            )}
-
-            {editingItemId && (
-              <label className="diary-calendar-checkbox">
-                <input
-                  type="checkbox"
-                  name="isCompleted"
-                  checked={formState.isCompleted}
-                  onChange={handleFormChange}
-                  disabled={submitting}
-                />
-                <span>Mark this reminder as completed</span>
-              </label>
-            )}
-
-            <div className="diary-calendar-form-actions">
-              <button type="submit" className="diary-primary-btn" disabled={submitting}>
-                {submitting
-                  ? "Saving..."
-                  : editingItemId
-                  ? "Update item"
-                  : "Save item"}
-              </button>
-              {editingItemId && (
-                <button
-                  type="button"
-                  className="diary-calendar-secondary-btn"
-                  onClick={() => resetForm(selectedDate)}
-                  disabled={submitting}
-                >
-                  Cancel edit
-                </button>
-              )}
-            </div>
-          </form>
-        </section>
-
-        <div className="diary-calendar-day-panels">
-          <section className="diary-calendar-day-card">
-            <div className="diary-calendar-panel-header">
-              <div>
-                <p className="diary-calendar-panel-eyebrow">Planner</p>
-                <h5>Notes and reminders</h5>
+          <div className="diary-calendar-modal-body">
+            <div className="diary-calendar-modal-section">
+              <div className="diary-calendar-section-title">
+                <h5>Add Note or Reminder</h5>
               </div>
-              <span className="diary-calendar-panel-count">
-                {selectedDateItems.length}
-              </span>
+
+              {formError && <div className="diary-calendar-error">{formError}</div>}
+
+              <form className="diary-calendar-form" onSubmit={handleSubmit}>
+                <div className="diary-calendar-form-row">
+                  <label className="diary-calendar-field">
+                    <span>Type</span>
+                    <select
+                      name="type"
+                      value={formState.type}
+                      onChange={handleFormChange}
+                      disabled={submitting}
+                    >
+                      <option value="note">Note</option>
+                      <option value="reminder">Reminder</option>
+                    </select>
+                  </label>
+
+                  <label className="diary-calendar-field diary-calendar-field-grow">
+                    <span>Title</span>
+                    <input
+                      type="text"
+                      name="title"
+                      value={formState.title}
+                      onChange={handleFormChange}
+                      placeholder="What do you want to remember?"
+                      disabled={submitting}
+                      maxLength="120"
+                    />
+                  </label>
+                </div>
+
+                <label className="diary-calendar-field">
+                  <span>Notes</span>
+                  <textarea
+                    name="note"
+                    value={formState.note}
+                    onChange={handleFormChange}
+                    placeholder="Add a short note for this date"
+                    disabled={submitting}
+                    rows="3"
+                    maxLength="1500"
+                  />
+                </label>
+
+                {formState.type === "reminder" && (
+                  <label className="diary-calendar-field">
+                    <span>Reminder time</span>
+                    <input
+                      type="datetime-local"
+                      name="reminderAt"
+                      value={formState.reminderAt}
+                      onChange={handleFormChange}
+                      disabled={submitting}
+                    />
+                  </label>
+                )}
+
+                {editingItemId && (
+                  <label className="diary-calendar-checkbox">
+                    <input
+                      type="checkbox"
+                      name="isCompleted"
+                      checked={formState.isCompleted}
+                      onChange={handleFormChange}
+                      disabled={submitting}
+                    />
+                    <span>Mark this reminder as completed</span>
+                  </label>
+                )}
+
+                <div className="diary-calendar-form-actions">
+                  <button type="submit" className="diary-primary-btn" disabled={submitting}>
+                    {submitting
+                      ? "Saving..."
+                      : editingItemId
+                      ? "Update item"
+                      : "Save item"}
+                  </button>
+                  {editingItemId && (
+                    <button
+                      type="button"
+                      className="diary-calendar-secondary-btn"
+                      onClick={() => resetForm(selectedDate)}
+                      disabled={submitting}
+                    >
+                      Cancel edit
+                    </button>
+                  )}
+                </div>
+              </form>
             </div>
 
-            {selectedDateItems.length > 0 ? (
-              <div className="diary-calendar-item-list">
-                {selectedDateItems.map((item) => (
-                  <article
-                    key={item._id}
-                    className={`diary-calendar-item-card ${
-                      item.isCompleted ? "completed" : ""
-                    }`}
-                  >
-                    <div className="diary-calendar-item-topline">
-                      <span
-                        className={`diary-calendar-item-type diary-calendar-item-type-${item.type}`}
-                      >
-                        {item.type === "reminder" ? "Reminder" : "Note"}
-                      </span>
-                      {item.reminderAt && (
-                        <span className="diary-calendar-item-time">
-                          {new Date(item.reminderAt).toLocaleString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+            <div className="diary-calendar-modal-section">
+              <div className="diary-calendar-section-title">
+                <h5>Notes and Reminders</h5>
+                <span className="diary-calendar-panel-count">
+                  {selectedDateItems.length}
+                </span>
+              </div>
+
+              {selectedDateItems.length > 0 ? (
+                <div className="diary-calendar-item-list">
+                  {selectedDateItems.map((item) => (
+                    <article
+                      key={item._id}
+                      className={`diary-calendar-item-card ${
+                        item.isCompleted ? "completed" : ""
+                      }`}
+                    >
+                      <div className="diary-calendar-item-topline">
+                        <span
+                          className={`diary-calendar-item-type diary-calendar-item-type-${item.type}`}
+                        >
+                          {item.type === "reminder" ? "Reminder" : "Note"}
                         </span>
-                      )}
-                    </div>
+                        {item.reminderAt && (
+                          <span className="diary-calendar-item-time">
+                            {new Date(item.reminderAt).toLocaleString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        )}
+                      </div>
 
-                    <h6>{item.title}</h6>
-                    {item.note && <p>{item.note}</p>}
+                      <h6>{item.title}</h6>
+                      {item.note && <p>{item.note}</p>}
 
-                    <div className="diary-calendar-item-actions">
-                      {item.type === "reminder" && (
+                      <div className="diary-calendar-item-actions">
+                        {item.type === "reminder" && (
+                          <button
+                            type="button"
+                            className="diary-calendar-inline-btn"
+                            onClick={() => handleToggleComplete(item)}
+                            disabled={submitting}
+                          >
+                            {item.isCompleted ? "Mark pending" : "Mark done"}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="diary-calendar-inline-btn"
-                          onClick={() => handleToggleComplete(item)}
+                          onClick={() => handleEditItem(item)}
                           disabled={submitting}
                         >
-                          {item.isCompleted ? "Mark pending" : "Mark done"}
+                          Edit
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        className="diary-calendar-inline-btn"
-                        onClick={() => handleEditItem(item)}
-                        disabled={submitting}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="diary-calendar-inline-btn danger"
-                        onClick={() => handleDeleteItem(item._id)}
-                        disabled={submitting}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="diary-calendar-empty-state">
-                No notes or reminders for this day yet.
-              </div>
-            )}
-          </section>
-
-          <section className="diary-calendar-day-card">
-            <div className="diary-calendar-panel-header">
-              <div>
-                <p className="diary-calendar-panel-eyebrow">Diary</p>
-                <h5>Entries on this date</h5>
-              </div>
-              <span className="diary-calendar-panel-count">
-                {selectedDateEntries.length}
-              </span>
+                        <button
+                          type="button"
+                          className="diary-calendar-inline-btn danger"
+                          onClick={() => handleDeleteItem(item._id)}
+                          disabled={submitting}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="diary-calendar-empty-state">
+                  No notes or reminders for this day yet.
+                </div>
+              )}
             </div>
 
-            {selectedDateEntries.length > 0 ? (
-              <div className="diary-calendar-entry-list">
-                {selectedDateEntries.map((entry) => (
-                  <article key={entry._id} className="diary-calendar-entry-card">
-                    <div className="diary-calendar-entry-meta">
-                      <span className="diary-calendar-entry-category">
-                        {entry.category}
-                      </span>
-                      <span className="diary-calendar-entry-date">
-                        {new Date(entry.entryDate || entry.createdAt).toLocaleDateString(
-                          "en-IN",
-                          {
-                            day: "numeric",
-                            month: "short",
-                          }
-                        )}
-                      </span>
-                    </div>
-                    <h6>{entry.title}</h6>
-                  </article>
-                ))}
+            <div className="diary-calendar-modal-section">
+              <div className="diary-calendar-section-title">
+                <h5>Diary Entries</h5>
+                <span className="diary-calendar-panel-count">
+                  {selectedDateEntries.length}
+                </span>
               </div>
-            ) : (
-              <div className="diary-calendar-empty-state">
-                No diary entries saved for this date.
-              </div>
-            )}
-          </section>
+
+              {selectedDateEntries.length > 0 ? (
+                <div className="diary-calendar-entry-list">
+                  {selectedDateEntries.map((entry) => (
+                    <article key={entry._id} className="diary-calendar-entry-card">
+                      <div className="diary-calendar-entry-meta">
+                        <span className="diary-calendar-entry-category">
+                          {entry.category}
+                        </span>
+                        <span className="diary-calendar-entry-date">
+                          {new Date(entry.entryDate || entry.createdAt).toLocaleDateString(
+                            "en-IN",
+                            {
+                              day: "numeric",
+                              month: "short",
+                            }
+                          )}
+                        </span>
+                      </div>
+                      <h6>{entry.title}</h6>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="diary-calendar-empty-state">
+                  No diary entries saved for this date.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
