@@ -350,7 +350,7 @@ router.delete('/calendar-items/:itemId', async (req, res) => {
 });
 
 // GET /api/diary/:id - Get single diary entry
-router.get('/:id', async (req, res) => {
+router.get('/:id([0-9a-fA-F]{24})', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
 
@@ -433,15 +433,72 @@ const parseTagsField = (value) => {
   return [];
 };
 
-const normalizeStartOfDay = (value) => {
-  const date = value instanceof Date ? new Date(value) : new Date(value);
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-  if (Number.isNaN(date.getTime())) {
+const parseDateValue = (value) => {
+  if (value instanceof Date) {
+    const clonedDate = new Date(value);
+    return Number.isNaN(clonedDate.getTime()) ? null : clonedDate;
+  }
+
+  if (typeof value === 'string') {
+    const trimmedValue = value.trim();
+    const dateOnlyMatch = trimmedValue.match(DATE_ONLY_PATTERN);
+
+    if (dateOnlyMatch) {
+      const year = parseInt(dateOnlyMatch[1], 10);
+      const monthIndex = parseInt(dateOnlyMatch[2], 10) - 1;
+      const day = parseInt(dateOnlyMatch[3], 10);
+      return new Date(year, monthIndex, day);
+    }
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const normalizeStartOfDay = (value) => {
+  const date = parseDateValue(value);
+  if (!date) {
     return null;
   }
 
   date.setHours(0, 0, 0, 0);
   return date;
+};
+
+const parseTimezoneOffsetMinutes = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const parsedOffset = parseInt(value, 10);
+  return Number.isNaN(parsedOffset) ? null : parsedOffset;
+};
+
+const buildDayWindow = (value = new Date(), timezoneOffsetMinutes = null) => {
+  const start = normalizeStartOfDay(value);
+  if (!start) {
+    return null;
+  }
+
+  const parsedOffset = parseTimezoneOffsetMinutes(timezoneOffsetMinutes);
+  if (parsedOffset !== null) {
+    const utcStart = new Date(
+      Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())
+    );
+    utcStart.setMinutes(utcStart.getMinutes() + parsedOffset);
+
+    const utcEnd = new Date(utcStart);
+    utcEnd.setDate(utcEnd.getDate() + 1);
+
+    return { start: utcStart, end: utcEnd };
+  }
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  return { start, end };
 };
 
 const parseCalendarItemPayload = (body = {}) => {
@@ -696,9 +753,16 @@ router.delete('/:id', async (req, res) => {
 router.get('/by-date/:date', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const date = new Date(req.params.date);
-    const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const endDate = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    const dayWindow = buildDayWindow(req.params.date);
+
+    if (!dayWindow) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date',
+      });
+    }
+
+    const { start: startDate, end: endDate } = dayWindow;
 
     const entries = await DiaryEntry.find({
       userId,
@@ -719,26 +783,47 @@ router.get('/by-date/:date', async (req, res) => {
   }
 });
 
-// GET /api/diary/todays-items - Get today's notes and reminders
+// GET /api/diary/todays-items - Get today's diary entries, notes, and reminders
 router.get('/today/summary', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const dayWindow = buildDayWindow(
+      req.query.date || new Date(),
+      req.query.timezoneOffsetMinutes
+    );
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (!dayWindow) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date',
+      });
+    }
 
-    const items = await DiaryCalendarItem.find({
-      userId,
-      date: {
-        $gte: today,
-        $lt: tomorrow,
-      },
-    })
-      .select('_id type title note reminderAt isCompleted isNotified date')
-      .sort({ reminderAt: 1, createdAt: 1 })
-      .lean();
+    const { start: dayStart, end: dayEnd } = dayWindow;
+
+    const [entries, items] = await Promise.all([
+      DiaryEntry.find({
+        userId,
+        isDraft: false,
+        entryDate: {
+          $gte: dayStart,
+          $lt: dayEnd,
+        },
+      })
+        .select('_id title content category mood entryDate createdAt')
+        .sort({ entryDate: -1, createdAt: -1 })
+        .lean(),
+      DiaryCalendarItem.find({
+        userId,
+        date: {
+          $gte: dayStart,
+          $lt: dayEnd,
+        },
+      })
+        .select('_id type title note reminderAt isCompleted isNotified date')
+        .sort({ reminderAt: 1, createdAt: 1 })
+        .lean(),
+    ]);
 
     const notes = items.filter((i) => i.type === 'note');
     const reminders = items.filter((i) => i.type === 'reminder');
@@ -747,10 +832,12 @@ router.get('/today/summary', async (req, res) => {
     res.json({
       success: true,
       data: {
+        entries,
         notes,
         reminders,
         pendingReminders,
         summary: {
+          totalEntries: entries.length,
           totalNotes: notes.length,
           totalReminders: reminders.length,
           pendingRemindersCount: pendingReminders.length,
@@ -770,20 +857,26 @@ router.get('/today/summary', async (req, res) => {
 router.get('/upcoming-reminders', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { daysAhead = 7 } = req.query;
+    const { daysAhead = 7, startDate, timezoneOffsetMinutes } = req.query;
+    const dayWindow = buildDayWindow(startDate || new Date(), timezoneOffsetMinutes);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    if (!dayWindow) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid start date',
+      });
+    }
 
-    const futureDate = new Date(today);
-    futureDate.setDate(futureDate.getDate() + parseInt(daysAhead));
+    const parsedDaysAhead = Math.max(parseInt(daysAhead, 10) || 7, 1);
+    const futureDate = new Date(dayWindow.start);
+    futureDate.setDate(futureDate.getDate() + parsedDaysAhead);
 
     const reminders = await DiaryCalendarItem.find({
       userId,
       type: 'reminder',
       isCompleted: false,
       reminderAt: {
-        $gte: today,
+        $gte: dayWindow.start,
         $lt: futureDate,
       },
     })
@@ -845,3 +938,9 @@ router.put('/calendar-items/:itemId/mark-notified', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.__testables = {
+  parseDateValue,
+  parseTimezoneOffsetMinutes,
+  normalizeStartOfDay,
+  buildDayWindow,
+};

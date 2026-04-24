@@ -2,6 +2,36 @@ import React, { useEffect, useState, useCallback } from "react";
 import { fetchTodaysSummary } from "../../services/diaryService";
 import "./styles/TodaysSummary.css";
 
+const stripHtml = (content = "") =>
+  String(content)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const buildPreview = (content = "", maxLength = 140) => {
+  const plainText = stripHtml(content);
+
+  if (plainText.length <= maxLength) {
+    return plainText;
+  }
+
+  return `${plainText.slice(0, maxLength).trim()}...`;
+};
+
+const formatReminderTime = (value) => {
+  const reminderDate = new Date(value);
+
+  if (Number.isNaN(reminderDate.getTime())) {
+    return "";
+  }
+
+  return reminderDate.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 const TodaysSummary = () => {
   const [todaysItems, setTodaysItems] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,10 +51,9 @@ const TodaysSummary = () => {
     }
   }, []);
 
-  // Load on mount and refresh every minute
   useEffect(() => {
     loadTodaysSummary();
-    const interval = setInterval(loadTodaysSummary, 60000); // Refresh every minute
+    const interval = setInterval(loadTodaysSummary, 60000);
     return () => clearInterval(interval);
   }, [loadTodaysSummary]);
 
@@ -55,34 +84,70 @@ const TodaysSummary = () => {
     return null;
   }
 
-  const { notes = [], reminders = [], pendingReminders = [], summary = {} } =
-    todaysItems;
-  const hasItems = summary.totalNotes > 0 || summary.totalReminders > 0;
+  const {
+    entries = [],
+    notes = [],
+    reminders = [],
+    pendingReminders = [],
+    summary = {},
+  } = todaysItems;
+  const hasItems =
+    (summary.totalEntries || 0) > 0 ||
+    (summary.totalNotes || 0) > 0 ||
+    (summary.totalReminders || 0) > 0;
 
   return (
     <div className="todays-summary">
       <div className="todays-summary-header">
-        <h3>📅 Today's Summary</h3>
+        <h3>Today's Summary</h3>
         <button
           className="todays-summary-refresh-btn"
           onClick={loadTodaysSummary}
           title="Refresh"
         >
-          ↻
+          Refresh
         </button>
       </div>
 
       {!hasItems ? (
         <div className="todays-summary-empty">
-          <p>No notes or reminders for today yet.</p>
+          <p>No diary entries, notes, or reminders for today yet.</p>
         </div>
       ) : (
         <div className="todays-summary-content">
-          {/* Notes Section */}
+          {entries.length > 0 && (
+            <div className="todays-summary-section">
+              <h4 className="todays-summary-section-title">
+                Entries ({entries.length})
+              </h4>
+              <div className="todays-summary-items">
+                {entries.map((entry) => (
+                  <div key={entry._id} className="todays-summary-item note">
+                    <div className="todays-summary-item-header">
+                      <span className="todays-summary-item-title">
+                        {entry.title}
+                      </span>
+                      {entry.category && (
+                        <span className="todays-summary-item-time">
+                          {entry.category}
+                        </span>
+                      )}
+                    </div>
+                    {entry.content && (
+                      <p className="todays-summary-item-content">
+                        {buildPreview(entry.content)}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {notes.length > 0 && (
             <div className="todays-summary-section">
               <h4 className="todays-summary-section-title">
-                📝 Notes ({notes.length})
+                Notes ({notes.length})
               </h4>
               <div className="todays-summary-items">
                 {notes.map((note) => (
@@ -103,55 +168,46 @@ const TodaysSummary = () => {
             </div>
           )}
 
-          {/* Reminders Section */}
           {reminders.length > 0 && (
             <div className="todays-summary-section">
               <h4 className="todays-summary-section-title">
-                🔔 Reminders ({reminders.length})
+                Reminders ({reminders.length})
               </h4>
               <div className="todays-summary-items">
-                {reminders.map((reminder) => {
-                  const reminderTime = new Date(reminder.reminderAt);
-                  const timeString = reminderTime.toLocaleTimeString("en-IN", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  });
-
-                  return (
-                    <div
-                      key={reminder._id}
-                      className={`todays-summary-item reminder ${
-                        reminder.isCompleted ? "completed" : "pending"
-                      }`}
-                    >
-                      <div className="todays-summary-item-header">
-                        <span className="todays-summary-item-time">
-                          {timeString}
-                        </span>
-                        <span
-                          className={`todays-summary-item-status ${
-                            reminder.isCompleted ? "done" : "pending"
-                          }`}
-                        >
-                          {reminder.isCompleted ? "✓ Done" : "⏳ Pending"}
-                        </span>
-                      </div>
-                      <span className="todays-summary-item-title">
-                        {reminder.title}
+                {reminders.map((reminder) => (
+                  <div
+                    key={reminder._id}
+                    className={`todays-summary-item reminder ${
+                      reminder.isCompleted ? "completed" : "pending"
+                    }`}
+                  >
+                    <div className="todays-summary-item-header">
+                      <span className="todays-summary-item-time">
+                        {formatReminderTime(reminder.reminderAt)}
                       </span>
-                      {reminder.note && (
-                        <p className="todays-summary-item-content">
-                          {reminder.note}
-                        </p>
-                      )}
+                      <span
+                        className={`todays-summary-item-status ${
+                          reminder.isCompleted ? "done" : "pending"
+                        }`}
+                      >
+                        {reminder.isCompleted ? "Done" : "Pending"}
+                      </span>
                     </div>
-                  );
-                })}
+                    <span className="todays-summary-item-title">
+                      {reminder.title}
+                    </span>
+                    {reminder.note && (
+                      <p className="todays-summary-item-content">
+                        {reminder.note}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
 
               {pendingReminders.length > 0 && (
                 <div className="todays-summary-alert">
-                  <span className="todays-summary-alert-icon">⚠️</span>
+                  <span className="todays-summary-alert-icon">!</span>
                   <span>
                     {pendingReminders.length} pending reminder
                     {pendingReminders.length !== 1 ? "s" : ""} today
@@ -163,26 +219,31 @@ const TodaysSummary = () => {
         </div>
       )}
 
-      {/* Stats Footer */}
       {hasItems && (
         <div className="todays-summary-stats">
           <div className="todays-summary-stat">
             <span className="todays-summary-stat-value">
+              {summary.totalEntries || 0}
+            </span>
+            <span className="todays-summary-stat-label">Entries</span>
+          </div>
+          <div className="todays-summary-stat">
+            <span className="todays-summary-stat-value">
               {summary.totalNotes || 0}
             </span>
-            <span className="todays-summary-stat-label">Note</span>
+            <span className="todays-summary-stat-label">Notes</span>
           </div>
           <div className="todays-summary-stat">
             <span className="todays-summary-stat-value">
               {summary.pendingRemindersCount || 0}
             </span>
-            <span className="todays-summary-stat-label">Pending Reminder</span>
+            <span className="todays-summary-stat-label">Pending</span>
           </div>
           <div className="todays-summary-stat">
             <span className="todays-summary-stat-value">
               {summary.totalReminders || 0}
             </span>
-            <span className="todays-summary-stat-label">Total Reminder</span>
+            <span className="todays-summary-stat-label">Reminders</span>
           </div>
         </div>
       )}

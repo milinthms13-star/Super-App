@@ -16,9 +16,10 @@ class VoiceCallScheduler {
   constructor() {
     this.isRunning = false;
     this.checkInterval = null;
-    this.checkIntervalMs = 60 * 1000; // Check every 60 seconds
+    this.checkIntervalMs = 30 * 1000; // Check every 30 seconds (reduced from 60 for better accuracy)
     this.maxConcurrentCalls = 5;
     this.currentCalls = 0;
+    this.graceWindowMs = 5 * 60 * 1000; // 5 minute grace window for catching missed reminders
   }
 
   /**
@@ -45,7 +46,8 @@ class VoiceCallScheduler {
       );
     }, this.checkIntervalMs);
 
-    logger.info(`Voice call scheduler started (interval: ${this.checkIntervalMs}ms)`);
+    logger.info(`Voice call scheduler started (interval: ${this.checkIntervalMs}ms, grace window: ${this.graceWindowMs}ms)`);
+  }
   }
 
   /**
@@ -72,6 +74,9 @@ class VoiceCallScheduler {
         return;
       }
 
+      const now = new Date();
+      const gracePeriodStart = new Date(now.getTime() - this.graceWindowMs);
+
       // Find all pending voice call reminders that are due
       const dueReminders = await Reminder.find({
         completed: { $ne: true },
@@ -90,18 +95,16 @@ class VoiceCallScheduler {
             voiceMessage: { $exists: true, $nin: [null, ''] }
           }
         ],
-        $and: [
-          {
-            $expr: {
-              $lte: [{ $ifNull: ['$nextCallTime', '$dueDate'] }, new Date()]
-            }
-          },
-          {
-            $expr: {
-              $lt: ['$callAttempts', '$maxCallAttempts']
-            }
-          }
-        ]
+        // Reminder time must be in the past (including grace period)
+        $expr: {
+          $lte: [{ $ifNull: ['$nextCallTime', '$dueDate'] }, now]
+        },
+        // Reminder must be within the grace window (not too far in the past)
+        nextCallTime: { $gte: gracePeriodStart },
+        // Still have attempts remaining
+        $expr: {
+          $lt: ['$callAttempts', '$maxCallAttempts']
+        }
       });
 
       if (dueReminders.length === 0) {
@@ -109,6 +112,13 @@ class VoiceCallScheduler {
       }
 
       logger.info(`Found ${dueReminders.length} reminders due for voice calls`);
+      
+      // Log reminder details for debugging
+      dueReminders.forEach(reminder => {
+        const callTime = reminder.nextCallTime || reminder.dueDate;
+        logger.debug(`Due reminder: ${reminder.title} (ID: ${reminder._id})`);
+        logger.debug(`  Scheduled: ${callTime}, Current: ${now}, Overdue by: ${now - callTime}ms`);
+      });
 
       // Process reminders concurrently up to maxConcurrentCalls
       const batches = this._batchArray(dueReminders, this.maxConcurrentCalls);

@@ -20,6 +20,30 @@ const appendFormValue = (formData, key, value) => {
   formData.append(key, value);
 };
 
+export const buildLocalDateParam = (value = new Date()) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+export const buildTimezoneOffsetParam = (value = new Date()) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return String(date.getTimezoneOffset());
+};
+
 /**
  * Fetch all diary entries
  * @param {Object} options - Query options
@@ -289,12 +313,17 @@ export const deleteDiaryCalendarItem = async (itemId) => {
 };
 
 /**
- * Fetch today's notes and reminders
+ * Fetch today's diary entries, notes, and reminders
  * @returns {Promise<Object>} - Today's items summary
  */
-export const fetchTodaysSummary = async () => {
+export const fetchTodaysSummary = async (date = new Date()) => {
   try {
-    const response = await axiosInstance.get("/diary/today/summary");
+    const response = await axiosInstance.get("/diary/today/summary", {
+      params: {
+        date: buildLocalDateParam(date),
+        timezoneOffsetMinutes: buildTimezoneOffsetParam(date),
+      },
+    });
     return response.data;
   } catch (error) {
     console.error("Error fetching today's summary:", error);
@@ -306,13 +335,21 @@ export const fetchTodaysSummary = async () => {
 
 /**
  * Fetch upcoming reminders
- * @param {Object} options - Optional filters
+ * @param {number} daysAhead - Number of days to look ahead
+ * @param {Date|string} startDate - Local day to use as the window start
  * @returns {Promise<Object>} - Upcoming reminders
  */
-export const fetchUpcomingReminders = async (daysAhead = 7) => {
+export const fetchUpcomingReminders = async (
+  daysAhead = 7,
+  startDate = new Date()
+) => {
   try {
     const response = await axiosInstance.get("/diary/upcoming-reminders", {
-      params: { daysAhead },
+      params: {
+        daysAhead,
+        startDate: buildLocalDateParam(startDate),
+        timezoneOffsetMinutes: buildTimezoneOffsetParam(startDate),
+      },
     });
     return response.data;
   } catch (error) {
@@ -343,6 +380,8 @@ export const markReminderAsNotified = async (reminderId) => {
 };
 
 export default {
+  buildLocalDateParam,
+  buildTimezoneOffsetParam,
   fetchDiaryEntries,
   fetchDraftEntries,
   fetchTags,
