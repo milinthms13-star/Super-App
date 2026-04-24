@@ -299,6 +299,37 @@ const Messaging = () => {
         });
       }
 
+      // Ensure the chat exists in the chat list
+      const chatIdStr = getEntityId(message.chatId);
+      setChats((prevChats) => {
+        const chatExists = prevChats.some((chat) => getEntityId(chat._id) === chatIdStr);
+        
+        if (!chatExists) {
+          // Chat doesn't exist, fetch it from backend and add to list
+          // Use setTimeout to avoid issues with stale closure
+          setTimeout(() => {
+            apiCall(`/messaging/chats/${chatIdStr}`, 'GET')
+              .then((response) => {
+                if (response?.chat) {
+                  setChats((latestChats) => {
+                    // Double-check the chat doesn't exist
+                    const stillMissing = !latestChats.some((chat) => getEntityId(chat._id) === chatIdStr);
+                    if (stillMissing) {
+                      return [response.chat, ...latestChats];
+                    }
+                    return latestChats;
+                  });
+                }
+              })
+              .catch((error) => {
+                console.error('Error fetching chat for received message:', error);
+              });
+          }, 0);
+        }
+
+        return prevChats;
+      });
+
       updateChatPreview(message);
     });
 
