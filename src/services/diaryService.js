@@ -288,6 +288,60 @@ export const deleteDiaryCalendarItem = async (itemId) => {
   }
 };
 
+/**
+ * Fetch today's notes and reminders
+ * @returns {Promise<Object>} - Today's items summary
+ */
+export const fetchTodaysSummary = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/today/summary");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching today's summary:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch today's summary"
+    );
+  }
+};
+
+/**
+ * Fetch upcoming reminders
+ * @param {Object} options - Optional filters
+ * @returns {Promise<Object>} - Upcoming reminders
+ */
+export const fetchUpcomingReminders = async (daysAhead = 7) => {
+  try {
+    const response = await axiosInstance.get("/diary/upcoming-reminders", {
+      params: { daysAhead },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching upcoming reminders:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch upcoming reminders"
+    );
+  }
+};
+
+/**
+ * Mark reminder as notified
+ * @param {string} reminderId - Reminder ID
+ * @returns {Promise<Object>} - Updated reminder
+ */
+export const markReminderAsNotified = async (reminderId) => {
+  try {
+    const response = await axiosInstance.put(
+      `/diary/calendar-items/${reminderId}/mark-notified`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error marking reminder as notified:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to mark reminder as notified"
+    );
+  }
+};
+
 export default {
   fetchDiaryEntries,
   fetchDraftEntries,
@@ -302,4 +356,7 @@ export default {
   createDiaryCalendarItem,
   updateDiaryCalendarItem,
   deleteDiaryCalendarItem,
+  fetchTodaysSummary,
+  fetchUpcomingReminders,
+  markReminderAsNotified,
 };

@@ -43,6 +43,19 @@ const diaryCalendarItemSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isNotified: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    notifiedAt: {
+      type: Date,
+      default: null,
+    },
+    isUrgent: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

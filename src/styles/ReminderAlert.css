@@ -738,6 +738,10 @@
   flex: 1;
 }
 
+.reminderalert-voice-note-preview audio {
+  width: min(100%, 320px);
+}
+
 @media (max-width: 1080px) {
   .reminderalert-stats-grid,
   .reminderalert-requirement-grid,

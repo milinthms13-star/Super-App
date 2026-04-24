@@ -719,4 +719,129 @@ router.get('/by-date/:date', async (req, res) => {
   }
 });
 
+// GET /api/diary/todays-items - Get today's notes and reminders
+router.get('/today/summary', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const items = await DiaryCalendarItem.find({
+      userId,
+      date: {
+        $gte: today,
+        $lt: tomorrow,
+      },
+    })
+      .select('_id type title note reminderAt isCompleted isNotified date')
+      .sort({ reminderAt: 1, createdAt: 1 })
+      .lean();
+
+    const notes = items.filter((i) => i.type === 'note');
+    const reminders = items.filter((i) => i.type === 'reminder');
+    const pendingReminders = reminders.filter((i) => !i.isCompleted);
+
+    res.json({
+      success: true,
+      data: {
+        notes,
+        reminders,
+        pendingReminders,
+        summary: {
+          totalNotes: notes.length,
+          totalReminders: reminders.length,
+          pendingRemindersCount: pendingReminders.length,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching todays items:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch todays items',
+    });
+  }
+});
+
+// GET /api/diary/upcoming-reminders - Get upcoming reminders
+router.get('/upcoming-reminders', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { daysAhead = 7 } = req.query;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + parseInt(daysAhead));
+
+    const reminders = await DiaryCalendarItem.find({
+      userId,
+      type: 'reminder',
+      isCompleted: false,
+      reminderAt: {
+        $gte: today,
+        $lt: futureDate,
+      },
+    })
+      .select('_id title reminderAt isNotified isCompleted date isUrgent')
+      .sort({ reminderAt: 1 })
+      .lean();
+
+    res.json({
+      success: true,
+      data: reminders,
+    });
+  } catch (error) {
+    logger.error('Error fetching upcoming reminders:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch upcoming reminders',
+    });
+  }
+});
+
+// PUT /api/diary/calendar-items/:itemId/mark-notified - Mark reminder as notified
+router.put('/calendar-items/:itemId/mark-notified', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { itemId } = req.params;
+
+    const item = await DiaryCalendarItem.findOneAndUpdate(
+      {
+        _id: itemId,
+        userId,
+        type: 'reminder',
+      },
+      {
+        isNotified: true,
+        notifiedAt: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: item,
+      message: 'Reminder marked as notified',
+    });
+  } catch (error) {
+    logger.error('Error marking reminder as notified:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark reminder as notified',
+    });
+  }
+});
+
 module.exports = router;

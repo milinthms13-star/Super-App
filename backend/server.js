@@ -134,10 +134,17 @@ initializeWebSocket(server);
 const voiceCallScheduler = require('./services/voiceCallScheduler');
 voiceCallScheduler.start();
 
+// Initialize Diary Reminder Scheduler
+const DiaryReminderScheduler = require('./services/diaryReminderScheduler');
+const { io } = require('./config/websocket');
+const diaryReminderScheduler = new DiaryReminderScheduler(io);
+diaryReminderScheduler.start();
+
 server.listen(PORT, () => {
   logger.info(`Server started on port ${PORT}`);
   logger.info(`WebSocket server initialized`);
   logger.info(`Voice call scheduler started`);
+  logger.info(`Diary reminder scheduler started`);
 });
 
 process.on('unhandledRejection', (err) => {
@@ -147,6 +154,8 @@ process.on('unhandledRejection', (err) => {
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  voiceCallScheduler.stop();
+  diaryReminderScheduler.stop();
   server.close(() => {
     logger.info('Process terminated');
   });

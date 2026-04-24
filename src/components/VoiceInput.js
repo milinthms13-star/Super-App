@@ -14,11 +14,16 @@ const VoiceInput = ({
   const [listening, setListening] = useState(false);
   const [result, setResult] = useState('');
 
-  const handleVoiceResult = async (audioBlob) => {
+  const handleVoiceResult = async (voicePayload) => {
+    const audioBlob = voicePayload instanceof Blob ? voicePayload : voicePayload?.blob;
+    if (!audioBlob) {
+      return;
+    }
+
     setListening(true);
     
     const formData = new FormData();
-    formData.append('audio', audioBlob, 'voice.m4a');
+    formData.append('audio', audioBlob, voicePayload?.fileName || 'voice.m4a');
     
     try {
       // Transcribe

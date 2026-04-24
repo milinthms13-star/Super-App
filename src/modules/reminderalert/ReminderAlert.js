@@ -59,6 +59,25 @@ const INITIAL_VOICE_CALL_FORM = {
   voiceMessage: "",
   messageType: "text",
   voiceNoteUrl: "",
+  voiceNotePreviewUrl: "",
+};
+
+const resolveVoiceNoteUrl = (voiceNote) => {
+  if (!voiceNote) {
+    return "";
+  }
+
+  if (typeof voiceNote === "string") {
+    return voiceNote;
+  }
+
+  return (
+    voiceNote.s3Url ||
+    voiceNote.url ||
+    voiceNote.voiceNote?.s3Url ||
+    voiceNote.voiceNote?.url ||
+    ""
+  );
 };
 
 const padDatePart = (value) => String(value).padStart(2, "0");
@@ -329,6 +348,7 @@ const ReminderAlert = () => {
           voiceMessage: "",
           messageType: "text",
           voiceNoteUrl: "",
+          voiceNotePreviewUrl: "",
         }));
       }
       return;
@@ -352,10 +372,21 @@ const ReminderAlert = () => {
 
   const handleVoiceCallChange = (event) => {
     const { name, value } = event.target;
-    setVoiceCallData((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    setVoiceCallData((current) => {
+      if (name === "messageType" && value === "text") {
+        return {
+          ...current,
+          messageType: value,
+          voiceNoteUrl: "",
+          voiceNotePreviewUrl: "",
+        };
+      }
+
+      return {
+        ...current,
+        [name]: value,
+      };
+    });
   };
 
   const syncReminderSharing = async (reminderId, contactIds = []) => {
@@ -467,6 +498,8 @@ const ReminderAlert = () => {
       recipientPhoneNumber: task.recipientPhoneNumber || "",
       voiceMessage: task.voiceMessage || "",
       messageType: task.messageType || "text",
+      voiceNoteUrl: task.voiceNoteUrl || "",
+      voiceNotePreviewUrl: task.voiceNoteUrl || "",
     });
     setSubmitError(null);
     setShowAddForm(true);
@@ -900,15 +933,29 @@ const ReminderAlert = () => {
                               contextId={editingTaskId || "new"}
                               recipientId={voiceCallData.recipientPhoneNumber}
                               onSend={(voiceNote) => {
+                                const uploadedVoiceNoteUrl = resolveVoiceNoteUrl(voiceNote);
                                 setVoiceCallData((current) => ({
                                   ...current,
-                                  voiceNoteUrl: voiceNote?.url || voiceNote,
+                                  voiceNoteUrl: uploadedVoiceNoteUrl,
+                                  voiceNotePreviewUrl:
+                                    voiceNote?.previewUrl || uploadedVoiceNoteUrl,
                                 }));
                               }}
                             />
                             {voiceCallData.voiceNoteUrl && (
                               <div className="reminderalert-voice-note-preview">
                                 <p className="reminderalert-voice-note-label">✓ Voice note recorded</p>
+                                <div className="reminderalert-inline-stack">
+                                  <audio
+                                    controls
+                                    preload="metadata"
+                                    src={
+                                      voiceCallData.voiceNotePreviewUrl || voiceCallData.voiceNoteUrl
+                                    }
+                                  >
+                                    Your browser could not play this recording.
+                                  </audio>
+                                </div>
                                 <button
                                   type="button"
                                   className="reminderalert-filter-chip"
@@ -916,6 +963,7 @@ const ReminderAlert = () => {
                                     setVoiceCallData((current) => ({
                                       ...current,
                                       voiceNoteUrl: "",
+                                      voiceNotePreviewUrl: "",
                                     }))
                                   }
                                   disabled={submitting}

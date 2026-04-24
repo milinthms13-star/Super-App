@@ -274,7 +274,8 @@ router.put('/:id', async (req, res) => {
       completed,
       recipientPhoneNumber,
       voiceMessage,
-      messageType
+      messageType,
+      voiceNoteUrl
     } = req.body;
 
     const validationMessage = validateReminderFields(
@@ -306,7 +307,10 @@ router.put('/:id', async (req, res) => {
     if (reminders !== undefined) reminder.reminders = reminders;
     if (recurring !== undefined) reminder.recurring = recurring;
     if (recipientPhoneNumber !== undefined) {
-      reminder.recipientPhoneNumber = String(recipientPhoneNumber || "").trim();
+      const formattedPhoneNumber = String(recipientPhoneNumber || "").trim();
+      reminder.recipientPhoneNumber = formattedPhoneNumber
+        ? voiceCallService.formatPhoneNumber(formattedPhoneNumber)
+        : '';
     }
     if (voiceMessage !== undefined) {
       reminder.voiceMessage = String(voiceMessage || "").trim();
@@ -314,10 +318,22 @@ router.put('/:id', async (req, res) => {
     if (messageType !== undefined && ['text', 'audio'].includes(messageType)) {
       reminder.messageType = messageType;
     }
+    if (voiceNoteUrl !== undefined) {
+      reminder.voiceNoteUrl = String(voiceNoteUrl || '').trim();
+    }
+
+    if (reminder.messageType === 'text') {
+      reminder.voiceNoteUrl = '';
+    }
+
+    if (reminder.messageType === 'audio') {
+      reminder.voiceMessage = reminder.voiceMessage || '';
+    }
 
     if (reminders !== undefined && !reminders.includes('Call')) {
       reminder.recipientPhoneNumber = '';
       reminder.voiceMessage = '';
+      reminder.voiceNoteUrl = '';
       reminder.messageType = 'text';
       reminder.callStatus = 'pending';
       reminder.lastCallTime = undefined;
@@ -467,6 +483,7 @@ router.post('/voice-call', async (req, res) => {
       recipientPhoneNumber,
       voiceMessage,
       messageType = 'text',
+      voiceNoteUrl,
       maxCallAttempts = 3
     } = req.body;
 
@@ -480,10 +497,17 @@ router.post('/voice-call', async (req, res) => {
       });
     }
 
-    if (!voiceMessage || voiceMessage.trim().length === 0) {
+    if (messageType === 'text' && (!voiceMessage || voiceMessage.trim().length === 0)) {
       return res.status(400).json({
         success: false,
         message: 'Voice message is required'
+      });
+    }
+
+    if (messageType === 'audio' && !String(voiceNoteUrl || '').trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Voice note URL is required for audio reminders'
       });
     }
 
@@ -527,8 +551,9 @@ router.post('/voice-call', async (req, res) => {
       // Voice call fields
       recipientId,
       recipientPhoneNumber: voiceCallService.formatPhoneNumber(recipientPhoneNumber),
-      voiceMessage: voiceMessage.trim(),
+      voiceMessage: messageType === 'text' ? voiceMessage.trim() : '',
       messageType,
+      voiceNoteUrl: messageType === 'audio' ? String(voiceNoteUrl || '').trim() : '',
       callStatus: 'pending',
       maxCallAttempts,
       senderName: req.user.name || 'Reminder Service'
@@ -576,7 +601,7 @@ router.get('/:id/voice-call-status', async (req, res) => {
       });
     }
 
-    if (!reminder.recipientId || !reminder.recipientPhoneNumber) {
+    if (!reminder.recipientPhoneNumber) {
       return res.status(400).json({
         success: false,
         message: 'This reminder does not have a voice call configured'
@@ -590,7 +615,10 @@ router.get('/:id/voice-call-status', async (req, res) => {
         title: reminder.title,
         callStatus: reminder.callStatus,
         recipientPhoneNumber: reminder.recipientPhoneNumber,
-        voiceMessage: reminder.voiceMessage.substring(0, 100) + '...',
+        voiceMessage:
+          reminder.messageType === 'audio'
+            ? 'Pre-recorded audio configured'
+            : `${String(reminder.voiceMessage || '').substring(0, 100)}...`,
         lastCallTime: reminder.lastCallTime,
         nextCallTime: reminder.nextCallTime,
         callAttempts: reminder.callAttempts,
@@ -625,7 +653,12 @@ router.post('/:id/trigger-call', async (req, res) => {
       });
     }
 
-    if (!reminder.recipientPhoneNumber || !reminder.voiceMessage) {
+    const hasVoiceContent =
+      reminder.messageType === 'audio'
+        ? Boolean(String(reminder.voiceNoteUrl || '').trim())
+        : Boolean(String(reminder.voiceMessage || '').trim());
+
+    if (!reminder.recipientPhoneNumber || !hasVoiceContent) {
       return res.status(400).json({
         success: false,
         message: 'Reminder is not configured for voice calls'

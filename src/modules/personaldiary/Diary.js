@@ -11,11 +11,15 @@ import {
   deleteDiaryCalendarItem,
   fetchTags,
   fetchMoodStats,
+  fetchUpcomingReminders,
 } from "../../services/diaryService";
+import notificationService from "../../services/notificationService";
 import DiaryEditor from "./DiaryEditor";
 import DiaryEntryCard from "./DiaryEntryCard";
 import DiaryCalendar from "./DiaryCalendar";
 import MoodChart from "./MoodChart";
+import TodaysSummary from "./TodaysSummary";
+import { io } from "socket.io-client";
 
 const MOODS = [
   { value: "very_sad", label: "😭", emoji: "😭" },
@@ -46,6 +50,7 @@ const sortCalendarItems = (items = []) =>
 const Diary = () => {
   const [entries, setEntries] = useState([]);
   const [calendarItems, setCalendarItems] = useState([]);
+  const [upcomingReminders, setUpcomingReminders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -66,7 +71,63 @@ const Diary = () => {
     loadCalendarItems();
     loadTags();
     loadMoodStats();
+    loadUpcomingReminders();
+    setupNotifications();
   }, []);
+
+  // Setup notifications on mount
+  const setupNotifications = async () => {
+    try {
+      // Request notification permission
+      await notificationService.requestPermission();
+
+      // Connect to WebSocket for reminder notifications
+      const BACKEND_BASE_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+      const socket = io(BACKEND_BASE_URL, {
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+      });
+
+      // Setup WebSocket listeners
+      notificationService.setupWebSocketListeners(socket);
+
+      // Listen for reminder notifications event in the page
+      window.addEventListener("reminderNotification", handleReminderNotification);
+
+      return () => {
+        window.removeEventListener(
+          "reminderNotification",
+          handleReminderNotification
+        );
+        socket.disconnect();
+        notificationService.destroy();
+      };
+    } catch (error) {
+      console.error("Error setting up notifications:", error);
+    }
+  };
+
+  const handleReminderNotification = (event) => {
+    const reminder = event.detail;
+    console.log("Reminder notification received:", reminder);
+    // Trigger any additional actions when reminder is shown
+  };
+
+  const loadUpcomingReminders = async () => {
+    try {
+      const response = await fetchUpcomingReminders(7);
+      setUpcomingReminders(Array.isArray(response.data) ? response.data : []);
+
+      // Start local reminder checking
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        notificationService.startLocalReminderCheck(response.data);
+      }
+    } catch (err) {
+      console.error("Failed to load upcoming reminders:", err);
+    }
+  };
 
   const loadEntries = async () => {
     try {
@@ -278,6 +339,11 @@ const Diary = () => {
           submitting={submitting}
         />
       )}
+
+      {/* Today's Summary Section */}
+      <section className="diary-todays-section">
+        <TodaysSummary />
+      </section>
 
       {/* View Mode Selector */}
       <div className="diary-view-selector">

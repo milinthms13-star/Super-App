@@ -74,16 +74,33 @@ class VoiceCallScheduler {
 
       // Find all pending voice call reminders that are due
       const dueReminders = await Reminder.find({
-        recipientId: { $exists: true, $ne: null },
-        recipientPhoneNumber: { $exists: true, $ne: null },
-        voiceMessage: { $exists: true, $ne: null },
+        recipientPhoneNumber: { $exists: true, $nin: [null, ''] },
         callStatus: { $in: ['pending', 'ringing', 'no-answer'] },
-        $expr: {
-          $lte: [{ $ifNull: ['$nextCallTime', '$dueDate'] }, new Date()]
-        },
-        $expr: {
-          $lt: ['$callAttempts', '$maxCallAttempts']
-        }
+        $or: [
+          {
+            messageType: 'audio',
+            voiceNoteUrl: { $exists: true, $nin: [null, ''] }
+          },
+          {
+            $or: [
+              { messageType: { $exists: false } },
+              { messageType: 'text' }
+            ],
+            voiceMessage: { $exists: true, $nin: [null, ''] }
+          }
+        ],
+        $and: [
+          {
+            $expr: {
+              $lte: [{ $ifNull: ['$nextCallTime', '$dueDate'] }, new Date()]
+            }
+          },
+          {
+            $expr: {
+              $lt: ['$callAttempts', '$maxCallAttempts']
+            }
+          }
+        ]
       });
 
       if (dueReminders.length === 0) {
@@ -230,8 +247,17 @@ class VoiceCallScheduler {
         throw new Error('Reminder not found');
       }
 
-      if (!reminder.recipientId || !reminder.recipientPhoneNumber) {
+      const hasVoiceContent =
+        reminder.messageType === 'audio'
+          ? Boolean(String(reminder.voiceNoteUrl || '').trim())
+          : Boolean(String(reminder.voiceMessage || '').trim());
+
+      if (!reminder.recipientPhoneNumber) {
         throw new Error('Reminder does not have recipient phone number configured');
+      }
+
+      if (!hasVoiceContent) {
+        throw new Error('Reminder does not have playable voice content configured');
       }
 
       logger.info(`Manually triggering voice call for reminder: ${reminderId}`);

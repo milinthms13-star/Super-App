@@ -9,6 +9,26 @@ const router = express.Router();
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+const getAudioFileExtension = (mimeType = '') => {
+  if (mimeType.includes('mpeg')) {
+    return 'mp3';
+  }
+
+  if (mimeType.includes('wav')) {
+    return 'wav';
+  }
+
+  if (mimeType.includes('ogg')) {
+    return 'ogg';
+  }
+
+  if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+    return 'm4a';
+  }
+
+  return 'webm';
+};
+
 // POST /api/voice/initiate - Start voice call
 router.post('/initiate', authenticate, async (req, res) => {
   try {
@@ -92,9 +112,15 @@ router.post('/end/:callId', authenticate, async (req, res) => {
 router.post('/voicenote', authenticate, upload.single('audio'), async (req, res) => {
   try {
     const { module, contextId, recipientId } = req.body;
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No audio file was uploaded' });
+    }
 
-    const result = await uploadToS3(req.file.buffer, `voice-notes/${module}/${contextId}/${Date.now()}.m4a`, {
-      contentType: 'audio/m4a'
+    const mimeType = req.file.mimetype || 'audio/webm';
+    const extension = getAudioFileExtension(mimeType);
+    const originalFileName = req.file.originalname || `voice-note.${extension}`;
+    const result = await uploadToS3(req.file.buffer, `voice-notes/${module}/${contextId}/${Date.now()}.${extension}`, {
+      contentType: mimeType
     });
 
     const voiceNote = new FileStorage({
@@ -102,8 +128,8 @@ router.post('/voicenote', authenticate, upload.single('audio'), async (req, res)
       contextId,
       contextModule: module,
       recipientId,
-      originalFileName: 'voice-note.m4a',
-      mimeType: 'audio/m4a',
+      originalFileName,
+      mimeType,
       fileSize: req.file.size,
       s3Url: result.s3Url
     });
@@ -118,7 +144,13 @@ router.post('/voicenote', authenticate, upload.single('audio'), async (req, res)
       contextId
     });
 
-    res.json({ success: true, voiceNote });
+    res.json({
+      success: true,
+      voiceNote: {
+        ...voiceNote.toObject(),
+        url: voiceNote.s3Url
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
