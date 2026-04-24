@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
-import { getAvatarLabel, isSameEntity } from './utils';
+import {
+  getAvatarLabel,
+  getChatClearTimestamp,
+  isMessageHiddenByClear,
+  isSameEntity,
+} from './utils';
 
 const ChatList = ({
   chats,
@@ -9,6 +14,7 @@ const ChatList = ({
   onNewChat,
   searchQuery,
   onSearchChange,
+  clearedChats = {},
 }) => {
   const { currentUser } = useApp();
   const [filteredChats, setFilteredChats] = useState(chats);
@@ -51,6 +57,13 @@ const ChatList = ({
 
   const getChatPreview = (chat) => {
     const lastMessage = chat.lastMessage;
+    const clearedAt = getChatClearTimestamp(chat?._id, clearedChats);
+    const lastVisibleCandidate = lastMessage || { createdAt: chat?.lastMessageAt };
+
+    if (isMessageHiddenByClear(lastVisibleCandidate, clearedAt)) {
+      return 'Chat cleared. New messages will appear here.';
+    }
+
     if (!lastMessage) {
       return 'No messages yet';
     }
@@ -69,6 +82,20 @@ const ChatList = ({
       default:
         return lastMessage.content?.substring(0, 50) || 'No messages yet';
     }
+  };
+
+  const getChatTime = (chat) => {
+    const clearedAt = getChatClearTimestamp(chat?._id, clearedChats);
+    if (isMessageHiddenByClear(chat?.lastMessage || { createdAt: chat?.lastMessageAt }, clearedAt)) {
+      return '';
+    }
+
+    return chat.lastMessageAt
+      ? new Date(chat.lastMessageAt).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '';
   };
 
   return (
@@ -108,14 +135,7 @@ const ChatList = ({
               </div>
               <div className="chat-item-meta">
                 {chat.unreadCount > 0 && <span className="unread-badge">{chat.unreadCount}</span>}
-                <span className="chat-time">
-                  {chat.lastMessageAt
-                    ? new Date(chat.lastMessageAt).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
-                    : ''}
-                </span>
+                <span className="chat-time">{getChatTime(chat)}</span>
               </div>
             </div>
           ))

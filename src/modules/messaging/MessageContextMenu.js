@@ -4,12 +4,12 @@ const MessageContextMenu = ({
   message,
   position,
   onEdit,
-  onDelete,
+  onRecall,
   onReply,
   onReact,
   onClose,
   canEdit = false,
-  canDelete = false,
+  canRecall = false,
 }) => {
   const menuRef = useRef(null);
 
@@ -72,17 +72,17 @@ const MessageContextMenu = ({
           </button>
         )}
 
-        {canDelete && (
+        {canRecall && (
           <button
             className="menu-item danger"
             onClick={() => {
-              onDelete(message);
+              onRecall(message);
               onClose();
             }}
             type="button"
-            title="Delete message"
+            title="Recall message"
           >
-            Delete
+            Recall
           </button>
         )}
       </div>

@@ -1,51 +1,55 @@
 import React from 'react';
 
-const MessagePagination = ({ 
-  currentPage, 
-  totalPages, 
-  onPreviousPage, 
-  onNextPage,
-  messagesPerPage = 20,
-  totalMessages = 0
+const MessagePagination = ({
+  visibleMessages = 0,
+  totalMessages = 0,
+  canShowOlderMessages = false,
+  hasOlderMessagesLoaded = false,
+  loadingOlderMessages = false,
+  onShowOlderMessages,
+  onShowLatestOnly,
 }) => {
-  const startMessage = currentPage * messagesPerPage + 1;
-  const endMessage = Math.min((currentPage + 1) * messagesPerPage, totalMessages);
-
-  if (totalPages <= 1) {
+  if (!canShowOlderMessages && !hasOlderMessagesLoaded) {
     return null;
   }
+
+  const hiddenOlderMessages = Math.max(totalMessages - visibleMessages, 0);
 
   return (
     <div className="message-pagination">
       <div className="pagination-info">
         <span className="message-count">
-          {totalMessages > 0 
-            ? `${startMessage}-${endMessage} of ${totalMessages}` 
+          {totalMessages > 0
+            ? `Showing ${visibleMessages} of ${totalMessages} messages`
             : 'No messages'}
         </span>
       </div>
       <div className="pagination-controls">
-        <button 
-          className="btn-pagination"
-          onClick={onPreviousPage}
-          disabled={currentPage === 0}
-          title="Previous page"
-          type="button"
-        >
-          ← Previous
-        </button>
-        <span className="page-indicator">
-          Page {currentPage + 1} of {totalPages}
-        </span>
-        <button 
-          className="btn-pagination"
-          onClick={onNextPage}
-          disabled={currentPage >= totalPages - 1}
-          title="Next page"
-          type="button"
-        >
-          Next →
-        </button>
+        {canShowOlderMessages && (
+          <button
+            className="btn-pagination"
+            onClick={onShowOlderMessages}
+            disabled={loadingOlderMessages}
+            title="Show older messages"
+            type="button"
+          >
+            {loadingOlderMessages
+              ? 'Loading...'
+              : hiddenOlderMessages > 0
+                ? `Show older messages (${hiddenOlderMessages})`
+                : 'Show older messages'}
+          </button>
+        )}
+        {hasOlderMessagesLoaded && (
+          <button
+            className="btn-pagination"
+            onClick={onShowLatestOnly}
+            title="Hide older messages"
+            type="button"
+          >
+            Show latest only
+          </button>
+        )}
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useApp } from '../../contexts/AppContext';
 import { getStoredAuthToken } from '../../utils/auth';
 import '../../styles/Messaging.css';
+import '../../styles/GroupCreation.css';
 import ChatList from './ChatList';
 import ChatWindow from './ChatWindow';
 import ContactsList from './ContactsList';
@@ -12,9 +13,20 @@ import NotificationBell from './NotificationBell';
 import InvitationPanel from './InvitationPanel';
 import VisibilitySettings from './VisibilitySettings';
 import ContactMeansSettings from './ContactMeansSettings';
+import GroupCreation from './GroupCreation';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
-import { getAvatarLabel, getEntityId, inferMessageTypeFromMimeType, isSameEntity } from './utils';
+import {
+  filterMessagesByClearTimestamp,
+  getAvatarLabel,
+  getChatClearTimestamp,
+  getEntityId,
+  inferMessageTypeFromMimeType,
+  isSameEntity,
+  loadClearedChats,
+  mergePagedMessages,
+  saveClearedChats,
+} from './utils';
 
 const getOtherParticipant = (chat, currentUser) =>
   chat?.participants?.find((participant) => !isSameEntity(participant, currentUser)) || null;
@@ -79,6 +91,14 @@ const mergeConfirmedMessage = (currentMessages = [], confirmedMessage) => {
   return nextMessages;
 };
 
+const MESSAGE_PAGE_SIZE = 20;
+const DEFAULT_MESSAGE_PAGINATION = {
+  page: 1,
+  pages: 1,
+  total: 0,
+  limit: MESSAGE_PAGE_SIZE,
+};
+
 const Messaging = () => {
   const { currentUser, apiCall } = useApp();
   const [activeTab, setActiveTab] = useState('chats');
@@ -90,6 +110,7 @@ const Messaging = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
+  const [newChatMode, setNewChatMode] = useState('direct'); // 'direct' or 'group'
   const [socket, setSocket] = useState(null);
   const [isOnline, setIsOnline] = useState(false);
   const [activeCall, setActiveCall] = useState(null);
@@ -107,10 +128,15 @@ const Messaging = () => {
   const [pendingInvitations, setPendingInvitations] = useState([]);
   const [loadingInvitations, setLoadingInvitations] = useState(false);
   const [sendingVoiceNote, setSendingVoiceNote] = useState(false);
+  const [messagePagination, setMessagePagination] = useState(DEFAULT_MESSAGE_PAGINATION);
+  const [loadedMessagePages, setLoadedMessagePages] = useState(1);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [clearedChats, setClearedChats] = useState(() => loadClearedChats());
 
   const socketRef = useRef(null);
   const activeCallRef = useRef(null);
   const incomingCallRef = useRef(null);
+  const clearedChatsRef = useRef(loadClearedChats());
   const currentUserId = getEntityId(currentUser);
   const resolvedCurrentUserId = useMemo(() => {
     const selectedChatParticipant = selectedChat?.participants?.find((participant) =>
@@ -119,6 +145,10 @@ const Messaging = () => {
 
     return getEntityId(selectedChatParticipant) || currentUserId;
   }, [currentUser, currentUserId, selectedChat]);
+  const selectedChatClearedAt = useMemo(
+    () => getChatClearTimestamp(selectedChat?._id, clearedChats),
+    [clearedChats, selectedChat]
+  );
   const latestMessageId = useMemo(() => {
     const latestReplyableMessage = [...messages]
       .reverse()
@@ -172,9 +202,12 @@ const Messaging = () => {
     }
   }, [apiCall]);
 
-  const loadContacts = useCallback(async () => {
+  const loadContacts = useCallback(async (showBlocked = false) => {
     try {
-      const response = await apiCall('/messaging/contacts', 'GET');
+      const url = showBlocked
+        ? '/messaging/contacts?showBlocked=true'
+        : '/messaging/contacts';
+      const response = await apiCall(url, 'GET');
       if (response?.contacts) {
         setContacts(response.contacts);
       }
@@ -183,12 +216,34 @@ const Messaging = () => {
     }
   }, [apiCall]);
 
-  const loadMessages = useCallback(async (chatId) => {
+  const loadMessages = useCallback(async (chatId, options = {}) => {
+    const {
+      page = 1,
+      appendOlderMessages = false,
+    } = options;
+
     try {
-      const response = await apiCall(`/messaging/messages/${chatId}`, 'GET');
-      if (response?.messages) {
-        setMessages(response.messages);
+      const response = await apiCall(`/messaging/messages/${chatId}`, 'GET', {
+        page,
+        limit: MESSAGE_PAGE_SIZE,
+      });
+
+      const clearedAt = getChatClearTimestamp(chatId, clearedChatsRef.current);
+      const nextMessages = filterMessagesByClearTimestamp(response?.messages || [], clearedAt);
+
+      if (appendOlderMessages) {
+        setMessages((prevMessages) => mergePagedMessages(nextMessages, prevMessages));
+        setLoadedMessagePages((prevPages) => Math.max(prevPages, page));
+      } else {
+        setMessages(nextMessages);
+        setLoadedMessagePages(1);
       }
+
+      setMessagePagination({
+        ...DEFAULT_MESSAGE_PAGINATION,
+        ...(response?.pagination || {}),
+        limit: response?.pagination?.limit || MESSAGE_PAGE_SIZE,
+      });
     } catch (error) {
       console.error('Error loading messages:', error);
     }
@@ -319,6 +374,11 @@ const Messaging = () => {
   }, [incomingCall]);
 
   useEffect(() => {
+    clearedChatsRef.current = clearedChats;
+    saveClearedChats(clearedChats);
+  }, [clearedChats]);
+
+  useEffect(() => {
     loadChats();
     loadContacts();
     loadNotifications();
@@ -334,6 +394,8 @@ const Messaging = () => {
     }
 
     setMessages([]);
+    setMessagePagination(DEFAULT_MESSAGE_PAGINATION);
+    setLoadedMessagePages(1);
     setShowAISuggestions(false);
     setEncryptionEnabled(false);
   }, [selectedChat, loadMessages, checkEncryptionStatus]);
@@ -684,7 +746,7 @@ const Messaging = () => {
 
       newSocket.disconnect();
     };
-  }, [currentUser, loadMessages, selectedChat, updateChatPreview]);
+  }, [apiCall, currentUser, loadMessages, resolvedCurrentUserId, selectedChat, updateChatPreview]);
 
   useEffect(() => {
     if (socket && selectedChat?._id) {
@@ -764,6 +826,87 @@ const Messaging = () => {
     setShowNewChat(false);
   };
 
+  const handleShowOlderMessages = useCallback(async () => {
+    if (!selectedChat?._id || loadingOlderMessages || selectedChatClearedAt) {
+      return;
+    }
+
+    const nextPage = loadedMessagePages + 1;
+    if (nextPage > (messagePagination.pages || 1)) {
+      return;
+    }
+
+    try {
+      setLoadingOlderMessages(true);
+      await loadMessages(selectedChat._id, {
+        page: nextPage,
+        appendOlderMessages: true,
+      });
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [
+    loadMessages,
+    loadedMessagePages,
+    loadingOlderMessages,
+    messagePagination.pages,
+    selectedChat,
+    selectedChatClearedAt,
+  ]);
+
+  const handleShowLatestOnly = useCallback(async () => {
+    if (!selectedChat?._id) {
+      return;
+    }
+
+    await loadMessages(selectedChat._id);
+  }, [loadMessages, selectedChat]);
+
+  const handleClearChat = useCallback(async () => {
+    if (!selectedChat?._id) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Clear this chat from your view? You can restore the hidden history anytime.'
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const chatId = getEntityId(selectedChat._id);
+    const clearedAt = new Date().toISOString();
+    const nextClearedChats = {
+      ...clearedChatsRef.current,
+      [chatId]: clearedAt,
+    };
+
+    clearedChatsRef.current = nextClearedChats;
+    setClearedChats(nextClearedChats);
+    setMessages((prevMessages) => filterMessagesByClearTimestamp(prevMessages, clearedAt));
+    setFocusedMessageId('');
+
+    try {
+      await apiCall(`/messaging/chats/${selectedChat._id}/mark-read`, 'PUT');
+    } catch (error) {
+      console.error('Error marking cleared chat as read:', error);
+    }
+  }, [apiCall, selectedChat]);
+
+  const handleRestoreClearedChat = useCallback(async () => {
+    if (!selectedChat?._id) {
+      return;
+    }
+
+    const chatId = getEntityId(selectedChat._id);
+    const nextClearedChats = { ...clearedChatsRef.current };
+    delete nextClearedChats[chatId];
+
+    clearedChatsRef.current = nextClearedChats;
+    setClearedChats(nextClearedChats);
+    await loadMessages(selectedChat._id);
+  }, [loadMessages, selectedChat]);
+
   const handleCreateDirectChat = async (userId) => {
     try {
       const response = await apiCall('/messaging/chats/direct', 'POST', {
@@ -781,6 +924,16 @@ const Messaging = () => {
     } catch (error) {
       console.error('Error creating chat:', error);
     }
+  };
+
+  const handleGroupCreated = (group) => {
+    setChats((prevChats) => {
+      const filteredChats = prevChats.filter((chat) => chat._id !== group._id);
+      return [group, ...filteredChats];
+    });
+    setSelectedChat(group);
+    setShowNewChat(false);
+    setNewChatMode('direct'); // Reset mode
   };
 
   const handleBlockContact = async (userId) => {
@@ -986,7 +1139,8 @@ const Messaging = () => {
         query,
         chatId: chatId || selectedChat?._id,
       });
-      return response?.messages || [];
+      const clearedAt = getChatClearTimestamp(chatId || selectedChat?._id, clearedChatsRef.current);
+      return filterMessagesByClearTimestamp(response?.messages || [], clearedAt);
     } catch (error) {
       console.error('Error searching messages:', error);
       return [];
@@ -1278,6 +1432,7 @@ const Messaging = () => {
               onNewChat={() => setShowNewChat(true)}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
+              clearedChats={clearedChats}
             />
           )}
 
@@ -1289,6 +1444,13 @@ const Messaging = () => {
               onUnblockContact={handleUnblockContact}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
+              onFilterChange={(filterType) => {
+                if (filterType === 'blocked') {
+                  loadContacts(true);
+                } else {
+                  loadContacts(false);
+                }
+              }}
             />
           )}
 
@@ -1331,112 +1493,139 @@ const Messaging = () => {
 
         <div className="messaging-main">
           {showNewChat ? (
-            <div className="new-chat-panel">
-              <div className="new-chat-header-copy">
-                <h3>Start a New Chat</h3>
-                <p className="new-chat-intro">
-                  Search for people, send a LinkUp invite, or jump into a conversation with someone you already know.
-                </p>
-              </div>
-              <div className="new-chat-search">
-                <input
-                  type="text"
-                  placeholder="Search for people to invite..."
-                  value={newChatSearchQuery}
-                  onChange={(e) => {
-                    setNewChatSearchQuery(e.target.value);
-                    searchUsers(e.target.value);
-                  }}
-                  className="search-input"
-                />
-              </div>
+            newChatMode === 'group' ? (
+              <GroupCreation
+                onGroupCreated={handleGroupCreated}
+                onCancel={() => {
+                  setShowNewChat(false);
+                  setNewChatMode('direct');
+                }}
+              />
+            ) : (
+              <div className="new-chat-panel">
+                <div className="new-chat-mode-toggle">
+                  <button
+                    className={`mode-btn ${newChatMode === 'direct' ? 'active' : ''}`}
+                    onClick={() => setNewChatMode('direct')}
+                    type="button"
+                  >
+                    💬 Direct Chat
+                  </button>
+                  <button
+                    className={`mode-btn ${newChatMode === 'group' ? 'active' : ''}`}
+                    onClick={() => setNewChatMode('group')}
+                    type="button"
+                  >
+                    👥 Create Group
+                  </button>
+                </div>
 
-              {newChatSearchQuery.trim() ? (
-                <div className="search-results">
-                  {searchingUsers ? (
-                    <p className="loading">Searching...</p>
-                  ) : availableUsers.length > 0 ? (
-                    availableUsers.map((user) => {
-                      const visibility = user.visibility || {
-                        visibleViaEmail: true,
-                        visibleViaPhone: true,
-                        visibleViaUsername: true,
-                      };
-                      const contactMeans = user.contactMeans || {
-                        availableForChat: true,
-                        availableForVoiceCall: true,
-                        availableForVideoCall: true,
-                      };
-                      const visibleMethods = [];
-                      if (visibility.visibleViaEmail) visibleMethods.push('Email');
-                      if (visibility.visibleViaPhone) visibleMethods.push('Phone');
-                      if (visibility.visibleViaUsername) visibleMethods.push('Username');
+                <div className="new-chat-header-copy">
+                  <h3>Start a New Chat</h3>
+                  <p className="new-chat-intro">
+                    Search for people, send a LinkUp invite, or jump into a conversation with someone you already know.
+                  </p>
+                </div>
+                <div className="new-chat-search">
+                  <input
+                    type="text"
+                    placeholder="Search for people to invite..."
+                    value={newChatSearchQuery}
+                    onChange={(e) => {
+                      setNewChatSearchQuery(e.target.value);
+                      searchUsers(e.target.value);
+                    }}
+                    className="search-input"
+                  />
+                </div>
 
-                      const availableMeans = [];
-                      if (contactMeans.availableForChat) availableMeans.push('Chat');
-                      if (contactMeans.availableForVoiceCall) availableMeans.push('Voice');
-                      if (contactMeans.availableForVideoCall) availableMeans.push('Video');
+                {newChatSearchQuery.trim() ? (
+                  <div className="search-results">
+                    {searchingUsers ? (
+                      <p className="loading">Searching...</p>
+                    ) : availableUsers.length > 0 ? (
+                      availableUsers.map((user) => {
+                        const visibility = user.visibility || {
+                          visibleViaEmail: true,
+                          visibleViaPhone: true,
+                          visibleViaUsername: true,
+                        };
+                        const contactMeans = user.contactMeans || {
+                          availableForChat: true,
+                          availableForVoiceCall: true,
+                          availableForVideoCall: true,
+                        };
+                        const visibleMethods = [];
+                        if (visibility.visibleViaEmail) visibleMethods.push('Email');
+                        if (visibility.visibleViaPhone) visibleMethods.push('Phone');
+                        if (visibility.visibleViaUsername) visibleMethods.push('Username');
 
-                      return (
-                        <div key={user._id} className="user-search-result">
-                          <span className="user-avatar">{getAvatarLabel(user.name, user.username, user.avatar, 'U')}</span>
-                          <div className="user-info">
-                            <h4>{user.name}</h4>
-                            <p>{user.email}</p>
-                            <div className="badges-row">
-                              <div className="visibility-badges">
-                                {visibleMethods.map((method, idx) => (
-                                  <span key={idx} className="visibility-badge" title="Can find you via this method">
-                                    {method}
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="contact-means-badges">
-                                {availableMeans.map((means, idx) => (
-                                  <span key={idx} className="contact-means-badge" title="Available for this contact method">
-                                    {means}
-                                  </span>
-                                ))}
+                        const availableMeans = [];
+                        if (contactMeans.availableForChat) availableMeans.push('Chat');
+                        if (contactMeans.availableForVoiceCall) availableMeans.push('Voice');
+                        if (contactMeans.availableForVideoCall) availableMeans.push('Video');
+
+                        return (
+                          <div key={user._id} className="user-search-result">
+                            <span className="user-avatar">{getAvatarLabel(user.name, user.username, user.avatar, 'U')}</span>
+                            <div className="user-info">
+                              <h4>{user.name}</h4>
+                              <p>{user.email}</p>
+                              <div className="badges-row">
+                                <div className="visibility-badges">
+                                  {visibleMethods.map((method, idx) => (
+                                    <span key={idx} className="visibility-badge" title="Can find you via this method">
+                                      {method}
+                                    </span>
+                                  ))}
+                                </div>
+                                <div className="contact-means-badges">
+                                  {availableMeans.map((means, idx) => (
+                                    <span key={idx} className="contact-means-badge" title="Available for this contact method">
+                                      {means}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             </div>
+                            <button
+                              className="btn-add-contact"
+                              onClick={() => handleAddContact(user._id, user.name, user.email, user.username)}
+                            >
+                              + Invite
+                            </button>
                           </div>
-                          <button
-                            className="btn-add-contact"
-                            onClick={() => handleAddContact(user._id, user.name, user.email, user.username)}
+                        );
+                      })
+                    ) : (
+                      <p className="no-results">No users found. Try another search.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="available-users">
+                    <p className="section-title">Your Contacts</p>
+                    {contacts.filter((c) => !c.isBlocked).length > 0 ? (
+                      contacts
+                        .filter((contact) => !contact.isBlocked)
+                        .map((contact) => (
+                          <div
+                            key={contact._id}
+                            className="user-card"
+                            onClick={() => handleCreateDirectChat(contact.contactUserId._id)}
                           >
-                            + Invite
-                          </button>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="no-results">No users found. Try another search.</p>
-                  )}
-                </div>
-              ) : (
-                <div className="available-users">
-                  <p className="section-title">Your Contacts</p>
-                  {contacts.filter((c) => !c.isBlocked).length > 0 ? (
-                    contacts
-                      .filter((contact) => !contact.isBlocked)
-                      .map((contact) => (
-                        <div
-                          key={contact._id}
-                          className="user-card"
-                          onClick={() => handleCreateDirectChat(contact.contactUserId._id)}
-                        >
-                          <span className="user-avatar">{getAvatarLabel(contact.displayName, contact.contactUserId?.name, contact.contactUserId?.username, contact.contactUserId?.avatar, 'U')}</span>
-                          <h4>{contact.contactUserId?.name}</h4>
-                          <p>{contact.category}</p>
-                        </div>
-                      ))
-                  ) : (
-                    <p className="no-contacts">No contacts yet. Search above to add one!</p>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
+                            <span className="user-avatar">{getAvatarLabel(contact.displayName, contact.contactUserId?.name, contact.contactUserId?.username, contact.contactUserId?.avatar, 'U')}</span>
+                            <h4>{contact.contactUserId?.name}</h4>
+                            <p>{contact.category}</p>
+                          </div>
+                        ))
+                    ) : (
+                      <p className="no-contacts">No contacts yet. Search above to add one!</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          ) : selectedChat ? (
             <>
               <ChatWindow
                 chat={selectedChat}
@@ -1456,6 +1645,15 @@ const Messaging = () => {
                 sendingVoiceMessage={sendingVoiceNote}
                 focusedMessageId={focusedMessageId}
                 onFocusHandled={() => setFocusedMessageId('')}
+                totalMessages={messagePagination.total}
+                canShowOlderMessages={!selectedChatClearedAt && loadedMessagePages < (messagePagination.pages || 1)}
+                hasOlderMessagesLoaded={!selectedChatClearedAt && loadedMessagePages > 1}
+                loadingOlderMessages={loadingOlderMessages}
+                onShowOlderMessages={handleShowOlderMessages}
+                onShowLatestOnly={handleShowLatestOnly}
+                onClearChat={handleClearChat}
+                onRestoreClearedChat={handleRestoreClearedChat}
+                isChatCleared={Boolean(selectedChatClearedAt)}
               />
 
               {showAISuggestions && selectedChat?._id && latestMessageId && (
@@ -1483,6 +1681,10 @@ const Messaging = () => {
                 />
               )}
             </>
+          ) : (
+            <div className="messaging-empty-state">
+              <p>Select a chat to start messaging</p>
+            </div>
           )}
         </div>
       </div>

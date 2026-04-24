@@ -4,6 +4,7 @@ import MessageSearch from './MessageSearch';
 import MessageContextMenu from './MessageContextMenu';
 import EmojiPicker from './EmojiPicker';
 import ReadReceipts from './ReadReceipts';
+import MessagePagination from './MessagePagination';
 import { getAvatarLabel, getEntityId, isSameEntity } from './utils';
 
 const ChatWindow = ({
@@ -24,6 +25,15 @@ const ChatWindow = ({
   onFocusHandled,
   onSendVoiceMessage,
   sendingVoiceMessage,
+  totalMessages = 0,
+  canShowOlderMessages = false,
+  hasOlderMessagesLoaded = false,
+  loadingOlderMessages = false,
+  onShowOlderMessages,
+  onShowLatestOnly,
+  onClearChat,
+  onRestoreClearedChat,
+  isChatCleared = false,
 }) => {
   const { currentUser } = useApp();
   const [messageInput, setMessageInput] = useState('');
@@ -42,13 +52,29 @@ const ChatWindow = ({
   const mediaStreamRef = useRef(null);
   const voiceChunksRef = useRef([]);
   const voiceRecordingStartedAtRef = useRef(0);
+  const previousMessageSnapshotRef = useRef({ count: 0, lastId: '' });
   const currentUserId = getEntityId(currentUser);
   const resolvedCurrentUserId = getEntityId(
     chat?.participants?.find((participant) => isSameEntity(participant, currentUser))
   ) || currentUserId;
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const latestMessageId = getEntityId(messages[messages.length - 1]);
+    const previousSnapshot = previousMessageSnapshotRef.current;
+    const isFirstLoad = previousSnapshot.count === 0 && messages.length > 0;
+    const appendedLatestMessage =
+      messages.length > previousSnapshot.count &&
+      latestMessageId &&
+      latestMessageId !== previousSnapshot.lastId;
+
+    if (isFirstLoad || appendedLatestMessage) {
+      messagesEndRef.current?.scrollIntoView({ behavior: isFirstLoad ? 'auto' : 'smooth' });
+    }
+
+    previousMessageSnapshotRef.current = {
+      count: messages.length,
+      lastId: latestMessageId,
+    };
   }, [messages]);
 
   useEffect(() => {
@@ -287,18 +313,43 @@ const ChatWindow = ({
     }
   };
 
+  const openMessageActions = (message, isOwnMessage, position) => {
+    setContextMenu({
+      message,
+      canEdit: isOwnMessage && message.messageType === 'text' && !message.isPending,
+      canRecall: isOwnMessage && !message.isPending,
+      position,
+    });
+  };
+
+  const buildActionMenuPosition = (event) => {
+    const targetRect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 200;
+    const menuHeight = 220;
+
+    return {
+      x: Math.max(12, Math.min(targetRect.left, window.innerWidth - menuWidth - 12)),
+      y: Math.max(12, Math.min(targetRect.bottom + 8, window.innerHeight - menuHeight - 12)),
+    };
+  };
+
   const handleContextMenu = (event, message, isOwnMessage) => {
     if (message.isDeleted) {
       return;
     }
 
     event.preventDefault();
-    setContextMenu({
-      message,
-      canEdit: isOwnMessage && message.messageType === 'text',
-      canDelete: isOwnMessage,
-      position: { x: event.clientX, y: event.clientY },
-    });
+    openMessageActions(message, isOwnMessage, { x: event.clientX, y: event.clientY });
+  };
+
+  const handleActionButtonClick = (event, message, isOwnMessage) => {
+    if (message.isDeleted) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    openMessageActions(message, isOwnMessage, buildActionMenuPosition(event));
   };
 
   const handleEditMessage = (message) => {
@@ -306,12 +357,12 @@ const ChatWindow = ({
     setEditingContent(message.content || '');
   };
 
-  const handleDeleteSelectedMessage = async (message) => {
+  const handleRecallMessage = async (message) => {
     if (!message?._id) {
       return;
     }
 
-    if (!window.confirm('Delete this message?')) {
+    if (!window.confirm('Recall this message for everyone?')) {
       return;
     }
 
@@ -415,6 +466,14 @@ const ChatWindow = ({
           >
             Search
           </button>
+          <button
+            className={`btn-icon ${isChatCleared ? 'active' : ''}`}
+            title={isChatCleared ? 'Show cleared messages again' : 'Clear this chat from your view'}
+            onClick={isChatCleared ? onRestoreClearedChat : onClearChat}
+            type="button"
+          >
+            {isChatCleared ? 'Restore' : 'Clear'}
+          </button>
           <button className="btn-icon" title="Voice Call" onClick={() => onStartCall('audio')} type="button">
             Audio
           </button>
@@ -443,9 +502,28 @@ const ChatWindow = ({
       )}
 
       <div className="messages-container" ref={messageContainerRef}>
+        {isChatCleared ? (
+          <div className="message-history-state">
+            <p className="message-history-copy">This chat history is hidden from your view.</p>
+            <button className="btn-pagination" onClick={onRestoreClearedChat} type="button">
+              Show previous messages
+            </button>
+          </div>
+        ) : (
+          <MessagePagination
+            visibleMessages={messages.length}
+            totalMessages={Math.max(totalMessages, messages.length)}
+            canShowOlderMessages={canShowOlderMessages}
+            hasOlderMessagesLoaded={hasOlderMessagesLoaded}
+            loadingOlderMessages={loadingOlderMessages}
+            onShowOlderMessages={onShowOlderMessages}
+            onShowLatestOnly={onShowLatestOnly}
+          />
+        )}
+
         {messages.length === 0 ? (
           <div className="no-messages">
-            <p>No messages yet. Say hello!</p>
+            <p>{isChatCleared ? 'New messages will appear here.' : 'No messages yet. Say hello!'}</p>
           </div>
         ) : (
           messages.map((message, index) => {
@@ -498,7 +576,7 @@ const ChatWindow = ({
                         </div>
                       </div>
                     ) : message.isDeleted ? (
-                      <p className="message-deleted-text">This message was deleted.</p>
+                      <p className="message-deleted-text">This message was recalled.</p>
                     ) : (
                       <>
                         {message.messageType === 'text' && <p>{message.content}</p>}
@@ -565,15 +643,35 @@ const ChatWindow = ({
                         currentUserId={resolvedCurrentUserId}
                       />
                     )}
-                    {!message.isDeleted && (
+                    {!message.isDeleted && !message.isPending && isOwnMessage && (
                       <button
-                        className="message-react-trigger"
-                        onClick={(event) => handleAddReaction(message, event)}
+                        className="message-inline-action danger"
+                        onClick={() => handleRecallMessage(message)}
                         type="button"
-                        title="Add reaction"
+                        title="Recall message"
                       >
-                        +
+                        Recall
                       </button>
+                    )}
+                    {!message.isDeleted && (
+                      <>
+                        <button
+                          className="message-react-trigger"
+                          onClick={(event) => handleAddReaction(message, event)}
+                          type="button"
+                          title="Add reaction"
+                        >
+                          +
+                        </button>
+                        <button
+                          className="message-inline-action"
+                          onClick={(event) => handleActionButtonClick(event, message, isOwnMessage)}
+                          type="button"
+                          title="More actions"
+                        >
+                          More
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -597,9 +695,9 @@ const ChatWindow = ({
           message={contextMenu.message}
           position={contextMenu.position}
           canEdit={contextMenu.canEdit}
-          canDelete={contextMenu.canDelete}
+          canRecall={contextMenu.canRecall}
           onEdit={handleEditMessage}
-          onDelete={handleDeleteSelectedMessage}
+          onRecall={handleRecallMessage}
           onReply={handleReplyMessage}
           onReact={handleAddReaction}
           onClose={() => setContextMenu(null)}

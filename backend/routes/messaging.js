@@ -425,6 +425,36 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
       return res.status(403).json({ message: 'Not authorized to send message in this chat' });
     }
 
+    // Check if sender is blocked by any recipient in the chat
+    for (const participant of chat.participants) {
+      if (!objectIdEquals(participant, req.user._id)) {
+        // Check if this participant has blocked the sender
+        const blockedByParticipant = await Contact.findOne({
+          userId: participant,
+          contactUserId: req.user._id,
+        });
+
+        if (blockedByParticipant) {
+          // Clean up expired blocks first
+          blockedByParticipant.cleanupExpiredBlocks();
+          
+          // Check if currently blocked (considering time-based blocks)
+          if (blockedByParticipant.isCurrentlyBlocked()) {
+            // For direct chats, deny the message completely
+            if (chat.type === 'direct') {
+              return res.status(403).json({
+                message: 'You are blocked by this user and cannot send messages',
+              });
+            }
+            // For group chats, still allow but log it
+            logger.warn(
+              `User ${req.user._id} tried to send message to group chat but is blocked by ${participant}`
+            );
+          }
+        }
+      }
+    }
+
     const participantIds = Array.from(
       new Set(
         (chat.participants || [])
@@ -860,15 +890,22 @@ router.get('/search/messages', authenticate, attachMessagingUser, async (req, re
 // Get all contacts
 router.get('/contacts', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
-    const { page = 1, limit = 50, favorite } = req.query;
+    const { page = 1, limit = 50, favorite, showBlocked } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const pageLimit = Math.min(parseInt(limit), 100);
 
     let query = {
       userId: req.user._id,
-      isBlocked: false,
     };
+
+    // If showBlocked is explicitly true, show only blocked contacts
+    // Otherwise, show only unblocked contacts (default behavior)
+    if (showBlocked === 'true') {
+      query.isBlocked = true;
+    } else {
+      query.isBlocked = false;
+    }
 
     if (favorite === 'true') {
       query.isFavorite = true;
@@ -998,6 +1035,159 @@ router.put('/contacts/:contactUserId/unblock', authenticate, attachMessagingUser
     await contact.save();
 
     logger.info(`Contact unblocked: ${contactUserId} by ${req.user._id}`);
+    res.json({ contact });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Add scheduled block
+router.post('/contacts/:contactUserId/scheduled-block', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { contactUserId } = req.params;
+    const { type, startTime, endTime, daysOfWeek, blockStartDate, blockEndDate, validUntil, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(contactUserId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    if (!['time', 'period'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid block type. Must be "time" or "period"' });
+    }
+
+    if (type === 'time' && (!startTime || !endTime)) {
+      return res.status(400).json({ message: 'startTime and endTime are required for time-based blocks' });
+    }
+
+    if (type === 'period' && (!blockStartDate || !blockEndDate)) {
+      return res.status(400).json({ message: 'blockStartDate and blockEndDate are required for period-based blocks' });
+    }
+
+    let contact = await Contact.findOne({
+      userId: req.user._id,
+      contactUserId,
+    });
+
+    if (!contact) {
+      contact = new Contact({
+        userId: req.user._id,
+        contactUserId,
+      });
+    }
+
+    const newBlock = {
+      type,
+      startTime: type === 'time' ? startTime : undefined,
+      endTime: type === 'time' ? endTime : undefined,
+      daysOfWeek: type === 'time' ? (daysOfWeek || [0, 1, 2, 3, 4, 5, 6]) : undefined,
+      blockStartDate: type === 'period' ? blockStartDate : undefined,
+      blockEndDate: type === 'period' ? blockEndDate : undefined,
+      validUntil: validUntil ? new Date(validUntil) : null,
+      reason: reason || null,
+      isActive: true,
+    };
+
+    if (!contact.scheduledBlocks) {
+      contact.scheduledBlocks = [];
+    }
+
+    contact.scheduledBlocks.push(newBlock);
+    await contact.save();
+
+    logger.info(`Scheduled block added for contact ${contactUserId} by ${req.user._id}`);
+    res.status(201).json({ contact, block: newBlock });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get scheduled blocks for a contact
+router.get('/contacts/:contactUserId/scheduled-blocks', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { contactUserId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(contactUserId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    const contact = await Contact.findOne({
+      userId: req.user._id,
+      contactUserId,
+    });
+
+    if (!contact) {
+      return res.json({ scheduledBlocks: [] });
+    }
+
+    // Clean up expired blocks
+    contact.cleanupExpiredBlocks();
+    await contact.save();
+
+    res.json({ scheduledBlocks: contact.scheduledBlocks || [] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update scheduled block
+router.put('/contacts/:contactUserId/scheduled-block/:blockId', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { contactUserId, blockId } = req.params;
+    const { isActive, validUntil, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(contactUserId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    const contact = await Contact.findOne({
+      userId: req.user._id,
+      contactUserId,
+    });
+
+    if (!contact) {
+      return res.status(404).json({ message: 'Contact not found' });
+    }
+
+    const block = contact.scheduledBlocks.id(blockId);
+    if (!block) {
+      return res.status(404).json({ message: 'Scheduled block not found' });
+    }
+
+    if (isActive !== undefined) block.isActive = isActive;
+    if (validUntil !== undefined) block.validUntil = validUntil ? new Date(validUntil) : null;
+    if (reason !== undefined) block.reason = reason;
+
+    await contact.save();
+
+    logger.info(`Scheduled block ${blockId} updated for contact ${contactUserId} by ${req.user._id}`);
+    res.json({ contact, block });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete scheduled block
+router.delete('/contacts/:contactUserId/scheduled-block/:blockId', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { contactUserId, blockId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(contactUserId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    const contact = await Contact.findOne({
+      userId: req.user._id,
+      contactUserId,
+    });
+
+    if (!contact) {
+      return res.status(404).json({ message: 'Contact not found' });
+    }
+
+    contact.scheduledBlocks = contact.scheduledBlocks.filter((b) => b._id.toString() !== blockId);
+    await contact.save();
+
+    logger.info(`Scheduled block ${blockId} deleted for contact ${contactUserId} by ${req.user._id}`);
     res.json({ contact });
   } catch (err) {
     next(err);

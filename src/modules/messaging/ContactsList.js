@@ -8,9 +8,16 @@ const ContactsList = ({
   onUnblockContact,
   searchQuery,
   onSearchChange,
+  onFilterChange,
 }) => {
   const [filteredContacts, setFilteredContacts] = useState(contacts);
   const [filterType, setFilterType] = useState('all');
+
+  useEffect(() => {
+    if (onFilterChange) {
+      onFilterChange(filterType);
+    }
+  }, [filterType, onFilterChange]);
 
   useEffect(() => {
     let filtered = contacts;

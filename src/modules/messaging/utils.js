@@ -81,6 +81,88 @@ export const getAvatarLabel = (...values) => {
   return "U";
 };
 
+const CLEARED_CHATS_STORAGE_KEY = "linkup-cleared-chats";
+
+const toTimestamp = (value) => {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+export const loadClearedChats = () => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(CLEARED_CHATS_STORAGE_KEY);
+    const parsedValue = storedValue ? JSON.parse(storedValue) : {};
+    return parsedValue && typeof parsedValue === "object" ? parsedValue : {};
+  } catch (error) {
+    return {};
+  }
+};
+
+export const saveClearedChats = (clearedChats = {}) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(CLEARED_CHATS_STORAGE_KEY, JSON.stringify(clearedChats));
+  } catch (error) {
+    // Ignore storage failures and keep the chat usable.
+  }
+};
+
+export const getChatClearTimestamp = (chatId, clearedChats = {}) => {
+  const resolvedChatId = getEntityId(chatId);
+  if (!resolvedChatId) {
+    return 0;
+  }
+
+  return toTimestamp(clearedChats[resolvedChatId]);
+};
+
+export const isMessageHiddenByClear = (message, clearedAt) => {
+  const clearedTimestamp = toTimestamp(clearedAt);
+  if (!clearedTimestamp) {
+    return false;
+  }
+
+  return toTimestamp(message?.createdAt) <= clearedTimestamp;
+};
+
+export const filterMessagesByClearTimestamp = (messages = [], clearedAt) =>
+  (Array.isArray(messages) ? messages : []).filter(
+    (message) => !isMessageHiddenByClear(message, clearedAt)
+  );
+
+export const mergePagedMessages = (olderMessages = [], newerMessages = []) => {
+  const seenMessageIds = new Set();
+
+  return [...olderMessages, ...newerMessages].filter((message) => {
+    const messageKey =
+      getEntityId(message) ||
+      [
+        message?.createdAt || "",
+        message?.messageType || "",
+        message?.content || "",
+        getEntityId(message?.senderId) || "",
+      ].join("::");
+
+    if (!messageKey || seenMessageIds.has(messageKey)) {
+      return false;
+    }
+
+    seenMessageIds.add(messageKey);
+    return true;
+  });
+};
+
 export const inferMessageTypeFromMimeType = (mimeType = "", { preferVoice = false } = {}) => {
   const normalizedMimeType = String(mimeType || "").toLowerCase();
 
