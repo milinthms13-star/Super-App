@@ -436,10 +436,8 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     chat.lastMessageAt = new Date();
     await chat.save();
 
-    // Emit to all participants
-    for (const participant of chat.participants) {
-      emitToUser(participant, 'message:received', message);
-    }
+    // Send to ALL participants via socket (including sender)
+    await emitToChatParticipants(chatId, 'message:received', message);
 
     // Create notifications for other participants (not for sender)
     for (const participant of chat.participants) {
@@ -459,8 +457,9 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     }
 
     logger.info(`Message sent in chat ${chatId} by ${req.user._id}`);
-    res.status(201).json({ message });
+    res.status(201).json({ message: message.toObject() });
   } catch (err) {
+    logger.error(`Error sending message: ${err.message}`);
     next(err);
   }
 });
