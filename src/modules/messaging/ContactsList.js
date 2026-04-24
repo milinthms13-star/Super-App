@@ -9,6 +9,7 @@ const ContactsList = ({
   searchQuery,
   onSearchChange,
   onFilterChange,
+  onScheduleBlock,
 }) => {
   const [filteredContacts, setFilteredContacts] = useState(contacts);
   const [filterType, setFilterType] = useState('all');
@@ -31,9 +32,12 @@ const ContactsList = ({
     }
 
     if (filterType === 'favorites') {
-      filtered = filtered.filter((contact) => contact.isFavorite);
+      filtered = filtered.filter((contact) => contact.isFavorite && !contact.isBlocked);
     } else if (filterType === 'blocked') {
       filtered = filtered.filter((contact) => contact.isBlocked);
+    } else {
+      // For 'all', exclude blocked contacts by default
+      filtered = filtered.filter((contact) => !contact.isBlocked);
     }
 
     setFilteredContacts(filtered);
@@ -104,6 +108,14 @@ const ContactsList = ({
                 </div>
               </div>
               <div className="contact-actions">
+                <button
+                  className="btn-action-sm"
+                  onClick={() => onScheduleBlock && onScheduleBlock(contact)}
+                  title="Manage scheduled blocks"
+                  type="button"
+                >
+                  ⏰ Schedule
+                </button>
                 {contact.isBlocked ? (
                   <button
                     className="btn-action-sm"

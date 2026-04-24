@@ -84,7 +84,7 @@ const Messaging = () => {
   };
 
   return (
-    <div className="messaging-container">
+    <div className="social-messaging">
       <div className="conversations-list">
         <div className="conversations-header">
           <h2>Messages</h2>

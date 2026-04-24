@@ -13,6 +13,7 @@ const errorHandler = require('./middleware/errorHandler');
 
 // Init app
 const app = express();
+const uploadsDirectory = path.join(__dirname, 'uploads');
 
 // Middleware
 app.use(helmet());
@@ -24,7 +25,12 @@ app.use(cors({
 app.use(morgan('combined'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(uploadsDirectory, {
+  setHeaders: (res) => {
+    // Uploaded chat media needs to be embeddable by the frontend audio/video tags.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  },
+}));
 
 // Connect Database
 connectDB();

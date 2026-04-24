@@ -1,12 +1,12 @@
 /* Messaging */
-.messaging-container {
+.social-messaging {
   display: grid;
   grid-template-columns: 300px 1fr;
   gap: 20px;
   height: 100%;
 }
 
-.conversations-list {
+.social-messaging .conversations-list {
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -15,18 +15,18 @@
   overflow: hidden;
 }
 
-.conversations-header {
+.social-messaging .conversations-header {
   padding: 20px;
   border-bottom: 2px solid #f0f0f0;
 }
 
-.conversations-header h2 {
+.social-messaging .conversations-header h2 {
   margin: 0 0 12px 0;
   color: #2c3e50;
   font-size: 20px;
 }
 
-.search-input {
+.social-messaging .search-input {
   width: 100%;
   padding: 10px;
   border: 2px solid #f0f0f0;
@@ -35,17 +35,17 @@
   transition: all 0.3s ease;
 }
 
-.search-input:focus {
+.social-messaging .search-input:focus {
   outline: none;
   border-color: #667eea;
 }
 
-.conversations {
+.social-messaging .conversations {
   flex: 1;
   overflow-y: auto;
 }
 
-.conversation-item {
+.social-messaging .conversation-item {
   display: flex;
   gap: 12px;
   padding: 12px;
@@ -55,16 +55,16 @@
   align-items: center;
 }
 
-.conversation-item:hover {
+.social-messaging .conversation-item:hover {
   background: #f9f9f9;
 }
 
-.conversation-item.active {
+.social-messaging .conversation-item.active {
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
   border-left: 3px solid #667eea;
 }
 
-.conv-avatar {
+.social-messaging .conv-avatar {
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -72,19 +72,19 @@
   flex-shrink: 0;
 }
 
-.conv-info {
+.social-messaging .conv-info {
   flex: 1;
   min-width: 0;
 }
 
-.conv-info h4 {
+.social-messaging .conv-info h4 {
   margin: 0;
   color: #2c3e50;
   font-size: 14px;
   font-weight: 600;
 }
 
-.last-message {
+.social-messaging .last-message {
   margin: 5px 0 0 0;
   font-size: 12px;
   color: #999;
@@ -93,7 +93,7 @@
   text-overflow: ellipsis;
 }
 
-.chat-area {
+.social-messaging .chat-area {
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -102,19 +102,19 @@
   overflow: hidden;
 }
 
-.chat-header {
+.social-messaging .chat-header {
   padding: 20px;
   border-bottom: 2px solid #f0f0f0;
   background: white;
 }
 
-.chat-header h3 {
+.social-messaging .chat-header h3 {
   margin: 0;
   color: #2c3e50;
   font-size: 18px;
 }
 
-.messages-list {
+.social-messaging .messages-list {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
@@ -124,14 +124,14 @@
   background: #f9f9f9;
 }
 
-.message {
+.social-messaging .message {
   display: flex;
   gap: 10px;
   max-width: 70%;
-  animation: slideIn 0.3s ease;
+  animation: social-message-slide-in 0.3s ease;
 }
 
-@keyframes slideIn {
+@keyframes social-message-slide-in {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -142,16 +142,16 @@
   }
 }
 
-.message.sent {
+.social-messaging .message.sent {
   align-self: flex-end;
   flex-direction: row-reverse;
 }
 
-.message.received {
+.social-messaging .message.received {
   align-self: flex-start;
 }
 
-.message-avatar {
+.social-messaging .message-avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -159,36 +159,36 @@
   flex-shrink: 0;
 }
 
-.message-content {
+.social-messaging .message-content {
   background: white;
   padding: 12px;
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.message.sent .message-content {
+.social-messaging .message.sent .message-content {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
 }
 
-.message-content p {
+.social-messaging .message-content p {
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
 }
 
-.message-time {
+.social-messaging .message-time {
   display: block;
   font-size: 11px;
   color: #999;
   margin-top: 5px;
 }
 
-.message.sent .message-time {
+.social-messaging .message.sent .message-time {
   color: rgba(255, 255, 255, 0.7);
 }
 
-.no-conversation {
+.social-messaging .no-conversation {
   flex: 1;
   display: flex;
   align-items: center;
@@ -196,7 +196,7 @@
   color: #999;
 }
 
-.message-input-area {
+.social-messaging .message-input-area {
   display: flex;
   gap: 10px;
   padding: 20px;
@@ -204,7 +204,7 @@
   border-top: 2px solid #f0f0f0;
 }
 
-.message-input {
+.social-messaging .message-input {
   flex: 1;
   border: 2px solid #f0f0f0;
   border-radius: 20px;
@@ -214,12 +214,12 @@
   font-family: inherit;
 }
 
-.message-input:focus {
+.social-messaging .message-input:focus {
   outline: none;
   border-color: #667eea;
 }
 
-.send-btn {
+.social-messaging .send-btn {
   padding: 12px 24px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -230,26 +230,26 @@
   transition: all 0.3s ease;
 }
 
-.send-btn:hover:not(:disabled) {
+.social-messaging .send-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
-.send-btn:disabled {
+.social-messaging .send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 @media (max-width: 768px) {
-  .messaging-container {
+  .social-messaging {
     grid-template-columns: 1fr;
   }
 
-  .conversations-list {
+  .social-messaging .conversations-list {
     display: none;
   }
 
-  .message {
+  .social-messaging .message {
     max-width: 90%;
   }
 }

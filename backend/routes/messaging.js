@@ -99,17 +99,91 @@ const attachMessagingUser = async (req, res, next) => {
   try {
     const resolvedUser = await ensureMessagingUser(req.user);
 
-    if (!resolvedUser || !mongoose.Types.ObjectId.isValid(resolvedUser._id)) {
-      return res.status(503).json({
-        message: 'Messaging is temporarily unavailable. Please reconnect the database and try again.',
-      });
+    if (!resolvedUser) {
+      return res.status(401).json({ message: 'Not authenticated' });
     }
 
-    req.originalUser = req.user;
     req.user = resolvedUser;
-    return next();
-  } catch (error) {
-    return next(error);
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Check if two users have blocking relationships
+const checkBlockingRelationship = async (userId1, userId2) => {
+  try {
+    // Check if userId1 blocked userId2
+    const blockingContact = await Contact.findOne({
+      userId: userId1,
+      contactUserId: userId2,
+      isBlocked: true,
+    });
+
+    if (blockingContact) return true;
+
+    // Check if userId2 blocked userId1
+    const blockedByContact = await Contact.findOne({
+      userId: userId2,
+      contactUserId: userId1,
+      isBlocked: true,
+    });
+
+    if (blockedByContact) return true;
+
+    return false;
+  } catch (err) {
+    logger.error('Error checking blocking relationship:', err);
+    return false;
+  }
+};
+
+// Check if all participants are unblocked with each other
+const validateGroupParticipants = async (participantIds) => {
+  try {
+    // Check all pairs of participants for blocking
+    for (let i = 0; i < participantIds.length; i++) {
+      for (let j = i + 1; j < participantIds.length; j++) {
+        const hasBlocking = await checkBlockingRelationship(
+          participantIds[i],
+          participantIds[j]
+        );
+        if (hasBlocking) {
+          return {
+            valid: false,
+            blockedPair: [participantIds[i], participantIds[j]],
+          };
+        }
+      }
+    }
+    return { valid: true };
+  } catch (err) {
+    logger.error('Error validating group participants:', err);
+    return { valid: false, error: err.message };
+  }
+};
+
+// Check if remaining participants have blocking relationships
+const shouldDeleteGroup = async (participantIds) => {
+  try {
+    if (participantIds.length <= 1) return true;
+
+    // For each pair of remaining participants, check if they have blocking
+    for (let i = 0; i < participantIds.length; i++) {
+      for (let j = i + 1; j < participantIds.length; j++) {
+        const hasBlocking = await checkBlockingRelationship(
+          participantIds[i],
+          participantIds[j]
+        );
+        if (hasBlocking) {
+          return true; // They have blocking, so delete the group
+        }
+      }
+    }
+    return false;
+  } catch (err) {
+    logger.error('Error checking if group should be deleted:', err);
+    return false;
   }
 };
 
@@ -179,6 +253,15 @@ router.post('/chats/group', authenticate, attachMessagingUser, async (req, res, 
 
     // Add creator to participants
     const allParticipants = [...new Set([req.user._id.toString(), ...participantIds])];
+
+    // Validate no blocking relationships among participants
+    const blockingValidation = await validateGroupParticipants(allParticipants);
+    if (!blockingValidation.valid) {
+      return res.status(400).json({
+        message: 'Cannot create group: Some members have blocked each other. Please ensure no blocked users are in the group.',
+        blockedPair: blockingValidation.blockedPair,
+      });
+    }
 
     const chat = new Chat({
       type: 'group',
@@ -345,6 +428,16 @@ router.post('/chats/:chatId/members', authenticate, attachMessagingUser, async (
       return res.status(400).json({ message: 'User already in group' });
     }
 
+    // Validate that new user doesn't have blocking with existing members
+    for (const participantId of chat.participants) {
+      const hasBlocking = await checkBlockingRelationship(userId, participantId);
+      if (hasBlocking) {
+        return res.status(400).json({
+          message: 'Cannot add member: This user has a blocking relationship with someone in the group',
+        });
+      }
+    }
+
     chat.participants.push(userId);
     chat.membersList.push({
       userId,
@@ -384,6 +477,19 @@ router.delete('/chats/:chatId/members/:userId', authenticate, attachMessagingUse
     chat.participants = chat.participants.filter((p) => p.toString() !== userId);
     chat.membersList = chat.membersList.filter((m) => m.userId.toString() !== userId);
     chat.admins = chat.admins.filter((a) => a.toString() !== userId);
+
+    // Check if group should be deleted (remaining members have blocking relationships)
+    const shouldDelete = await shouldDeleteGroup(chat.participants);
+    
+    if (shouldDelete) {
+      // Delete the group instead of just removing the member
+      await Chat.findByIdAndDelete(chatId);
+      logger.info(`Group chat auto-deleted due to member removal: ${chatId}`);
+      return res.json({ 
+        message: 'Group was automatically deleted because remaining members have blocked each other',
+        deleted: true 
+      });
+    }
 
     await chat.save();
     await chat.populate('participants', 'name avatar email');

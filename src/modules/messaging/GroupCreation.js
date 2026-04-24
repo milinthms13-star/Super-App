@@ -15,6 +15,26 @@ const GroupCreation = ({
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
+  const [userBlockedList, setUserBlockedList] = useState(new Set());
+
+  // Load blocked contacts
+  useEffect(() => {
+    loadBlockedContacts();
+  }, []);
+
+  const loadBlockedContacts = async () => {
+    try {
+      const response = await apiCall('/messaging/contacts?showBlocked=true', 'GET');
+      if (response?.contacts) {
+        const blockedIds = new Set(
+          response.contacts.map((c) => getEntityId(c.contactUserId))
+        );
+        setUserBlockedList(blockedIds);
+      }
+    } catch (error) {
+      console.error('Error loading blocked contacts:', error);
+    }
+  };
 
   const searchUsers = useCallback(
     async (query) => {
@@ -32,7 +52,9 @@ const GroupCreation = ({
           const selectedIds = new Set(selectedMembers.map((m) => getEntityId(m)));
           const filtered = response.users.filter(
             (u) =>
-              !isSameEntity(u, currentUser) && !selectedIds.has(getEntityId(u))
+              !isSameEntity(u, currentUser) &&
+              !selectedIds.has(getEntityId(u)) &&
+              !userBlockedList.has(getEntityId(u)) // Filter out blocked users
           );
           setAvailableUsers(filtered);
         }
@@ -43,7 +65,7 @@ const GroupCreation = ({
         setSearchingUsers(false);
       }
     },
-    [apiCall, currentUser, selectedMembers]
+    [apiCall, currentUser, selectedMembers, userBlockedList]
   );
 
   const handleSearchChange = (e) => {
@@ -73,6 +95,14 @@ const GroupCreation = ({
     if (selectedMembers.length === 0) {
       setError('Please add at least one member to the group');
       return;
+    }
+
+    // Check for blocked users among selected members
+    for (const member of selectedMembers) {
+      if (userBlockedList.has(getEntityId(member))) {
+        setError(`Cannot add ${member.name}: You have blocked this user`);
+        return;
+      }
     }
 
     try {

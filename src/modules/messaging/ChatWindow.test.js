@@ -106,3 +106,26 @@ test('switches the header action to restore after the chat is cleared', () => {
   expect(onRestoreClearedChat).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('button', { name: /show previous messages/i })).toBeInTheDocument();
 });
+
+test('renders voice notes with a playable audio source', () => {
+  const voiceMessage = {
+    ...baseMessage,
+    _id: 'voice-1',
+    content: 'Voice note',
+    messageType: 'voice',
+    media: {
+      url: 'https://example.com/uploads/voice-note.webm',
+      type: 'audio/webm',
+    },
+  };
+
+  const { container } = renderChatWindow({
+    messages: [voiceMessage],
+  });
+
+  expect(screen.getByText(/voice note/i)).toBeInTheDocument();
+  const source = container.querySelector('audio source');
+  expect(source).not.toBeNull();
+  expect(source).toHaveAttribute('src', 'https://example.com/uploads/voice-note.webm');
+  expect(source).toHaveAttribute('type', 'audio/webm');
+});

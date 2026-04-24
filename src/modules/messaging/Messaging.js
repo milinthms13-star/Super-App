@@ -14,6 +14,7 @@ import InvitationPanel from './InvitationPanel';
 import VisibilitySettings from './VisibilitySettings';
 import ContactMeansSettings from './ContactMeansSettings';
 import GroupCreation from './GroupCreation';
+import ScheduledBlockManager from './ScheduledBlockManager';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
 import {
@@ -132,6 +133,8 @@ const Messaging = () => {
   const [loadedMessagePages, setLoadedMessagePages] = useState(1);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [clearedChats, setClearedChats] = useState(() => loadClearedChats());
+  const [showScheduledBlockManager, setShowScheduledBlockManager] = useState(false);
+  const [selectedContactForScheduledBlock, setSelectedContactForScheduledBlock] = useState(null);
 
   const socketRef = useRef(null);
   const activeCallRef = useRef(null);
@@ -954,6 +957,11 @@ const Messaging = () => {
     }
   };
 
+  const handleScheduleBlock = (contact) => {
+    setSelectedContactForScheduledBlock(contact);
+    setShowScheduledBlockManager(true);
+  };
+
   const handleSelectContact = (contact) => {
     const contactId = contact?.contactUserId?._id || contact?._id;
 
@@ -1442,6 +1450,7 @@ const Messaging = () => {
               onSelectContact={handleSelectContact}
               onBlockContact={handleBlockContact}
               onUnblockContact={handleUnblockContact}
+              onScheduleBlock={handleScheduleBlock}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               onFilterChange={(filterType) => {
@@ -1688,6 +1697,16 @@ const Messaging = () => {
           )}
         </div>
       </div>
+
+      {showScheduledBlockManager && selectedContactForScheduledBlock && (
+        <div className="modal-overlay">
+          <ScheduledBlockManager
+            contact={selectedContactForScheduledBlock}
+            onClose={() => setShowScheduledBlockManager(false)}
+            onBlockAdded={() => loadContacts()}
+          />
+        </div>
+      )}
 
       {loading && <div className="messaging-loading">Loading chats...</div>}
     </div>

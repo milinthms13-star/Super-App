@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 const InvitationPanel = ({ invitations, onAccept, onReject, loading }) => {
   const [expandedId, setExpandedId] = useState(null);
@@ -21,42 +21,56 @@ const InvitationPanel = ({ invitations, onAccept, onReject, loading }) => {
 
   return (
     <div className="invitation-panel">
-      <h3>📬 Pending Invitations ({invitations.length})</h3>
-      <div className="invitations-list">
-        {invitations.map((invitation) => (
-          <div key={invitation._id} className="invitation-card">
-            <div className="invitation-header">
-              <div className="invitation-info">
-                <h4>{invitation.senderId?.name || 'Unknown User'}</h4>
-                <p className="sender-handle">@{invitation.senderUsername}</p>
-                {invitation.message && <p className="message">{invitation.message}</p>}
-              </div>
-              <button
-                className="expand-btn"
-                onClick={() => setExpandedId(expandedId === invitation._id ? null : invitation._id)}
-              >
-                {expandedId === invitation._id ? '▼' : '▶'}
-              </button>
-            </div>
+      <div className="invitation-panel-header">
+        <h3>Pending Invitations ({invitations.length})</h3>
+        <p>Review connection requests before opening a chat.</p>
+      </div>
 
-            {expandedId === invitation._id && (
-              <div className="invitation-actions">
+      <div className="invitations-list">
+        {invitations.map((invitation) => {
+          const isExpanded = expandedId === invitation._id;
+
+          return (
+            <div key={invitation._id} className="invitation-card">
+              <div className="invitation-header">
+                <div className="invitation-info">
+                  <h4>{invitation.senderId?.name || 'Unknown User'}</h4>
+                  <p className="sender-handle">@{invitation.senderUsername}</p>
+                  {invitation.message ? (
+                    <p className="invitation-message">{invitation.message}</p>
+                  ) : null}
+                </div>
+
                 <button
-                  className="btn-accept"
-                  onClick={() => onAccept(invitation._id)}
+                  className="expand-btn"
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : invitation._id)}
                 >
-                  ✓ Accept
-                </button>
-                <button
-                  className="btn-reject"
-                  onClick={() => onReject(invitation._id)}
-                >
-                  ✕ Reject
+                  {isExpanded ? 'Hide' : 'Review'}
                 </button>
               </div>
-            )}
-          </div>
-        ))}
+
+              {isExpanded ? (
+                <div className="invitation-actions">
+                  <button
+                    className="btn-accept"
+                    type="button"
+                    onClick={() => onAccept(invitation._id)}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    className="btn-reject"
+                    type="button"
+                    onClick={() => onReject(invitation._id)}
+                  >
+                    Reject
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -595,7 +595,14 @@ const ChatWindow = ({
                             {message.messageType === 'voice' && (
                               <span className="voice-note-label">Voice note</span>
                             )}
-                            <audio src={message.media?.url} controls />
+                            {message.media?.url ? (
+                              <audio controls preload="metadata">
+                                <source src={message.media.url} type={message.media?.type || undefined} />
+                                Your browser could not play this audio file.
+                              </audio>
+                            ) : (
+                              <p className="message-media-fallback">Audio file is not available.</p>
+                            )}
                           </div>
                         )}
                         {message.messageType === 'file' && (

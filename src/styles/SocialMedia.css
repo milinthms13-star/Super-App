@@ -27,13 +27,13 @@
   max-height: calc(100vh - 100px);
 }
 
-.sidebar-header {
+.socialmedia-container .sidebar-header {
   margin-bottom: 30px;
   border-bottom: 2px solid #f0f0f0;
   padding-bottom: 15px;
 }
 
-.sidebar-header h2 {
+.socialmedia-container .sidebar-header h2 {
   color: #2c3e50;
   font-size: 24px;
   margin: 0;
@@ -125,7 +125,7 @@
 }
 
 /* Main Content */
-.main-content {
+.socialmedia-container .main-content {
   background: white;
   border-radius: 12px;
   padding: 20px;
@@ -156,13 +156,13 @@
   font-size: 18px;
 }
 
-.suggestions-list {
+.socialmedia-container .suggestions-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.suggestion-item {
+.socialmedia-container .suggestion-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -172,11 +172,11 @@
   transition: all 0.3s ease;
 }
 
-.suggestion-item:hover {
+.socialmedia-container .suggestion-item:hover {
   background: #f0f0f0;
 }
 
-.suggestion-avatar {
+.socialmedia-container .suggestion-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -188,24 +188,24 @@
   flex-shrink: 0;
 }
 
-.suggestion-info {
+.socialmedia-container .suggestion-info {
   flex: 1;
   min-width: 0;
 }
 
-.suggestion-info p {
+.socialmedia-container .suggestion-info p {
   margin: 0;
   font-weight: 600;
   color: #2c3e50;
   font-size: 14px;
 }
 
-.suggestion-info small {
+.socialmedia-container .suggestion-info small {
   color: #999;
   font-size: 12px;
 }
 
-.follow-btn {
+.socialmedia-container .follow-btn {
   padding: 6px 12px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
@@ -217,18 +217,18 @@
   transition: all 0.3s ease;
 }
 
-.follow-btn:hover {
+.socialmedia-container .follow-btn:hover {
   transform: scale(1.05);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
-.trending-list {
+.socialmedia-container .trending-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.trending-item {
+.socialmedia-container .trending-item {
   padding: 12px;
   background: #f9f9f9;
   border-radius: 8px;
@@ -236,19 +236,19 @@
   transition: all 0.3s ease;
 }
 
-.trending-item:hover {
+.socialmedia-container .trending-item:hover {
   background: #f0f0f0;
   transform: translateX(5px);
 }
 
-.trending-item p {
+.socialmedia-container .trending-item p {
   margin: 0;
   font-weight: 600;
   color: #2c3e50;
   font-size: 14px;
 }
 
-.trending-item small {
+.socialmedia-container .trending-item small {
   color: #999;
   font-size: 12px;
 }
@@ -271,7 +271,7 @@
     display: none;
   }
 
-  .main-content {
+  .socialmedia-container .main-content {
     margin: 0 auto;
     max-width: 600px;
   }
@@ -282,7 +282,7 @@
     padding: 10px;
   }
 
-  .main-content {
+  .socialmedia-container .main-content {
     padding: 10px;
   }
 }
@@ -333,7 +333,7 @@
   align-items: flex-start;
 }
 
-.user-avatar {
+.socialmedia-container .user-avatar {
   font-size: 2rem;
   flex-shrink: 0;
 }
@@ -466,7 +466,7 @@
   margin-top: 1rem;
 }
 
-.action-btn {
+.socialmedia-container .action-btn {
   flex: 1;
   padding: 0.6rem;
   background: white;
@@ -478,7 +478,7 @@
   transition: all 0.3s;
 }
 
-.action-btn:hover {
+.socialmedia-container .action-btn:hover {
   background: #f5f5f5;
   color: #FFD700;
 }
@@ -510,14 +510,14 @@
   color: #333;
 }
 
-.suggestions-list,
-.trending-list {
+.socialmedia-container .suggestions-list,
+.socialmedia-container .trending-list {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.suggestion-item {
+.socialmedia-container .suggestion-item {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -526,34 +526,34 @@
   transition: background 0.3s;
 }
 
-.suggestion-item:hover {
+.socialmedia-container .suggestion-item:hover {
   background: #f5f5f5;
 }
 
-.suggestion-avatar {
+.socialmedia-container .suggestion-avatar {
   font-size: 2rem;
   flex-shrink: 0;
 }
 
-.suggestion-info {
+.socialmedia-container .suggestion-info {
   flex: 1;
   min-width: 0;
 }
 
-.suggestion-info p {
+.socialmedia-container .suggestion-info p {
   margin: 0;
   font-size: 0.9rem;
   color: #333;
   font-weight: 500;
 }
 
-.suggestion-info small {
+.socialmedia-container .suggestion-info small {
   display: block;
   color: #999;
   font-size: 0.8rem;
 }
 
-.follow-btn {
+.socialmedia-container .follow-btn {
   background: #FFD700;
   color: #0a1428;
   border: none;
@@ -565,28 +565,28 @@
   transition: background 0.3s;
 }
 
-.follow-btn:hover {
+.socialmedia-container .follow-btn:hover {
   background: #FFC700;
 }
 
-.trending-item {
+.socialmedia-container .trending-item {
   padding: 0.75rem 0;
   cursor: pointer;
   transition: opacity 0.3s;
 }
 
-.trending-item:hover {
+.socialmedia-container .trending-item:hover {
   opacity: 0.7;
 }
 
-.trending-item p {
+.socialmedia-container .trending-item p {
   margin: 0;
   color: #333;
   font-weight: 600;
   font-size: 0.9rem;
 }
 
-.trending-item small {
+.socialmedia-container .trending-item small {
   display: block;
   color: #999;
   font-size: 0.8rem;
