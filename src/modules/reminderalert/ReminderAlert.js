@@ -83,8 +83,6 @@ const ReminderAlert = () => {
     reminders,
     loading,
     error,
-    filter,
-    setFilter,
     load: loadReminders,
     create: createReminder,
     update: updateReminder,
@@ -104,9 +102,7 @@ const ReminderAlert = () => {
 
   const {
     trigger: triggerVoiceCall,
-    createWithCall: createReminderWithCall,
-    loading: voiceCallLoading,
-    error: voiceCallError
+    createWithCall: createReminderWithCall
   } = useVoiceCall();
 
   // Local state

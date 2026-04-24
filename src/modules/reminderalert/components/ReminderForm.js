@@ -108,27 +108,11 @@ const ReminderForm = React.memo(({
     };
   }, []);
 
-  const handleKeyDown = useCallback((e) => {
-    // Handle keyboard shortcuts
-    const handled = handleKeyboardShortcut(e, {
-      save: handleSubmit,
-      cancel: onCancel,
-    });
-
-    if (handled) return;
-
-    // Handle focus trapping
-    if (e.key === 'Tab') {
-      trapFocus(e, formRef.current);
-    }
-  }, [handleSubmit, onCancel]);
-
-  const handleSubmit = useCallback(async (e) => {
+  function handleSubmit(e) {
     if (e && e.preventDefault) {
       e.preventDefault();
     }
 
-    // Validate form
     const validationData = {
       ...formData,
       recipientPhoneNumber: voiceCallData.recipientPhoneNumber,
@@ -148,8 +132,21 @@ const ReminderForm = React.memo(({
     }
 
     setFormErrors({});
-    await onSubmit();
-  }, [formData, voiceCallData, editingTaskId, onSubmit]);
+    onSubmit();
+  }
+
+  function handleKeyDown(e) {
+    const handled = handleKeyboardShortcut(e, {
+      save: handleSubmit,
+      cancel: onCancel,
+    });
+
+    if (handled) return;
+
+    if (e.key === 'Tab') {
+      trapFocus(e, formRef.current);
+    }
+  }
 
   const resolveVoiceNoteUrl = (voiceNote) => {
     if (!voiceNote) return '';
@@ -538,7 +535,7 @@ const ReminderForm = React.memo(({
             <span>Keyboard shortcuts available</span>
           </summary>
           <div className="reminderalert-help-content">
-            <ul role="list">
+            <ul>
               <li><kbd>Ctrl</kbd> + <kbd>S</kbd> (or <kbd>Cmd</kbd> + <kbd>S</kbd>): Save reminder</li>
               <li><kbd>Esc</kbd>: Cancel and close form</li>
               <li><kbd>Tab</kbd>: Move to next field</li>
