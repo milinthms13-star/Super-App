@@ -74,8 +74,9 @@ class VoiceCallScheduler {
 
       // Find all pending voice call reminders that are due
       const dueReminders = await Reminder.find({
+        completed: { $ne: true },
         recipientPhoneNumber: { $exists: true, $nin: [null, ''] },
-        callStatus: { $in: ['pending', 'ringing', 'no-answer'] },
+        callStatus: { $in: ['pending', 'no-answer', 'failed'] },
         $or: [
           {
             messageType: 'audio',

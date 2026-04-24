@@ -1,4 +1,6 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { useLazyLoad } from '../hooks/usePerformance';
+import { getAriaLabel } from '../utils/a11y';
 
 /**
  * VoiceCallPanel component - displays voice call status and controls
@@ -27,7 +29,22 @@ const VoiceCallPanel = React.memo(({
   reminder = {},
   loading = false,
   onTrigger = () => {},
+  lazyLoad = true,
+  onLoadData = null,
 }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const panelRef = useRef(null);
+
+  // Use lazy loading for voice call data
+  const { ref: lazyRef, isVisible } = useLazyLoad({
+    onVisible: () => {
+      if (lazyLoad && onLoadData) {
+        onLoadData(reminder._id);
+      }
+    },
+    threshold: 0.5,
+  });
+
   const {
     recipientPhoneNumber = '',
     callStatus = 'pending',
@@ -40,6 +57,10 @@ const VoiceCallPanel = React.memo(({
   const handleTrigger = useCallback(() => {
     onTrigger(reminder._id);
   }, [reminder._id, onTrigger]);
+
+  const handleToggleExpand = useCallback(() => {
+    setIsExpanded(!isExpanded);
+  }, [isExpanded]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -74,50 +95,82 @@ const VoiceCallPanel = React.memo(({
   const canTriggerCall = callAttempts < maxCallAttempts && !loading;
 
   return (
-    <div className="reminderalert-voice-call-panel">
-      <div className="reminderalert-voice-call-header">
-        <h4>Voice Call Status</h4>
-        <span
-          className="reminderalert-voice-call-status"
-          style={{ color: getStatusColor(callStatus) }}
-          aria-label={`Call status: ${getStatusLabel(callStatus)}`}
-        >
-          ● {getStatusLabel(callStatus)}
+    <div 
+      ref={lazyRef}
+      className="reminderalert-voice-call-panel"
+      role="region"
+      aria-label="Voice call status and controls"
+    >
+      <button
+        className="reminderalert-voice-call-header"
+        onClick={handleToggleExpand}
+        aria-expanded={isExpanded}
+        aria-controls="voice-call-details"
+      >
+        <div className="reminderalert-voice-call-title">
+          <h4>Voice Call Status</h4>
+          <span
+            className="reminderalert-voice-call-status"
+            style={{ color: getStatusColor(callStatus) }}
+            aria-label={`Call status: ${getStatusLabel(callStatus)}`}
+            role="status"
+          >
+            ● {getStatusLabel(callStatus)}
+          </span>
+        </div>
+        <span className="expand-icon" aria-hidden="true">
+          {isExpanded ? '▼' : '▶'}
         </span>
-      </div>
+      </button>
 
-      <div className="reminderalert-voice-call-info">
-        <p>
-          <strong>Phone:</strong> {recipientPhoneNumber || 'Not set'}
-        </p>
-        <p>
-          <strong>Attempts:</strong> {callAttempts}/{maxCallAttempts}
-        </p>
-        {lastCallTime && (
-          <p>
-            <strong>Last Call:</strong> {new Date(lastCallTime).toLocaleString()}
-          </p>
-        )}
-        {nextCallTime && (
-          <p>
-            <strong>Next Scheduled:</strong> {new Date(nextCallTime).toLocaleString()}
-          </p>
-        )}
-      </div>
+      {isExpanded && isVisible && (
+        <div id="voice-call-details" className="reminderalert-voice-call-info">
+          <dl>
+            <dt>Phone Number</dt>
+            <dd>{recipientPhoneNumber || 'Not set'}</dd>
+            
+            <dt>Call Attempts</dt>
+            <dd>
+              <progress 
+                value={callAttempts} 
+                max={maxCallAttempts}
+                aria-label={`Call attempts: ${callAttempts} of ${maxCallAttempts}`}
+              />
+              <span className="progress-label">{callAttempts}/{maxCallAttempts}</span>
+            </dd>
+            
+            {lastCallTime && (
+              <>
+                <dt>Last Call</dt>
+                <dd>{new Date(lastCallTime).toLocaleString()}</dd>
+              </>
+            )}
+            
+            {nextCallTime && (
+              <>
+                <dt>Next Scheduled</dt>
+                <dd>{new Date(nextCallTime).toLocaleString()}</dd>
+              </>
+            )}
+          </dl>
 
-      {canTriggerCall ? (
-        <button
+          {canTriggerCall ? (
+            <button
+          type="button"
           type="button"
           className="reminderalert-add-btn reminderalert-voice-call-btn"
           onClick={handleTrigger}
           disabled={loading}
-          aria-label={`Trigger voice call to ${recipientPhoneNumber}`}
+          aria-label={getAriaLabel('call', `voice reminder to ${recipientPhoneNumber}`)}
+          title="Manually trigger the voice call for this reminder"
         >
           {loading ? '📞 Triggering...' : '📞 Trigger Call'}
         </button>
-      ) : (
-        <div className="reminderalert-alert reminderalert-alert-warning">
-          <p>Maximum call attempts reached. No more calls will be triggered.</p>
+            ) : (
+              <div className="reminderalert-alert reminderalert-alert-warning" role="status">
+                <p>Maximum call attempts reached. No more calls will be triggered.</p>
+              </div>
+            )}
         </div>
       )}
     </div>

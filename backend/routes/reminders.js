@@ -66,6 +66,47 @@ const parseReminderDueDate = (value) => {
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 };
 
+const buildReminderScheduleTime = (dueDateValue, dueTime = '') => {
+  if (!dueDateValue) {
+    return null;
+  }
+
+  const normalizedDueDate =
+    typeof dueDateValue === 'string' ? dueDateValue.trim() : '';
+
+  let scheduleTime = null;
+
+  // Date-only inputs like "2026-04-25" need to stay on that local calendar day.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedDueDate)) {
+    const [year, month, day] = normalizedDueDate.split('-').map((part) => parseInt(part, 10));
+    scheduleTime = new Date(year, month - 1, day, 0, 0, 0, 0);
+  } else {
+    const parsedDate = parseReminderDueDate(dueDateValue);
+    if (!parsedDate) {
+      return null;
+    }
+
+    scheduleTime = new Date(parsedDate);
+  }
+
+  if (!dueTime) {
+    scheduleTime.setHours(0, 0, 0, 0);
+    return scheduleTime;
+  }
+
+  const [hours, minutes] = String(dueTime)
+    .split(':')
+    .map((part) => parseInt(part, 10));
+
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    scheduleTime.setHours(0, 0, 0, 0);
+    return scheduleTime;
+  }
+
+  scheduleTime.setHours(hours, minutes, 0, 0);
+  return scheduleTime;
+};
+
 const validateReminderFields = ({ title, category, priority, reminders, recurring, dueDate }, { partial = false } = {}) => {
   if (!partial || title !== undefined) {
     if (!String(title || '').trim()) {
@@ -338,7 +379,27 @@ router.put('/:id', async (req, res) => {
       reminder.callStatus = 'pending';
       reminder.lastCallTime = undefined;
       reminder.nextCallTime = undefined;
+      reminder.callAttempts = 0;
+      reminder.callHistory = [];
     }
+
+    const hasCallReminder = Array.isArray(reminder.reminders) && reminder.reminders.includes('Call');
+    const hasPlayableVoiceContent =
+      reminder.messageType === 'audio'
+        ? Boolean(String(reminder.voiceNoteUrl || '').trim())
+        : Boolean(String(reminder.voiceMessage || '').trim());
+    const shouldResetVoiceSchedule =
+      completed === false ||
+      [
+        dueDate,
+        dueTime,
+        reminders,
+        recurring,
+        recipientPhoneNumber,
+        voiceMessage,
+        messageType,
+        voiceNoteUrl,
+      ].some((value) => value !== undefined);
 
     // Handle completion
     if (completed !== undefined && completed !== reminder.completed) {
@@ -346,6 +407,7 @@ router.put('/:id', async (req, res) => {
       if (completed) {
         reminder.completedAt = new Date();
         reminder.status = 'Completed';
+        reminder.nextCallTime = undefined;
       } else {
         reminder.completedAt = undefined;
         reminder.status = reminder.reminders.length > 1 ? 'Escalation armed' : 'Reminder scheduled';
@@ -355,6 +417,20 @@ router.put('/:id', async (req, res) => {
     // Update status based on reminders
     if (!reminder.completed && reminders) {
       reminder.status = reminders.length > 1 ? 'Escalation armed' : 'Reminder scheduled';
+    }
+
+    if (
+      hasCallReminder &&
+      !reminder.completed &&
+      reminder.recipientPhoneNumber &&
+      hasPlayableVoiceContent &&
+      shouldResetVoiceSchedule
+    ) {
+      reminder.callStatus = 'pending';
+      reminder.lastCallTime = undefined;
+      reminder.nextCallTime = buildReminderScheduleTime(reminder.dueDate, reminder.dueTime);
+      reminder.callAttempts = 0;
+      reminder.callHistory = [];
     }
 
     await reminder.save();
@@ -559,12 +635,8 @@ router.post('/voice-call', async (req, res) => {
       senderName: req.user.name || 'Reminder Service'
     });
 
-    // Set next call time
-    if (recurring !== 'none') {
-      reminder.nextCallTime = reminder.calculateNextCallTime();
-    } else {
-      reminder.nextCallTime = reminder.dueDate;
-    }
+    // The first automatic call should happen at this reminder's actual due date/time.
+    reminder.nextCallTime = buildReminderScheduleTime(dueDate, dueTime);
 
     await reminder.save();
 
@@ -1373,6 +1445,7 @@ module.exports = router;
 module.exports.__testables = {
   getReminderOwnerId,
   parseReminderDueDate,
+  buildReminderScheduleTime,
   validateReminderFields,
   normalizeTrustedContactIdentifier,
   resolveTrustedContactRecipient,

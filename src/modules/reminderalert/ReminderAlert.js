@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import '../../styles/ReminderAlert.css';
 import '../../styles/TrustedContacts.css';
+import './styles/accessibility.css';
 import {
   getAcceptedTrustedContacts,
   shareReminderWithContacts
@@ -82,6 +83,7 @@ const ReminderAlert = () => {
     error,
     filter,
     setFilter,
+    load: loadReminders,
     create: createReminder,
     update: updateReminder,
     remove: deleteReminder,
@@ -100,6 +102,7 @@ const ReminderAlert = () => {
 
   const {
     trigger: triggerVoiceCall,
+    createWithCall: createReminderWithCall,
     loading: voiceCallLoading,
     error: voiceCallError
   } = useVoiceCall();
@@ -356,14 +359,7 @@ const ReminderAlert = () => {
       if (editingTaskId) {
         savedTask = await updateReminder(editingTaskId, payload);
       } else if (formData.reminders.includes('Call')) {
-        // Voice call reminders use different endpoint
-        const response = await fetch('/api/reminders/voice-call', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) throw new Error('Failed to create voice call reminder');
-        savedTask = await response.json();
+        savedTask = await createReminderWithCall(payload);
       } else {
         savedTask = await createReminder(payload);
       }
@@ -378,6 +374,10 @@ const ReminderAlert = () => {
         }
       }
 
+      if (!editingTaskId && formData.reminders.includes('Call')) {
+        await loadReminders();
+      }
+
       closeEditor();
     } catch (err) {
       console.error('Error saving reminder:', err);
@@ -390,7 +390,9 @@ const ReminderAlert = () => {
     voiceCallData,
     editingTaskId,
     createReminder,
+    createReminderWithCall,
     updateReminder,
+    loadReminders,
     closeEditor,
   ]);
 

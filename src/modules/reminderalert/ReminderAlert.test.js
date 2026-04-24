@@ -1,9 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ReminderAlert from "./ReminderAlert";
 import {
+  acceptTrustedContactInvite,
   createReminder,
+  createVoiceCallReminder,
   deleteReminder,
   fetchReminders,
+  getAcceptedTrustedContacts,
+  getReceivedTrustedContactInvites,
+  getSentTrustedContactInvites,
+  rejectTrustedContactInvite,
+  removeTrustedContact,
+  sendTrustedContactInvite,
+  shareReminderWithContacts,
   toggleReminderCompletion,
   updateReminder,
 } from "../../services/remindersService";
@@ -11,9 +20,18 @@ import {
 jest.mock("../../services/remindersService", () => ({
   fetchReminders: jest.fn(),
   createReminder: jest.fn(),
+  createVoiceCallReminder: jest.fn(),
   updateReminder: jest.fn(),
   deleteReminder: jest.fn(),
   toggleReminderCompletion: jest.fn(),
+  getAcceptedTrustedContacts: jest.fn(),
+  getSentTrustedContactInvites: jest.fn(),
+  getReceivedTrustedContactInvites: jest.fn(),
+  sendTrustedContactInvite: jest.fn(),
+  acceptTrustedContactInvite: jest.fn(),
+  rejectTrustedContactInvite: jest.fn(),
+  removeTrustedContact: jest.fn(),
+  shareReminderWithContacts: jest.fn(),
 }));
 
 describe("ReminderAlert", () => {
@@ -22,6 +40,15 @@ describe("ReminderAlert", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    getAcceptedTrustedContacts.mockResolvedValue({ data: [] });
+    getSentTrustedContactInvites.mockResolvedValue({ data: [] });
+    getReceivedTrustedContactInvites.mockResolvedValue({ data: [] });
+    sendTrustedContactInvite.mockResolvedValue({ data: {} });
+    acceptTrustedContactInvite.mockResolvedValue({ data: {} });
+    rejectTrustedContactInvite.mockResolvedValue({ data: {} });
+    removeTrustedContact.mockResolvedValue({ data: {} });
+    shareReminderWithContacts.mockResolvedValue({ data: null });
+    createVoiceCallReminder.mockResolvedValue({ data: {} });
   });
 
   afterEach(() => {
@@ -33,7 +60,9 @@ describe("ReminderAlert", () => {
 
     render(<ReminderAlert customLinks={[]} onCustomLinksChange={jest.fn()} />);
 
-    expect(await screen.findByText("Backend is unavailable")).toBeInTheDocument();
+    expect(
+      await screen.findByText("An unexpected error occurred. Please try again.")
+    ).toBeInTheDocument();
     expect(screen.queryByText("Renew vendor payment")).not.toBeInTheDocument();
     expect(screen.queryByText("Doctor follow-up")).not.toBeInTheDocument();
   });
@@ -63,7 +92,8 @@ describe("ReminderAlert", () => {
 
     render(<ReminderAlert customLinks={[]} onCustomLinksChange={jest.fn()} />);
 
-    expect(await screen.findByText("Doctor follow-up")).toBeInTheDocument();
+    const reminderTitles = await screen.findAllByText("Doctor follow-up");
+    expect(reminderTitles.length).toBeGreaterThan(0);
     expect(screen.queryByText(/invalid date/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));

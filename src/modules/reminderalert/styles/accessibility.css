@@ -1,0 +1,425 @@
+/**
+ * Accessibility styles for ReminderAlert module
+ * Ensures WCAG AA compliance and better user experience
+ */
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Focus indicators - make sure they're visible */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Focus indicator for form elements inside labels */
+.reminderalert-field input:focus,
+.reminderalert-field select:focus,
+.reminderalert-field textarea:focus {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  a:focus-visible {
+    outline-width: 4px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Error states with good contrast */
+.reminderalert-field input[aria-invalid="true"],
+.reminderalert-field select[aria-invalid="true"],
+.reminderalert-field textarea[aria-invalid="true"] {
+  border-color: #dc2626;
+  background-color: #fee2e2;
+}
+
+.error-indicator {
+  color: #dc2626;
+  font-weight: bold;
+  margin-left: 0.25rem;
+}
+
+.error-text {
+  color: #991b1b;
+  display: block;
+  margin-top: 0.25rem;
+  font-weight: 500;
+}
+
+/* Help text styling */
+.reminderalert-inline-meta {
+  display: block;
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  font-weight: normal;
+}
+
+/* Legend styling for better accessibility */
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+legend {
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.reminderalert-section-heading {
+  margin-bottom: 1rem;
+}
+
+/* Keyboard shortcuts help section */
+.reminderalert-help-section {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: #f3f4f6;
+  border-left: 4px solid #4f46e5;
+  border-radius: 0.375rem;
+}
+
+.reminderalert-help-section summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.5rem 0;
+  user-select: none;
+}
+
+.reminderalert-help-section summary:hover {
+  color: #4f46e5;
+}
+
+.reminderalert-help-section summary:focus-visible {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.reminderalert-help-content {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.reminderalert-help-content ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.reminderalert-help-content li {
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+kbd {
+  background-color: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Voice Call Panel accessibility enhancements */
+.reminderalert-voice-call-header {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.reminderalert-voice-call-header:hover {
+  background-color: #f9fafb;
+}
+
+.reminderalert-voice-call-header:focus-visible {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.reminderalert-voice-call-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.reminderalert-voice-call-title h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.reminderalert-voice-call-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.expand-icon {
+  color: #6b7280;
+  transition: transform 0.2s ease;
+}
+
+.reminderalert-voice-call-header[aria-expanded="true"] .expand-icon {
+  transform: rotate(180deg);
+}
+
+.reminderalert-voice-call-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f9fafb;
+  border-radius: 0.375rem;
+}
+
+.reminderalert-voice-call-info dl {
+  margin: 0;
+  padding: 0;
+}
+
+.reminderalert-voice-call-info dt {
+  font-weight: 600;
+  color: #374151;
+  margin-top: 0.75rem;
+}
+
+.reminderalert-voice-call-info dt:first-child {
+  margin-top: 0;
+}
+
+.reminderalert-voice-call-info dd {
+  margin: 0.25rem 0 0 0;
+  color: #6b7280;
+}
+
+/* Progress indicator styling */
+progress {
+  width: 100%;
+  height: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+progress::-webkit-progress-bar {
+  background-color: #e5e7eb;
+  border-radius: 0.25rem;
+}
+
+progress::-webkit-progress-value {
+  background-color: #3b82f6;
+  border-radius: 0.25rem;
+}
+
+progress::-moz-progress-bar {
+  background-color: #3b82f6;
+  border-radius: 0.25rem;
+}
+
+.progress-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-left: 0.5rem;
+}
+
+/* Ensure choice cards are keyboard accessible */
+.reminderalert-choice-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reminderalert-choice-card input {
+  margin-right: 0.5rem;
+}
+
+.reminderalert-choice-card:focus-within {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/* Form actions area accessibility */
+.reminderalert-form-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.reminderalert-form-actions button {
+  padding: 0.625rem 1.25rem;
+  font-weight: 600;
+  border-radius: 0.375rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.reminderalert-form-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Ensure sufficient color contrast for alerts */
+.reminderalert-alert {
+  padding: 1rem;
+  border-radius: 0.375rem;
+  margin: 1rem 0;
+}
+
+.reminderalert-alert-error {
+  background-color: #fee2e2;
+  border-left: 4px solid #dc2626;
+  color: #991b1b;
+}
+
+.reminderalert-alert-info {
+  background-color: #dbeafe;
+  border-left: 4px solid #3b82f6;
+  color: #1e40af;
+}
+
+.reminderalert-alert-warning {
+  background-color: #fef3c7;
+  border-left: 4px solid #f59e0b;
+  color: #92400e;
+}
+
+/* Fieldset styling for better structure */
+fieldset > :first-child {
+  margin-top: 0;
+}
+
+fieldset > :last-child {
+  margin-bottom: 0;
+}
+
+/* Link underline for better visibility */
+a {
+  text-decoration: underline;
+}
+
+a:visited {
+  color: #6b21a8;
+}
+
+/* Ensure sufficient touch target sizes (44x44 minimum) */
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="checkbox"],
+input[type="radio"],
+select {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Checkbox and radio button styling */
+input[type="checkbox"],
+input[type="radio"] {
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+
+/* Ensure list markers are visible */
+ul, ol {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+li {
+  margin: 0.5rem 0;
+}
+
+/* High contrast mode colors */
+@media (prefers-color-scheme: dark) {
+  .reminderalert-help-section {
+    background-color: #374151;
+    color: #f3f4f6;
+  }
+
+  .reminderalert-voice-call-info {
+    background-color: #374151;
+    color: #d1d5db;
+  }
+
+  .reminderalert-voice-call-info dt {
+    color: #e5e7eb;
+  }
+
+  .reminderalert-voice-call-info dd {
+    color: #d1d5db;
+  }
+}
+
+/* Print styles for accessibility */
+@media print {
+  .sr-only {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
+  button {
+    border: 1px solid #000;
+  }
+
+  a {
+    text-decoration: underline;
+  }
+
+  a::after {
+    content: " (" attr(href) ")";
+  }
+}
