@@ -394,9 +394,7 @@ const ReminderAlert = () => {
         }
       }
 
-      if (!editingTaskId && formData.reminders.includes('Call')) {
-        await loadReminders();
-      }
+      await loadReminders();
 
       announceToScreenReader(
         editingTaskId ? 'Reminder updated successfully' : 'Reminder created successfully',
