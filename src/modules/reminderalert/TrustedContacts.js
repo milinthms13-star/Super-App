@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   getSentTrustedContactInvites,
   getReceivedTrustedContactInvites,
@@ -10,7 +10,7 @@ import {
 } from "../../services/remindersService";
 
 const TrustedContacts = ({ onContactsUpdate }) => {
-  const [activeTab, setActiveTab] = useState("accepted"); // accepted, sent, received
+  const [activeTab, setActiveTab] = useState("accepted");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sentInvites, setSentInvites] = useState([]);
@@ -26,10 +26,18 @@ const TrustedContacts = ({ onContactsUpdate }) => {
   const [submitError, setSubmitError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
-  // Load all trusted contacts data
   useEffect(() => {
     loadTrustedContactsData();
   }, []);
+
+  const summary = useMemo(
+    () => ({
+      accepted: acceptedContacts.length,
+      sent: sentInvites.length,
+      received: receivedInvites.length,
+    }),
+    [acceptedContacts.length, receivedInvites.length, sentInvites.length]
+  );
 
   const loadTrustedContactsData = async () => {
     try {
@@ -40,11 +48,17 @@ const TrustedContacts = ({ onContactsUpdate }) => {
         getReceivedTrustedContactInvites(),
         getAcceptedTrustedContacts(),
       ]);
-      setSentInvites(sent.data || []);
-      setReceivedInvites(received.data || []);
-      setAcceptedContacts(accepted.data || []);
+
+      const nextSent = sent.data || [];
+      const nextReceived = received.data || [];
+      const nextAccepted = accepted.data || [];
+
+      setSentInvites(nextSent);
+      setReceivedInvites(nextReceived);
+      setAcceptedContacts(nextAccepted);
+
       if (onContactsUpdate) {
-        onContactsUpdate(accepted.data || []);
+        onContactsUpdate(nextAccepted);
       }
     } catch (err) {
       console.error("Failed to load trusted contacts:", err);
@@ -54,21 +68,21 @@ const TrustedContacts = ({ onContactsUpdate }) => {
     }
   };
 
-  const handleInviteFormChange = (e) => {
-    const { name, value } = e.target;
-    setInviteForm((prev) => ({
-      ...prev,
+  const handleInviteFormChange = (event) => {
+    const { name, value } = event.target;
+    setInviteForm((current) => ({
+      ...current,
       [name]: value,
     }));
   };
 
-  const handleSendInvite = async (e) => {
-    e.preventDefault();
+  const handleSendInvite = async (event) => {
+    event.preventDefault();
     setSubmitError(null);
     setSuccessMessage(null);
 
     if (!inviteForm.recipientId.trim()) {
-      setSubmitError("Please enter a contact ID or username");
+      setSubmitError("Please enter a contact ID or username.");
       return;
     }
 
@@ -79,7 +93,7 @@ const TrustedContacts = ({ onContactsUpdate }) => {
         inviteForm.message,
         inviteForm.relationship
       );
-      setSuccessMessage("Invite sent successfully!");
+      setSuccessMessage("Invite sent successfully.");
       setInviteForm({
         recipientId: "",
         relationship: "other",
@@ -97,7 +111,7 @@ const TrustedContacts = ({ onContactsUpdate }) => {
   const handleAcceptInvite = async (inviteId) => {
     try {
       await acceptTrustedContactInvite(inviteId);
-      setSuccessMessage("Invite accepted!");
+      setSuccessMessage("Invite accepted.");
       await loadTrustedContactsData();
     } catch (err) {
       setError(err.message || "Failed to accept invite");
@@ -107,7 +121,7 @@ const TrustedContacts = ({ onContactsUpdate }) => {
   const handleRejectInvite = async (inviteId) => {
     try {
       await rejectTrustedContactInvite(inviteId);
-      setSuccessMessage("Invite rejected");
+      setSuccessMessage("Invite rejected.");
       await loadTrustedContactsData();
     } catch (err) {
       setError(err.message || "Failed to reject invite");
@@ -115,132 +129,163 @@ const TrustedContacts = ({ onContactsUpdate }) => {
   };
 
   const handleRemoveContact = async (contactId) => {
-    if (!window.confirm("Are you sure you want to remove this trusted contact?")) {
+    if (!window.confirm("Remove this trusted contact?")) {
       return;
     }
 
     try {
       await removeTrustedContact(contactId);
-      setSuccessMessage("Trusted contact removed");
+      setSuccessMessage("Trusted contact removed.");
       await loadTrustedContactsData();
     } catch (err) {
       setError(err.message || "Failed to remove trusted contact");
     }
   };
 
-  const renderUserInfo = (user) => {
-    if (!user) return "Unknown user";
-    return `${user.name || user.username || "User"} (${user.email || "No email"})`;
-  };
+  const renderUserName = (user) =>
+    user?.name || user?.username || user?.email || "Unknown user";
+
+  const renderUserSecondary = (user) =>
+    user?.email || user?.username || "No additional details";
+
+  const renderEmptyState = (title, body) => (
+    <div className="trusted-contacts-empty-state">
+      <strong>{title}</strong>
+      <p>{body}</p>
+    </div>
+  );
 
   return (
     <div className="trusted-contacts-container">
       <div className="trusted-contacts-panel">
-        <div className="reminderalert-panel-heading">
-          <p>Trusted Contacts Management</p>
-          <h2>Manage your trusted reminder contacts</h2>
+        <div className="trusted-contacts-header">
+          <div className="reminderalert-panel-heading">
+            <p>Trusted contacts</p>
+            <h2>People who can back up your reminders</h2>
+          </div>
+          {activeTab === "accepted" && (
+            <button
+              type="button"
+              className="reminderalert-add-btn"
+              onClick={() => {
+                setShowInviteForm((current) => !current);
+                setSubmitError(null);
+              }}
+            >
+              {showInviteForm ? "Close invite form" : "Invite contact"}
+            </button>
+          )}
         </div>
 
-        {error && (
-          <div style={{ color: "#d32f2f", marginBottom: "1rem", fontSize: "0.9rem" }}>
-            {error}
-          </div>
-        )}
+        <div className="trusted-contacts-stats">
+          <article className="trusted-contact-stat">
+            <strong>{summary.accepted}</strong>
+            <span>Accepted</span>
+          </article>
+          <article className="trusted-contact-stat">
+            <strong>{summary.sent}</strong>
+            <span>Sent invites</span>
+          </article>
+          <article className="trusted-contact-stat">
+            <strong>{summary.received}</strong>
+            <span>Received invites</span>
+          </article>
+        </div>
 
+        {error && <div className="trusted-contacts-message error">{error}</div>}
         {successMessage && (
-          <div style={{ color: "#28a745", marginBottom: "1rem", fontSize: "0.9rem" }}>
-            {successMessage}
-          </div>
+          <div className="trusted-contacts-message success">{successMessage}</div>
         )}
 
         <div className="trusted-contacts-tabs">
           <button
+            type="button"
             className={`tab-button ${activeTab === "accepted" ? "active" : ""}`}
             onClick={() => setActiveTab("accepted")}
           >
-            Accepted ({acceptedContacts.length})
+            Accepted ({summary.accepted})
           </button>
           <button
+            type="button"
             className={`tab-button ${activeTab === "sent" ? "active" : ""}`}
             onClick={() => setActiveTab("sent")}
           >
-            Sent Invites ({sentInvites.length})
+            Sent ({summary.sent})
           </button>
           <button
+            type="button"
             className={`tab-button ${activeTab === "received" ? "active" : ""}`}
             onClick={() => setActiveTab("received")}
           >
-            Received Invites ({receivedInvites.length})
+            Received ({summary.received})
           </button>
         </div>
 
         {activeTab === "accepted" && (
           <div className="trusted-contacts-tab-content">
-            <div className="trusted-contacts-actions">
-              <button
-                className="reminderalert-filter-chip active"
-                onClick={() => setShowInviteForm(!showInviteForm)}
-              >
-                {showInviteForm ? "Cancel" : "Add New Contact"}
-              </button>
-            </div>
-
             {showInviteForm && (
               <form className="trusted-contacts-form" onSubmit={handleSendInvite}>
-                <div className="reminderalert-step-item">
-                  <label>
-                    <span>Contact ID or Username</span>
+                <div className="trusted-contacts-form-grid">
+                  <label className="trusted-contacts-field trusted-contacts-field-wide">
+                    <span>Contact ID or username</span>
                     <input
                       type="text"
                       name="recipientId"
                       value={inviteForm.recipientId}
                       onChange={handleInviteFormChange}
-                      placeholder="Enter contact ID or username"
+                      placeholder="Enter a username or user ID"
+                      disabled={submitting}
                     />
                   </label>
-                </div>
 
-                <div className="reminderalert-requirement-card">
-                  <h4>Relationship</h4>
-                  <select
-                    name="relationship"
-                    value={inviteForm.relationship}
-                    onChange={handleInviteFormChange}
-                  >
-                    <option value="family">Family</option>
-                    <option value="friend">Friend</option>
-                    <option value="caregiver">Caregiver</option>
-                    <option value="colleague">Colleague</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
+                  <label className="trusted-contacts-field">
+                    <span>Relationship</span>
+                    <select
+                      name="relationship"
+                      value={inviteForm.relationship}
+                      onChange={handleInviteFormChange}
+                      disabled={submitting}
+                    >
+                      <option value="family">Family</option>
+                      <option value="friend">Friend</option>
+                      <option value="caregiver">Caregiver</option>
+                      <option value="colleague">Colleague</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
 
-                <div className="reminderalert-step-item">
-                  <label>
-                    <span>Message (Optional)</span>
+                  <label className="trusted-contacts-field trusted-contacts-field-wide">
+                    <span>Message</span>
                     <textarea
                       name="message"
                       value={inviteForm.message}
                       onChange={handleInviteFormChange}
-                      placeholder="Add a message to your invite"
-                      rows="3"
+                      placeholder="Add a short note so they know why you are inviting them."
+                      rows="4"
+                      disabled={submitting}
                     />
                   </label>
                 </div>
 
                 {submitError && (
-                  <div style={{ color: "#d32f2f", marginBottom: "1rem", fontSize: "0.9rem" }}>
-                    {submitError}
-                  </div>
+                  <div className="trusted-contacts-message error">{submitError}</div>
                 )}
 
-                <div className="reminderalert-filter-row">
+                <div className="trusted-contacts-form-actions">
                   <button
                     type="submit"
-                    className="reminderalert-filter-chip active"
+                    className="reminderalert-add-btn"
                     disabled={submitting}
                   >
-                    {submitting ? "Sending..." : "Send Invite"}
+                    {submitting ? "Sending..." : "Send invite"}
+                  </button>
+                  <button
+                    type="button"
+                    className="reminderalert-filter-chip"
+                    onClick={() => setShowInviteForm(false)}
+                    disabled={submitting}
+                  >
+                    Cancel
                   </button>
                 </div>
               </form>
@@ -248,35 +293,46 @@ const TrustedContacts = ({ onContactsUpdate }) => {
 
             {loading ? (
               <div className="reminderalert-callout">
-                <strong>Loading...</strong>
+                <strong>Loading trusted contacts...</strong>
+                <p>Please wait while we fetch the latest connection list.</p>
               </div>
             ) : acceptedContacts.length > 0 ? (
               <div className="trusted-contacts-list">
                 {acceptedContacts.map((contact) => (
-                  <div key={contact._id} className="trusted-contact-card">
+                  <article key={contact._id} className="trusted-contact-card">
                     <div className="contact-info">
-                      <h4>{renderUserInfo(contact.recipientId)}</h4>
-                      <p>
-                        {contact.relationship.charAt(0).toUpperCase() +
-                          contact.relationship.slice(1)}{" "}
-                        • Accepted on{" "}
-                        {new Date(contact.acceptedAt).toLocaleDateString()}
-                      </p>
+                      <h4>{renderUserName(contact.recipientId)}</h4>
+                      <p>{renderUserSecondary(contact.recipientId)}</p>
+                      <div className="trusted-contact-meta">
+                        <span className="contact-chip">
+                          {contact.relationship
+                            ? `${contact.relationship.charAt(0).toUpperCase()}${contact.relationship.slice(1)}`
+                            : "Connected"}
+                        </span>
+                        {contact.acceptedAt && (
+                          <span className="contact-chip muted">
+                            Accepted on {new Date(contact.acceptedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      className="reminderalert-filter-chip"
-                      onClick={() => handleRemoveContact(contact._id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
+                    <div className="contact-actions">
+                      <button
+                        type="button"
+                        className="reminderalert-filter-chip"
+                        onClick={() => handleRemoveContact(contact._id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </article>
                 ))}
               </div>
             ) : (
-              <div className="reminderalert-callout">
-                <strong>No accepted trusted contacts</strong>
-                <p>Add a new contact to get started</p>
-              </div>
+              renderEmptyState(
+                "No accepted trusted contacts yet",
+                "Invite someone you trust so important reminders can be shared with them."
+              )
             )}
           </div>
         )}
@@ -285,30 +341,35 @@ const TrustedContacts = ({ onContactsUpdate }) => {
           <div className="trusted-contacts-tab-content">
             {loading ? (
               <div className="reminderalert-callout">
-                <strong>Loading...</strong>
+                <strong>Loading sent invites...</strong>
               </div>
             ) : sentInvites.length > 0 ? (
               <div className="trusted-contacts-list">
                 {sentInvites.map((invite) => (
-                  <div key={invite._id} className="trusted-contact-card">
+                  <article key={invite._id} className="trusted-contact-card">
                     <div className="contact-info">
-                      <h4>{renderUserInfo(invite.recipientId)}</h4>
-                      <p>
-                        Status:{" "}
-                        <strong style={{ color: invite.status === "accepted" ? "#28a745" : "#ff9800" }}>
-                          {invite.status.toUpperCase()}
-                        </strong>
-                      </p>
+                      <h4>{renderUserName(invite.recipientId)}</h4>
+                      <p>{renderUserSecondary(invite.recipientId)}</p>
+                      <div className="trusted-contact-meta">
+                        <span className="contact-chip">
+                          {invite.relationship
+                            ? `${invite.relationship.charAt(0).toUpperCase()}${invite.relationship.slice(1)}`
+                            : "Invite"}
+                        </span>
+                        <span className="contact-chip muted">
+                          {invite.status ? invite.status.toUpperCase() : "PENDING"}
+                        </span>
+                      </div>
                       {invite.message && <p className="invite-message">"{invite.message}"</p>}
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             ) : (
-              <div className="reminderalert-callout">
-                <strong>No sent invites</strong>
-                <p>Add a new contact to send an invite</p>
-              </div>
+              renderEmptyState(
+                "No sent invites",
+                "When you invite someone, the request will appear here until they respond."
+              )
             )}
           </div>
         )}
@@ -317,39 +378,49 @@ const TrustedContacts = ({ onContactsUpdate }) => {
           <div className="trusted-contacts-tab-content">
             {loading ? (
               <div className="reminderalert-callout">
-                <strong>Loading...</strong>
+                <strong>Loading received invites...</strong>
               </div>
             ) : receivedInvites.length > 0 ? (
               <div className="trusted-contacts-list">
                 {receivedInvites.map((invite) => (
-                  <div key={invite._id} className="trusted-contact-card">
+                  <article key={invite._id} className="trusted-contact-card">
                     <div className="contact-info">
-                      <h4>{renderUserInfo(invite.senderId)}</h4>
-                      <p>Wants to add you as a {invite.relationship}</p>
+                      <h4>{renderUserName(invite.senderId)}</h4>
+                      <p>{renderUserSecondary(invite.senderId)}</p>
+                      <div className="trusted-contact-meta">
+                        <span className="contact-chip">
+                          Wants to add you as{" "}
+                          {invite.relationship
+                            ? `${invite.relationship.charAt(0).toUpperCase()}${invite.relationship.slice(1)}`
+                            : "a trusted contact"}
+                        </span>
+                      </div>
                       {invite.message && <p className="invite-message">"{invite.message}"</p>}
                     </div>
                     <div className="contact-actions">
                       <button
+                        type="button"
                         className="reminderalert-filter-chip active"
                         onClick={() => handleAcceptInvite(invite._id)}
                       >
                         Accept
                       </button>
                       <button
+                        type="button"
                         className="reminderalert-filter-chip"
                         onClick={() => handleRejectInvite(invite._id)}
                       >
                         Reject
                       </button>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             ) : (
-              <div className="reminderalert-callout">
-                <strong>No pending invites</strong>
-                <p>You'll see invitations here</p>
-              </div>
+              renderEmptyState(
+                "No pending invites",
+                "Incoming trusted contact requests will appear here when someone adds you."
+              )
             )}
           </div>
         )}

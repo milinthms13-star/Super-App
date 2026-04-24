@@ -212,6 +212,82 @@ export const fetchEntriesByDate = async (date) => {
   }
 };
 
+/**
+ * Fetch diary calendar notes and reminders
+ * @param {Object} options - Optional filters
+ * @returns {Promise<Object>} - Response with calendar items
+ */
+export const fetchDiaryCalendarItems = async (options = {}) => {
+  try {
+    const params = {};
+    if (options.date) params.date = options.date;
+    if (options.month) params.month = options.month;
+    if (options.startDate) params.startDate = options.startDate;
+    if (options.endDate) params.endDate = options.endDate;
+    if (options.limit) params.limit = options.limit;
+
+    const response = await axiosInstance.get("/diary/calendar-items", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching diary calendar items:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch diary calendar items"
+    );
+  }
+};
+
+/**
+ * Create a diary calendar note or reminder
+ * @param {Object} itemData - Calendar item payload
+ * @returns {Promise<Object>} - Created calendar item
+ */
+export const createDiaryCalendarItem = async (itemData) => {
+  try {
+    const response = await axiosInstance.post("/diary/calendar-items", itemData);
+    return response.data;
+  } catch (error) {
+    console.error("Error creating diary calendar item:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to create diary calendar item"
+    );
+  }
+};
+
+/**
+ * Update a diary calendar note or reminder
+ * @param {string} itemId - Calendar item ID
+ * @param {Object} itemData - Updated calendar item payload
+ * @returns {Promise<Object>} - Updated calendar item
+ */
+export const updateDiaryCalendarItem = async (itemId, itemData) => {
+  try {
+    const response = await axiosInstance.put(`/diary/calendar-items/${itemId}`, itemData);
+    return response.data;
+  } catch (error) {
+    console.error("Error updating diary calendar item:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to update diary calendar item"
+    );
+  }
+};
+
+/**
+ * Delete a diary calendar note or reminder
+ * @param {string} itemId - Calendar item ID
+ * @returns {Promise<Object>} - Deletion confirmation
+ */
+export const deleteDiaryCalendarItem = async (itemId) => {
+  try {
+    const response = await axiosInstance.delete(`/diary/calendar-items/${itemId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error deleting diary calendar item:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to delete diary calendar item"
+    );
+  }
+};
+
 export default {
   fetchDiaryEntries,
   fetchDraftEntries,
@@ -222,4 +298,8 @@ export default {
   updateDiaryEntry,
   deleteDiaryEntry,
   fetchEntriesByDate,
+  fetchDiaryCalendarItems,
+  createDiaryCalendarItem,
+  updateDiaryCalendarItem,
+  deleteDiaryCalendarItem,
 };

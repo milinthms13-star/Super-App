@@ -5,7 +5,7 @@ import useI18n from "../hooks/useI18n";
 import { getPathForModule, getProtectedModuleFromPathname } from "../utils/moduleRoutes";
 import "../styles/Navigation.css";
 
-const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary"]);
+const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks"]);
 
 const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const { currentUser, cart } = useApp();

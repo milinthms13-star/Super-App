@@ -5,6 +5,10 @@ import {
   createDiaryEntry,
   updateDiaryEntry,
   deleteDiaryEntry,
+  fetchDiaryCalendarItems,
+  createDiaryCalendarItem,
+  updateDiaryCalendarItem,
+  deleteDiaryCalendarItem,
   fetchTags,
   fetchMoodStats,
 } from "../../services/diaryService";
@@ -30,8 +34,18 @@ const stripHtml = (content = "") =>
     .replace(/\s+/g, " ")
     .trim();
 
+const sortCalendarItems = (items = []) =>
+  [...items].sort((leftItem, rightItem) => {
+    const leftDate =
+      new Date(leftItem.reminderAt || leftItem.date || leftItem.createdAt || 0).getTime();
+    const rightDate =
+      new Date(rightItem.reminderAt || rightItem.date || rightItem.createdAt || 0).getTime();
+    return leftDate - rightDate;
+  });
+
 const Diary = () => {
   const [entries, setEntries] = useState([]);
+  const [calendarItems, setCalendarItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -44,10 +58,12 @@ const Diary = () => {
   const [moodStats, setMoodStats] = useState([]);
   const [viewMode, setViewMode] = useState("list"); // list, calendar, analytics
   const [submitting, setSubmitting] = useState(false);
+  const [calendarSubmitting, setCalendarSubmitting] = useState(false);
 
   // Load entries on mount
   useEffect(() => {
     loadEntries();
+    loadCalendarItems();
     loadTags();
     loadMoodStats();
   }, []);
@@ -82,6 +98,17 @@ const Diary = () => {
       setMoodStats(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error("Failed to load mood stats:", err);
+    }
+  };
+
+  const loadCalendarItems = async () => {
+    try {
+      const response = await fetchDiaryCalendarItems({ limit: 500 });
+      setCalendarItems(sortCalendarItems(Array.isArray(response.data) ? response.data : []));
+    } catch (err) {
+      console.error("Failed to load calendar items:", err);
+      setError((current) => current || err.message || "Failed to load calendar items");
+      setCalendarItems([]);
     }
   };
 
@@ -164,6 +191,54 @@ const Diary = () => {
   const handleEditEntry = (entry) => {
     setEditingEntry(entry);
     setShowEditor(true);
+  };
+
+  const handleCreateCalendarItem = async (itemData) => {
+    try {
+      setCalendarSubmitting(true);
+      const response = await createDiaryCalendarItem(itemData);
+      setCalendarItems((current) => sortCalendarItems([...current, response.data]));
+      setError(null);
+      return response.data;
+    } catch (err) {
+      setError(err.message || "Failed to create calendar item");
+      throw err;
+    } finally {
+      setCalendarSubmitting(false);
+    }
+  };
+
+  const handleUpdateCalendarItem = async (itemId, itemData) => {
+    try {
+      setCalendarSubmitting(true);
+      const response = await updateDiaryCalendarItem(itemId, itemData);
+      setCalendarItems((current) =>
+        sortCalendarItems(
+          current.map((item) => (item._id === itemId ? response.data : item))
+        )
+      );
+      setError(null);
+      return response.data;
+    } catch (err) {
+      setError(err.message || "Failed to update calendar item");
+      throw err;
+    } finally {
+      setCalendarSubmitting(false);
+    }
+  };
+
+  const handleDeleteCalendarItem = async (itemId) => {
+    try {
+      setCalendarSubmitting(true);
+      await deleteDiaryCalendarItem(itemId);
+      setCalendarItems((current) => current.filter((item) => item._id !== itemId));
+      setError(null);
+    } catch (err) {
+      setError(err.message || "Failed to delete calendar item");
+      throw err;
+    } finally {
+      setCalendarSubmitting(false);
+    }
   };
 
   return (
@@ -323,7 +398,14 @@ const Diary = () => {
       )}
 
       {viewMode === "calendar" && (
-        <DiaryCalendar entries={entries} onDateClick={(date) => console.log(date)} />
+        <DiaryCalendar
+          entries={entries}
+          calendarItems={calendarItems}
+          onCreateCalendarItem={handleCreateCalendarItem}
+          onUpdateCalendarItem={handleUpdateCalendarItem}
+          onDeleteCalendarItem={handleDeleteCalendarItem}
+          submitting={calendarSubmitting}
+        />
       )}
 
       {viewMode === "analytics" && (

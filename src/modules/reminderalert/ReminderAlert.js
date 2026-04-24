@@ -19,6 +19,29 @@ import TrustedContacts from "./TrustedContacts";
 const PRIORITIES = ["Low", "Medium", "High"];
 const CATEGORIES = ["Work", "Personal", "Urgent"];
 const FILTERS = ["All", "Work", "Personal", "Urgent"];
+const RECURRING_OPTIONS = [
+  { value: "none", label: "Does not repeat" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
+const CHANNEL_OPTIONS = [
+  {
+    value: "In-app",
+    title: "In-app alert",
+    description: "Shows the reminder inside your NilaHub workspace.",
+  },
+  {
+    value: "SMS",
+    title: "SMS",
+    description: "Useful when you might be away from the app.",
+  },
+  {
+    value: "Call",
+    title: "Voice call",
+    description: "Triggers an automated phone reminder with your message.",
+  },
+];
 const INITIAL_FORM = {
   title: "",
   description: "",
@@ -34,7 +57,25 @@ const INITIAL_VOICE_CALL_FORM = {
   recipientPhoneNumber: "",
   voiceMessage: "",
   messageType: "text",
-  isVoiceCall: false,
+};
+
+const getReminderTimestamp = (task = {}) => {
+  const baseDate = new Date(task.dueDate);
+  if (Number.isNaN(baseDate.getTime())) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (task.dueTime) {
+    const [hours, minutes] = String(task.dueTime)
+      .split(":")
+      .map((value) => parseInt(value, 10));
+
+    if (!Number.isNaN(hours) && !Number.isNaN(minutes)) {
+      baseDate.setHours(hours, minutes, 0, 0);
+    }
+  }
+
+  return baseDate.getTime();
 };
 
 const ReminderAlert = () => {
@@ -48,11 +89,8 @@ const ReminderAlert = () => {
   const [voiceCallData, setVoiceCallData] = useState(INITIAL_VOICE_CALL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [voiceCallStatus, setVoiceCallStatus] = useState({});  // Track call status by reminder ID
-  const [trustedContacts, setTrustedContacts] = useState([]); // List of accepted trusted contacts
-  const [showTrustedContacts, setShowTrustedContacts] = useState(false); // Toggle trusted contacts panel
+  const [trustedContacts, setTrustedContacts] = useState([]);
 
-  // Load reminders from backend on component mount
   useEffect(() => {
     const loadReminders = async () => {
       try {
@@ -72,7 +110,6 @@ const ReminderAlert = () => {
     loadReminders();
   }, []);
 
-  // Load trusted contacts
   useEffect(() => {
     const loadTrustedContacts = async () => {
       try {
@@ -80,7 +117,6 @@ const ReminderAlert = () => {
         setTrustedContacts(Array.isArray(response.data) ? response.data : []);
       } catch (err) {
         console.error("Failed to load trusted contacts:", err);
-        // Don't show error for this, just silently fail
       }
     };
 
@@ -88,30 +124,79 @@ const ReminderAlert = () => {
   }, []);
 
   const visibleTasks = useMemo(() => {
-    if (activeFilter === "All") {
-      return tasks;
-    }
+    const filteredTasks =
+      activeFilter === "All"
+        ? tasks
+        : tasks.filter((task) => task.category === activeFilter);
 
-    return tasks.filter((task) => task.category === activeFilter);
+    return [...filteredTasks].sort(
+      (leftTask, rightTask) => getReminderTimestamp(leftTask) - getReminderTimestamp(rightTask)
+    );
   }, [activeFilter, tasks]);
 
-  const resetForm = () => {
+  const stats = useMemo(() => {
+    const pending = tasks.filter((task) => !task.completed).length;
+    const completed = tasks.filter((task) => task.completed).length;
+    const highPriority = tasks.filter((task) => task.priority === "High" && !task.completed).length;
+    const callEnabled = tasks.filter(
+      (task) => task.reminders?.includes("Call") || task.recipientPhoneNumber
+    ).length;
+
+    return {
+      total: tasks.length,
+      pending,
+      completed,
+      highPriority,
+      callEnabled,
+    };
+  }, [tasks]);
+
+  const nextDueTask = useMemo(() => {
+    const upcomingTasks = tasks
+      .filter((task) => !task.completed)
+      .sort((leftTask, rightTask) => getReminderTimestamp(leftTask) - getReminderTimestamp(rightTask));
+
+    return upcomingTasks[0] || null;
+  }, [tasks]);
+
+  const clearEditorValues = () => {
     setFormData(INITIAL_FORM);
     setVoiceCallData(INITIAL_VOICE_CALL_FORM);
     setEditingTaskId("");
+    setSubmitError(null);
+  };
+
+  const closeEditor = () => {
+    clearEditorValues();
     setShowAddForm(false);
+  };
+
+  const openCreateForm = () => {
+    clearEditorValues();
+    setShowAddForm(true);
   };
 
   const handleFormChange = (event) => {
     const { name, value, checked, type } = event.target;
 
     if (type === "checkbox" && name === "reminders") {
+      const nextReminderChannels = checked
+        ? [...formData.reminders, value]
+        : formData.reminders.filter((item) => item !== value);
+
       setFormData((current) => ({
         ...current,
-        reminders: checked
-          ? [...current.reminders, value]
-          : current.reminders.filter((item) => item !== value),
+        reminders: nextReminderChannels,
       }));
+
+      if (!checked && value === "Call") {
+        setVoiceCallData((current) => ({
+          ...current,
+          recipientPhoneNumber: "",
+          voiceMessage: "",
+          messageType: "text",
+        }));
+      }
       return;
     }
 
@@ -132,32 +217,27 @@ const ReminderAlert = () => {
   };
 
   const handleVoiceCallChange = (event) => {
-    const { name, value, checked, type } = event.target;
-
-    if (name === "isVoiceCall") {
-      setVoiceCallData((current) => ({
-        ...current,
-        isVoiceCall: checked,
-      }));
-      // Toggle Call in reminders
-      if (checked && !formData.reminders.includes("Call")) {
-        setFormData((current) => ({
-          ...current,
-          reminders: [...current.reminders, "Call"],
-        }));
-      } else if (!checked) {
-        setFormData((current) => ({
-          ...current,
-          reminders: current.reminders.filter((r) => r !== "Call"),
-        }));
-      }
-      return;
-    }
-
+    const { name, value } = event.target;
     setVoiceCallData((current) => ({
       ...current,
       [name]: value,
     }));
+  };
+
+  const syncReminderSharing = async (reminderId, contactIds = []) => {
+    const response = await shareReminderWithContacts(reminderId, contactIds);
+    return response?.data || null;
+  };
+
+  const upsertTask = (savedTask, { prepend = false } = {}) => {
+    if (!savedTask?._id) {
+      return;
+    }
+
+    setTasks((current) => {
+      const withoutCurrent = current.filter((task) => task._id !== savedTask._id);
+      return prepend ? [savedTask, ...withoutCurrent] : [...withoutCurrent, savedTask];
+    });
   };
 
   const handleSubmit = async (event) => {
@@ -165,18 +245,18 @@ const ReminderAlert = () => {
     setSubmitError(null);
 
     if (!formData.title.trim() || !formData.dueDate) {
-      setSubmitError("Title and due date are required");
+      setSubmitError("Title and due date are required.");
       return;
     }
 
-    // Validate voice call fields if enabled
-    if (voiceCallData.isVoiceCall) {
+    if (formData.reminders.includes("Call")) {
       if (!voiceCallData.recipientPhoneNumber.trim()) {
-        setSubmitError("Phone number is required for voice call reminders");
+        setSubmitError("Add a phone number for voice call reminders.");
         return;
       }
+
       if (!voiceCallData.voiceMessage.trim()) {
-        setSubmitError("Voice message is required for voice call reminders");
+        setSubmitError("Add the spoken message for the call reminder.");
         return;
       }
     }
@@ -184,52 +264,42 @@ const ReminderAlert = () => {
     try {
       setSubmitting(true);
 
-      if (editingTaskId) {
-        // Update existing reminder
-        const response = await updateReminder(editingTaskId, {
-          ...formData,
-          dueDate: new Date(formData.dueDate),
-        });
-        
-        // Share with trusted contacts if selected
-        if (formData.sharedWithTrustedContacts && formData.sharedWithTrustedContacts.length > 0) {
-          await shareReminderWithContacts(editingTaskId, formData.sharedWithTrustedContacts);
-        }
-        
-        setTasks((current) =>
-          current.map((task) =>
-            task._id === editingTaskId ? response.data : task
-          )
-        );
-      } else {
-        // Create new reminder
-        let reminderId;
-        if (voiceCallData.isVoiceCall) {
-          // Create voice call reminder
-          const response = await createVoiceCallReminder({
-            ...formData,
-            ...voiceCallData,
-            dueDate: new Date(formData.dueDate),
-          });
-          reminderId = response.data._id;
-          setTasks((current) => [response.data, ...current]);
-        } else {
-          // Create regular reminder
-          const response = await createReminder({
-            ...formData,
-            dueDate: new Date(formData.dueDate),
-          });
-          reminderId = response.data._id;
-          setTasks((current) => [response.data, ...current]);
-        }
+      const payload = {
+        ...formData,
+        dueDate: new Date(formData.dueDate),
+        recipientPhoneNumber: formData.reminders.includes("Call")
+          ? voiceCallData.recipientPhoneNumber
+          : "",
+        voiceMessage: formData.reminders.includes("Call") ? voiceCallData.voiceMessage : "",
+        messageType: formData.reminders.includes("Call") ? voiceCallData.messageType : "text",
+      };
 
-        // Share with trusted contacts if selected
-        if (formData.sharedWithTrustedContacts && formData.sharedWithTrustedContacts.length > 0) {
-          await shareReminderWithContacts(reminderId, formData.sharedWithTrustedContacts);
-        }
+      let savedTask = null;
+
+      if (editingTaskId) {
+        const response = await updateReminder(editingTaskId, payload);
+        savedTask = response.data;
+      } else if (formData.reminders.includes("Call")) {
+        const response = await createVoiceCallReminder(payload);
+        savedTask = response.data;
+      } else {
+        const response = await createReminder(payload);
+        savedTask = response.data;
       }
 
-      resetForm();
+      if (savedTask?._id) {
+        const sharedReminder = await syncReminderSharing(
+          savedTask._id,
+          formData.sharedWithTrustedContacts
+        );
+        if (sharedReminder?._id) {
+          savedTask = sharedReminder;
+        }
+
+        upsertTask(savedTask, { prepend: !editingTaskId });
+      }
+
+      closeEditor();
     } catch (err) {
       console.error("Error saving reminder:", err);
       setSubmitError(err.message || "Failed to save reminder");
@@ -241,28 +311,34 @@ const ReminderAlert = () => {
   const handleEdit = (task) => {
     setEditingTaskId(task._id);
     setFormData({
-      title: task.title,
+      title: task.title || "",
       description: task.description || "",
-      category: task.category,
-      priority: task.priority,
+      category: task.category || "Work",
+      priority: task.priority || "Medium",
       dueDate: toDateInputValue(task.dueDate),
-      dueTime: task.dueTime,
-      reminders: task.reminders,
+      dueTime: task.dueTime || "",
+      reminders: Array.isArray(task.reminders) && task.reminders.length ? task.reminders : ["In-app"],
       recurring: task.recurring || "none",
       sharedWithTrustedContacts: task.sharedWithTrustedContacts || [],
     });
+    setVoiceCallData({
+      recipientPhoneNumber: task.recipientPhoneNumber || "",
+      voiceMessage: task.voiceMessage || "",
+      messageType: task.messageType || "text",
+    });
+    setSubmitError(null);
     setShowAddForm(true);
   };
 
   const handleToggleComplete = async (taskId) => {
     try {
-      const task = tasks.find((t) => t._id === taskId);
-      if (!task) return;
+      const task = tasks.find((item) => item._id === taskId);
+      if (!task) {
+        return;
+      }
 
       const response = await toggleReminderCompletion(taskId, !task.completed);
-      setTasks((current) =>
-        current.map((t) => (t._id === taskId ? response.data : t))
-      );
+      upsertTask(response.data);
     } catch (err) {
       console.error("Error updating reminder:", err);
       setError(err.message || "Failed to update reminder");
@@ -270,6 +346,10 @@ const ReminderAlert = () => {
   };
 
   const handleDelete = async (taskId) => {
+    if (!window.confirm("Delete this reminder?")) {
+      return;
+    }
+
     try {
       await deleteReminder(taskId);
       setTasks((current) => current.filter((task) => task._id !== taskId));
@@ -279,254 +359,392 @@ const ReminderAlert = () => {
     }
   };
 
-
-
   const handleTriggerVoiceCall = async (taskId) => {
     try {
       await triggerVoiceCall(taskId);
-      // Refresh the reminder to get updated call status
       const response = await getVoiceCallStatus(taskId);
-      setVoiceCallStatus((current) => ({
-        ...current,
-        [taskId]: response.data,
-      }));
+      const nextStatus = response?.data || {};
+
+      setTasks((current) =>
+        current.map((task) =>
+          task._id === taskId
+            ? {
+                ...task,
+                callStatus: nextStatus.callStatus || task.callStatus,
+                lastCallTime: nextStatus.lastCallTime || task.lastCallTime,
+                nextCallTime: nextStatus.nextCallTime || task.nextCallTime,
+                callAttempts: nextStatus.callAttempts ?? task.callAttempts,
+                maxCallAttempts: nextStatus.maxCallAttempts ?? task.maxCallAttempts,
+              }
+            : task
+        )
+      );
     } catch (err) {
       console.error("Error triggering voice call:", err);
-      alert(err.message || "Failed to trigger voice call");
+      setError(err.message || "Failed to trigger voice call");
     }
   };
 
   return (
     <div className="reminderalert-page">
       <section className="reminderalert-hero">
-        <div>
+        <div className="reminderalert-hero-copy">
           <p className="reminderalert-eyebrow">Reminder workspace</p>
           <h1>Smart To-Do & Reminder System</h1>
           <p className="reminderalert-intro">
-            Create tasks, schedule reminders, and keep important actions visible from one working
-            dashboard.
+            Plan follow-ups, automate nudges, and share critical reminders with people you trust,
+            all from one cleaner workspace.
           </p>
-          {error && (
-            <div style={{ color: "#d32f2f", marginBottom: "1rem", fontSize: "0.9rem" }}>
-              {error}
-            </div>
-          )}
-          <button
-            type="button"
-            className="reminderalert-filter-chip active"
-            onClick={() => setShowAddForm((current) => !current)}
-            disabled={loading}
-          >
-            {showAddForm ? "Close form" : "Add reminder"}
-          </button>
-        </div>
-      </section>
-
-      {showAddForm ? (
-        <section className="reminderalert-panel">
-          <div className="reminderalert-panel-heading">
-            <p>Task editor</p>
-            <h2>{editingTaskId ? "Update reminder" : "Create reminder"}</h2>
-          </div>
-
-          <form className="reminderalert-step-list" onSubmit={handleSubmit}>
-            {submitError && (
-              <div style={{ color: "#d32f2f", marginBottom: "1rem", fontSize: "0.9rem" }}>
-                {submitError}
-              </div>
-            )}
-            <label className="reminderalert-step-item">
-              <span>1</span>
-              <p>
-                <input
-                  type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleFormChange}
-                  placeholder="Reminder title"
-                />
-              </p>
-            </label>
-
-            <label className="reminderalert-step-item">
-              <span>2</span>
-              <p>
-                <input
-                  type="text"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleFormChange}
-                  placeholder="Description"
-                />
-              </p>
-            </label>
-
-            <div className="reminderalert-requirement-grid">
-              <label className="reminderalert-requirement-card">
-                <h3>Category</h3>
-                <select name="category" value={formData.category} onChange={handleFormChange}>
-                  {CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="reminderalert-requirement-card">
-                <h3>Priority</h3>
-                <select name="priority" value={formData.priority} onChange={handleFormChange}>
-                  {PRIORITIES.map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="reminderalert-requirement-card">
-                <h3>Due date</h3>
-                <input type="date" name="dueDate" value={formData.dueDate} onChange={handleFormChange} />
-              </label>
-              <label className="reminderalert-requirement-card">
-                <h3>Due time</h3>
-                <input type="time" name="dueTime" value={formData.dueTime} onChange={handleFormChange} />
-              </label>
-            </div>
-
-            <div className="reminderalert-role-stack">
-              {["In-app", "SMS", "Call"].map((channel) => (
-                <label className="reminderalert-role-card" key={channel}>
-                  <h3>{channel}</h3>
-                  <ul>
-                    <li>
-                      <input
-                        type="checkbox"
-                        name="reminders"
-                        value={channel}
-                        checked={formData.reminders.includes(channel)}
-                        onChange={handleFormChange}
-                      />
-                    </li>
-                  </ul>
-                </label>
-              ))}
-            </div>
-
-            {trustedContacts.length > 0 && (
-              <div className="reminderalert-panel" style={{ marginTop: "1.5rem", padding: "1.5rem", backgroundColor: "#f0f8ff", borderRadius: "8px" }}>
-                <h3 style={{ marginBottom: "1rem" }}>🔗 Share with Trusted Contacts</h3>
-                <div className="reminderalert-role-stack">
-                  {trustedContacts.map((contact) => (
-                    <label className="reminderalert-role-card" key={contact._id}>
-                      <h3>{contact.recipientId?.name || contact.recipientId?.username || "Contact"}</h3>
-                      <ul>
-                        <li>
-                          <input
-                            type="checkbox"
-                            name="sharedWithTrustedContacts"
-                            value={contact.recipientId?._id}
-                            checked={formData.sharedWithTrustedContacts.includes(contact.recipientId?._id)}
-                            onChange={handleFormChange}
-                          />
-                        </li>
-                      </ul>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {formData.reminders.includes("Call") && (
-              <div className="reminderalert-panel" style={{ marginTop: "1.5rem", padding: "1.5rem", backgroundColor: "#f5f5f5", borderRadius: "8px" }}>
-                <h3 style={{ marginBottom: "1rem" }}>Voice Call Reminder Setup</h3>
-                
-                <label className="reminderalert-requirement-card">
-                  <h4>Recipient Phone Number</h4>
-                  <input
-                    type="tel"
-                    name="recipientPhoneNumber"
-                    value={voiceCallData.recipientPhoneNumber}
-                    onChange={handleVoiceCallChange}
-                    placeholder="+1 234-567-8900 or 23456789"
-                  />
-                  <small style={{ color: "#666", marginTop: "0.5rem", display: "block" }}>
-                    Enter the phone number where the automated call will be sent. Include country code if outside US.
-                  </small>
-                </label>
-
-                <label className="reminderalert-requirement-card">
-                  <h4>Message Type</h4>
-                  <select
-                    name="messageType"
-                    value={voiceCallData.messageType}
-                    onChange={handleVoiceCallChange}
-                  >
-                    <option value="text">Text-to-Speech (System reads the message)</option>
-                    <option value="audio">Pre-recorded Audio (Upload your own voice)</option>
-                  </select>
-                </label>
-
-                <label className="reminderalert-requirement-card">
-                  <h4>Voice Message</h4>
-                  <textarea
-                    name="voiceMessage"
-                    value={voiceCallData.voiceMessage}
-                    onChange={handleVoiceCallChange}
-                    placeholder="Enter the message that will be read or played. Example: Please remember to take your medicine at 2 PM today."
-                    rows="4"
-                    maxLength="500"
-                    style={{ width: "100%", padding: "0.75rem", fontFamily: "inherit" }}
-                  />
-                  <small style={{ color: "#666", marginTop: "0.5rem", display: "block" }}>
-                    {voiceCallData.voiceMessage.length}/500 characters
-                  </small>
-                </label>
-
-                <label className="reminderalert-requirement-card" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <input
-                    type="checkbox"
-                    name="isVoiceCall"
-                    checked={voiceCallData.isVoiceCall}
-                    onChange={handleVoiceCallChange}
-                  />
-                  <span>Enable automated voice call for this reminder</span>
-                </label>
-              </div>
-            )}
-
-            <div className="reminderalert-filter-row">
-              <button
-                type="submit"
-                className="reminderalert-filter-chip active"
-                disabled={submitting || loading}
-              >
-                {submitting
-                  ? editingTaskId
-                    ? "Updating..."
-                    : "Saving..."
-                  : editingTaskId
-                  ? "Update reminder"
-                  : "Save reminder"}
-              </button>
+          <div className="reminderalert-hero-actions">
+            <button
+              type="button"
+              className="reminderalert-add-btn"
+              onClick={() => {
+                if (showAddForm) {
+                  closeEditor();
+                } else {
+                  openCreateForm();
+                }
+              }}
+              disabled={loading}
+            >
+              {showAddForm ? "Close editor" : "Add reminder"}
+            </button>
+            {showAddForm && editingTaskId && (
               <button
                 type="button"
                 className="reminderalert-filter-chip"
-                onClick={resetForm}
+                onClick={openCreateForm}
                 disabled={submitting}
               >
-                Cancel
+                Start new
               </button>
-            </div>
-          </form>
-        </section>
-      ) : null}
+            )}
+          </div>
+          {error && <div className="reminderalert-alert reminderalert-alert-error">{error}</div>}
+        </div>
+
+        <aside className="reminderalert-highlight-card">
+          <p className="reminderalert-highlight-label">Next up</p>
+          <strong>
+            {nextDueTask ? nextDueTask.title : "You have a clear schedule right now"}
+          </strong>
+          <p>
+            {nextDueTask
+              ? `${formatReminderDueDate(nextDueTask.dueDate, nextDueTask.dueTime)} • ${
+                  nextDueTask.priority
+                } priority`
+              : "Create a reminder and it will appear here with the soonest due time."}
+          </p>
+        </aside>
+      </section>
+
+      <section className="reminderalert-stats-grid">
+        <article className="reminderalert-stat-card">
+          <strong>{stats.total}</strong>
+          <span>Total reminders</span>
+          <p>Everything currently tracked in your personal reminder board.</p>
+        </article>
+        <article className="reminderalert-stat-card">
+          <strong>{stats.pending}</strong>
+          <span>Open items</span>
+          <p>Tasks that still need your attention or a triggered reminder.</p>
+        </article>
+        <article className="reminderalert-stat-card">
+          <strong>{stats.highPriority}</strong>
+          <span>High priority</span>
+          <p>Urgent reminders that are active and ready for escalation.</p>
+        </article>
+        <article className="reminderalert-stat-card">
+          <strong>{stats.callEnabled}</strong>
+          <span>Voice call enabled</span>
+          <p>Reminders configured to ring a phone with your custom message.</p>
+        </article>
+      </section>
 
       <section className="reminderalert-layout">
         <div className="reminderalert-primary-column">
+          {showAddForm && (
+            <article className="reminderalert-panel">
+              <div className="reminderalert-panel-heading">
+                <p>{editingTaskId ? "Update reminder" : "Create reminder"}</p>
+                <h2>{editingTaskId ? "Edit the current reminder" : "Build a new reminder"}</h2>
+              </div>
+
+              <form className="reminderalert-editor-form" onSubmit={handleSubmit}>
+                {submitError && (
+                  <div className="reminderalert-alert reminderalert-alert-error">
+                    {submitError}
+                  </div>
+                )}
+
+                <div className="reminderalert-editor-grid">
+                  <label className="reminderalert-field reminderalert-field-full">
+                    <span>Title</span>
+                    <input
+                      type="text"
+                      name="title"
+                      value={formData.title}
+                      onChange={handleFormChange}
+                      placeholder="Example: Doctor follow-up"
+                      disabled={submitting}
+                    />
+                  </label>
+
+                  <label className="reminderalert-field reminderalert-field-full">
+                    <span>Description</span>
+                    <textarea
+                      name="description"
+                      value={formData.description}
+                      onChange={handleFormChange}
+                      placeholder="Add context so you know what needs to happen."
+                      rows="4"
+                      disabled={submitting}
+                    />
+                  </label>
+
+                  <label className="reminderalert-field">
+                    <span>Category</span>
+                    <select
+                      name="category"
+                      value={formData.category}
+                      onChange={handleFormChange}
+                      disabled={submitting}
+                    >
+                      {CATEGORIES.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="reminderalert-field">
+                    <span>Priority</span>
+                    <select
+                      name="priority"
+                      value={formData.priority}
+                      onChange={handleFormChange}
+                      disabled={submitting}
+                    >
+                      {PRIORITIES.map((priority) => (
+                        <option key={priority} value={priority}>
+                          {priority}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="reminderalert-field">
+                    <span>Due date</span>
+                    <input
+                      type="date"
+                      name="dueDate"
+                      value={formData.dueDate}
+                      onChange={handleFormChange}
+                      disabled={submitting}
+                    />
+                  </label>
+
+                  <label className="reminderalert-field">
+                    <span>Due time</span>
+                    <input
+                      type="time"
+                      name="dueTime"
+                      value={formData.dueTime}
+                      onChange={handleFormChange}
+                      disabled={submitting}
+                    />
+                  </label>
+
+                  <label className="reminderalert-field">
+                    <span>Recurring</span>
+                    <select
+                      name="recurring"
+                      value={formData.recurring}
+                      onChange={handleFormChange}
+                      disabled={submitting}
+                    >
+                      {RECURRING_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <section className="reminderalert-section-block">
+                  <div className="reminderalert-section-heading">
+                    <h3>Reminder channels</h3>
+                    <p>Select how this reminder should reach you.</p>
+                  </div>
+                  <div className="reminderalert-choice-grid">
+                    {CHANNEL_OPTIONS.map((channel) => {
+                      const isSelected = formData.reminders.includes(channel.value);
+
+                      return (
+                        <label
+                          key={channel.value}
+                          className={`reminderalert-choice-card ${
+                            isSelected ? "selected" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            name="reminders"
+                            value={channel.value}
+                            checked={isSelected}
+                            onChange={handleFormChange}
+                            disabled={submitting}
+                          />
+                          <div className="reminderalert-choice-copy">
+                            <strong>{channel.title}</strong>
+                            <p>{channel.description}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {trustedContacts.length > 0 && (
+                  <section className="reminderalert-section-block">
+                    <div className="reminderalert-section-heading">
+                      <h3>Share with trusted contacts</h3>
+                      <p>Let someone else receive and acknowledge this reminder too.</p>
+                    </div>
+                    <div className="reminderalert-choice-grid reminderalert-choice-grid-contacts">
+                      {trustedContacts.map((contact) => {
+                        const contactId = contact.recipientId?._id;
+                        const isSelected = formData.sharedWithTrustedContacts.includes(contactId);
+
+                        return (
+                          <label
+                            key={contact._id}
+                            className={`reminderalert-choice-card ${
+                              isSelected ? "selected" : ""
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              name="sharedWithTrustedContacts"
+                              value={contactId}
+                              checked={isSelected}
+                              onChange={handleFormChange}
+                              disabled={submitting || !contactId}
+                            />
+                            <div className="reminderalert-choice-copy">
+                              <strong>
+                                {contact.recipientId?.name ||
+                                  contact.recipientId?.username ||
+                                  "Trusted contact"}
+                              </strong>
+                              <p>
+                                {contact.relationship
+                                  ? `${contact.relationship.charAt(0).toUpperCase()}${contact.relationship.slice(1)}`
+                                  : "Connected"}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {formData.reminders.includes("Call") && (
+                  <section className="reminderalert-section-block reminderalert-voice-block">
+                    <div className="reminderalert-section-heading">
+                      <h3>Voice call setup</h3>
+                      <p>
+                        This reminder will ring the number below and play the message you provide.
+                      </p>
+                    </div>
+
+                    <div className="reminderalert-alert reminderalert-alert-info">
+                      Voice call reminders work best for high priority events, medicine schedules,
+                      and time-sensitive follow-ups.
+                    </div>
+
+                    <div className="reminderalert-editor-grid">
+                      <label className="reminderalert-field">
+                        <span>Phone number</span>
+                        <input
+                          type="tel"
+                          name="recipientPhoneNumber"
+                          value={voiceCallData.recipientPhoneNumber}
+                          onChange={handleVoiceCallChange}
+                          placeholder="+91 98765 43210"
+                          disabled={submitting}
+                        />
+                      </label>
+
+                      <label className="reminderalert-field">
+                        <span>Message type</span>
+                        <select
+                          name="messageType"
+                          value={voiceCallData.messageType}
+                          onChange={handleVoiceCallChange}
+                          disabled={submitting}
+                        >
+                          <option value="text">Text to speech</option>
+                          <option value="audio">Pre-recorded audio</option>
+                        </select>
+                      </label>
+
+                      <label className="reminderalert-field reminderalert-field-full">
+                        <span>Spoken message</span>
+                        <textarea
+                          name="voiceMessage"
+                          value={voiceCallData.voiceMessage}
+                          onChange={handleVoiceCallChange}
+                          placeholder="Example: Please remember to take your medicine at 2 PM."
+                          rows="4"
+                          maxLength="500"
+                          disabled={submitting}
+                        />
+                        <small className="reminderalert-inline-meta">
+                          {voiceCallData.voiceMessage.length}/500 characters
+                        </small>
+                      </label>
+                    </div>
+                  </section>
+                )}
+
+                <div className="reminderalert-submit-row">
+                  <button
+                    type="submit"
+                    className="reminderalert-add-btn"
+                    disabled={submitting || loading}
+                  >
+                    {submitting
+                      ? editingTaskId
+                        ? "Updating..."
+                        : "Saving..."
+                      : editingTaskId
+                      ? "Update reminder"
+                      : "Save reminder"}
+                  </button>
+                  <button
+                    type="button"
+                    className="reminderalert-filter-chip"
+                    onClick={closeEditor}
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </article>
+          )}
+
           <article className="reminderalert-panel">
             <div className="reminderalert-panel-heading">
               <p>Task board</p>
               <h2>Your reminders</h2>
             </div>
+
             <div className="reminderalert-filter-row">
               {FILTERS.map((filter) => (
                 <button
@@ -545,49 +763,66 @@ const ReminderAlert = () => {
               {loading ? (
                 <div className="reminderalert-callout">
                   <strong>Loading reminders...</strong>
-                  <p>Please wait while we fetch your reminders.</p>
+                  <p>Please wait while we fetch your latest schedule.</p>
                 </div>
               ) : visibleTasks.length ? (
                 visibleTasks.map((task) => (
-                  <article className="reminderalert-task-card" key={task._id}>
+                  <article
+                    className={`reminderalert-task-card ${task.completed ? "completed" : ""}`}
+                    key={task._id}
+                  >
                     <div className="reminderalert-task-topline">
                       <div>
                         <h3>{task.title}</h3>
                         <p>
-                          {task.category} - {task.priority} priority
+                          {task.category} · {task.priority} priority
                         </p>
                       </div>
                       <span className="reminderalert-task-status">
                         {task.completed ? "Completed" : task.status}
                       </span>
                     </div>
+
+                    {task.description && (
+                      <p className="reminderalert-task-description">{task.description}</p>
+                    )}
+
                     <p className="reminderalert-task-due">
                       {formatReminderDueDate(task.dueDate, task.dueTime)}
                     </p>
+
                     <div className="reminderalert-task-channels">
-                      {task.reminders.map((reminder) => (
+                      {(task.reminders || []).map((reminder) => (
                         <span key={reminder}>{reminder}</span>
                       ))}
+                      {task.recurring && task.recurring !== "none" && (
+                        <span className="reminderalert-task-chip-muted">
+                          Repeats {task.recurring}
+                        </span>
+                      )}
                     </div>
 
                     {task.recipientPhoneNumber && (
-                      <div style={{ marginTop: "0.75rem", padding: "0.75rem", backgroundColor: "#f0f8ff", borderRadius: "4px", fontSize: "0.85rem" }}>
-                        <strong>Voice Call:</strong> {task.recipientPhoneNumber}
-                        {task.callStatus && (
-                          <div style={{ marginTop: "0.5rem", color: task.callStatus === "completed" ? "#28a745" : "#ff9800" }}>
-                            Status: {task.callStatus} ({task.callAttempts}/{task.maxCallAttempts} attempts)
-                          </div>
-                        )}
+                      <div className="reminderalert-callout reminderalert-callout-inline">
+                        <strong>Voice call reminder</strong>
+                        <p>{task.recipientPhoneNumber}</p>
+                        <p className="reminderalert-inline-meta">
+                          Status: {task.callStatus || "pending"} · Attempts{" "}
+                          {task.callAttempts || 0}/{task.maxCallAttempts || 3}
+                        </p>
                       </div>
                     )}
 
-                    {task.sharedWithTrustedContacts && task.sharedWithTrustedContacts.length > 0 && (
-                      <div style={{ marginTop: "0.75rem", padding: "0.75rem", backgroundColor: "#f0f8ff", borderRadius: "4px", fontSize: "0.85rem" }}>
-                        <strong>🔗 Shared with {task.sharedWithTrustedContacts.length} trusted contact{task.sharedWithTrustedContacts.length > 1 ? "s" : ""}</strong>
+                    {task.sharedWithTrustedContacts?.length > 0 && (
+                      <div className="reminderalert-inline-stack">
+                        <span className="reminderalert-inline-tag">
+                          Shared with {task.sharedWithTrustedContacts.length} trusted
+                          {task.sharedWithTrustedContacts.length > 1 ? " contacts" : " contact"}
+                        </span>
                       </div>
                     )}
 
-                    <div className="reminderalert-filter-row">
+                    <div className="reminderalert-filter-row reminderalert-filter-row-tight">
                       <button
                         type="button"
                         className="reminderalert-filter-chip"
@@ -607,9 +842,9 @@ const ReminderAlert = () => {
                           type="button"
                           className="reminderalert-filter-chip"
                           onClick={() => handleTriggerVoiceCall(task._id)}
-                          title="Manually trigger the voice call"
+                          title="Trigger the configured voice call now"
                         >
-                          🔔 Call Now
+                          Call now
                         </button>
                       )}
                       <button
@@ -625,19 +860,57 @@ const ReminderAlert = () => {
               ) : (
                 <div className="reminderalert-callout">
                   <strong>No reminders found</strong>
-                  <p>Create a reminder or change the active filter.</p>
+                  <p>Create a reminder or switch the active filter to see more items.</p>
                 </div>
               )}
             </div>
           </article>
         </div>
+
+        <aside className="reminderalert-secondary-column">
+          <article className="reminderalert-panel">
+            <div className="reminderalert-panel-heading">
+              <p>Quick view</p>
+              <h2>Stay in control</h2>
+            </div>
+            <div className="reminderalert-role-stack">
+              <div className="reminderalert-role-card">
+                <h3>Today&apos;s focus</h3>
+                <ul>
+                  <li>
+                    {nextDueTask
+                      ? `${nextDueTask.title} is the next active reminder in your queue.`
+                      : "You do not have an active reminder scheduled right now."}
+                  </li>
+                </ul>
+              </div>
+              <div className="reminderalert-role-card">
+                <h3>Trusted contacts</h3>
+                <ul>
+                  <li>
+                    {trustedContacts.length
+                      ? `${trustedContacts.length} people can help monitor shared reminders.`
+                      : "Add trusted contacts so urgent reminders can reach other people too."}
+                  </li>
+                </ul>
+              </div>
+              <div className="reminderalert-role-card">
+                <h3>Escalation coverage</h3>
+                <ul>
+                  <li>
+                    Use SMS or voice call for reminders that should still reach you away from the
+                    app.
+                  </li>
+                  <li>High priority items are easier to spot when they also include a call.</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+        </aside>
       </section>
 
-      {/* Trusted Contacts Section */}
-      <section className="reminderalert-layout">
-        <div className="reminderalert-primary-column">
-          <TrustedContacts onContactsUpdate={setTrustedContacts} />
-        </div>
+      <section className="reminderalert-trusted-section">
+        <TrustedContacts onContactsUpdate={setTrustedContacts} />
       </section>
     </div>
   );

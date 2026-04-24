@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const DiaryEntry = require('../models/DiaryEntry');
+const DiaryCalendarItem = require('../models/DiaryCalendarItem');
 const { authenticate } = require('../middleware/auth');
 const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
@@ -161,6 +162,193 @@ router.get('/mood-stats', async (req, res) => {
   }
 });
 
+// GET /api/diary/calendar-items - Get diary notes and reminders
+router.get('/calendar-items', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { date, month, startDate, endDate, limit = 500 } = req.query;
+    const query = { userId };
+    const parsedLimit = Math.min(parseInt(limit, 10) || 500, 1000);
+
+    if (date) {
+      const start = normalizeStartOfDay(date);
+      if (!start) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid date',
+        });
+      }
+
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      query.date = { $gte: start, $lt: end };
+    } else if (month) {
+      const monthMatch = String(month).match(/^(\d{4})-(\d{2})$/);
+      if (!monthMatch) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid month format. Use YYYY-MM.',
+        });
+      }
+
+      const year = parseInt(monthMatch[1], 10);
+      const monthIndex = parseInt(monthMatch[2], 10) - 1;
+      const start = new Date(year, monthIndex, 1);
+      const end = new Date(year, monthIndex + 1, 1);
+      query.date = { $gte: start, $lt: end };
+    } else if (startDate || endDate) {
+      const start = startDate ? normalizeStartOfDay(startDate) : null;
+      const end = endDate ? normalizeStartOfDay(endDate) : null;
+
+      if ((startDate && !start) || (endDate && !end)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid date range',
+        });
+      }
+
+      query.date = {};
+      if (start) {
+        query.date.$gte = start;
+      }
+      if (end) {
+        const exclusiveEnd = new Date(end);
+        exclusiveEnd.setDate(exclusiveEnd.getDate() + 1);
+        query.date.$lt = exclusiveEnd;
+      }
+    }
+
+    const items = await DiaryCalendarItem.find(query)
+      .sort({ date: 1, reminderAt: 1, createdAt: 1 })
+      .limit(parsedLimit)
+      .lean();
+
+    res.json({
+      success: true,
+      data: items,
+    });
+  } catch (error) {
+    logger.error('Error fetching diary calendar items:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch diary calendar items',
+    });
+  }
+});
+
+// POST /api/diary/calendar-items - Create diary note or reminder
+router.post('/calendar-items', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const payload = parseCalendarItemPayload(req.body);
+    const validationError = validateCalendarItemPayload(payload);
+
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: validationError,
+      });
+    }
+
+    const item = await DiaryCalendarItem.create({
+      userId,
+      ...payload,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: item,
+      message:
+        payload.type === 'reminder'
+          ? 'Reminder created successfully'
+          : 'Note created successfully',
+    });
+  } catch (error) {
+    logger.error('Error creating diary calendar item:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create diary calendar item',
+    });
+  }
+});
+
+// PUT /api/diary/calendar-items/:itemId - Update diary note or reminder
+router.put('/calendar-items/:itemId', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const payload = parseCalendarItemPayload(req.body);
+    const validationError = validateCalendarItemPayload(payload);
+
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: validationError,
+      });
+    }
+
+    const item = await DiaryCalendarItem.findOne({
+      _id: req.params.itemId,
+      userId,
+    });
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Calendar item not found',
+      });
+    }
+
+    item.date = payload.date;
+    item.type = payload.type;
+    item.title = payload.title;
+    item.note = payload.note;
+    item.reminderAt = payload.reminderAt;
+    item.isCompleted = payload.isCompleted;
+    await item.save();
+
+    res.json({
+      success: true,
+      data: item,
+      message: 'Calendar item updated successfully',
+    });
+  } catch (error) {
+    logger.error('Error updating diary calendar item:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update diary calendar item',
+    });
+  }
+});
+
+// DELETE /api/diary/calendar-items/:itemId - Remove diary note or reminder
+router.delete('/calendar-items/:itemId', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const item = await DiaryCalendarItem.findOneAndDelete({
+      _id: req.params.itemId,
+      userId,
+    });
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Calendar item not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Calendar item deleted successfully',
+    });
+  } catch (error) {
+    logger.error('Error deleting diary calendar item:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete diary calendar item',
+    });
+  }
+});
+
 // GET /api/diary/:id - Get single diary entry
 router.get('/:id', async (req, res) => {
   try {
@@ -243,6 +431,50 @@ const parseTagsField = (value) => {
   }
 
   return [];
+};
+
+const normalizeStartOfDay = (value) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+const parseCalendarItemPayload = (body = {}) => {
+  const normalizedType = body.type === 'reminder' ? 'reminder' : 'note';
+  const normalizedDate = normalizeStartOfDay(body.date);
+  const rawReminderAt = normalizedType === 'reminder' ? body.reminderAt : null;
+  const reminderAt = rawReminderAt ? new Date(rawReminderAt) : null;
+
+  return {
+    date: normalizedDate,
+    type: normalizedType,
+    title: typeof body.title === 'string' ? body.title.trim() : '',
+    note: typeof body.note === 'string' ? body.note.trim() : '',
+    reminderAt:
+      reminderAt && !Number.isNaN(reminderAt.getTime()) ? reminderAt : null,
+    isCompleted: parseBooleanField(body.isCompleted, false),
+  };
+};
+
+const validateCalendarItemPayload = (payload) => {
+  if (!payload.date) {
+    return 'A valid calendar date is required';
+  }
+
+  if (!payload.title) {
+    return 'Title is required';
+  }
+
+  if (payload.type === 'reminder' && !payload.reminderAt) {
+    return 'Reminder time is required';
+  }
+
+  return null;
 };
 
 const storeDiaryAttachment = async ({ file, user }) => {
