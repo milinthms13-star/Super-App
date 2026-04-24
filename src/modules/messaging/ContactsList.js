@@ -6,6 +6,7 @@ const ContactsList = ({
   onSelectContact,
   onBlockContact,
   onUnblockContact,
+  onToggleFavorite,
   searchQuery,
   onSearchChange,
   onFilterChange,
@@ -108,6 +109,14 @@ const ContactsList = ({
                 </div>
               </div>
               <div className="contact-actions">
+                <button
+                  className="btn-action-sm"
+                  onClick={() => onToggleFavorite && onToggleFavorite(contact.contactUserId._id)}
+                  title={contact.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  type="button"
+                >
+                  {contact.isFavorite ? '⭐' : '☆'}
+                </button>
                 <button
                   className="btn-action-sm"
                   onClick={() => onScheduleBlock && onScheduleBlock(contact)}

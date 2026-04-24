@@ -16,6 +16,13 @@ const NotificationPanel = ({ notifications = [], onClear, onSelectNotification }
 
   const unreadCount = displayNotifications.filter((notification) => !notification.isRead).length;
 
+  const getNotificationTimestamp = (notification) =>
+    notification.createdAt || notification.timestamp || notification.sentAt || new Date().toISOString();
+
+  const getNotificationTitle = (notification) => notification.title || notification.heading || 'Notification';
+
+  const getNotificationBody = (notification) => notification.body || notification.message || 'Open to view details.';
+
   return (
     <div className="notification-panel">
       <div className="notification-panel-header">
@@ -46,15 +53,15 @@ const NotificationPanel = ({ notifications = [], onClear, onSelectNotification }
             >
               <div className="notification-content">
                 <div className="notification-header">
-                  <span className="notification-title">{notification.title}</span>
+                  <span className="notification-title">{getNotificationTitle(notification)}</span>
                   <span className="notification-time">
-                    {new Date(notification.createdAt).toLocaleTimeString([], {
+                    {new Date(getNotificationTimestamp(notification)).toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
                   </span>
                 </div>
-                <p className="notification-body">{notification.body}</p>
+                <p className="notification-body">{getNotificationBody(notification)}</p>
               </div>
               <button
                 className="dismiss-btn"

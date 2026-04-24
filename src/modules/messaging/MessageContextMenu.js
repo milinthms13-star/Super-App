@@ -7,9 +7,12 @@ const MessageContextMenu = ({
   onRecall,
   onReply,
   onReact,
+  onToggleImportant,
+  onDelete,
   onClose,
   canEdit = false,
   canRecall = false,
+  isImportant = false,
 }) => {
   const menuRef = useRef(null);
 
@@ -58,6 +61,18 @@ const MessageContextMenu = ({
           React
         </button>
 
+        <button
+          className="menu-item"
+          onClick={() => {
+            onToggleImportant(message);
+            onClose();
+          }}
+          type="button"
+          title={isImportant ? 'Remove from important' : 'Mark as important'}
+        >
+          {isImportant ? '⭐ Remove Important' : '☆ Mark Important'}
+        </button>
+
         {canEdit && (
           <button
             className="menu-item"
@@ -83,6 +98,20 @@ const MessageContextMenu = ({
             title="Recall message"
           >
             Recall
+          </button>
+        )}
+
+        {canRecall && (
+          <button
+            className="menu-item danger"
+            onClick={() => {
+              onDelete(message);
+              onClose();
+            }}
+            type="button"
+            title="Delete message"
+          >
+            🗑️ Delete
           </button>
         )}
       </div>

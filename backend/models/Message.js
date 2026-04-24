@@ -158,6 +158,14 @@ const messageSchema = new mongoose.Schema(
       sparse: true,
       index: { expireAfterSeconds: 0 }, // TTL index
     },
+
+    // Users who marked this message as important
+    markedAsImportantBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
   },
   {
     timestamps: true,

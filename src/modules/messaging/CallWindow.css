@@ -107,6 +107,12 @@
   font-size: 2rem;
 }
 
+.audio-call-name {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
 .audio-waves {
   display: flex;
   align-items: end;

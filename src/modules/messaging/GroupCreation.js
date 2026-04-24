@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { getAvatarLabel, isSameEntity, getEntityId } from './utils';
 

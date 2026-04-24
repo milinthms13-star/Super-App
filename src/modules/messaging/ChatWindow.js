@@ -19,6 +19,7 @@ const ChatWindow = ({
   onOpenFileUpload,
   onEditMessage,
   onDeleteMessage,
+  onToggleImportant,
   onAddReaction,
   onSearchMessages,
   focusedMessageId,
@@ -34,6 +35,7 @@ const ChatWindow = ({
   onClearChat,
   onRestoreClearedChat,
   isChatCleared = false,
+  onDeleteAllMessages,
 }) => {
   const { currentUser } = useApp();
   const [messageInput, setMessageInput] = useState('');
@@ -374,6 +376,13 @@ const ChatWindow = ({
     setContextMenu(null);
   };
 
+  const handleToggleImportantMessage = async (message) => {
+    if (onToggleImportant) {
+      await onToggleImportant(message._id);
+    }
+    setContextMenu(null);
+  };
+
   const handleAddReaction = (message, event) => {
     if (event) {
       event.stopPropagation();
@@ -473,6 +482,14 @@ const ChatWindow = ({
             type="button"
           >
             {isChatCleared ? 'Restore' : 'Clear'}
+          </button>
+          <button
+            className="btn-icon"
+            title="Delete all messages in this chat"
+            onClick={onDeleteAllMessages}
+            type="button"
+          >
+            Delete All
           </button>
           <button className="btn-icon" title="Voice Call" onClick={() => onStartCall('audio')} type="button">
             Audio
@@ -627,6 +644,14 @@ const ChatWindow = ({
                             ))}
                           </div>
                         )}
+
+                        {(message.markedAsImportantBy || []).some(
+                          (id) => id === resolvedCurrentUserId || id._id === resolvedCurrentUserId
+                        ) && (
+                          <div className="message-important-badge">
+                            ⭐ Marked as important
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -703,10 +728,15 @@ const ChatWindow = ({
           position={contextMenu.position}
           canEdit={contextMenu.canEdit}
           canRecall={contextMenu.canRecall}
+          isImportant={(contextMenu.message?.markedAsImportantBy || []).some(
+            (id) => id === resolvedCurrentUserId || id._id === resolvedCurrentUserId
+          )}
           onEdit={handleEditMessage}
           onRecall={handleRecallMessage}
           onReply={handleReplyMessage}
           onReact={handleAddReaction}
+          onToggleImportant={handleToggleImportantMessage}
+          onDelete={handleRecallMessage}
           onClose={() => setContextMenu(null)}
         />
       )}

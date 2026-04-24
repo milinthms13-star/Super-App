@@ -14,6 +14,41 @@ const userSockets = new Map(); // userId -> Set of socket IDs
 const userStatus = new Map(); // userId -> { status, lastSeen }
 const normalizeUserKey = (userId) => (userId?.toString ? userId.toString() : String(userId || ''));
 
+const resolveCallRelayTarget = async (callId, senderUserId, preferredTargetId = '') => {
+  if (!callId) {
+    return null;
+  }
+
+  const call = await Call.findById(callId).select('initiatorId recipientId');
+  if (!call) {
+    return null;
+  }
+
+  const normalizedSenderId = normalizeUserKey(senderUserId);
+  const initiatorId = normalizeUserKey(call.initiatorId);
+  const recipientId = normalizeUserKey(call.recipientId);
+
+  if (![initiatorId, recipientId].includes(normalizedSenderId)) {
+    return null;
+  }
+
+  const normalizedPreferredTarget = normalizeUserKey(preferredTargetId);
+  let targetUserId = normalizedSenderId === initiatorId ? recipientId : initiatorId;
+
+  if (
+    normalizedPreferredTarget &&
+    normalizedPreferredTarget !== normalizedSenderId &&
+    [initiatorId, recipientId].includes(normalizedPreferredTarget)
+  ) {
+    targetUserId = normalizedPreferredTarget;
+  }
+
+  return {
+    call,
+    targetUserId,
+  };
+};
+
 const initializeWebSocket = (server, options = {}) => {
   const allowedSocketOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000,http://localhost:3001,http://localhost:3002')
     .split(',')
@@ -245,6 +280,33 @@ const initializeWebSocket = (server, options = {}) => {
     });
 
     /**
+     * Notify the other participant that the local peer is ready to exchange WebRTC signaling.
+     * @event call:ready
+     * @param {object} data - {callId, targetUserId?}
+     */
+    socket.on('call:ready', async (data = {}) => {
+      try {
+        const relayTarget = await resolveCallRelayTarget(
+          data.callId,
+          socket.userId,
+          data.targetUserId
+        );
+
+        if (!relayTarget?.targetUserId) {
+          return;
+        }
+
+        emitToUser(relayTarget.targetUserId, 'call:ready', {
+          callId: data.callId,
+          fromUserId: socket.userId,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        console.error('[WebSocket] Call ready relay error:', error);
+      }
+    });
+
+    /**
      * Decline incoming call
      * @event call:decline
      * @param {string} callId - Call ID
@@ -268,6 +330,57 @@ const initializeWebSocket = (server, options = {}) => {
         candidate: data.candidate,
         from: socket.userId,
       });
+    });
+
+    /**
+     * Relay WebRTC offers, answers, and ICE candidates between call participants.
+     * @event call:signal
+     * @param {object} data - {callId, targetUserId?, description?, candidate?}
+     */
+    socket.on('call:signal', async (data = {}) => {
+      try {
+        const relayTarget = await resolveCallRelayTarget(
+          data.callId,
+          socket.userId,
+          data.targetUserId
+        );
+
+        if (!relayTarget?.targetUserId) {
+          return;
+        }
+
+        const { call } = relayTarget;
+        const hasDescription = Boolean(data.description?.type && data.description?.sdp);
+        const hasCandidate = Boolean(data.candidate);
+
+        if (!hasDescription && !hasCandidate) {
+          return;
+        }
+
+        if (hasDescription) {
+          if (data.description.type === 'offer') {
+            call.sdpOffer = data.description.sdp;
+          }
+
+          if (data.description.type === 'answer') {
+            call.sdpAnswer = data.description.sdp;
+          }
+        }
+
+        if (hasDescription) {
+          await call.save();
+        }
+
+        emitToUser(relayTarget.targetUserId, 'call:signal', {
+          callId: data.callId,
+          fromUserId: socket.userId,
+          description: hasDescription ? data.description : undefined,
+          candidate: hasCandidate ? data.candidate : undefined,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        console.error('[WebSocket] Call signal relay error:', error);
+      }
     });
 
     /**

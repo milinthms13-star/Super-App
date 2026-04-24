@@ -1377,6 +1377,14 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
+.btn-icon:nth-child(3) {
+  background: rgba(220, 53, 69, 0.3);
+}
+
+.btn-icon:nth-child(3):hover {
+  background: rgba(220, 53, 69, 0.5);
+}
+
 /* Messages Container */
 .messages-container {
   flex: 1;
@@ -1501,6 +1509,26 @@
 
 .message-reactions span:hover {
   background: rgba(0, 0, 0, 0.1);
+}
+
+.message-important-badge {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  color: #856404;
+  font-weight: 500;
+}
+
+.menu-item.danger {
+  color: #dc3545;
+}
+
+.menu-item.danger:hover {
+  background-color: #ffe5e5;
 }
 
 /* Message Search Styles */
@@ -4234,5 +4262,26 @@
   .message-actions {
     width: 100%;
   }
+}
+
+.sidebar-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.notification-enable-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.7rem 0.95rem;
+  background: linear-gradient(135deg, var(--linkup-accent) 0%, var(--linkup-accent-soft) 100%);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 12px 24px rgba(47, 111, 237, 0.22);
+}
+
+.notification-enable-btn:hover {
+  transform: translateY(-1px);
 }
 

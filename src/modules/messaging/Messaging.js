@@ -18,6 +18,11 @@ import ScheduledBlockManager from './ScheduledBlockManager';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
 import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  showServiceWorkerNotification,
+} from '../../pwaConfig';
+import {
   filterMessagesByClearTimestamp,
   getAvatarLabel,
   getChatClearTimestamp,
@@ -100,6 +105,49 @@ const DEFAULT_MESSAGE_PAGINATION = {
   limit: MESSAGE_PAGE_SIZE,
 };
 
+const buildNotificationTitle = (notification = {}) => {
+  if (notification.title) {
+    return notification.title;
+  }
+
+  switch (notification.type || notification.notificationType) {
+    case 'invitation':
+      return 'New invitation';
+    case 'invitation-accepted':
+      return 'Invitation accepted';
+    case 'invitation-rejected':
+      return 'Invitation rejected';
+    case 'call':
+      return 'Incoming call';
+    case 'call-declined':
+      return 'Call declined';
+    default:
+      return 'Notification';
+  }
+};
+
+const normalizeRealtimeNotification = (notification = {}) => {
+  const createdAt =
+    notification.createdAt || notification.timestamp || notification.sentAt || new Date().toISOString();
+
+  return {
+    ...notification,
+    id:
+      notification.id ||
+      notification._id ||
+      `${notification.type || notification.notificationType || 'notification'}-${
+        getEntityId(notification.callId) ||
+        getEntityId(notification.messageId) ||
+        getEntityId(notification.chatId) ||
+        createdAt
+      }`,
+    title: buildNotificationTitle(notification),
+    body: notification.body || notification.message || 'Open to view details.',
+    createdAt,
+    isRead: Boolean(notification.isRead),
+  };
+};
+
 const Messaging = () => {
   const { currentUser, apiCall } = useApp();
   const [activeTab, setActiveTab] = useState('chats');
@@ -122,6 +170,9 @@ const Messaging = () => {
   const [encryptionEnabled, setEncryptionEnabled] = useState(false);
   const [typingUsers, setTypingUsers] = useState(new Set());
   const [notifications, setNotifications] = useState([]);
+  const [notificationPermission, setNotificationPermission] = useState(() =>
+    getNotificationPermission()
+  );
   const [focusedMessageId, setFocusedMessageId] = useState('');
   const [newChatSearchQuery, setNewChatSearchQuery] = useState('');
   const [availableUsers, setAvailableUsers] = useState([]);
@@ -191,6 +242,70 @@ const Messaging = () => {
     });
   }, []);
 
+  const addNotificationEntry = useCallback((notification) => {
+    const normalizedNotification = normalizeRealtimeNotification(notification);
+
+    setNotifications((prevNotifications) => [
+      normalizedNotification,
+      ...prevNotifications.filter(
+        (entry) =>
+          String(entry._id || entry.id) !==
+          String(normalizedNotification._id || normalizedNotification.id)
+      ),
+    ]);
+
+    return normalizedNotification;
+  }, []);
+
+  const maybeShowDesktopNotification = useCallback(
+    async ({ title, body, tag, chatId, force = false }) => {
+      const permission = getNotificationPermission();
+      if (permission !== notificationPermission) {
+        setNotificationPermission(permission);
+      }
+
+      if (permission !== 'granted') {
+        return false;
+      }
+
+      const selectedChatId = getEntityId(selectedChat?._id);
+      const targetChatId = getEntityId(chatId);
+      const pageVisible =
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'visible' &&
+        (typeof document.hasFocus !== 'function' || document.hasFocus());
+      const sameChatInForeground =
+        Boolean(selectedChatId) && selectedChatId === targetChatId && pageVisible;
+
+      if (!force && sameChatInForeground) {
+        return false;
+      }
+
+      try {
+        await showServiceWorkerNotification({
+          title,
+          body,
+          tag,
+          data: { url: '/?source=pwa&module=messaging' },
+        });
+        return true;
+      } catch (error) {
+        console.error('Error showing desktop notification:', error);
+        return false;
+      }
+    },
+    [notificationPermission, selectedChat]
+  );
+
+  const handleEnableNotifications = useCallback(async () => {
+    try {
+      const permission = await requestNotificationPermission();
+      setNotificationPermission(permission);
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+    }
+  }, []);
+
   const loadChats = useCallback(async () => {
     try {
       setLoading(true);
@@ -256,7 +371,7 @@ const Messaging = () => {
     try {
       const response = await apiCall('/messaging/notifications', 'GET');
       if (response?.notifications) {
-        setNotifications(response.notifications);
+        setNotifications(response.notifications.map(normalizeRealtimeNotification));
       }
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -387,6 +502,22 @@ const Messaging = () => {
     loadNotifications();
     loadInvitations();
   }, [loadChats, loadContacts, loadNotifications, loadInvitations]);
+
+  useEffect(() => {
+    const syncNotificationPermission = () => {
+      setNotificationPermission(getNotificationPermission());
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', syncNotificationPermission);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', syncNotificationPermission);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedChat?._id) {
@@ -614,6 +745,24 @@ const Messaging = () => {
 
     newSocket.on('call:incoming', (callData) => {
       setIncomingCall(callData || null);
+
+      const incomingCallNotification = addNotificationEntry({
+        id: `call-${getEntityId(callData?._id || callData?.callId)}`,
+        type: 'call',
+        callId: callData?._id || callData?.callId,
+        chatId: callData?.chatId,
+        title: `Incoming ${callData?.callType || 'audio'} call`,
+        body: `${callData?.caller?.name || 'Someone'} is calling you`,
+        createdAt: callData?.timestamp || new Date().toISOString(),
+      });
+
+      maybeShowDesktopNotification({
+        title: incomingCallNotification.title,
+        body: incomingCallNotification.body,
+        tag: `call-${getEntityId(callData?._id || callData?.callId)}`,
+        chatId: callData?.chatId,
+        force: true,
+      });
     });
 
     newSocket.on('call:accepted', (callData) => {
@@ -659,6 +808,36 @@ const Messaging = () => {
       }
     });
 
+    newSocket.on('call:declined', (callData) => {
+      const declinedCallId = getEntityId(callData?.callId);
+      if (!declinedCallId) {
+        return;
+      }
+
+      const activeCallId = getEntityId(activeCallRef.current?._id || activeCallRef.current?.callId);
+      if (activeCallId && activeCallId === declinedCallId) {
+        setActiveCall((currentCall) =>
+          currentCall
+            ? {
+                ...currentCall,
+                status: 'declined',
+              }
+            : currentCall
+        );
+        setShowCallWindow(false);
+      }
+
+      addNotificationEntry({
+        id: `call-declined-${declinedCallId}`,
+        type: 'call-declined',
+        callId: declinedCallId,
+        chatId: activeCallRef.current?.chatId,
+        title: 'Call declined',
+        body: 'The other person declined your call.',
+        createdAt: callData?.timestamp || new Date().toISOString(),
+      });
+    });
+
     newSocket.on('user:online', ({ userId }) => {
       setChats((prevChats) => prevChats.map((chat) => ({
         ...chat,
@@ -678,7 +857,14 @@ const Messaging = () => {
     });
 
     newSocket.on('notification:received', (notification) => {
-      setNotifications((prevNotifications) => [notification, ...prevNotifications]);
+      const nextNotification = addNotificationEntry(notification);
+
+      maybeShowDesktopNotification({
+        title: nextNotification.title,
+        body: nextNotification.body,
+        tag: `message-${String(nextNotification._id || nextNotification.id)}`,
+        chatId: nextNotification.chatId,
+      });
     });
 
     // Invitation listeners
@@ -692,13 +878,14 @@ const Messaging = () => {
         return [invitation, ...prevInvitations];
       });
 
-      // Show notification
-      setNotifications((prevNotifications) => [{
+      addNotificationEntry({
+        id: `invitation-${invitation._id}`,
         type: 'invitation',
-        message: `New invitation from ${invitation.senderInfo?.name || 'a user'}`,
-        timestamp: new Date(),
+        title: 'New invitation',
+        body: `New invitation from ${invitation.senderInfo?.name || 'a user'}`,
+        createdAt: new Date().toISOString(),
         invitationId: invitation._id,
-      }, ...prevNotifications]);
+      });
     });
 
     newSocket.on('invitation:accepted', (data) => {
@@ -718,12 +905,13 @@ const Messaging = () => {
         return [...prevContacts, newContact];
       });
 
-      // Show notification
-      setNotifications((prevNotifications) => [{
+      addNotificationEntry({
+        id: `invitation-accepted-${invitationId}`,
         type: 'invitation-accepted',
-        message: `${newContact.name || newContact.username} accepted your invitation`,
-        timestamp: new Date(),
-      }, ...prevNotifications]);
+        title: 'Invitation accepted',
+        body: `${newContact.name || newContact.username} accepted your invitation`,
+        createdAt: new Date().toISOString(),
+      });
     });
 
     newSocket.on('invitation:rejected', (data) => {
@@ -734,12 +922,13 @@ const Messaging = () => {
         prevInvitations.filter((inv) => inv._id !== invitationId)
       );
 
-      // Show notification
-      setNotifications((prevNotifications) => [{
+      addNotificationEntry({
+        id: `invitation-rejected-${invitationId}`,
         type: 'invitation-rejected',
-        message: `${senderName || 'A user'} rejected your invitation`,
-        timestamp: new Date(),
-      }, ...prevNotifications]);
+        title: 'Invitation rejected',
+        body: `${senderName || 'A user'} rejected your invitation`,
+        createdAt: new Date().toISOString(),
+      });
     });
 
     return () => {
@@ -749,7 +938,16 @@ const Messaging = () => {
 
       newSocket.disconnect();
     };
-  }, [apiCall, currentUser, loadMessages, resolvedCurrentUserId, selectedChat, updateChatPreview]);
+  }, [
+    addNotificationEntry,
+    apiCall,
+    currentUser,
+    loadMessages,
+    maybeShowDesktopNotification,
+    resolvedCurrentUserId,
+    selectedChat,
+    updateChatPreview,
+  ]);
 
   useEffect(() => {
     if (socket && selectedChat?._id) {
@@ -957,6 +1155,15 @@ const Messaging = () => {
     }
   };
 
+  const handleToggleFavorite = async (userId) => {
+    try {
+      await apiCall(`/messaging/contacts/${userId}/favorite`, 'PUT');
+      await loadContacts();
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  };
+
   const handleScheduleBlock = (contact) => {
     setSelectedContactForScheduledBlock(contact);
     setShowScheduledBlockManager(true);
@@ -1109,6 +1316,56 @@ const Messaging = () => {
     }
   };
 
+  const handleToggleImportant = async (messageId) => {
+    try {
+      const response = await apiCall(
+        `/messaging/messages/${messageId}/important`,
+        'PUT'
+      );
+
+      if (response?.message) {
+        setMessages((prevMessages) =>
+          prevMessages.map((message) => (
+            message._id === response.message._id ? response.message : message
+          ))
+        );
+      }
+    } catch (error) {
+      console.error('Error toggling important:', error);
+    }
+  };
+
+  const handleDeleteAllMessages = async () => {
+    if (!selectedChat?._id) {
+      return;
+    }
+
+    const chatTitle = selectedChat.isGroupChat
+      ? selectedChat.groupName
+      : getOtherParticipant(selectedChat, currentUser)?.name || 'this chat';
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete all messages in "${chatTitle}"? This action cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await apiCall(`/messaging/chats/${selectedChat._id}/messages`, 'DELETE');
+
+      if (response?.deletedCount !== undefined) {
+        // Clear messages from state
+        setMessages([]);
+        console.log(`Deleted ${response.deletedCount} messages`);
+      }
+    } catch (error) {
+      console.error('Error deleting all messages:', error);
+      alert('Failed to delete messages. Please try again.');
+    }
+  };
+
   const handleAddReaction = async (messageId, emoji) => {
     try {
       const currentMessage = messages.find((message) => message._id === messageId);
@@ -1168,6 +1425,10 @@ const Messaging = () => {
 
     try {
       const otherParticipant = getOtherParticipant(selectedChat, currentUser);
+      if (!getEntityId(otherParticipant)) {
+        throw new Error('Calls are currently available for direct chats with one other participant.');
+      }
+
       const response = await apiCall('/messaging/calls/initiate', 'POST', {
         chatId: selectedChat._id,
         recipientId: getEntityId(otherParticipant),
@@ -1316,7 +1577,7 @@ const Messaging = () => {
     const notificationMessageId = getEntityId(notification?.messageId);
 
     try {
-      if (notificationId && !notification.isRead) {
+      if (notificationId && !notification.isRead && isMongoObjectId(notificationId)) {
         await apiCall(`/messaging/notifications/${notificationId}/read`, 'PUT');
       }
     } catch (error) {
@@ -1425,11 +1686,22 @@ const Messaging = () => {
                 Settings
               </button>
             </div>
-            <NotificationBell
-              notifications={notifications}
-              onClear={handleClearAllNotifications}
-              onSelectNotification={handleSelectNotification}
-            />
+            <div className="sidebar-tools">
+              <NotificationBell
+                notifications={notifications}
+                onClear={handleClearAllNotifications}
+                onSelectNotification={handleSelectNotification}
+              />
+              {notificationPermission === 'default' && (
+                <button
+                  className="notification-enable-btn"
+                  onClick={handleEnableNotifications}
+                  type="button"
+                >
+                  Enable Alerts
+                </button>
+              )}
+            </div>
           </div>
 
           {activeTab === 'chats' && (
@@ -1450,6 +1722,7 @@ const Messaging = () => {
               onSelectContact={handleSelectContact}
               onBlockContact={handleBlockContact}
               onUnblockContact={handleUnblockContact}
+              onToggleFavorite={handleToggleFavorite}
               onScheduleBlock={handleScheduleBlock}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
@@ -1642,6 +1915,7 @@ const Messaging = () => {
                 onSendMessage={handleSendMessage}
                 onEditMessage={handleEditMessage}
                 onDeleteMessage={handleDeleteMessage}
+                onToggleImportant={handleToggleImportant}
                 onAddReaction={handleAddReaction}
                 onSearchMessages={handleSearchMessages}
                 onTyping={handleTyping}
@@ -1663,6 +1937,7 @@ const Messaging = () => {
                 onClearChat={handleClearChat}
                 onRestoreClearedChat={handleRestoreClearedChat}
                 isChatCleared={Boolean(selectedChatClearedAt)}
+                onDeleteAllMessages={handleDeleteAllMessages}
               />
 
               {showAISuggestions && selectedChat?._id && latestMessageId && (
@@ -1684,6 +1959,7 @@ const Messaging = () => {
               {showCallWindow && activeCall && (
                 <CallWindow
                   call={activeCall}
+                  socket={socket}
                   onEndCall={handleEndCall}
                   onAcceptCall={handleAcceptCall}
                   onDeclineCall={handleDeclineCall}
