@@ -90,6 +90,8 @@ const ReminderAlert = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [trustedContacts, setTrustedContacts] = useState([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [countdown, setCountdown] = useState(null);
 
   useEffect(() => {
     const loadReminders = async () => {
@@ -122,6 +124,52 @@ const ReminderAlert = () => {
 
     loadTrustedContacts();
   }, []);
+
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Calculate countdown when form has due date and time
+  useEffect(() => {
+    if (formData.dueDate && formData.dueTime) {
+      const [hours, minutes] = formData.dueTime.split(":").map(Number);
+      const dueDateTime = new Date(formData.dueDate);
+      dueDateTime.setHours(hours, minutes, 0, 0);
+
+      const now = new Date();
+      const diffMs = dueDateTime - now;
+
+      if (diffMs > 0) {
+        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const hours_rem = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
+        const mins = Math.floor((diffMs / 1000 / 60) % 60);
+        const secs = Math.floor((diffMs / 1000) % 60);
+
+        setCountdown({
+          days,
+          hours: hours_rem,
+          minutes: mins,
+          seconds: secs,
+          isPast: false,
+        });
+      } else {
+        setCountdown({
+          days: 0,
+          hours: 0,
+          minutes: 0,
+          seconds: 0,
+          isPast: true,
+        });
+      }
+    } else {
+      setCountdown(null);
+    }
+  }, [formData.dueDate, formData.dueTime, currentTime]);
 
   const visibleTasks = useMemo(() => {
     const filteredTasks =
@@ -387,6 +435,14 @@ const ReminderAlert = () => {
 
   return (
     <div className="reminderalert-page">
+      <div className="reminderalert-current-time">
+        <div className="reminderalert-time-display">
+          <p className="reminderalert-time-label">Current</p>
+          <strong>{currentTime.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}</strong>
+          <p className="reminderalert-time-clock">{currentTime.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
+        </div>
+      </div>
+
       <section className="reminderalert-hero">
         <div className="reminderalert-hero-copy">
           <p className="reminderalert-eyebrow">Reminder workspace</p>
@@ -868,6 +924,55 @@ const ReminderAlert = () => {
         </div>
 
         <aside className="reminderalert-secondary-column">
+          {showAddForm && countdown && (
+            <article className="reminderalert-panel reminderalert-countdown-panel">
+              <div className="reminderalert-panel-heading">
+                <p>Countdown</p>
+                <h2>Time to remind</h2>
+              </div>
+              {countdown.isPast ? (
+                <div className="reminderalert-countdown-expired">
+                  <p>⏰ This reminder time has passed</p>
+                  <small>Please select a future date and time</small>
+                </div>
+              ) : (
+                <div className="reminderalert-countdown-display">
+                  <div className="reminderalert-countdown-item">
+                    <span className="reminderalert-countdown-value">{countdown.days}</span>
+                    <span className="reminderalert-countdown-label">Days</span>
+                  </div>
+                  <div className="reminderalert-countdown-separator">:</div>
+                  <div className="reminderalert-countdown-item">
+                    <span className="reminderalert-countdown-value">{String(countdown.hours).padStart(2, "0")}</span>
+                    <span className="reminderalert-countdown-label">Hours</span>
+                  </div>
+                  <div className="reminderalert-countdown-separator">:</div>
+                  <div className="reminderalert-countdown-item">
+                    <span className="reminderalert-countdown-value">{String(countdown.minutes).padStart(2, "0")}</span>
+                    <span className="reminderalert-countdown-label">Minutes</span>
+                  </div>
+                  <div className="reminderalert-countdown-separator">:</div>
+                  <div className="reminderalert-countdown-item">
+                    <span className="reminderalert-countdown-value">{String(countdown.seconds).padStart(2, "0")}</span>
+                    <span className="reminderalert-countdown-label">Seconds</span>
+                  </div>
+                </div>
+              )}
+              <div className="reminderalert-countdown-info">
+                <p>
+                  <strong>Due: </strong>
+                  {new Date(`${formData.dueDate}T${formData.dueTime}`).toLocaleDateString("en-IN", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+            </article>
+          )}
           <article className="reminderalert-panel">
             <div className="reminderalert-panel-heading">
               <p>Quick view</p>
