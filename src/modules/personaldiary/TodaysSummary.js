@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { fetchTodaysSummary } from "../../services/diaryService";
-import "../styles/TodaysSummary.css";
+import "./styles/TodaysSummary.css";
 
 const TodaysSummary = () => {
   const [todaysItems, setTodaysItems] = useState(null);
