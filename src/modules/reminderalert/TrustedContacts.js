@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getSentTrustedContactInvites,
   getReceivedTrustedContactInvites,
@@ -26,20 +26,7 @@ const TrustedContacts = ({ onContactsUpdate }) => {
   const [submitError, setSubmitError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
-  useEffect(() => {
-    loadTrustedContactsData();
-  }, []);
-
-  const summary = useMemo(
-    () => ({
-      accepted: acceptedContacts.length,
-      sent: sentInvites.length,
-      received: receivedInvites.length,
-    }),
-    [acceptedContacts.length, receivedInvites.length, sentInvites.length]
-  );
-
-  const loadTrustedContactsData = async () => {
+  const loadTrustedContactsData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -66,7 +53,20 @@ const TrustedContacts = ({ onContactsUpdate }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [onContactsUpdate]);
+
+  useEffect(() => {
+    loadTrustedContactsData();
+  }, [loadTrustedContactsData]);
+
+  const summary = useMemo(
+    () => ({
+      accepted: acceptedContacts.length,
+      sent: sentInvites.length,
+      received: receivedInvites.length,
+    }),
+    [acceptedContacts.length, receivedInvites.length, sentInvites.length]
+  );
 
   const handleInviteFormChange = (event) => {
     const { name, value } = event.target;

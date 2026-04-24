@@ -247,7 +247,10 @@ router.put('/:id', async (req, res) => {
       dueTime,
       reminders,
       recurring,
-      completed
+      completed,
+      recipientPhoneNumber,
+      voiceMessage,
+      messageType
     } = req.body;
 
     const validationMessage = validateReminderFields(
@@ -278,6 +281,24 @@ router.put('/:id', async (req, res) => {
     if (dueTime !== undefined) reminder.dueTime = dueTime;
     if (reminders !== undefined) reminder.reminders = reminders;
     if (recurring !== undefined) reminder.recurring = recurring;
+    if (recipientPhoneNumber !== undefined) {
+      reminder.recipientPhoneNumber = String(recipientPhoneNumber || "").trim();
+    }
+    if (voiceMessage !== undefined) {
+      reminder.voiceMessage = String(voiceMessage || "").trim();
+    }
+    if (messageType !== undefined && ['text', 'audio'].includes(messageType)) {
+      reminder.messageType = messageType;
+    }
+
+    if (reminders !== undefined && !reminders.includes('Call')) {
+      reminder.recipientPhoneNumber = '';
+      reminder.voiceMessage = '';
+      reminder.messageType = 'text';
+      reminder.callStatus = 'pending';
+      reminder.lastCallTime = undefined;
+      reminder.nextCallTime = undefined;
+    }
 
     // Handle completion
     if (completed !== undefined && completed !== reminder.completed) {
