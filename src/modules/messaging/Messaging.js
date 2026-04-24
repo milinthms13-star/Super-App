@@ -847,6 +847,7 @@ const Messaging = () => {
       return response?.message || null;
     } catch (error) {
       console.error('❌ Error sending message:', error);
+      console.error('Server response payload:', error?.response?.data);
       setMessages((prevMessages) =>
         prevMessages.filter((message) => message._id !== tempMessageId)
       );

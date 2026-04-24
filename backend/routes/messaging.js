@@ -443,23 +443,41 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
       })),
     });
 
-    await message.save();
-    await message.populate('senderId', 'name avatar email');
+    try {
+      await message.save();
+    } catch (saveError) {
+      logger.error(
+        `Message save failed for chat ${chatId} by ${req.user._id}: ${saveError.message}`
+      );
+      throw saveError;
+    }
 
-    // Update chat preview without re-validating the entire chat document.
-    await Chat.updateOne(
-      { _id: chatId },
-      {
-        $set: {
-          lastMessage: message._id,
-          lastMessageAt: new Date(),
-        },
-      }
-    );
+    let responseMessage = message.toObject();
+
+    try {
+      await message.populate('senderId', 'name avatar email');
+      responseMessage = message.toObject();
+    } catch (populateError) {
+      logger.warn(`Message populate failed for ${message._id}: ${populateError.message}`);
+    }
+
+    try {
+      await Chat.updateOne(
+        { _id: chatId },
+        {
+          $set: {
+            lastMessage: message._id,
+            lastMessageAt: new Date(),
+          },
+        }
+      );
+    } catch (chatUpdateError) {
+      logger.warn(`Chat lastMessage update failed for ${chatId}: ${chatUpdateError.message}`);
+    }
 
     // Try to emit socket event, but don't fail if it doesn't work
     try {
-      await emitToChatParticipants(chatId, 'message:received', message);
+      await emitToChatParticipants(chatId, 'message:received', responseMessage);
     } catch (socketErr) {
       logger.warn(`Socket emit failed: ${socketErr.message}`);
     }
@@ -486,7 +504,7 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     }
 
     logger.info(`Message sent in chat ${chatId} by ${req.user._id}`);
-    res.status(201).json({ message: message.toObject() });
+    res.status(201).json({ message: responseMessage });
   } catch (err) {
     logger.error(`Error sending message: ${err.message}`, err);
     next(err);
