@@ -893,8 +893,38 @@
   padding: 2rem 0;
 }
 
+/* Chatroom Chat Layout */
+.chatroom-chat-layout {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  height: 100%;
+  gap: 0;
+  background: white;
+}
+
+.chatroom-panel-sidebar {
+  border-left: 1px solid #eee;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chatroom-panel-sidebar .chatroom-panel {
+  flex: 1;
+  border-radius: 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .chatroom-chat-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .chatroom-panel-sidebar {
+    display: none;
+  }
+
   .chatroom-grid {
     grid-template-columns: 1fr;
   }

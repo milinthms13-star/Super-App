@@ -1181,8 +1181,13 @@ const Messaging = () => {
 
     if (chatroom?._id) {
       loadChatroomDetails(chatroom._id);
+      // Load messages for the chatroom
+      loadMessages(chatroom._id);
+      // Clear pagination for new chatroom
+      setMessagePagination(DEFAULT_MESSAGE_PAGINATION);
+      setLoadedMessagePages(1);
     }
-  }, [loadChatroomDetails]);
+  }, [loadChatroomDetails, loadMessages]);
 
   const handleOpenChatroomCreation = useCallback(() => {
     setShowChatroomCreation(true);
@@ -2035,13 +2040,53 @@ const Messaging = () => {
                 onRequestAccess={handleChatroomAccessRequested}
                 onCancel={handleCloseChatroomWorkspace}
               />
+            ) : selectedChatroom ? (
+              <div className="chatroom-chat-layout">
+                <ChatWindow
+                  chat={{
+                    ...selectedChatroom,
+                    _id: selectedChatroom._id,
+                    type: 'chatroom',
+                    groupName: selectedChatroom.name,
+                    participants: selectedChatroom.members || [],
+                  }}
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  onEditMessage={handleEditMessage}
+                  onDeleteMessage={handleDeleteMessage}
+                  onToggleImportant={handleToggleImportant}
+                  onAddReaction={handleAddReaction}
+                  onSearchMessages={handleSearchMessages}
+                  onTyping={handleTyping}
+                  typingUsers={typingUsers}
+                  encryptionEnabled={encryptionEnabled}
+                  onToggleEncryption={handleToggleEncryption}
+                  onStartCall={handleStartCall}
+                  onOpenFileUpload={() => setShowFileUpload(true)}
+                  onSendVoiceMessage={handleVoiceNoteRecorded}
+                  sendingVoiceMessage={sendingVoiceNote}
+                  focusedMessageId={focusedMessageId}
+                  onFocusHandled={() => setFocusedMessageId('')}
+                  totalMessages={messagePagination.total}
+                  canShowOlderMessages={loadedMessagePages < (messagePagination.pages || 1)}
+                  hasOlderMessagesLoaded={loadedMessagePages > 1}
+                  loadingOlderMessages={loadingOlderMessages}
+                  onShowOlderMessages={handleShowOlderMessages}
+                  onShowLatestOnly={handleShowLatestOnly}
+                />
+                <div className="chatroom-panel-sidebar">
+                  <ChatroomPanel
+                    chatroom={selectedChatroom}
+                    onLeaveChatroom={handleLeaveChatroom}
+                    onClose={() => setSelectedChatroom(null)}
+                    onRefreshChatroom={handleRefreshChatroom}
+                  />
+                </div>
+              </div>
             ) : (
-              <ChatroomPanel
-                chatroom={selectedChatroom}
-                onLeaveChatroom={handleLeaveChatroom}
-                onClose={() => setSelectedChatroom(null)}
-                onRefreshChatroom={handleRefreshChatroom}
-              />
+              <div className="messaging-empty-state">
+                <p>Select a chatroom or create one to start chatting</p>
+              </div>
             )
           ) : showNewChat ? (
             newChatMode === 'group' ? (
