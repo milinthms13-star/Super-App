@@ -28,15 +28,16 @@
 }
 
 .stat-card {
-  background: white;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 15px rgba(15, 23, 42, 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  border-top: 4px solid #007bff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  transition: all 0.3s ease;
 }
 
 .stat-label {
@@ -49,7 +50,7 @@
 .stat-value {
   font-size: 2rem;
   font-weight: bold;
-  color: #007bff;
+  color: #6366f1;
 }
 
 /* Filters */
@@ -84,19 +85,21 @@
 }
 
 .btn-refresh {
-  padding: 10px 16px;
-  background: #007bff;
+  padding: 0.75rem 1.2rem;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
   border: none;
-  border-radius: 6px;
+  border-radius: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.3s ease;
   align-self: flex-end;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .btn-refresh:hover {
-  background: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
 }
 
 /* Layout */
@@ -127,8 +130,8 @@
 }
 
 .history-item.selected {
-  background: #e7f3ff;
-  border-left: 4px solid #007bff;
+  background: #f0f4ff;
+  border-left: 4px solid #6366f1;
 }
 
 .history-item-header {
@@ -300,7 +303,7 @@
 .timeline {
   margin-bottom: 20px;
   padding-left: 20px;
-  border-left: 3px solid #007bff;
+  border-left: 3px solid #6366f1;
 }
 
 .timeline-item {
@@ -319,7 +322,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #007bff;
+  background: #6366f1;
   border: 3px solid white;
 }
 
@@ -343,7 +346,7 @@
   background: #f8f9fa;
   padding: 12px;
   border-radius: 6px;
-  border-left: 3px solid #007bff;
+  border-left: 3px solid #6366f1;
 }
 
 .note-text {
@@ -360,15 +363,15 @@
 
 /* Location Info */
 .location-info {
-  background: #f0f8ff;
+  background: #f0f4ff;
   padding: 15px;
   border-radius: 6px;
-  border-left: 3px solid #0066cc;
+  border-left: 3px solid #6366f1;
 }
 
 .location-info p {
   margin: 8px 0;
-  color: #0066cc;
+  color: #6366f1;
 }
 
 /* Actions */

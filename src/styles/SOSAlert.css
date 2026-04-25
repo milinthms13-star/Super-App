@@ -1,11 +1,10 @@
 .sos-page {
   min-height: 100vh;
   padding: 2rem 1rem 4rem;
-  background:
-    radial-gradient(circle at top left, rgba(220, 38, 38, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(249, 115, 22, 0.14), transparent 30%),
-    linear-gradient(180deg, #fff7f7 0%, #fff1f2 44%, #f8fafc 100%);
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e0e7ff 100%);
   color: #1f2937;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
 }
 
 .sos-hero,
@@ -34,7 +33,7 @@
 .sos-panel-heading p,
 .sos-hero-label {
   margin: 0 0 0.6rem;
-  color: #b91c1c;
+  color: #6366f1;
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -55,18 +54,20 @@
 .sos-contact-card,
 .sos-history-card,
 .sos-incident-card {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 15px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .sos-hero-card {
   padding: 1.5rem;
   border-radius: 28px;
-  background: linear-gradient(160deg, rgba(127, 29, 29, 0.98), rgba(220, 38, 38, 0.9));
-  color: #fff7ed;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  color: #fff;
+  box-shadow: 0 20px 50px rgba(99, 102, 241, 0.3);
+  border: none;
 }
 
 .sos-hero-card strong {
@@ -79,7 +80,7 @@
 .sos-hero-card p {
   margin: 0;
   line-height: 1.65;
-  color: rgba(255, 247, 237, 0.88);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .sos-stats-grid {
@@ -96,8 +97,9 @@
 
 .sos-stat-card strong {
   display: block;
-  color: #b91c1c;
+  color: #6366f1;
   font-size: 2rem;
+  margin-bottom: 0.5rem;
 }
 
 .sos-stat-card span {
@@ -108,12 +110,22 @@
 
 .sos-status-banner {
   margin-bottom: 1rem;
-  padding: 0.95rem 1.1rem;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(220, 38, 38, 0.16);
-  color: #991b1b;
+  padding: 1rem 1.2rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #4f46e5;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.sos-status-banner.error {
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #dc2626;
+  background: rgba(254, 242, 242, 0.8);
 }
 
 .sos-layout {
@@ -130,13 +142,20 @@
 }
 
 .sos-panel {
-  border-radius: 28px;
-  padding: 1.45rem;
+  border-radius: 24px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.sos-panel:hover {
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
 }
 
 .sos-panel-heading h2 {
   margin: 0;
-  font-size: 1.45rem;
+  font-size: 1.35rem;
+  color: #1f2937;
+  font-weight: 700;
 }
 
 .sos-controls-grid,
@@ -162,18 +181,26 @@
 .sos-field input,
 .sos-field select {
   width: 100%;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 16px;
-  padding: 0.85rem 0.95rem;
-  background: rgba(255, 255, 255, 0.92);
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  background: #fff;
   color: #0f172a;
   font: inherit;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+}
+
+.sos-field input::placeholder {
+  color: #94a3b8;
 }
 
 .sos-field input:focus,
 .sos-field select:focus {
-  outline: 2px solid rgba(220, 38, 38, 0.18);
-  border-color: rgba(220, 38, 38, 0.35);
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  background: #f8f9fa;
 }
 
 .sos-toggle-stack {
@@ -192,18 +219,24 @@
 }
 
 .sos-toggle {
-  padding: 0.8rem 0.95rem;
+  padding: 0.85rem 1rem;
   background: #fff;
   color: #0f172a;
   text-align: left;
-  font-weight: 700;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  font-weight: 600;
+  border: 2px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.sos-toggle:hover {
+  border-color: #cbd5e1;
+  background: #f8f9fa;
 }
 
 .sos-toggle.active {
-  background: rgba(220, 38, 38, 0.1);
-  color: #991b1b;
-  border-color: rgba(220, 38, 38, 0.28);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+  color: #6366f1;
+  border-color: #6366f1;
 }
 
 .sos-action-row {
@@ -220,9 +253,21 @@
 }
 
 .sos-primary-action {
-  background: linear-gradient(135deg, #b91c1c, #ef4444);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: #fff;
-  box-shadow: 0 16px 32px rgba(220, 38, 38, 0.22);
+  box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+  font-weight: 700;
+  transition: all 0.3s ease;
+}
+
+.sos-primary-action:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px rgba(99, 102, 241, 0.4);
+}
+
+.sos-primary-action:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 5px 15px rgba(99, 102, 241, 0.3);
 }
 
 .sos-primary-action:disabled,
@@ -235,8 +280,19 @@
 
 .sos-secondary-action {
   background: #fff;
-  color: #991b1b;
-  border: 1px solid rgba(220, 38, 38, 0.2);
+  color: #6366f1;
+  border: 2px solid #6366f1;
+  transition: all 0.3s ease;
+}
+
+.sos-secondary-action:hover:not(:disabled) {
+  background: #f0f4ff;
+  transform: translateY(-2px);
+}
+
+.sos-secondary-action:active:not(:disabled) {
+  background: #e8ecff;
+  transform: translateY(0);
 }
 
 .sos-secondary-action.compact {
@@ -282,8 +338,8 @@
 }
 
 .sos-alert-status.live {
-  background: rgba(220, 38, 38, 0.12);
-  color: #b91c1c;
+  background: rgba(99, 102, 241, 0.15);
+  color: #6366f1;
 }
 
 .sos-alert-status.idle {
@@ -329,9 +385,16 @@
   align-items: center;
   gap: 0.45rem;
   border-radius: 999px;
-  padding: 0.55rem 0.8rem;
-  background: rgba(248, 250, 252, 0.92);
-  color: #334155;
+  padding: 0.55rem 0.85rem;
+  background: #f0f4ff;
+  color: #4f46e5;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 500;
+}
+
+.sos-checkbox:hover {
+  background: #e8ecff;
 }
 
 .sos-channel-row {
@@ -341,8 +404,8 @@
 .sos-channel-row span {
   border-radius: 999px;
   padding: 0.45rem 0.8rem;
-  background: #fef2f2;
-  color: #b91c1c;
+  background: #f0f4ff;
+  color: #6366f1;
   font-size: 0.88rem;
   font-weight: 700;
 }
@@ -370,19 +433,28 @@
 }
 
 .sos-priority-badge {
-  background: rgba(249, 115, 22, 0.12);
-  color: #c2410c;
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
 }
 
 .sos-text-action {
-  padding: 0.4rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   background: transparent;
-  color: #991b1b;
+  color: #6366f1;
   font-weight: 700;
+  transition: color 0.3s ease;
+}
+
+.sos-text-action:hover:not(:disabled) {
+  color: #8b5cf6;
 }
 
 .sos-text-action.danger {
-  color: #b91c1c;
+  color: #ef4444;
+}
+
+.sos-text-action.danger:hover:not(:disabled) {
+  color: #dc2626;
 }
 
 .sos-log-item {
@@ -398,7 +470,7 @@
 .sos-log-item strong {
   display: block;
   margin-bottom: 0.25rem;
-  color: #991b1b;
+  color: #6366f1;
   font-size: 0.84rem;
 }
 
@@ -425,7 +497,8 @@
   margin-top: 1rem;
   border-radius: 18px;
   padding: 1rem 1.05rem;
-  background: linear-gradient(135deg, rgba(220, 38, 38, 0.1), rgba(249, 115, 22, 0.1));
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.08));
+  border: 1px solid rgba(99, 102, 241, 0.2);
 }
 
 .sos-callout strong {
@@ -444,6 +517,93 @@
   padding: 1rem;
   background: rgba(248, 250, 252, 0.92);
   color: #475569;
+}
+
+/* Form Group Styling */
+.sos-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sos-form-group label {
+  font-weight: 600;
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.sos-trigger-form {
+  display: grid;
+  gap: 1.2rem;
+}
+
+.sos-trigger-button,
+.sos-control-button {
+  padding: 0.95rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 700;
+  border: 0;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+}
+
+.sos-trigger-button {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #fff;
+  width: 100%;
+  box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+}
+
+.sos-trigger-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px rgba(99, 102, 241, 0.4);
+}
+
+.sos-trigger-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 5px 15px rgba(99, 102, 241, 0.3);
+}
+
+.sos-trigger-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sos-active-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.sos-control-button {
+  background: #fff;
+  color: #6366f1;
+  border: 2px solid #6366f1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.sos-control-button:hover:not(:disabled) {
+  background: #f0f4ff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.25);
+}
+
+.sos-control-button:active:not(:disabled) {
+  background: #e8ecff;
+  transform: translateY(0);
+}
+
+.sos-control-button.resolve {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+}
+
+.sos-control-button.resolve:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px rgba(16, 185, 129, 0.4);
 }
 
 @media (max-width: 1080px) {
@@ -476,5 +636,37 @@
 
   .sos-contact-actions {
     align-items: flex-start;
+  }
+
+  .sos-hero-copy h1 {
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+  }
+
+  .sos-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .sos-stat-card strong {
+    font-size: 1.5rem;
+  }
+
+  .sos-active-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .sos-trigger-button,
+  .sos-control-button {
+    padding: 0.85rem 1rem;
+    font-size: 0.95rem;
+  }
+
+  .sos-panel-heading h2 {
+    font-size: 1.15rem;
+  }
+
+  .sos-panel {
+    border-radius: 16px;
+    padding: 1rem;
   }
 }
