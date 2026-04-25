@@ -281,6 +281,13 @@
   resize: vertical;
   min-height: 100px;
   margin-bottom: 10px;
+  transition: all 0.3s ease;
+}
+
+.notes-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .notes-list {
