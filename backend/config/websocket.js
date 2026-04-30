@@ -145,6 +145,7 @@ const initializeWebSocket = (server, options = {}) => {
       socket.leave(`chat:${chatId}`);
       io.to(`chat:${chatId}`).emit('user:typing:stopped', {
         userId: socket.userId,
+        chatId,
       });
     });
 
