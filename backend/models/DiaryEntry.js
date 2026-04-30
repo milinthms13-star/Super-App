@@ -89,6 +89,16 @@ diaryEntrySchema.index({ userId: 1, category: 1 });
 diaryEntrySchema.index({ userId: 1, tags: 1 });
 diaryEntrySchema.index({ userId: 1, mood: 1 });
 
+// Text index for full-text search on title and content
+diaryEntrySchema.index(
+  { title: 'text', content: 'text' },
+  {
+    weights: { title: 10, content: 5 },
+    name: 'diary_text_search',
+    background: true
+  }
+);
+
 // Virtual for formatted date
 diaryEntrySchema.virtual('formattedDate').get(function() {
   if (!this.createdAt) return '';

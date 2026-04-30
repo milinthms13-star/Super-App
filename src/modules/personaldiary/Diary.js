@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import "../../styles/Diary.css";
 import {
   fetchDiaryEntries,
@@ -20,32 +20,18 @@ import DiaryCalendar from "./DiaryCalendar";
 import MoodChart from "./MoodChart";
 import TodaysSummary from "./TodaysSummary";
 import { io } from "socket.io-client";
+import {
+  stripHtml,
+  sortCalendarItems,
+  MOOD_CONFIG,
+  CATEGORIES,
+} from "../../utils/diaryHelpers";
 
-const MOODS = [
-  { value: "very_sad", label: "😭", emoji: "😭" },
-  { value: "sad", label: "😢", emoji: "😢" },
-  { value: "neutral", label: "😐", emoji: "😐" },
-  { value: "happy", label: "😊", emoji: "😊" },
-  { value: "very_happy", label: "😄", emoji: "😄" },
-];
-
-const CATEGORIES = ["All", "Personal", "Work", "Travel", "Health", "Relationships", "Other"];
-
-const stripHtml = (content = "") =>
-  String(content)
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const sortCalendarItems = (items = []) =>
-  [...items].sort((leftItem, rightItem) => {
-    const leftDate =
-      new Date(leftItem.reminderAt || leftItem.date || leftItem.createdAt || 0).getTime();
-    const rightDate =
-      new Date(rightItem.reminderAt || rightItem.date || rightItem.createdAt || 0).getTime();
-    return leftDate - rightDate;
-  });
+const MOODS = Object.entries(MOOD_CONFIG).map(([value, config]) => ({
+  value,
+  label: config.label,
+  emoji: config.emoji,
+}));
 
 const Diary = () => {
   const [entries, setEntries] = useState([]);

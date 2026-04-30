@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const FormData = require('form-data');
+const axios = require('axios');
 const { OpenAI } = require('openai');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
@@ -11,6 +12,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY
 });
+
+// Helper to call internal API routes
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:5000';
 
 // POST /api/voice-input/transcribe - Speech to text
 router.post('/transcribe', upload.single('audio'), async (req, res) => {
@@ -101,11 +105,17 @@ router.post('/search', authenticate, async (req, res) => {
       query = transcription.text;
     }
 
-    // Search across modules
+    // Search across modules using axios
+    const [productsRes, realestateRes, classifiedsRes] = await Promise.allSettled([
+      axios.get(`${API_BASE_URL}/api/products/search?q=${encodeURIComponent(query)}`).catch(() => ({ data: { products: [] } })),
+      axios.get(`${API_BASE_URL}/api/realestate?location=${encodeURIComponent(query)}`).catch(() => ({ data: { data: [] } })),
+      axios.get(`${API_BASE_URL}/api/app-data/classifieds/search?q=${encodeURIComponent(query)}`).catch(() => ({ data: { data: { listings: [] } } })),
+    ]);
+
     const searchResults = {
-      products: await fetch(`/api/products/search?q=${encodeURIComponent(query)}`),
-      realestate: await fetch(`/api/realestate?location=${query}`),
-      classifieds: await fetch(`/api/classifieds/search?q=${query}`)
+      products: productsRes.status === 'fulfilled' ? productsRes.value.data : { products: [] },
+      realestate: realestateRes.status === 'fulfilled' ? realestateRes.value.data : { data: [] },
+      classifieds: classifiedsRes.status === 'fulfilled' ? classifiedsRes.value.data : { data: { listings: [] } },
     };
 
     res.json({ success: true, query, results: searchResults });

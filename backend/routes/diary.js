@@ -8,6 +8,14 @@ const logger = require('../utils/logger');
 const multer = require('multer');
 const { uploadBufferToGridFS } = require('../utils/gridfs');
 const { analyzeMood } = require('../utils/aiMoodAnalyzer');
+const {
+  validateDiaryEntry,
+  validateDiaryEntryUpdate,
+  validateCalendarItem,
+  validateCalendarItemUpdate,
+  validateQuery,
+  formatValidationErrors
+} = require('../utils/diaryValidation');
 
 // Create rate limiter for diary
 const diaryRateLimiter = createModerateRateLimiter({
@@ -24,7 +32,15 @@ router.use(diaryRateLimiter);
 // GET /api/diary - Get all diary entries for the authenticated user
 router.get('/', async (req, res) => {
   try {
-    const { category, mood, search, limit = 20, skip = 0, sortBy = '-createdAt' } = req.query;
+    const { error, value: queryParams } = validateQuery(req.query, 'diary');
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: formatValidationErrors(error)
+      });
+    }
+
+    const { category, mood, search, limit, skip, sortBy } = queryParams;
     const userId = req.user._id || req.user.id;
 
     const query = { userId, isDraft: false };
@@ -240,26 +256,26 @@ router.get('/calendar-items', async (req, res) => {
 router.post('/calendar-items', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const payload = parseCalendarItemPayload(req.body);
-    const validationError = validateCalendarItemPayload(payload);
 
-    if (validationError) {
+    // Validate calendar item data
+    const { error, value: validatedPayload } = validateCalendarItem(req.body);
+    if (error) {
       return res.status(400).json({
         success: false,
-        message: validationError,
+        message: formatValidationErrors(error),
       });
     }
 
     const item = await DiaryCalendarItem.create({
       userId,
-      ...payload,
+      ...validatedPayload,
     });
 
     res.status(201).json({
       success: true,
       data: item,
       message:
-        payload.type === 'reminder'
+        validatedPayload.type === 'reminder'
           ? 'Reminder created successfully'
           : 'Note created successfully',
     });
@@ -276,13 +292,13 @@ router.post('/calendar-items', async (req, res) => {
 router.put('/calendar-items/:itemId', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const payload = parseCalendarItemPayload(req.body);
-    const validationError = validateCalendarItemPayload(payload);
 
-    if (validationError) {
+    // Validate update data
+    const { error, value: validatedPayload } = validateCalendarItemUpdate(req.body);
+    if (error) {
       return res.status(400).json({
         success: false,
-        message: validationError,
+        message: formatValidationErrors(error),
       });
     }
 
@@ -298,12 +314,13 @@ router.put('/calendar-items/:itemId', async (req, res) => {
       });
     }
 
-    item.date = payload.date;
-    item.type = payload.type;
-    item.title = payload.title;
-    item.note = payload.note;
-    item.reminderAt = payload.reminderAt;
-    item.isCompleted = payload.isCompleted;
+    // Update only provided fields
+    if (validatedPayload.date !== undefined) item.date = validatedPayload.date;
+    if (validatedPayload.type !== undefined) item.type = validatedPayload.type;
+    if (validatedPayload.title !== undefined) item.title = validatedPayload.title;
+    if (validatedPayload.note !== undefined) item.note = validatedPayload.note;
+    if (validatedPayload.reminderAt !== undefined) item.reminderAt = validatedPayload.reminderAt;
+    if (validatedPayload.isCompleted !== undefined) item.isCompleted = validatedPayload.isCompleted;
     await item.save();
 
     res.json({
@@ -385,10 +402,10 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/')) {
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/') || file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
-      cb(new Error('Only images and audio allowed'), false);
+      cb(new Error('Only images, audio, and video files are allowed'), false);
     }
   }
 });
@@ -577,15 +594,24 @@ const storeDiaryAttachment = async ({ file, user }) => {
 // POST /api/diary - Create new diary entry
 router.post('/', upload.array('attachments', 5), async (req, res) => {
   try {
+    // Validate entry data
+    const { error, value: validatedData } = validateDiaryEntry(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: formatValidationErrors(error)
+      });
+    }
+
     const {
       title,
       content,
       mood,
-      category = 'Personal',
+      category,
       tags,
       isDraft,
       entryDate
-    } = req.body;
+    } = validatedData;
 
     // Process attachments
     const attachments = [];
@@ -600,36 +626,18 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
       }
     }
 
-    if (!title || !content) {
-      return res.status(400).json({
-        success: false,
-        message: 'Title and content are required'
-      });
-    }
-
-    const validMoods = ['very_sad', 'sad', 'neutral', 'happy', 'very_happy'];
-    const validCategories = ['Personal', 'Work', 'Travel', 'Health', 'Relationships', 'Other'];
-    const normalizedMood = validMoods.includes(mood) ? mood : analyzeMood(content);
-
-    if (!validCategories.includes(category)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid category'
-      });
-    }
-
-    const parsedIsDraft = parseBooleanField(isDraft, false);
+    const normalizedMood = mood || analyzeMood(content);
 
     const entry = new DiaryEntry({
       userId: req.user._id || req.user.id,
-      title: title.trim(),
-      content: content.trim(),
+      title,
+      content,
       mood: normalizedMood,
       category,
-      tags: parseTagsField(tags),
-      isDraft: parsedIsDraft,
+      tags,
+      isDraft,
       attachments,
-      entryDate: entryDate ? new Date(entryDate) : new Date()
+      entryDate: entryDate || new Date()
     });
 
     await entry.save();
@@ -639,7 +647,7 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
     res.status(201).json({
       success: true,
       data: entry,
-      message: parsedIsDraft ? 'Draft saved successfully' : 'Entry created successfully'
+      message: isDraft ? 'Draft saved successfully' : 'Entry created successfully'
     });
   } catch (error) {
     logger.error('Error creating diary entry:', error);
@@ -655,7 +663,15 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
 router.put('/:id', upload.array('attachments', 5), async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { title, content, mood, category, tags, isDraft, entryDate } = req.body;
+
+    // Validate update data
+    const { error, value: validatedData } = validateDiaryEntryUpdate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: formatValidationErrors(error)
+      });
+    }
 
     const entry = await DiaryEntry.findOne({
       _id: req.params.id,
@@ -681,18 +697,19 @@ router.put('/:id', upload.array('attachments', 5), async (req, res) => {
       }
     }
 
-    if (title) entry.title = title.trim();
-    if (content) entry.content = content.trim();
+    const { title, content, mood, category, tags, isDraft, entryDate } = validatedData;
+
+    if (title) entry.title = title;
+    if (content) entry.content = content;
     if (mood) {
-      const validMoods = ['very_sad', 'sad', 'neutral', 'happy', 'very_happy'];
-      entry.mood = validMoods.includes(mood) ? mood : analyzeMood(content || entry.content || '');
+      entry.mood = mood || analyzeMood(content || entry.content || '');
     }
     if (category) entry.category = category;
     if (tags !== undefined) {
-      entry.tags = parseTagsField(tags);
+      entry.tags = tags;
     }
-    if (isDraft !== undefined) entry.isDraft = parseBooleanField(isDraft, entry.isDraft);
-    if (entryDate) entry.entryDate = new Date(entryDate);
+    if (isDraft !== undefined) entry.isDraft = isDraft;
+    if (entryDate) entry.entryDate = entryDate;
     if (newAttachments.length > 0) {
       entry.attachments.push(...newAttachments);
     }

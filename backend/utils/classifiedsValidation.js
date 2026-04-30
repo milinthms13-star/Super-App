@@ -119,7 +119,7 @@ const validateListingData = async (data) => {
     stripUnknown: true,
   });
 
-  if (error) {
+  if (error && error.details) {
     error.details.forEach((detail) => {
       errors.push(detail.message);
     });
@@ -171,7 +171,7 @@ const validateMessage = (data) => {
   if (error) {
     return {
       isValid: false,
-      errors: error.details.map((d) => d.message),
+      errors: error.details ? error.details.map((d) => d.message) : [error.message || 'Invalid message'],
       data: null,
     };
   }
@@ -190,7 +190,7 @@ const validateReport = (data) => {
   if (error) {
     return {
       isValid: false,
-      errors: error.details.map((d) => d.message),
+      errors: error.details ? error.details.map((d) => d.message) : [error.message || 'Invalid report'],
       data: null,
     };
   }
@@ -209,7 +209,7 @@ const validateReview = (data) => {
   if (error) {
     return {
       isValid: false,
-      errors: error.details.map((d) => d.message),
+      errors: error.details ? error.details.map((d) => d.message) : [error.message || 'Invalid review'],
       data: null,
     };
   }

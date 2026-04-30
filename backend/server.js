@@ -128,7 +128,11 @@ const server = require('http').createServer(app);
 
 // Initialize WebSocket
 const { initializeWebSocket } = require('./config/websocket');
+const { setupClassifiedsWebSocket } = require('./config/classifiedsWebSocket');
 initializeWebSocket(server);
+
+// Initialize Classifieds WebSocket namespace
+const classifiedsWS = setupClassifiedsWebSocket(require('./config/websocket').io());
 
 // Initialize Voice Call Scheduler
 const voiceCallScheduler = require('./services/voiceCallScheduler');

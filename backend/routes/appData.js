@@ -3,6 +3,12 @@ const crypto = require('crypto');
 const Joi = require('joi');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
+const {
+  createListingLimiter,
+  messageLimiter,
+  reportLimiter,
+  searchLimiter,
+} = require('../middleware/classifiedsRateLimiter');
 const devAppDataStore = require('../utils/devAppDataStore');
 const {
   useMongoClassifieds,
@@ -15,6 +21,7 @@ const {
   moderateClassifiedAd,
   deleteClassifiedAd,
   findClassifiedAdById,
+  searchClassifieds,
 } = require('../utils/classifiedStore');
 const {
   listRealEstateProperties,
@@ -677,6 +684,42 @@ router.get('/classifieds/user/:sellerEmail/rating', async (req, res) => {
   }
 });
 
+// GET /app-data/classifieds/search - Search classified listings
+router.get('/classifieds/search', searchLimiter, async (req, res) => {
+  try {
+    const {
+      q: text = '',
+      category = null,
+      location = null,
+      minPrice = 0,
+      maxPrice = Infinity,
+      condition = null,
+      sortBy = 'featured',
+      page = 1,
+      limit = 20,
+    } = req.query;
+
+    const result = await searchClassifieds({
+      text,
+      category,
+      location,
+      minPrice: Number(minPrice) || 0,
+      maxPrice: maxPrice === 'Infinity' ? Infinity : Number(maxPrice) || Infinity,
+      condition,
+      sortBy,
+      page: Number(page) || 1,
+      limit: Number(limit) || 20,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.get('/admin', authenticate, adminOnly, async (req, res) => {
   const appData = await devAppDataStore.readAppData();
   const classifiedsModuleData = await listClassifiedModuleData();
@@ -1153,7 +1196,7 @@ router.post('/globemart-categories/:categoryId/subcategories', authenticate, adm
   });
 });
 
-router.post('/classifieds/listings', authenticate, async (req, res) => {
+router.post('/classifieds/listings', authenticate, createListingLimiter, async (req, res) => {
   if (!canManageClassifieds(req.user)) {
     return res.status(403).json({
       success: false,
@@ -1371,7 +1414,7 @@ router.patch('/classifieds/listings/:listingId', authenticate, async (req, res) 
   });
 });
 
-router.post('/classifieds/listings/:listingId/messages', authenticate, async (req, res) => {
+router.post('/classifieds/listings/:listingId/messages', authenticate, messageLimiter, async (req, res) => {
   const { error, value } = classifiedsMessageSchema.validate(req.body, { stripUnknown: true });
   if (error) {
     return res.status(400).json({
@@ -1567,7 +1610,7 @@ router.post('/classifieds/listings/:listingId/reviews', authenticate, async (req
   });
 });
 
-router.post('/classifieds/listings/:listingId/reports', authenticate, async (req, res) => {
+router.post('/classifieds/listings/:listingId/reports', authenticate, reportLimiter, async (req, res) => {
   const { error, value } = classifiedsReportSchema.validate(req.body, { stripUnknown: true });
   if (error) {
     return res.status(400).json({

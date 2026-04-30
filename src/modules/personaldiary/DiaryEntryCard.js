@@ -1,54 +1,11 @@
 import React from "react";
-
-const MOOD_EMOJIS = {
-  very_sad: "😭",
-  sad: "😢",
-  neutral: "😐",
-  happy: "😊",
-  very_happy: "😄",
-};
-
-const stripHtml = (content = "") =>
-  String(content)
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+import { stripHtml, formatDate, formatTime, getMoodColor, getMoodEmoji } from "../../utils/diaryHelpers";
 
 const DiaryEntryCard = ({ entry, onEdit, onDelete }) => {
-  const getMoodColor = (mood) => {
-    const colors = {
-      very_sad: "#ff4757",
-      sad: "#ff7675",
-      neutral: "#ffa502",
-      happy: "#1dd1a1",
-      very_happy: "#00b894",
-    };
-    return colors[mood] || "#95a5a6";
-  };
-
-  const formatDate = (date) => {
-    if (!date) return "";
-    const d = new Date(date);
-    return d.toLocaleDateString("en-IN", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
-  const formatTime = (date) => {
-    if (!date) return "";
-    const d = new Date(date);
-    return d.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   const truncateContent = (content, length = 150) => {
-    if (content.length <= length) return content;
-    return content.substring(0, length) + "...";
+    const plainText = stripHtml(content);
+    if (plainText.length <= length) return plainText;
+    return plainText.substring(0, length) + "...";
   };
 
   return (
@@ -66,7 +23,7 @@ const DiaryEntryCard = ({ entry, onEdit, onDelete }) => {
           style={{ backgroundColor: getMoodColor(entry.mood) }}
           title={entry.mood.replace("_", " ")}
         >
-          {MOOD_EMOJIS[entry.mood]}
+          {getMoodEmoji(entry.mood)}
         </div>
       </div>
 
@@ -74,7 +31,7 @@ const DiaryEntryCard = ({ entry, onEdit, onDelete }) => {
         <span className="diary-category-badge">{entry.category}</span>
       </div>
 
-      <p className="diary-card-content">{truncateContent(stripHtml(entry.content))}</p>
+      <p className="diary-card-content">{truncateContent(entry.content)}</p>
 
       {entry.tags && entry.tags.length > 0 && (
         <div className="diary-card-tags">

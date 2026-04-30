@@ -1,23 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
+import {
+  stripHtml,
+  getPlainTextLength,
+  MOOD_CONFIG,
+  CATEGORIES,
+  saveDraftToStorage,
+  loadDraftFromStorage,
+  clearDraftFromStorage,
+  debounce,
+} from "../../utils/diaryHelpers";
 
-const MOODS = [
-  { value: "very_sad", label: "😭 Very Sad", emoji: "😭" },
-  { value: "sad", label: "😢 Sad", emoji: "😢" },
-  { value: "neutral", label: "😐 Neutral", emoji: "😐" },
-  { value: "happy", label: "😊 Happy", emoji: "😊" },
-  { value: "very_happy", label: "😄 Very Happy", emoji: "😄" },
-];
+const MOODS = Object.entries(MOOD_CONFIG).map(([value, config]) => ({
+  value,
+  label: config.label,
+  emoji: config.emoji,
+}));
 
-const CATEGORIES = ["Personal", "Work", "Travel", "Health", "Relationships", "Other"];
-
-const getPlainTextContent = (content = "") =>
-  String(content)
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+const EDITOR_CATEGORIES = CATEGORIES.filter((c) => c !== "All");
 
 const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
   const [formData, setFormData] = useState({
@@ -33,7 +34,10 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
   const [errors, setErrors] = useState({});
   const [selectedFiles, setSelectedFiles] = useState([]) ;
   const [filePreviews, setFilePreviews] = useState([]) ;
+  const [autosaveStatus, setAutosaveStatus] = useState("");
+  const quillRef = useRef(null);
 
+  // Load draft from localStorage on mount (only for new entries)
   useEffect(() => {
     if (entry) {
       setFormData({
@@ -45,8 +49,61 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
         isDraft: entry.isDraft,
         entryDate: entry.entryDate ? entry.entryDate.split("T")[0] : new Date().toISOString().split("T")[0],
       });
+    } else {
+      const draft = loadDraftFromStorage();
+      if (draft && draft.title) {
+        setFormData((current) => ({
+          ...current,
+          ...draft,
+          entryDate: draft.entryDate || current.entryDate,
+        }));
+        setAutosaveStatus("Draft loaded from autosave");
+      }
     }
   }, [entry]);
+
+  // Autosave to localStorage
+  const debouncedAutosave = useCallback(
+    debounce((data) => {
+      saveDraftToStorage(data);
+      setAutosaveStatus("Draft autosaved");
+    }, 2000),
+    []
+  );
+
+  useEffect(() => {
+    if (!entry) {
+      debouncedAutosave(formData);
+    }
+  }, [formData, entry, debouncedAutosave]);
+
+  // Clear autosave status after 3 seconds
+  useEffect(() => {
+    if (autosaveStatus) {
+      const timer = setTimeout(() => setAutosaveStatus(""), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [autosaveStatus]);
+
+  // Keyboard shortcuts: Ctrl+S to save, Escape to close
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!submitting) {
+          const fakeEvent = { preventDefault: () => {} };
+          handleSubmit(fakeEvent);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, submitting, formData, selectedFiles]);
 
   useEffect(() => {
     return () => {
@@ -103,7 +160,7 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
     if (!formData.title.trim()) {
       newErrors.title = "Title is required";
     }
-    if (!getPlainTextContent(formData.content)) {
+    if (!stripHtml(formData.content)) {
       newErrors.content = "Content is required";
     }
     setErrors(newErrors);
@@ -113,6 +170,7 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
+      clearDraftFromStorage();
       onSave(formData, selectedFiles);
     }
   };
@@ -166,7 +224,7 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
                 onChange={handleChange}
                 disabled={submitting}
               >
-                {CATEGORIES.map((cat) => (
+                {EDITOR_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -221,7 +279,7 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
             />
             {errors.content && <span className="diary-error">{errors.content}</span>}
             <div className="diary-char-count">
-              {getPlainTextContent(formData.content).length}/50000 characters
+              {stripHtml(formData.content).length}/50000 characters
             </div>
           </div>
 

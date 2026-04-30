@@ -154,6 +154,7 @@ const Classifieds = () => {
     createClassifiedListing,
     sendClassifiedMessage,
     reportClassifiedListing,
+    addClassifiedReview,
     updateClassifiedListing,
     moderateClassifiedListing,
     deleteClassifiedListing,
@@ -281,15 +282,11 @@ const Classifieds = () => {
     setSubmitting(true);
     try {
       const review = {
-        id: `review-${Date.now()}`,
         rating: reviewRating,
         comment: reviewText.trim(),
-        reviewerName: currentUser?.name || "Anonymous",
-        reviewerEmail: currentUser?.email || "",
-        createdAt: new Date().toISOString(),
       };
 
-      await reportClassifiedListing(selectedListing.id, { review });
+      await addClassifiedReview(selectedListing.id, review);
       setReviewText("");
       setReviewRating(5);
       setShowReviewForm(false);
