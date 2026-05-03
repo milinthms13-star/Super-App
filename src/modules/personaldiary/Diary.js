@@ -35,6 +35,10 @@ const MOODS = Object.entries(MOOD_CONFIG).map(([value, config]) => ({
 
 const Diary = () => {
   const [entries, setEntries] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef(null);
   const [calendarItems, setCalendarItems] = useState([]);
   const [upcomingReminders, setUpcomingReminders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +57,7 @@ const Diary = () => {
 
   // Load entries on mount
   useEffect(() => {
-    loadEntries();
+    loadEntries(false, 20);
     loadCalendarItems();
     loadTags();
     loadMoodStats();
@@ -115,20 +119,43 @@ const Diary = () => {
     }
   };
 
-  const loadEntries = async () => {
+  const loadEntries = async (append = false, limit = 20) => {
     try {
-      setLoading(true);
+      if (!append) {
+        setLoading(true);
+        setEntries([]);
+        setPage(0);
+        setHasMore(true);
+      } else {
+        setLoadingMore(true);
+      }
       setError(null);
-      const response = await fetchDiaryEntries({ limit: 100 });
-      setEntries(Array.isArray(response.data) ? response.data : []);
+
+      const response = await fetchDiaryEntries({ 
+        limit,
+        skip: append ? page * limit : 0,
+        category: selectedCategory !== 'All' ? selectedCategory : undefined,
+        mood: selectedMood !== 'All' ? selectedMood : undefined,
+        search: searchQuery || undefined,
+        sortBy: '-createdAt'
+      });
+      
+      setEntries(prev => append ? [...prev, ... (Array.isArray(response.data) ? response.data : [])] : (Array.isArray(response.data) ? response.data : []));
+      setHasMore(response.pagination?.hasMore ?? true);
+      if (append) setPage(prev => prev + 1);
     } catch (err) {
       console.error("Failed to load entries:", err);
       setError(err.message || "Failed to load diary entries");
-      setEntries([]);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+
+  // Reset entries on filter change
+  useEffect(() => {
+    loadEntries(false);
+  }, [selectedCategory, selectedMood, searchQuery, selectedTags]);
 
   const loadTags = async () => {
     try {
@@ -159,31 +186,8 @@ const Diary = () => {
     }
   };
 
-  // Filter entries based on selected filters
-  const filteredEntries = useMemo(() => {
-    return entries.filter((entry) => {
-      if (selectedCategory !== "All" && entry.category !== selectedCategory) {
-        return false;
-      }
-      if (selectedMood !== "All" && entry.mood !== selectedMood) {
-        return false;
-      }
-      if (
-        searchQuery &&
-        !entry.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !stripHtml(entry.content).toLowerCase().includes(searchQuery.toLowerCase())
-      ) {
-        return false;
-      }
-      if (
-        selectedTags.length > 0 &&
-        !selectedTags.some((tag) => entry.tags.includes(tag))
-      ) {
-        return false;
-      }
-      return true;
-    });
-  }, [entries, selectedCategory, selectedMood, searchQuery, selectedTags]);
+  // All loaded entries (server-side filtered)
+  const allLoadedEntries = useMemo(() => entries, [entries]);
 
   const handleCreateEntry = async (entryData, files = []) => {
     try {
@@ -429,9 +433,9 @@ const Diary = () => {
         <section className="diary-entries-section">
           {loading ? (
             <div className="diary-loading">Loading your entries...</div>
-          ) : filteredEntries.length > 0 ? (
-            <div className="diary-entries-grid">
-              {filteredEntries.map((entry) => (
+          ) : allLoadedEntries.length > 0 ? (
+            <div className="diary-entries-grid" ref={sentinelRef}>
+              {allLoadedEntries.map((entry) => (
                 <DiaryEntryCard
                   key={entry._id}
                   entry={entry}
@@ -439,6 +443,12 @@ const Diary = () => {
                   onDelete={() => handleDeleteEntry(entry._id)}
                 />
               ))}
+              {loadingMore && (
+                <div className="diary-loading-more">Loading more entries...</div>
+              )}
+              {!hasMore && allLoadedEntries.length > 0 && (
+                <div className="diary-no-more">No more entries to load</div>
+              )}
             </div>
           ) : (
             <div className="diary-empty">
@@ -466,5 +476,75 @@ const Diary = () => {
     </div>
   );
 };
+
+  // Infinite scroll observer
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !loadingMore) {
+          loadEntries(true, 20);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(sentinelRef.current);
+
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, page]);
+
+  const handleCreateEntry = async (entryData, files = []) => {
+    try {
+      setSubmitting(true);
+      const response = await createDiaryEntry(entryData, files);
+      setEntries([response.data, ...entries]); // Prepend new entry
+      setPage(0);
+      setHasMore(true);
+      setShowEditor(false);
+      setEditingEntry(null);
+      await loadTags();
+      setError(null);
+    } catch (err) {
+      setError(err.message || "Failed to create entry");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateEntry = async (entryData, files = []) => {
+    try {
+      setSubmitting(true);
+      const response = await updateDiaryEntry(editingEntry._id, entryData, files);
+      setEntries((current) =>
+        current.map((entry) =>
+          entry._id === editingEntry._id ? response.data : entry
+        )
+      );
+      setShowEditor(false);
+      setEditingEntry(null);
+      await loadTags();
+      setError(null);
+    } catch (err) {
+      setError(err.message || "Failed to update entry");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteEntry = async (entryId) => {
+    if (!window.confirm("Are you sure you want to delete this entry?")) {
+      return;
+    }
+
+    try {
+      await deleteDiaryEntry(entryId);
+      setEntries((current) => current.filter((entry) => entry._id !== entryId));
+      await loadTags();
+    } catch (err) {
+      setError(err.message || "Failed to delete entry");
+    }
+  };
 
 export default Diary;

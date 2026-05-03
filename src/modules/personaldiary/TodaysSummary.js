@@ -2,22 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { fetchTodaysSummary } from "../../services/diaryService";
 import "./styles/TodaysSummary.css";
 
-const stripHtml = (content = "") =>
-  String(content)
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const buildPreview = (content = "", maxLength = 140) => {
-  const plainText = stripHtml(content);
-
-  if (plainText.length <= maxLength) {
-    return plainText;
-  }
-
-  return `${plainText.slice(0, maxLength).trim()}...`;
-};
+import { stripHtml, buildPreview, formatDateTime } from "../../utils/diaryHelpers";
 
 const formatReminderTime = (value) => {
   const reminderDate = new Date(value);
