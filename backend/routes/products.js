@@ -36,7 +36,12 @@ const upload = multer({
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
-  fileFilter: (_req, file, cb) => {
+  async fileFilter (req, file, cb) {
+    const preScan = await validateImagePreScan(file.buffer, file.mimetype, file.originalname);
+    if (!preScan.valid) {
+      cb(new Error(`Image validation failed: ${preScan.reason}`));
+      return;
+    }
     if (!file.mimetype || !file.mimetype.startsWith('image/')) {
       cb(new Error('Only image uploads are allowed.'));
       return;
@@ -139,6 +144,7 @@ const extractFileIdFromProductImage = (imagePath = '') => {
 };
 
 const { uploadToCloudinary } = require('../utils/cloudinary');
+const { scanImageBuffer, validateImagePreScan } = require('../utils/imageSecurity');
 
 const buildStoredImagePayload = (imagePayload = {}) => ({
   image: imagePayload?.image || '',
@@ -151,6 +157,12 @@ const storeProductImage = async ({ file, sellerEmail }) => {
   if (!file?.buffer?.length) {
     return buildStoredImagePayload();
   }
+
+  const scanResult = await scanImageBuffer(file.buffer, file.originalname || 'image.jpg');
+  if (!scanResult.clean) {
+    throw new Error(`Image scan failed: ${scanResult.result}${scanResult.virusName ? ` (${scanResult.virusName})` : ''}`);
+  }
+  logger.info(`Image scan clean for ${file.originalname} by ${sellerEmail}`);
   
   // Try Cloudinary first, fallback to GridFS
   try {
@@ -179,6 +191,8 @@ const storeProductImage = async ({ file, sellerEmail }) => {
         category: 'product-image',
         visibility: 'public',
         ownerEmail: sellerEmail,
+        scanned: true,
+        scanResult: scanResult.result,
       },
     });
     return buildStoredImagePayload({

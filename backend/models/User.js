@@ -204,6 +204,25 @@ const UserSchema = new mongoose.Schema(
       min: 0,
       default: 0
     },
+    matrimonialTotalRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: 5.0
+    },
+    matrimonialReviewCount: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+    matrimonialInterestsSent: {
+      type: Number,
+      default: 0
+    },
+    matrimonialInterestsReceived: {
+      type: Number,
+      default: 0
+    },
     invitationsSent: [
       {
         type: mongoose.Schema.Types.ObjectId,

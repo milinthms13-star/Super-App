@@ -267,27 +267,36 @@ const ProductCard = ({ product, onOpenQuickView }) => {
           >
             Quick View
           </button>
-          <button
-            type="button"
-            className={`add-to-cart-btn ${isAdded ? "added" : ""}`}
-            onClick={handleAddToCart}
-            disabled={stockInfo.hasReached || isSellerAccount}
-            aria-label={
-              isSellerAccount
-                ? "Seller account cannot add to cart"
-                : stockInfo.hasReached
-                  ? `Cannot add more than ${stockInfo.stock} units`
-                  : `Add ${sanitizeText(product.name)} to cart`
-            }
-          >
-            {isSellerAccount
-              ? "Seller View"
+        <button
+          type="button"
+          className={`add-to-cart-btn ${isAdded ? "added" : ""}`}
+          onClick={handleAddToCart}
+          disabled={stockInfo.hasReached || isSellerAccount}
+          aria-label={
+            isSellerAccount
+              ? "Seller account cannot add to cart"
               : stockInfo.hasReached
-                ? "Max Added"
-                : isAdded
-                  ? "Added"
-                  : "Add to Cart"}
-          </button>
+                ? `Cannot add more than ${stockInfo.stock} units`
+                : `Add ${sanitizeText(product.name)} to cart`
+          }
+          onMouseEnter={(e) => {
+            if (!stockInfo.hasReached && !isSellerAccount) {
+              e.target.style.transform = 'scale(1.05)';
+              e.target.style.transition = 'transform 0.2s ease';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = 'scale(1)';
+          }}
+        >
+          {isSellerAccount
+            ? "Seller View"
+            : stockInfo.hasReached
+              ? "Max Added"
+              : isAdded
+                ? "Added ✓"
+                : "Add to Cart ✨"}
+        </button>
         </div>
       </div>
     </div>

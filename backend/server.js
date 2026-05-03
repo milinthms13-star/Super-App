@@ -89,7 +89,7 @@ app.use('/api/fooddelivery', require('./routes/fooddelivery'));
 // RideSharing routes
 app.use('/api/ridesharing', require('./routes/ridesharing'));
 
-// Add realestate route to main server
+// RealEstate routes
 app.use('/api/realestate', require('./routes/realestate'));
 
 // Voice API (new)
@@ -99,6 +99,7 @@ app.use('/api/voice-input', require('./routes/voiceInput'));
 // Astrology module routes
 app.use('/api/astrology', require('./routes/astrology'));
 
+app.use('/api/matrimonial', require('./routes/matrimonial'));
 app.use('/api/flashsales', require('./routes/flashsales'));
 app.use('/api/support', require('./routes/support'));
 

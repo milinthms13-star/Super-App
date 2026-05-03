@@ -1341,21 +1341,20 @@ const countSellerOpenFulfillments = ({ orders = [], user, req }) =>
   ).length;
 
 router.get('/mine', authenticate, cacheOrders, async (req, res) => {
+  const cursor = req.query.cursor;
   try {
-    const { page, limit, skip } = parsePagination(req.query);
-    const orders = await orderStore.listOrdersByEmail(req.user.email);
-    const pagedOrders = orders.slice(skip, skip + limit);
-
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+    const orders = await orderStore.listOrdersByEmail(req.user.email, { cursor: cursor || null, limit });
     return res.json({
       success: true,
-      orders: pagedOrders.map(serializeOrder),
-      pagination: buildPaginationMeta({
-        page,
+      orders: orders.map(serializeOrder),
+      pagination: {
+        cursor: orders.length === limit ? orders[orders.length - 1].createdAt.toISOString() : null,
         limit,
-        totalItems: orders.length,
-      }),
+        hasMore: orders.length === limit,
+      },
       stats: {
-        openCount: countCustomerOpenOrders(orders),
+        openCount: countCustomerOpenOrders(await orderStore.listOrdersByEmail(req.user.email)),
       },
     });
   } catch (error) {
@@ -1757,6 +1756,7 @@ router.post('/payments/razorpay/verify', paymentRateLimiter, authenticate, async
       });
     }
 
+    // ✅ Webhook signature verification (Razorpay)
     const generatedSignature = crypto
       .createHmac('sha256', getRazorpayKeySecret())
       .update(`${value.razorpay_order_id}|${value.razorpay_payment_id}`)

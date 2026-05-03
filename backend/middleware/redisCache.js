@@ -5,6 +5,8 @@ const CACHE_TTL_SECONDS = {
   products: 300, // 5min
   orders: 120,   // 2min
   search: 180,   // 3min
+  reminders: 120, // 2min
+  'reminder-stats': 60, // 1min
 };
 
 const generateCacheKey = (req, prefix = '') => {
@@ -59,6 +61,8 @@ module.exports = {
   cacheProducts: cacheMiddleware('products'),
   cacheOrders: cacheMiddleware('orders'),
   cacheSearch: cacheMiddleware('search'),
+  cacheReminders: cacheMiddleware('reminders'),
+  cacheReminderStats: cacheMiddleware('reminder-stats'),
   generateCacheKey,
 };
 

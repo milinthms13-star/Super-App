@@ -21,14 +21,17 @@ const readAppData = async () => {
 
   try {
     const parsed = JSON.parse(raw);
-    return {
-      ...DEFAULT_APP_DATA,
-      ...parsed,
-      moduleData: {
-        ...DEFAULT_APP_DATA.moduleData,
-        ...(parsed.moduleData || {}),
-      },
-    };
+  const mergedModuleData = {
+    ...DEFAULT_APP_DATA.moduleData,
+    ...parsed.moduleData,
+    matrimonialProfiles: parsed.moduleData?.matrimonialProfiles || DEFAULT_APP_DATA.moduleData.matrimonialProfiles || []
+  };
+
+  return {
+    ...DEFAULT_APP_DATA,
+    ...parsed,
+    moduleData: mergedModuleData,
+  };
   } catch (error) {
     return DEFAULT_APP_DATA;
   }

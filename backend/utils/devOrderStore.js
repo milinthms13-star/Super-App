@@ -50,9 +50,19 @@ const listOrders = async () => {
   return readOrders();
 };
 
-const listOrdersByEmail = async (email) => {
-  const orders = await readOrders();
-  return orders.filter((order) => order.customerEmail === email);
+const listOrdersByEmail = async (email, { cursor = null, limit = 20 } = {}) => {
+  let orders = await readOrders();
+  orders = orders.filter((order) => order.customerEmail === email);
+  orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  if (cursor) {
+    const cursorDate = new Date(cursor);
+    if (!Number.isNaN(cursorDate.getTime())) {
+      orders = orders.filter((order) => new Date(order.createdAt) < cursorDate);
+    }
+  }
+
+  return orders.slice(0, limit);
 };
 
 const findOrderById = async (orderId) => {

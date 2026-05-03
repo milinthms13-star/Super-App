@@ -37,14 +37,30 @@ const listOrders = async () => {
   return orders.map(normalizeOrderRecord);
 };
 
-const listOrdersByEmail = async (email) => {
+const listOrdersByEmail = async (email, { cursor = null, limit = 20 } = {}) => {
   if (!useMongoOrders()) {
-    return devOrderStore.listOrdersByEmail(email);
+    return devOrderStore.listOrdersByEmail(email, { cursor, limit });
+  }
+
+  let query = {
+    customerEmail: String(email || '').trim().toLowerCase(),
+  };
+
+  let sortOptions = { createdAt: -1 };
+  let cursorFilter = {};
+
+  if (cursor) {
+    const cursorDate = new Date(cursor);
+    if (!Number.isNaN(cursorDate.getTime())) {
+      cursorFilter.createdAt = { $lt: cursorDate };
+    }
   }
 
   const orders = await Order.find({
-    customerEmail: String(email || '').trim().toLowerCase(),
-  }).sort({ createdAt: -1 });
+    ...query,
+    ...cursorFilter,
+  }).sort(sortOptions).limit(limit);
+
   return orders.map(normalizeOrderRecord);
 };
 

@@ -37,6 +37,7 @@ const translations = {
         ["HomeSphere", "Explore homes, commercial spaces, rentals, land, and property services."],
         ["Feastly", "Order food, discover restaurants, and manage delivery needs with ease."],
         ["Local Market", "Discover local vendors, fresh produce, handmade goods, and neighborhood services."],
+        ["Local Market", "Discover local vendors, fresh produce, handmade goods, and neighborhood services."],
         ["SwiftRide", "Book rides, share trips, and connect with convenient transport options."],
         ["SoulMatch", "Build verified matrimonial profiles and connect with trusted matches."],
         ["VibeHub", "Share updates, discover stories, and grow your network across borders."],

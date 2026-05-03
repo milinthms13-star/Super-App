@@ -7,6 +7,38 @@ const DEFAULT_BUSINESS_CATEGORIES = [
   { id: 'localmarket', name: 'Local Market', fee: 1299, requiresFoodLicense: false },
   { id: 'ridesharing', name: 'SwiftRide', fee: 1099, requiresFoodLicense: false },
   { id: 'matrimonial', name: 'SoulMatch', fee: 1599, requiresFoodLicense: false },
+  matrimonialProfiles: [
+    {
+      id: 'mp-1',
+      name: 'Priya Nair',
+      age: 28,
+      gender: 'Woman',
+      religion: 'Hindu',
+      caste: 'Nair',
+      community: 'Malayali',
+      education: 'MCA',
+      profession: 'Software Engineer',
+      location: 'Kochi',
+      maritalStatus: 'Never Married',
+      bio: 'Family-oriented, loves travel and cooking. Looking for a stable partner.',
+      verificationStatus: 'verified'
+    },
+    {
+      id: 'mp-2',
+      name: 'Rahul Menon',
+      age: 30,
+      gender: 'Man',
+      religion: 'Hindu',
+      caste: 'Ezhava',
+      community: 'Malayali',
+      education: 'MBA',
+      profession: 'Business Analyst',
+      location: 'Trivandrum',
+      maritalStatus: 'Never Married',
+      bio: 'Career-focused, enjoys fitness and reading. Seeking compatible life partner.',
+      verificationStatus: 'verified'
+    }
+  ],
   { id: 'socialmedia', name: 'VibeHub', fee: 899, requiresFoodLicense: false },
   { id: 'reminderalert', name: 'ReminderAlert', fee: 1199, requiresFoodLicense: false },
   { id: 'sosalert', name: 'SOS FRS', fee: 1399, requiresFoodLicense: false },

@@ -11,45 +11,23 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// File upload configuration
-const uploadDir = path.join(__dirname, '../uploads/reminders');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const S3 = require('../config/s3');
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'reminder-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+const ALLOWED_MIME_TYPES = new Set([
+  'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/webm',
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain', 'text/csv'
+]);
 
-const fileFilter = (req, file, cb) => {
-  // Allow specific file types
-  const allowedMimes = [
-    'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/webm',
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-    'video/mp4', 'video/webm', 'video/quicktime',
-    'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/plain', 'text/csv'
-  ];
-
-  if (allowedMimes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only audio, image, video, and document files are allowed.'));
-  }
+const getFileTypeFromMime = (mimetype) => {
+  if (mimetype.startsWith('audio/')) return 'audio';
+  if (mimetype.startsWith('image/')) return 'image';
+  if (mimetype.startsWith('video/')) return 'video';
+  return 'document';
 };
-
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB max file size
-});
 
 const VALID_CATEGORIES = ['Work', 'Personal', 'Urgent'];
 const VALID_PRIORITIES = ['Low', 'Medium', 'High'];
@@ -183,7 +161,8 @@ router.use(authenticate);
 router.use(reminderRateLimiter);
 
 // GET /api/reminders - Get all reminders for the authenticated user
-router.get('/', async (req, res) => {
+const { cacheReminders } = require('../middleware/redisCache');
+router.get('/', cacheReminders, async (req, res) => {
   try {
     const { category, completed, limit = 50, skip = 0 } = req.query;
     const ownerId = getReminderOwnerId(req.user);
@@ -485,7 +464,8 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET /api/reminders/stats - Get reminder statistics
-router.get('/stats/summary', async (req, res) => {
+const { cacheReminderStats } = require('../middleware/redisCache');
+router.get('/stats/summary', cacheReminderStats, async (req, res) => {
   try {
     const userId = getReminderOwnerId(req.user);
 
@@ -1199,7 +1179,8 @@ router.put('/:id/share-with-contacts', async (req, res) => {
 });
 
 // GET /api/reminders/shared-with-me - Get reminders shared with me
-router.get('/shared-with-me/list', async (req, res) => {
+const { cacheReminders } = require('../middleware/redisCache');
+router.get('/shared-with-me/list', cacheReminders, async (req, res) => {
   try {
     const userId = getReminderOwnerId(req.user);
 
@@ -1225,16 +1206,24 @@ router.get('/shared-with-me/list', async (req, res) => {
 
 // ============ FILE ATTACHMENT ENDPOINTS ============
 
-// POST /api/reminders/:id/attachments - Upload file attachment to reminder
-router.post('/:id/attachments', authenticate, upload.single('file'), async (req, res) => {
+// POST /api/reminders/:id/attachments/presign - Get pre-signed S3 upload URL
+router.post('/:id/attachments/presign', authenticate, async (req, res) => {
   try {
     const userId = getReminderOwnerId(req.user);
     const reminderId = req.params.id;
+    const { fileName, fileType, mimeType, fileSize } = req.body;
 
-    if (!req.file) {
+    if (!fileName || !mimeType) {
       return res.status(400).json({
         success: false,
-        message: 'No file provided'
+        message: 'fileName and mimeType are required'
+      });
+    }
+
+    if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid file type. Only audio, image, video, and document files allowed.'
       });
     }
 
@@ -1244,36 +1233,70 @@ router.post('/:id/attachments', authenticate, upload.single('file'), async (req,
     });
 
     if (!reminder) {
-      // Clean up uploaded file
-      fs.unlinkSync(req.file.path);
       return res.status(404).json({
         success: false,
         message: 'Reminder not found'
       });
     }
 
-    // Determine file type based on MIME type
-    let fileType = 'document';
-    if (req.file.mimetype.startsWith('audio/')) {
-      fileType = 'audio';
-    } else if (req.file.mimetype.startsWith('image/')) {
-      fileType = 'image';
-    } else if (req.file.mimetype.startsWith('video/')) {
-      fileType = 'video';
+    const presigned = await S3.getPresignedUploadUrl(fileName, mimeType, fileSize || 50 * 1024 * 1024);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        uploadUrl: presigned.url,
+        fields: presigned.fields,
+        s3Key: presigned.fields.key,
+        downloadUrl: await S3.getPresignedDownloadUrl(presigned.fields.key)
+      }
+    });
+  } catch (error) {
+    logger.error('Error generating presigned URL:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate upload URL',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/:id/attachments - Complete attachment after S3 upload
+router.post('/:id/attachments', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const { s3Key, fileName, mimeType, fileSize, description, duration } = req.body;
+
+    if (!s3Key || !fileName || !mimeType || !fileSize) {
+      return res.status(400).json({
+        success: false,
+        message: 's3Key, fileName, mimeType, and fileSize are required'
+      });
     }
 
-    // Construct file URL (assuming files are served from /uploads/reminders/)
-    const fileUrl = `/uploads/reminders/${req.file.filename}`;
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
 
-    // Extract metadata
-    const { description, duration } = req.body;
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    const fileType = getFileTypeFromMime(mimeType);
+
+    const downloadUrl = await S3.getPresignedDownloadUrl(s3Key, 3600); // 1 hour
 
     const attachment = {
-      fileName: req.file.originalname,
+      fileName,
       fileType,
-      mimeType: req.file.mimetype,
-      fileUrl,
-      fileSize: req.file.size,
+      mimeType,
+      s3Key,
+      fileUrl: downloadUrl,
+      fileSize: parseInt(fileSize),
       uploadedBy: userId,
       uploadedByName: req.user?.name || req.user?.username || 'User',
       description: description || '',
@@ -1283,25 +1306,21 @@ router.post('/:id/attachments', authenticate, upload.single('file'), async (req,
     reminder.addAttachment(attachment);
     await reminder.save();
 
-    logger.info(`File attachment added to reminder ${reminderId}`);
+    logger.info(`S3 attachment registered for reminder ${reminderId}: ${s3Key}`);
 
     res.status(201).json({
       success: true,
       data: {
         reminderId,
-        attachment: reminder.attachments[reminder.attachments.length - 1]
+        attachment
       },
-      message: 'File uploaded successfully'
+      message: 'Attachment registered successfully'
     });
   } catch (error) {
-    // Clean up uploaded file on error
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    logger.error('Error uploading file:', error);
+    logger.error('Error registering S3 attachment:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to upload file',
+      message: 'Failed to register attachment',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -1341,7 +1360,7 @@ router.get('/:id/attachments', authenticate, async (req, res) => {
   }
 });
 
-// DELETE /api/reminders/:id/attachments/:attachmentId - Delete attachment from reminder
+// DELETE /api/reminders/:id/attachments/:attachmentId - Delete attachment from reminder & S3
 router.delete('/:id/attachments/:attachmentId', authenticate, async (req, res) => {
   try {
     const userId = getReminderOwnerId(req.user);
@@ -1360,35 +1379,36 @@ router.delete('/:id/attachments/:attachmentId', authenticate, async (req, res) =
       });
     }
 
-    // Find and remove attachment
-    const attachment = reminder.attachments.find(
+    // Find attachment
+    const attachmentIndex = reminder.attachments.findIndex(
       (att) => att._id.toString() === attachmentId
     );
 
-    if (!attachment) {
+    if (attachmentIndex === -1) {
       return res.status(404).json({
         success: false,
         message: 'Attachment not found'
       });
     }
 
-    // Delete file from disk
-    const filePath = path.join(__dirname, '..', attachment.fileUrl);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    const attachment = reminder.attachments[attachmentIndex];
+
+    // Delete from S3 if s3Key exists
+    if (attachment.s3Key) {
+      await S3.deleteFromS3(attachment.s3Key);
     }
 
     reminder.removeAttachment(attachmentId);
     await reminder.save();
 
-    logger.info(`Attachment deleted from reminder ${reminderId}`);
+    logger.info(`S3 attachment deleted from reminder ${reminderId}: ${attachment.s3Key || 'local'}`);
 
     res.json({
       success: true,
       message: 'Attachment deleted successfully'
     });
   } catch (error) {
-    logger.error('Error deleting attachment:', error);
+    logger.error('Error deleting S3 attachment:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete attachment',

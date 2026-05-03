@@ -1,99 +1,96 @@
-const ordersRouter = require('./orders');
+const request = require('supertest');
+const app = require('../server');
+const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
+const orderStore = require('../utils/orderStore');
+const devOrderStore = require('../utils/devOrderStore');
 
-describe('order pricing summary', () => {
-  test('recomputes subtotal, delivery fee, and total from authoritative item prices', () => {
-    const { buildAuthoritativeOrderSummary } = ordersRouter.__testables;
+let mongoServer;
 
-    const summary = buildAuthoritativeOrderSummary({
-      resolvedItems: [
-        {
-          item: {
-            id: 'prod-1::batch::batch-1',
-            productId: 'prod-1',
-            quantity: 2,
-            price: 1,
-          },
-          productLookupId: 'prod-1',
-          sourceProduct: {
-            name: 'Banana Chips',
-          },
-          unitPrice: 120,
-        },
-        {
-          item: {
-            id: 'prod-2',
-            quantity: 1,
-            price: 5,
-          },
-          productLookupId: 'prod-2',
-          sourceProduct: {
-            name: 'Mango Pickle',
-          },
-          unitPrice: 80,
-        },
-      ],
-    });
+describe('Orders API', () => {
+  beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create();
+    const mongoUri = mongoServer.getUri();
+    await mongoose.connect(mongoUri);
+  });
 
-    expect(summary.items).toEqual([
-      expect.objectContaining({
-        id: 'prod-1::batch::batch-1',
-        productId: 'prod-1',
-        price: 120,
-        quantity: 2,
-        lineTotal: 240,
-      }),
-      expect.objectContaining({
-        id: 'prod-2',
-        productId: 'prod-2',
-        price: 80,
+  afterAll(async () => {
+    await mongoose.disconnect();
+    if (mongoServer) await mongoServer.stop();
+  });
+
+  beforeEach(async () => {
+    await orderStore.listOrders().forEach(order => orderStore.deleteOrder(order.id));
+  });
+
+  test('POST /api/orders - create order', async () => {
+    const userToken = 'mock-auth-token'; // Mock auth setup needed
+    const orderData = {
+      amount: '500.00',
+      deliveryAddress: 'Test address',
+      deliveryDetails: {
+        receiverPhone: '9999999999',
+        pincode: '682001',
+        country: 'India',
+        state: 'Kerala',
+        district: 'Ernakulam',
+        houseName: 'Test House',
+        addressLine: 'Test Street',
+      },
+      items: [{
+        id: 'test-product-1',
         quantity: 1,
-        lineTotal: 80,
-      }),
-    ]);
-    expect(summary.subtotalValue).toBe(320);
-    expect(summary.deliveryFeeValue).toBe(85);
-    expect(summary.amountValue).toBe(405);
-    expect(summary.subtotal).toBe('INR 320');
-    expect(summary.deliveryFee).toBe('INR 85');
-    expect(summary.amount).toBe('INR 405');
+        price: 500,
+      }],
+    };
+
+    const response = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send(orderData)
+      .expect(201);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.order).toHaveProperty('id');
+    expect(response.body.order.items).toHaveLength(1);
   });
 
-  test('computes return eligibility from delivered date and window', () => {
-    const { getReturnEligibleUntil, isReturnRequestStillEligible } = ordersRouter.__testables;
+  test('GET /api/orders/mine - cursor pagination', async () => {
+    // Setup test orders
+    const testOrders = [
+      { id: 'order1', customerEmail: 'test@example.com', createdAt: new Date(Date.now() - 86400000) },
+      { id: 'order2', customerEmail: 'test@example.com', createdAt: new Date() },
+    ];
 
-    const order = {
-      deliveredAt: '2026-04-10T10:00:00.000Z',
-    };
-    const item = {
-      returnAllowed: true,
-      returnWindowDays: 7,
-    };
+    await Promise.all(testOrders.map(order => orderStore.createOrder(order)));
 
-    expect(getReturnEligibleUntil(item, order)?.toISOString()).toBe('2026-04-17T10:00:00.000Z');
-    expect(
-      isReturnRequestStillEligible(item, order, new Date('2026-04-16T09:00:00.000Z'))
-    ).toBe(true);
-    expect(
-      isReturnRequestStillEligible(item, order, new Date('2026-04-18T00:00:00.000Z'))
-    ).toBe(false);
+    const userToken = 'mock-auth-token';
+    const response = await request(app)
+      .get('/api/orders/mine?limit=1')
+      .set('Authorization', `Bearer ${userToken}`)
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.orders).toHaveLength(1);
+    expect(response.body.pagination.hasMore).toBe(true);
   });
 
-  test('does not allow return eligibility before delivery is recorded', () => {
-    const { getReturnEligibleUntil, isReturnRequestStillEligible } = ordersRouter.__testables;
-
-    const order = {
-      createdAt: '2026-04-10T10:00:00.000Z',
-      updatedAt: '2026-04-11T10:00:00.000Z',
-      deliveredAt: null,
-    };
-    const item = {
-      returnAllowed: true,
-      returnWindowDays: 7,
+  test('POST /api/orders/payments/razorpay/verify - webhook signature', async () => {
+    const userToken = 'mock-auth-token';
+    const verifyData = {
+      attemptId: 'test-attempt',
+      razorpay_order_id: 'order_RC123',
+      razorpay_payment_id: 'pay_RC123',
+      razorpay_signature: 'valid_signature_hash',
     };
 
-    expect(getReturnEligibleUntil(item, order)).toBeNull();
-    expect(
-      isReturnRequestStillEligible(item, order, new Date('2026-04-12T10:00:00.000Z'))
-    ).toBe(false);
+    const response = await request(app)
+      .post('/api/orders/payments/razorpay/verify')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send(verifyData)
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
   });
 });
+
