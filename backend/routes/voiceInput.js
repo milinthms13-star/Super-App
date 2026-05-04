@@ -9,9 +9,16 @@ const logger = require('../utils/logger');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY
-});
+let openai;
+try {
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY
+  });
+} catch (error) {
+  logger.warn('OpenAI client not initialized - missing API key:', error.message);
+  openai = null;
+}
+
 
 // Helper to call internal API routes
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:5000';

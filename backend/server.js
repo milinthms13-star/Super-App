@@ -90,7 +90,8 @@ app.use('/api/fooddelivery', require('./routes/fooddelivery'));
 app.use('/api/ridesharing', require('./routes/ridesharing'));
 
 // RealEstate routes
-app.use('/api/realestate', require('./routes/realestate'));
+app.use('/api/realestate', require('./routes/realestate_fixed'));
+
 
 // Voice API (new)
 app.use('/api/voice', require('./routes/voice'));
