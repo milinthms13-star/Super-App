@@ -24,7 +24,7 @@ const readAppData = async () => {
   const mergedModuleData = {
     ...DEFAULT_APP_DATA.moduleData,
     ...parsed.moduleData,
-    matrimonialProfiles: parsed.moduleData?.matrimonialProfiles || DEFAULT_APP_DATA.moduleData.matrimonialProfiles || []
+    matrimonialProfiles: parsed.moduleData?.matrimonialProfiles || DEFAULT_APP_DATA.moduleData.matrimonialProfiles || DEFAULT_MATRI_MONIAL_PROFILES || []
   };
 
   return {

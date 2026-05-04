@@ -2,9 +2,8 @@
   "appId": "com.nilahub.app",
   "appName": "NilaHub",
   "webDir": "build",
-  "bundledWebRuntime": false,
   "server": {
-    "url": "http://localhost:3000",
+    "url": "http://localhost:5000",
     "cleartext": true
   }
 }

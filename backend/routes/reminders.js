@@ -161,8 +161,8 @@ router.use(authenticate);
 router.use(reminderRateLimiter);
 
 // GET /api/reminders - Get all reminders for the authenticated user
-const { cacheReminders } = require('../middleware/redisCache');
-router.get('/', cacheReminders, async (req, res) => {
+const { cacheReminders: cacheRemindersList } = require('../middleware/redisCache');
+router.get('/', cacheRemindersList, async (req, res) => {
   try {
     const { category, completed, limit = 50, skip = 0 } = req.query;
     const ownerId = getReminderOwnerId(req.user);
@@ -464,8 +464,8 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET /api/reminders/stats - Get reminder statistics
-const { cacheReminderStats } = require('../middleware/redisCache');
-router.get('/stats/summary', cacheReminderStats, async (req, res) => {
+const { cacheReminderStats: cacheReminderStatsSummary } = require('../middleware/redisCache');
+router.get('/stats/summary', cacheReminderStatsSummary, async (req, res) => {
   try {
     const userId = getReminderOwnerId(req.user);
 
@@ -1179,8 +1179,8 @@ router.put('/:id/share-with-contacts', async (req, res) => {
 });
 
 // GET /api/reminders/shared-with-me - Get reminders shared with me
-const { cacheReminders } = require('../middleware/redisCache');
-router.get('/shared-with-me/list', cacheReminders, async (req, res) => {
+const { cacheReminders: cacheRemindersShared } = require('../middleware/redisCache');
+router.get('/shared-with-me/list', cacheRemindersShared, async (req, res) => {
   try {
     const userId = getReminderOwnerId(req.user);
 

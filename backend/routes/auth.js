@@ -67,9 +67,83 @@ const getEmailService = () => {
   });
 };
 
+const express = require('express');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+
 const router = express.Router();
 const AUTH_COOKIE_NAME = 'mb_auth_token';
 const AUTH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Google OAuth Strategy
+passport.use(new GoogleStrategy({
+  clientID: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  callbackURL: '/api/auth/google/callback'
+}, async (accessToken, refreshToken, profile, done) => {
+  try {
+    let user = await User.findOne({ 
+      $or: [
+        { googleId: profile.id },
+        { email: { $in: profile.emails.map(e => e.value) } }
+      ]
+    });
+
+    if (!user) {
+      user = new User({
+        googleId: profile.id,
+        email: profile.emails[0].value,
+        name: profile.displayName,
+        avatar: profile.photos[0]?.value,
+        registrationType: 'user',
+        role: 'user',
+        roles: ['user']
+      });
+      await user.save();
+    } else if (!user.googleId) {
+      user.googleId = profile.id;
+      user.googleEmails = profile.emails.map(e => e.value);
+      await user.save();
+    }
+
+    done(null, user);
+  } catch (err) {
+    done(err);
+  }
+}));
+
+passport.serializeUser((user, done) => done(null, user._id));
+passport.deserializeUser(async (id, done) => {
+  try {
+    const useMemoryAuth = process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production';
+    const user = useMemoryAuth
+      ? await devAuthStore.findUserById(id)
+      : await User.findById(id);
+    done(null, user);
+  } catch (err) {
+    done(err);
+  }
+}));
+
+
+// Google OAuth Routes
+router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+router.get('/google/callback', 
+  passport.authenticate('google', { 
+    session: false,
+    failureRedirect: '/login?error=google_auth_failed'
+  }), 
+  async (req, res) => {
+    try {
+      const token = createAuthToken(req.user);
+      res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
+      res.redirect(`http://localhost:3000/?google_login_success&role=${req.user.registrationType}`);
+    } catch (err) {
+      res.redirect('/login?error=token_failed');
+    }
+  }
+);
 
 // Validation schemas
 const emailSchema = Joi.object({

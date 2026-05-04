@@ -1254,8 +1254,14 @@ const Login = ({
             </div>
           )}
 
-          <div className="form-actions">
+<div className="form-actions">
+            <a href={`${API_BASE_URL}/auth/google`} className="btn btn-google">
+              <img src="/google-icon.svg" alt="Google" width="20" height="20" />
+              Continue with Google
+            </a>
+            <hr />
             <button type="submit" className="btn btn-primary" disabled={loading}>
+
               {needsUsernameSetup
                 ? loading ? "Setting username..." : "Complete Profile"
                 : otpSent

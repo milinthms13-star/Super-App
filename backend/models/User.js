@@ -235,10 +235,21 @@ const UserSchema = new mongoose.Schema(
         ref: 'Invitation',
       }
     ],
+    googleId: {
+      type: String,
+      sparse: true,
+      index: true
+    },
+    googleEmails: [{
+      type: String,
+      lowercase: true,
+      trim: true
+    }]
   },
   {
     timestamps: true,
   }
+
 );
 
 UserSchema.index({ classifiedsTotalRating: -1 });

@@ -39,6 +39,7 @@ const RealEstate = React.lazy(() => import("./modules/realestate/RealEstate"));
 const FoodDelivery = React.lazy(() => import("./modules/fooddelivery/FoodDelivery"));
 const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket"));
 const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
+const DriverMap = React.lazy(() => import("./modules/maps/DriverMap"));
 const Matrimonial = React.lazy(() => import("./modules/matrimonial/Matrimonial"));
 const SocialMedia = React.lazy(() => import("./modules/socialmedia/SocialMedia"));
 const ReminderAlert = React.lazy(() => import("./modules/reminderalert/ReminderAlert"));
@@ -938,6 +939,7 @@ function AppShell() {
               <Route path="fooddelivery" element={<FoodDelivery />} />
               <Route path="localmarket" element={<LocalMarket />} />
               <Route path="ridesharing" element={<RideSharing />} />
+              <Route path="ridesharing/driver-map" element={<DriverMap />} />
               <Route
                 path="matrimonial"
                 element={<Matrimonial onProfileUpdate={handleProfileUpdate} />}

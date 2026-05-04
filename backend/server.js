@@ -136,6 +136,8 @@ initializeWebSocket(server);
 const classifiedsWS = setupClassifiedsWebSocket(require('./config/websocket').io());
 
 // Initialize Voice Call Scheduler
+const foodOrderQueue = require('./jobs/foodOrderQueue');
+const rideQueue = require('./jobs/rideQueue');
 const voiceCallScheduler = require('./services/voiceCallScheduler');
 voiceCallScheduler.start();
 

@@ -2121,3 +2121,8 @@
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mClassified ads migration inserted 1 documents into MongoDB.\u001b[39m","timestamp":"2026-04-27 23:46:47:4647"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mReal estate properties migration inserted 1 documents into MongoDB.\u001b[39m","timestamp":"2026-04-27 23:46:47:4647"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mRestaurants migration inserted 1 documents into MongoDB.\u001b[39m","timestamp":"2026-04-27 23:46:47:4647"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mClassified ads migration inserted 1 documents into MongoDB.\u001b[39m","timestamp":"2026-05-03 19:13:05:135"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mReal estate properties migration inserted 1 documents into MongoDB.\u001b[39m","timestamp":"2026-05-03 19:13:05:135"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mRestaurants migration inserted 1 documents into MongoDB.\u001b[39m","timestamp":"2026-05-03 19:13:05:135"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mUnable to resolve flash sale for product starter-1: Cast to ObjectId failed for value \"starter-1\" (type string) at path \"productId\" for model \"FlashSale\"\u001b[39m","timestamp":"2026-05-03 19:13:07:137"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mUnable to resolve flash sale for product batch-1: Cast to ObjectId failed for value \"batch-1\" (type string) at path \"productId\" for model \"FlashSale\"\u001b[39m","timestamp":"2026-05-03 19:13:07:137"}

@@ -1,0 +1,141 @@
+.driver-map-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f5f5f5;
+}
+
+.driver-map-header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.driver-map-header h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.driver-status {
+  background: rgba(255,255,255,0.2);
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.driver-map {
+  flex: 1;
+  min-height: 400px;
+  border-radius: 0 0 20px 20px;
+  overflow: hidden;
+  position: relative;
+}
+
+.driver-controls {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: white;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  flex-wrap: wrap;
+}
+
+.control-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.control-btn:hover {
+  background: #e2e8f0;
+  transform: translateY(-1px);
+}
+
+.control-btn.active {
+  background: #10b981;
+  color: white;
+}
+
+.control-btn.arrival {
+  background: #f59e0b;
+  color: white;
+}
+
+.control-btn.complete {
+  background: #059669;
+  color: white;
+}
+
+.ride-info {
+  padding: 1rem;
+  background: white;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ride-info > div {
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.ride-info > div:last-child {
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.driver-map-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 1.2rem;
+  color: #dc2626;
+}
+
+/* Leaflet overrides */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+}
+
+.driver-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.pickup-marker {
+  background: #10b981 !important;
+}
+
+.dropoff-marker {
+  background: #ef4444 !important;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .driver-controls {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+  
+  .control-btn {
+    min-width: auto;
+    flex: 1 1 45%;
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+}
+

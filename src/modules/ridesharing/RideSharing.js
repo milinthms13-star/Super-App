@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
+import rideSharingService from "../../services/rideSharingService";
 import "../../styles/RideSharing.css";
 
 const ROLE_MODES = [
@@ -301,7 +303,8 @@ const buildInitialNotifications = () => [
 ];
 
 const RideSharing = () => {
-  const { currentUser, mockData } = useApp();
+const { currentUser, mockData } = useApp();
+  const navigate = useNavigate();
   const baseMode = useMemo(() => getBaseMode(currentUser), [currentUser]);
   const rideCatalog = useMemo(() => {
     const incoming = Array.isArray(mockData?.rideOffers) ? mockData.rideOffers : [];
@@ -961,12 +964,14 @@ const RideSharing = () => {
                     >
                       {driverOnline ? "Go offline" : "Go online"}
                     </button>
-                    <button
+                      <button
                       type="button"
                       className="rideshare-secondary-button"
                       onClick={() => {
-                        setStatusMessage("Navigation opened with pickup and drop waypoints.");
-                        pushNotification("Driver navigation synced with current ride assignment.");
+                        const pickup = bookingForm.pickup || activeTrip?.pickup || 'Infopark';
+                        const dropoff = bookingForm.dropoff || activeTrip?.dropoff || 'Lulu Mall';
+                        navigate(`/ridesharing/driver-map?pickup=${encodeURIComponent(pickup)}&dropoff=${encodeURIComponent(dropoff)}`);
+                        pushNotification(`Navigation opened for ${pickup} → ${dropoff}`);
                       }}
                     >
                       Open navigation
