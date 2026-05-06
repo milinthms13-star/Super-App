@@ -375,6 +375,25 @@ export const getRemindersSharedWithMe = async () => {
   }
 };
 
+/**
+ * Acknowledge a reminder that was shared with the current trusted contact
+ * @param {string} reminderId - Shared reminder ID
+ * @returns {Promise<Object>} - Updated reminder
+ */
+export const acknowledgeSharedReminder = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(
+      `/reminders/shared-with-me/${reminderId}/acknowledge`
+    );
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error acknowledging shared reminder:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to acknowledge shared reminder"
+    );
+  }
+};
+
 // ============ FILE ATTACHMENT FUNCTIONS ============
 
 /**
@@ -496,6 +515,7 @@ const remindersService = {
   removeTrustedContact,
   shareReminderWithContacts,
   getRemindersSharedWithMe,
+  acknowledgeSharedReminder,
   uploadReminderAttachment,
   getRemindersAttachments,
   getAttachmentsByType,

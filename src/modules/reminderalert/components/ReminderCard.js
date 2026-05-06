@@ -142,17 +142,6 @@ const ReminderCard = React.memo(
         </div>
       </article>
     );
-  },
-  (prevProps, nextProps) => {
-    // Custom comparison - re-render only if reminder data changed
-    return (
-      prevProps.reminder._id === nextProps.reminder._id &&
-      prevProps.reminder.completed === nextProps.reminder.completed &&
-      prevProps.reminder.title === nextProps.reminder.title &&
-      prevProps.reminder.dueDate === nextProps.reminder.dueDate &&
-      prevProps.reminder.priority === nextProps.reminder.priority &&
-      prevProps.reminder.category === nextProps.reminder.category
-    );
   }
 );
 

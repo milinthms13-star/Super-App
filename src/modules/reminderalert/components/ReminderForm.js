@@ -117,7 +117,8 @@ const ReminderForm = React.memo(({
       ...formData,
       recipientPhoneNumber: voiceCallData.recipientPhoneNumber,
       voiceMessage: voiceCallData.voiceMessage,
-      messageType: voiceCallData.messageType
+      messageType: voiceCallData.messageType,
+      voiceNoteUrl: voiceCallData.voiceNoteUrl,
     };
 
     const { isValid, errors } = validateReminderForm(validationData);
@@ -495,6 +496,9 @@ const ReminderForm = React.memo(({
                           Clear
                         </button>
                       </div>
+                    )}
+                    {formErrors.voiceNoteUrl && (
+                      <small className="error-text" role="alert">{formErrors.voiceNoteUrl}</small>
                     )}
                   </div>
                 </div>

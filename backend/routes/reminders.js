@@ -9,9 +9,9 @@ const voiceCallService = require('../services/voiceCallService');
 const voiceCallScheduler = require('../services/voiceCallScheduler');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
 const S3 = require('../config/s3');
+const { uploadToS3, generateSignedUrl } = require('../utils/s3Storage');
 
 const ALLOWED_MIME_TYPES = new Set([
   'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/ogg', 'audio/webm',
@@ -36,6 +36,13 @@ const VALID_RECURRING = ['none', 'daily', 'weekly', 'monthly'];
 const VALID_FILE_TYPES = ['voice', 'image', 'document', 'video', 'audio'];
 const VALID_TRUSTED_CONTACT_RELATIONSHIPS = ['family', 'friend', 'caregiver', 'colleague', 'other'];
 const TRUSTED_CONTACT_DEFAULT_MESSAGE = 'I would like to add you as a trusted contact for my reminders';
+const PUBLIC_REMINDER_PATHS = new Set(['/voice/callback', '/voice/acknowledge']);
+const attachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+  },
+});
 
 const getReminderOwnerId = (user = {}) => String(user?._id || user?.id || '');
 
@@ -148,14 +155,41 @@ const resolveTrustedContactRecipient = async (UserModel, recipientIdentifier) =>
   return UserModel.findOne({ [lookupField]: normalizedLookup });
 };
 
+const sanitizeFileName = (fileName = '') =>
+  path.basename(String(fileName || 'attachment'))
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+const buildReminderAttachmentStorageKey = (reminderId, fileName) =>
+  `reminders/${String(reminderId)}/attachments/${Date.now()}-${sanitizeFileName(fileName)}`;
+
+const serializeSharedReminderForContact = (reminder, contactId) => {
+  const reminderObject =
+    typeof reminder?.toObject === 'function' ? reminder.toObject() : { ...(reminder || {}) };
+  const matchingAcknowledgment = (reminderObject.trustedContactAcknowledgments || []).find(
+    (entry) => String(entry.contactId) === String(contactId)
+  );
+
+  return {
+    ...reminderObject,
+    viewerAcknowledged: Boolean(matchingAcknowledgment?.acknowledged),
+    viewerAcknowledgedAt: matchingAcknowledgment?.acknowledgedAt || null,
+  };
+};
+
 // Create rate limiter for reminders
 const reminderRateLimiter = createModerateRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
 });
 
-// Apply authentication to all routes
-router.use(authenticate);
+// Apply authentication to all non-webhook routes
+router.use((req, res, next) => {
+  if (PUBLIC_REMINDER_PATHS.has(req.path)) {
+    return next();
+  }
+
+  return authenticate(req, res, next);
+});
 
 // Apply rate limiting
 router.use(reminderRateLimiter);
@@ -367,6 +401,26 @@ router.put('/:id', async (req, res) => {
       reminder.messageType === 'audio'
         ? Boolean(String(reminder.voiceNoteUrl || '').trim())
         : Boolean(String(reminder.voiceMessage || '').trim());
+
+    if (hasCallReminder) {
+      if (!String(reminder.recipientPhoneNumber || '').trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Recipient phone number is required for voice call reminders'
+        });
+      }
+
+      if (!hasPlayableVoiceContent) {
+        return res.status(400).json({
+          success: false,
+          message:
+            reminder.messageType === 'audio'
+              ? 'Voice note URL is required for audio reminders'
+              : 'Voice message is required'
+        });
+      }
+    }
+
     const shouldResetVoiceSchedule =
       completed === false ||
       [
@@ -748,11 +802,29 @@ router.post('/voice/callback', async (req, res) => {
     });
 
     if (reminder) {
+      const hasFutureRecurringCall =
+        reminder.recurring !== 'none' &&
+        reminder.nextCallTime instanceof Date &&
+        reminder.nextCallTime > new Date();
+
       reminder.lastCallTime = new Date();
-      reminder.callStatus = callData.status;
-      if (callData.recordingUrl) {
-        reminder.voiceNoteUrl = callData.recordingUrl;
+      reminder.callStatus = hasFutureRecurringCall ? 'pending' : callData.status;
+
+      const callHistoryEntry = reminder.callHistory.find(
+        (entry) => entry.callId === callData.callId
+      );
+
+      if (callHistoryEntry) {
+        callHistoryEntry.status = callData.status;
+
+        if (callData.recordingDuration !== undefined && callData.recordingDuration !== null) {
+          const parsedDuration = parseInt(callData.recordingDuration, 10);
+          if (!Number.isNaN(parsedDuration)) {
+            callHistoryEntry.duration = parsedDuration;
+          }
+        }
       }
+
       await reminder.save();
     }
 
@@ -766,15 +838,40 @@ router.post('/voice/callback', async (req, res) => {
 // POST /api/reminders/voice/acknowledge - Handle voice call acknowledgment
 router.post('/voice/acknowledge', async (req, res) => {
   try {
-    const { Digits } = req.body;
+    const { Digits, CallSid } = req.body;
 
     logger.info(`Voice call acknowledgment received: ${Digits}`);
 
-    // User pressed a digit, so call was answered
-    res.json({ success: true, acknowledged: !!Digits });
+    if (CallSid && Digits) {
+      const reminder = await Reminder.findOne({
+        'callHistory.callId': CallSid
+      });
+
+      if (reminder) {
+        reminder.callStatus = 'answered';
+        reminder.lastCallTime = new Date();
+
+        const callHistoryEntry = reminder.callHistory.find(
+          (entry) => entry.callId === CallSid
+        );
+
+        if (callHistoryEntry) {
+          callHistoryEntry.status = 'answered';
+        }
+
+        await reminder.save();
+      }
+    }
+
+    res
+      .type('text/xml')
+      .send('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you. This reminder has been acknowledged.</Say></Response>');
   } catch (error) {
     logger.error('Error processing acknowledgment:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res
+      .status(200)
+      .type('text/xml')
+      .send('<?xml version="1.0" encoding="UTF-8"?><Response><Say>We could not record your acknowledgment right now.</Say></Response>');
   }
 });
 
@@ -1153,11 +1250,30 @@ router.put('/:id/share-with-contacts', async (req, res) => {
       });
     }
 
+    const existingAcknowledgments = new Map(
+      (reminder.trustedContactAcknowledgments || []).map((entry) => [
+        String(entry.contactId),
+        entry
+      ])
+    );
+
     reminder.sharedWithTrustedContacts = contactIds;
-    reminder.trustedContactAcknowledgments = contactIds.map(id => ({
-      contactId: id,
-      acknowledged: false
-    }));
+    reminder.trustedContactAcknowledgments = contactIds.map(id => {
+      const existingEntry = existingAcknowledgments.get(String(id));
+
+      if (existingEntry) {
+        return {
+          contactId: id,
+          acknowledged: Boolean(existingEntry.acknowledged),
+          acknowledgedAt: existingEntry.acknowledgedAt || undefined
+        };
+      }
+
+      return {
+        contactId: id,
+        acknowledged: false
+      };
+    });
 
     await reminder.save();
 
@@ -1192,13 +1308,59 @@ router.get('/shared-with-me/list', cacheRemindersShared, async (req, res) => {
 
     res.json({
       success: true,
-      data: reminders
+      data: reminders.map((reminder) => serializeSharedReminderForContact(reminder, userId))
     });
   } catch (error) {
     logger.error('Error fetching shared reminders:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch shared reminders',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/shared-with-me/:id/acknowledge - Acknowledge a shared reminder
+router.post('/shared-with-me/:id/acknowledge', async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({
+      _id: req.params.id,
+      sharedWithTrustedContacts: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Shared reminder not found'
+      });
+    }
+
+    const acknowledgment = reminder.trustedContactAcknowledgments.find(
+      (entry) => String(entry.contactId) === userId
+    );
+
+    if (!acknowledgment) {
+      return res.status(400).json({
+        success: false,
+        message: 'This reminder is not assigned to the current trusted contact'
+      });
+    }
+
+    acknowledgment.acknowledged = true;
+    acknowledgment.acknowledgedAt = new Date();
+    await reminder.save();
+
+    res.json({
+      success: true,
+      data: serializeSharedReminderForContact(reminder, userId),
+      message: 'Reminder acknowledged successfully'
+    });
+  } catch (error) {
+    logger.error('Error acknowledging shared reminder:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to acknowledge shared reminder',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -1260,19 +1422,12 @@ router.post('/:id/attachments/presign', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/reminders/:id/attachments - Complete attachment after S3 upload
-router.post('/:id/attachments', authenticate, async (req, res) => {
+// POST /api/reminders/:id/attachments - Upload attachment directly or register an S3 upload
+router.post('/:id/attachments', attachmentUpload.single('file'), async (req, res) => {
   try {
     const userId = getReminderOwnerId(req.user);
     const reminderId = req.params.id;
     const { s3Key, fileName, mimeType, fileSize, description, duration } = req.body;
-
-    if (!s3Key || !fileName || !mimeType || !fileSize) {
-      return res.status(400).json({
-        success: false,
-        message: 's3Key, fileName, mimeType, and fileSize are required'
-      });
-    }
 
     const reminder = await Reminder.findOne({
       _id: reminderId,
@@ -1286,27 +1441,69 @@ router.post('/:id/attachments', authenticate, async (req, res) => {
       });
     }
 
-    const fileType = getFileTypeFromMime(mimeType);
+    let attachment = null;
 
-    const downloadUrl = await S3.getPresignedDownloadUrl(s3Key, 3600); // 1 hour
+    if (req.file) {
+      const uploadedMimeType = req.file.mimetype || 'application/octet-stream';
 
-    const attachment = {
-      fileName,
-      fileType,
-      mimeType,
-      s3Key,
-      fileUrl: downloadUrl,
-      fileSize: parseInt(fileSize),
-      uploadedBy: userId,
-      uploadedByName: req.user?.name || req.user?.username || 'User',
-      description: description || '',
-      ...(duration && { duration: parseInt(duration) })
-    };
+      if (!ALLOWED_MIME_TYPES.has(uploadedMimeType)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid file type. Only audio, image, video, and document files allowed.'
+        });
+      }
+
+      const safeFileName = sanitizeFileName(req.file.originalname || `attachment-${Date.now()}`);
+      const storageKey = buildReminderAttachmentStorageKey(reminderId, safeFileName);
+      const uploadResult = await uploadToS3(req.file.buffer, storageKey, {
+        contentType: uploadedMimeType
+      });
+      const storedKey = uploadResult.s3Key || storageKey;
+      const fileUrl = uploadResult.s3Url || generateSignedUrl(storedKey);
+
+      attachment = {
+        fileName: safeFileName,
+        fileType: getFileTypeFromMime(uploadedMimeType),
+        mimeType: uploadedMimeType,
+        s3Key: storedKey,
+        fileUrl,
+        fileSize: req.file.size,
+        uploadedBy: req.user?._id || userId,
+        uploadedByName: req.user?.name || req.user?.username || 'User',
+        description: description || '',
+        ...(duration && { duration: parseInt(duration, 10) })
+      };
+
+      logger.info(`Attachment uploaded directly for reminder ${reminderId}: ${storedKey}`);
+    } else {
+      if (!s3Key || !fileName || !mimeType || !fileSize) {
+        return res.status(400).json({
+          success: false,
+          message: 's3Key, fileName, mimeType, and fileSize are required'
+        });
+      }
+
+      const fileType = getFileTypeFromMime(mimeType);
+      const downloadUrl = await S3.getPresignedDownloadUrl(s3Key, 3600);
+
+      attachment = {
+        fileName,
+        fileType,
+        mimeType,
+        s3Key,
+        fileUrl: downloadUrl,
+        fileSize: parseInt(fileSize, 10),
+        uploadedBy: req.user?._id || userId,
+        uploadedByName: req.user?.name || req.user?.username || 'User',
+        description: description || '',
+        ...(duration && { duration: parseInt(duration, 10) })
+      };
+
+      logger.info(`S3 attachment registered for reminder ${reminderId}: ${s3Key}`);
+    }
 
     reminder.addAttachment(attachment);
     await reminder.save();
-
-    logger.info(`S3 attachment registered for reminder ${reminderId}: ${s3Key}`);
 
     res.status(201).json({
       success: true,

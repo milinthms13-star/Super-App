@@ -55,7 +55,8 @@ class VoiceCallService {
       recipientPhoneNumber,
       voiceMessage,
       messageType = 'text',
-      senderName = 'System'
+      senderName = 'System',
+      voiceNoteUrl = ''
     } = reminderData;
 
     try {
@@ -70,6 +71,7 @@ class VoiceCallService {
         senderName,
         messageType,
         voiceMessage,
+        voiceNoteUrl,
         initiatedAt: new Date(),
         status: 'pending'
       };
@@ -125,7 +127,7 @@ class VoiceCallService {
     logger.info(`  Recipient: ${callData.recipientPhoneNumber}`);
     logger.info(`  From: ${callData.senderName}`);
     logger.info(`  Message Type: ${callData.messageType}`);
-    logger.info(`  Message: "${callData.voiceMessage.substring(0, 100)}..."`);
+    logger.info(`  Message: "${String(callData.voiceMessage || '').substring(0, 100)}..."`);
 
     // Simulate call in progress
     return {
@@ -171,16 +173,43 @@ class VoiceCallService {
    */
   async handleCallStatusCallback(data) {
     const { CallSid, CallStatus, RecordingUrl, RecordingDuration } = data;
+    const normalizedStatus = this.normalizeProviderCallStatus(CallStatus);
 
     logger.info(`Call status update: ${CallSid} - ${CallStatus}`);
 
     return {
       callId: CallSid,
-      status: CallStatus,
+      status: normalizedStatus,
+      providerStatus: String(CallStatus || '').trim().toLowerCase(),
       recordingUrl: RecordingUrl,
       recordingDuration: RecordingDuration,
       processedAt: new Date()
     };
+  }
+
+  normalizeProviderCallStatus(status) {
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+
+    switch (normalizedStatus) {
+      case 'queued':
+      case 'initiated':
+      case 'ringing':
+      case 'in-progress':
+        return 'ringing';
+      case 'busy':
+      case 'canceled':
+      case 'cancelled':
+      case 'failed':
+        return 'failed';
+      case 'no-answer':
+        return 'no-answer';
+      case 'answered':
+        return 'answered';
+      case 'completed':
+        return 'completed';
+      default:
+        return 'failed';
+    }
   }
 
   /**

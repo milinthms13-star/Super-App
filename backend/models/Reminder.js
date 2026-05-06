@@ -151,6 +151,10 @@ const reminderSchema = new mongoose.Schema({
       type: String,
       required: true, // S3 or cloud storage URL
     },
+    s3Key: {
+      type: String,
+      trim: true,
+    },
     fileSize: {
       type: Number, // Size in bytes
     },
@@ -269,20 +273,24 @@ reminderSchema.methods.isVoiceCallDue = function() {
 
 // Method to record a call attempt
 reminderSchema.methods.recordCallAttempt = function(status, callId, error = null) {
+  const attemptTime = new Date();
+  const nextScheduledOccurrence = this.nextCallTime || this.lastCallTime || this.dueDate || attemptTime;
+
   this.callHistory.push({
-    callTime: new Date(),
+    callTime: attemptTime,
     status,
     callId,
     error
   });
   
-  this.lastCallTime = new Date();
+  this.lastCallTime = attemptTime;
   this.callAttempts += 1;
   this.callStatus = status;
 
   // Calculate next call time if recurring
   if (this.recurring !== 'none') {
-    this.nextCallTime = this.calculateNextCallTime();
+    this.nextCallTime = this.calculateNextCallTime(nextScheduledOccurrence);
+    this.callStatus = 'pending';
   } else if (status === 'completed' || this.callAttempts >= this.maxCallAttempts) {
     this.callStatus = 'completed';
   }

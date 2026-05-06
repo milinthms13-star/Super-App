@@ -71,6 +71,7 @@ app.use('/api/localmarket', require('./routes/localmarket'));
 app.use('/api/messaging', require('./routes/messaging'));
 app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/referralprogram', require('./routes/referralprogram'));
 app.use('/api/reminders', require('./routes/reminders'));

@@ -345,6 +345,10 @@ const ReminderAlert = () => {
         : '',
       voiceMessage: formData.reminders.includes('Call') ? voiceCallData.voiceMessage : '',
       messageType: formData.reminders.includes('Call') ? voiceCallData.messageType : 'text',
+      voiceNoteUrl:
+        formData.reminders.includes('Call') && voiceCallData.messageType === 'audio'
+          ? voiceCallData.voiceNoteUrl
+          : '',
     };
 
     const { isValid, errors } = validateReminderForm(validationData);
@@ -394,9 +398,7 @@ const ReminderAlert = () => {
         }
       }
 
-      if (!editingTaskId && formData.reminders.includes('Call')) {
-        await loadReminders();
-      }
+      await loadReminders();
 
       announceToScreenReader(
         editingTaskId ? 'Reminder updated successfully' : 'Reminder created successfully',

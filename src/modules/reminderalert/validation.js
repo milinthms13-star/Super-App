@@ -13,6 +13,7 @@
  * @param {string} [formData.recipientPhoneNumber] - Phone for voice calls
  * @param {string} [formData.messageType] - Message type (text|audio)
  * @param {string} [formData.voiceMessage] - Text message for voice calls
+ * @param {string} [formData.voiceNoteUrl] - Uploaded audio URL for prerecorded reminders
  * 
  * @returns {Object} Validation result
  * @returns {boolean} returns.isValid - Is form valid
@@ -97,6 +98,10 @@ export const validateReminderForm = (formData) => {
 
     if (formData.messageType === 'text' && !formData.voiceMessage?.trim()) {
       errors.voiceMessage = 'Message text required for voice call reminders';
+    }
+
+    if (formData.messageType === 'audio' && !formData.voiceNoteUrl?.trim()) {
+      errors.voiceNoteUrl = 'Record or upload a voice note for audio reminders';
     }
   }
 

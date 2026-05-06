@@ -75,6 +75,7 @@ class VoiceCallScheduler {
 
       const now = new Date();
       const gracePeriodStart = new Date(now.getTime() - this.graceWindowMs);
+      const scheduledTimeExpression = { $ifNull: ['$nextCallTime', '$dueDate'] };
 
       // Find all pending voice call reminders that are due
       const dueReminders = await Reminder.find({
@@ -94,16 +95,26 @@ class VoiceCallScheduler {
             voiceMessage: { $exists: true, $nin: [null, ''] }
           }
         ],
-        // Reminder time must be in the past (including grace period)
-        $expr: {
-          $lte: [{ $ifNull: ['$nextCallTime', '$dueDate'] }, now]
-        },
-        // Reminder must be within the grace window (not too far in the past)
-        nextCallTime: { $gte: gracePeriodStart },
-        // Still have attempts remaining
-        $expr: {
-          $lt: ['$callAttempts', '$maxCallAttempts']
-        }
+        $and: [
+          // Reminder time must be in the past or due right now.
+          {
+            $expr: {
+              $lte: [scheduledTimeExpression, now]
+            }
+          },
+          // Reminder must still be inside the grace window.
+          {
+            $expr: {
+              $gte: [scheduledTimeExpression, gracePeriodStart]
+            }
+          },
+          // Still have attempts remaining.
+          {
+            $expr: {
+              $lt: ['$callAttempts', '$maxCallAttempts']
+            }
+          }
+        ]
       });
 
       if (dueReminders.length === 0) {

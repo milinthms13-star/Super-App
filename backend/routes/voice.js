@@ -1,8 +1,9 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { authenticate } = require('../middleware/auth');
 const Call = require('../models/Call');
 const FileStorage = require('../models/FileStorage');
-const { uploadToS3 } = require('../utils/s3Storage');
+const { uploadToS3, generateSignedUrl } = require('../utils/s3Storage');
 const { emitToUser } = require('../config/websocket');
 const router = express.Router();
 
@@ -119,37 +120,70 @@ router.post('/voicenote', authenticate, upload.single('audio'), async (req, res)
     const mimeType = req.file.mimetype || 'audio/webm';
     const extension = getAudioFileExtension(mimeType);
     const originalFileName = req.file.originalname || `voice-note.${extension}`;
-    const result = await uploadToS3(req.file.buffer, `voice-notes/${module}/${contextId}/${Date.now()}.${extension}`, {
+    const normalizedModule = String(module || 'general').trim().toLowerCase() || 'general';
+    const normalizedContextId = String(contextId || 'new').trim() || 'new';
+    const sanitizedFileName = originalFileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey = `voice-notes/${normalizedModule}/${normalizedContextId}/${Date.now()}-${sanitizedFileName}`;
+    const result = await uploadToS3(req.file.buffer, storageKey, {
       contentType: mimeType
     });
+    const storedKey = result.s3Key || storageKey;
+    const storedUrl = result.s3Url || generateSignedUrl(storedKey);
 
-    const voiceNote = new FileStorage({
+    let voiceNote = {
       uploadedBy: req.user._id,
-      contextId,
-      contextModule: module,
+      contextId: normalizedContextId,
+      contextModule: normalizedModule,
       recipientId,
       originalFileName,
+      fileName: originalFileName,
       mimeType,
+      fileType: 'audio',
       fileSize: req.file.size,
-      s3Url: result.s3Url
-    });
+      s3Key: storedKey,
+      s3Url: storedUrl,
+      status: 'completed',
+    };
 
-    await voiceNote.save();
+    if (normalizedModule === 'chat' && mongoose.Types.ObjectId.isValid(normalizedContextId)) {
+      const fileRecord = new FileStorage({
+        uploadedBy: req.user._id,
+        chatId: normalizedContextId,
+        fileName: originalFileName,
+        originalFileName,
+        fileSize: req.file.size,
+        fileType: 'audio',
+        mimeType,
+        s3Key: storedKey,
+        s3Url: storedUrl,
+        status: 'completed',
+      });
+
+      await fileRecord.save();
+      voiceNote = {
+        ...fileRecord.toObject(),
+        url: fileRecord.s3Url || generateSignedUrl(fileRecord.s3Key),
+      };
+    } else {
+      voiceNote = {
+        ...voiceNote,
+        url: storedUrl,
+      };
+    }
 
     // Emit real-time notification
-    emitToUser(recipientId, 'voice:note-received', {
-      voiceNoteId: voiceNote._id,
-      sender: req.user.name,
-      module,
-      contextId
-    });
+    if (recipientId && mongoose.Types.ObjectId.isValid(recipientId)) {
+      emitToUser(recipientId, 'voice:note-received', {
+        voiceNoteId: voiceNote._id,
+        sender: req.user.name,
+        module: normalizedModule,
+        contextId: normalizedContextId
+      });
+    }
 
     res.json({
       success: true,
-      voiceNote: {
-        ...voiceNote.toObject(),
-        url: voiceNote.s3Url
-      }
+      voiceNote
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

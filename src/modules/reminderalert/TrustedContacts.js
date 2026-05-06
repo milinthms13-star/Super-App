@@ -3,11 +3,14 @@ import {
   getSentTrustedContactInvites,
   getReceivedTrustedContactInvites,
   getAcceptedTrustedContacts,
+  getRemindersSharedWithMe,
   acceptTrustedContactInvite,
+  acknowledgeSharedReminder,
   rejectTrustedContactInvite,
   removeTrustedContact,
   sendTrustedContactInvite,
 } from "../../services/remindersService";
+import { formatReminderDueDate } from "./reminderUtils";
 
 const TrustedContacts = ({ onContactsUpdate }) => {
   const [activeTab, setActiveTab] = useState("accepted");
@@ -16,6 +19,7 @@ const TrustedContacts = ({ onContactsUpdate }) => {
   const [sentInvites, setSentInvites] = useState([]);
   const [receivedInvites, setReceivedInvites] = useState([]);
   const [acceptedContacts, setAcceptedContacts] = useState([]);
+  const [sharedReminders, setSharedReminders] = useState([]);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteForm, setInviteForm] = useState({
     recipientId: "",
@@ -30,19 +34,22 @@ const TrustedContacts = ({ onContactsUpdate }) => {
     try {
       setLoading(true);
       setError(null);
-      const [sent, received, accepted] = await Promise.all([
+      const [sent, received, accepted, shared] = await Promise.all([
         getSentTrustedContactInvites(),
         getReceivedTrustedContactInvites(),
         getAcceptedTrustedContacts(),
+        getRemindersSharedWithMe(),
       ]);
 
       const nextSent = sent.data || [];
       const nextReceived = received.data || [];
       const nextAccepted = accepted.data || [];
+      const nextShared = shared.data || [];
 
       setSentInvites(nextSent);
       setReceivedInvites(nextReceived);
       setAcceptedContacts(nextAccepted);
+      setSharedReminders(nextShared);
 
       if (onContactsUpdate) {
         onContactsUpdate(nextAccepted);
@@ -64,8 +71,9 @@ const TrustedContacts = ({ onContactsUpdate }) => {
       accepted: acceptedContacts.length,
       sent: sentInvites.length,
       received: receivedInvites.length,
+      shared: sharedReminders.length,
     }),
-    [acceptedContacts.length, receivedInvites.length, sentInvites.length]
+    [acceptedContacts.length, receivedInvites.length, sentInvites.length, sharedReminders.length]
   );
 
   const handleInviteFormChange = (event) => {
@@ -139,6 +147,16 @@ const TrustedContacts = ({ onContactsUpdate }) => {
       await loadTrustedContactsData();
     } catch (err) {
       setError(err.message || "Failed to remove trusted contact");
+    }
+  };
+
+  const handleAcknowledgeShared = async (reminderId) => {
+    try {
+      await acknowledgeSharedReminder(reminderId);
+      setSuccessMessage("Reminder acknowledged.");
+      await loadTrustedContactsData();
+    } catch (err) {
+      setError(err.message || "Failed to acknowledge shared reminder");
     }
   };
 
@@ -218,6 +236,13 @@ const TrustedContacts = ({ onContactsUpdate }) => {
             onClick={() => setActiveTab("received")}
           >
             Received ({summary.received})
+          </button>
+          <button
+            type="button"
+            className={`tab-button ${activeTab === "shared" ? "active" : ""}`}
+            onClick={() => setActiveTab("shared")}
+          >
+            Shared reminders ({summary.shared})
           </button>
         </div>
 
@@ -420,6 +445,56 @@ const TrustedContacts = ({ onContactsUpdate }) => {
               renderEmptyState(
                 "No pending invites",
                 "Incoming trusted contact requests will appear here when someone adds you."
+              )
+            )}
+          </div>
+        )}
+
+        {activeTab === "shared" && (
+          <div className="trusted-contacts-tab-content">
+            {loading ? (
+              <div className="reminderalert-callout">
+                <strong>Loading shared reminders...</strong>
+              </div>
+            ) : sharedReminders.length > 0 ? (
+              <div className="trusted-contacts-list">
+                {sharedReminders.map((reminder) => (
+                  <article key={reminder._id} className="trusted-contact-card">
+                    <div className="contact-info">
+                      <h4>{reminder.title || "Untitled reminder"}</h4>
+                      <p>{formatReminderDueDate(reminder.dueDate, reminder.dueTime)}</p>
+                      {reminder.description ? <p>{reminder.description}</p> : null}
+                      <div className="trusted-contact-meta">
+                        <span className="contact-chip">
+                          {reminder.priority || "Medium"} priority
+                        </span>
+                        <span className="contact-chip muted">
+                          {reminder.viewerAcknowledged
+                            ? `Acknowledged on ${new Date(reminder.viewerAcknowledgedAt).toLocaleString()}`
+                            : "Awaiting your acknowledgment"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="contact-actions">
+                      {reminder.viewerAcknowledged ? (
+                        <span className="contact-chip">Acknowledged</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="reminderalert-filter-chip active"
+                          onClick={() => handleAcknowledgeShared(reminder._id)}
+                        >
+                          Acknowledge
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              renderEmptyState(
+                "No shared reminders yet",
+                "Reminders that other people share with you will appear here for acknowledgment."
               )
             )}
           </div>
