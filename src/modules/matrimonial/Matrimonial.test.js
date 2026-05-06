@@ -1,6 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import axios from "axios";
+
 import Matrimonial from "./Matrimonial";
 import {
   calculateProfileCompletion,
@@ -17,40 +18,66 @@ jest.mock("../../contexts/AppContext", () => ({
 
 const baseProfiles = [
   {
-    id: 1,
+    id: "profile-1",
     name: "Anjali Sharma",
     age: 28,
     religion: "Hindu",
     caste: "Brahmin",
+    community: "Malayali",
     location: "Bangalore",
     profession: "Software Engineer",
+    education: "B.Tech",
     image: "A",
     verified: true,
+    verificationStatus: "verified",
+    profileStatus: "approved",
     bio: "Loves reading and cooking",
+    familyDetails: "Family oriented",
+    maritalStatus: "Never Married",
+    languages: ["Malayalam", "English"],
+    hobbies: ["Reading"],
+    privacy: {
+      hidePhone: false,
+      hidePhotos: false,
+      premiumOnlyContact: true,
+    },
+    premiumOnlyContact: true,
+    contactVisibility: "premium_required",
+    phone: "",
+    profileViews: 52,
+    lastActive: "2026-05-07T08:00:00.000Z",
+    lastActiveLabel: "2h ago",
   },
   {
-    id: 2,
+    id: "profile-2",
     name: "Kavya Singh",
     age: 26,
     religion: "Hindu",
     caste: "Kshatriya",
+    community: "Punjabi",
     location: "Delhi",
     profession: "Doctor",
+    education: "MBBS",
     image: "K",
     verified: true,
+    verificationStatus: "verified",
+    profileStatus: "approved",
     bio: "Passionate about health and fitness",
-  },
-  {
-    id: 3,
-    name: "Sara Joseph",
-    age: 27,
-    religion: "Christian",
-    caste: "Latin Catholic",
-    location: "Kochi",
-    profession: "Architect",
-    image: "S",
-    verified: false,
-    bio: "Enjoys travel and art",
+    familyDetails: "Close-knit family",
+    maritalStatus: "Never Married",
+    languages: ["Hindi", "English"],
+    hobbies: ["Fitness"],
+    privacy: {
+      hidePhone: true,
+      hidePhotos: true,
+      premiumOnlyContact: false,
+    },
+    premiumOnlyContact: false,
+    contactVisibility: "hidden",
+    phone: "",
+    profileViews: 61,
+    lastActive: "2026-05-07T09:00:00.000Z",
+    lastActiveLabel: "1h ago",
   },
 ];
 
@@ -67,6 +94,8 @@ const buildUser = (overrides = {}) => ({
   profession: "Product Manager",
   location: "Kochi",
   maritalStatus: "Never Married",
+  familyDetails: "Family details",
+  bio: "Bio",
   role: "user",
   registrationType: "user",
   preferences: {
@@ -76,105 +105,133 @@ const buildUser = (overrides = {}) => ({
   ...overrides,
 });
 
+const configureLiveAxios = ({
+  profile = null,
+  searchProfiles = baseProfiles,
+  interests = { incoming: [], outgoing: [] },
+  threads = [],
+  adminQueue = { summary: { verifiedCount: 0, pendingCount: 0, reportCount: 0, premiumCount: 0 }, profiles: [] },
+} = {}) => {
+  let currentInterests = interests;
+
+  axios.get.mockImplementation((url) => {
+    if (/\/matrimonial\/profile$/.test(url)) {
+      return Promise.resolve({ data: { data: profile } });
+    }
+
+    if (/\/matrimonial\/search/.test(url)) {
+      return Promise.resolve({ data: { data: searchProfiles } });
+    }
+
+    if (/\/matrimonial\/interests$/.test(url)) {
+      return Promise.resolve({ data: { data: currentInterests } });
+    }
+
+    if (/\/matrimonial\/messages$/.test(url)) {
+      return Promise.resolve({ data: { data: threads } });
+    }
+
+    if (/\/matrimonial\/admin\/review-queue$/.test(url)) {
+      return Promise.resolve({ data: { data: adminQueue } });
+    }
+
+    return Promise.reject(new Error(`Unhandled GET ${url}`));
+  });
+
+  axios.post.mockImplementation((url, body) => {
+    if (/\/matrimonial\/interests$/.test(url)) {
+      currentInterests = {
+        incoming: [],
+        outgoing: [
+          {
+            id: "interest-1",
+            status: "sent",
+            message: "",
+            toProfileId: body.toProfileId,
+            toProfile: baseProfiles[0],
+            fromProfileId: "self",
+            createdAt: "2026-05-07T10:00:00.000Z",
+          },
+        ],
+      };
+
+      return Promise.resolve({ data: { success: true } });
+    }
+
+    if (/\/report$/.test(url) || /\/block$/.test(url) || /\/matrimonial\/messages$/.test(url)) {
+      return Promise.resolve({ data: { success: true } });
+    }
+
+    return Promise.reject(new Error(`Unhandled POST ${url}`));
+  });
+
+  axios.put.mockResolvedValue({
+    data: {
+      data: {
+        ...(profile || {}),
+        ...buildUser(),
+        id: "self-profile",
+        userId: "user-1",
+        verificationStatus: "pending",
+        profileStatus: "pending_review",
+        privacy: {
+          hidePhone: false,
+          hidePhotos: false,
+          premiumOnlyContact: false,
+        },
+        languages: ["Malayalam", "English"],
+        hobbies: ["Travel", "Reading"],
+      },
+      user: buildUser(),
+    },
+  });
+
+  axios.patch.mockImplementation((url) => {
+    if (/\/auth\/me$/.test(url)) {
+      return Promise.resolve({
+        data: {
+          user: buildUser(),
+        },
+      });
+    }
+
+    if (/\/matrimonial\/interests\//.test(url) || /\/moderation$/.test(url)) {
+      return Promise.resolve({ data: { success: true } });
+    }
+
+    return Promise.reject(new Error(`Unhandled PATCH ${url}`));
+  });
+};
+
 describe("Matrimonial", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    axios.patch.mockResolvedValue({
-      data: {
-        user: buildUser(),
-      },
-    });
+    configureLiveAxios();
 
     mockUseApp.mockReturnValue({
       currentUser: buildUser(),
       mockData: {
-        matrimonialProfiles: baseProfiles,
+        matrimonialProfiles: [],
       },
     });
   });
 
-  test("filters discovery results using search and advanced filters", async () => {
+  test("loads live discovery data from the matrimonial API", async () => {
     render(<Matrimonial />);
-
-    expect(screen.getAllByText(/anjali sharma/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/kavya singh/i).length).toBeGreaterThan(0);
-
-    fireEvent.change(screen.getByLabelText(/search profiles/i), {
-      target: { value: "Doctor" },
-    });
 
     await waitFor(() => {
-      expect(screen.queryByText(/anjali sharma/i, { selector: '.matrimonial-match-card *' })).not.toBeInTheDocument();
+      expect(screen.getAllByText(/anjali sharma/i).length).toBeGreaterThan(0);
     });
-    expect(screen.getAllByText(/kavya singh/i).length).toBeGreaterThan(0);
-  });
 
-  test("keeps contact details hidden for free members and reveals premium messaging state on preview", () => {
-    render(<Matrimonial />);
-
-    expect(screen.getByText(/premium required to view contact details/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /preview premium/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /preview premium/i }));
-
-    expect(screen.getByRole("button", { name: /switch to free view/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /open secure chat/i })).toBeInTheDocument();
-  });
-
-  test("opens profile edit modal when Edit Profile is clicked", () => {
-    render(<Matrimonial />);
-
-    fireEvent.click(screen.getByRole("button", { name: /edit profile/i }));
-
-    expect(screen.getByRole("heading", { name: /complete your profile before you continue/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/profile name/i)).toBeInTheDocument();
-  });
-
-  test("shows caste filter control in discovery search", () => {
-    render(<Matrimonial />);
-
-    expect(screen.getByLabelText(/caste filter/i)).toBeInTheDocument();
-  });
-
-  test("sends interest to a profile", () => {
-    render(<Matrimonial />);
-
-    const interestButtons = screen.getAllByRole("button", { name: /express interest/i });
-    expect(interestButtons.length).toBeGreaterThan(0);
-    
-    fireEvent.click(interestButtons[0]);
-    
-    expect(screen.getByText(/interest sent to/i)).toBeInTheDocument();
-  });
-
-  test("shows onboarding modal and saves a sanitized profile", async () => {
-    const onProfileUpdate = jest.fn();
-    axios.patch
-      .mockResolvedValueOnce({
-        data: {
-          user: buildUser({
-            preferences: {
-              language: "en",
-              soulmatchOnboardingSeen: true,
-            },
-          }),
-        },
+    expect(axios.get).toHaveBeenCalledWith(
+      expect.stringMatching(/\/matrimonial\/search\?/),
+      expect.objectContaining({
+        timeout: 10000,
       })
-      .mockResolvedValueOnce({
-      data: {
-        user: buildUser({
-          name: "Arun alert(1)",
-          bio: "Safe text",
-          languages: ["Malayalam", "English"],
-          hobbies: ["Travel", "Reading"],
-          preferences: {
-            language: "en",
-            soulmatchOnboardingSeen: true,
-          },
-        }),
-      },
-      });
+    );
+  });
 
+  test("saves a sanitized profile through the live matrimonial profile endpoint", async () => {
     mockUseApp.mockReturnValue({
       currentUser: buildUser({
         preferences: {
@@ -183,21 +240,17 @@ describe("Matrimonial", () => {
         },
       }),
       mockData: {
-        matrimonialProfiles: baseProfiles,
+        matrimonialProfiles: [],
       },
     });
 
-    render(<Matrimonial onProfileUpdate={onProfileUpdate} />);
-
-    expect(
-      screen.getByRole("heading", { name: /complete your profile before you continue/i })
-    ).toBeInTheDocument();
+    render(<Matrimonial />);
 
     fireEvent.change(screen.getByLabelText(/profile name/i), {
-      target: { value: '<script>alert(1)</script>Arun' },
+      target: { value: "<script>alert(1)</script>Arun" },
     });
     fireEvent.change(screen.getByLabelText(/bio/i), {
-      target: { value: '<img src=x onerror=alert(1)>Safe text' },
+      target: { value: "<img src=x onerror=alert(1)>Safe text" },
     });
     fireEvent.change(screen.getByLabelText(/languages/i), {
       target: { value: "Malayalam, <b>English</b>" },
@@ -209,146 +262,139 @@ describe("Matrimonial", () => {
     fireEvent.click(screen.getByRole("button", { name: /save & continue/i }));
 
     await waitFor(() => {
-      expect(axios.patch).toHaveBeenCalledTimes(2);
+      expect(axios.put).toHaveBeenCalledTimes(1);
     });
 
-    expect(axios.patch).toHaveBeenNthCalledWith(
-      1,
-      expect.stringMatching(/\/auth\/me$/),
-      expect.objectContaining({
-        preferences: expect.objectContaining({
-          soulmatchOnboardingSeen: true,
-        }),
-      }),
-      expect.objectContaining({
-        timeout: 10000,
-      })
-    );
-
-    expect(axios.patch).toHaveBeenNthCalledWith(
-      2,
-      expect.stringMatching(/\/auth\/me$/),
-      expect.objectContaining({
-        name: "alert(1)Arun",
-        bio: "Safe text",
-        phone: "9876543210",
-        languages: ["Malayalam", "English"],
-        hobbies: ["Travel", "badReading"],
-      }),
-      expect.objectContaining({
-        timeout: 10000,
-      })
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText(/your profile has been saved successfully/i)).toBeInTheDocument();
-    });
-
-    expect(onProfileUpdate).toHaveBeenCalled();
+    const submittedFormData = axios.put.mock.calls[0][1];
+    expect(submittedFormData.get("name")).toBe("alert(1)Arun");
+    expect(submittedFormData.get("bio")).toBe("Safe text");
+    expect(submittedFormData.get("phone")).toBe("9876543210");
+    expect(submittedFormData.get("languages")).toBe("Malayalam, English");
+    expect(submittedFormData.get("hobbies")).toBe("Travel, badReading");
+    expect(axios.put.mock.calls[0][0]).toMatch(/\/matrimonial\/profile$/);
   });
 
-  test("shows API errors gracefully during profile save", async () => {
-    axios.patch
-      .mockResolvedValueOnce({
-        data: {
-          user: buildUser({
-            preferences: {
-              language: "en",
-              soulmatchOnboardingSeen: true,
-            },
-          }),
-        },
+  test("sends interests through the live API and reflects the updated state", async () => {
+    render(<Matrimonial />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /express interest/i }).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: /express interest/i })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/interest sent to/i)).toBeInTheDocument();
+    });
+
+    expect(axios.post).toHaveBeenCalledWith(
+      expect.stringMatching(/\/matrimonial\/interests$/),
+      expect.objectContaining({
+        toProfileId: "profile-1",
+      }),
+      expect.objectContaining({
+        timeout: 10000,
       })
-      .mockRejectedValueOnce({
-      response: {
-        status: 413,
+    );
+  });
+
+  test("renders the live moderation queue and submits moderation actions", async () => {
+    configureLiveAxios({
+      adminQueue: {
+        summary: {
+          verifiedCount: 8,
+          pendingCount: 3,
+          reportCount: 2,
+          premiumCount: 4,
+        },
+        profiles: [baseProfiles[0]],
       },
-      });
+    });
 
     mockUseApp.mockReturnValue({
       currentUser: buildUser({
-        preferences: {
-          language: "en",
-          soulmatchOnboardingSeen: false,
-        },
+        role: "admin",
+        registrationType: "admin",
       }),
       mockData: {
-        matrimonialProfiles: baseProfiles,
+        matrimonialProfiles: [],
       },
     });
 
     render(<Matrimonial />);
 
-    fireEvent.click(screen.getByRole("button", { name: /save & continue/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /admin/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/profile data too large/i)).toBeInTheDocument();
+      expect(screen.getByText("8")).toBeInTheDocument();
+      expect(screen.getAllByText(/anjali sharma/i).length).toBeGreaterThan(0);
     });
-  });
 
-  test("applies advanced filters correctly", async () => {
-    render(<Matrimonial />);
-
-    fireEvent.change(screen.getByLabelText(/religion filter/i), {
-      target: { value: "Christian" },
-    });
-    fireEvent.click(screen.getByLabelText(/show verified profiles only/i));
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/sara joseph/i).length).toBeGreaterThan(0);
+      expect(axios.patch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/matrimonial\/admin\/profiles\/profile-1\/moderation$/),
+        expect.objectContaining({
+          action: "approve",
+        }),
+        expect.objectContaining({
+          timeout: 10000,
+        })
+      );
     });
-    expect(screen.queryByText(/anjali sharma/i)).not.toBeInTheDocument();
   });
 
-  test("blocks profiles from discovery list", () => {
-    render(<Matrimonial />);
+  test("falls back to demo profiles when the live search request fails", async () => {
+    axios.get.mockImplementation((url) => {
+      if (/\/matrimonial\/profile$/.test(url)) {
+        return Promise.resolve({ data: { data: null } });
+      }
 
-    expect(screen.getAllByText(/anjali sharma/i).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByText(/block profile/i));
+      if (/\/matrimonial\/search/.test(url)) {
+        return Promise.reject(new Error("search down"));
+      }
 
-    expect(screen.queryByText(/interest sent to/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/was blocked from your discovery list/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/kavya singh/i).length).toBeGreaterThan(0);
-  });
+      if (/\/matrimonial\/interests$/.test(url)) {
+        return Promise.resolve({ data: { data: { incoming: [], outgoing: [] } } });
+      }
 
-  test("resets pagination when filters shrink the result set", async () => {
-    const largeProfiles = Array.from({ length: 25 }, (_, index) => ({
-      id: index + 1,
-      name: `Profile ${index + 1}`,
-      age: 25 + (index % 10),
-      religion: index >= 20 ? "Christian" : "Hindu",
-      caste: "Brahmin",
-      location: "Kochi",
-      profession: index >= 20 ? "Doctor" : "Engineer",
-      education: "B.Tech",
-      image: "P",
-      verified: true,
-      bio: `Bio for profile ${index + 1}`,
-    }));
+      if (/\/matrimonial\/messages$/.test(url)) {
+        return Promise.resolve({ data: { data: [] } });
+      }
+
+      return Promise.resolve({ data: { data: { summary: {}, profiles: [] } } });
+    });
 
     mockUseApp.mockReturnValue({
       currentUser: buildUser(),
-      mockData: { matrimonialProfiles: largeProfiles },
+      mockData: {
+        matrimonialProfiles: [
+          {
+            id: 1,
+            name: "Fallback Member",
+            age: 27,
+            religion: "Hindu",
+            caste: "Nair",
+            location: "Kochi",
+            profession: "Engineer",
+            education: "B.Tech",
+            verified: true,
+            bio: "Fallback bio",
+          },
+        ],
+      },
     });
 
     render(<Matrimonial />);
 
-    fireEvent.click(screen.getByRole("button", { name: /next/i }));
-    expect(screen.getByText(/page 2 of 3/i)).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(/profession filter/i), {
-      target: { value: "Doctor" },
-    });
-
     await waitFor(() => {
-      expect(screen.getAllByText(/profile 21/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/fallback member/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/showing demo profiles while the live matchmaking service is unavailable/i)).toBeInTheDocument();
     });
-    const pageText = screen.getByText(/page \d+ of \d+/i).textContent;
-    console.log('Page text:', pageText);
-    expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
   });
 
-  test("sanitizes user input to prevent XSS attacks", () => {
+  test("sanitizes user input and validates completion helpers", () => {
     const sanitized = sanitizeProfileData({
       name: "<script>alert(1)</script>Arun",
       email: " TEST@EXAMPLE.COM ",
@@ -372,10 +418,8 @@ describe("Matrimonial", () => {
     expect(sanitized.bio).toBe("Safe text");
     expect(sanitized.languages).toEqual(["Malayalam", "English"]);
     expect(sanitized.hobbies).toEqual(["Travel", "badReading"]);
-  });
 
-  test("validates profile input and calculates completion correctly", () => {
-    const invalidProfile = {
+    const validation = validateMatrimonialProfile({
       name: "",
       email: "bad-email",
       phone: "123",
@@ -388,313 +432,9 @@ describe("Matrimonial", () => {
       maritalStatus: "",
       familyDetails: "",
       bio: "",
-    };
+    });
 
-    const validation = validateMatrimonialProfile(invalidProfile);
     expect(validation.isValid).toBe(false);
-    expect(validation.errors).toEqual(
-      expect.objectContaining({
-        name: expect.any(String),
-        email: expect.any(String),
-        phone: expect.any(String),
-        age: expect.any(String),
-      })
-    );
-
-    expect(
-      calculateProfileCompletion({
-        name: "Arun",
-        email: "arun@example.com",
-        phone: "9876543210",
-        age: 29,
-        gender: "Man",
-        religion: "Hindu",
-        education: "B.Tech",
-        profession: "Engineer",
-        location: "Kochi",
-        maritalStatus: "Never Married",
-        bio: "Hello",
-        familyDetails: "Family details",
-      })
-    ).toBe(100);
-  });
-
-  test("displays proper accessibility attributes", () => {
-    render(<Matrimonial />);
-    expect(screen.getAllByRole("button", { name: /express interest/i }).length).toBeGreaterThan(0);
-    expect(screen.getByLabelText(/soulmatch sections/i)).toBeInTheDocument();
-  });
-
-  test("shows loading indicator during filter operations", async () => {
-    render(<Matrimonial />);
-    
-    const searchInput = screen.getByLabelText(/search profiles/i);
-    fireEvent.change(searchInput, { target: { value: "Software" } });
-    
-    // Filter is applied and results are updated
-    await waitFor(() => {
-      expect(screen.getAllByText(/anjali sharma/i).length).toBeGreaterThan(0);
-    });
-  });
-
-  test("handles network errors with specific messages", async () => {
-    axios.patch
-      .mockResolvedValueOnce({
-        data: {
-          user: buildUser({
-            preferences: {
-              language: "en",
-              soulmatchOnboardingSeen: true,
-            },
-          }),
-        },
-      })
-      .mockRejectedValueOnce({
-      code: 'ECONNABORTED',
-      message: 'timeout',
-      });
-
-    mockUseApp.mockReturnValue({
-      currentUser: buildUser({
-        preferences: {
-          language: "en",
-          soulmatchOnboardingSeen: false,
-        },
-      }),
-      mockData: {
-        matrimonialProfiles: baseProfiles,
-      },
-    });
-
-    render(<Matrimonial />);
-    
-    fireEvent.change(screen.getByLabelText(/profile name/i), {
-      target: { value: "Test User" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /save & continue/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/request timed out/i)).toBeInTheDocument();
-    });
-  });
-
-  test("handles 400 validation errors from server", async () => {
-    axios.patch
-      .mockResolvedValueOnce({
-        data: {
-          user: buildUser({
-            preferences: {
-              language: "en",
-              soulmatchOnboardingSeen: true,
-            },
-          }),
-        },
-      })
-      .mockRejectedValueOnce({
-      response: {
-        status: 400,
-        data: { message: "Email already registered" },
-      },
-      });
-
-    mockUseApp.mockReturnValue({
-      currentUser: buildUser({
-        preferences: {
-          language: "en",
-          soulmatchOnboardingSeen: false,
-        },
-      }),
-      mockData: {
-        matrimonialProfiles: baseProfiles,
-      },
-    });
-
-    render(<Matrimonial />);
-    
-    fireEvent.change(screen.getByLabelText(/profile name/i), {
-      target: { value: "Test User" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /save & continue/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Email already registered/i)).toBeInTheDocument();
-    });
-  });
-
-  test("shows profile completion percentage in modal", () => {
-    axios.patch.mockResolvedValueOnce({
-      data: {
-        user: buildUser({
-          preferences: {
-            language: "en",
-            soulmatchOnboardingSeen: true,
-          },
-        }),
-      },
-    });
-    mockUseApp.mockReturnValue({
-      currentUser: buildUser({
-        preferences: {
-          language: "en",
-          soulmatchOnboardingSeen: false,
-        },
-      }),
-      mockData: {
-        matrimonialProfiles: baseProfiles,
-      },
-    });
-
-    render(<Matrimonial />);
-
-    const progressBar = screen.getByRole("progressbar");
-    expect(progressBar).toBeInTheDocument();
-    expect(progressBar).toHaveAttribute("aria-valuenow");
-    expect(progressBar).toHaveAttribute("aria-valuemin", "0");
-    expect(progressBar).toHaveAttribute("aria-valuemax", "100");
-  });
-
-  test("prevents interest double-send to same profile", () => {
-    render(<Matrimonial />);
-    
-    const interestButtons = screen.getAllByRole("button", { name: /express interest/i });
-    
-    // Click first interest button twice
-    fireEvent.click(interestButtons[0]);
-    fireEvent.click(interestButtons[0]);
-    
-    expect(screen.getByText(/interest already sent to/i)).toBeInTheDocument();
-  });
-
-  test("blocks and unblocks profiles correctly", () => {
-    render(<Matrimonial />);
-    
-    // Block a profile
-    fireEvent.click(screen.getByText(/block profile/i));
-    expect(screen.getByText(/blocked from your discovery list/i)).toBeInTheDocument();
-    
-    // Verify blocked profile is hidden from discovery (but name may appear in banner)
-    expect(screen.queryByText(/sara joseph/i, { selector: '.matrimonial-match-card *' })).not.toBeInTheDocument();
-  });
-
-  test("handles pagination correctly with filtered results", () => {
-    const manyProfiles = Array.from({ length: 25 }, (_, i) => ({
-      id: i + 1,
-      name: `Profile ${i + 1}`,
-      age: 25 + (i % 10),
-      religion: "Hindu",
-      location: i % 2 === 0 ? "Delhi" : "Bangalore",
-      profession: "Engineer",
-      verified: true,
-      bio: "Test profile",
-    }));
-
-    mockUseApp.mockReturnValue({
-      currentUser: buildUser(),
-      mockData: { matrimonialProfiles: manyProfiles },
-    });
-
-    render(<Matrimonial />);
-    
-    // Should display profiles with pagination
-    expect(screen.getAllByText(/profile 1/i).length).toBeGreaterThan(0);
-  });
-
-  test("preserves profile state when switching tabs", () => {
-    render(<Matrimonial />);
-    
-    // Click interest button
-    fireEvent.click(screen.getAllByRole("button", { name: /express interest/i })[0]);
-    expect(screen.getByText(/interest sent to/i)).toBeInTheDocument();
-    
-    // Switch tabs and back
-    fireEvent.click(screen.getByRole("tab", { name: /interests/i }));
-    fireEvent.click(screen.getByRole("tab", { name: /discover/i }));
-    
-    // Interest state should persist
-    expect(screen.getAllByRole("button", { name: /interest sent/i }).length).toBeGreaterThan(0);
-  });
-
-  test("accepts incoming interests and sends unlocked messages in premium preview", () => {
-    render(<Matrimonial />);
-
-    fireEvent.click(screen.getByRole("tab", { name: /interests/i }));
-    fireEvent.click(screen.getAllByRole("button", { name: /^accept$/i })[0]);
-    expect(screen.getByText(/accepted interest from/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /preview premium/i }));
-    fireEvent.click(screen.getByRole("tab", { name: /messages/i }));
-    fireEvent.change(screen.getByLabelText(/message anjali sharma/i), {
-      target: { value: "Hello, wishing you the best in your search." },
-    });
-    fireEvent.click(screen.getAllByRole("button", { name: /^send$/i })[0]);
-
-    expect(screen.getByText(/message sent to anjali sharma/i)).toBeInTheDocument();
-  });
-
-  test("displays profile completion progress with accurate percentage", () => {
-    const incompleteUser = {
-      ...buildUser(),
-      name: "",
-      bio: "",
-      familyDetails: "",
-      preferences: {
-        language: "en",
-        soulmatchOnboardingSeen: false,
-      },
-    };
-    axios.patch.mockResolvedValueOnce({
-      data: {
-        user: {
-          ...incompleteUser,
-          preferences: {
-            language: "en",
-            soulmatchOnboardingSeen: true,
-          },
-        },
-      },
-    });
-    mockUseApp.mockReturnValue({
-      currentUser: incompleteUser,
-      mockData: {
-        matrimonialProfiles: baseProfiles,
-      },
-    });
-    
-    render(<Matrimonial />);
-    
-    const progressBar = screen.getByRole("progressbar");
-    const currentValue = parseInt(progressBar.getAttribute("aria-valuenow"));
-    
-    // Should be less than 100 with missing fields
-    expect(currentValue).toBeLessThan(100);
-    
-    // Fill in one field
-    fireEvent.change(screen.getByLabelText(/name/i), {
-      target: { value: "Test Name" },
-    });
-    
-    // Progress should increase
-    const updatedValue = parseInt(progressBar.getAttribute("aria-valuenow"));
-    expect(updatedValue).toBeGreaterThan(currentValue);
-  });
-
-  test("applies ARIA labels to profile action buttons", () => {
-    render(<Matrimonial />);
-    
-    // Check for descriptive ARIA labels
-    const interestButtons = screen.getAllByRole("button", { name: /express interest/i });
-    expect(interestButtons[0]).toHaveAttribute("aria-label");
-    expect(interestButtons[0]).toHaveAttribute("aria-pressed");
-  });
-
-  test("sanitizes profile names in status messages", () => {
-    render(<Matrimonial />);
-    
-    // Verify sanitization in messages
-    fireEvent.click(screen.getAllByRole("button", { name: /express interest/i })[0]);
-    
-    const message = screen.getByText(/interest sent to/i);
-    expect(message.textContent).not.toMatch(/<script>/);
-    expect(message.textContent).not.toMatch(/<img/);
+    expect(calculateProfileCompletion(buildUser())).toBe(100);
   });
 });

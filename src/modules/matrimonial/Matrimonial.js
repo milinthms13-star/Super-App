@@ -12,6 +12,20 @@ import { validateMatrimonialProfile, sanitizeProfileData, calculateProfileComple
 import { getMatchScore, getScoreBreakdown } from "./matching.js";
 import { applyFilters } from "./filtering.js";
 import { buildProfileForm, buildViewerProfile, normalizeProfile } from "./profileBuilders.js";
+import {
+  blockMatrimonialProfile,
+  getMatrimonialAdminQueue,
+  getMatrimonialInterests,
+  getMatrimonialMessages,
+  getMatrimonialProfile,
+  moderateMatrimonialProfile,
+  reportMatrimonialProfile,
+  respondToMatrimonialInterest,
+  saveMatrimonialProfile,
+  searchMatrimonialProfiles,
+  sendMatrimonialInterest,
+  sendMatrimonialMessage,
+} from "./api.js";
 import { sanitizeText } from "../../utils/xssProtection";
 
 // Debounce hook for search and filters
@@ -30,26 +44,26 @@ const useDebounce = (value, delay) => {
 };
 
 const getVisiblePhone = (profile, isPremiumViewer) => {
-  if (profile.premiumOnlyContact && !isPremiumViewer) {
+  if (profile.contactVisibility === "premium_required" || (profile.premiumOnlyContact && !isPremiumViewer)) {
     return "Premium required to view contact details";
   }
 
-  if (profile.privacy.hidePhone) {
+  if (profile.contactVisibility === "hidden" || profile.privacy.hidePhone) {
     return "Hidden by privacy settings";
   }
 
-  return profile.phone;
+  return profile.phone || "Contact details are unavailable";
 };
 
-const Matrimonial = ({ onProfileUpdate }) => {
+const Matrimonial = ({ onProfileUpdate = null }) => {
   const { currentUser, mockData } = useApp();
   const isAdmin =
     currentUser?.role === "admin" || currentUser?.registrationType === "admin";
+  const [matrimonialProfile, setMatrimonialProfile] = useState(null);
   const [profileForm, setProfileForm] = useState(() => buildProfileForm(currentUser));
   const [showProfilePrompt, setShowProfilePrompt] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState("");
-  const viewerProfile = buildViewerProfile(currentUser, profileForm);
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [activeTab, setActiveTab] = useState("discover");
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,27 +78,61 @@ const Matrimonial = ({ onProfileUpdate }) => {
   });
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sentInterests, setSentInterests] = useState([]);
   const [shortlistedProfiles, setShortlistedProfiles] = useState([]);
   const [blockedProfiles, setBlockedProfiles] = useState([]);
   const [reportedProfiles, setReportedProfiles] = useState([]);
-  const [interestResponses, setInterestResponses] = useState({});
   const [messageComposer, setMessageComposer] = useState({});
   const [statusMessage, setStatusMessage] = useState("");
+  const [fallbackNotice, setFallbackNotice] = useState("");
   const [isPremiumPreview, setIsPremiumPreview] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState("");
+  const [profilePhotoFile, setProfilePhotoFile] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
+  const [liveProfiles, setLiveProfiles] = useState([]);
+  const [liveInterests, setLiveInterests] = useState({ incoming: [], outgoing: [] });
+  const [liveThreads, setLiveThreads] = useState([]);
+  const [adminQueue, setAdminQueue] = useState({
+    summary: {
+      verifiedCount: 0,
+      pendingCount: 0,
+      reportCount: 0,
+      premiumCount: 0,
+    },
+    profiles: [],
+  });
+  const [liveSearchState, setLiveSearchState] = useState("idle");
   const photoInputRef = useRef(null);
   const onboardingRecordedRef = useRef(false);
 
   // Debounce search input only; advanced filters apply immediately
   const debouncedSearchQuery = useDebounce(searchQuery, 400);
+  const viewerProfile = useMemo(
+    () => buildViewerProfile(matrimonialProfile || currentUser, profileForm),
+    [currentUser, matrimonialProfile, profileForm]
+  );
+  const fallbackProfiles = useMemo(
+    () => (mockData.matrimonialProfiles || []).map(normalizeProfile),
+    [mockData.matrimonialProfiles]
+  );
+  const sentInterests = useMemo(
+    () =>
+      liveInterests.outgoing
+        .map((interest) => interest.toProfile?.id || interest.toProfileId)
+        .filter(Boolean),
+    [liveInterests.outgoing]
+  );
 
   useEffect(() => {
-    setProfileForm(buildProfileForm(currentUser));
-  }, [currentUser]);
+    if (!currentUser || isEditingProfile) {
+      return;
+    }
+
+    const source = matrimonialProfile || currentUser;
+    setProfileForm(buildProfileForm(source));
+    setProfilePhoto(source?.photoUrl || "");
+  }, [currentUser, matrimonialProfile, isEditingProfile]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -92,7 +140,7 @@ const Matrimonial = ({ onProfileUpdate }) => {
     }
 
     const hasSeenOnboarding = Boolean(currentUser?.preferences?.soulmatchOnboardingSeen);
-    setShowProfilePrompt(!hasSeenOnboarding);
+    setShowProfilePrompt(!hasSeenOnboarding || !matrimonialProfile?.id);
 
     if (hasSeenOnboarding || onboardingRecordedRef.current) {
       return;
@@ -133,7 +181,135 @@ const Matrimonial = ({ onProfileUpdate }) => {
     };
 
     persistOnboardingSeen();
-  }, [currentUser, onProfileUpdate]);
+  }, [currentUser, matrimonialProfile, onProfileUpdate]);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const profile = await getMatrimonialProfile();
+      if (!profile) {
+        setMatrimonialProfile(null);
+        return null;
+      }
+
+      const normalized = normalizeProfile(profile);
+      setMatrimonialProfile(normalized);
+      setProfilePhoto(normalized.photoUrl || "");
+      setPreferences((current) => ({
+        ...current,
+        ...(profile.preferences || {}),
+      }));
+      return normalized;
+    } catch (_error) {
+      setMatrimonialProfile(null);
+      return null;
+    }
+  }, []);
+
+  const loadDiscoveryProfiles = useCallback(async () => {
+    try {
+      setLiveSearchState("loading");
+      const profiles = await searchMatrimonialProfiles({
+        religion: advancedFilters.religion,
+        location: advancedFilters.location,
+        caste: advancedFilters.caste,
+        education: advancedFilters.education,
+        profession: advancedFilters.profession,
+        verifiedOnly: advancedFilters.verifiedOnly,
+        search: debouncedSearchQuery,
+        ageMin: preferences.ageMin,
+        ageMax: preferences.ageMax,
+        limit: 120,
+      });
+
+      setLiveProfiles(profiles.map(normalizeProfile));
+      setFallbackNotice("");
+      setLiveSearchState("success");
+    } catch (_error) {
+      setLiveProfiles([]);
+      setFallbackNotice("Showing demo profiles while the live matchmaking service is unavailable.");
+      setLiveSearchState("error");
+    }
+  }, [advancedFilters, debouncedSearchQuery, preferences.ageMax, preferences.ageMin]);
+
+  const loadInterestFeed = useCallback(async () => {
+    try {
+      const response = await getMatrimonialInterests();
+      setLiveInterests({
+        incoming: Array.isArray(response.incoming) ? response.incoming : [],
+        outgoing: Array.isArray(response.outgoing) ? response.outgoing : [],
+      });
+    } catch (_error) {
+      setLiveInterests({ incoming: [], outgoing: [] });
+    }
+  }, []);
+
+  const loadMessageThreads = useCallback(async () => {
+    try {
+      const threads = await getMatrimonialMessages();
+      setLiveThreads(Array.isArray(threads) ? threads : []);
+    } catch (_error) {
+      setLiveThreads([]);
+    }
+  }, []);
+
+  const loadAdminQueue = useCallback(async () => {
+    if (!isAdmin) {
+      setAdminQueue({
+        summary: {
+          verifiedCount: 0,
+          pendingCount: 0,
+          reportCount: 0,
+          premiumCount: 0,
+        },
+        profiles: [],
+      });
+      return;
+    }
+
+    try {
+      const queue = await getMatrimonialAdminQueue();
+      setAdminQueue({
+        summary: {
+          verifiedCount: Number(queue.summary?.verifiedCount || 0),
+          pendingCount: Number(queue.summary?.pendingCount || 0),
+          reportCount: Number(queue.summary?.reportCount || 0),
+          premiumCount: Number(queue.summary?.premiumCount || 0),
+        },
+        profiles: Array.isArray(queue.profiles)
+          ? queue.profiles.map(normalizeProfile)
+          : [],
+      });
+    } catch (_error) {
+      setAdminQueue({
+        summary: {
+          verifiedCount: 0,
+          pendingCount: 0,
+          reportCount: 0,
+          premiumCount: 0,
+        },
+        profiles: [],
+      });
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    void loadProfile();
+    void loadInterestFeed();
+    void loadMessageThreads();
+    void loadAdminQueue();
+  }, [currentUser, loadAdminQueue, loadInterestFeed, loadMessageThreads, loadProfile]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    void loadDiscoveryProfiles();
+  }, [currentUser, loadDiscoveryProfiles]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -152,18 +328,41 @@ const Matrimonial = ({ onProfileUpdate }) => {
     setIsFiltering(hasFilter);
   }, [searchQuery, advancedFilters]);
 
-  const profiles = (mockData.matrimonialProfiles || []).map(normalizeProfile);
-  const allFilteredProfiles = useMemo(() => 
-    applyFilters(profiles, { blockedProfiles, advancedFilters, searchQuery: debouncedSearchQuery, preferences, viewerProfile }),
-    [profiles, blockedProfiles, advancedFilters, debouncedSearchQuery, preferences, viewerProfile]
-  );
+  const profiles = liveSearchState === "error" ? fallbackProfiles : liveProfiles;
+  const allFilteredProfiles = useMemo(() => {
+    if (liveSearchState === "error") {
+      return applyFilters(fallbackProfiles, {
+        blockedProfiles,
+        advancedFilters,
+        searchQuery: debouncedSearchQuery,
+        preferences,
+        viewerProfile,
+      });
+    }
+
+    return profiles
+      .filter((profile) => !blockedProfiles.includes(profile.id))
+      .map((profile) => ({
+        ...profile,
+        matchScore: getMatchScore(profile, preferences, viewerProfile),
+      }));
+  }, [
+    advancedFilters,
+    blockedProfiles,
+    debouncedSearchQuery,
+    fallbackProfiles,
+    liveSearchState,
+    preferences,
+    profiles,
+    viewerProfile,
+  ]);
 
   const sortedProfiles = useMemo(() => {
     const nextProfiles = [...allFilteredProfiles];
 
     nextProfiles.sort((left, right) => {
       if (sortMode === "recently-active") {
-        return String(left.lastActive || "").localeCompare(String(right.lastActive || ""));
+        return new Date(right.lastActive || 0).getTime() - new Date(left.lastActive || 0).getTime();
       }
 
       if (sortMode === "most-viewed") {
@@ -225,21 +424,28 @@ const Matrimonial = ({ onProfileUpdate }) => {
     [profiles]
   );
 
-  const incomingInterests = useMemo(() => 
-    profiles
-      .slice(0, 3)
-      .map((profile, index) => ({
-        id: `incoming-${profile.id}`,
-        name: profile.name,
-        matchScore: getMatchScore(profile, preferences, viewerProfile),
-        status: index === 0 ? "New Interest" : index === 1 ? "Pending Response" : "Viewed Your Profile",
-        note:
-          index === 0
-            ? "Interested in a family-oriented match."
-            : index === 1
-              ? "Wants to connect after reviewing your preferences."
-              : "Your profile has been shortlisted for further conversation.",
-      })), [profiles, preferences, viewerProfile]
+  const incomingInterests = useMemo(
+    () =>
+      liveInterests.incoming.map((interest, index) => {
+        const fromProfile = normalizeProfile(interest.fromProfile || {}, index);
+
+        return {
+          ...interest,
+          name: fromProfile.name || "Unknown member",
+          fromProfile,
+          matchScore: getMatchScore(fromProfile, preferences, viewerProfile),
+          status:
+            interest.status === "accepted"
+              ? "Accepted"
+              : interest.status === "declined"
+                ? "Declined"
+                : "Pending Response",
+          note:
+            interest.message ||
+            "Interested in connecting after reviewing your profile preferences.",
+        };
+      }),
+    [liveInterests.incoming, preferences, viewerProfile]
   );
   const selectedProfileBreakdown = useMemo(
     () =>
@@ -249,54 +455,94 @@ const Matrimonial = ({ onProfileUpdate }) => {
     [preferences, selectedProfile, viewerProfile]
   );
 
-  const messageThreads = useMemo(() => 
-    profiles.slice(0, 3).map((profile, index) => ({
-      id: `thread-${profile.id}`,
-      name: profile.name,
-      lastMessage:
-        index === 0
-          ? "Thank you for accepting the interest. Happy to speak with family as well."
-          : index === 1
-            ? "Can we continue the conversation this weekend?"
-            : "I liked your approach to work-life balance.",
-      unreadCount: index === 0 ? 2 : index === 1 ? 0 : 1,
-      premiumLocked: !isPremiumPreview && index > 0,
-    })),
-    [profiles, isPremiumPreview]
+  const messageThreads = useMemo(
+    () =>
+      liveThreads.map((thread, index) => {
+        const profile = normalizeProfile(thread.profile || {}, index);
+
+        return {
+          id: thread.id || profile.id,
+          name: profile.name || "Unknown member",
+          profileId: profile.id,
+          lastMessage:
+            thread.lastMessage?.content ||
+            "Connection accepted. Start with a respectful introduction.",
+          unreadCount: Number(thread.unreadCount || 0),
+          premiumLocked: !isPremiumPreview,
+          profile,
+        };
+      }),
+    [isPremiumPreview, liveThreads]
   );
 
   const notifications = [
     `${topMatches.length} suggested matches updated for your preferences`,
     `${incomingInterests.length} profile events need your attention`,
+    fallbackNotice || null,
     isPremiumPreview
-      ? "Premium preview is active: messaging and contact visibility are unlocked"
-      : "Upgrade to premium to unlock unlimited messaging and direct contact visibility",
-  ];
+      ? "Premium preview is active: messaging controls are unlocked while member privacy settings stay enforced"
+      : "Preview premium messaging while member privacy settings remain enforced",
+  ].filter(Boolean);
 
-  const handleInterest = useCallback((profile) => {
+  const handleInterest = useCallback(async (profile) => {
     if (sentInterests.includes(profile.id)) {
       setStatusMessage(`Interest already sent to ${sanitizeText(profile.name)}.`);
       return;
     }
 
-    setSentInterests((current) => [...current, profile.id]);
-    setStatusMessage(`Interest sent to ${sanitizeText(profile.name)}.`);
-  }, [sentInterests]);
-
-  const handleBlock = useCallback((profile) => {
-    setBlockedProfiles((current) => [...current, profile.id]);
-    setStatusMessage(`${sanitizeText(profile.name)} was blocked from your discovery list.`);
-    if (selectedProfileId === profile.id) {
-      setSelectedProfileId("");
+    try {
+      const response = await sendMatrimonialInterest(profile.id);
+      await loadInterestFeed();
+      setStatusMessage(
+        response?.message === "Interest already sent"
+          ? `Interest already sent to ${sanitizeText(profile.name)}.`
+          : `Interest sent to ${sanitizeText(profile.name)}.`
+      );
+    } catch (error) {
+      setStatusMessage(
+        error.response?.data?.message ||
+          `Unable to send interest to ${sanitizeText(profile.name)} right now.`
+      );
     }
-  }, [selectedProfileId]);
+  }, [loadInterestFeed, sentInterests]);
 
-  const handleReport = useCallback((profile) => {
-    if (!reportedProfiles.includes(profile.id)) {
-      setReportedProfiles((current) => [...current, profile.id]);
+  const handleBlock = useCallback(async (profile) => {
+    try {
+      await blockMatrimonialProfile(profile.id);
+      setBlockedProfiles((current) =>
+        current.includes(profile.id) ? current : [...current, profile.id]
+      );
+      setStatusMessage(`${sanitizeText(profile.name)} was blocked from your discovery list.`);
+      if (selectedProfileId === profile.id) {
+        setSelectedProfileId("");
+      }
+      await loadDiscoveryProfiles();
+    } catch (error) {
+      setStatusMessage(
+        error.response?.data?.message ||
+          `Unable to block ${sanitizeText(profile.name)} right now.`
+      );
     }
-    setStatusMessage(`${sanitizeText(profile.name)} was flagged for moderation review.`);
-  }, [reportedProfiles]);
+  }, [loadDiscoveryProfiles, selectedProfileId]);
+
+  const handleReport = useCallback(async (profile) => {
+    try {
+      await reportMatrimonialProfile(
+        profile.id,
+        "Reported from the matrimonial workspace for moderation review."
+      );
+      if (!reportedProfiles.includes(profile.id)) {
+        setReportedProfiles((current) => [...current, profile.id]);
+      }
+      setStatusMessage(`${sanitizeText(profile.name)} was flagged for moderation review.`);
+      await loadAdminQueue();
+    } catch (error) {
+      setStatusMessage(
+        error.response?.data?.message ||
+          `Unable to report ${sanitizeText(profile.name)} right now.`
+      );
+    }
+  }, [loadAdminQueue, reportedProfiles]);
 
   const handleShortlist = useCallback((profile) => {
     const isAlreadyShortlisted = shortlistedProfiles.includes(profile.id);
@@ -313,19 +559,24 @@ const Matrimonial = ({ onProfileUpdate }) => {
     );
   }, [shortlistedProfiles]);
 
-  const handleInterestResponse = useCallback((interest, decision) => {
-    setInterestResponses((current) => ({
-      ...current,
-      [interest.id]: decision,
-    }));
-    setStatusMessage(
-      `${decision === "accepted" ? "Accepted" : "Declined"} interest from ${sanitizeText(
-        interest.name
-      )}.`
-    );
-  }, []);
+  const handleInterestResponse = useCallback(async (interest, decision) => {
+    try {
+      await respondToMatrimonialInterest(interest.id, decision);
+      await Promise.all([loadInterestFeed(), loadMessageThreads()]);
+      setStatusMessage(
+        `${decision === "accepted" ? "Accepted" : "Declined"} interest from ${sanitizeText(
+          interest.name
+        )}.`
+      );
+    } catch (error) {
+      setStatusMessage(
+        error.response?.data?.message ||
+          `Unable to update the interest from ${sanitizeText(interest.name)}.`
+      );
+    }
+  }, [loadInterestFeed, loadMessageThreads]);
 
-  const handleSendMessage = useCallback((thread) => {
+  const handleSendMessage = useCallback(async (thread) => {
     const draft = String(messageComposer[thread.id] || "").trim();
 
     if (!draft) {
@@ -333,12 +584,38 @@ const Matrimonial = ({ onProfileUpdate }) => {
       return;
     }
 
-    setMessageComposer((current) => ({
-      ...current,
-      [thread.id]: "",
-    }));
-    setStatusMessage(`Message sent to ${sanitizeText(thread.name)}.`);
-  }, [messageComposer]);
+    try {
+      await sendMatrimonialMessage(thread.profileId, draft);
+      setMessageComposer((current) => ({
+        ...current,
+        [thread.id]: "",
+      }));
+      setStatusMessage(`Message sent to ${sanitizeText(thread.name)}.`);
+      await loadMessageThreads();
+    } catch (error) {
+      setStatusMessage(
+        error.response?.data?.message ||
+          `Unable to send a message to ${sanitizeText(thread.name)} right now.`
+      );
+    }
+  }, [loadMessageThreads, messageComposer]);
+
+  const handleAdminModeration = useCallback(async (profile, action) => {
+    try {
+      await moderateMatrimonialProfile(profile.id, action);
+      setStatusMessage(
+        action === "approve"
+          ? `${sanitizeText(profile.name)} was approved.`
+          : `${sanitizeText(profile.name)} was moved back for profile changes.`
+      );
+      await Promise.all([loadAdminQueue(), loadDiscoveryProfiles()]);
+    } catch (error) {
+      setStatusMessage(
+        error.response?.data?.message ||
+          `Unable to update moderation for ${sanitizeText(profile.name)}.`
+      );
+    }
+  }, [loadAdminQueue, loadDiscoveryProfiles]);
 
   const handleProfileFieldChange = useCallback((field, value) => {
     // Field length constraints
@@ -393,19 +670,30 @@ const Matrimonial = ({ onProfileUpdate }) => {
 
     try {
       const sanitizedData = sanitizeProfileData(profileForm);
-      const response = await axios.patch(`${API_BASE_URL}/auth/me`, sanitizedData, {
-        timeout: 10000,
+      const response = await saveMatrimonialProfile({
+        profile: sanitizedData,
+        preferences,
+        photoFile: profilePhotoFile,
       });
-      const updatedUser = response.data?.user || {
+      const updatedProfile = response.data ? normalizeProfile(response.data) : null;
+      const updatedUser = response.user || {
         ...currentUser,
         ...sanitizedData,
+        preferences: {
+          ...(currentUser?.preferences || {}),
+          ...preferences,
+        },
       };
 
-      setProfileForm(buildProfileForm(updatedUser));
+      setMatrimonialProfile(updatedProfile);
+      setProfileForm(buildProfileForm(updatedProfile || updatedUser));
+      setProfilePhoto(updatedProfile?.photoUrl || profilePhoto);
+      setProfilePhotoFile(null);
       setShowProfilePrompt(false);
       setIsEditingProfile(false);
       setStatusMessage("Your profile has been saved successfully.");
       onProfileUpdate?.(updatedUser);
+      await Promise.all([loadDiscoveryProfiles(), loadAdminQueue()]);
     } catch (error) {
       let errorMsg = "Failed to save profile. Check your connection.";
       
@@ -423,7 +711,16 @@ const Matrimonial = ({ onProfileUpdate }) => {
     } finally {
       setIsSavingProfile(false);
     }
-  }, [profileForm, currentUser, onProfileUpdate]);
+  }, [
+    currentUser,
+    loadAdminQueue,
+    loadDiscoveryProfiles,
+    onProfileUpdate,
+    preferences,
+    profileForm,
+    profilePhoto,
+    profilePhotoFile,
+  ]);
 
   const profileCompletion = useMemo(() => 
     calculateProfileCompletion(profileForm),
@@ -469,6 +766,7 @@ const Matrimonial = ({ onProfileUpdate }) => {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
+                        setProfilePhotoFile(file);
                         const reader = new FileReader();
                         reader.onload = (evt) => setProfilePhoto(evt.target?.result || "");
                         reader.readAsDataURL(file);
@@ -706,8 +1004,8 @@ const Matrimonial = ({ onProfileUpdate }) => {
           <strong>{isPremiumPreview ? "Premium Preview" : "Free Member"}</strong>
           <p>
             {isPremiumPreview
-              ? "Unlimited messaging and contact visibility are unlocked in this preview."
-              : "Upgrade to preview premium messaging, contact details, and deeper profile access."}
+              ? "Messaging controls are unlocked in this preview while real member privacy settings stay enforced."
+              : "Preview premium messaging while privacy-aware profile visibility stays intact."}
           </p>
           <button
             type="button"
@@ -1234,14 +1532,14 @@ const Matrimonial = ({ onProfileUpdate }) => {
                         className="btn btn-primary"
                         onClick={() => handleInterestResponse(interest, "accepted")}
                       >
-                        {interestResponses[interest.id] === "accepted" ? "Accepted" : "Accept"}
+                        {interest.status === "Accepted" ? "Accepted" : "Accept"}
                       </button>
                       <button
                         type="button"
                         className="btn btn-outline"
                         onClick={() => handleInterestResponse(interest, "declined")}
                       >
-                        {interestResponses[interest.id] === "declined" ? "Declined" : "Decline"}
+                        {interest.status === "Declined" ? "Declined" : "Decline"}
                       </button>
                     </div>
                   </article>
@@ -1318,24 +1616,24 @@ const Matrimonial = ({ onProfileUpdate }) => {
               </div>
               <div className="matrimonial-admin-grid">
                 <article className="matrimonial-admin-card">
-                  <strong>{profiles.filter((profile) => profile.verified).length}</strong>
+                  <strong>{adminQueue.summary.verifiedCount}</strong>
                   <p>Approved Profiles</p>
                 </article>
                 <article className="matrimonial-admin-card">
-                  <strong>{profiles.filter((profile) => !profile.verified).length}</strong>
+                  <strong>{adminQueue.summary.pendingCount}</strong>
                   <p>Pending Verification</p>
                 </article>
                 <article className="matrimonial-admin-card">
-                  <strong>{reportedProfiles.length}</strong>
+                  <strong>{adminQueue.summary.reportCount}</strong>
                   <p>Complaints / Reports</p>
                 </article>
                 <article className="matrimonial-admin-card">
-                  <strong>{isPremiumPreview ? "1 demo premium" : "0 demo premium"}</strong>
+                  <strong>{adminQueue.summary.premiumCount}</strong>
                   <p>Premium Members Preview</p>
                 </article>
               </div>
               <div className="matrimonial-request-list">
-                {profiles.slice(0, 3).map((profile) => (
+                {adminQueue.profiles.slice(0, 6).map((profile) => (
                   <article key={`admin-${profile.id}`} className="matrimonial-request-card">
                     <div>
                       <h3>{sanitizeText(profile.name)}</h3>
@@ -1344,10 +1642,18 @@ const Matrimonial = ({ onProfileUpdate }) => {
                       </p>
                     </div>
                     <div className="matrimonial-card-actions">
-                      <button type="button" className="btn btn-primary">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => handleAdminModeration(profile, "approve")}
+                      >
                         Approve
                       </button>
-                      <button type="button" className="btn btn-outline">
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => handleAdminModeration(profile, "request_changes")}
+                      >
                         Request Changes
                       </button>
                     </div>
@@ -1379,7 +1685,7 @@ const Matrimonial = ({ onProfileUpdate }) => {
                     <p>
                       {selectedProfile.age} years · {sanitizeText(selectedProfile.maritalStatus)}
                     </p>
-                    <p>{sanitizeText(selectedProfile.lastActive)}</p>
+                    <p>{sanitizeText(selectedProfile.lastActiveLabel)}</p>
                   </div>
                 </div>
                 <dl className="matrimonial-detail-grid">
@@ -1488,7 +1794,7 @@ const Matrimonial = ({ onProfileUpdate }) => {
                       {selectedProfileBreakdown.matches || "This profile is being shown as a general discovery suggestion."}
                     </p>
                     <p className="matrimonial-detail-bio">
-                      {selectedProfile.profileViews} profile views · {sanitizeText(selectedProfile.lastActive)}
+                      {selectedProfile.profileViews} profile views · {sanitizeText(selectedProfile.lastActiveLabel)}
                     </p>
                   </div>
                 )}
@@ -1508,10 +1814,6 @@ const Matrimonial = ({ onProfileUpdate }) => {
 
 Matrimonial.propTypes = {
   onProfileUpdate: PropTypes.func,
-};
-
-Matrimonial.defaultProps = {
-  onProfileUpdate: null,
 };
 
 export default Matrimonial;
