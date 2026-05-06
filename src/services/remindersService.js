@@ -497,6 +497,208 @@ export const deleteRemindersAttachment = async (reminderId, attachmentId) => {
   }
 };
 
+// ==================== PHASE 1: SNOOZE FUNCTIONALITY ====================
+
+/**
+ * Snooze a reminder for a specified duration
+ * @param {string} reminderId - ID of the reminder to snooze
+ * @param {number} minutesToSnooze - Number of minutes to snooze (1-10080)
+ * @returns {Promise<Object>} - Snoozed reminder details
+ */
+export const snoozeReminder = async (reminderId, minutesToSnooze) => {
+  try {
+    const response = await axiosInstance.post(
+      `/reminders/${reminderId}/snooze`,
+      { minutesToSnooze }
+    );
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error snoozing reminder:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to snooze reminder"
+    );
+  }
+};
+
+// ==================== PHASE 1: MISSED REMINDER TRACKING ====================
+
+/**
+ * Fetch all missed reminders for the current user
+ * @param {Object} options - Query options
+ * @param {number} options.limit - Limit results (default: 20)
+ * @param {number} options.skip - Skip results for pagination (default: 0)
+ * @returns {Promise<Object>} - Response with missed reminders and pagination info
+ */
+export const getMissedReminders = async (options = {}) => {
+  try {
+    const params = {};
+    if (options.limit) {
+      params.limit = options.limit;
+    }
+    if (options.skip) {
+      params.skip = options.skip;
+    }
+
+    const response = await axiosInstance.get(`/reminders/missed`, { params });
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error fetching missed reminders:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch missed reminders"
+    );
+  }
+};
+
+/**
+ * Manually mark a reminder as missed
+ * @param {string} reminderId - ID of the reminder to mark as missed
+ * @returns {Promise<Object>} - Updated reminder details
+ */
+export const markReminderAsMissed = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(
+      `/reminders/${reminderId}/mark-missed`
+    );
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error marking reminder as missed:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to mark reminder as missed"
+    );
+  }
+};
+
+/**
+ * Resend or reschedule a missed reminder
+ * @param {string} reminderId - ID of the reminder to resend
+ * @param {Object} options - Resend options
+ * @param {string} options.rescheduleFor - New due date/time (optional)
+ * @param {string[]} options.channels - Channels to use for resend (default: ['In-app'])
+ * @returns {Promise<Object>} - Resend confirmation
+ */
+export const resendMissedReminder = async (reminderId, options = {}) => {
+  try {
+    const body = {
+      channels: options.channels || ["In-app"],
+      rescheduleFor: options.rescheduleFor
+    };
+
+    const response = await axiosInstance.post(
+      `/reminders/${reminderId}/resend`,
+      body
+    );
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error resending reminder:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to resend reminder"
+    );
+  }
+};
+
+// ==================== PHASE 1: REMIND-BEFORE OFFSETS ====================
+
+/**
+ * Get notification offsets for a reminder
+ * @param {string} reminderId - ID of the reminder
+ * @returns {Promise<Object>} - Reminder notification offsets and status
+ */
+export const getNotificationOffsets = async (reminderId) => {
+  try {
+    const response = await axiosInstance.get(
+      `/reminders/${reminderId}/notification-offsets`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching notification offsets:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch notification offsets"
+    );
+  }
+};
+
+/**
+ * Update notification offsets for a reminder
+ * @param {string} reminderId - ID of the reminder
+ * @param {number[]} reminderBeforeOffsets - Array of minutes before due time to send notifications
+ * @returns {Promise<Object>} - Updated offsets
+ */
+export const setNotificationOffsets = async (reminderId, reminderBeforeOffsets) => {
+  try {
+    const response = await axiosInstance.put(
+      `/reminders/${reminderId}/notification-offsets`,
+      { reminderBeforeOffsets }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating notification offsets:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to update notification offsets"
+    );
+  }
+};
+
+// ==================== PHASE 2: SMS DELIVERY ====================
+
+/**
+ * Get SMS delivery status for a reminder
+ * @param {string} reminderId - ID of the reminder
+ * @returns {Promise<Object>} - SMS delivery status and logs
+ */
+export const getSMSDeliveryStatus = async (reminderId) => {
+  try {
+    const response = await axiosInstance.get(
+      `/reminders/${reminderId}/sms-delivery-status`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching SMS delivery status:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch SMS delivery status"
+    );
+  }
+};
+
+/**
+ * Manually trigger SMS resend for a reminder
+ * @param {string} reminderId - ID of the reminder
+ * @returns {Promise<Object>} - Resend confirmation
+ */
+export const resendSMS = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(
+      `/reminders/${reminderId}/resend-sms`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error resending SMS:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to resend SMS"
+    );
+  }
+};
+
+/**
+ * Configure SMS phone number for a reminder
+ * @param {string} reminderId - ID of the reminder
+ * @param {string} phoneNumber - Phone number for SMS delivery
+ * @returns {Promise<Object>} - Updated SMS configuration
+ */
+export const setSMSConfig = async (reminderId, phoneNumber) => {
+  try {
+    const response = await axiosInstance.put(
+      `/reminders/${reminderId}/sms-config`,
+      { phoneNumber }
+    );
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error updating SMS configuration:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to update SMS configuration"
+    );
+  }
+};
+
 const remindersService = {
   fetchReminders,
   createReminder,
@@ -520,6 +722,19 @@ const remindersService = {
   getRemindersAttachments,
   getAttachmentsByType,
   deleteRemindersAttachment,
+  // Phase 1: Snooze
+  snoozeReminder,
+  // Phase 1: Missed Reminders
+  getMissedReminders,
+  markReminderAsMissed,
+  resendMissedReminder,
+  // Phase 1: Notification Offsets
+  getNotificationOffsets,
+  setNotificationOffsets,
+  // Phase 2: SMS Delivery
+  getSMSDeliveryStatus,
+  resendSMS,
+  setSMSConfig,
 };
 
 export default remindersService;

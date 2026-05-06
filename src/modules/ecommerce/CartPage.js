@@ -133,6 +133,9 @@ const CartPage = ({ onContinueShopping = null }) => {
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [pincodeLookupMessage, setPincodeLookupMessage] = useState("");
   const [pincodeLookupLoading, setPincodeLookupLoading] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponLoading, setCouponLoading] = useState(false);
   const [selectedGateway, setSelectedGateway] = useState("cod");
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState("");
@@ -197,9 +200,10 @@ const CartPage = ({ onContinueShopping = null }) => {
       items.length > 0 ? deliveryConstants.baseFee + itemCount * deliveryConstants.perItemFee : 0;
 
     return {
-      amount: `INR ${subtotalAmount + computedDeliveryFee}`,
+      amount: `INR ${subtotalAmount + computedDeliveryFee - (appliedCoupon?.discountAmount || 0)}`,
       subtotal: `INR ${subtotalAmount}`,
       deliveryFee: `INR ${computedDeliveryFee}`,
+      couponCode: appliedCoupon?.code || "",
       deliveryAddress: buildFormattedAddress(deliveryForm),
       deliveryDetails: {
         ...deliveryForm,
@@ -466,6 +470,54 @@ const CartPage = ({ onContinueShopping = null }) => {
     updateSavedAddresses,
     validateAddressFormForSave,
   ]);
+
+  const applyCoupon = useCallback(async () => {
+    const trimmedCode = couponCode.trim().toUpperCase();
+    if (!trimmedCode) {
+      setCheckoutMessage("Enter a coupon code to apply.");
+      return;
+    }
+
+    setCouponLoading(true);
+    setCheckoutMessage("");
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/coupons/apply`,
+        {
+          couponCode: trimmedCode,
+          amount: totalAmount,
+          userEmail: currentUser?.email || "",
+        },
+        { headers: { Authorization: `Bearer ${currentUser?.token || ""}` } }
+      );
+
+      if (response.data?.success) {
+        setAppliedCoupon({
+          code: trimmedCode,
+          discountAmount: response.data.discountAmount || 0,
+          couponData: response.data.coupon || {},
+        });
+        setCheckoutMessage(`Coupon applied! Saving INR ${formatCurrency(response.data.discountAmount || 0)}`);
+        setCouponCode("");
+      } else {
+        setCheckoutMessage(response.data?.message || "Unable to apply coupon.");
+        setAppliedCoupon(null);
+      }
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to apply coupon.";
+      setCheckoutMessage(errorMsg);
+      setAppliedCoupon(null);
+    } finally {
+      setCouponLoading(false);
+    }
+  }, [couponCode, totalAmount, currentUser?.email, currentUser?.token]);
+
+  const removeCoupon = useCallback(() => {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCheckoutMessage("Coupon removed.");
+  }, []);
 
   const handleStartPayment = useCallback(async () => {
     clearCheckoutStatus();
@@ -914,13 +966,57 @@ const CartPage = ({ onContinueShopping = null }) => {
               <span>Subtotal</span>
               <strong>INR {formatCurrency(totalAmount)}</strong>
             </div>
+
+            {/* Coupon Section */}
+            <div className="coupon-section">
+              <div className="coupon-input-group">
+                <input
+                  type="text"
+                  placeholder="Enter coupon code"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  onKeyPress={(e) => e.key === "Enter" && applyCoupon()}
+                  disabled={couponLoading || !!appliedCoupon}
+                  className="coupon-input"
+                />
+                {!appliedCoupon ? (
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={applyCoupon}
+                    disabled={couponLoading || !couponCode.trim()}
+                  >
+                    {couponLoading ? "Applying..." : "Apply"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={removeCoupon}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              {appliedCoupon && (
+                <p className="coupon-applied">✓ {appliedCoupon.code} applied</p>
+              )}
+            </div>
+
+            {appliedCoupon?.discountAmount > 0 && (
+              <div className="cart-summary-row discount-row">
+                <span>Discount ({appliedCoupon.code})</span>
+                <strong>-INR {formatCurrency(appliedCoupon.discountAmount)}</strong>
+              </div>
+            )}
+
             <div className="cart-summary-row">
               <span>Delivery Fee</span>
               <strong>INR {formatCurrency(deliveryFee)}</strong>
             </div>
             <div className="cart-summary-row cart-summary-total">
               <span>Total</span>
-              <strong>INR {formatCurrency(grandTotal)}</strong>
+              <strong>INR {formatCurrency(grandTotal - (appliedCoupon?.discountAmount || 0))}</strong>
             </div>
             <p className="delivery-fee-note">
               Delivery fee includes INR {formatCurrency(deliveryConstants.baseFee)} base charge plus INR {formatCurrency(deliveryConstants.perItemFee)} per item.
@@ -1009,6 +1105,12 @@ const CartPage = ({ onContinueShopping = null }) => {
                   <span>Subtotal</span>
                   <span>{orderConfirmData.subtotal}</span>
                 </div>
+                {appliedCoupon?.discountAmount > 0 && (
+                  <div className="pricing-row discount-row">
+                    <span>Discount ({appliedCoupon.code})</span>
+                    <span>-INR {formatCurrency(appliedCoupon.discountAmount)}</span>
+                  </div>
+                )}
                 <div className="pricing-row">
                   <span>Delivery Fee</span>
                   <span>{orderConfirmData.deliveryFee}</span>

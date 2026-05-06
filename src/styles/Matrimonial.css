@@ -588,6 +588,60 @@
   color: #2d1b33;
 }
 
+/* Payment Gateway Modal Overlay */
+.payment-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(27, 31, 42, 0.8);
+  backdrop-filter: blur(8px);
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.payment-modal-overlay .payment-gateway-container {
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(27, 31, 42, 0.4);
+}
+
+/* Matrimonial Tab Navigation */
+.matrimonial-nav-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 2px solid #e5e5e5;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 0;
+}
+
+.matrimonial-nav-tabs button {
+  padding: 0.75rem 1.25rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-weight: 500;
+  color: #625868;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.matrimonial-nav-tabs button:hover {
+  color: #3f51b5;
+}
+
+.matrimonial-nav-tabs button.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
 @media (max-width: 1200px) {
   .matrimonial-content-grid {
     grid-template-columns: minmax(260px, 0.95fr) minmax(0, 1.4fr);

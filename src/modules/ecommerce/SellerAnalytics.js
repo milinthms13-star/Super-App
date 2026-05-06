@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import { formatCurrency, formatDisplayDate } from "../../utils/ecommerceHelpers";
+import VendorSettlement from "./VendorSettlement";
+import InventoryAlerts from "./InventoryAlerts";
 import "./SellerAnalytics.css";
 
 const PERIODS = ["Today", "This Week", "This Month", "This Quarter", "This Year"];
@@ -114,6 +116,8 @@ const SellerAnalytics = () => {
           { id: "products", label: "Products" },
           { id: "regions", label: "Regions" },
           { id: "reviews", label: "Reviews" },
+          { id: "settlement", label: "Settlement" },
+          { id: "alerts", label: "Alerts" },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -386,6 +390,10 @@ const SellerAnalytics = () => {
           </article>
         </div>
       )}
+
+      {activeTab === "settlement" && <VendorSettlement />}
+
+      {activeTab === "alerts" && <InventoryAlerts />}
     </section>
   );
 };

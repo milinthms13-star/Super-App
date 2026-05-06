@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from "react";
 import PropTypes from "prop-types";
+import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import { normalizeOrderStatus, formatDisplayDate, getReturnWindowText, formatCurrency } from "../../utils/ecommerceHelpers";
 import { sanitizeText } from "../../utils/xssProtection";
 import { getPathForModule } from "../../utils/moduleRoutes";
+import { API_BASE_URL } from "../../utils/api";
 import "../../styles/Ecommerce.css";
 
 const ORDER_STEPS = ["Confirmed", "Packed", "Shipped", "Delivered"];
@@ -44,10 +46,44 @@ const OrdersPage = ({ onContinueShopping = null, onOpenReturns = null }) => {
     loadMoreOrders,
     checkoutStatus,
     clearCheckoutStatus,
+    currentUser,
   } = useApp();
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const [cancelMessage, setCancelMessage] = useState("");
+
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm("Are you sure you want to cancel this order? Inventory will be restored.")) {
+      return;
+    }
+
+    setCancellingOrderId(orderId);
+    setCancelMessage("");
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/orders/${orderId}/cancel`,
+        { reason: "Cancelled by customer" },
+        { headers: { Authorization: `Bearer ${currentUser?.token || ""}` } }
+      );
+
+      if (response.data?.success) {
+        setCancelMessage(`✓ Order ${orderId} cancelled successfully. Inventory restored.`);
+        // Refresh orders
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        setCancelMessage(response.data?.message || "Unable to cancel order.");
+      }
+    } catch (error) {
+      const errorMsg = error.response?.data?.message || error.message || "Failed to cancel order.";
+      setCancelMessage(errorMsg);
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
   const handleContinueShopping = () => {
     if (typeof onContinueShopping === "function") {
       onContinueShopping();
@@ -95,6 +131,15 @@ const OrdersPage = ({ onContinueShopping = null, onOpenReturns = null }) => {
         <div className="products-notice">
           <span>{checkoutStatus.message}</span>
           <button type="button" className="btn btn-outline" onClick={clearCheckoutStatus}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {cancelMessage && (
+        <div className="products-notice">
+          <span>{cancelMessage}</span>
+          <button type="button" className="btn btn-outline" onClick={() => setCancelMessage("")}>
             Dismiss
           </button>
         </div>
@@ -318,12 +363,94 @@ const OrdersPage = ({ onContinueShopping = null, onOpenReturns = null }) => {
 
               {expandedOrderId !== order.id && (
                 <div className="seller-inventory-header">
+                  <h5>Delivery Verification (Phase 2)</h5>
+                  <p>Proof of delivery, OTP verification, and location tracking.</p>
+                </div>
+              )}
+
+              {(order.deliveryProof || order.deliveryOTP || order.deliveryLocation) && expandedOrderId === order.id && (
+                <div className="seller-order-detail-panel">
+                  {order.deliveryProof && (
+                    <>
+                      <div className="seller-order-detail-row">
+                        <span>📷 Delivery Proof</span>
+                        <strong>{order.deliveryProof.uploadedAt ? `Uploaded ${formatDisplayDate(order.deliveryProof.uploadedAt)}` : "Pending"}</strong>
+                      </div>
+                      {order.deliveryProof.imageUrl && (
+                        <div className="seller-order-detail-row">
+                          <span>Proof Image</span>
+                          <a href={order.deliveryProof.imageUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline">
+                            View Proof 📸
+                          </a>
+                        </div>
+                      )}
+                      {order.deliveryProof.notes && (
+                        <div className="seller-order-detail-row">
+                          <span>Delivery Notes</span>
+                          <strong>{sanitizeText(order.deliveryProof.notes)}</strong>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {order.deliveryOTP && (
+                    <>
+                      <div className="seller-order-detail-row">
+                        <span>🔐 OTP Status</span>
+                        <strong>{order.deliveryOTP.verified ? "✓ Verified" : "Pending verification"}</strong>
+                      </div>
+                      {order.deliveryOTP.verifiedAt && (
+                        <div className="seller-order-detail-row">
+                          <span>Verified At</span>
+                          <strong>{formatDisplayDate(order.deliveryOTP.verifiedAt)}</strong>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {order.deliveryLocation && (
+                    <>
+                      <div className="seller-order-detail-row">
+                        <span>📍 Delivery Location</span>
+                        <strong>{order.deliveryLocation.address || `${order.deliveryLocation.lat}, ${order.deliveryLocation.lng}`}</strong>
+                      </div>
+                      {order.deliveryLocation.googleMapsLink && (
+                        <div className="seller-order-detail-row">
+                          <span>View on Map</span>
+                          <a href={order.deliveryLocation.googleMapsLink} target="_blank" rel="noopener noreferrer" className="btn btn-outline">
+                            Open Google Maps 🗺️
+                          </a>
+                        </div>
+                      )}
+                      {order.deliveryLocation.capturedAt && (
+                        <div className="seller-order-detail-row">
+                          <span>Captured At</span>
+                          <strong>{formatDisplayDate(order.deliveryLocation.capturedAt)}</strong>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {expandedOrderId !== order.id && (
+                <div className="seller-inventory-header">
                   <h5>Delivery Address</h5>
                   <p>{sanitizeText(order.deliveryAddress) || "Address unavailable"}</p>
                 </div>
               )}
 
               <div className="seller-card-actions">
+                {normalizeOrderStatus(order.status) === "Confirmed" && (
+                  <button 
+                    type="button" 
+                    className="btn btn-outline cancel-btn"
+                    onClick={() => handleCancelOrder(order.id)}
+                    disabled={cancellingOrderId === order.id}
+                  >
+                    {cancellingOrderId === order.id ? "Cancelling..." : "Cancel Order"}
+                  </button>
+                )}
                 <button type="button" className="btn btn-outline" onClick={handleOpenReturns}>
                   Manage Returns
                 </button>

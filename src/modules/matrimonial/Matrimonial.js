@@ -2,6 +2,7 @@
 import axios from "axios";
 import { useApp } from "../../contexts/AppContext";
 import "../../styles/Matrimonial.css";
+import "../../styles/MatrimonialFrontend.css";
 import PropTypes from "prop-types";
 import {
   API_BASE_URL,
@@ -27,6 +28,12 @@ import {
   sendMatrimonialMessage,
 } from "./api.js";
 import { sanitizeText } from "../../utils/xssProtection";
+import KYCVerification from "./KYCVerification";
+import BlueTickBadge from "./BlueTickBadge";
+import HoroscopeMatching from "./HoroscopeMatching";
+import SubscriptionManagement from "./SubscriptionManagement";
+import PaymentGateway from "./PaymentGateway";
+import * as matrimonialAPI from "./matrimonialAPI";
 
 // Debounce hook for search and filters
 const useDebounce = (value, delay) => {
@@ -105,6 +112,10 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
   const [liveSearchState, setLiveSearchState] = useState("idle");
   const photoInputRef = useRef(null);
   const onboardingRecordedRef = useRef(false);
+  
+  // New Premium Features State
+  const [showPaymentGateway, setShowPaymentGateway] = useState(false);
+  const [selectedPaymentTier, setSelectedPaymentTier] = useState(null);
 
   // Debounce search input only; advanced filters apply immediately
   const debouncedSearchQuery = useDebounce(searchQuery, 400);
@@ -1608,6 +1619,44 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
             </section>
           )}
 
+          {activeTab === "kyc" && (
+            <KYCVerification
+              currentProfile={matrimonialProfile}
+              onKYCComplete={(data) => {
+                setMatrimonialProfile((prev) => prev ? { ...prev, kycStatus: data.status } : null);
+                setStatusMessage("✓ KYC document uploaded successfully!");
+              }}
+            />
+          )}
+
+          {activeTab === "blue-tick" && matrimonialProfile && (
+            <BlueTickBadge
+              profileId={matrimonialProfile._id || matrimonialProfile.id}
+              onUpdate={(tickData) => {
+                setMatrimonialProfile((prev) => prev ? { ...prev, blueTick: tickData } : null);
+              }}
+            />
+          )}
+
+          {activeTab === "horoscope" && selectedProfileId && (
+            <HoroscopeMatching
+              profile1Id={matrimonialProfile?._id || matrimonialProfile?.id}
+              profile2Id={selectedProfileId}
+              onClose={() => setActiveTab("discover")}
+            />
+          )}
+
+          {activeTab === "subscription" && (
+            <SubscriptionManagement
+              userEmail={currentUser?.email}
+              onSubscriptionChange={(subscription) => {
+                localStorage.setItem("userSubscription", JSON.stringify(subscription));
+                setStatusMessage("✓ Subscription updated successfully!");
+                setIsPremiumPreview(subscription.tier !== "free");
+              }}
+            />
+          )}
+
           {activeTab === "admin" && isAdmin && (
             <section className="matrimonial-panel">
               <div className="matrimonial-panel-heading">
@@ -1807,6 +1856,33 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
             )}
           </section>
         </aside>
+
+        {/* Payment Gateway Modal */}
+        {showPaymentGateway && selectedPaymentTier && (
+          <div className="payment-modal-overlay">
+            <PaymentGateway
+              subscriptionTier={selectedPaymentTier}
+              amount={
+                selectedPaymentTier === "gold"
+                  ? 499
+                  : selectedPaymentTier === "premium"
+                  ? 999
+                  : 2999
+              }
+              onSuccess={(paymentData) => {
+                setShowPaymentGateway(false);
+                setSelectedPaymentTier(null);
+                setStatusMessage("✓ Payment successful! Your subscription is now active.");
+                setIsPremiumPreview(true);
+                setActiveTab("subscription");
+              }}
+              onCancel={() => {
+                setShowPaymentGateway(false);
+                setSelectedPaymentTier(null);
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

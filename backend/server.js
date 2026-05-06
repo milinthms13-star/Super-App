@@ -72,9 +72,18 @@ app.use('/api/messaging', require('./routes/messaging'));
 app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/coupons', require('./routes/coupons'));
+app.use('/api/settlements', require('./routes/settlements'));
+app.use('/api/alerts', require('./routes/alerts'));
+app.use('/api/abandonedcarts', require('./routes/abandonedcarts'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/referralprogram', require('./routes/referralprogram'));
 app.use('/api/reminders', require('./routes/reminders'));
+app.use('/api/matrimonial', require('./routes/matrimonial-kyc'));
+app.use('/api/matrimonial', require('./routes/matrimonial-subscription'));
+app.use('/api/matrimonial/admin/analytics', require('./routes/matrimonial-admin-analytics'));
+app.use('/api/matrimonial/referral', require('./routes/matrimonial-referral'));
+app.use('/api/matrimonial/communication', require('./routes/matrimonial-communication'));
+app.use('/matrimonial', require('./routes/matrimonial-seo'));
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/selleranalytics', require('./routes/selleranalytics'));
 app.use('/api/seller-analytics', require('./routes/selleranalytics'));
@@ -149,11 +158,21 @@ const { io } = require('./config/websocket');
 const diaryReminderScheduler = new DiaryReminderScheduler(io);
 diaryReminderScheduler.start();
 
+// Initialize Missed Reminder Scheduler (Phase 1)
+const missedReminderScheduler = require('./services/missedReminderScheduler');
+missedReminderScheduler.startMissedReminderScheduler(5 * 60 * 1000);  // Run every 5 minutes
+
+// Initialize SMS Reminder Scheduler (Phase 2)
+const smsReminderScheduler = require('./services/smsReminderScheduler');
+smsReminderScheduler.start();
+
 server.listen(PORT, () => {
   logger.info(`Server started on port ${PORT}`);
   logger.info(`WebSocket server initialized`);
   logger.info(`Voice call scheduler started`);
   logger.info(`Diary reminder scheduler started`);
+  logger.info(`Missed reminder scheduler started`);
+  logger.info(`SMS reminder scheduler started`);
 });
 
 process.on('unhandledRejection', (err) => {
@@ -165,6 +184,8 @@ process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
   voiceCallScheduler.stop();
   diaryReminderScheduler.stop();
+  missedReminderScheduler.stopMissedReminderScheduler();
+  smsReminderScheduler.stop();
   server.close(() => {
     logger.info('Process terminated');
   });

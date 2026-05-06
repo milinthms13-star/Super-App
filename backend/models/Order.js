@@ -62,14 +62,52 @@ const OrderSchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+    coupon: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     status: {
       type: String,
       default: 'Confirmed',
       trim: true,
     },
+    cancelledAt: {
+      type: Date,
+      default: null,
+    },
+    cancelReason: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     deliveredAt: {
       type: Date,
       default: null,
+    },
+    deliveryProof: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+      // Contains: { imageUrl, uploadedAt, uploadedBy, notes }
+    },
+    deliveryOTP: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+      // Contains: { otp, verified, verifiedAt, attempts, maxAttempts }
+    },
+    deliveryLocation: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+      // Contains: { lat, lng, address, googleMapsLink, capturedAt }
+    },
+    commission: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+      // Contains: { platformCommissionPercentage, items: [{ vendorEmail, revenue, commission, netPayable }] }
     },
   },
   {

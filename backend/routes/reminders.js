@@ -1658,6 +1658,528 @@ router.get('/:id/attachments/type/:type', authenticate, async (req, res) => {
   }
 });
 
+// ==================== PHASE 1: SNOOZE FUNCTIONALITY ====================
+
+// POST /api/reminders/:id/snooze - Snooze a reminder
+router.post('/:id/snooze', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const { minutesToSnooze } = req.body;
+
+    if (!minutesToSnooze || minutesToSnooze < 1 || minutesToSnooze > 10080) {
+      return res.status(400).json({
+        success: false,
+        message: 'minutesToSnooze must be between 1 and 10080 (7 days)'
+      });
+    }
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    reminder.snooze(minutesToSnooze);
+    await reminder.save();
+
+    logger.info(`Reminder ${reminderId} snoozed for ${minutesToSnooze} minutes`);
+
+    res.json({
+      success: true,
+      data: {
+        snoozedUntil: reminder.snoozedUntil,
+        snoozeCount: reminder.snoozeCount,
+        nextNotificationAt: reminder.snoozedUntil
+      },
+      message: `Reminder snoozed until ${reminder.snoozedUntil.toLocaleString()}`
+    });
+  } catch (error) {
+    logger.error('Error snoozing reminder:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to snooze reminder',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ==================== PHASE 1: MISSED REMINDER TRACKING ====================
+
+// GET /api/reminders/missed - Get all missed reminders for user
+router.get('/missed', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { limit = 20, skip = 0 } = req.query;
+
+    const missedReminders = await Reminder.find({
+      userId: userId,
+      missedAt: { $exists: true, $ne: null },
+      completed: false
+    })
+      .sort({ missedAt: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(skip))
+      .lean();
+
+    const totalCount = await Reminder.countDocuments({
+      userId: userId,
+      missedAt: { $exists: true, $ne: null },
+      completed: false
+    });
+
+    res.json({
+      success: true,
+      data: missedReminders,
+      pagination: {
+        total: totalCount,
+        limit: parseInt(limit),
+        skip: parseInt(skip)
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching missed reminders:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch missed reminders',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/:id/mark-missed - Manually mark reminder as missed
+router.post('/:id/mark-missed', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    if (reminder.completed) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot mark completed reminder as missed'
+      });
+    }
+
+    reminder.recordMissedReminder();
+    reminder.status = 'Missed';
+    await reminder.save();
+
+    logger.info(`Reminder ${reminderId} marked as missed`);
+
+    res.json({
+      success: true,
+      data: {
+        missedAt: reminder.missedAt,
+        status: reminder.status,
+        missedCount: reminder.missedHistory ? reminder.missedHistory.length : 1
+      },
+      message: 'Reminder marked as missed'
+    });
+  } catch (error) {
+    logger.error('Error marking reminder as missed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark reminder as missed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/:id/resend - Resend/reschedule a missed reminder
+router.post('/:id/resend', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const { rescheduleFor, channels = ['In-app'] } = req.body;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    if (reminder.completed) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot resend completed reminder'
+      });
+    }
+
+    // If rescheduling for a different time
+    if (rescheduleFor) {
+      const newDueDate = new Date(rescheduleFor);
+      if (newDueDate < new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot reschedule to a past date'
+        });
+      }
+      reminder.dueDate = newDueDate;
+    }
+
+    // Record resend in missed history
+    if (reminder.missedHistory && reminder.missedHistory.length > 0) {
+      const lastMissed = reminder.missedHistory[reminder.missedHistory.length - 1];
+      lastMissed.resendAt = new Date();
+      lastMissed.status = 'resent';
+    }
+
+    // Clear snooze if any
+    reminder.snoozedUntil = null;
+
+    // Record notification sent
+    for (const channel of channels) {
+      reminder.recordNotificationSent(reminder.reminderBeforeOffsets?.[0] || 5, channel);
+    }
+
+    await reminder.save();
+
+    logger.info(`Reminder ${reminderId} resent with channels: ${channels.join(', ')}`);
+
+    res.json({
+      success: true,
+      data: {
+        id: reminder._id,
+        dueDate: reminder.dueDate,
+        channels: channels,
+        resendAt: new Date()
+      },
+      message: 'Reminder resent successfully'
+    });
+  } catch (error) {
+    logger.error('Error resending reminder:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resend reminder',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ==================== PHASE 1: REMIND-BEFORE OFFSETS ====================
+
+// GET /api/reminders/:id/notification-offsets - Get reminder notification offsets
+router.get('/:id/notification-offsets', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    }).select('reminderBeforeOffsets notificationLog dueDate dueTime');
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    const offsets = reminder.reminderBeforeOffsets || [5];
+    const notificationStatus = (reminder.notificationLog || []).reduce((acc, log) => {
+      acc[log.offsetMinutes] = {
+        status: log.status,
+        firedAt: log.firedAt,
+        channel: log.channel
+      };
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      data: {
+        reminderBeforeOffsets: offsets,
+        availableOffsets: [5, 15, 30, 60, 1440],  // 5min, 15min, 30min, 1hr, 1day
+        notificationStatus: notificationStatus,
+        dueDateTime: {
+          date: reminder.dueDate,
+          time: reminder.dueTime
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching notification offsets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch notification offsets',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// PUT /api/reminders/:id/notification-offsets - Update reminder notification offsets
+router.put('/:id/notification-offsets', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const { reminderBeforeOffsets } = req.body;
+
+    if (!Array.isArray(reminderBeforeOffsets) || reminderBeforeOffsets.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'reminderBeforeOffsets must be a non-empty array of numbers'
+      });
+    }
+
+    // Validate offsets
+    const validOffsets = [5, 15, 30, 60, 1440];  // 5min, 15min, 30min, 1hr, 1day
+    const validatedOffsets = reminderBeforeOffsets.filter(offset => {
+      return Number.isInteger(offset) && offset > 0 && offset <= 10080;  // Max 7 days
+    }).sort((a, b) => a - b);
+
+    if (validatedOffsets.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one valid offset is required'
+      });
+    }
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    reminder.reminderBeforeOffsets = validatedOffsets;
+    reminder.notificationLog = [];  // Reset notification log when offsets change
+    await reminder.save();
+
+    logger.info(`Reminder ${reminderId} notification offsets updated to: ${validatedOffsets.join(', ')}`);
+
+    res.json({
+      success: true,
+      data: {
+        reminderBeforeOffsets: reminder.reminderBeforeOffsets,
+        message: `Notification reminders set for ${validatedOffsets.join(', ')} minutes before due time`
+      }
+    });
+  } catch (error) {
+    logger.error('Error updating notification offsets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update notification offsets',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ==================== PHASE 2: SMS DELIVERY ====================
+
+// GET /api/reminders/:id/sms-delivery-status - Check SMS delivery status for a reminder
+router.get('/:id/sms-delivery-status', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    }).select('notificationLog reminders recipientPhoneNumber');
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    if (!reminder.reminders || !reminder.reminders.includes('SMS')) {
+      return res.status(400).json({
+        success: false,
+        message: 'This reminder does not have SMS enabled'
+      });
+    }
+
+    // Filter SMS logs from notification log
+    const smsLogs = (reminder.notificationLog || []).filter(log => log.channel === 'SMS');
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        phoneNumber: reminder.recipientPhoneNumber,
+        smsEnabled: true,
+        deliveryStatus: smsLogs.map(log => ({
+          offsetMinutes: log.offsetMinutes,
+          sentAt: log.firedAt,
+          status: log.status,
+          message: log.status === 'sent' ? 'SMS sent successfully' : 'SMS delivery pending'
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching SMS delivery status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch SMS delivery status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/:id/resend-sms - Manually trigger SMS resend for a reminder
+router.post('/:id/resend-sms', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    if (!reminder.reminders || !reminder.reminders.includes('SMS')) {
+      return res.status(400).json({
+        success: false,
+        message: 'This reminder does not have SMS enabled'
+      });
+    }
+
+    if (!reminder.recipientPhoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number not configured for this reminder'
+      });
+    }
+
+    if (reminder.completed) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot resend SMS for completed reminder'
+      });
+    }
+
+    // Clear previous SMS logs to force resend
+    reminder.notificationLog = (reminder.notificationLog || []).filter(log => log.channel !== 'SMS');
+    
+    await reminder.save();
+
+    logger.info(`Reminder ${reminderId} SMS marked for resend`);
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        phoneNumber: reminder.recipientPhoneNumber,
+        message: 'SMS will be resent within the next 5 minutes'
+      }
+    });
+  } catch (error) {
+    logger.error('Error triggering SMS resend:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resend SMS',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// PUT /api/reminders/:id/sms-config - Configure SMS phone number for a reminder
+router.put('/:id/sms-config', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid phone number is required'
+      });
+    }
+
+    // Basic phone number validation
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(phoneNumber.replace(/\s/g, ''))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid phone number format'
+      });
+    }
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    reminder.recipientPhoneNumber = phoneNumber;
+
+    // Ensure SMS is in reminders channels if setting phone number
+    if (!reminder.reminders || !reminder.reminders.includes('SMS')) {
+      reminder.reminders = reminder.reminders || [];
+      if (!reminder.reminders.includes('SMS')) {
+        reminder.reminders.push('SMS');
+      }
+    }
+
+    await reminder.save();
+
+    logger.info(`SMS config updated for reminder ${reminderId}`);
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        phoneNumber: reminder.recipientPhoneNumber,
+        channels: reminder.reminders,
+        message: 'SMS configuration updated successfully'
+      }
+    });
+  } catch (error) {
+    logger.error('Error updating SMS config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update SMS configuration',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 module.exports = router;
 module.exports.__testables = {
   getReminderOwnerId,

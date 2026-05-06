@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const { authenticate } = require('../middleware/auth');
 const { createStrictRateLimiter } = require('../middleware/rateLimiter');
 const Product = require('../models/Product');
+const Coupon = require('../models/Coupon');
 const devProductStore = require('../utils/devProductStore');
 const devAppDataStore = require('../utils/devAppDataStore');
 const Order = require('../models/Order');
@@ -13,6 +14,7 @@ const orderStore = require('../utils/orderStore');
 const paymentAttemptStore = require('../utils/paymentAttemptStore');
 const GSTInvoicing = require('../utils/gstInvoice');
 const { buildPaymentSecurityProfile } = require('../utils/pciPayments');
+const { calculateVendorSettlement } = require('../utils/commissionService');
 const { consumeFlashSaleReservation, getActiveFlashSaleForProduct } = require('../utils/flashSaleService');
 const logger = require('../utils/logger');
 const { ADMIN_EMAIL, ORDER_STATUSES, DEFAULT_PAGE, DEFAULT_LIMIT, MAX_LIMIT, ORDER_CURRENCY, DELIVERY_BASE_FEE, DELIVERY_PER_ITEM_FEE, MILLISECONDS_IN_DAY, ORDER_STATUS_RANK } = require('../config/constants');
@@ -34,6 +36,7 @@ const orderSchema = Joi.object({
   amount: Joi.string().trim().allow('').optional(),
   subtotal: Joi.string().trim().allow('').optional(),
   deliveryFee: Joi.string().trim().allow('').optional(),
+  couponCode: Joi.string().trim().allow('').optional(),
   deliveryAddress: Joi.string().trim().required(),
   deliveryDetails: Joi.object({
     receiverPhone: Joi.string().trim().required(),
@@ -311,6 +314,7 @@ const serializeOrder = (order) => {
   const amount = getNumericAmount(order.amount);
   const subtotal = getNumericAmount(order.subtotal);
   const deliveryFee = getNumericAmount(order.deliveryFee);
+  const discountAmount = getNumericAmount(order.discountAmount || 0);
 
   return {
     id: order.id,
@@ -319,9 +323,12 @@ const serializeOrder = (order) => {
     amount,
     subtotal,
     deliveryFee,
+    discountAmount,
     formattedAmount: formatCurrencyAmount(amount),
     formattedSubtotal: formatCurrencyAmount(subtotal),
     formattedDeliveryFee: formatCurrencyAmount(deliveryFee),
+    formattedDiscountAmount: formatCurrencyAmount(discountAmount),
+    coupon: order.coupon || null,
     deliveryAddress: order.deliveryAddress,
     deliveryDetails: order.deliveryDetails,
     items: buildSerializedItems(order.items, sellerFulfillments),
@@ -339,6 +346,8 @@ const serializeOrder = (order) => {
       : null,
     notifications: Array.isArray(order.notifications) ? order.notifications : [],
     status: deriveOrderStatusFromFulfillments(sellerFulfillments),
+    cancelledAt: order.cancelledAt || null,
+    cancelReason: order.cancelReason || '',
     createdAt: order.createdAt,
     updatedAt: order.updatedAt || order.createdAt || null,
     deliveredAt: order.deliveredAt || null,
@@ -909,10 +918,113 @@ const buildAuthoritativeOrderSummary = ({ resolvedItems = [] }) => {
   };
 };
 
+const validateAndApplyCoupon = async ({ couponCode = '', subtotalValue = 0, userEmail = '' }) => {
+  if (!couponCode || !String(couponCode).trim()) {
+    return { coupon: null, discountAmount: 0 };
+  }
+
+  try {
+    const coupon = await Coupon.findOne({ code: String(couponCode).trim().toUpperCase() });
+    
+    if (!coupon) {
+      return { error: 'Coupon not found', statusCode: 404 };
+    }
+
+    if (!coupon.isActive) {
+      return { error: 'Coupon is no longer active', statusCode: 400 };
+    }
+
+    const now = new Date();
+    if (coupon.startAt && now < new Date(coupon.startAt)) {
+      return { error: 'Coupon has not started yet', statusCode: 400 };
+    }
+
+    if (coupon.endAt && now > new Date(coupon.endAt)) {
+      return { error: 'Coupon has expired', statusCode: 400 };
+    }
+
+    if (subtotalValue < Number(coupon.minOrderAmount || 0)) {
+      return { 
+        error: `Minimum order amount of ${formatCurrencyAmount(coupon.minOrderAmount)} required`, 
+        statusCode: 400 
+      };
+    }
+
+    let discountAmount = 0;
+    if (coupon.discountType === 'fixed') {
+      discountAmount = Number(coupon.discountValue || 0);
+    } else {
+      // percentage
+      discountAmount = (subtotalValue * Number(coupon.discountValue || 0)) / 100;
+    }
+
+    discountAmount = Math.max(0, Math.min(discountAmount, subtotalValue));
+
+    return {
+      coupon: {
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        minOrderAmount: coupon.minOrderAmount,
+      },
+      discountAmount: roundCurrency(discountAmount),
+    };
+  } catch (error) {
+    logger.error('Coupon validation error:', error);
+    return { error: 'Unable to validate coupon', statusCode: 500 };
+  }
+};
+
 const canUseMongoOrderTransaction = ({ authoritativeItems = [], starterProductMap = new Map() }) =>
   mongoose.connection.readyState === 1 &&
   authoritativeItems.length > 0 &&
   authoritativeItems.every((item) => !starterProductMap.has(String(item.productId)));
+
+/**
+ * Calculate commission data for order items grouped by vendor
+ * @param {Array} enrichedItems - Order items with seller information
+ * @param {Number} commissionPercentage - Commission % (from config)
+ * @returns {Object} Commission breakdown by vendor
+ */
+const calculateOrderCommission = (enrichedItems = [], commissionPercentage = 15) => {
+  const commissionByVendor = {};
+  let totalRevenue = 0;
+  let totalCommission = 0;
+
+  enrichedItems.forEach((item) => {
+    const vendorEmail = item.sellerEmail?.toLowerCase() || 'unknown';
+    const itemRevenue = item.price * item.quantity;
+    totalRevenue += itemRevenue;
+
+    if (!commissionByVendor[vendorEmail]) {
+      commissionByVendor[vendorEmail] = {
+        vendorEmail,
+        vendorName: item.sellerName || '',
+        revenue: 0,
+        commission: 0,
+        itemCount: 0,
+      };
+    }
+
+    commissionByVendor[vendorEmail].revenue += itemRevenue;
+    commissionByVendor[vendorEmail].itemCount += 1;
+  });
+
+  // Calculate commission for each vendor
+  Object.values(commissionByVendor).forEach((vendor) => {
+    vendor.commission = Math.round((vendor.revenue * commissionPercentage) / 100 * 100) / 100;
+    vendor.netPayable = Math.round((vendor.revenue - vendor.commission) * 100) / 100;
+    totalCommission += vendor.commission;
+  });
+
+  return {
+    platformCommissionPercentage: commissionPercentage,
+    items: Object.values(commissionByVendor),
+    totalRevenue: Math.round(totalRevenue * 100) / 100,
+    totalCommission: Math.round(totalCommission * 100) / 100,
+    netPayableToVendors: Math.round((totalRevenue - totalCommission) * 100) / 100,
+  };
+};
 
 const createStoredOrderPayload = ({
   user,
@@ -922,21 +1034,32 @@ const createStoredOrderPayload = ({
   sellerFulfillments,
   paymentDetails,
   paymentSecurity,
-}) => ({
-  customerEmail: user.email,
-  customerName: user.name || user.email,
-  amount: authoritativeOrder.amountValue,
-  subtotal: authoritativeOrder.subtotalValue,
-  deliveryFee: authoritativeOrder.deliveryFeeValue,
-  deliveryAddress: orderData.deliveryAddress,
-  deliveryDetails: orderData.deliveryDetails,
-  items: enrichedItems,
-  sellerFulfillments,
-  paymentDetails,
-  paymentSecurity,
-  notifications: [],
-  status: deriveOrderStatusFromFulfillments(sellerFulfillments),
-});
+  coupon = null,
+  discountAmount = 0,
+  commissionPercentage = 15,
+}) => {
+  const finalAmount = Math.max(0, authoritativeOrder.amountValue - discountAmount);
+  const commissionData = calculateOrderCommission(enrichedItems, commissionPercentage);
+
+  return {
+    customerEmail: user.email,
+    customerName: user.name || user.email,
+    amount: finalAmount,
+    subtotal: authoritativeOrder.subtotalValue,
+    deliveryFee: authoritativeOrder.deliveryFeeValue,
+    coupon,
+    discountAmount,
+    deliveryAddress: orderData.deliveryAddress,
+    deliveryDetails: orderData.deliveryDetails,
+    items: enrichedItems,
+    sellerFulfillments,
+    paymentDetails,
+    paymentSecurity,
+    commission: commissionData,
+    notifications: [],
+    status: deriveOrderStatusFromFulfillments(sellerFulfillments),
+  };
+};
 
 const createOrderWithMongoTransaction = async ({
   user,
@@ -946,6 +1069,9 @@ const createOrderWithMongoTransaction = async ({
   authoritativeOrder,
   starterProductMap,
   dbProducts,
+  coupon = null,
+  discountAmount = 0,
+  status = 'Confirmed',
 }) => {
   let createdOrder = null;
   const session = await mongoose.startSession();
@@ -1005,6 +1131,9 @@ const createOrderWithMongoTransaction = async ({
         sellerFulfillments,
         paymentDetails,
         paymentSecurity,
+        coupon,
+        discountAmount,
+        status,
       });
 
       const [order] = await Order.create([payload], { session });
@@ -1117,6 +1246,22 @@ const persistStockReductionAndCreateOrder = async ({ user, orderData, paymentDet
   const { starterProducts, starterProductMap, dbProducts, resolvedItems } = stockCheck;
   const authoritativeOrder = buildAuthoritativeOrderSummary({ resolvedItems });
 
+  // Validate and apply coupon
+  const couponResult = await validateAndApplyCoupon({
+    couponCode: orderData.couponCode,
+    subtotalValue: authoritativeOrder.subtotalValue,
+    userEmail: user.email,
+  });
+
+  if (couponResult.error) {
+    const error = new Error(couponResult.error);
+    error.statusCode = couponResult.statusCode || 400;
+    throw error;
+  }
+
+  const coupon = couponResult.coupon || null;
+  const discountAmount = couponResult.discountAmount || 0;
+
   await consumeFlashSaleItems({
     items: authoritativeOrder.items,
     userEmail: user.email,
@@ -1137,6 +1282,8 @@ const persistStockReductionAndCreateOrder = async ({ user, orderData, paymentDet
       authoritativeOrder,
       starterProductMap,
       dbProducts,
+      coupon,
+      discountAmount,
     });
 
     return finalizeCompletedOrder(order);
@@ -1210,6 +1357,8 @@ const persistStockReductionAndCreateOrder = async ({ user, orderData, paymentDet
       sellerFulfillments,
       paymentDetails,
       paymentSecurity,
+      coupon,
+      discountAmount,
       status,
     })
   ).then(finalizeCompletedOrder);
@@ -1918,6 +2067,125 @@ const isReturnRequestStillEligible = (item, order, now = new Date()) => {
   return eligibleUntil.getTime() >= now.getTime();
 };
 
+const restoreOrderInventory = async (order) => {
+  if (!order || !Array.isArray(order.items)) {
+    return;
+  }
+
+  const itemsByProductId = new Map();
+  for (const item of order.items) {
+    const productId = String(item.productId || item.id || '').trim();
+    if (!productId) {
+      continue;
+    }
+
+    const quantity = Number(item.quantity || 0);
+    const currentQty = itemsByProductId.get(productId) || 0;
+    itemsByProductId.set(productId, currentQty + quantity);
+  }
+
+  for (const [productId, quantity] of itemsByProductId.entries()) {
+    if (useMemoryProducts()) {
+      const product = await devProductStore.findProductById(productId);
+      if (product) {
+        await devProductStore.updateProduct(productId, {
+          stock: Math.max(0, Number(product.stock || 0) + quantity),
+        });
+      }
+    } else {
+      if (mongoose.Types.ObjectId.isValid(productId)) {
+        const product = await Product.findById(productId);
+        if (product) {
+          const inventoryBatches = Array.isArray(product.inventoryBatches)
+            ? product.inventoryBatches.map((batch) => ({
+                ...batch,
+                stock: Number(batch.stock || 0) + quantity,
+              }))
+            : product.inventoryBatches || [];
+
+          await Product.findByIdAndUpdate(productId, {
+            stock: Math.max(0, Number(product.stock || 0) + quantity),
+            inventoryBatches: inventoryBatches.length > 0 ? inventoryBatches : undefined,
+          });
+        }
+      }
+    }
+  }
+};
+
+const canCancelOrder = (order) => {
+  if (!order) {
+    return { canCancel: false, reason: 'Order not found' };
+  }
+
+  const status = normalizeOrderStatus(order.status);
+  const cancellableStatuses = ['Confirmed'];
+  
+  if (!cancellableStatuses.includes(status)) {
+    return { canCancel: false, reason: `Cannot cancel order with status: ${status}` };
+  }
+
+  return { canCancel: true };
+};
+
+router.post('/:orderId/cancel', authenticate, async (req, res) => {
+  try {
+    const existingOrder = await orderStore.findOrderById(req.params.orderId);
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    if (!customerOwnsOrder(existingOrder, req)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can cancel only your own orders.',
+      });
+    }
+
+    const cancelCheck = canCancelOrder(existingOrder);
+    if (!cancelCheck.canCancel) {
+      return res.status(400).json({
+        success: false,
+        message: cancelCheck.reason,
+      });
+    }
+
+    // Restore inventory
+    await restoreOrderInventory(existingOrder);
+
+    // Update order status to Cancelled
+    const now = new Date();
+    const updatedOrder = await orderStore.updateOrder(req.params.orderId, {
+      status: 'Cancelled',
+      cancelledAt: now,
+      cancelReason: req.body?.reason || 'Cancelled by customer',
+      notifications: [
+        ...(Array.isArray(existingOrder.notifications) ? existingOrder.notifications : []),
+        {
+          type: 'order_cancelled',
+          createdAt: now.toISOString(),
+          message: 'Order has been cancelled and inventory has been restored.',
+        },
+      ],
+    });
+
+    return res.json({
+      success: true,
+      message: 'Order cancelled successfully. Inventory has been restored.',
+      order: serializeOrder(updatedOrder),
+    });
+  } catch (error) {
+    logger.error('order cancel error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to cancel order.',
+    });
+  }
+});
+
 router.post('/:orderId/returns', authenticate, async (req, res) => {
   try {
     const { error, value } = createReturnRequestSchema.validate(req.body, { stripUnknown: true });
@@ -2356,6 +2624,298 @@ router.patch('/:orderId/status/sync', authenticate, async (req, res) => {
     return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || 'Unable to sync order status.',
+    });
+  }
+});
+
+// ===== PHASE 2: DELIVERY VERIFICATION ENDPOINTS =====
+
+/**
+ * POST /:orderId/delivery-proof
+ * Upload delivery proof image/receipt for an order
+ * Delivery partner/driver uploads photo evidence of delivery
+ */
+router.post('/:orderId/delivery-proof', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { imageUrl, notes = '' } = req.body;
+
+    if (!imageUrl || !imageUrl.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Delivery proof image URL is required.',
+      });
+    }
+
+    const existingOrder = await orderStore.findOrderById(orderId);
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    // Verify order is in delivered state
+    if (!existingOrder.status || !['Delivered', 'Out for Delivery'].includes(existingOrder.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Delivery proof can only be uploaded for orders in "Out for Delivery" or "Delivered" status. Current status: ${existingOrder.status}`,
+      });
+    }
+
+    const deliveryProof = {
+      imageUrl: imageUrl.trim(),
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: req.user?.email || 'delivery-partner',
+      notes: notes ? notes.trim() : '',
+    };
+
+    const updatedOrder = await orderStore.updateOrder(orderId, {
+      deliveryProof,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Delivery proof uploaded successfully.',
+      order: serializeOrder(updatedOrder),
+    });
+  } catch (error) {
+    logger.error('delivery proof upload error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to upload delivery proof.',
+    });
+  }
+});
+
+/**
+ * POST /:orderId/delivery-otp/generate
+ * Generate OTP for delivery verification (only seller/delivery partner can generate)
+ */
+router.post('/:orderId/delivery-otp/generate', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    if (!isSellerRole(req) && !isAdmin(req)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only seller or admin can generate delivery OTP.',
+      });
+    }
+
+    const existingOrder = await orderStore.findOrderById(orderId);
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    if (!existingOrder.status || !['Out for Delivery', 'Delivered'].includes(existingOrder.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `OTP can only be generated for orders in "Out for Delivery" or "Delivered" status. Current status: ${existingOrder.status}`,
+      });
+    }
+
+    // Generate random 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const deliveryOTP = {
+      otp,
+      verified: false,
+      verifiedAt: null,
+      attempts: 0,
+      maxAttempts: 3,
+      generatedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), // 10 minutes
+    };
+
+    const updatedOrder = await orderStore.updateOrder(orderId, {
+      deliveryOTP,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Delivery OTP generated successfully.',
+      otp, // Send OTP in response (in production, send via SMS/WhatsApp)
+      expiresIn: '10 minutes',
+      order: serializeOrder(updatedOrder),
+    });
+  } catch (error) {
+    logger.error('delivery OTP generation error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to generate delivery OTP.',
+    });
+  }
+});
+
+/**
+ * POST /:orderId/delivery-otp/verify
+ * Verify customer-provided OTP for delivery
+ */
+router.post('/:orderId/delivery-otp/verify', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { otp } = req.body;
+
+    if (!otp || !otp.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP is required.',
+      });
+    }
+
+    const existingOrder = await orderStore.findOrderById(orderId);
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    if (!existingOrder.deliveryOTP) {
+      return res.status(400).json({
+        success: false,
+        message: 'No OTP generated for this order. Ask delivery partner to generate OTP.',
+      });
+    }
+
+    const { deliveryOTP } = existingOrder;
+
+    // Check if OTP is expired
+    if (new Date() > new Date(deliveryOTP.expiresAt)) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired. Please request a new OTP.',
+      });
+    }
+
+    // Check attempts
+    if (deliveryOTP.attempts >= deliveryOTP.maxAttempts) {
+      return res.status(400).json({
+        success: false,
+        message: `Maximum OTP verification attempts (${deliveryOTP.maxAttempts}) exceeded. Request a new OTP.`,
+      });
+    }
+
+    // Verify OTP
+    if (otp.trim() !== deliveryOTP.otp) {
+      const updatedDeliveryOTP = {
+        ...deliveryOTP,
+        attempts: deliveryOTP.attempts + 1,
+      };
+
+      await orderStore.updateOrder(orderId, {
+        deliveryOTP: updatedDeliveryOTP,
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: `Incorrect OTP. ${deliveryOTP.maxAttempts - updatedDeliveryOTP.attempts} attempts remaining.`,
+      });
+    }
+
+    // OTP verified
+    const verifiedDeliveryOTP = {
+      ...deliveryOTP,
+      verified: true,
+      verifiedAt: new Date().toISOString(),
+    };
+
+    const updatedOrder = await orderStore.updateOrder(orderId, {
+      deliveryOTP: verifiedDeliveryOTP,
+      // Update order status to Delivered if not already
+      status: existingOrder.status === 'Out for Delivery' ? 'Delivered' : existingOrder.status,
+      deliveredAt: existingOrder.deliveredAt || new Date().toISOString(),
+    });
+
+    // Generate invoice if order is now delivered
+    const orderWithInvoice = updatedOrder.status === 'Delivered'
+      ? await ensureInvoiceForOrder(updatedOrder)
+      : updatedOrder;
+
+    return res.json({
+      success: true,
+      message: 'Delivery OTP verified successfully.',
+      order: serializeOrder(orderWithInvoice),
+    });
+  } catch (error) {
+    logger.error('delivery OTP verification error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to verify delivery OTP.',
+    });
+  }
+});
+
+/**
+ * POST /:orderId/delivery-location
+ * Capture delivery location (latitude/longitude) where order was delivered
+ */
+router.post('/:orderId/delivery-location', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { lat, lng, address = '' } = req.body;
+
+    if (lat === undefined || lat === null || lng === undefined || lng === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude are required.',
+      });
+    }
+
+    // Validate coordinates
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude and longitude must be numbers.',
+      });
+    }
+
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coordinates. Latitude must be -90 to 90, longitude must be -180 to 180.',
+      });
+    }
+
+    const existingOrder = await orderStore.findOrderById(orderId);
+    if (!existingOrder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found.',
+      });
+    }
+
+    // Build Google Maps link
+    const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+
+    const deliveryLocation = {
+      lat,
+      lng,
+      address: address ? address.trim() : '',
+      googleMapsLink,
+      capturedAt: new Date().toISOString(),
+      capturedBy: req.user?.email || 'delivery-partner',
+    };
+
+    const updatedOrder = await orderStore.updateOrder(orderId, {
+      deliveryLocation,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Delivery location captured successfully.',
+      deliveryLocation,
+      order: serializeOrder(updatedOrder),
+    });
+  } catch (error) {
+    logger.error('delivery location capture error:', error);
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to capture delivery location.',
     });
   }
 });

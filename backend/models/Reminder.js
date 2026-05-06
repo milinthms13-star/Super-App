@@ -180,7 +180,64 @@ const reminderSchema = new mongoose.Schema({
       maxlength: 500,
       sparse: true,
     },
-  }]
+  }],
+  // PHASE 1 FEATURES START
+  
+  // Snooze functionality
+  snoozedUntil: {
+    type: Date,
+    sparse: true  // When snooze expires, reminder becomes active again
+  },
+  snoozeCount: {
+    type: Number,
+    default: 0  // How many times user snoozed this reminder
+  },
+  snoozeHistory: [{
+    snoozedAt: {
+      type: Date,
+      default: Date.now
+    },
+    snoozedUntil: Date,
+    snoozeDuration: Number  // In minutes
+  }],
+  snoozeOptions: {
+    type: [Number],
+    default: [5, 10, 15, 30]  // Available snooze durations in minutes
+  },
+  
+  // Configurable remind-before offsets
+  reminderBeforeOffsets: {
+    type: [Number],
+    default: [5]  // Remind X minutes before due time (in minutes)
+  },
+  notificationLog: [{
+    offsetMinutes: Number,  // Which offset triggered this notification
+    firedAt: {
+      type: Date,
+      default: Date.now
+    },
+    channel: String,  // 'In-app', 'SMS', 'Call'
+    status: String    // 'sent', 'failed', 'pending'
+  }],
+  
+  // Missed reminder tracking
+  missedAt: {
+    type: Date,
+    sparse: true  // When marked as missed
+  },
+  missedHistory: [{
+    missedAt: {
+      type: Date,
+      default: Date.now
+    },
+    resendAt: Date,  // When it was resent
+    status: {
+      type: String,
+      enum: ['pending', 'resent', 'acknowledged'],
+      default: 'pending'
+    }
+  }],
+  // PHASE 1 FEATURES END
 }, {
   timestamps: true
 });
@@ -192,6 +249,10 @@ reminderSchema.index({ userId: 1, category: 1 });
 reminderSchema.index({ recipientId: 1, callStatus: 1 });  // For finding pending calls
 reminderSchema.index({ nextCallTime: 1, callStatus: 1 });  // For scheduler to find due reminders
 reminderSchema.index({ "attachments._id": 1 });  // For finding reminders by attachment ID
+// Phase 1 indexes
+reminderSchema.index({ userId: 1, snoozedUntil: 1 });  // For snoozed reminders
+reminderSchema.index({ userId: 1, missedAt: 1 });  // For missed reminders
+reminderSchema.index({ userId: 1, completed: 1, missedAt: 1 });  // For missed reminders list
 
 // Virtual for formatted due date
 reminderSchema.virtual('formattedDueDate').get(function() {
@@ -219,17 +280,61 @@ reminderSchema.methods.isDue = function() {
   return dueDateTime <= now;
 };
 
-// Method to check if reminder needs notification
+// Method to check if reminder needs notification (supports multiple offsets)
 reminderSchema.methods.needsNotification = function() {
   if (this.completed) return false;
+  if (this.snoozedUntil && this.snoozedUntil > new Date()) return false;  // Skip if snoozed
+  
   const now = new Date();
   const dueDateTime = this.dueTime ?
     new Date(`${this.dueDate.toISOString().split('T')[0]}T${this.dueTime}`) :
     new Date(this.dueDate);
 
-  // Notify 5 minutes before due time
-  const notifyTime = new Date(dueDateTime.getTime() - 5 * 60 * 1000);
-  return now >= notifyTime && (!this.lastNotified || this.lastNotified < notifyTime);
+  // Check each configured remind-before offset
+  const offsets = this.reminderBeforeOffsets && this.reminderBeforeOffsets.length > 0
+    ? this.reminderBeforeOffsets
+    : [5];  // Default to 5 minutes if not configured
+
+  for (const offsetMinutes of offsets) {
+    const notifyTime = new Date(dueDateTime.getTime() - offsetMinutes * 60 * 1000);
+    
+    // Check if we should notify at this offset
+    const alreadyNotified = this.notificationLog &&
+      this.notificationLog.some(log => log.offsetMinutes === offsetMinutes && log.firedAt);
+    
+    if (now >= notifyTime && !alreadyNotified) {
+      return true;  // Need to notify at this offset
+    }
+  }
+  
+  return false;
+};
+
+// Method to get next notification offset needed
+reminderSchema.methods.getNextNotificationOffset = function() {
+  if (this.completed) return null;
+  if (this.snoozedUntil && this.snoozedUntil > new Date()) return null;
+  
+  const now = new Date();
+  const dueDateTime = this.dueTime ?
+    new Date(`${this.dueDate.toISOString().split('T')[0]}T${this.dueTime}`) :
+    new Date(this.dueDate);
+
+  const offsets = this.reminderBeforeOffsets && this.reminderBeforeOffsets.length > 0
+    ? this.reminderBeforeOffsets
+    : [5];
+
+  for (const offsetMinutes of offsets) {
+    const notifyTime = new Date(dueDateTime.getTime() - offsetMinutes * 60 * 1000);
+    const alreadyNotified = this.notificationLog &&
+      this.notificationLog.some(log => log.offsetMinutes === offsetMinutes && log.firedAt);
+    
+    if (now >= notifyTime && !alreadyNotified) {
+      return offsetMinutes;
+    }
+  }
+  
+  return null;
 };
 
 // Method to calculate next call time for recurring reminders
@@ -319,6 +424,84 @@ reminderSchema.methods.removeAttachment = function(attachmentId) {
 reminderSchema.methods.getAttachmentsByType = function(fileType) {
   if (!this.attachments) return [];
   return this.attachments.filter((att) => att.fileType === fileType);
+};
+
+// PHASE 1: Snooze functionality
+reminderSchema.methods.snooze = function(minutesToSnooze) {
+  const snoozedUntil = new Date();
+  snoozedUntil.setMinutes(snoozedUntil.getMinutes() + minutesToSnooze);
+  
+  this.snoozedUntil = snoozedUntil;
+  this.snoozeCount = (this.snoozeCount || 0) + 1;
+  
+  this.snoozeHistory.push({
+    snoozedAt: new Date(),
+    snoozedUntil: snoozedUntil,
+    snoozeDuration: minutesToSnooze
+  });
+  
+  return this;
+};
+
+// PHASE 1: Check if reminder is snoozed
+reminderSchema.methods.isSnoozed = function() {
+  return this.snoozedUntil && this.snoozedUntil > new Date();
+};
+
+// PHASE 1: Mark reminder as missed
+reminderSchema.methods.markAsMissed = function() {
+  if (!this.missedAt) {
+    this.missedAt = new Date();
+    this.status = 'Missed';
+  }
+  
+  if (!this.missedHistory) {
+    this.missedHistory = [];
+  }
+  
+  this.missedHistory.push({
+    missedAt: new Date(),
+    status: 'pending'
+  });
+  
+  return this;
+};
+
+// PHASE 1: Record notification sent for specific offset
+reminderSchema.methods.recordNotificationSent = function(offsetMinutes, channel) {
+  if (!this.notificationLog) {
+    this.notificationLog = [];
+  }
+  
+  this.notificationLog.push({
+    offsetMinutes: offsetMinutes,
+    firedAt: new Date(),
+    channel: channel,
+    status: 'sent'
+  });
+  
+  this.lastNotified = new Date();
+  this.notificationCount = (this.notificationCount || 0) + 1;
+  
+  return this;
+};
+
+// PHASE 1: Mark reminder as missed and record in history
+reminderSchema.methods.recordMissedReminder = function() {
+  if (!this.missedHistory) {
+    this.missedHistory = [];
+  }
+  
+  this.missedHistory.push({
+    missedAt: new Date(),
+    status: 'pending'
+  });
+  
+  if (!this.missedAt) {
+    this.missedAt = new Date();
+  }
+  
+  return this;
 };
 
 module.exports = mongoose.model('Reminder', reminderSchema);

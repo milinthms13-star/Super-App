@@ -2096,6 +2096,62 @@
   color: #666;
 }
 
+/* Coupon Section */
+.coupon-section {
+  margin: 1rem 0 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.coupon-input-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.coupon-input {
+  flex: 1;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: #f9f9f9;
+}
+
+.coupon-input:disabled {
+  background: #f0f0f0;
+  cursor: not-allowed;
+}
+
+.coupon-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  background: #fff;
+}
+
+.coupon-applied {
+  font-size: 0.85rem;
+  color: #2c6b2f;
+  margin: 0.5rem 0 0;
+  font-weight: 500;
+}
+
+.discount-row {
+  color: #2c6b2f;
+  font-weight: 600;
+}
+
+.cancel-btn {
+  color: #c41e3a;
+  border-color: #c41e3a;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background: #c41e3a;
+  color: #fff;
+}
+
 @media (max-width: 900px) {
   .seller-layout,
   .seller-product-form,

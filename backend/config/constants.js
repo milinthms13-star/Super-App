@@ -6,12 +6,13 @@
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'mgdhanyamohan@gmail.com').trim().toLowerCase();
 
 // Order Configuration
-const ORDER_STATUSES = ['Confirmed', 'Packed', 'Shipped', 'Delivered'];
+const ORDER_STATUSES = ['Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
 const ORDER_STATUS_RANK = {
   Confirmed: 0,
   Packed: 1,
   Shipped: 2,
   Delivered: 3,
+  Cancelled: 4,
 };
 
 // Pagination
@@ -28,6 +29,15 @@ const DELIVERY_PER_ITEM_FEE = 15;
 
 // Time Constants
 const MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000;
+
+// Commission & Settlement Configuration
+const COMMISSION_CONFIG = {
+  PLATFORM_COMMISSION_PERCENTAGE: parseFloat(process.env.PLATFORM_COMMISSION_PCT || '15'), // 15% default admin commission
+  SETTLEMENT_MIN_AMOUNT: parseFloat(process.env.SETTLEMENT_MIN_AMOUNT || '100'), // Min amount to trigger settlement
+  SETTLEMENT_CYCLE_DAYS: parseInt(process.env.SETTLEMENT_CYCLE_DAYS || '7'), // Weekly settlements
+  SETTLEMENT_STATUSES: ['Pending', 'Processing', 'Completed', 'Failed', 'OnHold'],
+  SETTLEMENT_PAYMENT_METHODS: ['bank_transfer', 'wallet_credit', 'check', 'manual'],
+};
 
 // Validation Patterns
 const VALIDATION_PATTERNS = {
@@ -71,6 +81,7 @@ module.exports = {
   DELIVERY_BASE_FEE,
   DELIVERY_PER_ITEM_FEE,
   MILLISECONDS_IN_DAY,
+  COMMISSION_CONFIG,
   VALIDATION_PATTERNS,
   CONSTRAINTS,
   INVITATION_CONFIG,

@@ -348,6 +348,84 @@ const ReminderForm = React.memo(({
           )}
         </fieldset>
 
+        {/* Phase 1: Snooze Options */}
+        <fieldset className="reminderalert-section-block">
+          <legend className="reminderalert-section-heading">
+            <h3>Snooze options (optional)</h3>
+            <p>Configure how long you can snooze this reminder when it appears. Default is 5, 10, 15, and 30 minutes.</p>
+          </legend>
+          <div className="reminderalert-choice-grid" role="group" aria-label="snooze options">
+            {[5, 10, 15, 30].map((minutes) => {
+              const isSelected = (formData.snoozeOptions || []).includes(minutes);
+              return (
+                <label
+                  key={`snooze-${minutes}`}
+                  className={`reminderalert-choice-card ${isSelected ? 'selected' : ''}`}
+                  role="option"
+                  aria-selected={isSelected}
+                >
+                  <input
+                    type="checkbox"
+                    name="snoozeOptions"
+                    value={minutes}
+                    checked={isSelected}
+                    onChange={onChange}
+                    disabled={submitting}
+                    aria-label={`Snooze for ${minutes} minutes`}
+                  />
+                  <div className="reminderalert-choice-copy">
+                    <strong>{minutes} minutes</strong>
+                    <p>Pause this reminder</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <p className="reminderalert-help-text">You can always add custom snooze times when the reminder appears.</p>
+        </fieldset>
+
+        {/* Phase 1: Remind-Before Offsets */}
+        <fieldset className="reminderalert-section-block">
+          <legend className="reminderalert-section-heading">
+            <h3>Advanced reminders (optional)</h3>
+            <p>Get notified before the due time. Default is a single reminder 5 minutes before.</p>
+          </legend>
+          <div className="reminderalert-choice-grid" role="group" aria-label="reminder notification times">
+            {[
+              { value: 5, label: '5 minutes before' },
+              { value: 15, label: '15 minutes before' },
+              { value: 30, label: '30 minutes before' },
+              { value: 60, label: '1 hour before' },
+              { value: 1440, label: '1 day before' },
+            ].map((offset) => {
+              const isSelected = (formData.reminderBeforeOffsets || [5]).includes(offset.value);
+              return (
+                <label
+                  key={`offset-${offset.value}`}
+                  className={`reminderalert-choice-card ${isSelected ? 'selected' : ''}`}
+                  role="option"
+                  aria-selected={isSelected}
+                >
+                  <input
+                    type="checkbox"
+                    name="reminderBeforeOffsets"
+                    value={offset.value}
+                    checked={isSelected}
+                    onChange={onChange}
+                    disabled={submitting}
+                    aria-label={`Remind me ${offset.label}`}
+                  />
+                  <div className="reminderalert-choice-copy">
+                    <strong>{offset.label}</strong>
+                    <p>Get an early notification</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <p className="reminderalert-help-text">Select multiple times to get notifications at different intervals.</p>
+        </fieldset>
+
         {/* Trusted Contacts */}
         {trustedContacts.length > 0 && (
           <fieldset className="reminderalert-section-block">
@@ -504,6 +582,72 @@ const ReminderForm = React.memo(({
                 </div>
               )}
             </div>
+            </fieldset>
+          </fieldset>
+        )}
+
+        {/* Phase 2: SMS Setup */}
+        {formData.reminders.includes('SMS') && (
+          <fieldset className="reminderalert-section-block reminderalert-sms-block">
+            <legend className="reminderalert-section-heading">
+              <h3>SMS reminder setup</h3>
+              <p>This reminder will send an SMS to the phone number you provide.</p>
+            </legend>
+
+            <div className="reminderalert-alert reminderalert-alert-info" role="note">
+              💬 SMS reminders are reliable and work even without internet. You'll receive notifications at each scheduled time before the due date.
+            </div>
+
+            <fieldset>
+              <legend className="sr-only">SMS configuration</legend>
+              <div className="reminderalert-editor-grid">
+                <label className="reminderalert-field reminderalert-field-full">
+                  <span>
+                    Phone number for SMS {formErrors.smsPhoneNumber && <span className="error-indicator" aria-label="required">*</span>}
+                  </span>
+                  <input
+                    type="tel"
+                    name="smsPhoneNumber"
+                    value={formData.smsPhoneNumber || ''}
+                    onChange={onChange}
+                    placeholder="+91 98765 43210"
+                    disabled={submitting}
+                    aria-invalid={!!formErrors.smsPhoneNumber}
+                    aria-describedby={formErrors.smsPhoneNumber ? 'sms-phone-error' : 'sms-phone-help'}
+                  />
+                  <small id="sms-phone-help" className="sr-only">Enter the phone number where the SMS reminder will be sent. Include country code if needed.</small>
+                  {formErrors.smsPhoneNumber && (
+                    <small id="sms-phone-error" className="error-text" role="alert">{formErrors.smsPhoneNumber}</small>
+                  )}
+                </label>
+              </div>
+
+              <div className="reminderalert-info-box">
+                <p className="reminderalert-info-title">💡 SMS Notification Times</p>
+                <p className="reminderalert-info-text">
+                  You'll receive SMS notifications based on your Advanced Reminders settings:
+                </p>
+                <ul className="reminderalert-info-list">
+                  {(formData.reminderBeforeOffsets || [5]).length > 0 ? (
+                    (formData.reminderBeforeOffsets || [5]).map((offset) => {
+                      const labels = {
+                        5: '5 minutes before',
+                        15: '15 minutes before',
+                        30: '30 minutes before',
+                        60: '1 hour before',
+                        1440: '1 day before'
+                      };
+                      return (
+                        <li key={`sms-offset-${offset}`}>
+                          SMS notification: {labels[offset] || `${offset} minutes before`}
+                        </li>
+                      );
+                    })
+                  ) : (
+                    <li>Default: 5 minutes before the due time</li>
+                  )}
+                </ul>
+              </div>
             </fieldset>
           </fieldset>
         )}
