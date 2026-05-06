@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './GiftCards.css';
+import { API_BASE_URL } from '../../utils/api';
+import { getStoredAuthToken } from '../../utils/auth';
 
 const GiftCards = ({ userEmail, userName }) => {
   const [giftCards, setGiftCards] = useState({
@@ -28,13 +30,13 @@ const GiftCards = ({ userEmail, userName }) => {
   const fetchGiftCards = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = getStoredAuthToken();
 
       const [sentRes, receivedRes] = await Promise.all([
-        fetch('/api/gift-cards/sent', {
+        fetch(`${API_BASE_URL}/giftcards/sent`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch('/api/gift-cards/received', {
+        fetch(`${API_BASE_URL}/giftcards/received`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -67,8 +69,8 @@ const GiftCards = ({ userEmail, userName }) => {
   const handleCreateGiftCard = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/gift-cards/create', {
+      const token = getStoredAuthToken();
+      const response = await fetch(`${API_BASE_URL}/giftcards/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -102,8 +104,8 @@ const GiftCards = ({ userEmail, userName }) => {
   const handleRedeemGiftCard = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/gift-cards/redeem', {
+      const token = getStoredAuthToken();
+      const response = await fetch(`${API_BASE_URL}/giftcards/redeem`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

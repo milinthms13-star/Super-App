@@ -30,20 +30,16 @@ const productImageSchema = Joi.alternatives()
     Joi.string().allow('')
   )
   .default('');
+const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
-  async fileFilter (req, file, cb) {
-    const preScan = await validateImagePreScan(file.buffer, file.mimetype, file.originalname);
-    if (!preScan.valid) {
-      cb(new Error(`Image validation failed: ${preScan.reason}`));
-      return;
-    }
-    if (!file.mimetype || !file.mimetype.startsWith('image/')) {
-      cb(new Error('Only image uploads are allowed.'));
+  fileFilter (req, file, cb) {
+    if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
+      cb(new Error('Only JPEG, PNG, WEBP, or GIF image uploads are allowed.'));
       return;
     }
 
@@ -153,10 +149,23 @@ const buildStoredImagePayload = (imagePayload = {}) => ({
   imageCdn: imagePayload?.imageCdn || '',
 });
 
+const validateUploadedProductImage = async (file) => {
+  if (!file) {
+    return;
+  }
+
+  const preScan = await validateImagePreScan(file.buffer, file.mimetype, file.originalname);
+  if (!preScan.valid) {
+    throw new Error(`Image validation failed: ${preScan.reason}`);
+  }
+};
+
 const storeProductImage = async ({ file, sellerEmail }) => {
   if (!file?.buffer?.length) {
     return buildStoredImagePayload();
   }
+
+  await validateUploadedProductImage(file);
 
   const scanResult = await scanImageBuffer(file.buffer, file.originalname || 'image.jpg');
   if (!scanResult.clean) {
@@ -585,6 +594,7 @@ const applyBatchAggregation = async (product) => {
 const filterProductsLocally = (products = [], filters = {}) => {
   const normalizedQuery = String(filters.query || '').trim().toLowerCase();
   const normalizedCategory = String(filters.category || '').trim();
+  const normalizedSubcategory = String(filters.subcategory || '').trim();
   const normalizedBusiness = String(filters.business || '').trim();
   const normalizedMinPrice = Number.parseFloat(filters.minPrice);
   const normalizedMaxPrice = Number.parseFloat(filters.maxPrice);
@@ -608,6 +618,7 @@ const filterProductsLocally = (products = [], filters = {}) => {
         .some((value) => String(value).toLowerCase().includes(normalizedQuery));
 
     const matchesCategory = !normalizedCategory || product.category === normalizedCategory;
+    const matchesSubcategory = !normalizedSubcategory || product.subcategory === normalizedSubcategory;
     const matchesBusiness = !normalizedBusiness || product.businessName === normalizedBusiness;
     const matchesMinPrice = !Number.isFinite(normalizedMinPrice) || Number(product.price || 0) >= normalizedMinPrice;
     const matchesMaxPrice = !Number.isFinite(normalizedMaxPrice) || Number(product.price || 0) <= normalizedMaxPrice;
@@ -617,6 +628,7 @@ const filterProductsLocally = (products = [], filters = {}) => {
     return (
       matchesQuery &&
       matchesCategory &&
+      matchesSubcategory &&
       matchesBusiness &&
       matchesMinPrice &&
       matchesMaxPrice &&
@@ -1207,6 +1219,7 @@ router.get('/search', cacheSearch, async (req, res) => {
     const {
       q: query = '',
       category,
+      subcategory,
       business,
       seller = '',
       minPrice = '',
@@ -1222,6 +1235,7 @@ router.get('/search', cacheSearch, async (req, res) => {
     const result = await searchProducts({
       query,
       category,
+      subcategory,
       business,
       seller,
       minPrice,
@@ -1261,6 +1275,7 @@ router.get('/search', cacheSearch, async (req, res) => {
     const filteredProducts = filterProductsLocally(approvedProducts, {
       query: req.query.q,
       category: req.query.category,
+      subcategory: req.query.subcategory,
       business: req.query.business,
       minPrice: req.query.minPrice,
       maxPrice: req.query.maxPrice,
@@ -1362,4 +1377,6 @@ module.exports = router;
 module.exports.__testables = {
   buildBatchSummary,
   serializeProduct,
+  filterProductsLocally,
+  validateUploadedProductImage,
 };

@@ -146,6 +146,7 @@ async function deleteProduct(productId) {
 async function searchProducts({
   query = '',
   category = '',
+  subcategory = '',
   business = '',
   seller = '',
   minPrice = '',
@@ -218,6 +219,7 @@ async function searchProducts({
   };
 
   if (category) body.query.bool.filter.push({ term: { category } });
+  if (subcategory) body.query.bool.filter.push({ term: { subcategory } });
   if (business) body.query.bool.filter.push({ term: { businessName: business } });
   if (seller) body.query.bool.filter.push({ term: { sellerEmail: seller } });
   if (inStock === 'true') body.query.bool.filter.push({ range: { stock: { gt: 0 } } });

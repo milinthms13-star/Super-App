@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './ReferralProgram.css';
+import { API_BASE_URL } from '../../utils/api';
+import { getStoredAuthToken } from '../../utils/auth';
 
 const ReferralProgram = ({ userEmail, userName }) => {
   const [referral, setReferral] = useState(null);
@@ -15,13 +17,13 @@ const ReferralProgram = ({ userEmail, userName }) => {
   const fetchReferralData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = getStoredAuthToken();
 
       const [referralRes, statsRes] = await Promise.all([
-        fetch('/api/referral/my-referral', {
+        fetch(`${API_BASE_URL}/referralprogram/my-referral`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch('/api/referral/statistics', {
+        fetch(`${API_BASE_URL}/referralprogram/statistics`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
@@ -52,8 +54,8 @@ const ReferralProgram = ({ userEmail, userName }) => {
 
   const toggleReferralStatus = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/referral/toggle-status', {
+      const token = getStoredAuthToken();
+      const response = await fetch(`${API_BASE_URL}/referralprogram/toggle-status`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });

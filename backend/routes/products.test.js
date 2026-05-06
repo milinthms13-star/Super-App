@@ -67,4 +67,47 @@ describe('product serialization', () => {
     expect(serialized.returnAllowed).toBe(true);
     expect(serialized.returnWindowDays).toBe(7);
   });
+
+  test('filters local search results by subcategory when remote search falls back', () => {
+    const filtered = __testables.filterProductsLocally(
+      [
+        {
+          id: 'product-1',
+          name: 'USB-C Cable',
+          category: 'Electronics',
+          subcategory: 'Mobile Accessories',
+          businessName: 'Seller One',
+          price: 199,
+          rating: 4.5,
+          stock: 20,
+        },
+        {
+          id: 'product-2',
+          name: 'Phone Case',
+          category: 'Electronics',
+          subcategory: 'Cases',
+          businessName: 'Seller One',
+          price: 299,
+          rating: 4.2,
+          stock: 10,
+        },
+      ],
+      {
+        category: 'Electronics',
+        subcategory: 'Mobile Accessories',
+      }
+    );
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].id).toBe('product-1');
+  });
+
+  test('rejects image uploads that reach validation without a file buffer', async () => {
+    await expect(
+      __testables.validateUploadedProductImage({
+        mimetype: 'image/png',
+        originalname: 'product.png',
+      })
+    ).rejects.toThrow('Image validation failed: file_buffer_missing');
+  });
 });

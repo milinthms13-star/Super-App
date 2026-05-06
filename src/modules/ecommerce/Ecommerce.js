@@ -401,6 +401,7 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
     (
       Boolean(marketplaceSearch.trim()) ||
       selectedCategory !== "All" ||
+      selectedSubcategory !== "All" ||
       selectedSeller !== "All Businesses" ||
       Boolean(marketplaceMinPrice) ||
       Boolean(marketplaceMaxPrice) ||
@@ -419,6 +420,7 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
           const params = new URLSearchParams({
             q: marketplaceSearch.trim(),
             category: selectedCategory === "All" ? "" : selectedCategory,
+            subcategory: selectedSubcategory === "All" ? "" : selectedSubcategory,
             business: selectedSeller === "All Businesses" ? "" : selectedSeller,
             minPrice: marketplaceMinPrice,
             maxPrice: marketplaceMaxPrice,
@@ -464,6 +466,7 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
     marketplaceSort,
     selectedCategory,
     selectedSeller,
+    selectedSubcategory,
   ]);
 
   const applyMarketplaceFilters = (products = []) =>

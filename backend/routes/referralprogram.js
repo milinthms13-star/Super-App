@@ -10,15 +10,38 @@ const generateReferralCode = () => {
   return Math.random().toString(36).substring(2, 10).toUpperCase();
 };
 
+const normalizeEmail = (value = '') => String(value || '').trim().toLowerCase();
+
+const calculateRewardAmount = (referral) =>
+  Number(referral.rewardAmount || 0) * (1 + Number(referral.tierBenefits?.rewardPercentage || 0) / 100);
+
+const buildReferralStats = (referral) => {
+  const totalReferrals = Number(referral.totalReferrals || 0);
+  const successfulReferrals = Number(referral.successfulReferrals || 0);
+
+  return {
+    totalReferrals,
+    successfulReferrals,
+    conversionRate: totalReferrals > 0
+      ? ((successfulReferrals / totalReferrals) * 100).toFixed(2)
+      : '0.00',
+    totalRewardsEarned: Number(referral.totalRewardsEarned || 0),
+    tier: referral.tier,
+    pendingReferrals: referral.referredUsers.filter((u) => u.conversionStatus === 'Pending').length,
+    referredUsers: referral.referredUsers,
+  };
+};
+
 // Get or create referral program for user
 router.get('/my-referral', authenticate, async (req, res) => {
   try {
-    let referral = await ReferralProgram.findOne({ referrerEmail: req.user.email });
+    const referrerEmail = normalizeEmail(req.user.email);
+    let referral = await ReferralProgram.findOne({ referrerEmail });
 
     if (!referral) {
       const referralCode = generateReferralCode();
       referral = new ReferralProgram({
-        referrerEmail: req.user.email,
+        referrerEmail,
         referrerName: req.user.name,
         referralCode,
       });
@@ -42,8 +65,9 @@ router.get('/my-referral', authenticate, async (req, res) => {
 router.post('/track-referral', async (req, res) => {
   try {
     const { referralCode, newUserEmail, newUserName } = req.body;
+    const normalizedNewUserEmail = normalizeEmail(newUserEmail);
 
-    if (!referralCode || !newUserEmail || !newUserName) {
+    if (!referralCode || !normalizedNewUserEmail || !newUserName) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields',
@@ -63,53 +87,64 @@ router.post('/track-referral', async (req, res) => {
 
     // Add referred user
     const referredUserIndex = referral.referredUsers.findIndex(
-      (u) => u.email === newUserEmail.toLowerCase()
+      (u) => u.email === normalizedNewUserEmail
     );
 
     if (referredUserIndex > -1) {
-      referral.referredUsers[referredUserIndex].signedUpAt = new Date();
+      referral.referredUsers[referredUserIndex].name = newUserName;
+      referral.referredUsers[referredUserIndex].signedUpAt =
+        referral.referredUsers[referredUserIndex].signedUpAt || new Date();
       referral.referredUsers[referredUserIndex].conversionStatus = 'Converted';
     } else {
       referral.referredUsers.push({
-        email: newUserEmail.toLowerCase(),
+        email: normalizedNewUserEmail,
         name: newUserName,
         signedUpAt: new Date(),
         conversionStatus: 'Converted',
       });
     }
 
+    const resolvedReferralIndex =
+      referredUserIndex > -1 ? referredUserIndex : referral.referredUsers.length - 1;
+    const referredUser = referral.referredUsers[resolvedReferralIndex];
+
     referral.totalReferrals = referral.referredUsers.length;
     referral.successfulReferrals = referral.referredUsers.filter(
       (u) => u.conversionStatus === 'Converted'
     ).length;
 
-    // Credit wallet for referrer
-    let wallet = await Wallet.findOne({ userEmail: referral.referrerEmail });
-    if (!wallet) {
-      wallet = new Wallet({
-        userEmail: referral.referrerEmail,
-        userName: referral.referrerName,
+    const alreadyCredited = referredUser.rewardStatus === 'Credited';
+
+    if (!alreadyCredited) {
+      // Credit wallet for referrer exactly once per referred user
+      let wallet = await Wallet.findOne({ userEmail: referral.referrerEmail });
+      if (!wallet) {
+        wallet = new Wallet({
+          userEmail: referral.referrerEmail,
+          userName: referral.referrerName,
+        });
+      }
+
+      const rewardAmount = calculateRewardAmount(referral);
+      wallet.balance = Number(wallet.balance || 0) + rewardAmount;
+      wallet.transactions.push({
+        transactionId: `ref-${Date.now()}`,
+        type: 'Credit',
+        amount: rewardAmount,
+        description: `Referral reward for ${newUserName}`,
+        status: 'Completed',
       });
+      referral.totalRewardsEarned = Number(referral.totalRewardsEarned || 0) + rewardAmount;
+      referredUser.rewardStatus = 'Credited';
+
+      await wallet.save();
     }
 
-    const rewardAmount = referral.rewardAmount * (1 + referral.tierBenefits.rewardPercentage / 100);
-    wallet.balance += rewardAmount;
-    wallet.transactions.push({
-      transactionId: `ref-${Date.now()}`,
-      type: 'Credit',
-      amount: rewardAmount,
-      description: `Referral reward for ${newUserName}`,
-      status: 'Completed',
-    });
-    referral.totalRewardsEarned += rewardAmount;
-    referral.referredUsers[referral.referredUsers.length - 1].rewardStatus = 'Credited';
-
-    await wallet.save();
     await referral.save();
 
     res.json({
       success: true,
-      message: 'Referral tracked successfully',
+      message: alreadyCredited ? 'Referral already tracked' : 'Referral tracked successfully',
       data: referral,
     });
   } catch (error) {
@@ -124,7 +159,7 @@ router.post('/track-referral', async (req, res) => {
 // Get referral statistics
 router.get('/statistics', authenticate, async (req, res) => {
   try {
-    const referral = await ReferralProgram.findOne({ referrerEmail: req.user.email });
+    const referral = await ReferralProgram.findOne({ referrerEmail: normalizeEmail(req.user.email) });
 
     if (!referral) {
       return res.status(404).json({
@@ -133,19 +168,9 @@ router.get('/statistics', authenticate, async (req, res) => {
       });
     }
 
-    const stats = {
-      totalReferrals: referral.totalReferrals,
-      successfulReferrals: referral.successfulReferrals,
-      conversionRate: (referral.successfulReferrals / referral.totalReferrals * 100).toFixed(2),
-      totalRewardsEarned: referral.totalRewardsEarned,
-      tier: referral.tier,
-      pendingReferrals: referral.referredUsers.filter((u) => u.conversionStatus === 'Pending').length,
-      referredUsers: referral.referredUsers,
-    };
-
     res.json({
       success: true,
-      data: stats,
+      data: buildReferralStats(referral),
     });
   } catch (error) {
     res.status(500).json({
@@ -159,7 +184,7 @@ router.get('/statistics', authenticate, async (req, res) => {
 // Update referral tier based on performance
 router.put('/update-tier', authenticate, async (req, res) => {
   try {
-    const referral = await ReferralProgram.findOne({ referrerEmail: req.user.email });
+    const referral = await ReferralProgram.findOne({ referrerEmail: normalizeEmail(req.user.email) });
 
     if (!referral) {
       return res.status(404).json({
@@ -205,7 +230,7 @@ router.put('/update-tier', authenticate, async (req, res) => {
 // Pause/Resume referral program
 router.put('/toggle-status', authenticate, async (req, res) => {
   try {
-    const referral = await ReferralProgram.findOne({ referrerEmail: req.user.email });
+    const referral = await ReferralProgram.findOne({ referrerEmail: normalizeEmail(req.user.email) });
 
     if (!referral) {
       return res.status(404).json({
@@ -232,3 +257,8 @@ router.put('/toggle-status', authenticate, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.__testables = {
+  buildReferralStats,
+  calculateRewardAmount,
+  normalizeEmail,
+};

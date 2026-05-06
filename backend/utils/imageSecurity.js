@@ -27,6 +27,10 @@ const validateImagePreScan = async (buffer, mimetype, filename, maxSize = 5 * 10
     return { valid: false, reason: 'unsupported_image_type' };
   }
 
+  if (!buffer?.length) {
+    return { valid: false, reason: 'file_buffer_missing' };
+  }
+
   if (buffer.length > maxSize) {
     return { valid: false, reason: 'file_too_large' };
   }
