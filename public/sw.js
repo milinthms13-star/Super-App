@@ -83,6 +83,16 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const requestUrl = new URL(request.url);
   const isSameOrigin = requestUrl.origin === self.location.origin;
+  const isApiRequest =
+    requestUrl.pathname.startsWith("/api/") ||
+    requestUrl.pathname.includes("/auth/");
+
+  // Never intercept non-GET or API requests. Let the browser handle them
+  // directly so auth, payments, and other write operations do not get
+  // entangled with service worker fetch passthrough behavior.
+  if (request.method !== "GET" || isApiRequest) {
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(
