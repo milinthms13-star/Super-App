@@ -15694,3 +15694,7 @@
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mWebSocket server initialized\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mModeration WebSocket server initialized\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
 {"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mBackground jobs were skipped because MongoDB is not connected\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mOPENAI_API_KEY not configured - AI features disabled\u001b[39m","timestamp":"2026-05-08 03:33:33:3333"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mOPENAI_API_KEY not configured - AI features disabled\u001b[39m","timestamp":"2026-05-08 03:34:12:3412"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mOPENAI_API_KEY not configured - AI features disabled\u001b[39m","timestamp":"2026-05-08 03:35:09:359"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mOPENAI_API_KEY not configured - AI features disabled\u001b[39m","timestamp":"2026-05-08 03:35:53:3553"}
