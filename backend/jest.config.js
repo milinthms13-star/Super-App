@@ -27,6 +27,9 @@ module.exports = {
   transform: {
     '^.+\\.js$': 'babel-jest'
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(uuid)/)'
+  ],
   globals: {
     'ts-jest': {
       useESM: true

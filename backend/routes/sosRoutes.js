@@ -123,4 +123,55 @@ router.get(
   sosController.getSpamReport
 );
 
+/**
+ * =============================================================================
+ * PRIORITY 2 FEATURES: Video Recording & Contact Groups
+ * =============================================================================
+ */
+
+/**
+ * VIDEO RECORDING ENDPOINTS (Priority 2 - Feature 1)
+ */
+
+// Upload and transcode video for incident
+router.post('/upload-video/:incidentId', authMiddleware, sosController.uploadVideo);
+
+// Get all videos for incident
+router.get('/video/:incidentId', authMiddleware, sosController.getIncidentVideos);
+
+// Check video transcoding status
+router.get('/video/:videoId/status', authMiddleware, sosController.checkVideoStatus);
+
+/**
+ * CONTACT GROUP ENDPOINTS (Priority 2 - Feature 3)
+ */
+
+// Create new contact group
+router.post('/contact-groups', authMiddleware, sosController.createContactGroup);
+
+// Get all user's contact groups (with pagination)
+router.get('/contact-groups', authMiddleware, sosController.getContactGroups);
+
+// Get single group details
+router.get('/contact-groups/:groupId', authMiddleware, sosController.getContactGroup);
+
+// Update group
+router.patch('/contact-groups/:groupId', authMiddleware, sosController.updateContactGroup);
+
+// Delete group
+router.delete('/contact-groups/:groupId', authMiddleware, sosController.deleteContactGroup);
+
+// Add contact to group
+router.post('/contact-groups/:groupId/contacts', authMiddleware, sosController.addContactToGroup);
+
+// Remove contact from group
+router.delete(
+  '/contact-groups/:groupId/contacts/:contactId',
+  authMiddleware,
+  sosController.removeContactFromGroup
+);
+
+// Get group statistics
+router.get('/groups/stats', authMiddleware, sosController.getGroupStats);
+
 module.exports = router;

@@ -8,12 +8,12 @@
 
 const request = require('supertest');
 const mongoose = require('mongoose');
-const app = require('../server'); // Express app
-const User = require('../models/User');
-const SOSIncident = require('../models/SOSIncident');
-const SOSContact = require('../models/SOSContact');
-const VideoRecording = require('../models/VideoRecording');
-const ContactGroup = require('../models/ContactGroup');
+const app = require('../../server'); // Express app
+const User = require('../../models/User');
+const SOSIncident = require('../../models/SOSIncident');
+const SOSContact = require('../../models/SOSContact');
+const VideoRecording = require('../../models/VideoRecording');
+const ContactGroup = require('../../models/ContactGroup');
 
 const TEST_DB = process.env.MONGODB_TEST_URI || 'mongodb://localhost:27017/sos-test';
 
