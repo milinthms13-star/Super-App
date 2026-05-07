@@ -111,6 +111,40 @@ enum: ['push', 'sms', 'call', 'whatsapp']
       default: Date.now
     }
   }],
+  // Priority 3: Status History & Real-Time Updates
+  statusHistory: [{
+    status: {
+      type: String,
+      enum: ['initial', 'acknowledged', 'en-route', 'arrived', 'resolved', 'escalated'],
+      required: true
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    updatedBy: {
+      type: String,  // responder email
+      required: true
+    },
+    responderName: String,
+    responderLocation: {
+      latitude: Number,
+      longitude: Number,
+      accuracy: Number,
+      mapsUrl: String
+    },
+    notes: {
+      type: String,
+      trim: true
+    }
+  }],
+  currentStatus: {
+    type: String,
+    enum: ['initial', 'acknowledged', 'en-route', 'arrived', 'resolved', 'escalated'],
+    default: 'initial'
+  },
+  lastStatusUpdate: Date,
+  lastUpdatedBy: String,
   history: [{
     event: String,
     timestamp: { 
@@ -126,6 +160,13 @@ enum: ['push', 'sms', 'call', 'whatsapp']
 
 sosIncidentSchema.index({ userId: 1, createdAt: -1 });
 sosIncidentSchema.index({ status: 1, createdAt: -1 });
+// Priority 3: Status history indexes
+sosIncidentSchema.index({ currentStatus: 1 });
+sosIncidentSchema.index({ lastStatusUpdate: -1 });
+sosIncidentSchema.index({ userId: 1, currentStatus: 1 });
+sosIncidentSchema.index({ userId: 1, lastStatusUpdate: -1 });
+// TTL index for old status history (optional cleanup)
+sosIncidentSchema.index({ 'statusHistory.timestamp': 1 }, { expireAfterSeconds: 7776000 }); // 90 days
 
 module.exports = mongoose.models.SosIncident || mongoose.model('SosIncident', sosIncidentSchema);
 

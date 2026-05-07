@@ -1308,3 +1308,270 @@ exports.getGroupStats = async (req, res) => {
     res.status(500).json({ error: 'Failed to get statistics' });
   }
 };
+
+/**
+ * =============================================================================
+ * PRIORITY 3 FEATURES: Real-Time Status Updates & Responder Coordination
+ * =============================================================================
+ */
+
+/**
+ * ENDPOINT 20: Update incident status (Priority 3 - Real-time tracking)
+ * PATCH /api/sos/incident/:incidentId/status
+ * Body: { status, notes, responderLocation?, responderName?, responderEmail? }
+ * Purpose: Responder updates incident status, tracked in statusHistory for real-time updates
+ * Auth: JWT token required
+ */
+exports.updateIncidentStatusPriority3 = async (req, res) => {
+  try {
+    const { incidentId } = req.params;
+    const { status, notes, responderLocation, responderName, responderEmail } = req.body;
+    const userId = req.user?.id;
+    const userEmail = req.user?.email;
+
+    // Validate status value
+    const validStatuses = ['initial', 'acknowledged', 'en-route', 'arrived', 'resolved', 'escalated'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+      });
+    }
+
+    // Find incident
+    const incident = await SOSIncident.findById(incidentId);
+    if (!incident) {
+      return res.status(404).json({
+        success: false,
+        message: 'Incident not found',
+      });
+    }
+
+    // Record previous status
+    const previousStatus = incident.currentStatus || 'initial';
+
+    // Add to status history
+    const statusRecord = {
+      status,
+      timestamp: new Date(),
+      updatedBy: responderEmail || userEmail || 'system',
+      responderName: responderName || req.user?.name || 'Unknown Responder',
+      notes: notes || '',
+    };
+
+    // Add responder location if provided
+    if (responderLocation) {
+      statusRecord.responderLocation = {
+        latitude: responderLocation.latitude,
+        longitude: responderLocation.longitude,
+        accuracy: responderLocation.accuracy,
+        mapsUrl: responderLocation.mapsUrl,
+      };
+    }
+
+    // Update incident
+    incident.statusHistory = incident.statusHistory || [];
+    incident.statusHistory.push(statusRecord);
+    incident.currentStatus = status;
+    incident.lastStatusUpdate = new Date();
+    incident.lastUpdatedBy = responderEmail || userEmail || 'system';
+
+    await incident.save();
+
+    logger.info(
+      `Status updated for incident ${incidentId}: ${previousStatus} → ${status} by ${statusRecord.updatedBy}`
+    );
+
+    // Emit WebSocket event for real-time updates (if available)
+    const { emitToUser } = require('../config/websocket');
+    if (emitToUser) {
+      emitToUser(incident.userId?.toString(), 'sos:status:updated', {
+        incidentId: incident._id.toString(),
+        previousStatus,
+        newStatus: status,
+        timestamp: statusRecord.timestamp,
+        responderName: statusRecord.responderName,
+        responderEmail: statusRecord.updatedBy,
+        notes,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Status updated successfully',
+      data: {
+        incidentId: incident._id,
+        previousStatus,
+        newStatus: status,
+        statusHistory: incident.statusHistory,
+        lastUpdate: {
+          timestamp: statusRecord.timestamp,
+          updatedBy: statusRecord.updatedBy,
+          responderName: statusRecord.responderName,
+          notes,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Update status failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating incident status',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * ENDPOINT 21: Get incident status timeline (Priority 3)
+ * GET /api/sos/incident/:incidentId/timeline
+ * Query params: { limit=50, offset=0, filterStatus? }
+ * Purpose: Retrieve full status history for incident
+ * Auth: JWT token required
+ */
+exports.getIncidentTimeline = async (req, res) => {
+  try {
+    const { incidentId } = req.params;
+    const { limit = 50, offset = 0, filterStatus } = req.query;
+    const userId = req.user?.id;
+
+    // Find incident
+    let incident = await SOSIncident.findById(incidentId);
+
+    if (!incident) {
+      return res.status(404).json({
+        success: false,
+        message: 'Incident not found',
+      });
+    }
+
+    // Verify user has access (is caller or responder)
+    const hasAccess = incident.userId?.toString() === userId || req.user?.role === 'responder';
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view this incident',
+      });
+    }
+
+    // Get status history
+    let timeline = incident.statusHistory || [];
+
+    // Filter by status if specified
+    if (filterStatus) {
+      timeline = timeline.filter((t) => t.status === filterStatus);
+    }
+
+    // Pagination
+    const startIndex = parseInt(offset) || 0;
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedTimeline = timeline.slice(startIndex, endIndex);
+
+    res.json({
+      success: true,
+      data: {
+        incidentId: incident._id,
+        timeline: paginatedTimeline,
+        pagination: {
+          total: timeline.length,
+          limit: parseInt(limit),
+          offset: startIndex,
+          hasMore: endIndex < timeline.length,
+        },
+        currentStatus: incident.currentStatus || 'initial',
+        lastUpdate: incident.lastStatusUpdate,
+      },
+    });
+  } catch (error) {
+    logger.error('Get timeline failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching timeline',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * ENDPOINT 22: Get current incident status snapshot (Priority 3)
+ * GET /api/sos/incident/:incidentId/status
+ * Purpose: Get latest status and responder info
+ * Auth: JWT token required
+ */
+exports.getIncidentCurrentStatus = async (req, res) => {
+  try {
+    const { incidentId } = req.params;
+    const userId = req.user?.id;
+
+    // Find incident
+    const incident = await SOSIncident.findById(incidentId).populate(
+      'userId',
+      'name email phone'
+    );
+
+    if (!incident) {
+      return res.status(404).json({
+        success: false,
+        message: 'Incident not found',
+      });
+    }
+
+    // Verify access
+    const hasAccess = incident.userId?._id?.toString() === userId || req.user?.role === 'responder';
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized',
+      });
+    }
+
+    // Get latest status record
+    const latestStatus = incident.statusHistory?.[incident.statusHistory.length - 1] || {
+      status: 'initial',
+      timestamp: incident.createdAt,
+      updatedBy: 'system',
+    };
+
+    // Calculate wait time
+    const waitTime = Math.floor((Date.now() - incident.createdAt) / 1000); // seconds
+
+    res.json({
+      success: true,
+      data: {
+        incidentId: incident._id,
+        currentStatus: incident.currentStatus || 'initial',
+        reason: incident.reason,
+        location: {
+          latitude: incident.location?.coordinates?.[1],
+          longitude: incident.location?.coordinates?.[0],
+          mapsUrl: incident.mapsUrl,
+        },
+        latestUpdate: {
+          status: latestStatus.status,
+          timestamp: latestStatus.timestamp,
+          responderName: latestStatus.responderName,
+          responderEmail: latestStatus.updatedBy,
+          notes: latestStatus.notes,
+        },
+        statistics: {
+          totalStatusUpdates: incident.statusHistory?.length || 0,
+          waitingTime: waitTime, // seconds
+          estimatedArrival: latestStatus.responderLocation?.mapsUrl ? null : 'Calculating...',
+        },
+        caller: {
+          name: incident.userId?.name,
+          email: incident.userId?.email,
+          phone: incident.userId?.phone,
+        },
+        incidentCreatedAt: incident.createdAt,
+      },
+    });
+  } catch (error) {
+    logger.error('Get current status failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching incident status',
+      error: error.message,
+    });
+  }
+};

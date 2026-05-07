@@ -174,4 +174,19 @@ router.delete(
 // Get group statistics
 router.get('/groups/stats', authMiddleware, sosController.getGroupStats);
 
+/**
+ * =============================================================================
+ * PRIORITY 3 FEATURES: Real-Time Status Updates & Responder Coordination
+ * =============================================================================
+ */
+
+// Update incident status (responder updates, tracked in statusHistory)
+router.patch('/incident/:incidentId/status', authMiddleware, sosController.updateIncidentStatusPriority3);
+
+// Get full incident status timeline
+router.get('/incident/:incidentId/timeline', authMiddleware, sosController.getIncidentTimeline);
+
+// Get current incident status snapshot
+router.get('/incident/:incidentId/status', authMiddleware, sosController.getIncidentCurrentStatus);
+
 module.exports = router;

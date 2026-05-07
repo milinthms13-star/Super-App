@@ -525,6 +525,111 @@ const initializeWebSocket = (server, options = {}) => {
       }
     });
 
+    // ============== SOS STATUS EVENTS (Priority 3) ==============
+
+    /**
+     * Join incident real-time updates room
+     * @event sos:incident:join
+     * @param {object} data - {incidentId}
+     */
+    socket.on('sos:incident:join', (data) => {
+      const { incidentId } = data;
+      if (incidentId) {
+        socket.join(`sos:incident:${incidentId}`);
+        console.log(`[WebSocket] User ${socket.userId} subscribed to incident ${incidentId} updates`);
+        
+        // Notify others in the room
+        socket.broadcast.to(`sos:incident:${incidentId}`).emit('sos:user:joined', {
+          userId: socket.userId,
+          timestamp: new Date(),
+        });
+      }
+    });
+
+    /**
+     * Leave incident real-time updates room
+     * @event sos:incident:leave
+     * @param {object} data - {incidentId}
+     */
+    socket.on('sos:incident:leave', (data) => {
+      const { incidentId } = data;
+      if (incidentId) {
+        socket.leave(`sos:incident:${incidentId}`);
+        console.log(`[WebSocket] User ${socket.userId} unsubscribed from incident ${incidentId}`);
+        
+        // Notify others in the room
+        socket.broadcast.to(`sos:incident:${incidentId}`).emit('sos:user:left', {
+          userId: socket.userId,
+          timestamp: new Date(),
+        });
+      }
+    });
+
+    /**
+     * Request full timeline for incident
+     * @event sos:incident:request_timeline
+     * @param {object} data - {incidentId}
+     */
+    socket.on('sos:incident:request_timeline', async (data) => {
+      try {
+        const { incidentId } = data;
+        const SosIncident = require('../models/SosIncident');
+        
+        const incident = await SosIncident.findById(incidentId);
+        if (!incident) {
+          socket.emit('sos:error', {
+            message: 'Incident not found',
+          });
+          return;
+        }
+
+        socket.emit('sos:incident:timeline', {
+          incidentId,
+          timeline: incident.statusHistory || [],
+          currentStatus: incident.currentStatus || 'initial',
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        console.error('[WebSocket] Timeline request error:', error);
+        socket.emit('sos:error', {
+          message: 'Failed to fetch timeline',
+        });
+      }
+    });
+
+    /**
+     * Listen for status update notifications (for incident caller)
+     * Real-time status updates are broadcast automatically via emitToUser in controller
+     * This event allows clients to explicitly request re-sync
+     */
+    socket.on('sos:incident:status_request', async (data) => {
+      try {
+        const { incidentId } = data;
+        const SosIncident = require('../models/SosIncident');
+        
+        const incident = await SosIncident.findById(incidentId);
+        if (!incident) {
+          return;
+        }
+
+        const latestStatus = incident.statusHistory?.[incident.statusHistory.length - 1] || {
+          status: 'initial',
+          timestamp: incident.createdAt,
+          updatedBy: 'system',
+        };
+
+        socket.emit('sos:incident:status', {
+          incidentId,
+          currentStatus: incident.currentStatus || 'initial',
+          latestUpdate: latestStatus,
+          updatedAt: incident.lastStatusUpdate,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        console.error('[WebSocket] Status request error:', error);
+      }
+    });
+
     // ============== CONNECTION TERMINATION ==============
 
     /**
