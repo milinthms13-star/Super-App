@@ -1,9 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
+import SOSAlarm from "./SOSAlarm";
+import PhotoCapture from "./PhotoCapture";
 import "../../styles/SOSAlert.css";
 
 const QUICK_REASONS = ["Medical", "Unsafe situation", "Travel check-in", "Vehicle breakdown"];
 const DELIVERY_CHANNELS = ["SMS", "WhatsApp", "Call"];
+const MAX_TRUSTED_CONTACTS = 5;
+const TRIGGER_COUNTDOWN_SECONDS = 5;
 const LOCATION_OPTIONS = {
   enableHighAccuracy: true,
   timeout: 10000,
@@ -55,6 +59,29 @@ const buildAlertLog = (entry) => ({
   timestamp: new Date().toISOString(),
   entry,
 });
+
+const buildBatterySnapshot = (batteryState) => {
+  const level = Number(batteryState?.level);
+  return {
+    supported: Boolean(batteryState?.supported),
+    level: Number.isFinite(level) ? level : null,
+    charging:
+      typeof batteryState?.charging === "boolean" ? batteryState.charging : null,
+  };
+};
+
+const formatBatteryStatus = (batteryState) => {
+  if (!batteryState?.supported) {
+    return "Unavailable";
+  }
+
+  const level = Number(batteryState?.level);
+  if (!Number.isFinite(level)) {
+    return "Detecting";
+  }
+
+  return `${Math.round(level)}%${batteryState.charging ? " charging" : ""}`;
+};
 
 const getSosItemId = (item) => item?._id || item?.id || "";
 
@@ -115,6 +142,10 @@ const fetchReverseGeocode = async (latitude, longitude) => {
 };
 
 const formatIncidentLocation = (location) => {
+  if (typeof location?.locationText === "string" && location.locationText.trim()) {
+    return location.locationText;
+  }
+
   if (typeof location === "string" && location.trim()) {
     return location;
   }
@@ -161,6 +192,7 @@ const SOSAlert = () => {
   const [apiError, setApiError] = useState(null);
   const [alertState, setAlertState] = useState({
     active: false,
+    incidentId: "",
     mode: "Standby",
     reason: QUICK_REASONS[0],
     startedAt: "",
@@ -177,11 +209,30 @@ const SOSAlert = () => {
     phone: "",
     priority: "Backup",
     notifyBy: ["SMS", "Call"],
+    otpSent: false,
+    otpCode: "",
+    otpVerified: false,
   });
   const [statusMessage, setStatusMessage] = useState("");
   const [locationError, setLocationError] = useState(null);
   const [currentPosition, setCurrentPosition] = useState(null);
   const [locationName, setLocationName] = useState(null);
+  const [batteryStatus, setBatteryStatus] = useState({
+    supported: false,
+    level: null,
+    charging: null,
+  });
+  const [countdownState, setCountdownState] = useState({
+    active: false,
+    secondsRemaining: TRIGGER_COUNTDOWN_SECONDS,
+  });
+
+  // Phase 1 Features: OTP, Camera, Photos, Alarm
+  const [otpError, setOtpError] = useState("");
+  const [showCamera, setShowCamera] = useState(false);
+  const [capturedPhotos, setCapturedPhotos] = useState([]);
+  const [alarmMuted, setAlarmMuted] = useState(false);
+  const [, setTrackingLink] = useState(null); // For future use with tracking display
 
   useEffect(() => {
     let isMounted = true;
@@ -227,6 +278,59 @@ const SOSAlert = () => {
       isMounted = false;
     };
   }, [apiCall]);
+
+  useEffect(() => {
+    if (typeof navigator?.getBattery !== "function") {
+      setBatteryStatus({
+        supported: false,
+        level: null,
+        charging: null,
+      });
+      return undefined;
+    }
+
+    let isMounted = true;
+    let batteryManager;
+
+    const syncBatteryState = () => {
+      if (!isMounted || !batteryManager) {
+        return;
+      }
+
+      setBatteryStatus({
+        supported: true,
+        level: Math.round(Number(batteryManager.level || 0) * 100),
+        charging: Boolean(batteryManager.charging),
+      });
+    };
+
+    navigator.getBattery().then((battery) => {
+      if (!isMounted) {
+        return;
+      }
+
+      batteryManager = battery;
+      syncBatteryState();
+      batteryManager.addEventListener("levelchange", syncBatteryState);
+      batteryManager.addEventListener("chargingchange", syncBatteryState);
+    }).catch(() => {
+      if (isMounted) {
+        setBatteryStatus({
+          supported: false,
+          level: null,
+          charging: null,
+        });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      if (batteryManager) {
+        batteryManager.removeEventListener("levelchange", syncBatteryState);
+        batteryManager.removeEventListener("chargingchange", syncBatteryState);
+      }
+    };
+  }, []);
 
   // Geolocation watch
   useEffect(() => {
@@ -285,29 +389,35 @@ const SOSAlert = () => {
     if (!alertState.active) return;
 
     const interval = setInterval(() => {
-      const minutesActive = Math.round((Date.now() - new Date(alertState.startedAt).getTime()) / 60000);
-      const shouldEscalate = settings.autoEscalation && minutesActive >= 2 && alertState.escalationLevel < 3;
+      setAlertState((prev) => {
+        const minutesActive = Math.round(
+          (Date.now() - new Date(prev.startedAt).getTime()) / 60000
+        );
+        const shouldEscalate =
+          settings.autoEscalation && minutesActive >= 2 && prev.escalationLevel < 3;
+        const nextLog = [...prev.log];
 
-      const nextLog = [...alertState.log];
+        if (shouldEscalate) {
+          nextLog.unshift(buildAlertLog(`Auto-escalation to level ${prev.escalationLevel + 1}`));
+        }
 
-      if (shouldEscalate) {
-        nextLog.unshift(buildAlertLog(`Auto-escalation to level ${alertState.escalationLevel + 1}`));
-      }
+        if (currentPosition) {
+          nextLog.unshift(
+            buildAlertLog(`Live location updated (${currentPosition.coords.accuracy?.toFixed(0)}m)`)
+          );
+        }
 
-      if (currentPosition) {
-        nextLog.unshift(buildAlertLog(`Live location updated (${currentPosition.coords.accuracy?.toFixed(0)}m)`));
-      }
-
-      setAlertState(prev => ({
-        ...prev,
-        escalationLevel: shouldEscalate ? prev.escalationLevel + 1 : prev.escalationLevel,
-        mode: shouldEscalate ? 'Escalated' : prev.mode,
-        log: nextLog.slice(0, 10),
-      }));
+        return {
+          ...prev,
+          escalationLevel: shouldEscalate ? prev.escalationLevel + 1 : prev.escalationLevel,
+          mode: shouldEscalate ? 'Escalated' : prev.mode,
+          log: nextLog.slice(0, 10),
+        };
+      });
     }, 30000); // Check every 30s
 
     return () => clearInterval(interval);
-  }, [alertState.active, alertState.escalationLevel, alertState.startedAt, alertState.log.length, settings.autoEscalation, currentPosition]);
+  }, [alertState.active, currentPosition, settings.autoEscalation]);
 
   const readinessScore = useMemo(
     () => getReadinessScore(contacts, settings),
@@ -340,11 +450,13 @@ const SOSAlert = () => {
       : locationError
         ? 'Error'
         : 'Loading...';
+  const batteryStatusLabel = formatBatteryStatus(batteryStatus);
 
   const stats = [
     { label: "Trusted contacts", value: String(contacts.length) },
     { label: "Delivery channels", value: String(configuredChannelCount) },
     { label: "Location ready", value: locationStatus },
+    { label: "Battery", value: batteryStatusLabel },
     { label: "Readiness", value: `${readinessScore}%` },
   ];
 
@@ -367,30 +479,123 @@ const SOSAlert = () => {
     }));
   };
 
+  // Phase 1: OTP Verification Handler
+  const handleSendOTP = async () => {
+    if (!contactForm.phone.trim()) {
+      setStatusMessage("Enter phone number first");
+      return;
+    }
+
+    try {
+      const response = await apiCall("/sos/send-contact-otp", "POST", {
+        phone: contactForm.phone,
+      });
+
+      if (response?.success) {
+        setContactForm((prev) => ({ ...prev, otpSent: true }));
+        setStatusMessage("OTP sent to phone. Enter code below.");
+        setOtpError("");
+      }
+    } catch (error) {
+      setOtpError("Failed to send OTP. Try again.");
+    }
+  };
+
+  // Phase 1: OTP Verification
+  const handleVerifyOTP = async () => {
+    if (!contactForm.otpCode.trim()) {
+      setOtpError("Enter OTP code");
+      return;
+    }
+
+    try {
+      const response = await apiCall("/sos/verify-contact-otp", "POST", {
+        phone: contactForm.phone,
+        otp: contactForm.otpCode,
+      });
+
+      if (response?.verified) {
+        setContactForm((prev) => ({ ...prev, otpVerified: true }));
+        setStatusMessage("Contact verified! Click Save to add to SOS circle.");
+        setOtpError("");
+      } else {
+        setOtpError("Invalid OTP. Try again.");
+      }
+    } catch (error) {
+      setOtpError("Verification failed. Try again.");
+    }
+  };
+
+  // Phase 1: Photo Capture Handler
+  const handlePhotoCapture = (photoBlob) => {
+    const photoUrl = URL.createObjectURL(photoBlob);
+    setCapturedPhotos((prev) => [
+      ...prev,
+      {
+        url: photoUrl,
+        blob: photoBlob,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+    setStatusMessage("📸 Photo captured and saved as evidence");
+  };
+
+  // Helper to convert blob to base64
+  const blobToBase64 = (blob) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const handleAddContact = async (event) => {
     event.preventDefault();
+
+    if (contacts.length >= MAX_TRUSTED_CONTACTS) {
+      setStatusMessage(`You can add up to ${MAX_TRUSTED_CONTACTS} SOS contacts.`);
+      return;
+    }
 
     if (!contactForm.name.trim() || !contactForm.phone.trim()) {
       setStatusMessage("Add a name and phone number before saving a trusted contact.");
       return;
     }
 
+    // Phase 1: Check OTP verification
+    if (!contactForm.otpVerified) {
+      setStatusMessage("Please verify phone number with OTP first");
+      return;
+    }
+
     try {
-      const response = await apiCall('/sos/contacts', 'POST', contactForm);
+      const response = await apiCall("/sos/contacts", "POST", {
+        name: contactForm.name,
+        relation: contactForm.relation,
+        phone: contactForm.phone,
+        priority: contactForm.priority,
+        notifyBy: contactForm.notifyBy,
+        verified: true,
+        verifiedAt: new Date().toISOString(),
+      });
+
       if (response?.data) {
-        setContacts(prev => [...prev, { ...response.data, acknowledged: false }]);
+        setContacts((prev) => [...prev, { ...response.data, acknowledged: false }]);
         setContactForm({
           name: "",
           relation: "",
           phone: "",
           priority: "Backup",
           notifyBy: ["SMS", "Call"],
+          otpSent: false,
+          otpCode: "",
+          otpVerified: false,
         });
-        setStatusMessage(`${contactForm.name} saved to your SOS safety circle.`);
-        loadData(); // Refresh list
+        setStatusMessage(`${contactForm.name} verified and saved to your SOS safety circle.`);
+        loadData();
       }
     } catch (error) {
-      setStatusMessage('Failed to save contact. Try again.');
+      setStatusMessage("Failed to save contact. Try again.");
     }
   };
 
@@ -446,9 +651,16 @@ const SOSAlert = () => {
     }
   }, [currentPosition, settings.shareLiveLocation]);
 
-  const handleTriggerSOS = useCallback(async () => {
+  const resetCountdown = useCallback(() => {
+    setCountdownState({
+      active: false,
+      secondsRemaining: TRIGGER_COUNTDOWN_SECONDS,
+    });
+  }, []);
+
+  const dispatchSOSAlert = useCallback(async () => {
     if (!contacts.length) {
-      setStatusMessage('Add at least one trusted contact first.');
+      setStatusMessage("Add at least one trusted contact first.");
       return;
     }
 
@@ -463,16 +675,20 @@ const SOSAlert = () => {
         geoLocation
           ? `Live location shared: ${geoLocation.locationText}`
           : settings.shareLiveLocation
-            ? 'Live location unavailable'
-            : 'Location sharing disabled'
+            ? "Live location unavailable"
+            : "Location sharing disabled"
       ),
-      buildAlertLog(`Queued for ${contacts.length} trusted contact${contacts.length === 1 ? "" : "s"}.`),
+      buildAlertLog(
+        `Queued for ${contacts.length} trusted contact${contacts.length === 1 ? "" : "s"}.`
+      ),
+      buildAlertLog(`Battery snapshot shared: ${batteryStatusLabel}.`),
     ];
 
-    setContacts(prev => prev.map(c => ({ ...c, acknowledged: false })));
-    setAlertState(prev => ({
+    setContacts((prev) => prev.map((contact) => ({ ...contact, acknowledged: false })));
+    setAlertState((prev) => ({
       ...prev,
       active: true,
+      incidentId: "",
       mode: settings.silentMode ? "Silent" : "Active",
       startedAt,
       reason,
@@ -483,15 +699,26 @@ const SOSAlert = () => {
     }));
 
     try {
+      // Phase 1: Prepare photo data
+      const photoData = await Promise.all(
+        capturedPhotos.map(async (photo) => ({
+          data: await blobToBase64(photo.blob),
+          timestamp: photo.timestamp,
+        }))
+      );
+
       const response = await apiCall("/sos/send-alert", "POST", {
         reason,
         longitude: geoLocation?.longitude,
         latitude: geoLocation?.latitude,
         accuracy: geoLocation?.accuracy,
         mapsUrl: geoLocation?.mapsUrl,
-        location: geoLocation?.locationText || 'Location unavailable',
+        location: geoLocation?.locationText || "Location unavailable",
+        batteryStatus: buildBatterySnapshot(batteryStatus),
+        photos: photoData.length > 0 ? photoData : undefined,
         channels,
         timestamp: startedAt,
+        countdownSeconds: TRIGGER_COUNTDOWN_SECONDS,
       });
 
       const recipients = response?.data?.recipients || [];
@@ -499,24 +726,51 @@ const SOSAlert = () => {
       const videoRecipientCount =
         Number(response?.data?.videoRecipientCount || 0) ||
         recipients.filter((recipient) => recipient.videoCallStatus === "ringing").length;
-      setAlertState(prev => ({
+
+      // Phase 1: Generate tracking link
+      let trackingUrl = null;
+      if (response?.data?.incidentId) {
+        try {
+          const trackingRes = await apiCall("/sos/create-tracking-link", "POST", {
+            incidentId: response.data.incidentId,
+          });
+          if (trackingRes?.trackingUrl) {
+            trackingUrl = trackingRes.trackingUrl;
+            setTrackingLink(trackingUrl);
+          }
+        } catch (trackingErr) {
+          console.warn("Failed to create tracking link:", trackingErr);
+        }
+      }
+
+      setAlertState((prev) => ({
         ...prev,
+        incidentId: response?.data?.incidentId || prev.incidentId,
         log: [
+          ...(trackingUrl
+            ? [buildAlertLog(`Tracking link created: ${trackingUrl}`)]
+            : []),
           ...(videoRecipientCount > 0
-            ? [buildAlertLog(`Emergency video call started for ${videoRecipientCount} trusted contact${videoRecipientCount === 1 ? "" : "s"}.`)]
+            ? [
+                buildAlertLog(
+                  `Emergency video call started for ${videoRecipientCount} trusted contact${videoRecipientCount === 1 ? "" : "s"}.`
+                ),
+              ]
             : []),
           buildAlertLog(`Dispatched to ${recipientLabel}.`),
           ...prev.log,
-        ].slice(0, 8),
+        ].slice(0, 10),
       }));
+
       setStatusMessage(
-        `SOS live. ${recipientLabel} notified.${videoRecipientCount > 0 ? ` Emergency video call sent to ${videoRecipientCount} contact${videoRecipientCount === 1 ? "" : "s"}.` : ""} Incident ID: ${response.data.incidentId || 'N/A'}`
+        `SOS live. ${recipientLabel} notified.${videoRecipientCount > 0 ? ` Emergency video call sent to ${videoRecipientCount} contact${videoRecipientCount === 1 ? "" : "s"}.` : ""}${trackingUrl ? ` Tracking link: ${trackingUrl}` : ""} Incident ID: ${response.data.incidentId || "N/A"}`
       );
+      loadData();
     } catch (error) {
       const msg = error.response?.data?.message || error.message || "Dispatch error";
-      setAlertState(prev => ({
+      setAlertState((prev) => ({
         ...prev,
-        log: [buildAlertLog(`Dispatch failed: ${msg}`), ...prev.log].slice(0, 8),
+        log: [buildAlertLog(`Dispatch failed: ${msg}`), ...prev.log].slice(0, 10),
       }));
       setStatusMessage(`Local alert active. Backend: ${msg}`);
     }
@@ -524,16 +778,72 @@ const SOSAlert = () => {
     activeLocation,
     alertState.reason,
     apiCall,
+    batteryStatus,
+    batteryStatusLabel,
     captureLiveLocation,
+    capturedPhotos,
     contacts.length,
+    loadData,
     settings.shareLiveLocation,
     settings.silentMode,
   ]);
 
+  const handleTriggerSOS = useCallback(() => {
+    if (!contacts.length) {
+      setStatusMessage("Add at least one trusted contact first.");
+      return;
+    }
+
+    if (alertState.active || countdownState.active) {
+      return;
+    }
+
+    setCountdownState({
+      active: true,
+      secondsRemaining: TRIGGER_COUNTDOWN_SECONDS,
+    });
+    setStatusMessage(
+      `SOS countdown started. Alert will send in ${TRIGGER_COUNTDOWN_SECONDS} seconds unless you cancel.`
+    );
+  }, [alertState.active, contacts.length, countdownState.active]);
+
+  const handleCancelCountdown = useCallback(() => {
+    resetCountdown();
+    setStatusMessage("SOS countdown cancelled before dispatch.");
+  }, [resetCountdown]);
+
+  useEffect(() => {
+    if (!countdownState.active) {
+      return undefined;
+    }
+
+    if (countdownState.secondsRemaining <= 0) {
+      resetCountdown();
+      dispatchSOSAlert();
+      return undefined;
+    }
+
+    const countdownTimer = setTimeout(() => {
+      setCountdownState((current) => ({
+        ...current,
+        secondsRemaining: current.secondsRemaining - 1,
+      }));
+    }, 1000);
+
+    return () => clearTimeout(countdownTimer);
+  }, [
+    countdownState.active,
+    countdownState.secondsRemaining,
+    dispatchSOSAlert,
+    resetCountdown,
+  ]);
+
   useEffect(() => {
     const handleExternalSOSRequest = () => {
-      if (alertState.active) {
-        setStatusMessage("SOS alert is already active. Use the controls below to escalate or mark safe.");
+      if (alertState.active || countdownState.active) {
+        setStatusMessage(
+          "SOS alert is already active. Use the controls below to escalate or mark safe."
+        );
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
@@ -546,7 +856,7 @@ const SOSAlert = () => {
     return () => {
       window.removeEventListener("malabarbazaar:sos-requested", handleExternalSOSRequest);
     };
-  }, [alertState.active, handleTriggerSOS]);
+  }, [alertState.active, countdownState.active, handleTriggerSOS]);
 
   const handleAcknowledge = (contactId) => {
     const contact = contacts.find((item) => getSosItemId(item) === contactId);
@@ -568,7 +878,7 @@ const SOSAlert = () => {
     setStatusMessage(`${contact.name} acknowledged the alert and can follow your live location.`);
   };
 
-  const handleEscalate = () => {
+  const handleEscalate = async () => {
     if (!alertState.active) {
       return;
     }
@@ -583,9 +893,20 @@ const SOSAlert = () => {
       ].slice(0, 8),
     }));
     setStatusMessage("SOS alert escalated to the next response tier.");
+
+    if (alertState.incidentId) {
+      try {
+        await apiCall(`/sos/incident/${alertState.incidentId}/status`, "PUT", {
+          status: "escalated",
+        });
+        loadData();
+      } catch (error) {
+        console.warn("Unable to sync escalation status:", error);
+      }
+    }
   };
 
-  const handleResolve = () => {
+  const handleResolve = async () => {
     if (!alertState.active) {
       return;
     }
@@ -608,10 +929,26 @@ const SOSAlert = () => {
     setAlertState((current) => ({
       ...current,
       active: false,
+      incidentId: "",
       mode: "Resolved",
       log: [buildAlertLog("SOS alert resolved and live sharing stopped."), ...current.log].slice(0, 8),
     }));
     setStatusMessage("SOS resolved. Live sharing and escalation have been stopped.");
+
+    if (countdownState.active) {
+      resetCountdown();
+    }
+
+    if (alertState.incidentId) {
+      try {
+        await apiCall(`/sos/incident/${alertState.incidentId}/status`, "PUT", {
+          status: "resolved",
+        });
+        loadData();
+      } catch (error) {
+        console.warn("Unable to sync resolved status:", error);
+      }
+    }
   };
 
   // Add safeguards for rendering
@@ -627,6 +964,14 @@ const SOSAlert = () => {
 
   return (
     <div className="sos-page">
+      {/* Phase 1: Siren Alarm */}
+      <SOSAlarm active={alertState.active} muted={alarmMuted} />
+
+      {/* Phase 1: Photo Capture Modal */}
+      {showCamera && (
+        <PhotoCapture onCapture={handlePhotoCapture} onClose={() => setShowCamera(false)} />
+      )}
+
       <section className="sos-hero">
         <div className="sos-hero-copy">
           <p className="sos-eyebrow">Personal safety workspace</p>
@@ -702,18 +1047,42 @@ const SOSAlert = () => {
                     ))}
                   </select>
                 </div>
-                <button
-                  className="sos-trigger-button"
-                  onClick={handleTriggerSOS}
-                  disabled={!contacts.length}
-                >
-                  Trigger SOS Alert
-                </button>
+                {countdownState.active ? (
+                  <div className="sos-countdown-card">
+                    <strong>Sending SOS in {countdownState.secondsRemaining}s</strong>
+                    <p>Cancel now if you triggered this by mistake.</p>
+                    <button
+                      type="button"
+                      className="sos-control-button"
+                      onClick={handleCancelCountdown}
+                    >
+                      Cancel Countdown
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="sos-trigger-button"
+                    onClick={handleTriggerSOS}
+                    disabled={!contacts.length}
+                  >
+                    Send SOS Alert
+                  </button>
+                )}
+                <div className="sos-checklist-note">
+                  5-second cancel countdown, live location link, battery snapshot, photo capture,
+                  tracking link, and silent mode are ready before dispatch.
+                </div>
               </div>
             ) : (
               <div className="sos-active-controls">
                 <button className="sos-control-button" onClick={handleEscalate}>
                   Escalate Alert
+                </button>
+                <button className="sos-control-button mute" onClick={() => setAlarmMuted(!alarmMuted)}>
+                  {alarmMuted ? "🔇 Unmute Alarm" : "🔊 Mute Alarm"}
+                </button>
+                <button className="sos-control-button capture" onClick={() => setShowCamera(true)}>
+                  📷 Capture Evidence
                 </button>
                 <button className="sos-control-button resolve" onClick={handleResolve}>
                   Mark as Safe / Resolve
@@ -739,6 +1108,18 @@ const SOSAlert = () => {
                 </li>
               ))}
             </ul>
+
+            {/* Phase 1: Captured Photos Section */}
+            {capturedPhotos.length > 0 && alertState.active && (
+              <div className="captured-photos-section">
+                <h3>📸 Evidence Photos ({capturedPhotos.length})</h3>
+                <div className="photo-grid">
+                  {capturedPhotos.map((photo, idx) => (
+                    <img key={idx} src={photo.url} alt={`Evidence ${idx + 1}`} />
+                  ))}
+                </div>
+              </div>
+            )}
           </article>
         </div>
 
@@ -746,7 +1127,11 @@ const SOSAlert = () => {
           <article className="sos-panel">
             <div className="sos-panel-heading">
               <h2>Trusted Contacts</h2>
-              <p>Manage your safety circle. Add at least one primary contact.</p>
+              <p>SOS trusted contacts are managed here independently.</p>
+            </div>
+            <div className="sos-checklist-note">
+              Keep 3-5 people here so alerts can escalate if your primary contact misses the first
+              call.
             </div>
             <ul className="sos-contact-list">
               {contacts.map((contact) => (
@@ -786,15 +1171,60 @@ const SOSAlert = () => {
                   onChange={handleFormChange}
                   required
                 />
-                <input
-                  type="text"
-                  name="phone"
-                  placeholder="Phone Number"
-                  value={contactForm.phone}
-                  onChange={handleFormChange}
-                  required
-                />
+                {!contactForm.otpSent ? (
+                  <input
+                    type="tel"
+                    name="phone"
+                    placeholder="Phone Number"
+                    value={contactForm.phone}
+                    onChange={handleFormChange}
+                    required
+                  />
+                ) : null}
               </div>
+
+              {/* Phase 1: OTP Verification UI */}
+              {!contactForm.otpSent ? (
+                <div className="sos-otp-section">
+                  <button
+                    type="button"
+                    className="sos-otp-button"
+                    onClick={handleSendOTP}
+                    disabled={!contactForm.phone.trim()}
+                  >
+                    📱 Send OTP
+                  </button>
+                </div>
+              ) : !contactForm.otpVerified ? (
+                <div className="sos-otp-section">
+                  <input
+                    type="text"
+                    placeholder="Enter 6-digit OTP"
+                    value={contactForm.otpCode}
+                    onChange={(e) =>
+                      setContactForm((prev) => ({
+                        ...prev,
+                        otpCode: e.target.value,
+                      }))
+                    }
+                    maxLength="6"
+                  />
+                  <button
+                    type="button"
+                    className="sos-otp-verify-button"
+                    onClick={handleVerifyOTP}
+                    disabled={contactForm.otpCode.length !== 6}
+                  >
+                    ✓ Verify OTP
+                  </button>
+                  {otpError && <p className="sos-error-text">{otpError}</p>}
+                </div>
+              ) : (
+                <div className="sos-otp-success">
+                  <p className="sos-success-text">✓ Contact verified</p>
+                </div>
+              )}
+
               <div className="sos-form-group">
                 <input
                   type="text"
@@ -803,11 +1233,7 @@ const SOSAlert = () => {
                   value={contactForm.relation}
                   onChange={handleFormChange}
                 />
-                <select
-                  name="priority"
-                  value={contactForm.priority}
-                  onChange={handleFormChange}
-                >
+                <select name="priority" value={contactForm.priority} onChange={handleFormChange}>
                   <option>Primary</option>
                   <option>Backup</option>
                 </select>
@@ -827,7 +1253,12 @@ const SOSAlert = () => {
                   </label>
                 ))}
               </div>
-              <button type="submit">Add Contact</button>
+              <button
+                type="submit"
+                disabled={contacts.length >= MAX_TRUSTED_CONTACTS || !contactForm.otpVerified}
+              >
+                Save to Safety Circle
+              </button>
             </form>
           </article>
 
@@ -841,11 +1272,11 @@ const SOSAlert = () => {
                 <li key={getSosItemId(item)}>
                   <div className="sos-history-info">
                     <strong>{item.reason}</strong>
-                    <span>{formatDateTime(item.timestamp)}</span>
+                    <span>{formatDateTime(item.createdAt || item.timestamp)}</span>
                   </div>
                   <div className="sos-history-outcome">
                     <span>{getIncidentOutcome(item)}</span>
-                    <small>{formatIncidentLocation(item.location)}</small>
+                    <small>{formatIncidentLocation(item.locationText || item.location)}</small>
                   </div>
                 </li>
               ))}
@@ -885,6 +1316,10 @@ const SOSAlert = () => {
                   onChange={() => handleToggleSetting("silentMode")}
                 />
               </div>
+            </div>
+            <div className="sos-checklist-note">
+              Battery status: {batteryStatusLabel}. Silent SOS keeps the trigger discreet when you
+              cannot safely make noise.
             </div>
           </article>
         </div>

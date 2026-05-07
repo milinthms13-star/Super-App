@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './SOSResponseHistory.css';
 
 const SOSResponseHistory = ({ userEmail, userName }) => {
@@ -11,21 +11,18 @@ const SOSResponseHistory = ({ userEmail, userName }) => {
     endDate: new Date(),
   });
 
-  useEffect(() => {
-    fetchResponseHistory();
-  }, [userEmail, dateRange]);
-
-  const fetchResponseHistory = async () => {
+  const fetchResponseHistory = useCallback(async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token =
+        localStorage.getItem('authToken') || localStorage.getItem('token');
       const params = new URLSearchParams({
         startDate: dateRange.startDate.toISOString(),
         endDate: dateRange.endDate.toISOString(),
       });
 
       const response = await fetch(`/api/sos/response-history?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: token ? `Bearer ${token}` : '' },
       });
 
       if (response.ok) {
@@ -37,7 +34,11 @@ const SOSResponseHistory = ({ userEmail, userName }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange.endDate, dateRange.startDate]);
+
+  useEffect(() => {
+    fetchResponseHistory();
+  }, [fetchResponseHistory, userEmail]);
 
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {

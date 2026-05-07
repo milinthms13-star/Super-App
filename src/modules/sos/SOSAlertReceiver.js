@@ -5,9 +5,82 @@ const SOSAlertReceiver = ({ userEmail, userName, socket }) => {
   const [incomingAlerts, setIncomingAlerts] = useState([]);
   const [activeAlert, setActiveAlert] = useState(null);
   const [acceptedAlerts, setAcceptedAlerts] = useState([]);
-  const [showNotification, setShowNotification] = useState(false);
   const [notificationSound, setNotificationSound] = useState(true);
   const [autoAccept, setAutoAccept] = useState(false);
+
+  const playNotificationSound = () => {
+    // Create a simple beep sound using Web Audio API
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+  };
+
+  const handleAcceptAlert = useCallback(
+    async (alertId) => {
+      const alert = incomingAlerts.find((a) => a.id === alertId);
+      if (!alert) return;
+
+      try {
+        // Call backend to acknowledge incident
+        const token =
+          localStorage.getItem('authToken') || localStorage.getItem('token');
+        const response = await fetch('/api/sos/acknowledge', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+          body: JSON.stringify({
+            incidentId: alert.incidentId,
+            responderName: userName,
+            responderEmail: userEmail,
+          }),
+        });
+
+        if (response.ok) {
+          await response.json();
+
+          // Move to accepted alerts
+          setIncomingAlerts((prev) => prev.filter((a) => a.id !== alertId));
+
+          const acceptedAlert = {
+            ...alert,
+            status: 'accepted',
+            acknowledged: true,
+            responseTime: new Date().toISOString(),
+          };
+
+          setAcceptedAlerts((prev) => [acceptedAlert, ...prev]);
+          setActiveAlert(acceptedAlert);
+
+          // Send notification back to caller
+          if (socket) {
+            socket.emit('sos:accepted', {
+              incidentId: alert.incidentId,
+              responderName: userName,
+              responderEmail: userEmail,
+              respondedAt: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error accepting alert:', error);
+      }
+    },
+    [incomingAlerts, userName, userEmail, socket]
+  );
 
   // Listen for incoming SOS alerts via WebSocket
   useEffect(() => {
@@ -35,8 +108,6 @@ const SOSAlertReceiver = ({ userEmail, userName, socket }) => {
         },
         ...prev,
       ]);
-
-      setShowNotification(true);
 
       // Play notification sound
       if (notificationSound) {
@@ -72,79 +143,7 @@ const SOSAlertReceiver = ({ userEmail, userName, socket }) => {
       socket.off('call:incoming', handleCallIncoming);
       socket.off('notification:received');
     };
-  }, [socket, notificationSound, autoAccept]);
-
-  const playNotificationSound = () => {
-    // Create a simple beep sound using Web Audio API
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
-  };
-
-  const handleAcceptAlert = useCallback(
-    async (alertId) => {
-      const alert = incomingAlerts.find((a) => a.id === alertId);
-      if (!alert) return;
-
-      try {
-        // Call backend to acknowledge incident
-        const response = await fetch('/api/sos/acknowledge', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-          body: JSON.stringify({
-            incidentId: alert.incidentId,
-            responderName: userName,
-            responderEmail: userEmail,
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-
-          // Move to accepted alerts
-          setIncomingAlerts((prev) => prev.filter((a) => a.id !== alertId));
-
-          const acceptedAlert = {
-            ...alert,
-            status: 'accepted',
-            acknowledged: true,
-            responseTime: new Date().toISOString(),
-          };
-
-          setAcceptedAlerts((prev) => [acceptedAlert, ...prev]);
-          setActiveAlert(acceptedAlert);
-
-          // Send notification back to caller
-          if (socket) {
-            socket.emit('sos:accepted', {
-              incidentId: alert.incidentId,
-              responderName: userName,
-              responderEmail: userEmail,
-              respondedAt: new Date().toISOString(),
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error accepting alert:', error);
-      }
-    },
-    [incomingAlerts, userName, userEmail, socket]
-  );
+  }, [socket, notificationSound, autoAccept, handleAcceptAlert]);
 
   const handleDeclineAlert = (alertId) => {
     setIncomingAlerts((prev) => {

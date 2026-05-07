@@ -164,8 +164,17 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-module.exports = {
-  authenticate,
-  authenticateToken: authenticate,
-  getJwtSecret,
-};
+// Export the middleware as both a callable function and a named-export bag.
+// This preserves compatibility with older route files that import auth in
+// different ways: `require('../middleware/auth')`, `{ authenticate }`,
+// `{ authenticateToken }`, or `{ authMiddleware }`.
+authenticate.authenticate = authenticate;
+authenticate.authenticateToken = authenticate;
+authenticate.authMiddleware = authenticate;
+authenticate.getJwtSecret = getJwtSecret;
+
+module.exports = authenticate;
+module.exports.authenticate = authenticate;
+module.exports.authenticateToken = authenticate;
+module.exports.authMiddleware = authenticate;
+module.exports.getJwtSecret = getJwtSecret;

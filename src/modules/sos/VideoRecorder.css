@@ -1,0 +1,377 @@
+.video-recorder {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 15px 0;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto';
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+}
+
+.video-recorder.permission-denied {
+  background: linear-gradient(135deg, #ef5350 0%, #e53935 100%);
+}
+
+/* Header */
+.video-recorder-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.video-recorder-header .material-icons {
+  font-size: 24px;
+}
+
+.video-recorder-header h3 {
+  margin: 0;
+  flex: 1;
+  font-size: 16px;
+}
+
+.time-display {
+  font-size: 18px;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 6px;
+}
+
+/* Camera Preview */
+.camera-preview-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  margin: 12px 0;
+}
+
+.camera-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.recording-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, transparent 100%);
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 107, 107, 0.9);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Recording Status */
+.recording-status {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+}
+
+/* Progress Bar */
+.recording-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50, #45a049);
+  transition: width 0.1s linear;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.6);
+}
+
+/* Duration Info */
+.duration-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  opacity: 0.9;
+  margin-bottom: 12px;
+}
+
+.duration-max {
+  opacity: 0.7;
+}
+
+/* Quality Selector */
+.quality-selector {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.quality-selector label {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.quality-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.quality-btn {
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quality-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.quality-btn.active {
+  background: rgba(255, 255, 255, 0.4);
+  border-color: white;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+/* Control Buttons */
+.video-recorder-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-start-recording,
+.btn-stop-recording,
+.btn-cancel-recording {
+  flex: 1;
+  min-width: 140px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
+}
+
+.btn-start-recording {
+  background: #4caf50;
+  color: white;
+}
+
+.btn-start-recording:hover:not(:disabled) {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(76, 175, 80, 0.4);
+}
+
+.btn-start-recording:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-stop-recording {
+  background: #ff6b6b;
+  color: white;
+  flex: 2;
+}
+
+.btn-stop-recording:hover {
+  background: #ee5a52;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(255, 107, 107, 0.4);
+}
+
+.btn-cancel-recording {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-cancel-recording:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-start-recording .material-icons,
+.btn-stop-recording .material-icons,
+.btn-cancel-recording .material-icons {
+  font-size: 18px;
+}
+
+/* Processing Spinner */
+.processing-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error State */
+.video-recorder-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.video-recorder-error .material-icons {
+  font-size: 48px;
+  opacity: 0.8;
+}
+
+.video-recorder-error p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.video-recorder-error small {
+  opacity: 0.8;
+  font-size: 12px;
+}
+
+/* Info Text */
+.video-recorder-info {
+  display: block;
+  margin-top: 12px;
+  opacity: 0.85;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .video-recorder {
+    padding: 15px;
+  }
+
+  .camera-preview-container {
+    aspect-ratio: 4 / 3;
+  }
+
+  .quality-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .btn-start-recording,
+  .btn-stop-recording,
+  .btn-cancel-recording {
+    min-width: 100px;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .time-display {
+    font-size: 16px;
+    padding: 2px 8px;
+  }
+}

@@ -8,6 +8,7 @@ const compression = require('compression');
 const path = require('path');
 
 const connectDB = require('./config/db');
+const { connectRedis, closeRedis } = require('./config/redis');
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -31,15 +32,6 @@ app.use('/uploads', express.static(uploadsDirectory, {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   },
 }));
-
-// Connect Database
-connectDB();
-
-// Init Redis
-const { connectRedis } = require('./config/redis');
-connectRedis().catch((err) => {
-  logger.warn('Redis init failed (optional):', err.message);
-});
 
 // Health check
 app.get('/', (req, res) => {
@@ -96,6 +88,9 @@ app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/settlements', require('./routes/settlements'));
+
+// SOS Emergency Module Phase 1 Routes (OTP, Siren, Photos, Tracking, Retry)
+app.use('/api/sos', require('./routes/sosRoutes'));
 
 // Phase 1: Device Management Routes (Multi-Device & Session Support)
 app.use('/api/messaging/devices', require('./routes/deviceRoutes'));
@@ -220,126 +215,175 @@ const {
 } = require('./jobs/abandonedCartScheduler');
 const { initOrderQueue, closeOrderQueue } = require('./jobs/orderQueue');
 const voiceCallScheduler = require('./services/voiceCallScheduler');
-voiceCallScheduler.start();
-
-// Initialize Ecommerce Background Jobs
-scheduleAbandonedCartReminders();
-void initOrderQueue().catch((err) => {
-  logger.warn(`Ecommerce order queue init failed: ${err.message}`);
-});
 
 // Initialize Message Retry Job (Phase 1: Multi-Device & Retry Support)
 const messageRetryJob = require('./jobs/messageRetryJob');
-messageRetryJob.startAll();
 
 // Initialize OTP Cleanup Job (Phase 2: OTP Authentication)
 const otpCleanupJob = require('./jobs/otpCleanupJob');
-otpCleanupJob.startAll();
 
 // Initialize Encryption Cleanup Job (Phase 2: End-to-End Encryption)
 const encryptionCleanupJob = require('./jobs/encryptionCleanupJob');
-encryptionCleanupJob.startAll();
 
 // Initialize Moderation Cleanup Job (Phase 2: Admin Moderation Panel)
 const moderationCleanupJob = require('./jobs/moderationCleanupJob');
-moderationCleanupJob.startAll();
 
 // Initialize Optimization Cleanup Job (Phase 2: Real-Time Optimization)
 const optimizationCleanupJob = require('./jobs/optimizationCleanupJob');
-optimizationCleanupJob.startAll();
 
 // Initialize Abuse Reporting Job (Phase 2: User Abuse Reporting)
 const abuseReportingJob = require('./jobs/abuseReportingJob');
-abuseReportingJob.startAll();
 
 // Initialize Diary Reminder Scheduler
 const DiaryReminderScheduler = require('./services/diaryReminderScheduler');
 const { io } = require('./config/websocket');
 const diaryReminderScheduler = new DiaryReminderScheduler(io);
-diaryReminderScheduler.start();
 
 // Initialize Missed Reminder Scheduler (Phase 1)
 const missedReminderScheduler = require('./services/missedReminderScheduler');
-missedReminderScheduler.startMissedReminderScheduler(5 * 60 * 1000);  // Run every 5 minutes
 
 // Initialize SMS Reminder Scheduler (Phase 2)
 const smsReminderScheduler = require('./services/smsReminderScheduler');
-smsReminderScheduler.start();
 
 // Initialize Email Reminder Scheduler (Phase 3)
 const emailReminderScheduler = require('./services/emailReminderScheduler');
-emailReminderScheduler.start();
 
 // Initialize WhatsApp Reminder Scheduler (Phase 4)
 const whatsappReminderScheduler = require('./services/whatsappReminderScheduler');
-whatsappReminderScheduler.startWhatsAppReminderScheduler();
 
 // Initialize Telegram Reminder Scheduler (Phase 4)
 const telegramReminderScheduler = require('./services/telegramReminderScheduler');
-telegramReminderScheduler.startTelegramReminderScheduler();
 
 // Initialize Phase 4: Message Scheduling Service
 const schedulingService = require('./services/schedulingService');
-schedulingService.startSchedulingJobs();
 
 // Initialize Phase 4: Data Management Service
 const dataManagementService = require('./services/dataManagementService');
-dataManagementService.startDataManagementJobs();
 
 // Initialize Push Notification Scheduler (Phase 4)
 const pushNotificationScheduler = require('./services/pushNotificationScheduler');
-pushNotificationScheduler.startPushNotificationScheduler();
 
 // Initialize WhatsApp Group Reminder Scheduler (Phase 5)
 const whatsappGroupReminderScheduler = require('./services/whatsappGroupReminderScheduler');
-whatsappGroupReminderScheduler.startWhatsAppGroupReminderScheduler();
 
 // Initialize Diary Draft Expiration Scheduler (Phase 4.5)
 const draftExpirationScheduler = require('./services/draftExpirationScheduler');
-draftExpirationScheduler.startDraftExpirationScheduler();
+let backgroundServicesStarted = false;
+let databaseConnectedAtStartup = false;
 
-server.listen(PORT, () => {
-  logger.info(`Server started on port ${PORT}`);
-  logger.info(`WebSocket server initialized`);
-  logger.info(`Moderation WebSocket server initialized`);
-  logger.info(`Voice call scheduler started`);
-  logger.info(`Diary reminder scheduler started`);
-  logger.info(`Missed reminder scheduler started`);
-  logger.info(`SMS reminder scheduler started`);
-  logger.info(`Email reminder scheduler started`);
-  logger.info(`WhatsApp reminder scheduler started`);
-  logger.info(`Telegram reminder scheduler started`);
-  logger.info(`Push notification scheduler started`);
-  logger.info(`WhatsApp group reminder scheduler started`);
-  logger.info(`Phase 4: Message scheduling service started`);
-  logger.info(`Phase 4: Data management service started`);
-  logger.info(`Abandoned cart scheduler started`);
-});
+const startBackgroundServices = () => {
+  if (backgroundServicesStarted) {
+    return;
+  }
+
+  voiceCallScheduler.start();
+  scheduleAbandonedCartReminders();
+  void initOrderQueue().catch((err) => {
+    logger.warn(`Ecommerce order queue init failed: ${err.message}`);
+  });
+
+  messageRetryJob.startAll();
+  otpCleanupJob.startAll();
+  encryptionCleanupJob.startAll();
+  moderationCleanupJob.startAll();
+  optimizationCleanupJob.startAll();
+  abuseReportingJob.startAll();
+  diaryReminderScheduler.start();
+  missedReminderScheduler.startMissedReminderScheduler(5 * 60 * 1000);
+  smsReminderScheduler.start();
+  emailReminderScheduler.start();
+  whatsappReminderScheduler.startWhatsAppReminderScheduler();
+  telegramReminderScheduler.startTelegramReminderScheduler();
+  schedulingService.startSchedulingJobs();
+  dataManagementService.startDataManagementJobs();
+  pushNotificationScheduler.startPushNotificationScheduler();
+  whatsappGroupReminderScheduler.startWhatsAppGroupReminderScheduler();
+  draftExpirationScheduler.startDraftExpirationScheduler();
+
+  backgroundServicesStarted = true;
+};
+
+const stopBackgroundServices = async () => {
+  if (backgroundServicesStarted) {
+    voiceCallScheduler.stop();
+    stopAbandonedCartReminders();
+    diaryReminderScheduler.stop();
+    missedReminderScheduler.stopMissedReminderScheduler();
+    smsReminderScheduler.stop();
+    emailReminderScheduler.stop();
+    whatsappReminderScheduler.stopWhatsAppReminderScheduler();
+    telegramReminderScheduler.stopTelegramReminderScheduler();
+    pushNotificationScheduler.stopPushNotificationScheduler();
+    whatsappGroupReminderScheduler.stopWhatsAppGroupReminderScheduler();
+
+    try {
+      await closeOrderQueue();
+    } catch (error) {
+      logger.warn(`Failed to close ecommerce order queue: ${error.message}`);
+    }
+
+    backgroundServicesStarted = false;
+  }
+
+  moderationWebsocket.shutdown();
+
+  try {
+    await closeRedis();
+  } catch (error) {
+    logger.warn(`Failed to close Redis connection: ${error.message}`);
+  }
+};
+
+const bootstrap = async () => {
+  try {
+    databaseConnectedAtStartup = await connectDB();
+    await connectRedis();
+
+    if (databaseConnectedAtStartup) {
+      startBackgroundServices();
+    } else {
+      logger.warn('MongoDB is not connected. Starting without MongoDB-backed background jobs.');
+    }
+
+    server.listen(PORT, () => {
+      logger.info(`Server started on port ${PORT}`);
+      logger.info('WebSocket server initialized');
+      logger.info('Moderation WebSocket server initialized');
+
+      if (databaseConnectedAtStartup) {
+        logger.info('MongoDB-backed background services started');
+      } else {
+        logger.warn('Background jobs were skipped because MongoDB is not connected');
+      }
+    });
+  } catch (error) {
+    logger.error(`Startup failed: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+bootstrap();
 
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled Rejection', err);
-  server.close(() => process.exit(1));
+  if (server.listening) {
+    server.close(() => process.exit(1));
+    return;
+  }
+
+  process.exit(1);
 });
 
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  voiceCallScheduler.stop();
-  stopAbandonedCartReminders();
-  diaryReminderScheduler.stop();
-  missedReminderScheduler.stopMissedReminderScheduler();
-  smsReminderScheduler.stop();
-  emailReminderScheduler.stop();
-  whatsappReminderScheduler.stopWhatsAppReminderScheduler();
-  telegramReminderScheduler.stopTelegramReminderScheduler();
-  pushNotificationScheduler.stopPushNotificationScheduler();
-  whatsappGroupReminderScheduler.stopWhatsAppGroupReminderScheduler();
-  moderationWebsocket.shutdown();
-  try {
-    await closeOrderQueue();
-  } catch (error) {
-    logger.warn(`Failed to close ecommerce order queue: ${error.message}`);
+  await stopBackgroundServices();
+
+  if (server.listening) {
+    server.close(() => {
+      logger.info('Process terminated');
+    });
+    return;
   }
-  server.close(() => {
-    logger.info('Process terminated');
-  });
+
+  logger.info('Process terminated');
 });

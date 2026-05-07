@@ -1,4 +1,4 @@
-t4rgfcda    AS/**
+/**
  * Referral & Affiliate System Routes
  * GET /api/matrimonial/referral/*
  */

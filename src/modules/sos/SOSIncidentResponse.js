@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './SOSIncidentResponse.css';
 
 const SOSIncidentResponse = ({ userEmail, userName }) => {
@@ -8,39 +8,62 @@ const SOSIncidentResponse = ({ userEmail, userName }) => {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
 
-  useEffect(() => {
-    fetchIncidents();
-    const interval = setInterval(fetchIncidents, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, [userEmail]);
+  const getIncidentLocationLabel = (incident) => {
+    if (typeof incident?.location === 'string' && incident.location.trim()) {
+      return incident.location.trim();
+    }
 
-  const fetchIncidents = async () => {
+    const coordinates = incident?.location?.coordinates;
+    if (Array.isArray(coordinates) && coordinates.length === 2) {
+      return `${coordinates[1]}, ${coordinates[0]}`;
+    }
+
+    if (typeof incident?.locationText === 'string' && incident.locationText.trim()) {
+      return incident.locationText.trim();
+    }
+
+    return 'Location TBA';
+  };
+
+  const fetchIncidents = useCallback(async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token =
+        localStorage.getItem('authToken') || localStorage.getItem('token');
       const response = await fetch('/api/sos/my-responses', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: token ? `Bearer ${token}` : '' },
       });
 
       if (response.ok) {
         const data = await response.json();
-        setIncidents(data.data || []);
+        const nextIncidents = data.data || [];
+        setIncidents(nextIncidents);
+        setSelectedIncident((prev) =>
+          prev ? nextIncidents.find((incident) => incident._id === prev._id) || null : prev
+        );
       }
     } catch (error) {
       console.error('Error fetching incidents:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchIncidents();
+    const interval = setInterval(fetchIncidents, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [fetchIncidents, userEmail]);
 
   const handleAddNote = async (incidentId, note) => {
     try {
-      const token = localStorage.getItem('token');
+      const token =
+        localStorage.getItem('authToken') || localStorage.getItem('token');
       const response = await fetch(`/api/sos/incident/${incidentId}/note`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify({
           note,
@@ -60,12 +83,13 @@ const SOSIncidentResponse = ({ userEmail, userName }) => {
 
   const handleUpdateStatus = async (incidentId, newStatus) => {
     try {
-      const token = localStorage.getItem('token');
+      const token =
+        localStorage.getItem('authToken') || localStorage.getItem('token');
       const response = await fetch(`/api/sos/incident/${incidentId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify({
           status: newStatus,
@@ -92,14 +116,15 @@ const SOSIncidentResponse = ({ userEmail, userName }) => {
       }
 
       navigator.geolocation.getCurrentPosition(async (position) => {
-        const token = localStorage.getItem('token');
+        const token =
+          localStorage.getItem('authToken') || localStorage.getItem('token');
         const response = await fetch(
           `/api/sos/incident/${incidentId}/location`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
+              Authorization: token ? `Bearer ${token}` : '',
             },
             body: JSON.stringify({
               latitude: position.coords.latitude,
@@ -218,7 +243,7 @@ const SOSIncidentResponse = ({ userEmail, userName }) => {
                 </div>
 
                 <div className="incident-card-meta">
-                  <span>📍 {incident.location?.coordinates?.join(', ') || 'Location TBA'}</span>
+                  <span>📍 {getIncidentLocationLabel(incident)}</span>
                   <span>⏱ {formatTime(incident.createdAt)}</span>
                   <span>
                     ⏰{' '}
@@ -229,10 +254,10 @@ const SOSIncidentResponse = ({ userEmail, userName }) => {
                   </span>
                 </div>
 
-                {incident.acknowledgements?.length > 0 && (
+                {((incident.acknowledgedBy || incident.acknowledgements || []).length > 0) && (
                   <div className="incident-acknowledgements">
-                    <strong>{incident.acknowledgements.length}</strong> responder
-                    {incident.acknowledgements.length !== 1 ? 's' : ''}
+                    <strong>{(incident.acknowledgedBy || incident.acknowledgements || []).length}</strong> responder
+                    {(incident.acknowledgedBy || incident.acknowledgements || []).length !== 1 ? 's' : ''}
                   </div>
                 )}
               </div>
@@ -264,7 +289,7 @@ const SOSIncidentResponse = ({ userEmail, userName }) => {
               </div>
               <div className="detail-item">
                 <label>Location:</label>
-                <p>{selectedIncident.location || 'Not provided'}</p>
+                <p>{getIncidentLocationLabel(selectedIncident)}</p>
               </div>
               <div className="detail-item">
                 <label>Reported At:</label>

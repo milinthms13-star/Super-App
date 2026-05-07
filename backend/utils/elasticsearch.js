@@ -2,11 +2,30 @@ const { Client } = require('@elastic/elasticsearch');
 const logger = require('./logger');
 const { ELASTICSEARCH_URL = 'http://localhost:9200' } = process.env;
 
-const client = new Client({ node: ELASTICSEARCH_URL });
+const isElasticsearchEnabled = () => {
+  if (process.env.ELASTICSEARCH_ENABLED === 'true') {
+    return true;
+  }
+
+  if (process.env.ELASTICSEARCH_ENABLED === 'false') {
+    return false;
+  }
+
+  return process.env.NODE_ENV === 'production';
+};
+
+const client = isElasticsearchEnabled()
+  ? new Client({ node: ELASTICSEARCH_URL })
+  : null;
 
 const PRODUCT_INDEX = 'products';
 
 async function ensureIndex() {
+  if (!client) {
+    logger.warn('Elasticsearch is disabled for this environment. Skipping index creation.');
+    return false;
+  }
+
   try {
     const exists = await client.indices.exists({ index: PRODUCT_INDEX });
     if (!exists) {
@@ -82,6 +101,10 @@ async function ensureIndex() {
 }
 
 async function indexProduct(product) {
+  if (!client) {
+    return false;
+  }
+
   try {
     await client.index({
       index: PRODUCT_INDEX,
@@ -133,6 +156,10 @@ async function indexProduct(product) {
 }
 
 async function deleteProduct(productId) {
+  if (!client) {
+    return false;
+  }
+
   try {
     await client.delete({
       index: PRODUCT_INDEX,
@@ -157,6 +184,19 @@ async function searchProducts({
   page = 1,
   limit = 20,
 }) {
+  if (!client) {
+    return {
+      products: [],
+      total: 0,
+      aggregations: {
+        categories: [],
+        businesses: [],
+        ratings: [],
+        priceRanges: [],
+      }
+    };
+  }
+
   const trimmedQuery = String(query || '').trim();
   const normalizedPage = Math.max(1, Number.parseInt(page, 10) || 1);
   const normalizedLimit = Math.max(1, Number.parseInt(limit, 10) || 20);

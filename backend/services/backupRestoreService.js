@@ -6,8 +6,34 @@ const User = require('../models/User');
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
-const json2csv = require('json2csv').parse;
 const logger = require('../utils/logger');
+
+const escapeCsvValue = (value) => {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  const stringValue = String(value);
+  if (/[",\n]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+
+  return stringValue;
+};
+
+const convertRowsToCsv = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return '';
+  }
+
+  const headers = Object.keys(rows[0]);
+  const lines = [
+    headers.join(','),
+    ...rows.map((row) => headers.map((header) => escapeCsvValue(row[header])).join(',')),
+  ];
+
+  return `${lines.join('\n')}\n`;
+};
 
 class BackupRestoreService {
   constructor() {
@@ -216,7 +242,7 @@ class BackupRestoreService {
         readBy: msg.readBy?.length || 0,
       }));
 
-      return json2csv(csvData);
+      return convertRowsToCsv(csvData);
     } catch (error) {
       logger.error('Error exporting chat as CSV:', error);
       throw error;

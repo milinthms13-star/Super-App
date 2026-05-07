@@ -40,5 +40,5 @@ const sosContactSchema = new mongoose.Schema({
 
 sosContactSchema.index({ userId: 1, priority: 1 });
 
-module.exports = mongoose.model('SosContact', sosContactSchema);
+module.exports = mongoose.models.SosContact || mongoose.model('SosContact', sosContactSchema);
 

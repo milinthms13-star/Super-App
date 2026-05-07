@@ -2,16 +2,47 @@ const mongoose = require('mongoose');
 const logger = require('../utils/logger');
 const { initializeGridFS } = require('../utils/gridfs');
 
+let listenersAttached = false;
+
+const attachConnectionListeners = () => {
+  if (listenersAttached) {
+    return;
+  }
+
+  mongoose.connection.on('error', (err) => {
+    logger.error('MongoDB connection error:', err);
+  });
+
+  mongoose.connection.on('disconnected', () => {
+    logger.warn('MongoDB disconnected');
+  });
+
+  mongoose.connection.on('reconnected', () => {
+    logger.info('MongoDB reconnected');
+  });
+
+  listenersAttached = true;
+};
+
 const connectDB = async () => {
+  const shouldSkipMongoInLocalMemoryMode =
+    process.env.AUTH_STORAGE === 'memory' &&
+    process.env.NODE_ENV !== 'production' &&
+    process.env.USE_MONGODB_IN_MEMORY_MODE !== 'true';
+
+  if (shouldSkipMongoInLocalMemoryMode) {
+    logger.warn('Using local in-memory mode. MongoDB/GridFS startup is skipped.');
+    return false;
+  }
+
   const uri = process.env.MONGODB_URI;
   if (!uri) {
     if (process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production') {
       logger.warn('Using development-only in-memory auth storage. MongoDB/GridFS is disabled because MONGODB_URI is not set.');
-      return;
+      return false;
     }
 
-    logger.error('MONGODB_URI is required in .env');
-    process.exit(1);
+    throw new Error('MONGODB_URI is required in .env');
   }
 
   try {
@@ -29,31 +60,20 @@ const connectDB = async () => {
     logger.info('MongoDB connected successfully');
     initializeGridFS();
     logger.info('GridFS bucket initialized');
+    attachConnectionListeners();
 
     if (process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production') {
       logger.warn('Auth remains in memory mode, but MongoDB is connected for GridFS and other persisted data.');
     }
 
-    // Handle connection events
-    mongoose.connection.on('error', (err) => {
-      logger.error('MongoDB connection error:', err);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      logger.warn('MongoDB disconnected');
-    });
-
-    mongoose.connection.on('reconnected', () => {
-      logger.info('MongoDB reconnected');
-    });
-
+    return true;
   } catch (error) {
     logger.error('MongoDB connection error:', error);
     if (process.env.NODE_ENV !== 'production') {
       logger.warn('Continuing without MongoDB in development mode. Some features may be unavailable.');
-      return;
+      return false;
     }
-    process.exit(1);
+    throw error;
   }
 };
 

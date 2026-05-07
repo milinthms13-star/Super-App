@@ -1,0 +1,326 @@
+.audio-recorder {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 15px 0;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto';
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+}
+
+.audio-recorder.permission-denied {
+  background: linear-gradient(135deg, #ef5350 0%, #e53935 100%);
+}
+
+/* Header */
+.audio-recorder-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.audio-recorder-header .material-icons {
+  font-size: 24px;
+}
+
+.audio-recorder-header h3 {
+  margin: 0;
+  flex: 1;
+  font-size: 16px;
+}
+
+.time-display {
+  font-size: 18px;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 6px;
+}
+
+/* Recording Indicator */
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pulse-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff6b6b;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.status-text {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Progress Bar */
+.recording-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50, #45a049);
+  transition: width 0.1s linear;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.6);
+}
+
+/* Duration Info */
+.duration-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  opacity: 0.9;
+  margin-bottom: 12px;
+}
+
+.duration-max {
+  opacity: 0.7;
+}
+
+/* Control Buttons */
+.audio-recorder-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.btn-start-recording,
+.btn-stop-recording,
+.btn-cancel-recording {
+  flex: 1;
+  min-width: 140px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
+}
+
+.btn-start-recording {
+  background: #4caf50;
+  color: white;
+}
+
+.btn-start-recording:hover:not(:disabled) {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(76, 175, 80, 0.4);
+}
+
+.btn-start-recording:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-stop-recording {
+  background: #ff6b6b;
+  color: white;
+  flex: 2;
+}
+
+.btn-stop-recording:hover {
+  background: #ee5a52;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(255, 107, 107, 0.4);
+}
+
+.btn-cancel-recording {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-cancel-recording:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-start-recording .material-icons,
+.btn-stop-recording .material-icons,
+.btn-cancel-recording .material-icons {
+  font-size: 18px;
+}
+
+/* Processing Spinner */
+.processing-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Audio Visualization */
+.audio-visualization {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  margin: 15px 0;
+  opacity: 0.6;
+}
+
+.wave-bar {
+  width: 4px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 2px;
+  animation: wave 0.8s ease-in-out infinite;
+}
+
+.wave-bar:nth-child(1) {
+  height: 10px;
+  animation-delay: 0s;
+}
+
+.wave-bar:nth-child(2) {
+  height: 20px;
+  animation-delay: 0.1s;
+}
+
+.wave-bar:nth-child(3) {
+  height: 30px;
+  animation-delay: 0.2s;
+}
+
+.wave-bar:nth-child(4) {
+  height: 20px;
+  animation-delay: 0.3s;
+}
+
+.wave-bar:nth-child(5) {
+  height: 10px;
+  animation-delay: 0.4s;
+}
+
+@keyframes wave {
+  0%, 100% {
+    height: 10px;
+  }
+  50% {
+    height: 30px;
+  }
+}
+
+.recording-state-recording .wave-bar {
+  opacity: 1;
+  animation: wave 0.6s ease-in-out infinite;
+}
+
+/* Error State */
+.audio-recorder-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.audio-recorder-error .material-icons {
+  font-size: 48px;
+  opacity: 0.8;
+}
+
+.audio-recorder-error p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.audio-recorder-error small {
+  opacity: 0.8;
+  font-size: 12px;
+}
+
+/* Info Text */
+.audio-recorder-info {
+  display: block;
+  margin-top: 12px;
+  opacity: 0.85;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .audio-recorder {
+    padding: 15px;
+  }
+
+  .audio-recorder-header {
+    gap: 8px;
+  }
+
+  .audio-recorder-controls {
+    gap: 8px;
+  }
+
+  .btn-start-recording,
+  .btn-stop-recording,
+  .btn-cancel-recording {
+    min-width: 100px;
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .time-display {
+    font-size: 16px;
+    padding: 2px 8px;
+  }
+}

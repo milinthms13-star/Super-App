@@ -1,0 +1,113 @@
+.photo-capture-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.photo-capture-container {
+  background-color: #1a1a1a;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.photo-capture-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.photo-capture-header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.close-button:hover {
+  opacity: 0.7;
+}
+
+.photo-capture-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  justify-content: center;
+}
+
+.capture-button,
+.toggle-button {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 600;
+}
+
+.capture-button {
+  background-color: #dc143c;
+  color: #fff;
+  flex: 1;
+}
+
+.capture-button:hover {
+  background-color: #b81030;
+  transform: scale(1.02);
+}
+
+.capture-button:active {
+  transform: scale(0.98);
+}
+
+.toggle-button {
+  background-color: #4a5568;
+  color: #fff;
+  flex: 0 1 auto;
+}
+
+.toggle-button:hover {
+  background-color: #2d3748;
+}
+
+.error-message {
+  color: #ff6b6b;
+  text-align: center;
+  margin: 0;
+  padding: 20px;
+}
+
+@media (max-width: 480px) {
+  .photo-capture-container {
+    padding: 12px;
+  }
+
+  .photo-capture-controls {
+    flex-direction: column;
+  }
+
+  .toggle-button {
+    flex: 1;
+  }
+}
