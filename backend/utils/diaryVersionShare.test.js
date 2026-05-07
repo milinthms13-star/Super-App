@@ -227,11 +227,11 @@ describe('DiaryVersionShare Utility', () => {
 
       DiaryEntry.findById.mockResolvedValue(mockEntry);
 
-      await expect(async () => {
+      await expect((async () => {
         if (mockEntry.userId.toString() !== differentUserId.toString()) {
           throw new Error('Not authorized');
         }
-      }()).rejects.toThrow();
+      })()).rejects.toThrow();
     });
 
     it('should handle non-existent share token', async () => {

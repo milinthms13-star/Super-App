@@ -1,0 +1,18 @@
+{
+  "chatId": "test-chat-123",
+  "userId": "test-user-456",
+  "format": "json",
+  "messages": [
+    {
+      "id": "existing-msg-1",
+      "messageId": "existing-msg-1",
+      "senderId": "test-user-456",
+      "content": "Existing test message",
+      "attachments": [],
+      "reactions": [],
+      "createdAt": "2026-05-02T10:00:00.000Z",
+      "editedAt": null
+    }
+  ],
+  "exportedAt": "2026-05-07T18:33:50.074Z"
+}

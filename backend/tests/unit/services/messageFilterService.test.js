@@ -1,4 +1,11 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+jest.mock('../../../models/MessageFilter', () => require('./helpers/inMemoryMessagingModels').MessageFilterModel);
+
+const {
+  resetMessagingStore,
+  seedMessage,
+} = require('./helpers/inMemoryMessagingModels');
 const messageFilterService = require('../../../services/messageFilterService');
 
 describe('Message Filter Service', () => {
@@ -10,7 +17,16 @@ describe('Message Filter Service', () => {
   const testActions = [{ type: 'label', value: 'urgent' }];
 
   beforeEach(() => {
+    resetMessagingStore();
     messageFilterService.clearCache();
+    seedMessage({
+      _id: 'msg-1',
+      chatId: 'chat-1',
+      senderId: 'user-1',
+      content: 'Urgent task',
+      attachments: [],
+      createdAt: new Date(),
+    });
   });
 
   afterEach(() => {

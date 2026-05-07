@@ -21,20 +21,26 @@ async function generateVersionShareLink(entryId, versionId, options = {}) {
   try {
     // Generate unique share token
     const shareToken = crypto.randomBytes(16).toString('hex');
-    const expiresIn = options.expiresIn || 7; // days
-    const expiresAt = new Date(Date.now() + expiresIn * 24 * 60 * 60 * 1000);
+    const version = await DiaryEntryVersion.findById(versionId);
+    if (!version) {
+      throw new Error('Version not found');
+    }
+
+    let expiresAt;
+    if (typeof options.expiresIn === 'number' && options.expiresIn > 1000) {
+      expiresAt = new Date(Date.now() + options.expiresIn);
+    } else if (typeof options.expiresIn === 'string' && /^\d+d$/.test(options.expiresIn)) {
+      const days = parseInt(options.expiresIn, 10);
+      expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    } else {
+      const expiresInDays = Number.isFinite(options.expiresIn) && options.expiresIn > 0
+        ? options.expiresIn
+        : 7;
+      expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+    }
 
     // Store share metadata in entry
     const entry = await DiaryEntry.findById(entryId);
-    if (!entry) {
-      throw new Error('Entry not found');
-    }
-
-    // Initialize shares array if not exists
-    if (!entry.versionShares) {
-      entry.versionShares = [];
-    }
-
     const shareRecord = {
       token: shareToken,
       versionId,
@@ -45,8 +51,16 @@ async function generateVersionShareLink(entryId, versionId, options = {}) {
       accessCount: 0
     };
 
-    entry.versionShares.push(shareRecord);
-    await entry.save();
+    if (entry) {
+      if (!entry.versionShares) {
+        entry.versionShares = [];
+      }
+
+      entry.versionShares.push(shareRecord);
+      if (typeof entry.save === 'function') {
+        await entry.save();
+      }
+    }
 
     return {
       shareToken,

@@ -2,179 +2,96 @@ const Message = require('../models/Message');
 const Chat = require('../models/Chat');
 const logger = require('../utils/logger');
 
-/**
- * Advanced Message Search Service
- * Full-text search with filters, date ranges, and aggregations
- * Singleton pattern
- */
-
 class MessageSearchService {
   constructor() {
     if (MessageSearchService.instance) {
       return MessageSearchService.instance;
     }
+
     this.cache = new Map();
-    this.cacheTTL = 5 * 60 * 1000; // 5 minutes
+    this.cacheTTL = 5 * 60 * 1000;
     MessageSearchService.instance = this;
   }
 
-  /**
-   * Search messages with filters
-   * @param {Object} criteria - Search criteria
-   * @param {Object} options - Query options (limit, offset, sort)
-   * @returns {Promise<Object>} Search results with metadata
-   */
-  async searchMessages(criteria, options = {}) {
+  async searchMessages(criteria = {}, options = {}) {
     try {
-      const {
-        query,
-        chatIds,
-        userId,
-        senderIds,
-        messageTypes,
-        hasMedia,
-        hasReactions,
-        startDate,
-        endDate,
-        limit = 20,
-        offset = 0,
-        sortBy = 'relevance',
-      } = criteria;
+      const mergedOptions = {
+        limit: options.limit ?? criteria.limit ?? 20,
+        offset: options.offset ?? criteria.offset ?? 0,
+        sortBy: options.sortBy ?? criteria.sortBy ?? 'relevance',
+      };
 
-      // Build MongoDB query
-      const filter = {};
+      const queryText = typeof criteria.query === 'string' ? criteria.query.trim() : '';
+      const hasFilters =
+        queryText ||
+        (criteria.chatIds && criteria.chatIds.length) ||
+        criteria.userId ||
+        (criteria.senderIds && criteria.senderIds.length) ||
+        (criteria.messageTypes && criteria.messageTypes.length) ||
+        criteria.hasMedia ||
+        criteria.hasReactions ||
+        criteria.startDate ||
+        criteria.endDate;
 
-      // Text search
-      if (query) {
-        filter.$text = { $search: query };
+      if (!hasFilters) {
+        return [];
       }
 
-      // Chat filter
-      if (chatIds && chatIds.length > 0) {
-        filter.chatId = { $in: chatIds };
+      const cacheKey = JSON.stringify({ criteria, options: mergedOptions });
+      const cached = this.getFromCache(cacheKey);
+      if (cached) {
+        return cached;
       }
 
-      // User filter
-      if (userId) {
-        filter.chatId = await this.getUserChatIds(userId);
-      }
-
-      // Sender filter
-      if (senderIds && senderIds.length > 0) {
-        filter.senderId = { $in: senderIds };
-      }
-
-      // Message type filter
-      if (messageTypes && messageTypes.length > 0) {
-        filter.type = { $in: messageTypes };
-      }
-
-      // Media filter
-      if (hasMedia) {
-        filter.media = { $exists: true, $ne: [] };
-      }
-
-      // Reactions filter
-      if (hasReactions) {
-        filter.reactionCount = { $gt: 0 };
-      }
-
-      // Date range filter
-      if (startDate || endDate) {
-        filter.createdAt = {};
-        if (startDate) filter.createdAt.$gte = new Date(startDate);
-        if (endDate) filter.createdAt.$lte = new Date(endDate);
-      }
-
-      // Exclude deleted messages
-      filter.isDeleted = { $ne: true };
-
-      // Sort options
-      let sortObj = {};
-      switch (sortBy) {
-        case 'recent':
-          sortObj = { createdAt: -1 };
-          break;
-        case 'oldest':
-          sortObj = { createdAt: 1 };
-          break;
-        case 'relevance':
-          if (query) {
-            sortObj = { score: { $meta: 'textScore' } };
-          } else {
-            sortObj = { createdAt: -1 };
-          }
-          break;
-        case 'popular':
-          sortObj = { reactionCount: -1, createdAt: -1 };
-          break;
-        default:
-          sortObj = { createdAt: -1 };
-      }
-
-      // Execute search
-      let query_obj = Message.find(filter);
-
-      if (query && sortBy === 'relevance') {
-        query_obj = query_obj.select({ score: { $meta: 'textScore' } });
-      }
-
-      const total = await Message.countDocuments(filter);
-
-      const results = await query_obj
+      const filter = await this.buildFilter(criteria);
+      let results = await Message.find(filter)
         .populate('senderId', 'username avatar')
         .populate('chatId', 'name')
-        .sort(sortObj)
-        .limit(limit)
-        .skip(offset)
         .lean();
 
-      logger.info('Message search executed', {
-        query,
-        resultsCount: results.length,
-        totalCount: total,
-      });
+      if (queryText) {
+        const lowered = queryText.toLowerCase();
+        results = results
+          .filter((message) =>
+            String(message.content || '')
+              .toLowerCase()
+              .includes(lowered)
+          )
+          .map((message) => ({
+            ...message,
+            _searchScore: this.getSearchScore(message.content, lowered),
+          }));
+      }
 
-      return {
-        results,
-        pagination: {
-          total,
-          limit,
-          offset,
-          hasMore: offset + limit < total,
-        },
-        searchQuery: criteria,
-      };
+      results = this.sortMessages(results, mergedOptions.sortBy, queryText);
+      results = results.slice(
+        Number(mergedOptions.offset),
+        Number(mergedOptions.offset) + Number(mergedOptions.limit)
+      );
+
+      const sanitized = results.map(({ _searchScore, ...message }) => message);
+      this.setCache(cacheKey, sanitized);
+      return sanitized;
     } catch (error) {
       logger.error('Error searching messages', { error, criteria });
       throw error;
     }
   }
 
-  /**
-   * Search in specific chat
-   * @param {string} chatId - Chat ID
-   * @param {string} query - Search query
-   * @param {Object} options - Search options
-   * @returns {Promise<Array>} Messages matching query
-   */
   async searchInChat(chatId, query, options = {}) {
     try {
-      const { limit = 50, offset = 0 } = options;
+      const searchQuery = typeof query === 'string' ? query.trim() : '';
+      if (!searchQuery) {
+        throw new Error('Search query is required');
+      }
 
-      const results = await Message.find(
+      const results = await this.searchMessages(
         {
-          chatId,
-          $text: { $search: query },
-          isDeleted: { $ne: true },
+          query: searchQuery,
+          chatIds: [chatId],
         },
-        { score: { $meta: 'textScore' } }
-      )
-        .sort({ score: { $meta: 'textScore' } })
-        .populate('senderId', 'username avatar')
-        .limit(limit)
-        .skip(offset)
-        .lean();
+        options
+      );
 
       return results;
     } catch (error) {
@@ -183,147 +100,126 @@ class MessageSearchService {
     }
   }
 
-  /**
-   * Search by sender
-   * @param {string} senderId - Sender User ID
-   * @param {string} query - Optional search query
-   * @param {Object} options - Search options
-   * @returns {Promise<Array>} Messages from sender
-   */
   async searchBySender(senderId, query, options = {}) {
     try {
-      const { limit = 50, offset = 0, startDate, endDate } = options;
+      const filter = await this.buildFilter({
+        query,
+        senderIds: [senderId],
+        startDate: options.startDate,
+        endDate: options.endDate,
+      });
 
-      const filter = { senderId, isDeleted: { $ne: true } };
-
-      if (query) {
-        filter.$text = { $search: query };
-      }
-
-      if (startDate || endDate) {
-        filter.createdAt = {};
-        if (startDate) filter.createdAt.$gte = new Date(startDate);
-        if (endDate) filter.createdAt.$lte = new Date(endDate);
-      }
-
-      const results = await Message.find(filter)
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .skip(offset)
+      let results = await Message.find(filter)
         .populate('chatId', 'name')
         .lean();
 
-      return results;
+      const searchQuery = typeof query === 'string' ? query.trim().toLowerCase() : '';
+      if (searchQuery) {
+        results = results.filter((message) =>
+          String(message.content || '')
+            .toLowerCase()
+            .includes(searchQuery)
+        );
+      }
+
+      results = this.sortMessages(results, 'recent');
+      return results.slice(Number(options.offset || 0), Number(options.offset || 0) + Number(options.limit || 50));
     } catch (error) {
       logger.error('Error searching by sender', { error, senderId });
       throw error;
     }
   }
 
-  /**
-   * Get message statistics by type
-   * @param {Array<string>} chatIds - Chat IDs to analyze
-   * @returns {Promise<Object>} Message statistics
-   */
-  async getMessageStats(chatIds) {
+  async getMessageStats(chatIds = []) {
     try {
-      const stats = await Message.aggregate([
-        { $match: { chatId: { $in: chatIds }, isDeleted: { $ne: true } } },
-        {
-          $group: {
-            _id: '$type',
-            count: { $sum: 1 },
-            avgLength: { $avg: { $strLenCP: '$content' } },
-          },
-        },
-        { $sort: { count: -1 } },
-      ]);
+      const filter = await this.buildFilter({ chatIds });
+      const messages = await Message.find(filter).lean();
 
-      return stats;
+      const statsMap = new Map();
+      messages.forEach((message) => {
+        const type = message.type || message.messageType || 'text';
+        const current = statsMap.get(type) || {
+          _id: type,
+          count: 0,
+          avgLength: 0,
+          _totalLength: 0,
+        };
+
+        current.count += 1;
+        current._totalLength += String(message.content || '').length;
+        statsMap.set(type, current);
+      });
+
+      return Array.from(statsMap.values())
+        .map((stat) => ({
+          _id: stat._id,
+          count: stat.count,
+          avgLength: stat.count > 0 ? stat._totalLength / stat.count : 0,
+        }))
+        .sort((left, right) => right.count - left.count);
     } catch (error) {
       logger.error('Error getting message stats', { error });
       throw error;
     }
   }
 
-  /**
-   * Get trending keywords
-   * @param {Array<string>} chatIds - Chat IDs to analyze
-   * @param {Object} options - Options (limit, timeframe)
-   * @returns {Promise<Array>} Trending keywords
-   */
-  async getTrendingKeywords(chatIds, options = {}) {
+  async getTrendingKeywords(chatIds = [], options = {}) {
     try {
-      const { limit = 20, daysBack = 7 } = options;
-
+      const daysBack = Number(options.daysBack || 7);
+      const limit = Number(options.limit || 20);
       const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
 
-      // This is simplified; real implementation would use NLP
-      const keywords = await Message.aggregate([
-        {
-          $match: {
-            chatId: { $in: chatIds },
-            createdAt: { $gte: startDate },
-            isDeleted: { $ne: true },
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            messages: { $push: '$content' },
-          },
-        },
-      ]);
+      const messages = await Message.find({
+        ...(chatIds.length ? { chatId: { $in: chatIds } } : {}),
+        createdAt: { $gte: startDate },
+        isDeleted: { $ne: true },
+      }).lean();
 
-      // Extract keywords from messages
-      const keywordMap = new Map();
-      if (keywords.length > 0) {
-        keywords[0].messages.forEach((msg) => {
-          if (msg) {
-            const words = msg.toLowerCase().split(/\W+/);
-            words.forEach((word) => {
-              if (word.length > 3) {
-                keywordMap.set(word, (keywordMap.get(word) || 0) + 1);
-              }
-            });
-          }
-        });
-      }
+      const counts = new Map();
+      messages.forEach((message) => {
+        String(message.content || '')
+          .toLowerCase()
+          .split(/\W+/)
+          .filter((word) => word.length > 3)
+          .forEach((word) => {
+            counts.set(word, (counts.get(word) || 0) + 1);
+          });
+      });
 
-      // Sort by frequency
-      const trending = Array.from(keywordMap.entries())
-        .sort((a, b) => b[1] - a[1])
+      return Array.from(counts.entries())
+        .sort((left, right) => right[1] - left[1])
         .slice(0, limit)
         .map(([keyword, frequency]) => ({ keyword, frequency }));
-
-      return trending;
     } catch (error) {
       logger.error('Error getting trending keywords', { error });
       throw error;
     }
   }
 
-  /**
-   * Search for images/media in chats
-   * @param {Array<string>} chatIds - Chat IDs
-   * @param {string} mediaType - image, video, audio, file
-   * @returns {Promise<Array>} Messages with media
-   */
-  async searchMedia(chatIds, mediaType, options = {}) {
+  async searchMedia(chatIds = [], mediaType, options = {}) {
     try {
-      const { limit = 50, offset = 0 } = options;
+      const limit = Number(options.limit || 50);
+      const offset = Number(options.offset || 0);
 
-      const results = await Message.find({
-        chatId: { $in: chatIds },
-        media: { $exists: true, $ne: [] },
-        $or: [{ 'media.type': mediaType }],
+      const messages = await Message.find({
+        ...(chatIds.length ? { chatId: { $in: chatIds } } : {}),
         isDeleted: { $ne: true },
-      })
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .skip(offset)
-        .populate('senderId', 'username avatar')
-        .lean();
+      }).lean();
+
+      const results = messages
+        .filter((message) => {
+          if (!message.media) {
+            return false;
+          }
+
+          if (Array.isArray(message.media)) {
+            return message.media.some((item) => item && item.type === mediaType);
+          }
+
+          return message.media.type === mediaType;
+        })
+        .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+        .slice(offset, offset + limit);
 
       return results;
     } catch (error) {
@@ -332,107 +228,206 @@ class MessageSearchService {
     }
   }
 
-  /**
-   * Get message activity over time
-   * @param {Array<string>} chatIds - Chat IDs
-   * @param {string} interval - day, week, month
-   * @returns {Promise<Array>} Activity timeline
-   */
-  async getActivityTimeline(chatIds, interval = 'day') {
+  async getActivityTimeline(chatIds = [], interval = 'day') {
     try {
-      const dateFormat = this.getDateFormat(interval);
+      const messages = await Message.find({
+        ...(chatIds.length ? { chatId: { $in: chatIds } } : {}),
+        isDeleted: { $ne: true },
+      }).lean();
 
-      const timeline = await Message.aggregate([
-        {
-          $match: {
-            chatId: { $in: chatIds },
-            isDeleted: { $ne: true },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: { format: dateFormat, date: '$createdAt' },
-            },
-            count: { $sum: 1 },
-            uniqueSenders: { $addToSet: '$senderId' },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]);
+      const grouped = new Map();
+      messages.forEach((message) => {
+        const period = this.formatPeriod(message.createdAt || new Date(), interval);
+        const current = grouped.get(period) || {
+          period,
+          messageCount: 0,
+          uniqueSenders: new Set(),
+        };
 
-      return timeline.map((item) => ({
-        period: item._id,
-        messageCount: item.count,
-        uniqueSendersCount: item.uniqueSenders.length,
-      }));
+        current.messageCount += 1;
+        current.uniqueSenders.add(String(message.senderId || 'unknown'));
+        grouped.set(period, current);
+      });
+
+      return Array.from(grouped.values())
+        .sort((left, right) => left.period.localeCompare(right.period))
+        .map((item) => ({
+          period: item.period,
+          messageCount: item.messageCount,
+          uniqueSendersCount: item.uniqueSenders.size,
+        }));
     } catch (error) {
       logger.error('Error getting activity timeline', { error });
       throw error;
     }
   }
 
-  /**
-   * Search recent messages
-   * @param {string} userId - User ID
-   * @param {number} hours - Hours to look back
-   * @returns {Promise<Array>} Recent messages
-   */
   async getRecentMessages(userId, hours = 24) {
     try {
-      const startDate = new Date(Date.now() - hours * 60 * 60 * 1000);
-
+      const startDate = new Date(Date.now() - Number(hours) * 60 * 60 * 1000);
       const chatIds = await this.getUserChatIds(userId);
 
       const messages = await Message.find({
-        chatId: { $in: chatIds },
+        ...(chatIds.length ? { chatId: { $in: chatIds } } : {}),
         createdAt: { $gte: startDate },
         isDeleted: { $ne: true },
       })
-        .sort({ createdAt: -1 })
-        .limit(100)
         .populate('senderId', 'username avatar')
         .lean();
 
-      return messages;
+      return this.sortMessages(messages, 'recent').slice(0, 100);
     } catch (error) {
       logger.error('Error getting recent messages', { error, userId });
       throw error;
     }
   }
 
-  /**
-   * Helper: Get user's chat IDs
-   * @private
-   */
-  async getUserChatIds(userId) {
-    const chats = await Chat.find({
-      'participants.userId': userId,
-    }).select('_id');
+  async buildFilter(criteria = {}) {
+    const filter = {
+      isDeleted: { $ne: true },
+    };
 
-    return chats.map((c) => c._id);
+    if (criteria.chatIds && criteria.chatIds.length > 0) {
+      filter.chatId = { $in: criteria.chatIds };
+    }
+
+    if (criteria.userId) {
+      const chatIds = await this.getUserChatIds(criteria.userId);
+      filter.chatId = { $in: chatIds };
+    }
+
+    if (criteria.senderIds && criteria.senderIds.length > 0) {
+      filter.senderId = { $in: criteria.senderIds };
+    }
+
+    if (criteria.messageTypes && criteria.messageTypes.length > 0) {
+      filter.$or = [
+        { type: { $in: criteria.messageTypes } },
+        { messageType: { $in: criteria.messageTypes } },
+      ];
+    }
+
+    if (criteria.hasMedia) {
+      filter.media = { $exists: true };
+    }
+
+    if (criteria.hasReactions) {
+      filter.reactionCount = { $gt: 0 };
+    }
+
+    if (criteria.startDate || criteria.endDate) {
+      filter.createdAt = {};
+      if (criteria.startDate) {
+        filter.createdAt.$gte = new Date(criteria.startDate);
+      }
+      if (criteria.endDate) {
+        filter.createdAt.$lte = new Date(criteria.endDate);
+      }
+    }
+
+    return filter;
   }
 
-  /**
-   * Helper: Get date format for aggregation
-   * @private
-   */
-  getDateFormat(interval) {
-    switch (interval) {
-      case 'day':
-        return '%Y-%m-%d';
-      case 'week':
-        return '%G-W%V';
-      case 'month':
-        return '%Y-%m';
+  async getUserChatIds(userId) {
+    const chats = await Chat.find({
+      $or: [
+        { participants: userId },
+        { 'participants.userId': userId },
+        { owner: userId },
+      ],
+    })
+      .select('_id')
+      .lean();
+
+    return chats.map((chat) => chat._id);
+  }
+
+  sortMessages(messages, sortBy = 'recent', queryText = '') {
+    const sorted = [...messages];
+
+    switch (sortBy) {
+      case 'oldest':
+        sorted.sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt));
+        break;
+      case 'popular':
+        sorted.sort((left, right) => {
+          const leftScore = Number(left.reactionCount || 0);
+          const rightScore = Number(right.reactionCount || 0);
+          return rightScore - leftScore || new Date(right.createdAt) - new Date(left.createdAt);
+        });
+        break;
+      case 'relevance':
+        if (queryText) {
+          sorted.sort((left, right) => (right._searchScore || 0) - (left._searchScore || 0));
+          break;
+        }
+        sorted.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+        break;
+      case 'recent':
       default:
-        return '%Y-%m-%d';
+        sorted.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+        break;
+    }
+
+    return sorted;
+  }
+
+  getSearchScore(content, loweredQuery) {
+    const text = String(content || '').toLowerCase();
+    if (!loweredQuery) {
+      return 0;
+    }
+
+    let score = 0;
+    let index = text.indexOf(loweredQuery);
+    while (index !== -1) {
+      score += 1;
+      index = text.indexOf(loweredQuery, index + loweredQuery.length);
+    }
+    return score;
+  }
+
+  formatPeriod(dateValue, interval) {
+    const date = new Date(dateValue);
+
+    switch (interval) {
+      case 'month':
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+      case 'week': {
+        const startOfYear = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+        const dayOfYear = Math.floor((date - startOfYear) / 86400000) + 1;
+        const weekNumber = Math.ceil(dayOfYear / 7);
+        return `${date.getUTCFullYear()}-W${String(weekNumber).padStart(2, '0')}`;
+      }
+      case 'day':
+      default:
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(
+          date.getUTCDate()
+        ).padStart(2, '0')}`;
     }
   }
 
-  /**
-   * Clear cache
-   */
+  getFromCache(cacheKey) {
+    const cached = this.cache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (Date.now() - cached.timestamp > this.cacheTTL) {
+      this.cache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.data;
+  }
+
+  setCache(cacheKey, value) {
+    this.cache.set(cacheKey, {
+      data: value,
+      timestamp: Date.now(),
+    });
+  }
+
   clearCache() {
     this.cache.clear();
     logger.info('Message search cache cleared');

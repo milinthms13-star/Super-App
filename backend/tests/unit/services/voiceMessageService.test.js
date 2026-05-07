@@ -1,4 +1,8 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+jest.mock('../../../models/VoiceMessage', () => require('./helpers/inMemoryMessagingModels').VoiceMessageModel);
+
+const { resetMessagingStore } = require('./helpers/inMemoryMessagingModels');
 const voiceMessageService = require('../../../services/voiceMessageService');
 
 describe('Voice Message Service', () => {
@@ -7,6 +11,7 @@ describe('Voice Message Service', () => {
   const testAudioBuffer = Buffer.from('audio-data');
 
   beforeEach(() => {
+    resetMessagingStore();
     voiceMessageService.clearCache();
   });
 

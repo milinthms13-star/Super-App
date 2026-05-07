@@ -1,4 +1,12 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+jest.mock('../../../models/Chat', () => require('./helpers/inMemoryMessagingModels').ChatModel);
+
+const {
+  resetMessagingStore,
+  seedChat,
+  seedMessage,
+} = require('./helpers/inMemoryMessagingModels');
 const messageBackupService = require('../../../services/messageBackupService');
 
 describe('Message Backup Service', () => {
@@ -6,7 +14,25 @@ describe('Message Backup Service', () => {
   const testChatId = 'test-chat-123';
 
   beforeEach(() => {
+    resetMessagingStore();
     messageBackupService.clearCache();
+    seedChat({
+      _id: testChatId,
+      owner: testUserId,
+      participants: [testUserId, 'participant-2'],
+      name: 'Backup Chat',
+      description: 'Backup test chat',
+      type: 'group',
+      createdAt: new Date('2026-05-01T10:00:00Z'),
+    });
+    seedMessage({
+      _id: 'existing-msg-1',
+      chatId: testChatId,
+      senderId: testUserId,
+      content: 'Existing test message',
+      createdAt: new Date('2026-05-02T10:00:00Z'),
+      attachments: [],
+    });
   });
 
   afterEach(() => {

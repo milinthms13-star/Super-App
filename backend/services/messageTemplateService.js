@@ -267,31 +267,30 @@ class MessageTemplateService {
    */
   async getTemplateStats(userId) {
     try {
-      const total = await MessageTemplate.countDocuments({ userId });
+      const templates = await MessageTemplate.find({ userId }).exec();
+      const total = templates.length;
 
-      const byCategory = await MessageTemplate.aggregate([
-        { $match: { userId } },
-        { $group: { _id: '$category', count: { $sum: 1 } } },
-      ]).exec();
+      const byCategory = templates.reduce((acc, template) => {
+        const category = template.category || 'general';
+        acc[category] = (acc[category] || 0) + 1;
+        return acc;
+      }, {});
 
-      const mostUsed = await MessageTemplate.findOne({ userId })
-        .sort({ usageCount: -1 })
-        .exec();
+      const totalUsageCount = templates.reduce(
+        (sum, template) => sum + Number(template.usageCount || 0),
+        0
+      );
 
-      const totalUsage = await MessageTemplate.aggregate([
-        { $match: { userId } },
-        { $group: { _id: null, total: { $sum: '$usageCount' } } },
-      ]).exec();
+      const mostUsed = templates
+        .slice()
+        .sort((left, right) => Number(right.usageCount || 0) - Number(left.usageCount || 0))[0];
 
       return {
         totalTemplates: total,
-        byCategory: byCategory.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {}),
+        byCategory,
         mostUsedTemplate: mostUsed?.name || null,
-        totalUsageCount: totalUsage[0]?.total || 0,
-        averageUsagePerTemplate: total > 0 ? (totalUsage[0]?.total || 0) / total : 0,
+        totalUsageCount,
+        averageUsagePerTemplate: total > 0 ? totalUsageCount / total : 0,
       };
     } catch (error) {
       logger.error(`Error getting template stats: ${error.message}`);

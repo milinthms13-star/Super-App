@@ -783,17 +783,33 @@ const Classifieds = () => {
       return;
     }
 
+    let isActive = true;
     trackedViewIdsRef.current.add(listingId);
 
     trackClassifiedListingView(listingId)
       .then((response) => {
-        if (Array.isArray(response?.recentlyViewed)) {
-          setRecentlyViewedListings(response.recentlyViewed);
+        if (isActive && Array.isArray(response?.recentlyViewed)) {
+          setRecentlyViewedListings((currentListings) => {
+            const nextListings = response.recentlyViewed;
+            const hasSameListings =
+              currentListings.length === nextListings.length &&
+              currentListings.every(
+                (listing, index) => String(listing?.id) === String(nextListings[index]?.id)
+              );
+
+            return hasSameListings ? currentListings : nextListings;
+          });
         }
       })
       .catch(() => {
-        trackedViewIdsRef.current.delete(listingId);
+        if (isActive) {
+          trackedViewIdsRef.current.delete(listingId);
+        }
       });
+
+    return () => {
+      isActive = false;
+    };
   }, [selectedListing?.id]);
 
   const handleFavoriteToggle = (listing) => {

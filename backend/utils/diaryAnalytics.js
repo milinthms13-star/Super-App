@@ -296,7 +296,7 @@ const calculateTagAnalytics = (entries, limit = 10) => {
     return {
       uniqueTags: 0,
       tagFrequency: [],
-      tagTrend: {},
+      totalTagUsages: 0,
     };
   }
 
@@ -428,7 +428,13 @@ const calculateWordCountAnalytics = (entries) => {
       minWords: 0,
       maxWords: 0,
       median: 0,
-      wordDistribution: {},
+      wordDistribution: {
+        veryShort: 0,
+        short: 0,
+        medium: 0,
+        long: 0,
+        veryLong: 0,
+      },
     };
   }
 

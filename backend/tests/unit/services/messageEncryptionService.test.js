@@ -1,4 +1,12 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+jest.mock('../../../models/Chat', () => require('./helpers/inMemoryMessagingModels').ChatModel);
+
+const {
+  resetMessagingStore,
+  seedChat,
+  seedMessage,
+} = require('./helpers/inMemoryMessagingModels');
 const messageEncryptionService = require('../../../services/messageEncryptionService');
 
 describe('Message Encryption Service', () => {
@@ -7,6 +15,23 @@ describe('Message Encryption Service', () => {
   const testUserId = 'test-user-456';
 
   beforeEach(() => {
+    resetMessagingStore();
+    seedChat({
+      _id: testChatId,
+      owner: testUserId,
+      participants: [testUserId, 'user-2', 'user-3'],
+      settings: {},
+    });
+    seedMessage({
+      _id: 'test-msg-id',
+      chatId: testChatId,
+      senderId: testUserId,
+      content: testContent,
+      encryption: {
+        enabled: true,
+        authTag: 'existing-tag',
+      },
+    });
     messageEncryptionService.clearCache();
   });
 

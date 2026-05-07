@@ -1,8 +1,72 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+jest.mock('../../../models/Chat', () => require('./helpers/inMemoryMessagingModels').ChatModel);
+
+const {
+  resetMessagingStore,
+  seedChat,
+  seedMessage,
+} = require('./helpers/inMemoryMessagingModels');
 const messageForwardingService = require('../../../services/messageForwardingService');
 
 describe('MessageForwardingService', () => {
   beforeEach(() => {
+    resetMessagingStore();
+    seedChat({ _id: 'chat1', owner: 'user1', participants: ['user1', 'user2'] });
+    seedChat({ _id: 'chat2', owner: 'user1', participants: ['user1', 'user3'] });
+    seedChat({ _id: 'chat3', owner: 'user1', participants: ['user1'] });
+    seedChat({ _id: 'restrictedChat', owner: 'admin', participants: ['admin'] });
+
+    seedMessage({
+      _id: 'originalMsg',
+      chatId: 'chat1',
+      senderId: { _id: 'user2', username: 'alice' },
+      content: 'Original content',
+      forwardCount: 0,
+    });
+    seedMessage({
+      _id: 'msg123',
+      chatId: 'chat1',
+      senderId: { _id: 'user2', username: 'alice' },
+      content: 'Forward me',
+      forwardCount: 2,
+      forwardedFrom: {
+        originalMessageId: 'originalMsg',
+        originalSenderId: 'user2',
+        originalSenderName: 'alice',
+        originalChatId: 'chat1',
+        forwardedAt: new Date(),
+        forwardedBy: 'user1',
+      },
+    });
+    seedMessage({
+      _id: 'forwardedMsg',
+      chatId: 'chat2',
+      senderId: 'user1',
+      content: 'Forwarded copy',
+      forwardedFrom: {
+        originalMessageId: 'msg123',
+        originalSenderId: 'user2',
+        originalSenderName: 'alice',
+        originalChatId: 'chat1',
+        forwardedAt: new Date(),
+        forwardedBy: 'user1',
+      },
+    });
+    seedMessage({
+      _id: 'restrictedMsg',
+      chatId: 'restrictedChat',
+      senderId: { _id: 'admin', username: 'admin' },
+      content: 'Restricted',
+    });
+    ['msg1', 'msg2', 'msg3'].forEach((id, index) => {
+      seedMessage({
+        _id: id,
+        chatId: 'chat1',
+        senderId: { _id: 'user1', username: 'user1' },
+        content: `Batch ${index}`,
+      });
+    });
     messageForwardingService.clearCache();
   });
 

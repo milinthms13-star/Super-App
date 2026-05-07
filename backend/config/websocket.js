@@ -106,7 +106,7 @@ const initializeWebSocket = (server, options = {}) => {
   });
 
   // Connection handler
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     console.log(`[WebSocket] User ${socket.userId} connected: ${socket.id}`);
 
     // Store socket mapping

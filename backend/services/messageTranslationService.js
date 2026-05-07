@@ -13,6 +13,12 @@ class MessageTranslationService {
       return MessageTranslationService.instance;
     }
     this.translationCache = new Map();
+    this.userLanguagePreferences = new Map();
+    this.translationMetrics = {
+      cacheHits: 0,
+      totalTranslations: 0,
+      languagesUsed: new Set(),
+    };
     this.supportedLanguages = [
       'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko', 'hi', 'ar', 'bn',
     ];
@@ -36,6 +42,7 @@ class MessageTranslationService {
       // Check cache
       const cacheKey = `${messageId}_${targetLanguage}`;
       if (this.translationCache.has(cacheKey)) {
+        this.translationMetrics.cacheHits += 1;
         return this.translationCache.get(cacheKey);
       }
 
@@ -66,7 +73,8 @@ class MessageTranslationService {
 
       // Cache for 24 hours
       this.translationCache.set(cacheKey, messageWithTranslation);
-      setTimeout(() => this.translationCache.delete(cacheKey), 24 * 60 * 60 * 1000);
+      this.translationMetrics.totalTranslations += 1;
+      this.translationMetrics.languagesUsed.add(targetLanguage);
 
       logger.info(
         `Message ${messageId} translated to ${targetLanguage}`
@@ -123,12 +131,7 @@ class MessageTranslationService {
       // Mock language detection (in production, use proper NLP)
       const detectedLanguage = this.performLanguageDetection(message.content);
 
-      return {
-        messageId,
-        content: message.content,
-        detectedLanguage,
-        confidence: 0.95, // Mock confidence score
-      };
+      return detectedLanguage;
     } catch (error) {
       logger.error('Error detecting language', { error });
       throw error;
@@ -172,20 +175,32 @@ class MessageTranslationService {
    */
   async saveTranslation(messageId, language, translatedContent) {
     try {
-      const updated = await Message.findByIdAndUpdate(
-        messageId,
-        {
-          $set: {
-            [`translations.${language}`]: {
-              content: translatedContent,
-              translatedAt: new Date(),
-            },
-          },
+      const message = await Message.findById(messageId);
+      if (!message) {
+        throw new Error(`Message ${messageId} not found`);
+      }
+
+      message.translations = {
+        ...(message.translations || {}),
+        [language]: {
+          content: translatedContent,
+          translatedAt: new Date(),
+          language,
         },
-        { new: true }
-      );
+      };
+
+      const updated = typeof message.save === 'function'
+        ? await message.save()
+        : await Message.findByIdAndUpdate(
+            messageId,
+            {
+              translations: message.translations,
+            },
+            { new: true }
+          );
 
       this.translationCache.delete(`${messageId}_${language}`);
+      this.translationMetrics.languagesUsed.add(language);
 
       logger.info(`Translation saved for message ${messageId} in ${language}`);
       return updated;
@@ -207,7 +222,7 @@ class MessageTranslationService {
    * Set user's preferred language
    * @param {string} userId - User ID
    * @param {string} language - Preferred language
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>}
    */
   async setUserPreferredLanguage(userId, language) {
     try {
@@ -215,9 +230,9 @@ class MessageTranslationService {
         throw new Error(`Unsupported language: ${language}`);
       }
 
-      // Store in user preferences (would need User model update)
-      // This is a placeholder
+      this.userLanguagePreferences.set(String(userId), language);
       logger.info(`User ${userId} preferred language set to ${language}`);
+      return true;
     } catch (error) {
       logger.error('Error setting user language', { error });
       throw error;
@@ -269,8 +284,13 @@ class MessageTranslationService {
     try {
       // Placeholder for translation metrics
       return {
-        totalTranslations: this.translationCache.size,
+        totalTranslations: this.translationMetrics.totalTranslations,
         cacheSize: this.translationCache.size,
+        cacheHitRate:
+          this.translationMetrics.totalTranslations === 0
+            ? 0
+            : this.translationMetrics.cacheHits / this.translationMetrics.totalTranslations,
+        languagesUsed: [...this.translationMetrics.languagesUsed],
         supportedLanguages: this.supportedLanguages.length,
       };
     } catch (error) {
@@ -306,6 +326,9 @@ class MessageTranslationService {
    */
   clearCache() {
     this.translationCache.clear();
+    this.translationMetrics.cacheHits = 0;
+    this.translationMetrics.totalTranslations = 0;
+    this.translationMetrics.languagesUsed.clear();
     logger.info('Translation cache cleared');
   }
 }

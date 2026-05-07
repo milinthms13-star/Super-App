@@ -1,3 +1,25 @@
+const express = require('express');
+const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const Joi = require('joi');
+const multer = require('multer');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const User = require('../models/User');
+const OtpToken = require('../models/OtpToken');
+const { getRedisClient } = require('../config/redis');
+const logger = require('../utils/logger');
+const { authenticate, getJwtSecret } = require('../middleware/auth');
+const devAuthStore = require('../utils/devAuthStore');
+
+const router = express.Router();
+const upload = multer({ dest: 'uploads/kyc/' });
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_CALLBACK_URL =
+  process.env.GOOGLE_CALLBACK_URL ||
+  `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/google/callback`;
+
 // Get profile completion score for current user
 router.get('/profile/completion', authenticate, async (req, res) => {
   try {
@@ -10,8 +32,6 @@ router.get('/profile/completion', authenticate, async (req, res) => {
   }
 });
 // --- KYC Verification Endpoints ---
-const multer = require('multer');
-const upload = multer({ dest: 'uploads/kyc/' });
 
 // Submit KYC documents (user)
 router.post('/kyc/submit', authenticate, upload.array('documents', 5), async (req, res) => {
@@ -72,23 +92,7 @@ router.post('/kyc/admin/update', authenticate, async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to update KYC status', error: error.message });
   }
 });
-const express = require('express');
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
-const Joi = require('joi');
-const User = require('../models/User');
-const OtpToken = require('../models/OtpToken');
-const { getRedisClient } = require('../config/redis');
-const logger = require('../utils/logger');
-const { authenticate, getJwtSecret } = require('../middleware/auth');
-const devAuthStore = require('../utils/devAuthStore');
-
 // Google OAuth2
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/google/callback`;
 
 if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
   passport.use(new GoogleStrategy({
@@ -212,7 +216,6 @@ const getEmailService = () => {
   });
 };
 
-const router = express.Router();
 const AUTH_COOKIE_NAME = 'mb_auth_token';
 const AUTH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 

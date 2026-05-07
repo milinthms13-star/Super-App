@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Classifieds from "./Classifieds";
 
 const mockUseApp = jest.fn();
@@ -436,6 +436,10 @@ describe("Classifieds", () => {
 
     await waitFor(() => {
       expect(mockTrackClassifiedListingView).toHaveBeenCalledWith("cl-1");
+    });
+
+    await act(async () => {
+      await mockTrackClassifiedListingView.mock.results[0]?.value;
     });
   });
 });

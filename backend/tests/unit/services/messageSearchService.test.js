@@ -1,11 +1,72 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+jest.mock('../../../models/Chat', () => require('./helpers/inMemoryMessagingModels').ChatModel);
+
+const {
+  resetMessagingStore,
+  seedChat,
+  seedMessage,
+} = require('./helpers/inMemoryMessagingModels');
 const messageSearchService = require('../../../services/messageSearchService');
-const Message = require('../../../models/Message');
-const Chat = require('../../../models/Chat');
 
 describe('MessageSearchService', () => {
   beforeEach(() => {
+    resetMessagingStore();
     messageSearchService.clearCache();
+    seedChat({
+      _id: 'chatId',
+      owner: 'userId',
+      participants: ['userId', 'senderId'],
+      name: 'Search Chat',
+    });
+    seedChat({
+      _id: 'chat1',
+      owner: 'userId',
+      participants: ['userId'],
+      name: 'Secondary Chat',
+    });
+    seedChat({
+      _id: 'chatId1',
+      owner: 'userId',
+      participants: ['userId'],
+    });
+    seedChat({
+      _id: 'chatId2',
+      owner: 'userId',
+      participants: ['userId'],
+    });
+    seedMessage({
+      _id: 'msg-1',
+      chatId: 'chatId',
+      senderId: 'senderId',
+      content: 'hello test image update',
+      media: { type: 'image', url: '/image.png' },
+      reactionCount: 3,
+      createdAt: new Date('2026-05-02T08:00:00Z'),
+    });
+    seedMessage({
+      _id: 'msg-2',
+      chatId: 'chat1',
+      senderId: 'senderId',
+      content: 'test video followup',
+      media: { type: 'video', url: '/video.mp4' },
+      reactionCount: 1,
+      createdAt: new Date('2026-05-04T09:00:00Z'),
+    });
+    seedMessage({
+      _id: 'msg-3',
+      chatId: 'chatId1',
+      senderId: 'senderId',
+      content: 'keyword trends and activity',
+      createdAt: new Date('2026-05-05T10:00:00Z'),
+    });
+    seedMessage({
+      _id: 'msg-4',
+      chatId: 'chatId2',
+      senderId: 'another-sender',
+      content: 'recent message stats',
+      createdAt: new Date(),
+    });
   });
 
   describe('searchMessages', () => {

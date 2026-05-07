@@ -1,7 +1,13 @@
 const assert = require('assert');
 const mongoose = require('mongoose');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+
+const {
+  resetMessagingStore,
+  seedMessage,
+  seedChat,
+} = require('./helpers/inMemoryMessagingModels');
 const messageThreadService = require('../../../services/messageThreadService');
-const Message = require('../../../models/Message');
 
 describe('MessageThreadService', () => {
   const parentMessageId = new mongoose.Types.ObjectId();
@@ -13,7 +19,72 @@ describe('MessageThreadService', () => {
   const largeThreadId = new mongoose.Types.ObjectId();
 
   beforeEach(() => {
+    resetMessagingStore();
     messageThreadService.clearCache();
+    seedChat({
+      _id: chatId.toString(),
+      owner: userId.toString(),
+      participants: [userId.toString(), 'user-2'],
+      name: 'Thread Chat',
+    });
+    seedMessage({
+      _id: parentMessageId.toString(),
+      chatId: chatId.toString(),
+      senderId: userId.toString(),
+      content: 'Parent message',
+      metadata: { threadDepth: 0 },
+      replyCount: 0,
+      createdAt: new Date('2026-05-01T10:00:00Z'),
+    });
+    seedMessage({
+      _id: messageId.toString(),
+      chatId: chatId.toString(),
+      senderId: userId.toString(),
+      content: 'Thread root',
+      metadata: { threadDepth: 0 },
+      replyCount: 2,
+      createdAt: new Date('2026-05-02T10:00:00Z'),
+    });
+    seedMessage({
+      _id: replyId.toString(),
+      chatId: chatId.toString(),
+      senderId: userId.toString(),
+      parentMessageId: messageId.toString(),
+      content: 'First reply',
+      createdAt: new Date('2026-05-02T11:00:00Z'),
+    });
+    seedMessage({
+      _id: nestedMessageId.toString(),
+      chatId: chatId.toString(),
+      senderId: 'user-2',
+      parentMessageId: replyId.toString(),
+      content: 'Nested reply',
+      createdAt: new Date('2026-05-02T12:00:00Z'),
+    });
+    seedMessage({
+      _id: largeThreadId.toString(),
+      chatId: chatId.toString(),
+      senderId: userId.toString(),
+      content: 'Large thread root',
+      replyCount: 3,
+      createdAt: new Date('2026-05-03T10:00:00Z'),
+    });
+    seedMessage({
+      _id: 'large-reply-1',
+      chatId: chatId.toString(),
+      senderId: 'user-2',
+      parentMessageId: largeThreadId.toString(),
+      content: 'Large reply 1',
+      createdAt: new Date('2026-05-03T10:10:00Z'),
+    });
+    seedMessage({
+      _id: 'large-reply-2',
+      chatId: chatId.toString(),
+      senderId: 'user-3',
+      parentMessageId: largeThreadId.toString(),
+      content: 'Large reply 2',
+      createdAt: new Date('2026-05-03T10:20:00Z'),
+    });
   });
 
   describe('createReply', () => {

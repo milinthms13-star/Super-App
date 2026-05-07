@@ -1,8 +1,34 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+
+const {
+  resetMessagingStore,
+  seedMessage,
+} = require('./helpers/inMemoryMessagingModels');
 const messagePinService = require('../../../services/messagePinService');
 
 describe('MessagePinService', () => {
   beforeEach(() => {
+    resetMessagingStore();
+    seedMessage({
+      _id: 'msg123',
+      chatId: 'chat1',
+      senderId: 'user1',
+      content: 'Pinned content',
+      isPinned: true,
+      pinnedAt: new Date(),
+      pinnedBy: 'user1',
+      pinnedReason: 'Important announcement',
+    });
+    seedMessage({
+      _id: 'msg0',
+      chatId: 'chat1',
+      senderId: 'user1',
+      content: 'Another message',
+      isPinned: true,
+      pinnedAt: new Date(Date.now() - 1000),
+      pinnedBy: 'user1',
+    });
     messagePinService.clearCache();
   });
 

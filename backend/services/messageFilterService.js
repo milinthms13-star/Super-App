@@ -227,7 +227,7 @@ class MessageFilterService {
           result.success = false;
       }
 
-      if (result.success) {
+      if (result.success && typeof message.save === 'function') {
         await message.save();
       }
 

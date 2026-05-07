@@ -1,4 +1,9 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+jest.mock('../../../models/DisappearingMessage', () => require('./helpers/inMemoryMessagingModels').DisappearingMessageModel);
+jest.mock('../../../models/Chat', () => require('./helpers/inMemoryMessagingModels').ChatModel);
+
+const { resetMessagingStore, seedChat } = require('./helpers/inMemoryMessagingModels');
 const disappearingMessageService = require('../../../services/disappearingMessageService');
 
 describe('Disappearing Message Service', () => {
@@ -6,7 +11,14 @@ describe('Disappearing Message Service', () => {
   const testUserId = 'test-user-456';
 
   beforeEach(() => {
+    resetMessagingStore();
     disappearingMessageService.clearCache();
+    seedChat({
+      _id: testChatId,
+      owner: testUserId,
+      participants: [testUserId, 'user-1', 'user-2'],
+      name: 'Secret Chat',
+    });
   });
 
   afterEach(() => {

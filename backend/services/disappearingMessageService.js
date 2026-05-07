@@ -20,7 +20,14 @@ class DisappearingMessageService {
    */
   async createDisappearingMessage(chatId, userId, content, disappearType, duration, options = {}) {
     try {
-      if (!chatId || !userId || !content || !disappearType || !duration) {
+      if (
+        !chatId ||
+        !userId ||
+        !content ||
+        !disappearType ||
+        duration === undefined ||
+        duration === null
+      ) {
         throw new Error('Missing required fields');
       }
 
@@ -28,7 +35,9 @@ class DisappearingMessageService {
         throw new Error('Invalid disappear type. Must be "timer" or "view"');
       }
 
-      if (duration < 1 || duration > 86400) {
+      const isViewBased = disappearType === 'view';
+      const minimumDuration = isViewBased ? 0 : 1;
+      if (duration < minimumDuration || duration > 86400) {
         throw new Error('Duration must be between 1 second and 24 hours');
       }
 
@@ -56,7 +65,7 @@ class DisappearingMessageService {
         userId,
         disappearType,
         duration,
-        disappearsAt: new Date(Date.now() + duration * 1000),
+        disappearsAt: duration > 0 ? new Date(Date.now() + duration * 1000) : null,
         status: 'active',
       });
 
@@ -287,15 +296,23 @@ class DisappearingMessageService {
       }
 
       const disappearing = await DisappearingMessage.findOne({ messageId });
+      const disappearsAt = disappearing?.disappearsAt
+        ? new Date(disappearing.disappearsAt).getTime()
+        : 0;
+
+      const fallbackRemaining =
+        message.disappearingMessage.type === 'timer'
+          ? Number(message.disappearingMessage.duration || 0) * 1000
+          : 0;
 
       return {
         messageId,
         type: message.disappearingMessage.type,
         viewCount: message.disappearingMessage.viewCount,
         readBy: message.disappearingMessage.readBy,
-        timeRemaining: disappearing
-          ? Math.max(0, disappearing.disappearsAt - Date.now())
-          : 0,
+        timeRemaining: disappearsAt
+          ? Math.max(0, disappearsAt - Date.now())
+          : fallbackRemaining,
         status: disappearing?.status || 'unknown',
       };
     } catch (error) {

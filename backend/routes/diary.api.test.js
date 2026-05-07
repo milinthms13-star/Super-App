@@ -7,7 +7,7 @@ const request = require('supertest');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
-const app = require('../../../server'); // Express app
+const app = require('../server'); // Express app
 
 describe('Diary API - Phase 4.7 Integration Tests', () => {
   const mockUserId = new mongoose.Types.ObjectId();

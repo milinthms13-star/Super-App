@@ -1,4 +1,7 @@
 const assert = require('assert');
+jest.mock('../../../models/MessageTemplate', () => require('./helpers/inMemoryMessagingModels').MessageTemplateModel);
+
+const { resetMessagingStore } = require('./helpers/inMemoryMessagingModels');
 const messageTemplateService = require('../../../services/messageTemplateService');
 
 describe('Message Template Service', () => {
@@ -7,6 +10,7 @@ describe('Message Template Service', () => {
   const testContent = 'Hello {{name}}, your order #{{orderId}} is ready!';
 
   beforeEach(() => {
+    resetMessagingStore();
     messageTemplateService.clearCache();
   });
 

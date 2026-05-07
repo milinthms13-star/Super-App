@@ -20,6 +20,10 @@ const realEstateListingCreateSchema = Joi.object({
   hasVideoTour: Joi.boolean().default(false),
   status: Joi.string().valid('available', 'sold', 'rented').default('available'),
   roleMode: Joi.string().valid('owner', 'agent', 'builder').default('owner'),
+  sellerName: Joi.string().allow('').trim().max(120).default(''),
+  sellerEmail: Joi.string().allow('').trim().email({ tlds: { allow: false } }).default(''),
+  sellerRole: Joi.string().allow('').trim().max(60).default(''),
+  ownerId: Joi.string().allow('').trim().max(120).default(''),
 });
 
 const realEstateListingUpdateSchema = realEstateListingCreateSchema

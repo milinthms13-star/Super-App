@@ -412,72 +412,71 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
 
   // Example: show analytics data at the top (customize as needed)
   return (
-    <>
-      {dashboardAnalytics && (
-        <div className="dashboard-analytics-bar">
-          <strong>Real-Time Analytics:</strong>
-          <span> Success Rate: {dashboardAnalytics.successRate?.successRate ?? '-'}% </span>
-          <span> Total Deliveries: {dashboardAnalytics.successRate?.totalDeliveries ?? '-'} </span>
-          <span> Failed: {dashboardAnalytics.successRate?.failedDeliveries ?? '-'} </span>
-          <span> Pending: {dashboardAnalytics.successRate?.pendingDeliveries ?? '-'} </span>
-        </div>
-      )}
     <div className={`dashboard-container ${!isSeller ? "dashboard-container-compact" : ""}`}>
-      {isLoading ? (
-        <div className="premium-loading">
-          <div className="loading-shimmer">
-            <div className="shimmer-card welcome-shimmer"></div>
-            <div className="shimmer-grid">
-              <div className="shimmer-card stat-shimmer"></div>
-              <div className="shimmer-card stat-shimmer"></div>
-              <div className="shimmer-card stat-shimmer"></div>
-              <div className="shimmer-card stat-shimmer"></div>
-            </div>
-            <div className="shimmer-grid">
-              <div className="shimmer-card module-shimmer"></div>
-              <div className="shimmer-card module-shimmer"></div>
-              <div className="shimmer-card module-shimmer"></div>
-            </div>
+        {dashboardAnalytics && (
+          <div className="dashboard-analytics-bar">
+            <strong>Real-Time Analytics:</strong>
+            <span> Success Rate: {dashboardAnalytics.successRate?.successRate ?? '-'}% </span>
+            <span> Total Deliveries: {dashboardAnalytics.successRate?.totalDeliveries ?? '-'} </span>
+            <span> Failed: {dashboardAnalytics.successRate?.failedDeliveries ?? '-'} </span>
+            <span> Pending: {dashboardAnalytics.successRate?.pendingDeliveries ?? '-'} </span>
           </div>
-        </div>
-      ) : (
-        <>
-          <div className={`welcome-section ${isSeller ? "seller-welcome-section" : ""}`}>
-            <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
-            {isSeller ? (
-              <>
-                <h1>{businessName} Seller Dashboard</h1>
-                <p>
-                  Manage your subscribed NilaHub business categories, monitor seller orders,
-                  and jump directly into the services your business registered for.
-                </p>
-              </>
-            ) : (
-              <>
-                <h1>{t("dashboard.welcomeTitle", "Welcome to NilaHub!")}</h1>
-                <p>
-                  {t(
-                    "dashboard.welcomeDescription",
-                    "Kerala's first super app for global shopping, messaging, listings, homes, food, rides, matches, and social life"
-                  )}
-                </p>
-              </>
-            )}
-          </div>
-
-          <div className="stats-section">
-            {isSeller ? (
-          <>
-            <div className="stat-card">
-              <span className="stat-icon"><Icon type="ecommerce" className="stat-icon-svg" /></span>
-              <div className="stat-content">
-                <h3>{subscribedCategoryIds.length}</h3>
-                <p>Subscribed Categories</p>
+        )}
+        {isLoading ? (
+          <div className="premium-loading">
+            <div className="loading-shimmer">
+              <div className="shimmer-card welcome-shimmer"></div>
+              <div className="shimmer-grid">
+                <div className="shimmer-card stat-shimmer"></div>
+                <div className="shimmer-card stat-shimmer"></div>
+                <div className="shimmer-card stat-shimmer"></div>
+                <div className="shimmer-card stat-shimmer"></div>
+              </div>
+              <div className="shimmer-grid">
+                <div className="shimmer-card module-shimmer"></div>
+                <div className="shimmer-card module-shimmer"></div>
+                <div className="shimmer-card module-shimmer"></div>
               </div>
             </div>
-            <button
-              type="button"
-              className="stat-card stat-card-button"
+          </div>
+        ) : (
+          <>
+            <div className={`welcome-section ${isSeller ? "seller-welcome-section" : ""}`}>
+              <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
+              {isSeller ? (
+                <>
+                  <h1>{businessName} Seller Dashboard</h1>
+                  <p>
+                    Manage your subscribed NilaHub business categories, monitor seller orders,
+                    and jump directly into the services your business registered for.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1>{t("dashboard.welcomeTitle", "Welcome to NilaHub!")}</h1>
+                  <p>
+                    {t(
+                      "dashboard.welcomeDescription",
+                      "Kerala's first super app for global shopping, messaging, listings, homes, food, rides, matches, and social life"
+                    )}
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="stats-section">
+              {isSeller ? (
+            <>
+              <div className="stat-card">
+                <span className="stat-icon"><Icon type="ecommerce" className="stat-icon-svg" /></span>
+                <div className="stat-content">
+                  <h3>{subscribedCategoryIds.length}</h3>
+                  <p>Subscribed Categories</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="stat-card stat-card-button"
               onClick={handleOrdersCardClick}
             >
               <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
@@ -597,32 +596,32 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
           <div className="recent-orders recent-orders-compact" ref={recentOrdersRef}>
             <h2>{t("dashboard.recentOrders", "Recent Orders")}</h2>
             {orders.length > 0 ? (
-              <div className="orders-list">
-                {orders.map((order) => (
-                  <div key={order.id} className="order-item">
-                    <span className="order-date">
-                      {order.createdAt
-                        ? new Date(order.createdAt).toLocaleDateString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })
-                        : "Recent"}
-                    </span>
-                    <span
-                      className={`order-status order-status-${normalizeOrderStatus(order.status).toLowerCase()}`}
-                    >
-                      {normalizeOrderStatus(order.status)}
-                    </span>
-                    <span className="order-amount">Total: INR {formatCurrency(order.amount)}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="no-orders">
-                {t("dashboard.noOrders", "No orders yet. Start shopping!")}
-              </p>
-            )}
+                <div className="orders-list">
+                  {orders.map((order) => (
+                    <div key={order.id} className="order-item">
+                      <span className="order-date">
+                        {order.createdAt
+                          ? new Date(order.createdAt).toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "Recent"}
+                      </span>
+                      <span
+                        className={`order-status order-status-${normalizeOrderStatus(order.status).toLowerCase()}`}
+                      >
+                        {normalizeOrderStatus(order.status)}
+                      </span>
+                      <span className="order-amount">Total: INR {formatCurrency(order.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="no-orders">
+                  {t("dashboard.noOrders", "No orders yet. Start shopping!")}
+                </p>
+              )}
             {ordersPagination.hasNextPage && (
               <button type="button" className="btn btn-outline" onClick={loadMoreOrders}>
                 Load more orders
@@ -688,10 +687,10 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       )}
 
       {isSeller && (
-      <div className="recent-orders" ref={recentOrdersRef}>
-        <h2>{isSeller ? "Seller Activity" : t("dashboard.recentOrders", "Recent Orders")}</h2>
-        {isSeller ? (
-          sellerOrders.length > 0 ? (
+        <div className="recent-orders" ref={recentOrdersRef}>
+          <h2>Seller Activity</h2>
+
+          {sellerOrders.length > 0 ? (
             <div className="orders-list">
               {sellerOrders.map((order) => {
                 const myFulfillment = (order.sellerFulfillments || []).find(
@@ -711,74 +710,39 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                           })
                         : "Recent"}
                     </span>
+
                     <span
                       className={`order-status order-status-${normalizeOrderStatus(myFulfillment?.status).toLowerCase()}`}
                     >
                       {normalizeOrderStatus(myFulfillment?.status)}
                     </span>
-                    <span className="order-amount">Order Total: INR {formatCurrency(order.amount)}</span>
+
+                    <span className="order-amount">
+                      Order Total: INR {formatCurrency(order.amount)}
+                    </span>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <p className="no-orders">No seller orders yet. New business activity will appear here.</p>
-          )
-        ) : (
-          orders.length > 0 ? (
-            <div className="orders-list">
-              {orders.map((order) => (
-                <div key={order.id} className="order-item">
-                  <span className="order-date">
-                    {order.createdAt
-                      ? new Date(order.createdAt).toLocaleDateString("en-IN", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })
-                      : "Recent"}
-                  </span>
-                  <span
-                    className={`order-status order-status-${normalizeOrderStatus(order.status).toLowerCase()}`}
-                  >
-                    {normalizeOrderStatus(order.status)}
-                  </span>
-                  <span className="order-amount">Total: INR {formatCurrency(order.amount)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
             <p className="no-orders">
-              {t("dashboard.noOrders", "No orders yet. Start shopping!")}
+              No seller orders yet. New business activity will appear here.
             </p>
-          )
-        )}
-        {isSeller ? (
-          sellerOrdersPagination.hasNextPage && (
-            <button type="button" className="btn btn-outline" onClick={loadMoreSellerOrders}>
+          )}
+
+          {sellerOrdersPagination.hasNextPage && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={loadMoreSellerOrders}
+            >
               Load more seller orders
             </button>
-          )
-        ) : (
-          ordersPagination.hasNextPage && (
-            <button type="button" className="btn btn-outline" onClick={loadMoreOrders}>
-              Load more orders
-            </button>
-          )
-        )}
-        {!isSeller && (
-          <button
-            type="button"
-            className="btn btn-outline dashboard-return-btn"
-            onClick={() => handleModuleNavigation("returns")}
-          >
-            Open Returns & Refunds
-          </button>
-        )}
-      </div>
+          )}
+        </div>
       )}
-      </>
-      )}
+          </>
+        )}
     </div>
   );
 };

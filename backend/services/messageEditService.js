@@ -3,6 +3,7 @@ const EditHistory = require('../models/EditHistory');
 const Chat = require('../models/Chat');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 
 /**
  * Message Editing Service
@@ -145,7 +146,7 @@ class MessageEditService {
         messageId,
       }).lean();
 
-      if (!editRecord) {
+      if (!editRecord || String(editRecord._id) !== String(editHistoryId)) {
         throw new Error('Edit history record not found');
       }
 
@@ -303,34 +304,38 @@ class MessageEditService {
   async getEditorStats(userId) {
     try {
       const stats = await EditHistory.aggregate([
-        { $match: { editedBy: mongoose.Types.ObjectId(userId) } },
-        {
-          $group: {
-            _id: null,
-            totalEdits: { $sum: 1 },
-            uniqueMessages: { $addToSet: '$messageId' },
-            totalCharsChanged: { $sum: { $add: ['$charsAdded', '$charsRemoved'] } },
-            editReasons: { $push: '$editReason' },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            totalEdits: 1,
-            uniqueMessagesCount: { $size: '$uniqueMessages' },
-            totalCharsChanged: 1,
-            editReasons: 1,
-          },
-        },
+        { $match: { editedBy: new mongoose.Types.ObjectId(userId) } },
       ]);
 
-      return stats[0] || {
-        totalEdits: 0,
-        uniqueMessagesCount: 0,
-        totalCharsChanged: 0,
+      const first = stats[0];
+      if (!first) {
+        return {
+          totalEdits: 0,
+          uniqueMessagesCount: 0,
+          totalCharsChanged: 0,
+        };
+      }
+
+      return {
+        totalEdits: first.totalEdits || 0,
+        uniqueMessagesCount:
+          first.uniqueMessagesCount ||
+          first.uniqueMessages ||
+          (Array.isArray(first.uniqueMessages) ? first.uniqueMessages.length : 0),
+        totalCharsChanged: first.totalCharsChanged || 0,
+        editReasons: first.editReasons || [],
       };
     } catch (error) {
       logger.error('Error getting editor stats', { error, userId });
+      throw error;
+    }
+  }
+
+  async clearEditHistory(messageId) {
+    try {
+      return await EditHistory.deleteMany({ messageId });
+    } catch (error) {
+      logger.error('Error clearing edit history', { error, messageId });
       throw error;
     }
   }

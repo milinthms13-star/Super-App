@@ -6,7 +6,7 @@
  */
 
 const request = require('supertest');
-const app = require('../../../app'); // Main Express app
+const app = require('../server'); // Main Express app
 const mongoose = require('mongoose');
 const DiaryEntry = require('../models/DiaryEntry');
 const User = require('../models/User');

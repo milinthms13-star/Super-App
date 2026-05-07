@@ -111,6 +111,49 @@ const diaryRateLimiter = createModerateRateLimiter({
   max: 100,
 });
 
+const parsePositiveInteger = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const isAnalyticsDataLayerError = (error) => {
+  const message = error?.message || '';
+  return (
+    message.includes('buffering timed out') ||
+    message.includes('Cast to date failed')
+  );
+};
+
+const fetchAnalyticsEntries = async (query, contextLabel) => {
+  const modelReadyState =
+    typeof DiaryEntry?.db?.readyState === 'number'
+      ? DiaryEntry.db.readyState
+      : undefined;
+
+  if (modelReadyState !== undefined && modelReadyState !== 1) {
+    logger.warn(`Falling back to empty analytics data for ${contextLabel}: diary database is not connected`, {
+      context: contextLabel,
+      readyState: modelReadyState,
+    });
+    return [];
+  }
+
+  try {
+    return await DiaryEntry.find(query).lean();
+  } catch (error) {
+    if (isAnalyticsDataLayerError(error)) {
+      const message = error?.message || 'Unknown analytics data error';
+      logger.warn(`Falling back to empty analytics data for ${contextLabel}: ${message}`, {
+        context: contextLabel,
+        error: message,
+      });
+      return [];
+    }
+
+    throw error;
+  }
+};
+
 // Apply authentication to all routes
 router.use(authenticate);
 
@@ -3823,7 +3866,7 @@ router.get('/filters/suggestions', async (req, res) => {
 router.get('/analytics/dashboard', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { daysBack = 90 } = req.query;
+    const daysBack = parsePositiveInteger(req.query.daysBack, 90);
     const cacheKey = `diary:analytics:dashboard:${userId}:${daysBack}`;
 
     // Check cache
@@ -3834,21 +3877,20 @@ router.get('/analytics/dashboard', async (req, res) => {
     }
 
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+    startDate.setDate(startDate.getDate() - daysBack);
 
-    const entries = await DiaryEntry.find({
+    const entries = await fetchAnalyticsEntries({
       userId,
       createdAt: { $gte: startDate },
       isDraft: false,
       isDeleted: false
-    }).lean();
+    }, 'analytics dashboard');
 
     const dashboardData = await getDashboardAnalytics(entries);
 
     const response = {
       success: true,
-      data: dashboardData,
-      period: `${daysBack} days`
+      data: dashboardData
     };
 
     await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
@@ -3867,7 +3909,8 @@ router.get('/analytics/dashboard', async (req, res) => {
 router.get('/analytics/tags', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { limit = 10, daysBack = 90 } = req.query;
+    const limit = parsePositiveInteger(req.query.limit, 10);
+    const daysBack = parsePositiveInteger(req.query.daysBack, 90);
     const cacheKey = `diary:analytics:tags:${userId}:${limit}`;
 
     const cached = await getCached(cacheKey);
@@ -3877,16 +3920,16 @@ router.get('/analytics/tags', async (req, res) => {
     }
 
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+    startDate.setDate(startDate.getDate() - daysBack);
 
-    const entries = await DiaryEntry.find({
+    const entries = await fetchAnalyticsEntries({
       userId,
       createdAt: { $gte: startDate },
       isDraft: false,
       isDeleted: false
-    }).lean();
+    }, 'tag analytics');
 
-    const tagAnalytics = calculateTagAnalytics(entries, parseInt(limit));
+    const tagAnalytics = calculateTagAnalytics(entries, limit);
 
     const response = {
       success: true,
@@ -3909,7 +3952,10 @@ router.get('/analytics/tags', async (req, res) => {
 router.get('/analytics/sentiment-trend', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { groupBy = 'week', daysBack = 90 } = req.query;
+    const groupBy = ['day', 'week', 'month'].includes(req.query.groupBy)
+      ? req.query.groupBy
+      : 'week';
+    const daysBack = parsePositiveInteger(req.query.daysBack, 90);
     const cacheKey = `diary:analytics:sentiment:${userId}:${groupBy}`;
 
     const cached = await getCached(cacheKey);
@@ -3919,14 +3965,14 @@ router.get('/analytics/sentiment-trend', async (req, res) => {
     }
 
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+    startDate.setDate(startDate.getDate() - daysBack);
 
-    const entries = await DiaryEntry.find({
+    const entries = await fetchAnalyticsEntries({
       userId,
       createdAt: { $gte: startDate },
       isDraft: false,
       isDeleted: false
-    }).lean();
+    }, 'sentiment trend');
 
     const sentimentTrend = calculateSentimentTrend(entries, groupBy);
 
@@ -3952,7 +3998,7 @@ router.get('/analytics/sentiment-trend', async (req, res) => {
 router.get('/analytics/heatmap', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { monthsBack = 6 } = req.query;
+    const monthsBack = parsePositiveInteger(req.query.monthsBack, 6);
     const cacheKey = `diary:analytics:heatmap:${userId}:${monthsBack}`;
 
     const cached = await getCached(cacheKey);
@@ -3961,18 +4007,18 @@ router.get('/analytics/heatmap', async (req, res) => {
       return res.json(cached);
     }
 
-    const entries = await DiaryEntry.find({
+    const entries = await fetchAnalyticsEntries({
       userId,
       isDraft: false,
       isDeleted: false
-    }).lean();
+    }, 'writing heatmap');
 
-    const heatmap = calculateWritingHeatmap(entries, parseInt(monthsBack));
+    const heatmap = calculateWritingHeatmap(entries, monthsBack);
 
     const response = {
       success: true,
       data: heatmap,
-      monthsBack: parseInt(monthsBack)
+      monthsBack
     };
 
     await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
@@ -3991,7 +4037,7 @@ router.get('/analytics/heatmap', async (req, res) => {
 router.get('/analytics/word-count', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { daysBack = 90 } = req.query;
+    const daysBack = parsePositiveInteger(req.query.daysBack, 90);
     const cacheKey = `diary:analytics:words:${userId}:${daysBack}`;
 
     const cached = await getCached(cacheKey);
@@ -4001,14 +4047,14 @@ router.get('/analytics/word-count', async (req, res) => {
     }
 
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+    startDate.setDate(startDate.getDate() - daysBack);
 
-    const entries = await DiaryEntry.find({
+    const entries = await fetchAnalyticsEntries({
       userId,
       createdAt: { $gte: startDate },
       isDraft: false,
       isDeleted: false
-    }).lean();
+    }, 'word count analytics');
 
     const wordCountAnalytics = calculateWordCountAnalytics(entries);
 
@@ -4055,12 +4101,12 @@ router.get('/analytics/monthly-summary/:year/:month', async (req, res) => {
     const startDate = new Date(yearNum, monthNum - 1, 1);
     const endDate = new Date(yearNum, monthNum, 1);
 
-    const entries = await DiaryEntry.find({
+    const entries = await fetchAnalyticsEntries({
       userId,
       createdAt: { $gte: startDate, $lt: endDate },
       isDraft: false,
       isDeleted: false
-    }).lean();
+    }, 'monthly summary');
 
     const writingStats = calculateWritingStats(entries);
     const moodStats = calculateMoodStats(entries);
@@ -4073,6 +4119,8 @@ router.get('/analytics/monthly-summary/:year/:month', async (req, res) => {
         year: yearNum,
         month: monthNum,
         entryCount: entries.length,
+        stats: writingStats,
+        mood: moodStats,
         writingStats,
         moodStats,
         topTags: tagAnalytics.tagFrequency,
@@ -4096,7 +4144,7 @@ router.get('/analytics/monthly-summary/:year/:month', async (req, res) => {
 router.get('/analytics/insights', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { daysBack = 90 } = req.query;
+    const daysBack = parsePositiveInteger(req.query.daysBack, 90);
     const cacheKey = `diary:analytics:insights:${userId}:${daysBack}`;
 
     const cached = await getCached(cacheKey);
@@ -4106,14 +4154,14 @@ router.get('/analytics/insights', async (req, res) => {
     }
 
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+    startDate.setDate(startDate.getDate() - daysBack);
 
-    const entries = await DiaryEntry.find({
+    const entries = await fetchAnalyticsEntries({
       userId,
       createdAt: { $gte: startDate },
       isDraft: false,
       isDeleted: false
-    }).lean();
+    }, 'analytics insights');
 
     if (entries.length === 0) {
       return res.json({

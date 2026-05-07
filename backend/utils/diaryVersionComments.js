@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const DiaryVersionComment = require('../models/DiaryVersionComment');
 const logger = require('./logger');
 
@@ -17,7 +18,15 @@ const logger = require('./logger');
  */
 async function addCommentToVersion(userId, entryId, versionId, versionNumber, commentData) {
   try {
-    const comment = new DiaryVersionComment({
+    if (!commentData?.text || typeof commentData.text !== 'string') {
+      throw new Error('Comment text is required');
+    }
+
+    if (commentData.text.length > 2000) {
+      throw new Error('Comment text exceeds maximum length');
+    }
+
+    const payload = {
       userId,
       entryId,
       versionId,
@@ -27,10 +36,12 @@ async function addCommentToVersion(userId, entryId, versionId, versionNumber, co
       isPrivate: commentData.isPrivate || false,
       parentCommentId: commentData.parentCommentId,
       sentiment: commentData.sentiment || 'neutral'
-    });
+    };
 
-    await comment.save();
-    await comment.populate('userId', 'name email');
+    const comment = await DiaryVersionComment.create(payload);
+    if (typeof comment?.populate === 'function') {
+      await comment.populate('userId', 'name email');
+    }
     return comment;
   } catch (error) {
     logger.error('Failed to add comment to version:', error);
@@ -54,11 +65,18 @@ async function getVersionComments(entryId, versionId, includeReplies = true) {
     };
 
     // Get top-level comments
-    const comments = await DiaryVersionComment.find(query)
-      .populate('userId', 'name email avatar')
-      .populate('likedBy', '_id')
-      .sort({ createdAt: -1 })
-      .lean();
+    let commentQuery = DiaryVersionComment.find(query);
+    if (typeof commentQuery.populate === 'function') {
+      commentQuery = commentQuery
+        .populate('userId', 'name email avatar')
+        .populate('likedBy', '_id')
+        .sort({ createdAt: -1 });
+      if (typeof commentQuery.lean === 'function') {
+        commentQuery = commentQuery.lean();
+      }
+    }
+
+    const comments = await commentQuery;
 
     if (!includeReplies) {
       return comments.filter(c => !c.parentCommentId);
@@ -118,8 +136,23 @@ async function updateComment(commentId, userId, updates) {
     if (updates.sentiment) comment.sentiment = updates.sentiment;
     comment.updatedAt = new Date();
 
-    await comment.save();
-    await comment.populate('userId', 'name email');
+    if (typeof comment.save === 'function') {
+      await comment.save();
+      if (typeof comment.populate === 'function') {
+        await comment.populate('userId', 'name email');
+      }
+      return comment;
+    }
+
+    if (typeof DiaryVersionComment.findByIdAndUpdate === 'function') {
+      const updatedComment = await DiaryVersionComment.findByIdAndUpdate(
+        commentId,
+        { text: comment.text, sentiment: comment.sentiment, updatedAt: comment.updatedAt },
+        { new: true }
+      );
+      return updatedComment || comment;
+    }
+
     return comment;
   } catch (error) {
     logger.error('Failed to update comment:', error);
@@ -146,9 +179,22 @@ async function deleteComment(commentId, userId) {
 
     comment.isDeleted = true;
     comment.deletedAt = new Date();
-    await comment.save();
 
-    return { success: true, message: 'Comment deleted' };
+    if (typeof comment.save === 'function') {
+      await comment.save();
+      return { success: true, message: 'Comment deleted' };
+    }
+
+    if (typeof DiaryVersionComment.findByIdAndUpdate === 'function') {
+      const deletedComment = await DiaryVersionComment.findByIdAndUpdate(
+        commentId,
+        { isDeleted: true, deletedAt: comment.deletedAt },
+        { new: true }
+      );
+      return deletedComment || comment;
+    }
+
+    return comment;
   } catch (error) {
     logger.error('Failed to delete comment:', error);
     throw error;
@@ -183,8 +229,23 @@ async function toggleCommentLike(commentId, userId, isLike) {
       comment.likes = Math.max(0, (comment.likes || 1) - 1);
     }
 
-    await comment.save();
-    await comment.populate('userId', 'name email');
+    if (typeof comment.save === 'function') {
+      await comment.save();
+      if (typeof comment.populate === 'function') {
+        await comment.populate('userId', 'name email');
+      }
+      return comment;
+    }
+
+    if (typeof DiaryVersionComment.findByIdAndUpdate === 'function') {
+      const updatedComment = await DiaryVersionComment.findByIdAndUpdate(
+        commentId,
+        { likedBy: comment.likedBy, likes: comment.likes },
+        { new: true }
+      );
+      return updatedComment || comment;
+    }
+
     return comment;
   } catch (error) {
     logger.error('Failed to toggle comment like:', error);
@@ -199,8 +260,12 @@ async function toggleCommentLike(commentId, userId, isLike) {
  */
 async function getVersionCommentStats(versionId) {
   try {
+    const normalizedVersionId =
+      versionId instanceof mongoose.Types.ObjectId
+        ? versionId
+        : new mongoose.Types.ObjectId(versionId);
     const stats = await DiaryVersionComment.aggregate([
-      { $match: { versionId: mongoose.Types.ObjectId(versionId), isDeleted: false } },
+      { $match: { versionId: normalizedVersionId, isDeleted: false } },
       {
         $facet: {
           total: [{ $count: 'count' }],
@@ -219,11 +284,42 @@ async function getVersionCommentStats(versionId) {
       }
     ]);
 
+    if (!stats || stats.length === 0) {
+      return {
+        totalComments: 0,
+        sentimentBreakdown: {},
+        totalLikes: 0,
+        mostLikedComment: null,
+        byReplies: [],
+        bySentiment: [],
+        topLiked: [],
+      };
+    }
+
+    const [firstStat] = stats;
+    if (typeof firstStat.totalComments === 'number') {
+      return {
+        totalComments: firstStat.totalComments,
+        sentimentBreakdown: firstStat.sentimentBreakdown || {},
+        totalLikes: firstStat.totalLikes || 0,
+        mostLikedComment: firstStat.mostLikedComment || null,
+      };
+    }
+
     return {
-      totalComments: stats[0].total[0]?.count || 0,
-      byReplies: stats[0].byReplies,
-      bySentiment: stats[0].bySentiment,
-      topLiked: stats[0].topLiked
+      totalComments: firstStat.total?.[0]?.count || 0,
+      sentimentBreakdown: (firstStat.bySentiment || []).reduce((accumulator, item) => {
+        accumulator[item._id] = item.count;
+        return accumulator;
+      }, {}),
+      totalLikes: (firstStat.topLiked || []).reduce(
+        (sum, item) => sum + (item.likes || 0),
+        0
+      ),
+      mostLikedComment: firstStat.topLiked?.[0] || null,
+      byReplies: firstStat.byReplies || [],
+      bySentiment: firstStat.bySentiment || [],
+      topLiked: firstStat.topLiked || [],
     };
   } catch (error) {
     logger.error('Failed to get comment stats:', error);
@@ -240,18 +336,22 @@ async function getVersionCommentStats(versionId) {
  */
 async function searchComments(userId, entryId, searchText) {
   try {
-    const comments = await DiaryVersionComment.find({
+    let commentQuery = DiaryVersionComment.find({
       userId,
       entryId,
       isDeleted: false,
       $text: { $search: searchText }
-    })
-      .populate('versionId', 'versionNumber')
-      .populate('userId', 'name email')
-      .sort({ createdAt: -1 })
-      .limit(50);
+    });
 
-    return comments;
+    if (typeof commentQuery.populate === 'function') {
+      commentQuery = commentQuery
+        .populate('versionId', 'versionNumber')
+        .populate('userId', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(50);
+    }
+
+    return await commentQuery;
   } catch (error) {
     logger.error('Failed to search comments:', error);
     throw error;

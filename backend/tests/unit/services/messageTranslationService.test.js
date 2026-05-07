@@ -1,8 +1,25 @@
 const assert = require('assert');
+jest.mock('../../../models/Message', () => require('./helpers/inMemoryMessagingModels').MessageModel);
+
+const {
+  resetMessagingStore,
+  seedMessage,
+} = require('./helpers/inMemoryMessagingModels');
 const messageTranslationService = require('../../../services/messageTranslationService');
 
 describe('MessageTranslationService', () => {
   beforeEach(() => {
+    resetMessagingStore();
+    seedMessage({ _id: 'msg123', chatId: 'chat1', content: 'Hello world' });
+    seedMessage({ _id: 'multilangMsg', chatId: 'chat1', content: 'Hello hola bonjour' });
+    seedMessage({ _id: 'invalid', chatId: 'chat1', content: 'Still valid for testing' });
+    for (let index = 0; index < 100; index += 1) {
+      seedMessage({
+        _id: `msg${index}`,
+        chatId: index < 80 ? 'chat1' : 'largeChat',
+        content: `Message ${index}`,
+      });
+    }
     messageTranslationService.clearCache();
   });
 

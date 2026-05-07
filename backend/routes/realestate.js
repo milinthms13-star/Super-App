@@ -1,1 +1,241 @@
-const express = require('express');\nconst router = express.Router();\nconst multer = require('multer');\nconst { authenticate } = require('../middleware/auth');\nconst { createModerateRateLimiter } = require('../middleware/rateLimiter');\nconst redisCache = require('../middleware/redisCache');\nconst realEstateStore = require('../utils/realEstateStore');\nconst s3 = require('../config/s3');\nconst imageSecurity = require('../utils/imageSecurity');\nconst logger = require('../utils/logger');\nconst {\n  realEstateListingCreateSchema,\n  realEstateListingUpdateSchema,\n  realEstateEnquirySchema,\n  realEstateMessageSchema,\n  realEstateReviewSchema,\n  realEstateReportSchema,\n  realEstateModerationSchema,\n} = require('../utils/validators');\n\nconst upload = multer({\n  storage: multer.memoryStorage(),\n  limits: { fileSize: 10 * 1024 * 1024, files: 10 },\n});\n\nconst rateLimiter = createModerateRateLimiter();\n\nrouter.use(authenticate);\nrouter.use(rateLimiter);\n\n// GET /api/realestate - List (cached)\nrouter.get('/', redisCache.cacheList('realestate:list'), async (req, res) => {\n  try {\n    const { type, intent, location, verified, limit = 50, skip = 0, sort = 'createdAt' } = req.query;\n    const properties = await realEstateStore.listRealEstateProperties({\n      type, intent, location, verified,\n      limit: parseInt(limit), skip: parseInt(skip),\n    });\n    res.json({ success: true, data: properties, pagination: { limit, skip } });\n  } catch (error) {\n    logger.error('RealEstate list:', error);\n    res.status(500).json({ success: false, message: 'List failed' });\n  }\n});\n\n// POST /api/realestate - Create\nrouter.post('/', async (req, res) => {\n  try {\n    const { error, value } = realEstateListingCreateSchema.validate(req.body);\n    if (error) return res.status(400).json({ success: false, message: error.details[0].message });\n\n    const property = await realEstateStore.createRealEstateProperty(value);\n    res.status(201).json({ success: true, data: property });\n  } catch (error) {\n    logger.error('RealEstate create:', error);\n    res.status(500).json({ success: false, message: 'Create failed' });\n  }\n});\n\n// PATCH /api/realestate/:id - Update\nrouter.patch('/:id', async (req, res) => {\n  try {\n    const { error, value } = realEstateListingUpdateSchema.validate(req.body);\n    if (error) return res.status(400).json({ success: false, message: error.details[0].message });\n\n    const property = await realEstateStore.updateRealEstateProperty(req.params.id, value);\n    if (!property) return res.status(404).json({ success: false, message: 'Not found' });\n\n    res.json({ success: true, data: property });\n  } catch (error) {\n    logger.error('RealEstate update:', error);\n    res.status(500).json({ success: false, message: 'Update failed' });\n  }\n});\n\n// DELETE /api/realestate/:id\nrouter.delete('/:id', async (req, res) => {\n  try {\n    const result = await realEstateStore.deleteRealEstateProperty(req.params.id);\n    if (!result) return res.status(404).json({ success: false, message: 'Not found' });\n    res.json({ success: true, message: 'Deleted' });\n  } catch (error) {\n    logger.error('RealEstate delete:', error);\n    res.status(500).json({ success: false, message: 'Delete failed' });\n  }\n});\n\n// POST /api/realestate/:id/enquiries\nrouter.post('/:id/enquiries', async (req, res) => {\n  try {\n    const { error, value } = realEstateEnquirySchema.validate(req.body);\n    if (error) return res.status(400).json({ success: false, message: error.details[0].message });\n\n    const lead = await realEstateStore.addRealEstateLead(req.params.id, {\n      ...value,\n      name: req.user.name,\n      email: req.user.email,\n    });\n    res.json({ success: true, data: lead });\n  } catch (error) {\n    logger.error('RealEstate enquiry:', error);\n    res.status(500).json({ success: false, message: 'Enquiry failed' });\n  }\n});\n\n// POST /api/realestate/:id/messages\nrouter.post('/:id/messages', async (req, res) => {\n  try {\n    const { error, value } = realEstateMessageSchema.validate(req.body);\n    if (error) return res.status(400).json({ success: false, message: error.details[0].message });\n\n    await realEstateStore.addRealEstateMessage(req.params.id, {\n      ...value,\n      from: req.user.name,\n      senderEmail: req.user.email,\n    });\n    res.json({ success: true, message: 'Message sent' });\n  } catch (error) {\n    logger.error('RealEstate message:', error);\n    res.status(500).json({ success: false, message: 'Message failed' });\n  }\n});\n\n// POST /api/realestate/:id/reviews\nrouter.post('/:id/reviews', async (req, res) => {\n  try {\n    const { error, value } = realEstateReviewSchema.validate(req.body);\n    if (error) return res.status(400).json({ success: false, message: error.details[0].message });\n\n    await realEstateStore.addRealEstateReview(req.params.id, {\n      ...value,\n      author: req.user.name,\n      buyerEmail: req.user.email,\n    });\n    res.json({ success: true, message: 'Review added' });\n  } catch (error) {\n    logger.error('RealEstate review:', error);\n    res.status(500).json({ success: false, message: 'Review failed' });\n  }\n});\n\n// POST /api/realestate/:id/reports\nrouter.post('/:id/reports', async (req, res) => {\n  try {\n    const { error, value } = realEstateReportSchema.validate(req.body);\n    if (error) return res.status(400).json({ success: false, message: error.details[0].message });\n\n    await realEstateStore.addRealEstateReport(req.params.id, {\n      ...value,\n      reporterEmail: req.user.email,\n      reporterName: req.user.name,\n    });\n    res.json({ success: true, message: 'Report submitted' });\n  } catch (error) {\n    logger.error('RealEstate report:', error);\n    res.status(500).json({ success: false, message: 'Report failed' });\n  }\n});\n\n// PATCH /api/realestate/:id/moderation (admin)\nrouter.patch('/:id/moderation', authenticate, async (req, res) => {\n  try {\n    const { error, value } = realEstateModerationSchema.validate(req.body);\n    if (error) return res.status(400).json({ success: false, message: error.details[0].message });\n\n    const property = await realEstateStore.moderateRealEstateProperty(req.params.id, value);\n    if (!property) return res.status(404).json({ success: false, message: 'Not found' });\n\n    res.json({ success: true, data: property });\n  } catch (error) {\n    logger.error('RealEstate moderation:', error);\n    res.status(500).json({ success: false, message: 'Moderation failed' });\n  }\n});\n\n// POST /api/realestate/:id/photos - S3 Uploads\nrouter.post('/:id/photos', upload.array('photos', 10), async (req, res) => {\n  try {\n    const property = await realEstateStore.findRealEstatePropertyById(req.params.id);\n    if (!property) return res.status(404).json({ success: false, message: 'Property not found' });\n\n    const urls = [];\n    for (const file of req.files) {\n      if (await imageSecurity.isSafe(file.buffer)) {\n        const url = await s3.uploadPropertyPhoto({\n          buffer: file.buffer,\n          filename: `realestate-${req.params.id}-${Date.now()}-${file.originalname}`,\n          metadata: { propertyId: req.params.id, userId: req.user.id },\n        });\n        urls.push(url);\n      }\n    }\n\n    // Update mediaCount\n    await realEstateStore.updateRealEstateProperty(req.params.id, {\n      mediaCount: (property.mediaCount || 0) + urls.length,\n    });\n\n    res.json({ success: true, data: { urls, totalMedia: property.mediaCount + urls.length } });\n  } catch (error) {\n    logger.error('RealEstate photo upload:', error);\n    res.status(500).json({ success: false, message: 'Upload failed' });\n  }\n});\n\nmodule.exports = router;\n
+const express = require('express');
+const multer = require('multer');
+
+const { authenticate } = require('../middleware/auth');
+const { createModerateRateLimiter } = require('../middleware/rateLimiter');
+const redisCache = require('../middleware/redisCache');
+const realEstateStore = require('../utils/realEstateStore');
+const s3 = require('../config/s3');
+const imageSecurity = require('../utils/imageSecurity');
+const logger = require('../utils/logger');
+const {
+  realEstateListingCreateSchema,
+  realEstateListingUpdateSchema,
+  realEstateEnquirySchema,
+  realEstateMessageSchema,
+  realEstateReviewSchema,
+  realEstateReportSchema,
+  realEstateModerationSchema,
+} = require('../utils/validators');
+
+const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 10 },
+});
+const rateLimiter = createModerateRateLimiter();
+
+router.use(authenticate);
+router.use(rateLimiter);
+
+router.get('/', redisCache.cacheList('realestate:list'), async (req, res) => {
+  try {
+    const {
+      type,
+      intent,
+      location,
+      verified,
+      limit = 50,
+      skip = 0,
+    } = req.query;
+
+    const properties = await realEstateStore.listRealEstateProperties({
+      type,
+      intent,
+      location,
+      verified,
+      limit: parseInt(limit, 10),
+      skip: parseInt(skip, 10),
+    });
+
+    res.json({ success: true, data: properties, pagination: { limit, skip } });
+  } catch (error) {
+    logger.error('RealEstate list:', error);
+    res.status(500).json({ success: false, message: 'List failed' });
+  }
+});
+
+router.post('/', async (req, res) => {
+  try {
+    const { error, value } = realEstateListingCreateSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    const property = await realEstateStore.createRealEstateProperty(value);
+    res.status(201).json({ success: true, data: property });
+  } catch (error) {
+    logger.error('RealEstate create:', error);
+    res.status(500).json({ success: false, message: 'Create failed' });
+  }
+});
+
+router.patch('/:id', async (req, res) => {
+  try {
+    const { error, value } = realEstateListingUpdateSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    const property = await realEstateStore.updateRealEstateProperty(req.params.id, value);
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Not found' });
+    }
+
+    res.json({ success: true, data: property });
+  } catch (error) {
+    logger.error('RealEstate update:', error);
+    res.status(500).json({ success: false, message: 'Update failed' });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await realEstateStore.deleteRealEstateProperty(req.params.id);
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Not found' });
+    }
+
+    res.json({ success: true, message: 'Deleted' });
+  } catch (error) {
+    logger.error('RealEstate delete:', error);
+    res.status(500).json({ success: false, message: 'Delete failed' });
+  }
+});
+
+router.post('/:id/enquiries', async (req, res) => {
+  try {
+    const { error, value } = realEstateEnquirySchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    const lead = await realEstateStore.addRealEstateLead(req.params.id, {
+      ...value,
+      name: req.user.name,
+      email: req.user.email,
+    });
+
+    res.json({ success: true, data: lead });
+  } catch (error) {
+    logger.error('RealEstate enquiry:', error);
+    res.status(500).json({ success: false, message: 'Enquiry failed' });
+  }
+});
+
+router.post('/:id/messages', async (req, res) => {
+  try {
+    const { error, value } = realEstateMessageSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    await realEstateStore.addRealEstateMessage(req.params.id, {
+      ...value,
+      from: req.user.name,
+      senderEmail: req.user.email,
+    });
+
+    res.json({ success: true, message: 'Message sent' });
+  } catch (error) {
+    logger.error('RealEstate message:', error);
+    res.status(500).json({ success: false, message: 'Message failed' });
+  }
+});
+
+router.post('/:id/reviews', async (req, res) => {
+  try {
+    const { error, value } = realEstateReviewSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    await realEstateStore.addRealEstateReview(req.params.id, {
+      ...value,
+      author: req.user.name,
+      buyerEmail: req.user.email,
+    });
+
+    res.json({ success: true, message: 'Review added' });
+  } catch (error) {
+    logger.error('RealEstate review:', error);
+    res.status(500).json({ success: false, message: 'Review failed' });
+  }
+});
+
+router.post('/:id/reports', async (req, res) => {
+  try {
+    const { error, value } = realEstateReportSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    await realEstateStore.addRealEstateReport(req.params.id, {
+      ...value,
+      reporterEmail: req.user.email,
+      reporterName: req.user.name,
+    });
+
+    res.json({ success: true, message: 'Report submitted' });
+  } catch (error) {
+    logger.error('RealEstate report:', error);
+    res.status(500).json({ success: false, message: 'Report failed' });
+  }
+});
+
+router.patch('/:id/moderation', authenticate, async (req, res) => {
+  try {
+    const { error, value } = realEstateModerationSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    const property = await realEstateStore.moderateRealEstateProperty(req.params.id, value);
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Not found' });
+    }
+
+    res.json({ success: true, data: property });
+  } catch (error) {
+    logger.error('RealEstate moderation:', error);
+    res.status(500).json({ success: false, message: 'Moderation failed' });
+  }
+});
+
+router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
+  try {
+    const property = await realEstateStore.findRealEstatePropertyById(req.params.id);
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Property not found' });
+    }
+
+    const urls = [];
+    for (const file of req.files) {
+      if (await imageSecurity.isSafe(file.buffer)) {
+        const url = await s3.uploadPropertyPhoto({
+          buffer: file.buffer,
+          filename: `realestate-${req.params.id}-${Date.now()}-${file.originalname}`,
+          metadata: { propertyId: req.params.id, userId: req.user.id },
+        });
+        urls.push(url);
+      }
+    }
+
+    await realEstateStore.updateRealEstateProperty(req.params.id, {
+      mediaCount: (property.mediaCount || 0) + urls.length,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        urls,
+        totalMedia: (property.mediaCount || 0) + urls.length,
+      },
+    });
+  } catch (error) {
+    logger.error('RealEstate photo upload:', error);
+    res.status(500).json({ success: false, message: 'Upload failed' });
+  }
+});
+
+module.exports = router;

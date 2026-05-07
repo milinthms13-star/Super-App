@@ -737,6 +737,25 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
     calculateProfileCompletion(profileForm),
     [profileForm]
   );
+  const ProfileCompletionScore = () => (
+    <div style={{ padding: "2rem 0" }}>
+      <div
+        className="profile-completion-container"
+        role="progressbar"
+        aria-valuenow={profileCompletion}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Profile ${profileCompletion}% complete`}
+      >
+        <div
+          className="profile-completion-bar"
+          style={{ width: `${profileCompletion}%` }}
+        ></div>
+      </div>
+      <div className="profile-completion-text">{profileCompletion}% Complete</div>
+      <p>Complete your profile to improve your match quality and unlock more features.</p>
+    </div>
+  );
 
   return (
     <div className="matrimonial-shell">
@@ -1060,58 +1079,26 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
           { id: "profile-completion", label: "Profile Score" },
           ...(isAdmin ? [{ id: "admin", label: "Admin" }] : []),
         ].map((tab) => (
-                {activeTab === "profile-completion" && (
-                  <section className="matrimonial-panel">
-                    <div className="matrimonial-panel-heading">
-                      <h2>Profile Completion Score</h2>
-                      <span className="matrimonial-chip">Progress</span>
-                    </div>
-                    <ProfileCompletionScore />
-                  </section>
-                )}
-          // ProfileCompletionScore component
-          const ProfileCompletionScore = () => {
-            const [score, setScore] = useState(null);
-            const [loading, setLoading] = useState(true);
-            const [error, setError] = useState("");
-            useEffect(() => {
-              setLoading(true);
-              axios.get(`${API_BASE_URL}/auth/profile/completion`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
-              })
-                .then(res => {
-                  setScore(res.data.score);
-                  setLoading(false);
-                })
-                .catch(err => {
-                  setError("Failed to fetch profile completion score");
-                  setLoading(false);
-                });
-            }, []);
-            if (loading) return <div>Loading...</div>;
-            if (error) return <div className="error">{error}</div>;
-            return (
-              <div style={{ padding: '2rem 0' }}>
-                <div className="profile-completion-container">
-                  <div className="profile-completion-bar" style={{ width: `${score}%` }}></div>
-                </div>
-                <div className="profile-completion-text">{score}% Complete</div>
-                <p>Complete your profile to improve your match quality and unlock more features.</p>
-              </div>
-            );
-          };
           <button
             key={tab.id}
-            type="button"
+            className={`matrimonial-tab${activeTab === tab.id ? ' active' : ''}`}
             role="tab"
             aria-selected={activeTab === tab.id}
-            aria-controls={`matrimonial-tabpanel-${tab.id}`}
-            className={`matrimonial-tab ${activeTab === tab.id ? "active" : ""}`}
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
           </button>
         ))}
+
+        {activeTab === "profile-completion" && (
+          <section className="matrimonial-panel">
+            <div className="matrimonial-panel-heading">
+              <h2>Profile Completion Score</h2>
+              <span className="matrimonial-chip">Progress</span>
+            </div>
+            <ProfileCompletionScore />
+          </section>
+        )}
       </section>
 
       {statusMessage && (

@@ -1,97 +1,89 @@
 const Message = require('../models/Message');
-const mongoose = require('mongoose');
 const logger = require('../utils/logger');
-
-/**
- * Message Threading Service
- * Handles replies and threaded conversations
- * Singleton pattern
- */
 
 class MessageThreadService {
   constructor() {
     if (MessageThreadService.instance) {
       return MessageThreadService.instance;
     }
+
     this.threadCache = new Map();
+    this.cacheTTL = 5 * 60 * 1000;
     MessageThreadService.instance = this;
   }
 
-  /**
-   * Create reply to message (thread)
-   * @param {string} parentMessageId - Parent message ID
-   * @param {string} senderId - Sender User ID
-   * @param {string} content - Reply content
-   * @param {Object} options - Additional options
-   * @returns {Promise<Object>} Created reply message
-   */
-  async createReply(parentMessageId, senderId, content, options = {}) {
+  async createReply(parentMessageIdOrData, senderId, content, options = {}) {
+    const normalized = this.normalizeReplyArgs(
+      parentMessageIdOrData,
+      senderId,
+      content,
+      options
+    );
+
     try {
-      const parentMessage = await Message.findById(parentMessageId);
+      if (!normalized.parentMessageId || !normalized.userId || !normalized.content.trim()) {
+        throw new Error('parentMessageId, userId and content are required');
+      }
+
+      const parentMessage = await Message.findById(normalized.parentMessageId);
       if (!parentMessage) {
-        throw new Error(`Parent message ${parentMessageId} not found`);
+        throw new Error(`Parent message ${normalized.parentMessageId} not found`);
       }
 
       if (parentMessage.isDeleted) {
         throw new Error('Cannot reply to deleted message');
       }
 
-      // Create reply message
       const reply = await Message.create({
-        senderId,
+        senderId: normalized.userId,
         chatId: parentMessage.chatId,
-        parentMessageId,
-        content,
-        type: options.type || 'reply',
-        media: options.media,
-        mentions: options.mentions,
+        parentMessageId: normalized.parentMessageId,
+        content: normalized.content.trim(),
+        type: normalized.type || 'reply',
+        messageType: normalized.messageType || 'text',
+        attachments: normalized.attachments || [],
+        media: normalized.media || null,
+        mentions: normalized.mentions || [],
         metadata: {
-          ...options.metadata,
+          ...(parentMessage.metadata || {}),
+          ...(normalized.metadata || {}),
           isReply: true,
-          threadDepth: (parentMessage.metadata?.threadDepth || 0) + 1,
+          threadDepth: Number(parentMessage.metadata?.threadDepth || 0) + 1,
         },
+        replyCount: 0,
+        createdAt: new Date(),
       });
 
-      // Update parent message reply count
-      await Message.findByIdAndUpdate(
-        parentMessageId,
-        {
-          $inc: { replyCount: 1 },
-          lastReplyAt: new Date(),
-        }
-      );
+      await Message.findByIdAndUpdate(normalized.parentMessageId, {
+        $inc: { replyCount: 1 },
+        $set: { lastReplyAt: new Date() },
+      });
 
-      // Clear cache
-      this.threadCache.delete(parentMessageId);
+      this.invalidateThread(normalized.parentMessageId);
 
-      logger.info(`Reply created for message ${parentMessageId}`, {
+      logger.info(`Reply created for message ${normalized.parentMessageId}`, {
         replyId: reply._id,
-        senderId,
+        senderId: normalized.userId,
       });
 
-      return await reply.populate('senderId', 'username avatar');
+      return reply.populate ? await reply.populate('senderId', 'username avatar') : reply;
     } catch (error) {
-      logger.error('Error creating reply', { error, parentMessageId });
+      logger.error('Error creating reply', { error, parentMessageId: normalized.parentMessageId });
       throw error;
     }
   }
 
-  /**
-   * Get thread of replies
-   * @param {string} messageId - Parent message ID
-   * @param {Object} options - Query options (limit, offset)
-   * @returns {Promise<Object>} Thread with replies
-   */
   async getThread(messageId, options = {}) {
     try {
-      // Check cache
-      if (this.threadCache.has(messageId)) {
-        return this.threadCache.get(messageId);
+      const cacheKey = this.getCacheKey(messageId, options);
+      const cached = this.getFromCache(cacheKey);
+      if (cached) {
+        return cached;
       }
 
-      const { limit = 50, offset = 0 } = options;
+      const limit = Number(options.limit || 50);
+      const offset = Number(options.offset || 0);
 
-      // Get parent message
       const parentMessage = await Message.findById(messageId)
         .populate('senderId', 'username avatar')
         .lean();
@@ -100,30 +92,27 @@ class MessageThreadService {
         throw new Error(`Message ${messageId} not found`);
       }
 
-      // Get replies
-      const replies = await Message.find({ parentMessageId: messageId })
+      const allReplies = await Message.find({
+        parentMessageId: messageId,
+        isDeleted: { $ne: true },
+      })
         .populate('senderId', 'username avatar')
         .populate('mentions.userId', 'username')
-        .sort({ createdAt: 1 })
-        .limit(limit)
-        .skip(offset)
         .lean();
 
+      const replies = this.sortByCreatedAt(allReplies).slice(offset, offset + limit);
       const thread = {
         parent: parentMessage,
         replies,
-        totalReplies: await Message.countDocuments({ parentMessageId: messageId }),
+        totalReplies: allReplies.length,
         pagination: {
           limit,
           offset,
-          hasMore: offset + limit < parentMessage.replyCount,
+          hasMore: offset + limit < allReplies.length,
         },
       };
 
-      // Cache for 5 minutes
-      this.threadCache.set(messageId, thread);
-      setTimeout(() => this.threadCache.delete(messageId), 5 * 60 * 1000);
-
+      this.setCache(cacheKey, thread);
       return thread;
     } catch (error) {
       logger.error('Error getting thread', { error, messageId });
@@ -131,105 +120,112 @@ class MessageThreadService {
     }
   }
 
-  /**
-   * Get conversation chain (parent + all descendants)
-   * @param {string} messageId - Message ID
-   * @returns {Promise<Array>} Conversation chain
-   */
   async getConversationChain(messageId) {
     try {
       const chain = [];
+      const visited = new Set();
 
-      // Find root message
       let current = await Message.findById(messageId).lean();
       if (!current) {
         throw new Error(`Message ${messageId} not found`);
       }
 
-      // Traverse up to root
-      while (current.parentMessageId) {
-        current = await Message.findById(current.parentMessageId).lean();
-        chain.unshift(current);
+      while (current && current.parentMessageId) {
+        if (visited.has(String(current._id))) {
+          break;
+        }
+
+        visited.add(String(current._id));
+        const parent = await Message.findById(current.parentMessageId).lean();
+        if (!parent) {
+          break;
+        }
+
+        chain.unshift(parent);
+        current = parent;
       }
 
-      // Add original message
-      chain.push(current);
+      const rootMessage = chain[0] || (await Message.findById(messageId).lean());
+      if (rootMessage && !chain.some((item) => String(item._id) === String(rootMessage._id))) {
+        chain.push(rootMessage);
+      }
 
-      // Get all descendants
-      const descendants = await this.getAllDescendants(current._id);
-      chain.push(...descendants);
-
-      return chain;
+      const descendants = await this.getAllDescendants(rootMessage?._id || messageId);
+      const combined = [...chain, ...descendants];
+      return this.sortByCreatedAt(
+        combined.filter(
+          (item, index, array) =>
+            item && array.findIndex((candidate) => String(candidate._id) === String(item._id)) === index
+        )
+      );
     } catch (error) {
       logger.error('Error getting conversation chain', { error, messageId });
       throw error;
     }
   }
 
-  /**
-   * Get all descendants (recursive replies)
-   * @private
-   */
-  async getAllDescendants(messageId, depth = 0, maxDepth = 10) {
-    if (depth > maxDepth) return [];
-
-    const replies = await Message.find({ parentMessageId: messageId })
-      .sort({ createdAt: 1 })
-      .lean();
-
-    let allDescendants = [...replies];
-
-    for (const reply of replies) {
-      const descendants = await this.getAllDescendants(
-        reply._id,
-        depth + 1,
-        maxDepth
-      );
-      allDescendants.push(...descendants);
-    }
-
-    return allDescendants;
+  async getThreadChain(messageId) {
+    return this.getConversationChain(messageId);
   }
 
-  /**
-   * Get thread statistics
-   * @param {string} messageId - Parent message ID
-   * @returns {Promise<Object>} Thread stats
-   */
+  async getAllDescendants(messageId, depth = 0, maxDepth = 10, visited = new Set()) {
+    if (!messageId || depth > maxDepth || visited.has(String(messageId))) {
+      return [];
+    }
+
+    visited.add(String(messageId));
+
+    const replies = await Message.find({
+      parentMessageId: messageId,
+      isDeleted: { $ne: true },
+    }).lean();
+
+    const sortedReplies = this.sortByCreatedAt(replies);
+    let descendants = [...sortedReplies];
+
+    for (const reply of sortedReplies) {
+      const nested = await this.getAllDescendants(reply._id, depth + 1, maxDepth, visited);
+      descendants = descendants.concat(nested);
+    }
+
+    return descendants;
+  }
+
+  async getThreadDescendants(messageId, limit = 50, offset = 0) {
+    const descendants = await this.getAllDescendants(messageId);
+    return descendants.slice(Number(offset), Number(offset) + Number(limit));
+  }
+
   async getThreadStats(messageId) {
     try {
-      const message = await Message.findById(messageId).lean();
-      if (!message) {
+      const parent = await Message.findById(messageId).lean();
+      if (!parent) {
         throw new Error(`Message ${messageId} not found`);
       }
 
-      const stats = await Message.aggregate([
-        {
-          $match: {
-            $or: [
-              { _id: mongoose.Types.ObjectId(messageId) },
-              { parentMessageId: mongoose.Types.ObjectId(messageId) },
-            ],
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalMessages: { $sum: 1 },
-            uniqueSenders: { $addToSet: '$senderId' },
-            avgContentLength: { $avg: { $strLenCP: '$content' } },
-            mediaCount: {
-              $sum: { $cond: [{ $ne: ['$media', null] }, 1, 0] },
-            },
-          },
-        },
-      ]);
+      const replies = await this.getAllDescendants(messageId);
+      const allMessages = [parent, ...replies];
+      const participants = Array.from(
+        new Set(allMessages.map((message) => String(message.senderId)).filter(Boolean))
+      );
+      const lastReplyAt = replies.length
+        ? this.sortByCreatedAt(replies)[replies.length - 1].createdAt
+        : parent.lastReplyAt || parent.createdAt;
 
-      return stats[0] || {
-        totalMessages: 0,
-        uniqueSenders: [],
-        avgContentLength: 0,
-        mediaCount: 0,
+      return {
+        totalMessages: allMessages.length,
+        replyCount: replies.length,
+        lastReplyAt,
+        lastReplyTime: lastReplyAt,
+        participants,
+        uniqueSendersCount: participants.length,
+        avgContentLength:
+          allMessages.length > 0
+            ? allMessages.reduce((sum, message) => sum + String(message.content || '').length, 0) /
+              allMessages.length
+            : 0,
+        mediaCount: allMessages.filter((message) => message.media || (message.attachments || []).length > 0)
+          .length,
       };
     } catch (error) {
       logger.error('Error getting thread stats', { error, messageId });
@@ -237,12 +233,6 @@ class MessageThreadService {
     }
   }
 
-  /**
-   * Delete thread (message + all replies)
-   * @param {string} messageId - Parent message ID
-   * @param {string} userId - User ID (must be original sender)
-   * @returns {Promise<number>} Deleted count
-   */
   async deleteThread(messageId, userId) {
     try {
       const message = await Message.findById(messageId);
@@ -250,25 +240,23 @@ class MessageThreadService {
         throw new Error(`Message ${messageId} not found`);
       }
 
-      if (message.senderId.toString() !== userId.toString()) {
+      if (String(message.senderId) !== String(userId)) {
         throw new Error('Only message owner can delete thread');
       }
 
-      // Get all messages in thread
       const allMessages = [message, ...(await this.getAllDescendants(messageId))];
-
-      // Soft delete all messages
       const result = await Message.updateMany(
-        { _id: { $in: allMessages.map((m) => m._id) } },
+        { _id: { $in: allMessages.map((item) => item._id) } },
         {
-          isDeleted: true,
-          deletedAt: new Date(),
-          deletedBy: userId,
+          $set: {
+            isDeleted: true,
+            deletedAt: new Date(),
+            deletedBy: userId,
+          },
         }
       );
 
-      this.threadCache.delete(messageId);
-
+      this.invalidateThread(messageId);
       logger.info(`Thread deleted: ${allMessages.length} messages`);
       return result.modifiedCount;
     } catch (error) {
@@ -277,78 +265,53 @@ class MessageThreadService {
     }
   }
 
-  /**
-   * Get popular threads in chat
-   * @param {string} chatId - Chat ID
-   * @param {Object} options - Query options (limit)
-   * @returns {Promise<Array>} Popular threads
-   */
   async getPopularThreads(chatId, options = {}) {
     try {
-      const { limit = 20, daysBack = 7 } = options;
-
+      const limit = Number(options.limit || 20);
+      const daysBack = Number(options.daysBack || 7);
       const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
 
-      const threads = await Message.aggregate([
-        {
-          $match: {
-            chatId: mongoose.Types.ObjectId(chatId),
-            parentMessageId: { $exists: false },
-            createdAt: { $gte: startDate },
-            isDeleted: { $ne: true },
-          },
-        },
-        {
-          $addFields: {
-            activity: {
-              $add: [
-                { $ifNull: ['$replyCount', 0] },
-                { $ifNull: ['$reactionCount', 0] },
-              ],
-            },
-          },
-        },
-        { $sort: { activity: -1 } },
-        { $limit: limit },
-        {
-          $lookup: {
-            from: 'messages',
-            localField: '_id',
-            foreignField: 'parentMessageId',
-            as: 'replies',
-          },
-        },
-      ]);
+      const messages = await Message.find({
+        chatId,
+        isDeleted: { $ne: true },
+      }).lean();
 
-      return threads;
+      const roots = messages.filter(
+        (message) =>
+          !message.parentMessageId &&
+          (!message.createdAt || new Date(message.createdAt) >= startDate)
+      );
+
+      const threads = roots.map((root) => {
+        const replies = messages.filter((message) => String(message.parentMessageId) === String(root._id));
+        return {
+          ...root,
+          replies,
+          replyCount: replies.length,
+          activity: replies.length + Number(root.reactionCount || 0),
+        };
+      });
+
+      return threads
+        .sort((left, right) => right.activity - left.activity || right.replyCount - left.replyCount)
+        .slice(0, limit);
     } catch (error) {
       logger.error('Error getting popular threads', { error, chatId });
       throw error;
     }
   }
 
-  /**
-   * Resolve a thread (mark as resolved/answered)
-   * @param {string} messageId - Parent message ID
-   * @param {string} userId - User ID
-   * @returns {Promise<Object>} Updated message
-   */
   async markThreadResolved(messageId, userId) {
     try {
-      const message = await Message.findByIdAndUpdate(
-        messageId,
-        {
-          $set: {
-            'metadata.threadResolved': true,
-            'metadata.resolvedAt': new Date(),
-            'metadata.resolvedBy': userId,
-          },
+      const message = await Message.findByIdAndUpdate(messageId, {
+        $set: {
+          'metadata.threadResolved': true,
+          'metadata.resolvedAt': new Date(),
+          'metadata.resolvedBy': userId,
         },
-        { new: true }
-      );
+      });
 
-      this.threadCache.delete(messageId);
-
+      this.invalidateThread(messageId);
       logger.info(`Thread marked as resolved: ${messageId}`);
       return message;
     } catch (error) {
@@ -357,9 +320,67 @@ class MessageThreadService {
     }
   }
 
-  /**
-   * Clear thread cache
-   */
+  normalizeReplyArgs(parentMessageIdOrData, senderId, content, options = {}) {
+    if (parentMessageIdOrData && typeof parentMessageIdOrData === 'object' && !Array.isArray(parentMessageIdOrData)) {
+      return {
+        parentMessageId: parentMessageIdOrData.parentMessageId,
+        userId: parentMessageIdOrData.userId || parentMessageIdOrData.senderId,
+        content: parentMessageIdOrData.content || '',
+        type: parentMessageIdOrData.type,
+        messageType: parentMessageIdOrData.messageType,
+        attachments: parentMessageIdOrData.attachments,
+        media: parentMessageIdOrData.media,
+        mentions: parentMessageIdOrData.mentions,
+        metadata: parentMessageIdOrData.metadata,
+      };
+    }
+
+    return {
+      parentMessageId: parentMessageIdOrData,
+      userId: senderId,
+      content: content || '',
+      ...options,
+    };
+  }
+
+  sortByCreatedAt(messages) {
+    return [...messages].sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt));
+  }
+
+  getCacheKey(messageId, options) {
+    return JSON.stringify({ messageId, options });
+  }
+
+  getFromCache(cacheKey) {
+    const cached = this.threadCache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    if (Date.now() - cached.timestamp > this.cacheTTL) {
+      this.threadCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached.data;
+  }
+
+  setCache(cacheKey, value) {
+    this.threadCache.set(cacheKey, {
+      data: value,
+      timestamp: Date.now(),
+    });
+  }
+
+  invalidateThread(messageId) {
+    const normalized = String(messageId);
+    Array.from(this.threadCache.keys()).forEach((cacheKey) => {
+      if (cacheKey.includes(normalized)) {
+        this.threadCache.delete(cacheKey);
+      }
+    });
+  }
+
   clearCache() {
     this.threadCache.clear();
     logger.info('Thread cache cleared');
