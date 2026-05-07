@@ -15682,3 +15682,15 @@
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mWebSocket server initialized\u001b[39m","timestamp":"2026-05-08 03:07:23:723"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mModeration WebSocket server initialized\u001b[39m","timestamp":"2026-05-08 03:07:23:723"}
 {"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mBackground jobs were skipped because MongoDB is not connected\u001b[39m","timestamp":"2026-05-08 03:07:23:723"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mOPENAI_API_KEY not configured - AI features disabled\u001b[39m","timestamp":"2026-05-08 03:28:44:2844"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mOpenAI client not initialized - missing API key:\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mElasticsearch is disabled for this environment. Skipping index creation.\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32m[WebSocket] Moderation WebSocket server initialized\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mUsing local in-memory mode. MongoDB/GridFS startup is skipped.\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mRedis unavailable. Continuing without cache: \u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mRedis connection failed. Continuing without cache: \u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mMongoDB is not connected. Starting without MongoDB-backed background jobs.\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mServer started on port 5000\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mWebSocket server initialized\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mModeration WebSocket server initialized\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mBackground jobs were skipped because MongoDB is not connected\u001b[39m","timestamp":"2026-05-08 03:28:45:2845"}

@@ -8,6 +8,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/User');
 const OtpToken = require('../models/OtpToken');
 const { getRedisClient } = require('../config/redis');
+const { sendEmailViaGmail } = require('../config/gmail');
 const logger = require('../utils/logger');
 const { authenticate, getJwtSecret } = require('../middleware/auth');
 const devAuthStore = require('../utils/devAuthStore');
@@ -163,35 +164,85 @@ const useMemoryAuth = () => {
   return process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production';
 };
 
+const getEmailMode = () => {
+  const rawMode = String(
+    process.env.EMAIL_SERVICE ||
+      process.env.EMAIL_PROVIDER ||
+      'smtp'
+  )
+    .trim()
+    .toLowerCase();
+
+  if (rawMode === 'gmail') {
+    return 'smtp';
+  }
+
+  if (rawMode === 'sendgrid') {
+    return 'smtp';
+  }
+
+  return rawMode;
+};
+
+const getSmtpConfig = () => {
+  const port = Number(process.env.EMAIL_PORT || process.env.SMTP_PORT) || 587;
+  const secureFlag = process.env.EMAIL_SECURE ?? process.env.SMTP_SECURE;
+
+  return {
+    host: process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.gmail.com',
+    port,
+    secure: secureFlag === 'true' || port === 465,
+    user:
+      process.env.EMAIL_USER ||
+      process.env.SMTP_USER ||
+      process.env.GMAIL_USER ||
+      '',
+    pass:
+      process.env.EMAIL_PASS ||
+      process.env.SMTP_PASSWORD ||
+      process.env.GMAIL_APP_PASSWORD ||
+      '',
+    from:
+      process.env.EMAIL_FROM ||
+      process.env.SMTP_FROM_EMAIL ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      process.env.EMAIL_USER ||
+      process.env.SMTP_USER ||
+      process.env.GMAIL_USER ||
+      '',
+  };
+};
+
 const hasRealEmailConfig = () => {
-  // Check Gmail API
-  if (process.env.EMAIL_SERVICE === 'gmail-api') {
+  const mode = getEmailMode();
+
+  if (mode === 'gmail-api') {
     return !!process.env.GMAIL_USER;
   }
-  // Check for SES
-  if (process.env.EMAIL_SERVICE === 'ses') {
+
+  if (mode === 'ses') {
     return !!(
       process.env.AWS_ACCESS_KEY_ID &&
       process.env.AWS_SECRET_ACCESS_KEY &&
       !process.env.AWS_ACCESS_KEY_ID.includes('your-')
     );
   }
-  // Check for SMTP
-  const values = [
-    process.env.EMAIL_USER,
-    process.env.EMAIL_PASS,
-    process.env.EMAIL_FROM,
-  ];
-  return values.every((value) => value && !value.includes('your-'));
+
+  const smtpConfig = getSmtpConfig();
+  return [smtpConfig.user, smtpConfig.pass, smtpConfig.from].every(
+    (value) => value && !String(value).includes('your-')
+  );
 };
 
 // Dynamic email service based on environment
 const getEmailService = () => {
-  if (process.env.EMAIL_SERVICE === 'gmail-api') {
+  const mode = getEmailMode();
+
+  if (mode === 'gmail-api') {
     return 'gmail-api'; // Will be handled separately
   }
 
-  if (process.env.EMAIL_SERVICE === 'ses') {
+  if (mode === 'ses') {
     const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
     const sesClient = new SESClient({
       region: process.env.AWS_REGION || 'us-east-1',
@@ -205,14 +256,19 @@ const getEmailService = () => {
 
   // Default to nodemailer
   const nodemailer = require('nodemailer');
+  const smtpConfig = getSmtpConfig();
   return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: Number(process.env.EMAIL_PORT) || 587,
-    secure: process.env.EMAIL_SECURE === 'true',
+    host: smtpConfig.host,
+    port: smtpConfig.port,
+    secure: smtpConfig.secure,
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: smtpConfig.user,
+      pass: smtpConfig.pass,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+    dnsTimeout: 10000,
   });
 };
 
@@ -494,11 +550,22 @@ router.post('/send-otp', async (req, res) => {
         </div>
       `;
 
-      if (process.env.EMAIL_SERVICE === 'gmail-api') {
+      const emailMode = getEmailMode();
+
+      if (!hasRealEmailConfig()) {
+        logger.error('OTP email delivery is not configured for production use');
+        return res.status(503).json({
+          success: false,
+          message: 'OTP email service is not configured. Please contact support.',
+        });
+      }
+
+      if (emailMode === 'gmail-api') {
         await sendEmailViaGmail(email, 'Your NilaHub OTP', htmlContent);
-      } else if (process.env.EMAIL_SERVICE === 'ses') {
+      } else if (emailMode === 'ses') {
+        const { SendEmailCommand } = require('@aws-sdk/client-ses');
         const ses = getEmailService();
-        await ses.sendEmail({
+        await ses.send(new SendEmailCommand({
           Source: process.env.EMAIL_FROM || process.env.EMAIL_USER,
           Destination: { ToAddresses: [email] },
           Message: {
@@ -509,10 +576,10 @@ router.post('/send-otp', async (req, res) => {
               },
             },
           },
-        }).promise();
+        }));
       } else {
         const transporter = getEmailService();
-        const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+        const fromAddress = getSmtpConfig().from;
         await transporter.sendMail({
           from: `NilaHub <${fromAddress}>`,
           to: email,

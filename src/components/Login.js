@@ -392,7 +392,11 @@ const Login = ({
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/send-otp`, { email });
+      const response = await axios.post(
+        `${API_BASE_URL}/auth/send-otp`,
+        { email },
+        { timeout: 15000 }
+      );
 
       if (response.data.success) {
         setOtpSent(true);
@@ -402,7 +406,9 @@ const Login = ({
         setError(response.data.message || "Failed to send OTP");
       }
     } catch (err) {
-      if (!err.response) {
+      if (err.code === "ECONNABORTED") {
+        setError("OTP request timed out. Please check backend email configuration and try again.");
+      } else if (!err.response) {
         setError("Backend is not running. Please start the API server and try again.");
       } else {
         setError(err.response.data?.message || "Unable to send OTP. Please try again.");
