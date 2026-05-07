@@ -570,6 +570,42 @@ const normalizeClassifiedsModule = (moduleData = {}) => {
 
 const normalizeEmailAddress = (value = '') => String(value || '').trim().toLowerCase();
 
+const getClassifiedPublicInteractionGuard = (listing = {}, user = {}) => {
+  const normalizedUserEmail = normalizeEmailAddress(user?.email);
+  const normalizedSellerEmail = normalizeEmailAddress(listing?.sellerEmail);
+  const moderationStatus = String(
+    listing?.moderationStatus || (listing?.verified === false ? 'pending' : 'approved')
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!listing?.id) {
+    return {
+      allowed: false,
+      statusCode: 404,
+      message: 'Classified listing not found.',
+    };
+  }
+
+  if (normalizedUserEmail && normalizedSellerEmail && normalizedUserEmail === normalizedSellerEmail) {
+    return {
+      allowed: false,
+      statusCode: 400,
+      message: 'You cannot perform this action on your own listing.',
+    };
+  }
+
+  if (moderationStatus !== 'approved') {
+    return {
+      allowed: false,
+      statusCode: 403,
+      message: 'Only approved classifieds can receive buyer interactions.',
+    };
+  }
+
+  return { allowed: true };
+};
+
 const normalizeStringList = (values = []) =>
   [...new Set((Array.isArray(values) ? values : [])
     .map((value) => String(value || '').trim())
@@ -2357,6 +2393,23 @@ router.post('/classifieds/listings/:listingId/messages', authenticate, messageLi
   }
 
   if (useMongoClassifieds()) {
+    const matchedListing = await findClassifiedAdById(req.params.listingId);
+
+    if (!matchedListing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Classified listing not found.',
+      });
+    }
+
+    const interactionGuard = getClassifiedPublicInteractionGuard(matchedListing, req.user);
+    if (!interactionGuard.allowed) {
+      return res.status(interactionGuard.statusCode).json({
+        success: false,
+        message: interactionGuard.message,
+      });
+    }
+
     const updatedListing = await addClassifiedMessage(req.params.listingId, {
       id:
         typeof crypto.randomUUID === 'function'
@@ -2383,16 +2436,28 @@ router.post('/classifieds/listings/:listingId/messages', authenticate, messageLi
     });
   }
 
+  const currentData = await devAppDataStore.readAppData();
+  const currentModuleData = normalizeClassifiedsModule(currentData.moduleData);
+  const matchedListing = currentModuleData.classifiedsListings.find(
+    (listing) => listing.id === req.params.listingId
+  );
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Classified listing not found.',
+    });
+  }
+
+  const interactionGuard = getClassifiedPublicInteractionGuard(matchedListing, req.user);
+  if (!interactionGuard.allowed) {
+    return res.status(interactionGuard.statusCode).json({
+      success: false,
+      message: interactionGuard.message,
+    });
+  }
+
   const nextData = await devAppDataStore.updateAppData(async (currentData) => {
-    const currentModuleData = normalizeClassifiedsModule(currentData.moduleData);
-    const listingExists = currentModuleData.classifiedsListings.some(
-      (listing) => listing.id === req.params.listingId
-    );
-
-    if (!listingExists) {
-      return currentData;
-    }
-
     const message = {
       id:
         typeof crypto.randomUUID === 'function'
@@ -2424,22 +2489,10 @@ router.post('/classifieds/listings/:listingId/messages', authenticate, messageLi
     };
   });
 
-  const normalizedModuleData = normalizeClassifiedsModule(nextData.moduleData);
-  const listingExists = normalizedModuleData.classifiedsListings.some(
-    (listing) => listing.id === req.params.listingId
-  );
-
-  if (!listingExists) {
-    return res.status(404).json({
-      success: false,
-      message: 'Classified listing not found.',
-    });
-  }
-
   return res.json({
     success: true,
     data: {
-      moduleData: normalizedModuleData,
+      moduleData: normalizeClassifiedsModule(nextData.moduleData),
     },
   });
 });
@@ -2553,6 +2606,23 @@ router.post('/classifieds/listings/:listingId/reports', authenticate, reportLimi
   }
 
   if (useMongoClassifieds()) {
+    const matchedListing = await findClassifiedAdById(req.params.listingId);
+
+    if (!matchedListing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Classified listing not found.',
+      });
+    }
+
+    const interactionGuard = getClassifiedPublicInteractionGuard(matchedListing, req.user);
+    if (!interactionGuard.allowed) {
+      return res.status(interactionGuard.statusCode).json({
+        success: false,
+        message: interactionGuard.message,
+      });
+    }
+
     const updatedListing = await addClassifiedReport(req.params.listingId, {
       id:
         typeof crypto.randomUUID === 'function'
@@ -2580,16 +2650,28 @@ router.post('/classifieds/listings/:listingId/reports', authenticate, reportLimi
     });
   }
 
+  const currentData = await devAppDataStore.readAppData();
+  const currentModuleData = normalizeClassifiedsModule(currentData.moduleData);
+  const matchedListing = currentModuleData.classifiedsListings.find(
+    (listing) => listing.id === req.params.listingId
+  );
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Classified listing not found.',
+    });
+  }
+
+  const interactionGuard = getClassifiedPublicInteractionGuard(matchedListing, req.user);
+  if (!interactionGuard.allowed) {
+    return res.status(interactionGuard.statusCode).json({
+      success: false,
+      message: interactionGuard.message,
+    });
+  }
+
   const nextData = await devAppDataStore.updateAppData(async (currentData) => {
-    const currentModuleData = normalizeClassifiedsModule(currentData.moduleData);
-    const listingExists = currentModuleData.classifiedsListings.some(
-      (listing) => listing.id === req.params.listingId
-    );
-
-    if (!listingExists) {
-      return currentData;
-    }
-
     const report = {
       id:
         typeof crypto.randomUUID === 'function'
@@ -2613,22 +2695,10 @@ router.post('/classifieds/listings/:listingId/reports', authenticate, reportLimi
     };
   });
 
-  const normalizedModuleData = normalizeClassifiedsModule(nextData.moduleData);
-  const listingExists = normalizedModuleData.classifiedsListings.some(
-    (listing) => listing.id === req.params.listingId
-  );
-
-  if (!listingExists) {
-    return res.status(404).json({
-      success: false,
-      message: 'Classified listing not found.',
-    });
-  }
-
   return res.json({
     success: true,
     data: {
-      moduleData: normalizedModuleData,
+      moduleData: normalizeClassifiedsModule(nextData.moduleData),
     },
   });
 });
@@ -3953,6 +4023,7 @@ module.exports.__testables = {
   normalizeClassifiedSavedSearchRecord,
   matchesClassifiedSavedSearchFilters,
   buildClassifiedSavedSearchSummary,
+  getClassifiedPublicInteractionGuard,
   normalizeRealEstateLeadRecord,
   normalizeRealEstateVisitRecord,
   buildRealEstateLeadUpdate,

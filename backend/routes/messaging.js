@@ -738,6 +738,22 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
       logger.warn(`Chat lastMessage update failed for ${chatId}: ${chatUpdateError.message}`);
     }
 
+    // Phase 1: Enqueue message for delivery (for offline users & multi-device sync)
+    try {
+      const messageRetryHandler = require('../services/messageRetryHandler');
+      const recipientIds = participantIds.filter(id => !objectIdEquals(id, req.user._id));
+      
+      await messageRetryHandler.enqueueMessage(message, {
+        recipientIds,
+        priority: 'normal',
+        offline: false,
+      });
+      logger.debug(`Message enqueued for delivery: ${message._id}`);
+    } catch (queueErr) {
+      // Log but don't fail - real-time delivery will still work
+      logger.warn(`Failed to enqueue message ${message._id}: ${queueErr.message}`);
+    }
+
     // Try to emit socket event, but don't fail if it doesn't work
     try {
       await emitToChatParticipants(chatId, 'message:received', responseMessage);
@@ -860,6 +876,19 @@ router.put('/messages/:messageId/read', authenticate, attachMessagingUser, async
 
     await message.save();
 
+    // Phase 1: Notify retry handler of delivery confirmation
+    try {
+      const messageRetryHandler = require('../services/messageRetryHandler');
+      await messageRetryHandler.handleDeliveryConfirmation(
+        messageId,
+        req.user._id,
+        'seen'
+      );
+      logger.debug(`Delivery confirmation tracked: ${messageId} seen by ${req.user._id}`);
+    } catch (confirmErr) {
+      logger.warn(`Failed to track delivery confirmation: ${confirmErr.message}`);
+    }
+
     logger.info(`Message marked as read: ${messageId} by ${req.user._id}`);
     res.json({ message });
   } catch (err) {
@@ -902,6 +931,29 @@ router.put('/chats/:chatId/mark-read', authenticate, attachMessagingUser, async 
         multi: true,
       }
     );
+
+    // Phase 1: Notify retry handler of batch delivery confirmations
+    if (result.modifiedCount > 0) {
+      try {
+        const messages = await Message.find({
+          chatId,
+          'deliveryStatus.userId': req.user._id,
+          'deliveryStatus.status': 'seen',
+        });
+        
+        const messageRetryHandler = require('../services/messageRetryHandler');
+        for (const msg of messages) {
+          await messageRetryHandler.handleDeliveryConfirmation(
+            msg._id,
+            req.user._id,
+            'seen'
+          );
+        }
+        logger.debug(`Batch delivery confirmations tracked for ${result.modifiedCount} messages`);
+      } catch (confirmErr) {
+        logger.warn(`Failed to track batch delivery confirmations: ${confirmErr.message}`);
+      }
+    }
 
     logger.info(`All messages in chat ${chatId} marked as read by ${req.user._id}`);
     res.json({ modifiedCount: result.modifiedCount });

@@ -3,7 +3,7 @@ const DiaryEntry = require('../models/DiaryEntry');
 const DiaryEntryVersion = require('../models/DiaryEntryVersion');
 const DiaryVersionTag = require('../models/DiaryVersionTag');
 const DiaryVersionComment = require('../models/DiaryVersionComment');
-const logger = require('../logger');
+const logger = require('./logger');
 
 /**
  * Version Share & Export Utilities - Share and export specific diary versions

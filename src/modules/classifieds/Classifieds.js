@@ -120,6 +120,11 @@ const normalizeListing = (listing, index) => ({
   messages: listing?.messages || [],
 });
 
+const normalizeModerationStatus = (listing = {}) =>
+  String(listing?.moderationStatus || (listing?.verified === false ? "pending" : "approved"))
+    .trim()
+    .toLowerCase();
+
 const getBaseRole = (currentUser) => {
   if (currentUser?.registrationType === "admin" || currentUser?.role === "admin") {
     return "admin";
@@ -164,6 +169,25 @@ const isSameSeller = (listing = {}, seller = {}) => {
   }
 
   return Boolean(sellerIdentity.sellerName) && sellerIdentity.sellerName === listingIdentity.sellerName;
+};
+
+const isListingVisibleToRole = (listing = {}, activeRole = "buyer", currentUser = null) => {
+  if (activeRole === "admin") {
+    return true;
+  }
+
+  if (normalizeModerationStatus(listing) === "approved") {
+    return true;
+  }
+
+  if (activeRole !== "seller") {
+    return false;
+  }
+
+  return isSameSeller(listing, {
+    name: currentUser?.businessName || currentUser?.name,
+    email: currentUser?.email,
+  });
 };
 
 const Classifieds = () => {
@@ -481,12 +505,13 @@ const Classifieds = () => {
 
   const priceRanges = ["Under 10k", "10k - 50k", "50k - 1L", "1L+"];
 
-  const filteredListings = useMemo(() => {
-    const visibleListings = listings.filter((listing) => {
-      if (listing.moderationStatus === "rejected" && activeRole !== "admin") {
-        return false;
-      }
+  const roleVisibleListings = useMemo(
+    () => listings.filter((listing) => isListingVisibleToRole(listing, activeRole, currentUser)),
+    [activeRole, currentUser, listings]
+  );
 
+  const filteredListings = useMemo(() => {
+    const visibleListings = roleVisibleListings.filter((listing) => {
       const matchesSearch =
         !searchText ||
         [
@@ -548,12 +573,11 @@ const Classifieds = () => {
 
     return sortedResults;
   }, [
-    activeRole,
     categoryFilter,
     conditionFilter,
-    listings,
     locationFilter,
     priceFilter,
+    roleVisibleListings,
     searchText,
     sortBy,
   ]);
@@ -646,8 +670,8 @@ const Classifieds = () => {
       return [];
     }
 
-    return listings.filter((listing) => isSameSeller(listing, selectedSellerStore));
-  }, [listings, selectedSellerStore]);
+    return roleVisibleListings.filter((listing) => isSameSeller(listing, selectedSellerStore));
+  }, [roleVisibleListings, selectedSellerStore]);
 
   const sellerStats = useMemo(() => {
     if (!sellerListings.length) return null;
@@ -673,7 +697,7 @@ const Classifieds = () => {
       return;
     }
 
-    const matchingListings = listings.filter((candidate) => isSameSeller(candidate, {
+    const matchingListings = roleVisibleListings.filter((candidate) => isSameSeller(candidate, {
       name: listing.seller,
       email: listing.sellerEmail,
     }));

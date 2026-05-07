@@ -57,8 +57,7 @@ const DiaryEntryVersionSchema = new mongoose.Schema({
   ],
   savedAt: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   },
   changeType: {
     type: String,

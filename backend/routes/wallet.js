@@ -3,6 +3,58 @@ const router = express.Router();
 const Wallet = require('../models/Wallet');
 const { authenticate } = require('../middleware/auth');
 
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
+const VALID_TRANSACTION_TYPES = new Set(['Credit', 'Debit', 'Refund', 'Transfer']);
+
+const parsePositiveAmount = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  return Math.round(amount * 100) / 100;
+};
+
+const parsePagination = (pageValue, limitValue, defaultLimit = DEFAULT_LIMIT) => {
+  const parsedPage = Math.max(1, parseInt(pageValue, 10) || 1);
+  const parsedLimit = Math.min(MAX_LIMIT, Math.max(1, parseInt(limitValue, 10) || defaultLimit));
+
+  return {
+    page: parsedPage,
+    limit: parsedLimit,
+    skip: (parsedPage - 1) * parsedLimit,
+  };
+};
+
+const buildWalletSummary = (wallet = {}) => ({
+  balance: Number(wallet.balance || 0),
+  currency: wallet.currency || 'INR',
+  totalCredited: Number(wallet.totalCredited || 0),
+  totalDebited: Number(wallet.totalDebited || 0),
+  isActive: wallet.isActive !== false,
+  maximumBalance: Number(wallet.maximumBalance || 0),
+  lastTransactionDate: wallet.lastTransactionDate || null,
+});
+
+const buildTransactionId = () =>
+  `txn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const ensureWalletForUser = async (user = {}) => {
+  let wallet = await Wallet.findOne({ userEmail: user.email });
+
+  if (wallet) {
+    return wallet;
+  }
+
+  wallet = new Wallet({
+    userEmail: user.email,
+    userName: user.name,
+  });
+  await wallet.save();
+  return wallet;
+};
+
 // Initialize wallet for new user
 router.post('/init', authenticate, async (req, res) => {
   try {
@@ -12,13 +64,7 @@ router.post('/init', authenticate, async (req, res) => {
       return res.json({ success: true, data: wallet });
     }
 
-    wallet = new Wallet({
-      userEmail: req.user.email,
-      userName: req.user.name,
-      balance: 0,
-    });
-
-    await wallet.save();
+    wallet = await ensureWalletForUser(req.user);
     res.status(201).json({ success: true, data: wallet });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -28,23 +74,11 @@ router.post('/init', authenticate, async (req, res) => {
 // Get wallet balance
 router.get('/balance', authenticate, async (req, res) => {
   try {
-    let wallet = await Wallet.findOne({ userEmail: req.user.email });
-
-    if (!wallet) {
-      wallet = new Wallet({
-        userEmail: req.user.email,
-        userName: req.user.name,
-      });
-      await wallet.save();
-    }
+    const wallet = await ensureWalletForUser(req.user);
 
     res.json({
       success: true,
-      data: {
-        balance: wallet.balance,
-        currency: wallet.currency,
-        isActive: wallet.isActive,
-      },
+      data: buildWalletSummary(wallet),
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -54,37 +88,22 @@ router.get('/balance', authenticate, async (req, res) => {
 // Get wallet details with transactions
 router.get('/details', authenticate, async (req, res) => {
   try {
-    let wallet = await Wallet.findOne({ userEmail: req.user.email });
+    const wallet = await ensureWalletForUser(req.user);
 
-    if (!wallet) {
-      wallet = new Wallet({
-        userEmail: req.user.email,
-        userName: req.user.name,
-      });
-      await wallet.save();
-    }
-
-    const { page = 1, limit = 10 } = req.query;
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = parsePagination(req.query?.page, req.query?.limit);
 
     const transactions = wallet.transactions
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(skip, skip + parseInt(limit));
+      .slice(skip, skip + limit);
 
     res.json({
       success: true,
       data: {
-        wallet: {
-          balance: wallet.balance,
-          currency: wallet.currency,
-          totalCredited: wallet.totalCredited,
-          totalDebited: wallet.totalDebited,
-          isActive: wallet.isActive,
-        },
+        wallet: buildWalletSummary(wallet),
         transactions,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page,
+          limit,
           total: wallet.transactions.length,
         },
       },
@@ -97,18 +116,23 @@ router.get('/details', authenticate, async (req, res) => {
 // Add money to wallet
 router.post('/add-money', authenticate, async (req, res) => {
   try {
-    const { amount } = req.body;
+    const amount = parsePositiveAmount(req.body?.amount);
 
-    if (amount <= 0) {
+    if (!amount) {
       return res.status(400).json({ success: false, error: 'Amount must be positive' });
     }
 
-    let wallet = await Wallet.findOne({ userEmail: req.user.email });
+    const wallet = await ensureWalletForUser(req.user);
 
-    if (!wallet) {
-      wallet = new Wallet({
-        userEmail: req.user.email,
-        userName: req.user.name,
+    if (wallet.isActive === false) {
+      return res.status(403).json({ success: false, error: 'Wallet is inactive' });
+    }
+
+    const maximumBalance = Number(wallet.maximumBalance || 0);
+    if (maximumBalance > 0 && Number(wallet.balance || 0) + amount > maximumBalance) {
+      return res.status(400).json({
+        success: false,
+        error: `Wallet balance cannot exceed ${maximumBalance}`,
       });
     }
 
@@ -118,7 +142,7 @@ router.post('/add-money', authenticate, async (req, res) => {
     wallet.lastTransactionDate = new Date();
 
     wallet.transactions.push({
-      transactionId: `txn-${Date.now()}`,
+      transactionId: buildTransactionId(),
       type: 'Credit',
       amount,
       description: 'Added money to wallet',
@@ -144,16 +168,21 @@ router.post('/add-money', authenticate, async (req, res) => {
 // Use wallet balance for purchase
 router.post('/use', authenticate, async (req, res) => {
   try {
-    const { amount, orderId, description } = req.body;
+    const amount = parsePositiveAmount(req.body?.amount);
+    const { orderId, description } = req.body;
 
-    if (amount <= 0) {
+    if (!amount) {
       return res.status(400).json({ success: false, error: 'Amount must be positive' });
     }
 
-    let wallet = await Wallet.findOne({ userEmail: req.user.email });
+    const wallet = await Wallet.findOne({ userEmail: req.user.email });
 
     if (!wallet) {
       return res.status(404).json({ success: false, error: 'Wallet not found' });
+    }
+
+    if (wallet.isActive === false) {
+      return res.status(403).json({ success: false, error: 'Wallet is inactive' });
     }
 
     if (wallet.balance < amount) {
@@ -166,7 +195,7 @@ router.post('/use', authenticate, async (req, res) => {
     wallet.lastTransactionDate = new Date();
 
     wallet.transactions.push({
-      transactionId: `txn-${Date.now()}`,
+      transactionId: buildTransactionId(),
       type: 'Debit',
       amount,
       description: description || 'Used wallet balance for purchase',
@@ -193,18 +222,24 @@ router.post('/use', authenticate, async (req, res) => {
 // Refund to wallet
 router.post('/refund', authenticate, async (req, res) => {
   try {
-    const { amount, refundId, reason } = req.body;
+    const amount = parsePositiveAmount(req.body?.amount);
+    const { refundId, reason } = req.body;
 
-    if (amount <= 0) {
+    if (!amount) {
       return res.status(400).json({ success: false, error: 'Amount must be positive' });
     }
 
-    let wallet = await Wallet.findOne({ userEmail: req.user.email });
+    const wallet = await ensureWalletForUser(req.user);
 
-    if (!wallet) {
-      wallet = new Wallet({
-        userEmail: req.user.email,
-        userName: req.user.name,
+    if (wallet.isActive === false) {
+      return res.status(403).json({ success: false, error: 'Wallet is inactive' });
+    }
+
+    const maximumBalance = Number(wallet.maximumBalance || 0);
+    if (maximumBalance > 0 && Number(wallet.balance || 0) + amount > maximumBalance) {
+      return res.status(400).json({
+        success: false,
+        error: `Wallet balance cannot exceed ${maximumBalance}`,
       });
     }
 
@@ -214,7 +249,7 @@ router.post('/refund', authenticate, async (req, res) => {
     wallet.lastTransactionDate = new Date();
 
     wallet.transactions.push({
-      transactionId: `txn-${Date.now()}`,
+      transactionId: buildTransactionId(),
       type: 'Refund',
       amount,
       description: reason || 'Refund credited to wallet',
@@ -241,9 +276,10 @@ router.post('/refund', authenticate, async (req, res) => {
 // Get wallet transaction history
 router.get('/transactions/history', authenticate, async (req, res) => {
   try {
-    const { type, page = 1, limit = 20 } = req.query;
+    const { type } = req.query;
+    const { page, limit, skip } = parsePagination(req.query?.page, req.query?.limit, 20);
 
-    let wallet = await Wallet.findOne({ userEmail: req.user.email });
+    const wallet = await Wallet.findOne({ userEmail: req.user.email });
 
     if (!wallet) {
       return res.json({ success: true, data: [] });
@@ -251,21 +287,23 @@ router.get('/transactions/history', authenticate, async (req, res) => {
 
     let transactions = wallet.transactions;
 
-    if (type) {
+    if (type && VALID_TRANSACTION_TYPES.has(type)) {
       transactions = transactions.filter((t) => t.type === type);
     }
 
+    const filteredTotal = transactions.length;
+
     transactions = transactions
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice((page - 1) * limit, page * limit);
+      .slice(skip, skip + limit);
 
     res.json({
       success: true,
       data: transactions,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: wallet.transactions.length,
+        page,
+        limit,
+        total: filteredTotal,
       },
     });
   } catch (error) {

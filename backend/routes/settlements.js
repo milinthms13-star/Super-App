@@ -7,17 +7,37 @@ const express = require('express');
 const router = express.Router();
 const Settlement = require('../models/Settlement');
 const Order = require('../models/Order');
-const SellerAnalytics = require('../models/SellerAnalytics');
 const { authenticate } = require('../middleware/auth');
 const {
   calculateVendorSettlement,
-  generateSettlementReport,
   qualifiesForSettlement,
 } = require('../utils/commissionService');
-const { COMMISSION_CONFIG } = require('../config/constants');
+const { ADMIN_EMAIL, COMMISSION_CONFIG, DEFAULT_LIMIT, MAX_LIMIT } = require('../config/constants');
 const logger = require('../utils/logger');
 
 const roundCurrency = (value) => Math.round(value * 100) / 100;
+const normalizeEmail = (value = '') => String(value || '').trim().toLowerCase();
+const isAdminUser = (req) =>
+  normalizeEmail(req.user?.email) === ADMIN_EMAIL ||
+  String(req.user?.role || req.user?.registrationType || '').trim().toLowerCase() === 'admin';
+const parseDateValue = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+const parsePagination = (pageValue, limitValue) => {
+  const page = Math.max(1, parseInt(pageValue, 10) || 1);
+  const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(limitValue, 10) || DEFAULT_LIMIT));
+
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit,
+  };
+};
 
 /**
  * GET /api/settlements/list
@@ -26,26 +46,31 @@ const roundCurrency = (value) => Math.round(value * 100) / 100;
  */
 router.get('/list', authenticate, async (req, res) => {
   try {
-    const { vendorEmail, status, page = 1, limit = 10, sortBy = '-createdAt' } = req.query;
-    const userEmail = req.user?.email;
+    const { vendorEmail, status, sortBy = '-createdAt' } = req.query;
+    const userEmail = normalizeEmail(req.user?.email);
+    const { page, limit, skip } = parsePagination(req.query?.page, req.query?.limit);
 
     // Vendors can only view their own settlements
     const query = {};
-    if (!userEmail?.includes('admin')) {
+    if (!isAdminUser(req)) {
       query.vendorEmail = userEmail;
     } else if (vendorEmail) {
-      query.vendorEmail = vendorEmail.toLowerCase();
+      query.vendorEmail = normalizeEmail(vendorEmail);
     }
 
     if (status) {
+      if (!COMMISSION_CONFIG.SETTLEMENT_STATUSES.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid status. Allowed values: ${COMMISSION_CONFIG.SETTLEMENT_STATUSES.join(', ')}`,
+        });
+      }
       query.status = status;
     }
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
     const settlements = await Settlement.find(query)
       .sort(sortBy)
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(limit)
       .lean();
 
     const total = await Settlement.countDocuments(query);
@@ -54,10 +79,10 @@ router.get('/list', authenticate, async (req, res) => {
       success: true,
       data: settlements,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page,
+        limit,
         total,
-        pages: Math.ceil(total / parseInt(limit)),
+        pages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
@@ -73,7 +98,7 @@ router.get('/list', authenticate, async (req, res) => {
 router.get('/:settlementId', authenticate, async (req, res) => {
   try {
     const { settlementId } = req.params;
-    const userEmail = req.user?.email;
+    const userEmail = normalizeEmail(req.user?.email);
 
     const settlement = await Settlement.findOne({ settlementId });
 
@@ -82,7 +107,7 @@ router.get('/:settlementId', authenticate, async (req, res) => {
     }
 
     // Vendors can only view their own settlements
-    if (!userEmail?.includes('admin') && settlement.vendorEmail !== userEmail) {
+    if (!isAdminUser(req) && normalizeEmail(settlement.vendorEmail) !== userEmail) {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
@@ -100,23 +125,42 @@ router.get('/:settlementId', authenticate, async (req, res) => {
  */
 router.post('/generate', authenticate, async (req, res) => {
   try {
-    const userEmail = req.user?.email;
-    if (!userEmail?.includes('admin')) {
+    const userEmail = normalizeEmail(req.user?.email);
+    if (!isAdminUser(req)) {
       return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
     const { vendorEmail, startDate, endDate } = req.body;
+    const normalizedVendorEmail = normalizeEmail(vendorEmail);
 
-    if (!vendorEmail) {
+    if (!normalizedVendorEmail) {
       return res.status(400).json({ success: false, message: 'vendorEmail is required' });
     }
 
-    const periodStart = new Date(startDate || Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: last 7 days
-    const periodEnd = new Date(endDate || Date.now());
+    const parsedStartDate = parseDateValue(startDate);
+    const parsedEndDate = parseDateValue(endDate);
+    const periodStart =
+      parsedStartDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const periodEnd = parsedEndDate || new Date();
+
+    if (startDate && !parsedStartDate) {
+      return res.status(400).json({ success: false, message: 'startDate is invalid' });
+    }
+
+    if (endDate && !parsedEndDate) {
+      return res.status(400).json({ success: false, message: 'endDate is invalid' });
+    }
+
+    if (periodEnd < periodStart) {
+      return res.status(400).json({
+        success: false,
+        message: 'endDate must be on or after startDate',
+      });
+    }
 
     // Get all orders for this vendor in the period
     const orders = await Order.find({
-      'items.sellerEmail': vendorEmail.toLowerCase(),
+      'items.sellerEmail': normalizedVendorEmail,
       createdAt: { $gte: periodStart, $lte: periodEnd },
     });
 
@@ -128,7 +172,7 @@ router.post('/generate', authenticate, async (req, res) => {
     }
 
     // Calculate settlement
-    const calculatedSettlement = calculateVendorSettlement(orders, vendorEmail, {
+    const calculatedSettlement = calculateVendorSettlement(orders, normalizedVendorEmail, {
       periodStartDate: periodStart,
       periodEndDate: periodEnd,
     });
@@ -155,7 +199,7 @@ router.post('/generate', authenticate, async (req, res) => {
 
     // Check for existing settlement in same period
     const existingSettlement = await Settlement.findOne({
-      vendorEmail: vendorEmail.toLowerCase(),
+      vendorEmail: normalizedVendorEmail,
       periodStartDate: { $lte: periodStart },
       periodEndDate: { $gte: periodEnd },
     });
@@ -169,7 +213,7 @@ router.post('/generate', authenticate, async (req, res) => {
 
     // Create settlement document
     const newSettlement = new Settlement({
-      vendorEmail: vendorEmail.toLowerCase(),
+      vendorEmail: normalizedVendorEmail,
       vendorName: calculatedSettlement.orders[0]?.sellerName || '',
       businessName: calculatedSettlement.orders[0]?.businessName || '',
       periodStartDate: periodStart,
@@ -182,7 +226,7 @@ router.post('/generate', authenticate, async (req, res) => {
 
     await newSettlement.save();
 
-    logger.info(`Settlement generated: ${newSettlement.settlementId} for ${vendorEmail}`);
+    logger.info(`Settlement generated: ${newSettlement.settlementId} for ${normalizedVendorEmail}`);
 
     return res.json({
       success: true,
@@ -202,8 +246,8 @@ router.post('/generate', authenticate, async (req, res) => {
  */
 router.patch('/:settlementId/mark-completed', authenticate, async (req, res) => {
   try {
-    const userEmail = req.user?.email;
-    if (!userEmail?.includes('admin')) {
+    const userEmail = normalizeEmail(req.user?.email);
+    if (!isAdminUser(req)) {
       return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
@@ -253,8 +297,8 @@ router.patch('/:settlementId/mark-completed', authenticate, async (req, res) => 
  */
 router.patch('/:settlementId/update-status', authenticate, async (req, res) => {
   try {
-    const userEmail = req.user?.email;
-    if (!userEmail?.includes('admin')) {
+    const userEmail = normalizeEmail(req.user?.email);
+    if (!isAdminUser(req)) {
       return res.status(403).json({ success: false, message: 'Admin access required' });
     }
 
@@ -301,7 +345,7 @@ router.patch('/:settlementId/update-status', authenticate, async (req, res) => {
  */
 router.get('/dashboard/vendor', authenticate, async (req, res) => {
   try {
-    const vendorEmail = req.user?.email;
+    const vendorEmail = normalizeEmail(req.user?.email);
 
     const settlements = await Settlement.find({ vendorEmail })
       .sort('-createdAt')
@@ -313,7 +357,7 @@ router.get('/dashboard/vendor', authenticate, async (req, res) => {
       pending: settlements.filter((s) => s.status === 'Pending').length,
       processing: settlements.filter((s) => s.status === 'Processing').length,
       completed: settlements.filter((s) => s.status === 'Completed').length,
-      failed: settlements.filter((s) => s.status === 'Failed').number,
+      failed: settlements.filter((s) => s.status === 'Failed').length,
       onHold: settlements.filter((s) => s.status === 'OnHold').length,
       totalEarnings: roundCurrency(
         settlements

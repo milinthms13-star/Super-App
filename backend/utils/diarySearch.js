@@ -22,14 +22,57 @@ const SEARCH_CONFIG = {
   },
 };
 
+const escapeRegExp = (value = '') =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const runDistinctQuery = async (queryBuilder, field, limit = 10) => {
+  const distinctQuery = queryBuilder.distinct(field);
+
+  if (distinctQuery && typeof distinctQuery.limit === 'function') {
+    return distinctQuery.limit(limit);
+  }
+
+  const values = await distinctQuery;
+  return Array.isArray(values) ? values.slice(0, limit) : [];
+};
+
+const finalizeQuery = async (
+  queryLike,
+  { select, sort, limit, skip } = {}
+) => {
+  let cursor = queryLike;
+
+  if (select && typeof cursor?.select === 'function') {
+    cursor = cursor.select(select);
+  }
+  if (sort && typeof cursor?.sort === 'function') {
+    cursor = cursor.sort(sort);
+  }
+  if (typeof limit === 'number' && typeof cursor?.limit === 'function') {
+    cursor = cursor.limit(limit);
+  }
+  if (typeof skip === 'number' && typeof cursor?.skip === 'function') {
+    cursor = cursor.skip(skip);
+  }
+
+  if (typeof cursor?.exec === 'function') {
+    return cursor.exec();
+  }
+  if (typeof cursor?.then === 'function') {
+    return cursor;
+  }
+
+  return cursor;
+};
+
 /**
  * Full-text search across diary entries
- * @param {string} query - Search query
  * @param {string} userId - User ID
+ * @param {string} query - Search query
  * @param {object} options - Search options
  * @returns {Promise<Array>} - Search results with relevance scores
  */
-async function searchEntries(query, userId, options = {}) {
+async function searchEntries(userId, query, options = {}) {
   try {
     if (!query || query.trim().length < SEARCH_CONFIG.minSearchLength) {
       return { results: [], total: 0, query };
@@ -100,19 +143,21 @@ async function searchEntries(query, userId, options = {}) {
 
 /**
  * Search with content highlighting
- * @param {string} query - Search query
  * @param {string} userId - User ID
+ * @param {string} query - Search query
  * @param {object} options - Search options
  * @returns {Promise<Array>} - Results with highlighted content
  */
-async function searchWithHighlight(query, userId, options = {}) {
+async function searchWithHighlight(userId, query, options = {}) {
   try {
-    const results = await searchEntries(query, userId, options);
+    const results = await searchEntries(userId, query, options);
 
     // Add content preview with highlighting
     const enrichedResults = await Promise.all(
       results.results.map(async (result) => {
-        const entry = await DiaryEntry.findById(result._id).select('content');
+        const entry = await finalizeQuery(DiaryEntry.findById(result._id), {
+          select: 'content',
+        });
         const highlighted = highlightSearchTerms(entry.content, query);
 
         return {
@@ -141,7 +186,7 @@ async function searchWithHighlight(query, userId, options = {}) {
  */
 function highlightSearchTerms(text, query) {
   if (!text) return '';
-  const regex = new RegExp(`(${query})`, 'gi');
+  const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
   return text.replace(regex, '<mark>$1</mark>');
 }
 
@@ -216,11 +261,12 @@ async function filterEntries(userId, filters = {}) {
     }
 
     // Execute query
-    const results = await DiaryEntry.find(mongoQuery)
-      .sort({ createdAt: -1 })
-      .limit(filters.limit || 100)
-      .skip(filters.skip || 0)
-      .select('title createdAt updatedAt tags sentiment wordCount');
+    const results = await finalizeQuery(DiaryEntry.find(mongoQuery), {
+      sort: { createdAt: -1 },
+      limit: filters.limit || 100,
+      skip: filters.skip || 0,
+      select: 'title createdAt updatedAt tags sentiment wordCount',
+    });
 
     const total = await DiaryEntry.countDocuments(mongoQuery);
 
@@ -249,60 +295,88 @@ async function getSearchSuggestions(query, userId, type = 'all') {
       return [];
     }
 
-    const searchRegex = new RegExp(`^${query}`, 'i');
+    const searchRegex = new RegExp(`^${escapeRegExp(query)}`, 'i');
     const suggestions = [];
+    let encounteredError = false;
 
     // Tag suggestions
     if (type === 'all' || type === 'tags') {
-      const tags = await DiaryVersionTag.find({
-        name: searchRegex,
-      })
-        .distinct('name')
-        .limit(10);
-      suggestions.push(
-        ...tags.map((tag) => ({
-          text: tag,
-          type: 'tag',
-          category: 'Tags',
-        }))
-      );
+      try {
+        const tags = await runDistinctQuery(
+          DiaryVersionTag.find({
+            name: searchRegex,
+          }),
+          'name',
+          10
+        );
+
+        suggestions.push(
+          ...tags.map((tag) => ({
+            text: tag,
+            type: 'tag',
+            category: 'Tags',
+          }))
+        );
+      } catch (error) {
+        logger.error('Get tag suggestions error:', error);
+        encounteredError = true;
+      }
     }
 
     // Title suggestions
     if (type === 'all' || type === 'titles') {
-      const titles = await DiaryEntry.find({
-        userId,
-        title: searchRegex,
-        isDeleted: false,
-      })
-        .distinct('title')
-        .limit(10);
-      suggestions.push(
-        ...titles.map((title) => ({
-          text: title,
-          type: 'title',
-          category: 'Titles',
-        }))
-      );
+      try {
+        const titles = await runDistinctQuery(
+          DiaryEntry.find({
+            userId,
+            title: searchRegex,
+            isDeleted: false,
+          }),
+          'title',
+          10
+        );
+
+        suggestions.push(
+          ...titles.map((title) => ({
+            text: title,
+            type: 'title',
+            category: 'Titles',
+          }))
+        );
+      } catch (error) {
+        logger.error('Get title suggestions error:', error);
+        encounteredError = true;
+      }
     }
 
     // Content keywords
     if (type === 'all' || type === 'content') {
-      // Simple keyword extraction from recent entries
-      const entries = await DiaryEntry.find({ userId, isDeleted: false })
-        .select('content')
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .exec();
+      try {
+        const recentEntriesQuery = DiaryEntry.find({ userId, isDeleted: false });
+        if (typeof recentEntriesQuery.select === 'function') {
+          const entries = await recentEntriesQuery
+            .select('content')
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .exec();
 
-      const keywords = extractKeywords(entries.map((e) => e.content), query);
-      suggestions.push(
-        ...keywords.map((keyword) => ({
-          text: keyword,
-          type: 'keyword',
-          category: 'Keywords',
-        }))
-      );
+          const keywords = extractKeywords(entries.map((e) => e.content), query);
+          suggestions.push(
+            ...keywords.map((keyword) => ({
+              text: keyword,
+              type: 'keyword',
+              category: 'Keywords',
+            }))
+          );
+        }
+      } catch (error) {
+        logger.error('Get keyword suggestions error:', error);
+        encounteredError = true;
+      }
+    }
+
+    if (encounteredError) {
+      return [];
     }
 
     return suggestions.slice(0, 20); // Limit total suggestions
@@ -386,7 +460,9 @@ async function saveSearchHistory(userId, query, resultCount) {
 async function getSearchHistory(userId) {
   try {
     const User = require('../models/User');
-    const user = await User.findById(userId).select('searchHistory');
+    const user = await finalizeQuery(User.findById(userId), {
+      select: 'searchHistory',
+    });
 
     if (!user || !user.searchHistory) {
       return [];
@@ -397,7 +473,7 @@ async function getSearchHistory(userId) {
       .slice(0, 20);
   } catch (error) {
     logger.error('Get search history error:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -442,7 +518,7 @@ async function saveFilter(userId, name, filterConfig) {
     }
 
     const filter = {
-      _id: require('mongoose').Types.ObjectId(),
+      _id: new (require('mongoose').Types.ObjectId)(),
       name,
       config: filterConfig,
       createdAt: new Date(),
@@ -467,7 +543,9 @@ async function saveFilter(userId, name, filterConfig) {
 async function getSavedFilters(userId) {
   try {
     const User = require('../models/User');
-    const user = await User.findById(userId).select('savedFilters');
+    const user = await finalizeQuery(User.findById(userId), {
+      select: 'savedFilters',
+    });
 
     return (user?.savedFilters || []).sort((a, b) => b.useCount - a.useCount);
   } catch (error) {
@@ -528,9 +606,13 @@ async function deleteSavedFilter(userId, filterId) {
  */
 async function getFilterSuggestions(userId) {
   try {
-    const entries = await DiaryEntry.find({ userId, isDeleted: false })
-      .select('tags sentiment createdAt')
-      .limit(100);
+    const entries = await finalizeQuery(
+      DiaryEntry.find({ userId, isDeleted: false }),
+      {
+        select: 'tags sentiment createdAt',
+        limit: 100,
+      }
+    );
 
     if (entries.length === 0) {
       return {

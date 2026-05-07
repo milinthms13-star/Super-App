@@ -40,6 +40,15 @@
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+.composer-notice {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  background: #eef4ff;
+  border-radius: 10px;
+  color: #3557b7;
+  font-size: 14px;
+}
+
 .image-previews {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
@@ -80,6 +89,31 @@
 
 .remove-image-btn:hover {
   background: rgba(0, 0, 0, 0.8);
+}
+
+.schedule-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.schedule-controls label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.schedule-controls input {
+  border: 2px solid #f0f0f0;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font: inherit;
+}
+
+.schedule-controls input:focus {
+  outline: none;
+  border-color: #667eea;
 }
 
 .post-actions {

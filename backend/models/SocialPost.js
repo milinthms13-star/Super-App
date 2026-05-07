@@ -10,9 +10,9 @@ const SocialPostSchema = new mongoose.Schema(
     },
     content: {
       type: String,
-      required: true,
       trim: true,
       maxlength: 5000,
+      default: '',
     },
     images: [
       {
@@ -121,6 +121,21 @@ const SocialPostSchema = new mongoose.Schema(
       default: '',
     },
     tags: [String],
+    status: {
+      type: String,
+      enum: ['published', 'draft', 'scheduled'],
+      default: 'published',
+      index: true,
+    },
+    scheduledFor: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    publishedAt: {
+      type: Date,
+      default: null,
+    },
     isEdited: {
       type: Boolean,
       default: false,

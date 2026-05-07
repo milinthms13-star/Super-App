@@ -6,18 +6,23 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
-const { checkBlockStatus } = require('../middleware/matrimonialIntegration');
+const {
+  ensureMatrimonialProfileContext,
+  checkBlockStatus,
+} = require('../middleware/matrimonialIntegration');
 const commFeatures = require('../utils/communicationFeatures');
 const { moderateMessage } = require('../utils/chatModerationService');
+
+router.use(authenticateToken, ensureMatrimonialProfileContext);
 
 /**
  * POST /api/matrimonial/communication/typing
  * Update typing indicator
  */
-router.post('/typing', authenticateToken, checkBlockStatus, async (req, res) => {
+router.post('/typing', checkBlockStatus, async (req, res) => {
   try {
     const { toProfileId, isTyping } = req.body;
-    const fromProfileId = req.user?.matrimonialProfileId;
+    const fromProfileId = req.matrimonialProfileId;
 
     if (!fromProfileId || !toProfileId) {
       return res.status(400).json({ error: 'Missing profile IDs' });
@@ -44,7 +49,7 @@ router.post('/typing', authenticateToken, checkBlockStatus, async (req, res) => 
  * POST /api/matrimonial/communication/read-receipt
  * Mark message as read
  */
-router.post('/read-receipt', authenticateToken, async (req, res) => {
+router.post('/read-receipt', async (req, res) => {
   try {
     const { messageId } = req.body;
     const readerId = req.user?._id;
@@ -69,10 +74,10 @@ router.post('/read-receipt', authenticateToken, async (req, res) => {
  * POST /api/matrimonial/communication/voice-call
  * Initiate voice call
  */
-router.post('/voice-call', authenticateToken, checkBlockStatus, async (req, res) => {
+router.post('/voice-call', checkBlockStatus, async (req, res) => {
   try {
     const { toProfileId } = req.body;
-    const fromProfileId = req.user?.matrimonialProfileId;
+    const fromProfileId = req.matrimonialProfileId;
 
     if (!toProfileId) {
       return res.status(400).json({ error: 'Recipient profile ID required' });
@@ -96,10 +101,10 @@ router.post('/voice-call', authenticateToken, checkBlockStatus, async (req, res)
  * POST /api/matrimonial/communication/video-call
  * Initiate video call
  */
-router.post('/video-call', authenticateToken, checkBlockStatus, async (req, res) => {
+router.post('/video-call', checkBlockStatus, async (req, res) => {
   try {
     const { toProfileId } = req.body;
-    const fromProfileId = req.user?.matrimonialProfileId;
+    const fromProfileId = req.matrimonialProfileId;
 
     if (!toProfileId) {
       return res.status(400).json({ error: 'Recipient profile ID required' });
@@ -130,7 +135,7 @@ router.post('/video-call', authenticateToken, checkBlockStatus, async (req, res)
  * PATCH /api/matrimonial/communication/call/:callId/status
  * Update call status
  */
-router.patch('/call/:callId/status', authenticateToken, async (req, res) => {
+router.patch('/call/:callId/status', async (req, res) => {
   try {
     const { callId } = req.params;
     const { status, duration, rejectionReason, callQuality } = req.body;
@@ -155,10 +160,10 @@ router.patch('/call/:callId/status', authenticateToken, async (req, res) => {
  * POST /api/matrimonial/communication/schedule-call
  * Schedule a call for later
  */
-router.post('/schedule-call', authenticateToken, async (req, res) => {
+router.post('/schedule-call', async (req, res) => {
   try {
     const { toProfileId, scheduledTime, callType } = req.body;
-    const fromProfileId = req.user?.matrimonialProfileId;
+    const fromProfileId = req.matrimonialProfileId;
 
     if (!toProfileId || !scheduledTime) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -186,10 +191,10 @@ router.post('/schedule-call', authenticateToken, async (req, res) => {
  * POST /api/matrimonial/communication/voice-note
  * Upload voice note
  */
-router.post('/voice-note', authenticateToken, checkBlockStatus, async (req, res) => {
+router.post('/voice-note', checkBlockStatus, async (req, res) => {
   try {
     const { toProfileId, audioUrl, duration } = req.body;
-    const fromProfileId = req.user?.matrimonialProfileId;
+    const fromProfileId = req.matrimonialProfileId;
 
     if (!toProfileId || !audioUrl) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -217,7 +222,7 @@ router.post('/voice-note', authenticateToken, checkBlockStatus, async (req, res)
  * GET /api/matrimonial/communication/whatsapp-link
  * Get WhatsApp integration link
  */
-router.get('/whatsapp-link', authenticateToken, async (req, res) => {
+router.get('/whatsapp-link', async (req, res) => {
   try {
     const { phoneNumber, message } = req.query;
 
@@ -241,7 +246,7 @@ router.get('/whatsapp-link', authenticateToken, async (req, res) => {
  * GET /api/matrimonial/communication/features
  * Get available communication features for user
  */
-router.get('/features', authenticateToken, async (req, res) => {
+router.get('/features', async (req, res) => {
   try {
     const userEmail = req.user?.email;
     const features = await commFeatures.getCommunicationFeatures(userEmail);
@@ -260,9 +265,9 @@ router.get('/features', authenticateToken, async (req, res) => {
  * GET /api/matrimonial/communication/call-history
  * Get user's call history
  */
-router.get('/call-history', authenticateToken, async (req, res) => {
+router.get('/call-history', async (req, res) => {
   try {
-    const profileId = req.user?.matrimonialProfileId;
+    const profileId = req.matrimonialProfileId;
     const limit = parseInt(req.query.limit) || 20;
 
     const history = await commFeatures.getCallHistory(profileId, limit);
@@ -281,9 +286,9 @@ router.get('/call-history', authenticateToken, async (req, res) => {
  * GET /api/matrimonial/communication/call-stats
  * Get call statistics
  */
-router.get('/call-stats', authenticateToken, async (req, res) => {
+router.get('/call-stats', async (req, res) => {
   try {
-    const profileId = req.user?.matrimonialProfileId;
+    const profileId = req.matrimonialProfileId;
     const stats = await commFeatures.getCallStatistics(profileId);
 
     res.json({

@@ -89,7 +89,6 @@ const DiaryVersionCommentSchema = new mongoose.Schema({
 DiaryVersionCommentSchema.index({ entryId: 1, versionId: 1, createdAt: -1 });
 DiaryVersionCommentSchema.index({ userId: 1, createdAt: -1 });
 DiaryVersionCommentSchema.index({ versionId: 1, isDeleted: 1 });
-DiaryVersionCommentSchema.index({ parentCommentId: 1 });
 
 // Virtual for reply count
 DiaryVersionCommentSchema.virtual('replyCount').get(function() {

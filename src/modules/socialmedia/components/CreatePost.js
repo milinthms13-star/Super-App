@@ -1,17 +1,86 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../../../contexts/AppContext";
 import { getAvatarSrc, normalizeSocialUser } from "../socialData";
 import "../styles/CreatePost.css";
 
-const CreatePost = ({ onPostCreated }) => {
+const SOCIAL_DRAFT_STORAGE_PREFIX = "vibehub-social-composer";
+
+const buildDraftStorageKey = (userId) =>
+  `${SOCIAL_DRAFT_STORAGE_PREFIX}:${String(userId || "guest")}`;
+
+const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
   const { currentUser } = useApp();
   const [content, setContent] = useState("");
   const [images, setImages] = useState([]);
   const [privacy, setPrivacy] = useState("public");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState("");
+  const [scheduleAt, setScheduleAt] = useState("");
+  const [showScheduleOptions, setShowScheduleOptions] = useState(false);
+  const [composerNotice, setComposerNotice] = useState("");
   const fileInputRef = useRef(null);
+  const restoredDraftRef = useRef(false);
 
   const viewer = normalizeSocialUser(currentUser, "You");
+  const draftStorageKey = useMemo(
+    () => buildDraftStorageKey(currentUser?._id || currentUser?.id),
+    [currentUser]
+  );
+
+  const resetComposer = () => {
+    setContent("");
+    setImages([]);
+    setPrivacy("public");
+    setScheduleAt("");
+    setShowScheduleOptions(false);
+    setComposerNotice("");
+    restoredDraftRef.current = false;
+
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(draftStorageKey);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const storedDraft = window.localStorage.getItem(draftStorageKey);
+      if (!storedDraft) {
+        return;
+      }
+
+      const parsedDraft = JSON.parse(storedDraft);
+      setContent(String(parsedDraft?.content || ""));
+      setImages(Array.isArray(parsedDraft?.images) ? parsedDraft.images : []);
+      setPrivacy(String(parsedDraft?.privacy || "public"));
+      restoredDraftRef.current = true;
+      setComposerNotice("Recovered your local draft from the last session.");
+    } catch (error) {
+      // Keep the composer usable even if local draft restoration fails.
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const payload = {
+      content,
+      images,
+      privacy,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (!content.trim() && images.length === 0) {
+      window.localStorage.removeItem(draftStorageKey);
+      return;
+    }
+
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+  }, [content, draftStorageKey, images, privacy]);
 
   const handleImageSelect = (event) => {
     const files = Array.from(event.target.files || []);
@@ -22,8 +91,9 @@ const CreatePost = ({ onPostCreated }) => {
         setImages((current) => [
           ...current,
           {
-            file,
-            preview: loadEvent.target?.result || "",
+            fileName: file.name,
+            mimeType: file.type || "image/*",
+            url: loadEvent.target?.result || "",
           },
         ]);
       };
@@ -37,35 +107,86 @@ const CreatePost = ({ onPostCreated }) => {
     setImages((current) => current.filter((_, imageIndex) => imageIndex !== index));
   };
 
-  const handleSubmit = () => {
+  const buildPostPayload = () => ({
+    content: content.trim(),
+    images: images.map((image) => ({
+      url: image.url,
+      caption: "",
+    })),
+    privacy,
+    hashtags: (content.match(/#\w+/g) || []).map((item) => item.replace("#", "")),
+  });
+
+  const validateComposer = (action = "publish") => {
     if (!content.trim() && images.length === 0) {
-      window.alert("Please add some content or images.");
+      window.alert(
+        action === "draft"
+          ? "Add some content or media before saving this draft."
+          : "Please add some content or images."
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  const runComposerAction = async (mode, callback, extraPayload = {}, successMessage = "") => {
+    if (!validateComposer(mode)) {
       return;
     }
 
-    setLoading(true);
+    if (typeof callback !== "function") {
+      return;
+    }
 
-    const createdPost = {
-      _id: `post-${Date.now()}`,
-      author: viewer,
-      content: content.trim(),
-      images: images.map((image) => ({ url: image.preview })),
-      likeCount: 0,
-      commentCount: 0,
-      shareCount: 0,
-      liked: false,
-      saved: false,
-      commentsList: [],
-      hashtags: (content.match(/#\w+/g) || []).map((item) => item.replace("#", "")),
-      createdAt: new Date().toISOString(),
-      privacy,
-    };
+    setLoading(mode);
 
-    onPostCreated(createdPost);
-    setContent("");
-    setImages([]);
-    setPrivacy("public");
-    setLoading(false);
+    try {
+      await callback({
+        ...buildPostPayload(),
+        ...extraPayload,
+      });
+
+      resetComposer();
+      if (successMessage) {
+        setComposerNotice(successMessage);
+      }
+    } catch (error) {
+      setComposerNotice(
+        error?.response?.data?.message || error?.message || "We could not save this post right now."
+      );
+    } finally {
+      setLoading("");
+    }
+  };
+
+  const handlePublish = () =>
+    runComposerAction("publish", onPostCreated, {}, "Post published successfully.");
+
+  const handleSaveDraft = () =>
+    runComposerAction("draft", onSaveDraft, { status: "draft" }, "Draft saved.");
+
+  const handleSchedule = () => {
+    if (!scheduleAt) {
+      window.alert("Choose a future time for the scheduled post.");
+      return;
+    }
+
+    const scheduledFor = new Date(scheduleAt);
+    if (Number.isNaN(scheduledFor.getTime()) || scheduledFor.getTime() <= Date.now()) {
+      window.alert("Scheduled posts need a future publish time.");
+      return;
+    }
+
+    runComposerAction(
+      "schedule",
+      onSchedulePost,
+      {
+        status: "scheduled",
+        scheduledFor: scheduledFor.toISOString(),
+      },
+      "Post scheduled successfully."
+    );
   };
 
   return (
@@ -85,16 +206,30 @@ const CreatePost = ({ onPostCreated }) => {
         />
       </div>
 
+      {composerNotice ? <p className="composer-notice">{composerNotice}</p> : null}
+
       {images.length > 0 ? (
         <div className="image-previews">
           {images.map((image, index) => (
-            <div key={`${image.file?.name || "preview"}-${index}`} className="image-preview-item">
-              <img src={image.preview} alt={`Preview ${index + 1}`} />
-              <button className="remove-image-btn" onClick={() => removeImage(index)}>
+            <div key={`${image.fileName || "preview"}-${index}`} className="image-preview-item">
+              <img src={image.url} alt={`Preview ${index + 1}`} />
+              <button className="remove-image-btn" onClick={() => removeImage(index)} type="button">
                 X
               </button>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {showScheduleOptions ? (
+        <div className="schedule-controls">
+          <label htmlFor="social-schedule-at">Schedule publish time</label>
+          <input
+            id="social-schedule-at"
+            type="datetime-local"
+            value={scheduleAt}
+            onChange={(event) => setScheduleAt(event.target.value)}
+          />
         </div>
       ) : null}
 
@@ -103,6 +238,7 @@ const CreatePost = ({ onPostCreated }) => {
           className="action-btn"
           onClick={() => fileInputRef.current?.click()}
           title="Add photos"
+          type="button"
         >
           Photo
         </button>
@@ -126,11 +262,41 @@ const CreatePost = ({ onPostCreated }) => {
         </select>
 
         <button
-          className="submit-btn"
-          onClick={handleSubmit}
-          disabled={loading || (!content.trim() && images.length === 0)}
+          className="action-btn"
+          onClick={handleSaveDraft}
+          disabled={Boolean(loading)}
+          type="button"
         >
-          {loading ? "Posting..." : "Post"}
+          {loading === "draft" ? "Saving..." : "Save Draft"}
+        </button>
+
+        <button
+          className="action-btn"
+          onClick={() => setShowScheduleOptions((current) => !current)}
+          disabled={Boolean(loading)}
+          type="button"
+        >
+          {showScheduleOptions ? "Hide Schedule" : "Schedule"}
+        </button>
+
+        {showScheduleOptions ? (
+          <button
+            className="action-btn"
+            onClick={handleSchedule}
+            disabled={Boolean(loading)}
+            type="button"
+          >
+            {loading === "schedule" ? "Scheduling..." : "Confirm Schedule"}
+          </button>
+        ) : null}
+
+        <button
+          className="submit-btn"
+          onClick={handlePublish}
+          disabled={Boolean(loading) || (!content.trim() && images.length === 0)}
+          type="button"
+        >
+          {loading === "publish" ? "Posting..." : "Post"}
         </button>
       </div>
     </div>

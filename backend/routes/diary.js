@@ -4118,11 +4118,11 @@ router.get('/analytics/insights', async (req, res) => {
     if (entries.length === 0) {
       return res.json({
         success: true,
-        data: {
-          insights: [],
+        data: [],
+        meta: {
           message: 'Not enough data for insights',
           period: `${daysBack} days`
-        }
+        },
       });
     }
 
@@ -4203,8 +4203,8 @@ router.get('/analytics/insights', async (req, res) => {
 
     const response = {
       success: true,
-      data: {
-        insights,
+      data: insights,
+      meta: {
         analytics: {
           writingStats,
           moodStats,
@@ -4212,7 +4212,7 @@ router.get('/analytics/insights', async (req, res) => {
           streakStats
         },
         period: `${daysBack} days`
-      }
+      },
     };
 
     await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
@@ -4223,14 +4223,6 @@ router.get('/analytics/insights', async (req, res) => {
       success: false,
       message: 'Failed to generate insights',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-module.exports = router;
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch filter suggestions'
     });
   }
 });

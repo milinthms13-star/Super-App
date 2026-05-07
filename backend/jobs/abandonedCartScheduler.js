@@ -15,6 +15,9 @@ const {
   generateReminderEmailTemplate,
 } = require('../utils/abandonedCartService');
 const logger = require('../utils/logger');
+const ABANDONED_CART_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+let abandonedCartInterval = null;
 
 /**
  * Send reminder for abandoned cart
@@ -153,15 +156,33 @@ const processAbandonedCarts = async () => {
  * For production, consider using bull-mq or node-cron
  */
 const scheduleAbandonedCartReminders = () => {
-  const INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+  if (abandonedCartInterval) {
+    logger.warn('Abandoned cart reminder scheduler is already running');
+    return abandonedCartInterval;
+  }
 
   logger.info('Scheduling abandoned cart reminder job every 6 hours');
 
   // Run once immediately
-  processAbandonedCarts();
+  void processAbandonedCarts();
 
   // Then schedule recurring
-  setInterval(processAbandonedCarts, INTERVAL_MS);
+  abandonedCartInterval = setInterval(() => {
+    void processAbandonedCarts();
+  }, ABANDONED_CART_INTERVAL_MS);
+
+  return abandonedCartInterval;
+};
+
+const stopAbandonedCartReminders = () => {
+  if (!abandonedCartInterval) {
+    logger.warn('Abandoned cart reminder scheduler is not running');
+    return;
+  }
+
+  clearInterval(abandonedCartInterval);
+  abandonedCartInterval = null;
+  logger.info('Abandoned cart reminder scheduler stopped');
 };
 
 module.exports = {
@@ -169,4 +190,5 @@ module.exports = {
   expireOldCarts,
   processAbandonedCarts,
   scheduleAbandonedCartReminders,
+  stopAbandonedCartReminders,
 };

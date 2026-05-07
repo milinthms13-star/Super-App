@@ -1,5 +1,5 @@
 const DiaryVersionTag = require('../models/DiaryVersionTag');
-const logger = require('../logger');
+const logger = require('./logger');
 
 /**
  * Version Tag Utilities - Manage tags for diary entry versions

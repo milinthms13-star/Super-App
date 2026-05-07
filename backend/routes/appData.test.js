@@ -178,6 +178,59 @@ describe('classifieds app-data helpers', () => {
     ]);
     expect(summary.matchedListingIds).toEqual(['cl-new', 'cl-older']);
   });
+
+  test('guards classifieds buyer interactions against hidden or owned listings', () => {
+    const { getClassifiedPublicInteractionGuard } = appDataRouter.__testables;
+
+    expect(
+      getClassifiedPublicInteractionGuard(
+        {
+          id: 'cl-approved',
+          sellerEmail: 'seller@example.com',
+          moderationStatus: 'approved',
+        },
+        {
+          email: 'buyer@example.com',
+        }
+      )
+    ).toEqual({ allowed: true });
+
+    expect(
+      getClassifiedPublicInteractionGuard(
+        {
+          id: 'cl-owned',
+          sellerEmail: 'seller@example.com',
+          moderationStatus: 'approved',
+        },
+        {
+          email: 'seller@example.com',
+        }
+      )
+    ).toEqual(
+      expect.objectContaining({
+        allowed: false,
+        statusCode: 400,
+      })
+    );
+
+    expect(
+      getClassifiedPublicInteractionGuard(
+        {
+          id: 'cl-pending',
+          sellerEmail: 'seller@example.com',
+          moderationStatus: 'pending',
+        },
+        {
+          email: 'buyer@example.com',
+        }
+      )
+    ).toEqual(
+      expect.objectContaining({
+        allowed: false,
+        statusCode: 403,
+      })
+    );
+  });
 });
 
 describe('realestate app-data helpers', () => {

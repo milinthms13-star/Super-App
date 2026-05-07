@@ -34,6 +34,16 @@ const parseOptionalDate = (value) => {
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 };
 
+const normalizeClassifiedModerationStatus = (value, verified = true) =>
+  String(value || (verified === false ? 'pending' : 'approved'))
+    .trim()
+    .toLowerCase();
+
+const isClassifiedModerationPubliclyVisible = (record = {}) =>
+  normalizeClassifiedModerationStatus(record?.moderationStatus, record?.verified) === 'approved';
+
+const escapeRegexText = (value = '') => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const isPromotionActive = (record = {}, now = new Date()) => {
   const promotionExpiry = parseOptionalDate(record?.promotionPlanExpiry || record?.expiryDate);
   return !promotionExpiry || promotionExpiry >= now;
@@ -46,6 +56,28 @@ const isClassifiedRecordVisible = (record = {}, now = new Date()) => {
 
   const expiryDate = parseOptionalDate(record?.expiryDate);
   return !expiryDate || expiryDate >= now;
+};
+
+const shouldIncludeClassifiedRecord = (record = {}, options = {}) => {
+  const {
+    includeExpired = false,
+    includeRejected = false,
+    now = new Date(),
+  } = options;
+
+  if (Boolean(record?.isDraft)) {
+    return false;
+  }
+
+  if (!includeRejected && !isClassifiedModerationPubliclyVisible(record)) {
+    return false;
+  }
+
+  if (!includeExpired && !isClassifiedRecordVisible(record, now)) {
+    return false;
+  }
+
+  return true;
 };
 
 const buildClassifiedSearchTextMatch = (record = {}, searchText = '') => {
@@ -132,9 +164,10 @@ const serializeClassifiedAd = (record, index = 0) => {
     views: Number(plainRecord.views || 0),
     favorites: Number(plainRecord.favorites || 0),
     chats: Number(plainRecord.chats || 0),
-    moderationStatus: String(
-      plainRecord.moderationStatus || (plainRecord.verified === false ? 'pending' : 'approved')
-    ).trim(),
+    moderationStatus: normalizeClassifiedModerationStatus(
+      plainRecord.moderationStatus,
+      plainRecord.verified
+    ),
     moderationNotes: String(plainRecord.moderationNotes || '').trim(),
     languageSupport:
       Array.isArray(plainRecord.languageSupport) && plainRecord.languageSupport.length > 0
@@ -174,31 +207,53 @@ const serializeClassifiedAd = (record, index = 0) => {
   };
 };
 
+const normalizeClassifiedMessageRecord = (message = {}, index = 0) => ({
+  id: String(message.id || `classified-message-${index + 1}`),
+  listingId: String(message.listingId || ''),
+  from: String(message.from || 'User').trim(),
+  senderEmail: String(message.senderEmail || '').trim().toLowerCase(),
+  text: String(message.text || '').trim(),
+  isRead: Boolean(message.isRead),
+  attachments: Array.isArray(message.attachments) ? message.attachments : [],
+  createdAt: message.createdAt ? new Date(message.createdAt).toISOString() : new Date().toISOString(),
+});
+
+const normalizeClassifiedReportRecord = (report = {}, index = 0) => ({
+  id: String(report.id || `classified-report-${index + 1}`),
+  listingId: String(report.listingId || ''),
+  reporterEmail: String(report.reporterEmail || '').trim().toLowerCase(),
+  reporterName: String(report.reporterName || 'User').trim(),
+  reason: String(report.reason || '').trim(),
+  status: String(report.status || 'open').trim(),
+  createdAt: report.createdAt ? new Date(report.createdAt).toISOString() : new Date().toISOString(),
+});
+
 const flattenClassifiedMessages = (ads = []) =>
   ads.flatMap((ad) =>
-    (Array.isArray(ad.messages) ? ad.messages : []).map((message, index) => ({
-      id: String(message.id || `${ad.id}-message-${index + 1}`),
-      listingId: String(ad.id),
-      from: String(message.from || 'User').trim(),
-      senderEmail: String(message.senderEmail || '').trim().toLowerCase(),
-      text: String(message.text || '').trim(),
-      isRead: Boolean(message.isRead),
-      attachments: Array.isArray(message.attachments) ? message.attachments : [],
-      createdAt: message.createdAt ? new Date(message.createdAt).toISOString() : new Date().toISOString(),
-    }))
+    (Array.isArray(ad.messages) ? ad.messages : []).map((message, index) =>
+      normalizeClassifiedMessageRecord(
+        {
+          ...message,
+          id: String(message.id || `${ad.id}-message-${index + 1}`),
+          listingId: String(ad.id),
+        },
+        index
+      )
+    )
   );
 
 const flattenClassifiedReports = (ads = []) =>
   ads.flatMap((ad) =>
-    (Array.isArray(ad.reports) ? ad.reports : []).map((report, index) => ({
-      id: String(report.id || `${ad.id}-report-${index + 1}`),
-      listingId: String(ad.id),
-      reporterEmail: String(report.reporterEmail || '').trim().toLowerCase(),
-      reporterName: String(report.reporterName || 'User').trim(),
-      reason: String(report.reason || '').trim(),
-      status: String(report.status || 'open').trim(),
-      createdAt: report.createdAt ? new Date(report.createdAt).toISOString() : new Date().toISOString(),
-    }))
+    (Array.isArray(ad.reports) ? ad.reports : []).map((report, index) =>
+      normalizeClassifiedReportRecord(
+        {
+          ...report,
+          id: String(report.id || `${ad.id}-report-${index + 1}`),
+          listingId: String(ad.id),
+        },
+        index
+      )
+    )
   );
 
 const listClassifiedModuleDataFromMongo = async (filters = {}, options = {}) => {
@@ -213,7 +268,8 @@ const listClassifiedModuleDataFromMongo = async (filters = {}, options = {}) => 
   const andConditions = [];
 
   if (!includeRejected) {
-    query.moderationStatus = { $ne: 'rejected' };
+    // Only approved listings should be publicly visible
+    query.moderationStatus = 'approved';
   }
 
   if (!includeExpired) {
@@ -229,13 +285,13 @@ const listClassifiedModuleDataFromMongo = async (filters = {}, options = {}) => 
   }
 
   if (searchText && searchText.trim()) {
-    const searchRegex = new RegExp(searchText.trim(), 'i');
+    const searchRegex = new RegExp(escapeRegexText(searchText.trim()), 'i');
     andConditions.push({
       $or: [
-      { title: searchRegex },
-      { description: searchRegex },
-      { tags: searchRegex },
-      { seller: searchRegex },
+        { title: searchRegex },
+        { description: searchRegex },
+        { tags: searchRegex },
+        { seller: searchRegex },
       ],
     });
   }
@@ -294,22 +350,20 @@ const listClassifiedModuleData = async (filters = {}, options = {}) => {
     includeRejected = false,
   } = options;
   const currentData = await devAppDataStore.readAppData();
-  const allSerializedListings = (
-    Array.isArray(currentData.moduleData?.classifiedsListings)
-      ? currentData.moduleData.classifiedsListings
-      : []
-  ).map((record, index) => serializeClassifiedAd(record, index));
+  const sourceListings = Array.isArray(currentData.moduleData?.classifiedsListings)
+    ? currentData.moduleData.classifiedsListings
+    : [];
+  const sourceMessages = Array.isArray(currentData.moduleData?.classifiedsMessages)
+    ? currentData.moduleData.classifiedsMessages
+    : [];
+  const sourceReports = Array.isArray(currentData.moduleData?.classifiedsReports)
+    ? currentData.moduleData.classifiedsReports
+    : [];
+  const allSerializedListings = sourceListings.map((record, index) => serializeClassifiedAd(record, index));
+  const now = new Date();
   const filteredRecords = sortClassifiedRecords(
     allSerializedListings.filter((listing) => {
-      if (Boolean(listing?.isDraft)) {
-        return false;
-      }
-
-      if (!includeRejected && String(listing?.moderationStatus || '').trim().toLowerCase() === 'rejected') {
-        return false;
-      }
-
-      if (!includeExpired && !isClassifiedRecordVisible(listing, new Date())) {
+      if (!shouldIncludeClassifiedRecord(listing, { includeExpired, includeRejected, now })) {
         return false;
       }
 
@@ -326,29 +380,35 @@ const listClassifiedModuleData = async (filters = {}, options = {}) => {
     'featured'
   );
   const listings = filteredRecords.slice(skip, skip + limit);
+  const visibleListingIds = new Set(listings.map((listing) => String(listing.id)));
+  const sourceListingsById = new Map(
+    sourceListings.map((record, index) => [String(record?.id || record?._id || `classified-${index + 1}`), record])
+  );
 
   return {
     classifiedsListings: listings,
-    classifiedsMessages: flattenClassifiedMessages(
-      listings.map((listing) => ({
-        ...listing,
-        messages:
-          (Array.isArray(currentData.moduleData?.classifiedsListings)
-            ? currentData.moduleData.classifiedsListings
-            : []
-          ).find((record) => String(record?.id || record?._id || '') === String(listing.id))?.messages || [],
-      }))
-    ),
-    classifiedsReports: flattenClassifiedReports(
-      listings.map((listing) => ({
-        ...listing,
-        reports:
-          (Array.isArray(currentData.moduleData?.classifiedsListings)
-            ? currentData.moduleData.classifiedsListings
-            : []
-          ).find((record) => String(record?.id || record?._id || '') === String(listing.id))?.reports || [],
-      }))
-    ),
+    classifiedsMessages:
+      sourceMessages.length > 0
+        ? sourceMessages
+            .filter((message) => visibleListingIds.has(String(message?.listingId || '')))
+            .map((message, index) => normalizeClassifiedMessageRecord(message, index))
+        : flattenClassifiedMessages(
+            listings.map((listing) => ({
+              ...listing,
+              messages: sourceListingsById.get(String(listing.id))?.messages || [],
+            }))
+          ),
+    classifiedsReports:
+      sourceReports.length > 0
+        ? sourceReports
+            .filter((report) => visibleListingIds.has(String(report?.listingId || '')))
+            .map((report, index) => normalizeClassifiedReportRecord(report, index))
+        : flattenClassifiedReports(
+            listings.map((listing) => ({
+              ...listing,
+              reports: sourceListingsById.get(String(listing.id))?.reports || [],
+            }))
+          ),
     pagination: {
       total: filteredRecords.length,
       page,
@@ -543,6 +603,9 @@ const findNearbyListings = async (coordinates = [0, 0], radiusKm = 50) => {
   }
 
   const listings = await ClassifiedAd.find({
+    isDraft: false,
+    moderationStatus: 'approved',
+    $and: [buildNonExpiredQuery(new Date())],
     coordinates: {
       $near: {
         $geometry: { type: 'Point', coordinates },
@@ -669,12 +732,13 @@ const searchClassifieds = async (query = {}, options = {}) => {
 
   const dbQuery = {
     isDraft: false,
-    moderationStatus: { $ne: 'rejected' },
+    // Only approved listings should be publicly discoverable
+    moderationStatus: 'approved',
     ...(expiryFilter ? { $and: [expiryFilter] } : {}),
   };
 
   if (text && text.trim()) {
-    const searchRegex = new RegExp(text.trim(), 'i');
+    const searchRegex = new RegExp(escapeRegexText(text.trim()), 'i');
     dbQuery.$and = dbQuery.$and || [];
     dbQuery.$and.push({
       $or: [

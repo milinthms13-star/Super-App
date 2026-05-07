@@ -177,7 +177,7 @@ const SocialMedia = () => {
     const isFollowing = followedUsers.has(userId);
 
     try {
-      await apiCall(`/social/users/${userId}/${isFollowing ? "unfollow" : "follow"}`, "POST");
+      await apiCall(`/socialmedia/users/${userId}/${isFollowing ? "unfollow" : "follow"}`, "POST");
 
       setFollowedUsers((prev) => {
         const updated = new Set(prev);

@@ -117,6 +117,7 @@ export const normalizeSocialPosts = (posts = []) =>
       author,
       content: post?.content || "",
       images,
+      videos: Array.isArray(post?.videos) ? post.videos : [],
       likeCount: Number(post?.likeCount ?? post?.likes ?? 0),
       commentCount,
       shareCount: Number(post?.shareCount ?? Math.max(0, Math.round(commentCount / 3))),
@@ -127,6 +128,9 @@ export const normalizeSocialPosts = (posts = []) =>
         Array.isArray(post?.hashtags) && post.hashtags.length > 0
           ? post.hashtags
           : (post?.content?.match(/#\w+/g) || []).map((item) => item.replace("#", "")),
+      status: post?.status || "published",
+      scheduledFor: post?.scheduledFor || null,
+      publishedAt: post?.publishedAt || null,
       createdAt:
         post?.createdAt || new Date(Date.now() - index * 3600000 * 6).toISOString(),
       timestamp: post?.timestamp || "",

@@ -133,7 +133,6 @@ const diaryEntrySchema = new mongoose.Schema({
 
 // Index for efficient queries
 diaryEntrySchema.index({ userId: 1, createdAt: -1 });
-diaryEntrySchema.index({ shareToken: 1 });
 diaryEntrySchema.index({ userId: 1, entryDate: -1 });
 diaryEntrySchema.index({ userId: 1, category: 1 });
 diaryEntrySchema.index({ userId: 1, tags: 1 });

@@ -16,39 +16,160 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
+const SOCIAL_POST_STATUS = {
+  PUBLISHED: 'published',
+  DRAFT: 'draft',
+  SCHEDULED: 'scheduled',
+};
+
+const normalizeSocialPostStatus = (value) => {
+  const normalizedValue = String(value || '').trim().toLowerCase();
+
+  if (normalizedValue === SOCIAL_POST_STATUS.DRAFT) {
+    return SOCIAL_POST_STATUS.DRAFT;
+  }
+
+  if (normalizedValue === SOCIAL_POST_STATUS.SCHEDULED) {
+    return SOCIAL_POST_STATUS.SCHEDULED;
+  }
+
+  return SOCIAL_POST_STATUS.PUBLISHED;
+};
+
+const normalizeHashtags = (hashtags = [], content = '') => {
+  const explicitTags = Array.isArray(hashtags) ? hashtags : [];
+  const derivedTags = String(content || '')
+    .match(/#([\p{L}\p{N}_]+)/gu) || [];
+
+  return Array.from(
+    new Set(
+      [...explicitTags, ...derivedTags.map((tag) => tag.replace(/^#/, ''))]
+        .map((tag) => String(tag || '').trim().replace(/^#/, '').toLowerCase())
+        .filter(Boolean)
+    )
+  );
+};
+
+const buildPublishedPostQuery = () => ({
+  $or: [
+    { status: { $exists: false } },
+    { status: SOCIAL_POST_STATUS.PUBLISHED },
+  ],
+});
+
+const resolveSocialPostLifecycle = ({ status, scheduledFor, now = new Date() } = {}) => {
+  const normalizedStatus = normalizeSocialPostStatus(status);
+  const nextLifecycle = {
+    status: normalizedStatus,
+    scheduledFor: null,
+    publishedAt: normalizedStatus === SOCIAL_POST_STATUS.PUBLISHED ? new Date(now) : null,
+  };
+
+  if (normalizedStatus === SOCIAL_POST_STATUS.SCHEDULED) {
+    const scheduledAt = scheduledFor ? new Date(scheduledFor) : null;
+
+    if (!scheduledAt || Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() <= new Date(now).getTime()) {
+      return {
+        error: 'Scheduled posts require a future publish time.',
+      };
+    }
+
+    nextLifecycle.scheduledFor = scheduledAt;
+    nextLifecycle.publishedAt = null;
+  }
+
+  if (normalizedStatus === SOCIAL_POST_STATUS.DRAFT) {
+    nextLifecycle.publishedAt = null;
+  }
+
+  return nextLifecycle;
+};
+
+const publishDueScheduledPosts = async (authorIds = []) => {
+  const query = {
+    status: SOCIAL_POST_STATUS.SCHEDULED,
+    scheduledFor: { $lte: new Date() },
+    isDeleted: false,
+  };
+
+  if (authorIds.length > 0) {
+    query.author = { $in: authorIds };
+  }
+
+  await SocialPost.updateMany(
+    query,
+    {
+      $set: {
+        status: SOCIAL_POST_STATUS.PUBLISHED,
+        publishedAt: new Date(),
+        scheduledFor: null,
+      },
+    }
+  );
+};
+
 // ============ POST ROUTES ============
 
 // Create a new post
 router.post('/posts/create', authenticate, async (req, res, next) => {
   try {
-    const { content, images, videos, privacy, allowedUsers, location, hashtags, mentions } = req.body;
+    const {
+      content,
+      images,
+      videos,
+      privacy,
+      allowedUsers,
+      location,
+      hashtags,
+      mentions,
+      status,
+      scheduledFor,
+    } = req.body;
+    const trimmedContent = String(content || '').trim();
+    const normalizedImages = Array.isArray(images) ? images : [];
+    const normalizedVideos = Array.isArray(videos) ? videos : [];
+    const lifecycle = resolveSocialPostLifecycle({ status, scheduledFor });
 
-    if (!content || content.trim().length === 0) {
-      return res.status(400).json({ message: 'Post content is required' });
+    if (lifecycle.error) {
+      return res.status(400).json({ message: lifecycle.error });
+    }
+
+    if (
+      lifecycle.status !== SOCIAL_POST_STATUS.DRAFT &&
+      trimmedContent.length === 0 &&
+      normalizedImages.length === 0 &&
+      normalizedVideos.length === 0
+    ) {
+      return res.status(400).json({ message: 'Post content or media is required' });
     }
 
     const newPost = new SocialPost({
       author: req.user._id,
-      content: content.trim(),
-      images: images || [],
-      videos: videos || [],
+      content: trimmedContent,
+      images: normalizedImages,
+      videos: normalizedVideos,
       privacy: privacy || 'public',
       allowedUsers: allowedUsers || [],
       location: location || '',
-      hashtags: hashtags || [],
+      hashtags: normalizeHashtags(hashtags, trimmedContent),
       mentions: mentions || [],
+      status: lifecycle.status,
+      scheduledFor: lifecycle.scheduledFor,
+      publishedAt: lifecycle.publishedAt,
     });
 
     await newPost.save();
     await newPost.populate('author', 'name avatar email');
 
     // Update user post count
-    await SocialProfile.findOneAndUpdate(
-      { userId: req.user._id },
-      { $inc: { postCount: 1 } }
-    );
+    if (lifecycle.status === SOCIAL_POST_STATUS.PUBLISHED) {
+      await SocialProfile.findOneAndUpdate(
+        { userId: req.user._id },
+        { $inc: { postCount: 1 } }
+      );
+    }
 
-    logger.info(`Post created by ${req.user._id}`);
+    logger.info(`Post created by ${req.user._id} with status ${lifecycle.status}`);
     res.status(201).json({ post: newPost });
   } catch (err) {
     next(err);
@@ -56,7 +177,7 @@ router.post('/posts/create', authenticate, async (req, res, next) => {
 });
 
 // Get post by ID
-router.get('/posts/:postId', authenticate, async (req, res, next) => {
+router.get('/posts/:postId([0-9a-fA-F]{24})', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
 
@@ -70,6 +191,13 @@ router.get('/posts/:postId', authenticate, async (req, res, next) => {
       .lean();
 
     if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    if (
+      [SOCIAL_POST_STATUS.DRAFT, SOCIAL_POST_STATUS.SCHEDULED].includes(post.status) &&
+      String(post.author?._id || post.author) !== String(req.user._id)
+    ) {
       return res.status(404).json({ message: 'Post not found' });
     }
 
@@ -96,27 +224,28 @@ router.get('/feed', authenticate, async (req, res, next) => {
     const followingIds = following.map(f => f.following);
     followingIds.push(req.user._id); // Include own posts
 
+    await publishDueScheduledPosts(followingIds);
+
     let sortBy = { createdAt: -1 };
     if (sort === 'trending') {
       sortBy = { likeCount: -1, commentCount: -1, createdAt: -1 };
     }
 
-    const posts = await SocialPost.find({
+    const feedQuery = {
       author: { $in: followingIds },
       visibility: 'visible',
       isDeleted: false,
-    })
+      ...buildPublishedPostQuery(),
+    };
+
+    const posts = await SocialPost.find(feedQuery)
       .populate('author', 'name avatar email')
       .sort(sortBy)
       .skip(skip)
       .limit(pageLimit)
       .lean();
 
-    const total = await SocialPost.countDocuments({
-      author: { $in: followingIds },
-      visibility: 'visible',
-      isDeleted: false,
-    });
+    const total = await SocialPost.countDocuments(feedQuery);
 
     res.json({
       posts,
@@ -132,11 +261,49 @@ router.get('/feed', authenticate, async (req, res, next) => {
   }
 });
 
+// Get current user's draft posts
+router.get('/posts/drafts', authenticate, async (req, res, next) => {
+  try {
+    const drafts = await SocialPost.find({
+      author: req.user._id,
+      status: SOCIAL_POST_STATUS.DRAFT,
+      isDeleted: false,
+    })
+      .populate('author', 'name avatar email')
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.json({ posts: drafts });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get current user's scheduled posts
+router.get('/posts/scheduled', authenticate, async (req, res, next) => {
+  try {
+    await publishDueScheduledPosts([req.user._id]);
+
+    const scheduledPosts = await SocialPost.find({
+      author: req.user._id,
+      status: SOCIAL_POST_STATUS.SCHEDULED,
+      isDeleted: false,
+    })
+      .populate('author', 'name avatar email')
+      .sort({ scheduledFor: 1, updatedAt: -1 })
+      .lean();
+
+    res.json({ posts: scheduledPosts });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Update post
-router.put('/posts/:postId', authenticate, async (req, res, next) => {
+router.put('/posts/:postId([0-9a-fA-F]{24})', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
-    const { content, privacy, allowedUsers } = req.body;
+    const { content, privacy, allowedUsers, status, scheduledFor, images, videos } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(postId)) {
       return res.status(400).json({ message: 'Invalid post ID' });
@@ -152,8 +319,10 @@ router.put('/posts/:postId', authenticate, async (req, res, next) => {
       return res.status(403).json({ message: 'Not authorized to update this post' });
     }
 
-    if (content) {
-      post.content = content.trim();
+    const previousStatus = normalizeSocialPostStatus(post.status);
+
+    if (content !== undefined) {
+      post.content = String(content || '').trim();
     }
     if (privacy) {
       post.privacy = privacy;
@@ -161,12 +330,52 @@ router.put('/posts/:postId', authenticate, async (req, res, next) => {
     if (allowedUsers) {
       post.allowedUsers = allowedUsers;
     }
+    if (images !== undefined) {
+      post.images = Array.isArray(images) ? images : [];
+    }
+    if (videos !== undefined) {
+      post.videos = Array.isArray(videos) ? videos : [];
+    }
+
+    if (status !== undefined || scheduledFor !== undefined) {
+      const lifecycle = resolveSocialPostLifecycle({
+        status: status !== undefined ? status : post.status,
+        scheduledFor: scheduledFor !== undefined ? scheduledFor : post.scheduledFor,
+      });
+
+      if (lifecycle.error) {
+        return res.status(400).json({ message: lifecycle.error });
+      }
+
+      if (
+        lifecycle.status !== SOCIAL_POST_STATUS.DRAFT &&
+        !String(post.content || '').trim() &&
+        (!Array.isArray(post.images) || post.images.length === 0) &&
+        (!Array.isArray(post.videos) || post.videos.length === 0)
+      ) {
+        return res.status(400).json({ message: 'Post content or media is required' });
+      }
+
+      post.status = lifecycle.status;
+      post.scheduledFor = lifecycle.scheduledFor;
+      post.publishedAt = lifecycle.publishedAt;
+    }
+
+    post.hashtags = normalizeHashtags(req.body.hashtags !== undefined ? req.body.hashtags : post.hashtags, post.content);
 
     post.isEdited = true;
     post.editedAt = new Date();
 
     await post.save();
     await post.populate('author', 'name avatar email');
+
+    const nextStatus = normalizeSocialPostStatus(post.status);
+    if (previousStatus !== SOCIAL_POST_STATUS.PUBLISHED && nextStatus === SOCIAL_POST_STATUS.PUBLISHED) {
+      await SocialProfile.findOneAndUpdate(
+        { userId: req.user._id },
+        { $inc: { postCount: 1 } }
+      );
+    }
 
     logger.info(`Post ${postId} updated by ${req.user._id}`);
     res.json({ post });
@@ -175,8 +384,55 @@ router.put('/posts/:postId', authenticate, async (req, res, next) => {
   }
 });
 
+// Publish a draft or scheduled post immediately
+router.post('/posts/:postId([0-9a-fA-F]{24})/publish', authenticate, async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(postId)) {
+      return res.status(400).json({ message: 'Invalid post ID' });
+    }
+
+    const post = await SocialPost.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    if (String(post.author) !== String(req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized to publish this post' });
+    }
+
+    if (
+      !String(post.content || '').trim() &&
+      (!Array.isArray(post.images) || post.images.length === 0) &&
+      (!Array.isArray(post.videos) || post.videos.length === 0)
+    ) {
+      return res.status(400).json({ message: 'Post content or media is required' });
+    }
+
+    const previousStatus = normalizeSocialPostStatus(post.status);
+    post.status = SOCIAL_POST_STATUS.PUBLISHED;
+    post.scheduledFor = null;
+    post.publishedAt = new Date();
+    await post.save();
+    await post.populate('author', 'name avatar email');
+
+    if (previousStatus !== SOCIAL_POST_STATUS.PUBLISHED) {
+      await SocialProfile.findOneAndUpdate(
+        { userId: req.user._id },
+        { $inc: { postCount: 1 } }
+      );
+    }
+
+    res.json({ post });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Delete post
-router.delete('/posts/:postId', authenticate, async (req, res, next) => {
+router.delete('/posts/:postId([0-9a-fA-F]{24})', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
 
@@ -194,13 +450,16 @@ router.delete('/posts/:postId', authenticate, async (req, res, next) => {
       return res.status(403).json({ message: 'Not authorized to delete this post' });
     }
 
+    const normalizedStatus = normalizeSocialPostStatus(post.status);
     await SocialPost.findByIdAndDelete(postId);
 
     // Update user post count
-    await SocialProfile.findOneAndUpdate(
-      { userId: req.user._id },
-      { $inc: { postCount: -1 } }
-    );
+    if (normalizedStatus === SOCIAL_POST_STATUS.PUBLISHED) {
+      await SocialProfile.findOneAndUpdate(
+        { userId: req.user._id },
+        { $inc: { postCount: -1 } }
+      );
+    }
 
     logger.info(`Post ${postId} deleted by ${req.user._id}`);
     res.json({ message: 'Post deleted successfully' });
@@ -212,7 +471,7 @@ router.delete('/posts/:postId', authenticate, async (req, res, next) => {
 // ============ LIKE/REACTION ROUTES ============
 
 // Like/React to post
-router.post('/posts/:postId/like', authenticate, async (req, res, next) => {
+router.post('/posts/:postId([0-9a-fA-F]{24})/like', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
     const { reactionType = 'like' } = req.body;
@@ -265,7 +524,7 @@ router.post('/posts/:postId/like', authenticate, async (req, res, next) => {
 });
 
 // Unlike post
-router.post('/posts/:postId/unlike', authenticate, async (req, res, next) => {
+router.post('/posts/:postId([0-9a-fA-F]{24})/unlike', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
 
@@ -294,7 +553,7 @@ router.post('/posts/:postId/unlike', authenticate, async (req, res, next) => {
 });
 
 // Get post likes
-router.get('/posts/:postId/likes', authenticate, async (req, res, next) => {
+router.get('/posts/:postId([0-9a-fA-F]{24})/likes', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
     const { page = 1, limit = 20 } = req.query;
@@ -343,7 +602,7 @@ router.get('/posts/:postId/likes', authenticate, async (req, res, next) => {
 // ============ COMMENT ROUTES ============
 
 // Add comment
-router.post('/posts/:postId/comments', authenticate, async (req, res, next) => {
+router.post('/posts/:postId([0-9a-fA-F]{24})/comments', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
     const { content, mentions, parentCommentId } = req.body;
@@ -400,7 +659,7 @@ router.post('/posts/:postId/comments', authenticate, async (req, res, next) => {
 });
 
 // Get post comments
-router.get('/posts/:postId/comments', authenticate, async (req, res, next) => {
+router.get('/posts/:postId([0-9a-fA-F]{24})/comments', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
     const { page = 1, limit = 10 } = req.query;
@@ -735,22 +994,23 @@ router.get('/profile/:userId/posts', authenticate, async (req, res, next) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const pageLimit = Math.min(parseInt(limit), 50);
 
-    const posts = await SocialPost.find({
+    await publishDueScheduledPosts([userId]);
+
+    const profilePostsQuery = {
       author: userId,
       visibility: 'visible',
       isDeleted: false,
-    })
+      ...buildPublishedPostQuery(),
+    };
+
+    const posts = await SocialPost.find(profilePostsQuery)
       .populate('author', 'name avatar email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(pageLimit)
       .lean();
 
-    const total = await SocialPost.countDocuments({
-      author: userId,
-      visibility: 'visible',
-      isDeleted: false,
-    });
+    const total = await SocialPost.countDocuments(profilePostsQuery);
 
     res.json({
       posts,
@@ -892,6 +1152,53 @@ router.get('/search/users', authenticate, async (req, res, next) => {
   }
 });
 
+// Search published posts
+router.get('/search/posts', authenticate, async (req, res, next) => {
+  try {
+    const { q, page = 1, limit = 20 } = req.query;
+
+    if (!q || q.trim().length === 0) {
+      return res.status(400).json({ message: 'Search query is required' });
+    }
+
+    await publishDueScheduledPosts();
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const pageLimit = Math.min(parseInt(limit), 50);
+    const searchRegex = new RegExp(String(q).trim(), 'i');
+    const postSearchQuery = {
+      visibility: 'visible',
+      isDeleted: false,
+      ...buildPublishedPostQuery(),
+      $or: [
+        { content: searchRegex },
+        { hashtags: searchRegex },
+      ],
+    };
+
+    const posts = await SocialPost.find(postSearchQuery)
+      .populate('author', 'name avatar email')
+      .sort({ createdAt: -1, likeCount: -1 })
+      .skip(skip)
+      .limit(pageLimit)
+      .lean();
+
+    const total = await SocialPost.countDocuments(postSearchQuery);
+
+    res.json({
+      posts,
+      pagination: {
+        page: parseInt(page),
+        limit: pageLimit,
+        total,
+        pages: Math.ceil(total / pageLimit),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Search posts by hashtag
 router.get('/search/hashtags/:hashtag', authenticate, async (req, res, next) => {
   try {
@@ -905,22 +1212,23 @@ router.get('/search/hashtags/:hashtag', authenticate, async (req, res, next) => 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const pageLimit = Math.min(parseInt(limit), 50);
 
-    const posts = await SocialPost.find({
+    await publishDueScheduledPosts();
+
+    const hashtagQuery = {
       hashtags: hashtag.toLowerCase(),
       visibility: 'visible',
       isDeleted: false,
-    })
+      ...buildPublishedPostQuery(),
+    };
+
+    const posts = await SocialPost.find(hashtagQuery)
       .populate('author', 'name avatar email')
       .sort({ likeCount: -1, createdAt: -1 })
       .skip(skip)
       .limit(pageLimit)
       .lean();
 
-    const total = await SocialPost.countDocuments({
-      hashtags: hashtag.toLowerCase(),
-      visibility: 'visible',
-      isDeleted: false,
-    });
+    const total = await SocialPost.countDocuments(hashtagQuery);
 
     res.json({
       hashtag,
@@ -1479,7 +1787,7 @@ router.post('/users/:userId/unblock', authenticate, async (req, res, next) => {
 });
 
 // Save post
-router.post('/posts/:postId/save', authenticate, async (req, res, next) => {
+router.post('/posts/:postId([0-9a-fA-F]{24})/save', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
 
@@ -1511,7 +1819,7 @@ router.post('/posts/:postId/save', authenticate, async (req, res, next) => {
 });
 
 // Unsave post
-router.post('/posts/:postId/unsave', authenticate, async (req, res, next) => {
+router.post('/posts/:postId([0-9a-fA-F]{24})/unsave', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
 
@@ -1571,7 +1879,7 @@ router.get('/posts/saved', authenticate, async (req, res, next) => {
 });
 
 // Share post
-router.post('/posts/:postId/share', authenticate, async (req, res, next) => {
+router.post('/posts/:postId([0-9a-fA-F]{24})/share', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
     const { caption } = req.body;
@@ -1618,22 +1926,23 @@ router.get('/posts/trending', authenticate, async (req, res, next) => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const posts = await SocialPost.find({
+    await publishDueScheduledPosts();
+
+    const trendingQuery = {
       createdAt: { $gte: sevenDaysAgo },
       visibility: 'visible',
       isDeleted: false,
-    })
+      ...buildPublishedPostQuery(),
+    };
+
+    const posts = await SocialPost.find(trendingQuery)
       .populate('author', 'name avatar email')
       .sort({ likeCount: -1, commentCount: -1, shareCount: -1 })
       .skip(skip)
       .limit(pageLimit)
       .lean();
 
-    const total = await SocialPost.countDocuments({
-      createdAt: { $gte: sevenDaysAgo },
-      visibility: 'visible',
-      isDeleted: false,
-    });
+    const total = await SocialPost.countDocuments(trendingQuery);
 
     res.json({
       posts,
@@ -1681,3 +1990,9 @@ router.get('/stats/:userId', authenticate, async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports.__testables = {
+  buildPublishedPostQuery,
+  normalizeHashtags,
+  normalizeSocialPostStatus,
+  resolveSocialPostLifecycle,
+};

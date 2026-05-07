@@ -7,7 +7,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
-import AnalyticsDashboard from '../AnalyticsDashboard';
+import AnalyticsDashboard from './AnalyticsDashboard';
 
 // Mock fetch
 global.fetch = jest.fn();
@@ -228,7 +228,7 @@ describe('AnalyticsDashboard Component', () => {
     );
     
     await waitFor(() => {
-      expect(screen.getByText('75')).toBeInTheDocument(); // Wellness score
+      expect(screen.getByText(/75%/i)).toBeInTheDocument(); // Wellness score
     });
   });
 
@@ -247,7 +247,6 @@ describe('AnalyticsDashboard Component', () => {
   });
 
   test('should change daysBack when filter selected', async () => {
-    const user = userEvent.setup();
     render(
       <AnalyticsDashboard token={mockToken} apiUrl={mockApiUrl} />
     );
@@ -258,7 +257,7 @@ describe('AnalyticsDashboard Component', () => {
 
     const filterSelects = screen.getAllByRole('combobox');
     if (filterSelects.length > 0) {
-      await user.selectOptions(filterSelects[0], '90');
+      await userEvent.selectOptions(filterSelects[0], '90');
       
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
@@ -270,7 +269,6 @@ describe('AnalyticsDashboard Component', () => {
   });
 
   test('should change groupBy when sentiment filter selected', async () => {
-    const user = userEvent.setup();
     render(
       <AnalyticsDashboard token={mockToken} apiUrl={mockApiUrl} />
     );
@@ -281,7 +279,7 @@ describe('AnalyticsDashboard Component', () => {
 
     const filterSelects = screen.getAllByRole('combobox');
     if (filterSelects.length > 1) {
-      await user.selectOptions(filterSelects[1], 'month');
+      await userEvent.selectOptions(filterSelects[1], 'month');
       
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
@@ -293,7 +291,6 @@ describe('AnalyticsDashboard Component', () => {
   });
 
   test('should refresh data when refresh button clicked', async () => {
-    const user = userEvent.setup();
     render(
       <AnalyticsDashboard token={mockToken} apiUrl={mockApiUrl} />
     );
@@ -305,7 +302,7 @@ describe('AnalyticsDashboard Component', () => {
     const initialCallCount = fetch.mock.calls.length;
     
     const refreshButton = screen.getByRole('button', { name: /Refresh/i });
-    await user.click(refreshButton);
+    await userEvent.click(refreshButton);
 
     await waitFor(() => {
       expect(fetch.mock.calls.length).toBeGreaterThan(initialCallCount);

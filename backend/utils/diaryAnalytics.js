@@ -1,5 +1,13 @@
 const logger = require('./logger');
 
+const getWellnessLevel = (score = 0) => {
+  if (score >= 80) return 'Excellent';
+  if (score >= 60) return 'High';
+  if (score >= 40) return 'Moderate';
+  if (score > 0) return 'Low';
+  return 'Neutral';
+};
+
 /**
  * Calculate comprehensive writing statistics
  */
@@ -443,25 +451,98 @@ const calculateWordCountAnalytics = (entries) => {
 const getDashboardAnalytics = async (entries) => {
   if (!entries || entries.length === 0) {
     return {
-      writing: {},
-      streak: {},
-      mood: {},
-      wellness: {},
+      writing: {
+        totalEntries: 0,
+        entryCount: 0,
+        totalWords: 0,
+        avgWordsPerEntry: 0,
+        avgWords: 0,
+        entriesPerDay: {},
+        entriesPerDayAverage: 0,
+        wordsPerDay: 0,
+      },
+      streak: {
+        currentStreak: 0,
+        longestStreak: 0,
+        totalDaysWritten: 0,
+        lastEntryDate: null,
+      },
+      mood: {
+        moodDistribution: {},
+        moodCounts: {},
+        dominantMood: null,
+        moodVariability: 0,
+      },
+      wellness: {
+        overallScore: 0,
+        score: 0,
+        level: 'Neutral',
+        writingFrequency: 0,
+        emotionalStability: 0,
+        contentLength: 0,
+        consistencyScore: 0,
+      },
       tags: {},
-      sentiment: {},
-      words: {},
+      sentiment: [],
+      words: {
+        totalWords: 0,
+        avgWords: 0,
+        minWords: 0,
+        maxWords: 0,
+        median: 0,
+        wordDistribution: {
+          veryShort: 0,
+          short: 0,
+          medium: 0,
+          long: 0,
+          veryLong: 0,
+        },
+      },
+      heatmap: {},
     };
   }
 
+  const writing = calculateWritingStats(entries);
+  const streak = calculateStreakStats(entries);
+  const mood = calculateMoodStats(entries);
+  const wellness = calculateWellnessScore(entries);
+  const tags = calculateTagAnalytics(entries);
+  const sentiment = calculateSentimentTrend(entries);
+  const words = calculateWordCountAnalytics(entries);
+  const heatmap = calculateWritingHeatmap(entries);
+  const activeWritingDays = Object.keys(writing.entriesPerDay || {}).length;
+  const entriesPerDayAverage =
+    activeWritingDays > 0
+      ? Math.round((writing.totalEntries / activeWritingDays) * 10) / 10
+      : 0;
+  const wordsPerDay =
+    activeWritingDays > 0
+      ? Math.round((writing.totalWords / activeWritingDays) * 10) / 10
+      : 0;
+
   return {
-    writing: calculateWritingStats(entries),
-    streak: calculateStreakStats(entries),
-    mood: calculateMoodStats(entries),
-    wellness: calculateWellnessScore(entries),
-    tags: calculateTagAnalytics(entries),
-    sentiment: calculateSentimentTrend(entries),
-    words: calculateWordCountAnalytics(entries),
-    heatmap: calculateWritingHeatmap(entries),
+    writing: {
+      ...writing,
+      entryCount: writing.totalEntries,
+      avgWords: writing.avgWordsPerEntry,
+      avgChars: writing.avgCharsPerEntry,
+      entriesPerDayAverage,
+      wordsPerDay,
+    },
+    streak,
+    mood: {
+      ...mood,
+      moodCounts: mood.moodDistribution,
+    },
+    wellness: {
+      ...wellness,
+      score: wellness.overallScore,
+      level: getWellnessLevel(wellness.overallScore),
+    },
+    tags,
+    sentiment,
+    words,
+    heatmap,
   };
 };
 

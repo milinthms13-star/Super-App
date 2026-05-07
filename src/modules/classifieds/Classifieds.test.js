@@ -103,6 +103,7 @@ describe("Classifieds", () => {
             posted: "2026-04-17",
             featured: false,
             verified: false,
+            moderationStatus: "approved",
             chats: 7,
             favorites: 10,
             views: 204,
@@ -150,6 +151,79 @@ describe("Classifieds", () => {
         title: "Part-time Bakery Assistant",
       })
     );
+  });
+
+  test("hides pending and flagged listings from buyers", async () => {
+    mockUseApp.mockReturnValue({
+      currentUser: {
+        name: "Dhanya",
+        registrationType: "user",
+        role: "user",
+      },
+      favorites: [],
+      addToFavorites: mockAddToFavorites,
+      removeFavorite: mockRemoveFavorite,
+      createClassifiedListing: mockCreateClassifiedListing,
+      sendClassifiedMessage: mockSendClassifiedMessage,
+      reportClassifiedListing: mockReportClassifiedListing,
+      moderateClassifiedListing: mockModerateClassifiedListing,
+      deleteClassifiedListing: mockDeleteClassifiedListing,
+      getClassifiedSavedSearches: mockGetClassifiedSavedSearches,
+      saveClassifiedSearch: mockSaveClassifiedSearch,
+      acknowledgeClassifiedSavedSearch: mockAcknowledgeClassifiedSavedSearch,
+      deleteClassifiedSavedSearch: mockDeleteClassifiedSavedSearch,
+      getRecentlyViewedClassifieds: mockGetRecentlyViewedClassifieds,
+      trackClassifiedListingView: mockTrackClassifiedListingView,
+      mockData: {
+        classifiedsListings: [
+          {
+            id: "cl-approved",
+            title: "Approved Laptop",
+            description: "Visible to buyers.",
+            price: 45000,
+            category: "Electronics",
+            location: "Kochi",
+            condition: "Used",
+            seller: "Visible Seller",
+            moderationStatus: "approved",
+            tags: ["Laptop"],
+          },
+          {
+            id: "cl-pending",
+            title: "Pending Camera",
+            description: "Should stay hidden until review completes.",
+            price: 22000,
+            category: "Electronics",
+            location: "Kochi",
+            condition: "Used",
+            seller: "Pending Seller",
+            moderationStatus: "pending",
+            tags: ["Camera"],
+          },
+          {
+            id: "cl-flagged",
+            title: "Flagged Phone",
+            description: "Should not be buyer visible.",
+            price: 18000,
+            category: "Electronics",
+            location: "Kochi",
+            condition: "Used",
+            seller: "Flagged Seller",
+            moderationStatus: "flagged",
+            tags: ["Phone"],
+          },
+        ],
+        classifiedsMessages: [],
+        classifiedsReports: [],
+      },
+    });
+
+    render(<Classifieds />);
+    await waitForDiscoveryBoot();
+
+    expect(screen.getByRole("heading", { name: /approved laptop/i, level: 3 })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /pending camera/i, level: 3 })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /flagged phone/i, level: 3 })).not.toBeInTheDocument();
   });
 
   test("allows seller-side ad posting", async () => {

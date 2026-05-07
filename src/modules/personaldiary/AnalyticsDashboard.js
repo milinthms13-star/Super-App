@@ -1,6 +1,118 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './AnalyticsDashboard.css';
 
+const DEFAULT_WORD_DISTRIBUTION = {
+  veryShort: 0,
+  short: 0,
+  medium: 0,
+  long: 0,
+  veryLong: 0,
+};
+
+const pickNumber = (...values) => {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return 0;
+};
+
+const deriveWellnessLevel = (score = 0) => {
+  if (score >= 80) return 'Excellent';
+  if (score >= 60) return 'High';
+  if (score >= 40) return 'Moderate';
+  if (score > 0) return 'Low';
+  return 'Neutral';
+};
+
+const calculateEntriesPerDayAverage = (entryCount, entriesPerDay) => {
+  if (typeof entriesPerDay === 'number' && Number.isFinite(entriesPerDay)) {
+    return entriesPerDay;
+  }
+
+  if (!entriesPerDay || typeof entriesPerDay !== 'object') {
+    return 0;
+  }
+
+  const activeDays = Object.keys(entriesPerDay).length;
+  return activeDays > 0 ? entryCount / activeDays : 0;
+};
+
+const normalizeDashboardPayload = (raw = {}) => {
+  const writing = raw.writing || {};
+  const mood = raw.mood || {};
+  const wellness = raw.wellness || {};
+  const entryCount = pickNumber(writing.entryCount, writing.totalEntries);
+  const totalWords = pickNumber(writing.totalWords);
+  const avgWords = pickNumber(writing.avgWords, writing.avgWordsPerEntry);
+  const entriesPerDayAverage = calculateEntriesPerDayAverage(
+    entryCount,
+    writing.entriesPerDayAverage ?? writing.entriesPerDay
+  );
+  const score = pickNumber(wellness.score, wellness.overallScore);
+
+  return {
+    ...raw,
+    writing: {
+      ...writing,
+      entryCount,
+      totalWords,
+      avgWords,
+      entriesPerDayAverage,
+    },
+    mood: {
+      ...mood,
+      moodCounts: mood.moodCounts || mood.moodDistribution || {},
+    },
+    wellness: {
+      ...wellness,
+      score,
+      level: wellness.level || deriveWellnessLevel(score),
+    },
+  };
+};
+
+const normalizeInsightsPayload = (raw) => {
+  if (Array.isArray(raw)) {
+    return {
+      insights: raw,
+      analytics: {},
+      period: null,
+      message: null,
+    };
+  }
+
+  if (raw && typeof raw === 'object') {
+    return {
+      insights: Array.isArray(raw.insights) ? raw.insights : [],
+      analytics: raw.analytics || {},
+      period: raw.period || null,
+      message: raw.message || null,
+    };
+  }
+
+  return {
+    insights: [],
+    analytics: {},
+    period: null,
+    message: null,
+  };
+};
+
+const normalizeWordCountPayload = (raw = {}) => ({
+  totalWords: pickNumber(raw.totalWords),
+  avgWords: pickNumber(raw.avgWords),
+  minWords: pickNumber(raw.minWords),
+  maxWords: pickNumber(raw.maxWords),
+  median: pickNumber(raw.median),
+  wordDistribution: {
+    ...DEFAULT_WORD_DISTRIBUTION,
+    ...(raw.wordDistribution || {}),
+  },
+});
+
 /**
  * Analytics Dashboard Component for Diary Module
  * Displays comprehensive statistics and insights about diary entries
@@ -64,7 +176,7 @@ const AnalyticsDashboard = ({
 
       if (!response.ok) throw new Error('Failed to fetch dashboard data');
       const data = await response.json();
-      setDashboardData(data.data);
+      setDashboardData(normalizeDashboardPayload(data.data));
     } catch (err) {
       setError(err.message);
       onError(err.message);
@@ -131,7 +243,7 @@ const AnalyticsDashboard = ({
 
       if (!response.ok) throw new Error('Failed to fetch word count analytics');
       const data = await response.json();
-      setWordCountAnalytics(data.data);
+      setWordCountAnalytics(normalizeWordCountPayload(data.data));
     } catch (err) {
       console.error('Error fetching word count analytics:', err);
     }
@@ -173,7 +285,7 @@ const AnalyticsDashboard = ({
 
       if (!response.ok) throw new Error('Failed to fetch insights');
       const data = await response.json();
-      setInsights(data.data);
+      setInsights(normalizeInsightsPayload(data.data));
     } catch (err) {
       console.error('Error fetching insights:', err);
     }
@@ -192,32 +304,32 @@ const AnalyticsDashboard = ({
   // Render error state
   if (error && !dashboardData) {
     return (
-      <div className="analytics-error">
+      <main className="analytics-error">
         <div className="error-icon">⚠️</div>
-        <h3>Unable to Load Analytics</h3>
+        <h3>Error Loading Analytics</h3>
         <p>{error}</p>
         <button onClick={fetchDashboard} className="retry-button">
           Retry
         </button>
-      </div>
+      </main>
     );
   }
 
   // Render loading state
   if (loading && !dashboardData) {
     return (
-      <div className="analytics-loading">
+      <main className="analytics-loading">
         <div className="spinner"></div>
         <p>Loading your analytics...</p>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="analytics-dashboard">
+    <main className="analytics-dashboard">
       {/* Header */}
       <div className="analytics-header">
-        <h1>📊 Analytics & Statistics</h1>
+        <h1>Analytics Dashboard</h1>
         <p>Insights into your diary writing patterns and emotional trends</p>
       </div>
 
@@ -280,9 +392,9 @@ const AnalyticsDashboard = ({
                 <div className="stat-value">
                   {dashboardData.writing?.entryCount || 0}
                 </div>
-                <div className="stat-label">Entries</div>
+                <div className="stat-label">Total Entries</div>
                 <div className="stat-detail">
-                  {dashboardData.writing?.entriesPerDay?.toFixed(1) || 0} per day
+                  {dashboardData.writing?.entriesPerDayAverage?.toFixed(1) || 0} per day
                 </div>
               </div>
             </div>
@@ -292,9 +404,9 @@ const AnalyticsDashboard = ({
               <div className="stat-icon">✍️</div>
               <div className="stat-content">
                 <div className="stat-value">
-                  {(dashboardData.writing?.totalWords || 0).toLocaleString()}
+                  {dashboardData.writing?.totalWords || 0}
                 </div>
-                <div className="stat-label">Words</div>
+                <div className="stat-label">Total Words</div>
                 <div className="stat-detail">
                   {dashboardData.writing?.avgWords?.toFixed(0) || 0} avg per entry
                 </div>
@@ -322,7 +434,7 @@ const AnalyticsDashboard = ({
                 <div className="stat-value">
                   {dashboardData.wellness?.score?.toFixed(0) || 0}%
                 </div>
-                <div className="stat-label">Wellness</div>
+                <div className="stat-label">Wellness Score</div>
                 <div className="stat-detail">
                   {dashboardData.wellness?.level || 'Neutral'}
                 </div>
@@ -494,17 +606,21 @@ const AnalyticsDashboard = ({
             <div className="heatmap-grid">
               {Object.entries(heatmapData)
                 .sort((a, b) => new Date(a[0]) - new Date(b[0]))
-                .map(([date, count]) => (
-                  <div
-                    key={date}
-                    className="heatmap-cell"
-                    style={{
-                      backgroundColor: getHeatmapColor(count),
-                      opacity: Math.min(count / 3, 1)
-                    }}
-                    title={`${date}: ${count} entry(ies)`}
-                  ></div>
-                ))}
+                .map(([date, count]) => {
+                  const activityCount = Number.isFinite(Number(count)) ? Number(count) : 0;
+
+                  return (
+                    <div
+                      key={date}
+                      className="heatmap-cell"
+                      style={{
+                        backgroundColor: getHeatmapColor(activityCount),
+                        opacity: Math.min(activityCount / 3, 1)
+                      }}
+                      title={`${date}: ${activityCount} entry(ies)`}
+                    ></div>
+                  );
+                })}
             </div>
           </div>
           <div className="heatmap-legend">
@@ -522,7 +638,7 @@ const AnalyticsDashboard = ({
           <p className="text-muted">Last updated: {new Date().toLocaleString()}</p>
         </div>
       )}
-    </div>
+    </main>
   );
 };
 

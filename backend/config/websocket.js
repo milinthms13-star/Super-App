@@ -118,6 +118,24 @@ const initializeWebSocket = (server, options = {}) => {
     // Set user online
     setUserOnline(socket.userId);
 
+    // Phase 1: Update device connection status
+    try {
+      const Device = require('../models/Device');
+      const deviceService = require('../services/deviceService');
+      const deviceFingerprint = socket.handshake.auth.deviceFingerprint;
+      
+      if (deviceFingerprint) {
+        await deviceService.updateConnectionStatus(
+          deviceFingerprint,
+          'online',
+          socket.id
+        );
+        socket.deviceFingerprint = deviceFingerprint;
+      }
+    } catch (err) {
+      console.error('[WebSocket] Failed to update device connection status:', err.message);
+    }
+
     // Broadcast online status
     socket.broadcast.emit('user:online', {
       userId: socket.userId,
@@ -496,6 +514,22 @@ const initializeWebSocket = (server, options = {}) => {
      */
     socket.on('disconnect', () => {
       console.log(`[WebSocket] User ${socket.userId} disconnected: ${socket.id}`);
+
+      // Phase 1: Update device connection status to offline
+      if (socket.deviceFingerprint) {
+        try {
+          const deviceService = require('../services/deviceService');
+          deviceService.updateConnectionStatus(
+            socket.deviceFingerprint,
+            'offline',
+            null
+          ).catch(err => {
+            console.error('[WebSocket] Failed to update device offline status:', err.message);
+          });
+        } catch (err) {
+          console.error('[WebSocket] Error updating device status:', err.message);
+        }
+      }
 
       // Remove socket from user's socket set
       const sockets = userSockets.get(socket.userId);

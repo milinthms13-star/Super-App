@@ -1,5 +1,5 @@
 const DiaryVersionComment = require('../models/DiaryVersionComment');
-const logger = require('../logger');
+const logger = require('./logger');
 
 /**
  * Version Comment Utilities - Manage comments on diary entry versions

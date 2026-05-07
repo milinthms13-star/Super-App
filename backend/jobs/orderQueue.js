@@ -1,16 +1,33 @@
-const Queue = require('bullmq');
-const IORedis = require('ioredis');
+const Queue = require('bull');
 const logger = require('../utils/logger');
-const { connectRedis } = require('../config/redis');
 
 let orderQueue = null;
+const ORDER_QUEUE_NAME = 'ecommerce:orders';
+
+const processOrderJob = async (jobData = {}) => {
+  // Placeholder for order processing (payment, inventory, email, etc.)
+  logger.info(`Processing order from queue: ${jobData.orderId || 'unknown-order'}`);
+  // Integrate with payment webhooks, inventory deduction, etc.
+  return { success: true, orderId: jobData.orderId || null };
+};
 
 const initOrderQueue = async () => {
-  await connectRedis();
-  const redisConnection = new IORedis(process.env.REDIS_URL);
-  
-  orderQueue = new Queue('ecommerce:orders', {
-    connection: redisConnection,
+  if (orderQueue) {
+    return orderQueue;
+  }
+
+  if (process.env.NODE_ENV === 'test') {
+    logger.info('Skipping ecommerce order queue initialization in test environment');
+    return null;
+  }
+
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    logger.info('REDIS_URL not configured. Ecommerce order queue disabled.');
+    return null;
+  }
+
+  orderQueue = new Queue(ORDER_QUEUE_NAME, redisUrl, {
     defaultJobOptions: {
       removeOnComplete: 10,
       removeOnFail: 50,
@@ -18,7 +35,7 @@ const initOrderQueue = async () => {
     },
   });
 
-  logger.info('Ecommerce order queue initialized');
+  orderQueue.process(async (job) => processOrderJob(job.data));
 
   orderQueue.on('completed', (job) => {
     logger.info(`Order job ${job.id} completed: ${job.data.orderId}`);
@@ -28,15 +45,21 @@ const initOrderQueue = async () => {
     logger.error(`Order job ${job.id} failed: ${err.message}`, { data: job.data });
   });
 
+  orderQueue.on('error', (err) => {
+    logger.error(`Ecommerce order queue error: ${err.message}`);
+  });
+
+  logger.info('Ecommerce order queue initialized');
   return orderQueue;
 };
 
 const addOrderToQueue = async (orderData) => {
-  if (!orderQueue) {
-    await initOrderQueue();
+  const queue = orderQueue || await initOrderQueue();
+  if (!queue) {
+    throw new Error('Ecommerce order queue is not configured');
   }
 
-  const job = await orderQueue.add('processOrder', orderData, {
+  const job = await queue.add('processOrder', orderData, {
     delay: 0,
     priority: 1,
   });
@@ -44,15 +67,20 @@ const addOrderToQueue = async (orderData) => {
   return job;
 };
 
-const processOrderJob = async (jobData) => {
-  // Placeholder for order processing (payment, inventory, email, etc.)
-  logger.info('Processing order from queue:', jobData.orderId);
-  // Integrate with payment webhooks, inventory deduction, etc.
+const closeOrderQueue = async () => {
+  if (!orderQueue) {
+    return;
+  }
+
+  await orderQueue.close();
+  orderQueue = null;
+  logger.info('Ecommerce order queue closed');
 };
 
 module.exports = {
   initOrderQueue,
   addOrderToQueue,
   processOrderJob,
+  closeOrderQueue,
 };
 
