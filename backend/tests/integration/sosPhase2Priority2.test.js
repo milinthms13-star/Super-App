@@ -10,8 +10,8 @@ const request = require('supertest');
 const mongoose = require('mongoose');
 const app = require('../../server'); // Express app
 const User = require('../../models/User');
-const SOSIncident = require('../../models/SOSIncident');
-const SOSContact = require('../../models/SOSContact');
+const SOSIncident = require('../../models/SosIncident');
+const SOSContact = require('../../models/SosContact');
 const VideoRecording = require('../../models/VideoRecording');
 const ContactGroup = require('../../models/ContactGroup');
 

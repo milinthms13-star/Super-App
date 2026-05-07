@@ -31,7 +31,7 @@ const contactGroupSchema = new mongoose.Schema(
     contacts: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'SOSContact',
+        ref: 'SosContact',
       },
     ],
 

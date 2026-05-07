@@ -6,8 +6,8 @@
 const request = require('supertest');
 const app = require('../../server');
 const User = require('../../models/User');
-const SOSContact = require('../../models/SOSContact');
-const SOSIncident = require('../../models/SOSIncident');
+const SOSContact = require('../../models/SosContact');
+const SOSIncident = require('../../models/SosIncident');
 const TrackingLink = require('../../models/TrackingLink');
 
 let authToken;
