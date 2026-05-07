@@ -9,14 +9,41 @@ const ReminderDeliveryLog = require('../models/ReminderDeliveryLog');
 const { sendWhatsAppToGroup } = require('../utils/sendWhatsApp');
 const reminderAnalyticsService = require('./reminderAnalyticsService');
 const logger = require('../utils/logger');
-const pLimit = require('p-limit');
+
+const createConcurrencyLimiter = (maxConcurrent = 1) => {
+  let activeCount = 0;
+  const queue = [];
+
+  const next = () => {
+    if (activeCount >= maxConcurrent || queue.length === 0) {
+      return;
+    }
+
+    activeCount += 1;
+    const { fn, resolve, reject } = queue.shift();
+
+    Promise.resolve()
+      .then(fn)
+      .then(resolve, reject)
+      .finally(() => {
+        activeCount -= 1;
+        next();
+      });
+  };
+
+  return (fn) =>
+    new Promise((resolve, reject) => {
+      queue.push({ fn, resolve, reject });
+      next();
+    });
+};
 
 let whatsappGroupSchedulerRunning = false;
 
 class WhatsAppGroupReminderScheduler {
   constructor() {
     this.maxConcurrent = 15;
-    this.limit = pLimit(this.maxConcurrent);
+    this.limit = createConcurrencyLimiter(this.maxConcurrent);
     this.gracePeriodMinutes = 1;
   }
 
