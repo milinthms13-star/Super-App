@@ -12,6 +12,11 @@ import {
   fetchTags,
   fetchMoodStats,
   fetchUpcomingReminders,
+  // Phase 5.1: Version History, Trash, Autosave, App Lock
+  autosaveDiaryEntry,
+  getAppLockStatus,
+  // Phase 5.2: E2EE, Cloud Backup, AI
+  getEncryptionStatus,
 } from "../../services/diaryService";
 import notificationService from "../../services/notificationService";
 import DiaryEditor from "./DiaryEditor";
@@ -19,6 +24,14 @@ import DiaryEntryCard from "./DiaryEntryCard";
 import DiaryCalendar from "./DiaryCalendar";
 import MoodChart from "./MoodChart";
 import TodaysSummary from "./TodaysSummary";
+// Phase 5.1 Components
+import VersionHistory from "./VersionHistory";
+import TrashBin from "./TrashBin";
+import AppLockSettings from "./AppLockSettings";
+import AutosaveIndicator from "./AutosaveIndicator";
+// Phase 5.2 Components
+import AIInsights from "./AIInsights";
+import EncryptionBackupSettings from "./EncryptionBackupSettings";
 import { io } from "socket.io-client";
 import {
   stripHtml,
@@ -54,6 +67,21 @@ const Diary = () => {
   const [viewMode, setViewMode] = useState("list"); // list, calendar, analytics
   const [submitting, setSubmitting] = useState(false);
   const [calendarSubmitting, setCalendarSubmitting] = useState(false);
+
+  // Phase 5.1: Autosave, Version History, Trash, App Lock
+  const [autosaveStatus, setAutosaveStatus] = useState("saved"); // saving, saved, error, offline
+  const [lastSavedTime, setLastSavedTime] = useState(null);
+  const [currentVersionNumber, setCurrentVersionNumber] = useState(0);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showTrashBin, setShowTrashBin] = useState(false);
+  const [showAppLock, setShowAppLock] = useState(false);
+
+  // Phase 5.2: Encryption, Backup, AI Analysis
+  const [showEncryptionBackup, setShowEncryptionBackup] = useState(false);
+  const [showAIInsights, setShowAIInsights] = useState(false);
+
+  // Current entry state for autosave (updated when editing)
+  const [currentEntryForAutosave, setCurrentEntryForAutosave] = useState(null);
 
   // Load entries on mount
   useEffect(() => {
@@ -118,6 +146,48 @@ const Diary = () => {
       console.error("Failed to load upcoming reminders:", err);
     }
   };
+
+  // Phase 5.1: Autosave handler - saves entry every 30 seconds if being edited
+  const performAutosave = useCallback(async () => {
+    if (!editingEntry || !currentEntryForAutosave) return;
+
+    try {
+      setAutosaveStatus("saving");
+      const response = await autosaveDiaryEntry(editingEntry._id, {
+        title: currentEntryForAutosave.title || editingEntry.title,
+        content: currentEntryForAutosave.content || editingEntry.content,
+        mood: currentEntryForAutosave.mood || editingEntry.mood,
+        category: currentEntryForAutosave.category || editingEntry.category,
+        tags: currentEntryForAutosave.tags || editingEntry.tags,
+      });
+
+      if (response.data && response.data.versionNumber) {
+        setCurrentVersionNumber(response.data.versionNumber);
+      }
+      setLastSavedTime(new Date());
+      setAutosaveStatus("saved");
+    } catch (err) {
+      console.error("Autosave failed:", err);
+      setAutosaveStatus("error");
+      // Auto-recover after 3 seconds
+      setTimeout(() => setAutosaveStatus("saved"), 3000);
+    }
+  }, [editingEntry, currentEntryForAutosave]);
+
+  // Phase 5.1: Autosave timer - runs every 30 seconds
+  useEffect(() => {
+    let autosaveInterval;
+
+    if (showEditor && editingEntry) {
+      autosaveInterval = setInterval(() => {
+        performAutosave();
+      }, 30000); // 30 seconds
+    }
+
+    return () => {
+      if (autosaveInterval) clearInterval(autosaveInterval);
+    };
+  }, [showEditor, editingEntry, performAutosave]);
 
   const loadEntries = async (append = false, limit = 20) => {
     try {
@@ -304,17 +374,68 @@ const Diary = () => {
           {error && (
             <div className="diary-error-message">{error}</div>
           )}
-          <button
-            type="button"
-            className="diary-primary-btn"
-            onClick={() => {
-              setEditingEntry(null);
-              setShowEditor(true);
-            }}
-            disabled={loading}
-          >
-            ✍️ New Entry
-          </button>
+          <div className="diary-hero-actions">
+            <button
+              type="button"
+              className="diary-primary-btn"
+              onClick={() => {
+                setEditingEntry(null);
+                setShowEditor(true);
+              }}
+              disabled={loading}
+            >
+              ✍️ New Entry
+            </button>
+
+            {/* Phase 5.1: Feature Access Buttons */}
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowVersionHistory(true)}
+              title="View version history and restore previous versions"
+              disabled={!editingEntry}
+            >
+              📜 History
+            </button>
+
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowTrashBin(true)}
+              title="View and recover deleted entries"
+            >
+              🗑️ Trash
+            </button>
+
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowAppLock(true)}
+              title="Set up PIN lock for app"
+            >
+              🔒 Lock
+            </button>
+
+            {/* Phase 5.2: Feature Access Buttons */}
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowEncryptionBackup(true)}
+              title="Manage encryption and backups"
+            >
+              🔐 Backup
+            </button>
+
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowAIInsights(true)}
+              title="View AI-generated insights"
+              disabled={!editingEntry}
+            >
+              ✨ AI
+            </button>
+          </div>
         </div>
       </section>
 
@@ -325,8 +446,64 @@ const Diary = () => {
           onClose={() => {
             setShowEditor(false);
             setEditingEntry(null);
+            setCurrentEntryForAutosave(null);
+            setCurrentVersionNumber(0);
+            setAutosaveStatus("saved");
           }}
           submitting={submitting}
+        />
+      )}
+
+      {/* Autosave Indicator */}
+      {showEditor && editingEntry && (
+        <AutosaveIndicator
+          status={autosaveStatus}
+          lastSaveTime={lastSavedTime}
+          versionNumber={currentVersionNumber}
+        />
+      )}
+
+      {/* Phase 5.1: Version History Modal */}
+      {showVersionHistory && editingEntry && (
+        <VersionHistory
+          entryId={editingEntry._id}
+          onClose={() => setShowVersionHistory(false)}
+        />
+      )}
+
+      {/* Phase 5.1: Trash Bin Modal */}
+      {showTrashBin && (
+        <TrashBin
+          onClose={() => setShowTrashBin(false)}
+          onRecover={async () => {
+            await loadEntries(false);
+            setShowTrashBin(false);
+          }}
+        />
+      )}
+
+      {/* Phase 5.1: App Lock Settings Modal */}
+      {showAppLock && (
+        <AppLockSettings
+          onClose={() => setShowAppLock(false)}
+        />
+      )}
+
+      {/* Phase 5.2: AI Insights Modal */}
+      {showAIInsights && editingEntry && (
+        <AIInsights
+          entryId={editingEntry._id}
+          onClose={() => setShowAIInsights(false)}
+        />
+      )}
+
+      {/* Phase 5.2: Encryption & Backup Modal */}
+      {showEncryptionBackup && (
+        <EncryptionBackupSettings
+          onClose={() => setShowEncryptionBackup(false)}
+          onBackupRestore={async () => {
+            await loadEntries(false);
+          }}
         />
       )}
 

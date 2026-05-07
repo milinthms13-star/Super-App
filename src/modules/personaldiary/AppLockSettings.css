@@ -1,0 +1,342 @@
+.app-lock-settings-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.app-lock-content {
+  background: white;
+  border-radius: 8px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  padding: 0;
+  position: relative;
+}
+
+.app-lock-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f5f5f5;
+  position: sticky;
+  top: 0;
+}
+
+.app-lock-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.app-lock-error {
+  padding: 15px 20px;
+  background: #ffebee;
+  color: #d32f2f;
+  margin: 15px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.app-lock-content > p {
+  padding: 40px 20px;
+  text-align: center;
+  color: #999;
+}
+
+.lock-status-card {
+  padding: 20px;
+  margin: 15px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  border-left: 4px solid #4caf50;
+}
+
+.status-indicator {
+  margin-bottom: 15px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.status-badge.enabled {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-badge.disabled {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.status-indicator p {
+  margin: 8px 0 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.lock-info {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.info-row .label {
+  color: #666;
+  font-weight: bold;
+}
+
+.info-row .value {
+  color: #333;
+}
+
+.lock-actions {
+  padding: 0 20px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setup-btn,
+.timeout-btn,
+.change-pin-btn,
+.disable-btn {
+  padding: 12px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.setup-btn,
+.change-pin-btn,
+.timeout-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.setup-btn:hover,
+.change-pin-btn:hover,
+.timeout-btn:hover {
+  background: #45a049;
+}
+
+.disable-btn {
+  background: #ff6b6b;
+  color: white;
+}
+
+.disable-btn:hover:not(:disabled) {
+  background: #ff5252;
+}
+
+.setup-btn:disabled,
+.timeout-btn:disabled,
+.change-pin-btn:disabled,
+.disable-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.timeout-editor {
+  padding: 15px 20px;
+  background: #f9f9f9;
+  margin: 0 15px 15px 15px;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+}
+
+.timeout-editor label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: bold;
+  font-size: 13px;
+  color: #333;
+}
+
+.timeout-editor input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-bottom: 15px;
+  box-sizing: border-box;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.save-btn,
+.cancel-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.save-btn {
+  background: #4caf50;
+  color: white;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.cancel-btn {
+  background: #999;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #888;
+}
+
+.pin-setup-form {
+  padding: 15px 20px;
+  background: #f9f9f9;
+  margin: 0 15px 15px 15px;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+}
+
+.pin-setup-form h3 {
+  margin: 0 0 10px 0;
+  font-size: 15px;
+  color: #333;
+}
+
+.pin-info {
+  margin: 0 0 15px 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: bold;
+  font-size: 13px;
+  color: #333;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #4caf50;
+  box-shadow: 0 0 4px rgba(76, 175, 80, 0.2);
+}
+
+.form-group input:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.confirm-btn {
+  flex: 1;
+  padding: 10px 15px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.confirm-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form-actions .cancel-btn {
+  flex: 1;
+  padding: 10px 15px;
+  background: #999;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.form-actions .cancel-btn:hover:not(:disabled) {
+  background: #888;
+}
+
+@media (max-width: 600px) {
+  .app-lock-content {
+    width: 95%;
+    max-height: 85vh;
+  }
+}

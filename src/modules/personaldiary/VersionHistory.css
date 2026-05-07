@@ -1,0 +1,207 @@
+.version-history-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.version-history-content {
+  background: white;
+  border-radius: 8px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.version-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f5f5f5;
+  position: sticky;
+  top: 0;
+}
+
+.version-history-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.version-loading,
+.version-error,
+.version-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #999;
+}
+
+.version-error {
+  color: #d32f2f;
+  background: #ffebee;
+}
+
+.versions-list {
+  padding: 10px 0;
+}
+
+.version-item {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.version-header {
+  padding: 15px 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.version-header:hover {
+  background: #f9f9f9;
+}
+
+.version-number {
+  background: #4caf50;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  min-width: 40px;
+  text-align: center;
+}
+
+.version-meta {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  font-size: 12px;
+  color: #999;
+}
+
+.version-date {
+  flex: 1;
+}
+
+.version-type {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  background: #f0f0f0;
+}
+
+.version-type.auto_save {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.version-type.manual_save {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.version-title-preview {
+  flex: 0 0 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.version-details {
+  padding: 15px 20px;
+  background: #fafafa;
+  border-top: 1px solid #f0f0f0;
+}
+
+.version-content-preview {
+  margin-bottom: 15px;
+}
+
+.version-content-preview strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+.version-content-preview p {
+  margin: 0;
+  font-size: 13px;
+  color: #999;
+  line-height: 1.4;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.version-metadata {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 15px;
+  font-size: 12px;
+  color: #666;
+}
+
+.restore-btn {
+  width: 100%;
+  padding: 10px 15px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.restore-btn:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.restore-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .version-history-content {
+    width: 95%;
+    max-height: 85vh;
+  }
+
+  .version-header {
+    flex-wrap: wrap;
+  }
+
+  .version-title-preview {
+    flex: 0 0 100%;
+  }
+}

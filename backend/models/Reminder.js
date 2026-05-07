@@ -238,6 +238,57 @@ const reminderSchema = new mongoose.Schema({
     }
   }],
   // PHASE 1 FEATURES END
+
+  // Phase 3 Email field
+  email: {
+    type: String,
+    lowercase: true,
+    match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/ // Email validation regex
+  },
+
+  // Phase 4: WhatsApp, Telegram, Push delivery fields
+  whatsappPhoneNumber: {
+    type: String  // Phone number for WhatsApp delivery
+  },
+  telegramChatId: {
+    type: String  // Telegram chat ID for delivery
+  },
+  pushEnabled: {
+    type: Boolean,
+    default: false  // Push notifications to user devices
+  },
+
+  // Phase 4: Template customization
+  templateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ReminderTemplate'  // Custom template for this reminder
+  },
+
+  // Phase 4: Delivery analytics tracking
+  deliveryStats: {
+    totalAttempts: {
+      type: Number,
+      default: 0
+    },
+    successfulDeliveries: {
+      type: Number,
+      default: 0
+    },
+    failedDeliveries: {
+      type: Number,
+      default: 0
+    },
+    lastDeliveryAttempt: Date,
+    lastSuccessfulDelivery: Date
+  },
+
+  // Phase 5: WhatsApp Groups support
+  whatsappGroupId: {
+    type: String  // WhatsApp group ID for bulk group delivery
+  },
+  whatsappGroupName: {
+    type: String  // Display name of the group
+  }
 }, {
   timestamps: true
 });

@@ -1,0 +1,58 @@
+.autosave-indicator {
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.autosave-indicator.saving {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.autosave-indicator.saved {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.autosave-indicator.error {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+.autosave-indicator.offline {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.indicator-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.icon {
+  font-size: 14px;
+}
+
+.text {
+  font-size: 12px;
+}

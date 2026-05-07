@@ -1,7 +1,27 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
-import { formatCurrency, formatDisplayDate } from "../../utils/ecommerceHelpers";
+import { formatDisplayDate } from "../../utils/ecommerceHelpers";
 import "./InventoryAlerts.css";
+
+const getLatestNotification = (alert) => {
+  if (!Array.isArray(alert?.notifications) || alert.notifications.length === 0) {
+    return null;
+  }
+
+  return alert.notifications[alert.notifications.length - 1];
+};
+
+const getAcknowledgedAt = (alert) => getLatestNotification(alert)?.acknowledgedAt || null;
+
+const isAlertAcknowledged = (alert) => Boolean(getAcknowledgedAt(alert));
+
+const getAlertStatusLabel = (alert) => {
+  if (alert?.status === "active" && isAlertAcknowledged(alert)) {
+    return "Acknowledged";
+  }
+
+  return alert?.status || "unknown";
+};
 
 const InventoryAlerts = () => {
   const { apiCall } = useApp();
@@ -12,6 +32,17 @@ const InventoryAlerts = () => {
   const [filterStatus, setFilterStatus] = useState("active");
   const [filterType, setFilterType] = useState("");
   const [selectedAlert, setSelectedAlert] = useState(null);
+
+  const syncAlertRecord = (nextAlert) => {
+    if (!nextAlert?.alertId) {
+      return;
+    }
+
+    setAlerts((prev) =>
+      prev.map((alert) => (alert.alertId === nextAlert.alertId ? nextAlert : alert))
+    );
+    setSelectedAlert((prev) => (prev?.alertId === nextAlert.alertId ? nextAlert : prev));
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -36,8 +67,7 @@ const InventoryAlerts = () => {
 
         setAlerts(response.data || []);
 
-        // Also load dashboard summary
-        const summaryResponse = await apiCall("/alerts/inventory/dashboard/summary", "GET");
+        const summaryResponse = await apiCall("/alerts/dashboard/summary", "GET");
         if (summaryResponse?.success) {
           setSummary(summaryResponse.summary);
         }
@@ -61,12 +91,8 @@ const InventoryAlerts = () => {
   const handleAcknowledge = async (alertId) => {
     try {
       const response = await apiCall(`/alerts/${alertId}/acknowledge`, "PATCH");
-      if (response?.success) {
-        setAlerts((prev) =>
-          prev.map((a) =>
-            a.alertId === alertId ? { ...a, status: "acknowledged" } : a
-          )
-        );
+      if (response?.success && response.data) {
+        syncAlertRecord(response.data);
       }
     } catch (err) {
       console.error("Error acknowledging alert:", err);
@@ -80,7 +106,7 @@ const InventoryAlerts = () => {
         reason: "Item restocked",
       });
       if (response?.success) {
-        setAlerts((prev) => prev.filter((a) => a.alertId !== alertId));
+        setAlerts((prev) => prev.filter((alert) => alert.alertId !== alertId));
         setSelectedAlert(null);
       }
     } catch (err) {
@@ -124,7 +150,6 @@ const InventoryAlerts = () => {
 
   return (
     <section className="inventory-alerts-shell">
-      {/* Summary Cards */}
       {summary && (
         <div className="alerts-summary">
           <article className="alert-summary-card">
@@ -153,7 +178,6 @@ const InventoryAlerts = () => {
         </div>
       )}
 
-      {/* Filters */}
       <div className="alerts-filters">
         <div className="filter-group">
           <label>Status:</label>
@@ -176,7 +200,6 @@ const InventoryAlerts = () => {
         </div>
       </div>
 
-      {/* Alerts List */}
       <div className="alerts-list">
         <div className="alerts-list-header">
           <h3>Inventory Alerts</h3>
@@ -224,7 +247,7 @@ const InventoryAlerts = () => {
                     <small>minimum</small>
                   </td>
                   <td className={`alert-status status-${alert.status}`}>
-                    <span>{alert.status}</span>
+                    <span>{getAlertStatusLabel(alert)}</span>
                   </td>
                   <td className="alert-time">
                     <small>{formatDisplayDate(alert.triggeredAt)}</small>
@@ -236,7 +259,6 @@ const InventoryAlerts = () => {
         )}
       </div>
 
-      {/* Alert Details Modal */}
       {selectedAlert && (
         <div className="alert-modal-overlay" onClick={() => setSelectedAlert(null)}>
           <div className="alert-modal" onClick={(e) => e.stopPropagation()}>
@@ -247,12 +269,11 @@ const InventoryAlerts = () => {
                 className="close-btn"
                 onClick={() => setSelectedAlert(null)}
               >
-                ✕
+                x
               </button>
             </div>
 
             <div className="alert-modal-body">
-              {/* Alert Info */}
               <div className="alert-detail-section">
                 <h4>Alert Information</h4>
                 <div className="detail-grid">
@@ -273,13 +294,12 @@ const InventoryAlerts = () => {
                   <div className="detail-item">
                     <span>Status</span>
                     <strong className={`status-badge status-${selectedAlert.status}`}>
-                      {selectedAlert.status}
+                      {getAlertStatusLabel(selectedAlert)}
                     </strong>
                   </div>
                 </div>
               </div>
 
-              {/* Settings */}
               {selectedAlert.settings && (
                 <div className="alert-detail-section">
                   <h4>Alert Settings</h4>
@@ -300,7 +320,6 @@ const InventoryAlerts = () => {
                 </div>
               )}
 
-              {/* Suggestions */}
               {selectedAlert.suggestions && selectedAlert.suggestions.length > 0 && (
                 <div className="alert-detail-section">
                   <h4>Suggested Actions</h4>
@@ -316,7 +335,6 @@ const InventoryAlerts = () => {
                 </div>
               )}
 
-              {/* Triggered Date */}
               <div className="alert-detail-section">
                 <h4>Timeline</h4>
                 <div className="detail-grid">
@@ -324,6 +342,12 @@ const InventoryAlerts = () => {
                     <span>Triggered</span>
                     <strong>{formatDisplayDate(selectedAlert.triggeredAt)}</strong>
                   </div>
+                  {getAcknowledgedAt(selectedAlert) && (
+                    <div className="detail-item">
+                      <span>Acknowledged</span>
+                      <strong>{formatDisplayDate(getAcknowledgedAt(selectedAlert))}</strong>
+                    </div>
+                  )}
                   {selectedAlert.resolvedAt && (
                     <div className="detail-item">
                       <span>Resolved</span>
@@ -337,13 +361,15 @@ const InventoryAlerts = () => {
             <div className="alert-modal-footer">
               {selectedAlert.status === "active" && (
                 <>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => handleAcknowledge(selectedAlert.alertId)}
-                  >
-                    Acknowledge
-                  </button>
+                  {!isAlertAcknowledged(selectedAlert) && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => handleAcknowledge(selectedAlert.alertId)}
+                    >
+                      Acknowledge
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-primary"

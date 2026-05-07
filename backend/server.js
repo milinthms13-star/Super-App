@@ -166,6 +166,26 @@ missedReminderScheduler.startMissedReminderScheduler(5 * 60 * 1000);  // Run eve
 const smsReminderScheduler = require('./services/smsReminderScheduler');
 smsReminderScheduler.start();
 
+// Initialize Email Reminder Scheduler (Phase 3)
+const emailReminderScheduler = require('./services/emailReminderScheduler');
+emailReminderScheduler.start();
+
+// Initialize WhatsApp Reminder Scheduler (Phase 4)
+const whatsappReminderScheduler = require('./services/whatsappReminderScheduler');
+whatsappReminderScheduler.startWhatsAppReminderScheduler();
+
+// Initialize Telegram Reminder Scheduler (Phase 4)
+const telegramReminderScheduler = require('./services/telegramReminderScheduler');
+telegramReminderScheduler.startTelegramReminderScheduler();
+
+// Initialize Push Notification Scheduler (Phase 4)
+const pushNotificationScheduler = require('./services/pushNotificationScheduler');
+pushNotificationScheduler.startPushNotificationScheduler();
+
+// Initialize WhatsApp Group Reminder Scheduler (Phase 5)
+const whatsappGroupReminderScheduler = require('./services/whatsappGroupReminderScheduler');
+whatsappGroupReminderScheduler.startWhatsAppGroupReminderScheduler();
+
 server.listen(PORT, () => {
   logger.info(`Server started on port ${PORT}`);
   logger.info(`WebSocket server initialized`);
@@ -173,6 +193,11 @@ server.listen(PORT, () => {
   logger.info(`Diary reminder scheduler started`);
   logger.info(`Missed reminder scheduler started`);
   logger.info(`SMS reminder scheduler started`);
+  logger.info(`Email reminder scheduler started`);
+  logger.info(`WhatsApp reminder scheduler started`);
+  logger.info(`Telegram reminder scheduler started`);
+  logger.info(`Push notification scheduler started`);
+  logger.info(`WhatsApp group reminder scheduler started`);
 });
 
 process.on('unhandledRejection', (err) => {
@@ -186,6 +211,11 @@ process.on('SIGTERM', () => {
   diaryReminderScheduler.stop();
   missedReminderScheduler.stopMissedReminderScheduler();
   smsReminderScheduler.stop();
+  emailReminderScheduler.stop();
+  whatsappReminderScheduler.stopWhatsAppReminderScheduler();
+  telegramReminderScheduler.stopTelegramReminderScheduler();
+  pushNotificationScheduler.stopPushNotificationScheduler();
+  whatsappGroupReminderScheduler.stopWhatsAppGroupReminderScheduler();
   server.close(() => {
     logger.info('Process terminated');
   });

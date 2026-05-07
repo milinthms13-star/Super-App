@@ -652,6 +652,198 @@ const ReminderForm = React.memo(({
           </fieldset>
         )}
 
+        {/* Phase 3: Email Setup */}
+        {formData.reminders.includes('Email') && (
+          <fieldset className="reminderalert-section-block reminderalert-email-block">
+            <legend className="reminderalert-section-heading">
+              <h3>Email reminder setup</h3>
+              <p>This reminder will send an email notification to the address you provide.</p>
+            </legend>
+
+            <div className="reminderalert-alert reminderalert-alert-info" role="note">
+              📧 Email reminders are sent at each scheduled time before the due date. You can check your spam folder if you don't see them.
+            </div>
+
+            <fieldset>
+              <legend className="sr-only">Email configuration</legend>
+              <div className="reminderalert-editor-grid">
+                <label className="reminderalert-field reminderalert-field-full">
+                  <span>
+                    Email address {formErrors.email && <span className="error-indicator" aria-label="required">*</span>}
+                  </span>
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email || ''}
+                    onChange={onChange}
+                    placeholder="your.email@example.com"
+                    disabled={submitting}
+                    aria-invalid={!!formErrors.email}
+                    aria-describedby={formErrors.email ? 'email-error' : 'email-help'}
+                  />
+                  <small id="email-help" className="sr-only">Enter the email address where the reminder notification will be sent.</small>
+                  {formErrors.email && (
+                    <small id="email-error" className="error-text" role="alert">{formErrors.email}</small>
+                  )}
+                </label>
+              </div>
+
+              <div className="reminderalert-info-box">
+                <p className="reminderalert-info-title">💡 Email Notification Times</p>
+                <p className="reminderalert-info-text">
+                  You'll receive email notifications based on your Advanced Reminders settings:
+                </p>
+                <ul className="reminderalert-info-list">
+                  {(formData.reminderBeforeOffsets || [5]).length > 0 ? (
+                    (formData.reminderBeforeOffsets || [5]).map((offset) => {
+                      const labels = {
+                        5: '5 minutes before',
+                        15: '15 minutes before',
+                        30: '30 minutes before',
+                        60: '1 hour before',
+                        1440: '1 day before'
+                      };
+                      return (
+                        <li key={`email-offset-${offset}`}>
+                          Email notification: {labels[offset] || `${offset} minutes before`}
+                        </li>
+                      );
+                    })
+                  ) : (
+                    <li>Default: 5 minutes before the due time</li>
+                  )}
+                </ul>
+              </div>
+            </fieldset>
+          </fieldset>
+        )}
+
+        {/* Phase 4: WhatsApp Setup */}
+        {formData.reminders.includes('WhatsApp') && (
+          <fieldset className="reminderalert-section-block reminderalert-whatsapp-block">
+            <legend className="reminderalert-section-heading">
+              <h3>WhatsApp reminder setup</h3>
+              <p>Receive reminders via WhatsApp messages.</p>
+            </legend>
+
+            <div className="reminderalert-alert reminderalert-alert-info" role="note">
+              💬 WhatsApp reminders reach you instantly. You'll receive formatted messages at each scheduled time.
+            </div>
+
+            <fieldset>
+              <legend className="sr-only">WhatsApp configuration</legend>
+              <div className="reminderalert-editor-grid">
+                <label className="reminderalert-field reminderalert-field-full">
+                  <span>
+                    WhatsApp phone number {formErrors.whatsappPhoneNumber && <span className="error-indicator">*</span>}
+                  </span>
+                  <input
+                    type="tel"
+                    name="whatsappPhoneNumber"
+                    value={formData.whatsappPhoneNumber || ''}
+                    onChange={onChange}
+                    placeholder="+91 98765 43210"
+                    disabled={submitting}
+                    aria-invalid={!!formErrors.whatsappPhoneNumber}
+                  />
+                  {formErrors.whatsappPhoneNumber && (
+                    <small className="error-text" role="alert">{formErrors.whatsappPhoneNumber}</small>
+                  )}
+                </label>
+              </div>
+            </fieldset>
+          </fieldset>
+        )}
+
+        {/* Phase 4: Telegram Setup */}
+        {formData.reminders.includes('Telegram') && (
+          <fieldset className="reminderalert-section-block reminderalert-telegram-block">
+            <legend className="reminderalert-section-heading">
+              <h3>Telegram reminder setup</h3>
+              <p>Receive reminders via your Telegram bot.</p>
+            </legend>
+
+            <div className="reminderalert-alert reminderalert-alert-info" role="note">
+              🤖 Telegram reminders are sent to your private chat. Ensure you've started our Telegram bot first.
+            </div>
+
+            <fieldset>
+              <legend className="sr-only">Telegram configuration</legend>
+              <div className="reminderalert-editor-grid">
+                <label className="reminderalert-field reminderalert-field-full">
+                  <span>
+                    Telegram Chat ID {formErrors.telegramChatId && <span className="error-indicator">*</span>}
+                  </span>
+                  <input
+                    type="text"
+                    name="telegramChatId"
+                    value={formData.telegramChatId || ''}
+                    onChange={onChange}
+                    placeholder="123456789"
+                    disabled={submitting}
+                    aria-invalid={!!formErrors.telegramChatId}
+                  />
+                  <small className="sr-only">Your unique Telegram chat ID. Get it from /start command in our bot.</small>
+                  {formErrors.telegramChatId && (
+                    <small className="error-text" role="alert">{formErrors.telegramChatId}</small>
+                  )}
+                </label>
+              </div>
+            </fieldset>
+          </fieldset>
+        )}
+
+        {/* Phase 4: Push Notifications */}
+        <fieldset className="reminderalert-section-block reminderalert-push-block">
+          <legend className="reminderalert-section-heading">
+            <h3>Push notification settings</h3>
+            <p>Browser and mobile notifications for instant alerts.</p>
+          </legend>
+
+          <div className="reminderalert-editor-grid">
+            <label className="reminderalert-field reminderalert-checkbox-field">
+              <input
+                type="checkbox"
+                name="pushEnabled"
+                checked={formData.pushEnabled || false}
+                onChange={onChange}
+                disabled={submitting}
+              />
+              <span>Enable push notifications for this reminder</span>
+            </label>
+          </div>
+
+          {formData.pushEnabled && (
+            <div className="reminderalert-alert reminderalert-alert-info" role="note">
+              🔔 Push notifications will appear on all your connected devices. Make sure you've granted permission.
+            </div>
+          )}
+        </fieldset>
+
+        {/* Phase 4: Template Selection */}
+        <fieldset className="reminderalert-section-block reminderalert-template-block">
+          <legend className="reminderalert-section-heading">
+            <h3>Notification template</h3>
+            <p>Customize how your reminders are formatted (optional).</p>
+          </legend>
+
+          <div className="reminderalert-editor-grid">
+            <label className="reminderalert-field reminderalert-field-full">
+              <span>Message template</span>
+              <select
+                name="templateId"
+                value={formData.templateId || ''}
+                onChange={onChange}
+                disabled={submitting}
+              >
+                <option value="">Use default template</option>
+                <option value="custom">Create custom template</option>
+              </select>
+              <small className="sr-only">Choose how your reminder messages are formatted across different channels.</small>
+            </label>
+          </div>
+        </fieldset>
+
         {/* Submit Buttons */}
         <div className="reminderalert-submit-row">
           <button

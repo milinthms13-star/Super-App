@@ -1,0 +1,202 @@
+.analytics-dashboard {
+  padding: 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.analytics-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 24px;
+}
+
+.days-selector {
+  display: flex;
+  gap: 10px;
+}
+
+.days-selector button {
+  padding: 8px 16px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.days-selector button.active,
+.days-selector button:hover {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.analytics-loading,
+.analytics-error,
+.analytics-empty {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+  font-size: 16px;
+}
+
+.analytics-error {
+  background: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+  border-radius: 4px;
+}
+
+.analytics-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.analytics-card h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+  font-size: 18px;
+}
+
+.success-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  padding: 15px;
+  background: #f9f9f9;
+  border-radius: 4px;
+  border-left: 4px solid #007bff;
+}
+
+.metric .label {
+  font-size: 12px;
+  color: #666;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.metric .value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+}
+
+.metric .value.success {
+  color: #28a745;
+}
+
+.metric .value.failed {
+  color: #dc3545;
+}
+
+.channel-list,
+.type-list,
+.time-list,
+.failure-list {
+  display: grid;
+  gap: 10px;
+}
+
+.channel-item,
+.type-item,
+.time-item,
+.failure-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 4px;
+  border-left: 4px solid #007bff;
+}
+
+.channel-name,
+.type-name,
+.hour,
+.error {
+  font-weight: 600;
+  color: #333;
+}
+
+.channel-stats,
+.type-stats {
+  display: flex;
+  gap: 15px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+
+.channel-stats span,
+.type-stats span {
+  color: #666;
+}
+
+.channel-stats .success,
+.type-stats .success {
+  color: #28a745;
+}
+
+.channel-stats .failed {
+  color: #dc3545;
+}
+
+.time-item {
+  justify-content: space-around;
+}
+
+.failure-item {
+  justify-content: space-between;
+}
+
+.failure-item .error {
+  flex: 1;
+  color: #dc3545;
+}
+
+.failure-item .count {
+  color: #666;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .analytics-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .success-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .channel-item,
+  .type-item,
+  .time-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .channel-stats,
+  .type-stats {
+    width: 100%;
+  }
+}

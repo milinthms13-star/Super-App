@@ -699,6 +699,66 @@ export const setSMSConfig = async (reminderId, phoneNumber) => {
   }
 };
 
+// ==================== PHASE 3: EMAIL DELIVERY ====================
+
+/**
+ * Get email delivery status for a reminder
+ * @param {string} reminderId - The reminder ID
+ * @returns {Promise<Object>} - Email delivery status and logs
+ */
+export const getEmailDeliveryStatus = async (reminderId) => {
+  try {
+    const response = await axiosInstance.get(`/reminders/${reminderId}/email-delivery-status`);
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error fetching email delivery status:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch email delivery status"
+    );
+  }
+};
+
+/**
+ * Manually trigger email resend for a reminder
+ * @param {string} reminderId - The reminder ID
+ * @returns {Promise<Object>} - Resend confirmation
+ */
+export const resendEmail = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(
+      `/reminders/${reminderId}/resend-email`,
+      {}
+    );
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error triggering email resend:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to resend email"
+    );
+  }
+};
+
+/**
+ * Configure email address for a reminder
+ * @param {string} reminderId - The reminder ID
+ * @param {string} email - The email address
+ * @returns {Promise<Object>} - Updated email configuration
+ */
+export const setEmailConfig = async (reminderId, email) => {
+  try {
+    const response = await axiosInstance.put(
+      `/reminders/${reminderId}/email-config`,
+      { email }
+    );
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error updating email configuration:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to update email configuration"
+    );
+  }
+};
+
 const remindersService = {
   fetchReminders,
   createReminder,
@@ -735,6 +795,563 @@ const remindersService = {
   getSMSDeliveryStatus,
   resendSMS,
   setSMSConfig,
+  // Phase 3: Email Delivery
+  getEmailDeliveryStatus,
+  resendEmail,
+  setEmailConfig,
+  // Phase 4: WhatsApp, Telegram, Push, Analytics, Templates
+  getWhatsAppDeliveryStatus,
+  resendWhatsApp,
+  setWhatsAppConfig,
+  getTelegramDeliveryStatus,
+  resendTelegram,
+  setTelegramConfig,
+  getPushDeliveryStatus,
+  setPushConfig,
+  getDeliveryAnalytics,
+  getFailedDeliveries,
+  retryFailedDelivery,
+  createTemplate,
+  getUserTemplates,
+  getTemplate,
+  updateTemplate,
+  deleteTemplate,
+  cloneTemplate,
 };
 
 export default remindersService;
+
+// ==================== PHASE 4: WHATSAPP DELIVERY ====================
+
+/**
+ * Get WhatsApp delivery status
+ */
+export const getWhatsAppDeliveryStatus = async (reminderId) => {
+  try {
+    const response = await axiosInstance.get(`/reminders/${reminderId}/whatsapp-delivery-status`);
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error fetching WhatsApp delivery status:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch WhatsApp delivery status");
+  }
+};
+
+/**
+ * Resend WhatsApp message
+ */
+export const resendWhatsApp = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(`/reminders/${reminderId}/resend-whatsapp`, {});
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error resending WhatsApp:", error);
+    throw new Error(error.response?.data?.message || "Failed to resend WhatsApp");
+  }
+};
+
+/**
+ * Configure WhatsApp phone number
+ */
+export const setWhatsAppConfig = async (reminderId, whatsappPhoneNumber) => {
+  try {
+    const response = await axiosInstance.put(`/reminders/${reminderId}/whatsapp-config`, { whatsappPhoneNumber });
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error updating WhatsApp config:", error);
+    throw new Error(error.response?.data?.message || "Failed to update WhatsApp configuration");
+  }
+};
+
+// ==================== PHASE 4: TELEGRAM DELIVERY ====================
+
+/**
+ * Get Telegram delivery status
+ */
+export const getTelegramDeliveryStatus = async (reminderId) => {
+  try {
+    const response = await axiosInstance.get(`/reminders/${reminderId}/telegram-delivery-status`);
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error fetching Telegram delivery status:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch Telegram delivery status");
+  }
+};
+
+/**
+ * Resend Telegram message
+ */
+export const resendTelegram = async (reminderId) => {
+  try {
+    const response = await axiosInstance.post(`/reminders/${reminderId}/resend-telegram`, {});
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error resending Telegram:", error);
+    throw new Error(error.response?.data?.message || "Failed to resend Telegram");
+  }
+};
+
+/**
+ * Configure Telegram chat ID
+ */
+export const setTelegramConfig = async (reminderId, telegramChatId) => {
+  try {
+    const response = await axiosInstance.put(`/reminders/${reminderId}/telegram-config`, { telegramChatId });
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error updating Telegram config:", error);
+    throw new Error(error.response?.data?.message || "Failed to update Telegram configuration");
+  }
+};
+
+// ==================== PHASE 4: PUSH NOTIFICATIONS ====================
+
+/**
+ * Get push notification delivery status
+ */
+export const getPushDeliveryStatus = async (reminderId) => {
+  try {
+    const response = await axiosInstance.get(`/reminders/${reminderId}/push-delivery-status`);
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error fetching push delivery status:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch push delivery status");
+  }
+};
+
+/**
+ * Configure push notifications
+ */
+export const setPushConfig = async (reminderId, pushEnabled) => {
+  try {
+    const response = await axiosInstance.put(`/reminders/${reminderId}/push-config`, { pushEnabled });
+    return normalizeReminderResponse(response.data);
+  } catch (error) {
+    console.error("Error updating push config:", error);
+    throw new Error(error.response?.data?.message || "Failed to update push configuration");
+  }
+};
+
+// ==================== PHASE 4: DELIVERY ANALYTICS ====================
+
+/**
+ * Get delivery analytics
+ */
+export const getDeliveryAnalytics = async (daysBack = 30, channel = null) => {
+  try {
+    const params = { daysBack };
+    if (channel) params.channel = channel;
+    
+    const response = await axiosInstance.get('/reminders/analytics/delivery-stats', { params });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching delivery analytics:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch analytics");
+  }
+};
+
+/**
+ * Get failed deliveries for retry
+ */
+export const getFailedDeliveries = async (channel = null, limit = 10) => {
+  try {
+    const params = { limit };
+    if (channel) params.channel = channel;
+    
+    const response = await axiosInstance.get('/reminders/analytics/failed-deliveries', { params });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching failed deliveries:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch failed deliveries");
+  }
+};
+
+/**
+ * Retry a failed delivery
+ */
+export const retryFailedDelivery = async (logId) => {
+  try {
+    const response = await axiosInstance.post(`/reminders/analytics/retry/${logId}`, {});
+    return response.data.data;
+  } catch (error) {
+    console.error("Error retrying delivery:", error);
+    throw new Error(error.response?.data?.message || "Failed to retry delivery");
+  }
+};
+
+// ==================== PHASE 4: TEMPLATE CUSTOMIZATION ====================
+
+/**
+ * Create a new template
+ */
+export const createTemplate = async (templateData) => {
+  try {
+    const response = await axiosInstance.post('/reminders/templates', templateData);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error creating template:", error);
+    throw new Error(error.response?.data?.message || "Failed to create template");
+  }
+};
+
+/**
+ * Get all templates for user
+ */
+export const getUserTemplates = async () => {
+  try {
+    const response = await axiosInstance.get('/reminders/templates');
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching templates:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch templates");
+  }
+};
+
+/**
+ * Get a specific template
+ */
+export const getTemplate = async (templateId) => {
+  try {
+    const response = await axiosInstance.get(`/reminders/templates/${templateId}`);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching template:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch template");
+  }
+};
+
+/**
+ * Update a template
+ */
+export const updateTemplate = async (templateId, templateData) => {
+  try {
+    const response = await axiosInstance.put(`/reminders/templates/${templateId}`, templateData);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error updating template:", error);
+    throw new Error(error.response?.data?.message || "Failed to update template");
+  }
+};
+
+/**
+ * Delete a template
+ */
+export const deleteTemplate = async (templateId) => {
+  try {
+    const response = await axiosInstance.delete(`/reminders/templates/${templateId}`);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error deleting template:", error);
+    throw new Error(error.response?.data?.message || "Failed to delete template");
+  }
+};
+
+/**
+ * Clone a template
+ */
+export const cloneTemplate = async (templateId, newName) => {
+  try {
+    const response = await axiosInstance.post(`/reminders/templates/${templateId}/clone`, { newName });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error cloning template:", error);
+    throw new Error(error.response?.data?.message || "Failed to clone template");
+  }
+};
+
+// ==================== PHASE 5: ANALYTICS DASHBOARD ====================
+
+/**
+ * Get full analytics dashboard overview
+ */
+export const getDashboardOverview = async (daysBack = 30) => {
+  try {
+    const response = await axiosInstance.get('/reminders/analytics/dashboard', {
+      params: { daysBack }
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching dashboard overview:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch analytics");
+  }
+};
+
+/**
+ * Get channel comparison stats
+ */
+export const getChannelComparison = async (daysBack = 30) => {
+  try {
+    const response = await axiosInstance.get('/reminders/analytics/channel-comparison', {
+      params: { daysBack }
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching channel comparison:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch channel comparison");
+  }
+};
+
+/**
+ * Get reminder type analysis
+ */
+export const getReminderTypeAnalysis = async (daysBack = 30) => {
+  try {
+    const response = await axiosInstance.get('/reminders/analytics/reminder-types', {
+      params: { daysBack }
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching reminder type analysis:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch type analysis");
+  }
+};
+
+/**
+ * Get priority impact analysis
+ */
+export const getPriorityImpactAnalysis = async (daysBack = 30) => {
+  try {
+    const response = await axiosInstance.get('/reminders/analytics/priority-impact', {
+      params: { daysBack }
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching priority impact:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch priority impact");
+  }
+};
+
+/**
+ * Get template usage analytics
+ */
+export const getTemplateUsageAnalytics = async (daysBack = 30) => {
+  try {
+    const response = await axiosInstance.get('/reminders/analytics/template-usage', {
+      params: { daysBack }
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching template usage:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch template usage");
+  }
+};
+
+// ==================== PHASE 5: BULK TEMPLATE MANAGEMENT ====================
+
+/**
+ * Apply template to multiple reminders
+ */
+export const applyTemplateToBulk = async (templateId, reminderIds) => {
+  try {
+    const response = await axiosInstance.post('/reminders/bulk/apply-template', {
+      templateId,
+      reminderIds
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error applying template in bulk:", error);
+    throw new Error(error.response?.data?.message || "Failed to apply template");
+  }
+};
+
+/**
+ * Snooze multiple reminders
+ */
+export const bulkSnoozeReminders = async (reminderIds, snoozeMinutes) => {
+  try {
+    const response = await axiosInstance.post('/reminders/bulk/snooze', {
+      reminderIds,
+      snoozeMinutes
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error snoozeing reminders in bulk:", error);
+    throw new Error(error.response?.data?.message || "Failed to snooze reminders");
+  }
+};
+
+/**
+ * Delete multiple reminders
+ */
+export const bulkDeleteReminders = async (reminderIds) => {
+  try {
+    const response = await axiosInstance.post('/reminders/bulk/delete', { reminderIds });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error deleting reminders in bulk:", error);
+    throw new Error(error.response?.data?.message || "Failed to delete reminders");
+  }
+};
+
+/**
+ * Update priority for multiple reminders
+ */
+export const bulkUpdatePriority = async (reminderIds, priority) => {
+  try {
+    const response = await axiosInstance.post('/reminders/bulk/update-priority', {
+      reminderIds,
+      priority
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error updating priority in bulk:", error);
+    throw new Error(error.response?.data?.message || "Failed to update priority");
+  }
+};
+
+/**
+ * Get reminder groups summary
+ */
+export const getReminderGroupSummary = async (groupBy = 'priority') => {
+  try {
+    const response = await axiosInstance.get('/reminders/bulk/group-summary', {
+      params: { groupBy }
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching group summary:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch group summary");
+  }
+};
+
+// ==================== PHASE 5: AI TEMPLATE SUGGESTIONS ====================
+
+/**
+ * Generate AI template suggestions
+ */
+export const generateAISuggestions = async (title, description, category, priority = 'medium') => {
+  try {
+    const response = await axiosInstance.post('/reminders/ai-suggestions/generate', {
+      title,
+      description,
+      category,
+      priority
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error generating AI suggestions:", error);
+    throw new Error(error.response?.data?.message || "Failed to generate suggestions");
+  }
+};
+
+/**
+ * Accept an AI suggestion as template
+ */
+export const acceptAISuggestion = async (suggestion, customName = null) => {
+  try {
+    const response = await axiosInstance.post('/reminders/ai-suggestions/accept', {
+      suggestion,
+      customName
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error accepting suggestion:", error);
+    throw new Error(error.response?.data?.message || "Failed to accept suggestion");
+  }
+};
+
+/**
+ * Enhance an existing template with AI
+ */
+export const enhanceTemplateWithAI = async (templateId) => {
+  try {
+    const response = await axiosInstance.post('/reminders/ai-suggestions/enhance', {
+      templateId
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error enhancing template:", error);
+    throw new Error(error.response?.data?.message || "Failed to enhance template");
+  }
+};
+
+// ==================== PHASE 5: TEMPLATE LIBRARY ====================
+
+/**
+ * Browse library templates
+ */
+export const browseLibraryTemplates = async (query = '', category = null, tags = []) => {
+  try {
+    const params = { query };
+    if (category) params.category = category;
+    if (tags.length > 0) params.tags = tags;
+    
+    const response = await axiosInstance.get('/reminders/library/templates', { params });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error browsing library:", error);
+    throw new Error(error.response?.data?.message || "Failed to browse library");
+  }
+};
+
+/**
+ * Get library categories
+ */
+export const getLibraryCategories = async () => {
+  try {
+    const response = await axiosInstance.get('/reminders/library/categories');
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch categories");
+  }
+};
+
+/**
+ * Get popular library tags
+ */
+export const getLibraryTags = async () => {
+  try {
+    const response = await axiosInstance.get('/reminders/library/tags');
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching tags:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch tags");
+  }
+};
+
+/**
+ * Install library template to user's templates
+ */
+export const installLibraryTemplate = async (libraryTemplateId, customName = null) => {
+  try {
+    const response = await axiosInstance.post('/reminders/library/install', {
+      libraryTemplateId,
+      customName
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error installing template:", error);
+    throw new Error(error.response?.data?.message || "Failed to install template");
+  }
+};
+
+// ==================== PHASE 5: WHATSAPP GROUPS ====================
+
+/**
+ * Configure WhatsApp group for reminder
+ */
+export const configureWhatsAppGroup = async (reminderId, whatsappGroupId, whatsappGroupName) => {
+  try {
+    const response = await axiosInstance.put(`/reminders/${reminderId}/whatsapp-group-config`, {
+      whatsappGroupId,
+      whatsappGroupName
+    });
+    return response.data.data;
+  } catch (error) {
+    console.error("Error configuring WhatsApp group:", error);
+    throw new Error(error.response?.data?.message || "Failed to configure group");
+  }
+};
+
+/**
+ * Get WhatsApp group delivery status
+ */
+export const getWhatsAppGroupStatus = async (reminderId) => {
+  try {
+    const response = await axiosInstance.get(`/reminders/${reminderId}/whatsapp-group-status`);
+    return response.data.data;
+  } catch (error) {
+    console.error("Error fetching group status:", error);
+    throw new Error(error.response?.data?.message || "Failed to fetch group status");
+  }
+};

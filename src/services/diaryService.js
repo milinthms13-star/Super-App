@@ -379,6 +379,448 @@ export const markReminderAsNotified = async (reminderId) => {
   }
 };
 
+// ============================================================================
+// PHASE 5.1: VERSION HISTORY, TRASH, AUTOSAVE, APP LOCK
+// ============================================================================
+
+/**
+ * Auto-save diary entry (creates version)
+ * @param {string} entryId - Entry ID
+ * @param {Object} data - Entry data to save
+ * @returns {Promise<Object>} - Updated entry with version info
+ */
+export const autosaveDiaryEntry = async (entryId, data) => {
+  try {
+    const response = await axiosInstance.post(
+      `/diary/${entryId}/autosave`,
+      data
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error auto-saving diary entry:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to auto-save entry"
+    );
+  }
+};
+
+/**
+ * Fetch all versions of a diary entry
+ * @param {string} entryId - Entry ID
+ * @param {Object} options - Query options
+ * @returns {Promise<Object>} - Entry versions
+ */
+export const getEntryVersions = async (entryId, options = {}) => {
+  try {
+    const params = {};
+    if (options.limit) params.limit = options.limit;
+    if (options.skip) params.skip = options.skip;
+
+    const response = await axiosInstance.get(
+      `/diary/${entryId}/versions`,
+      { params }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching entry versions:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch versions"
+    );
+  }
+};
+
+/**
+ * Restore a specific version of an entry
+ * @param {string} entryId - Entry ID
+ * @param {number} versionNumber - Version number to restore
+ * @returns {Promise<Object>} - Restored entry
+ */
+export const restoreEntryVersion = async (entryId, versionNumber) => {
+  try {
+    const response = await axiosInstance.post(
+      `/diary/${entryId}/versions/${versionNumber}/restore`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error restoring version:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to restore version"
+    );
+  }
+};
+
+/**
+ * Fetch all deleted entries (trash)
+ * @param {Object} options - Query options
+ * @returns {Promise<Object>} - Deleted entries
+ */
+export const getTrash = async (options = {}) => {
+  try {
+    const params = {};
+    if (options.limit) params.limit = options.limit;
+    if (options.skip) params.skip = options.skip;
+
+    const response = await axiosInstance.get(
+      "/diary/trash/list",
+      { params }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching trash:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch trash"
+    );
+  }
+};
+
+/**
+ * Recover an entry from trash
+ * @param {string} entryId - Entry ID
+ * @returns {Promise<Object>} - Recovered entry
+ */
+export const recoverFromTrash = async (entryId) => {
+  try {
+    const response = await axiosInstance.post(
+      `/diary/${entryId}/recover`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error recovering from trash:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to recover entry"
+    );
+  }
+};
+
+/**
+ * Permanently delete an entry (bypasses trash)
+ * @param {string} entryId - Entry ID
+ * @returns {Promise<Object>} - Success response
+ */
+export const permanentlyDeleteEntry = async (entryId) => {
+  try {
+    const response = await axiosInstance.delete(
+      `/diary/${entryId}/permanent`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error permanently deleting entry:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to permanently delete entry"
+    );
+  }
+};
+
+// ============================================================================
+// APP LOCK SERVICES
+// ============================================================================
+
+/**
+ * Get app lock status
+ * @returns {Promise<Object>} - App lock status
+ */
+export const getAppLockStatus = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/app-lock/status");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching app lock status:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch app lock status"
+    );
+  }
+};
+
+/**
+ * Setup or update app lock PIN
+ * @param {string} pin - PIN code (4-8 digits)
+ * @returns {Promise<Object>} - Setup response
+ */
+export const setupAppLockPin = async (pin) => {
+  try {
+    const response = await axiosInstance.post(
+      "/diary/app-lock/setup-pin",
+      { pin }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error setting up app lock:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to setup app lock"
+    );
+  }
+};
+
+/**
+ * Verify app lock PIN
+ * @param {string} pin - PIN code to verify
+ * @returns {Promise<Object>} - Verification response
+ */
+export const verifyAppLockPin = async (pin) => {
+  try {
+    const response = await axiosInstance.post(
+      "/diary/app-lock/verify-pin",
+      { pin }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error verifying app lock PIN:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to verify PIN"
+    );
+  }
+};
+
+/**
+ * Disable app lock
+ * @returns {Promise<Object>} - Disable response
+ */
+export const disableAppLock = async () => {
+  try {
+    const response = await axiosInstance.post(
+      "/diary/app-lock/disable"
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error disabling app lock:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to disable app lock"
+    );
+  }
+};
+
+/**
+ * Update auto-lock timeout
+ * @param {number} timeoutMinutes - Timeout in minutes (1-120)
+ * @returns {Promise<Object>} - Update response
+ */
+export const updateAutoLockTimeout = async (timeoutMinutes) => {
+  try {
+    const response = await axiosInstance.put(
+      "/diary/app-lock/auto-lock-timeout",
+      { timeoutMinutes }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error updating auto-lock timeout:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to update timeout"
+    );
+  }
+};
+
+// ============================================================================
+// PHASE 5.2: END-TO-END ENCRYPTION, CLOUD BACKUP, AI FEATURES
+// ============================================================================
+
+/**
+ * Enable E2E encryption for diary
+ * @returns {Promise<Object>} - Encryption setup response
+ */
+export const enableEncryption = async () => {
+  try {
+    const response = await axiosInstance.post("/diary/encryption/enable");
+    return response.data;
+  } catch (error) {
+    console.error("Error enabling encryption:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to enable encryption"
+    );
+  }
+};
+
+/**
+ * Get encryption status
+ * @returns {Promise<Object>} - Encryption status
+ */
+export const getEncryptionStatus = async () => {
+  try {
+    const response = await axiosInstance.get("/diary/encryption/status");
+    return response.data;
+  } catch (error) {
+    console.error("Error checking encryption status:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to check encryption status"
+    );
+  }
+};
+
+/**
+ * Encrypt a specific entry
+ * @param {string} entryId - Entry ID
+ * @returns {Promise<Object>} - Encryption response
+ */
+export const encryptEntry = async (entryId) => {
+  try {
+    const response = await axiosInstance.post(
+      `/diary/${entryId}/encrypt`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error encrypting entry:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to encrypt entry"
+    );
+  }
+};
+
+/**
+ * Create backup of all diary entries
+ * @param {string} backupType - 'manual' or 'scheduled'
+ * @returns {Promise<Object>} - Backup creation response
+ */
+export const createBackup = async (backupType = 'manual') => {
+  try {
+    const response = await axiosInstance.post("/diary/backup/create", {
+      backupType,
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error creating backup:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to create backup"
+    );
+  }
+};
+
+/**
+ * Get list of backups
+ * @param {Object} options - Query options
+ * @param {number} options.limit - Limit results
+ * @param {number} options.skip - Skip results
+ * @param {string} options.status - Filter by status
+ * @returns {Promise<Object>} - Backup list
+ */
+export const getBackupList = async (options = {}) => {
+  try {
+    const { limit = 10, skip = 0, status } = options;
+    const query = new URLSearchParams({
+      limit,
+      skip,
+    });
+    if (status) query.append("status", status);
+
+    const response = await axiosInstance.get(
+      `/diary/backup/list?${query.toString()}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching backups:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch backups"
+    );
+  }
+};
+
+/**
+ * Restore from backup
+ * @param {string} backupId - Backup ID
+ * @returns {Promise<Object>} - Restore response
+ */
+export const restoreBackup = async (backupId) => {
+  try {
+    const response = await axiosInstance.post(
+      `/diary/backup/${backupId}/restore`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error restoring backup:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to restore backup"
+    );
+  }
+};
+
+/**
+ * Get AI-generated diary summary
+ * @param {Object} options - Query options
+ * @param {string} options.period - 'week', 'month', 'year'
+ * @param {string} options.entryId - Specific entry ID for summary
+ * @returns {Promise<Object>} - AI summary response
+ */
+export const getAISummary = async (options = {}) => {
+  try {
+    const { period = 'month', entryId } = options;
+    const query = new URLSearchParams({ period });
+    if (entryId) query.append("entryId", entryId);
+
+    const response = await axiosInstance.get(
+      `/diary/ai/summary?${query.toString()}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error getting AI summary:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to generate summary"
+    );
+  }
+};
+
+/**
+ * Get AI mood insights and emotional patterns
+ * @param {Object} options - Query options
+ * @param {number} options.daysBack - Days to analyze
+ * @returns {Promise<Object>} - Mood insights
+ */
+export const getMoodInsights = async (options = {}) => {
+  try {
+    const { daysBack = 30 } = options;
+    const query = new URLSearchParams({ daysBack });
+
+    const response = await axiosInstance.get(
+      `/diary/ai/mood-insights?${query.toString()}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error getting mood insights:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to analyze mood patterns"
+    );
+  }
+};
+
+/**
+ * Get personalized wellness recommendations
+ * @param {Object} options - Query options
+ * @param {number} options.daysBack - Days to consider
+ * @returns {Promise<Object>} - Wellness recommendations
+ */
+export const getWellnessRecommendations = async (options = {}) => {
+  try {
+    const { daysBack = 30 } = options;
+    const query = new URLSearchParams({ daysBack });
+
+    const response = await axiosInstance.get(
+      `/diary/ai/wellness-recommendations?${query.toString()}`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error getting wellness recommendations:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to get recommendations"
+    );
+  }
+};
+
+/**
+ * Extract action items from entry using AI
+ * @param {string} entryId - Entry ID
+ * @returns {Promise<Object>} - Action items
+ */
+export const extractActionItems = async (entryId) => {
+  try {
+    const response = await axiosInstance.get(
+      `/diary/${entryId}/ai/action-items`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error extracting action items:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to extract action items"
+    );
+  }
+};
+
 export default {
   buildLocalDateParam,
   buildTimezoneOffsetParam,
@@ -398,4 +840,27 @@ export default {
   fetchTodaysSummary,
   fetchUpcomingReminders,
   markReminderAsNotified,
+  // Phase 5.1: Version history, trash, autosave, app lock
+  autosaveDiaryEntry,
+  getEntryVersions,
+  restoreEntryVersion,
+  getTrash,
+  recoverFromTrash,
+  permanentlyDeleteEntry,
+  getAppLockStatus,
+  setupAppLockPin,
+  verifyAppLockPin,
+  disableAppLock,
+  updateAutoLockTimeout,
+  // Phase 5.2: E2EE, Cloud Backup, AI Features
+  enableEncryption,
+  getEncryptionStatus,
+  encryptEntry,
+  createBackup,
+  getBackupList,
+  restoreBackup,
+  getAISummary,
+  getMoodInsights,
+  getWellnessRecommendations,
+  extractActionItems,
 };

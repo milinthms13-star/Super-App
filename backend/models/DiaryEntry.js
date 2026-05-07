@@ -76,6 +76,56 @@ const diaryEntrySchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
     index: true
+  },
+  // Soft delete fields
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: Date,
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  // Auto-permanently delete after 30 days
+  permanentlyDeleteAt: Date,
+  // For recovery: store the last known version
+  lastVersionBeforeDeletion: mongoose.Schema.Types.ObjectId,
+  // End-to-end encryption fields
+  isEncrypted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  encryptionKeyId: {
+    type: String,
+    sparse: true
+  },
+  // Encrypted content (only populated if isEncrypted = true)
+  encryptedData: {
+    iv: String, // Initialization vector (hex)
+    authTag: String, // Authentication tag for GCM (hex)
+    encryptedContent: String, // Encrypted entry data (hex)
+    algorithm: {
+      type: String,
+      default: 'aes-256-gcm'
+    }
+  },
+  // Content hash for integrity verification
+  contentHash: String,
+  // AI Summary cache (refreshed periodically)
+  aiSummary: {
+    summary: String,
+    generatedAt: Date,
+    expiresAt: Date
+  },
+  // Mood analysis cache
+  emotionalAnalysis: {
+    dominantEmotion: String,
+    sentimentScore: Number,
+    themes: [String],
+    analyzedAt: Date
   }
 }, {
   timestamps: true

@@ -17,11 +17,12 @@ const {
 const logger = require('../utils/logger');
 
 /**
+ * GET /api/alerts/list
  * GET /api/alerts/inventory/list
  * Get inventory alerts for authenticated seller
  * Query: status, alertType, page, limit, sortBy
  */
-router.get('/list', authenticate, async (req, res) => {
+router.get(['/list', '/inventory/list'], authenticate, async (req, res) => {
   try {
     const sellerEmail = req.user?.email;
     const { status = 'active', alertType, page = 1, limit = 10, sortBy = '-triggeredAt' } = req.query;
@@ -57,10 +58,11 @@ router.get('/list', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/alerts/:alertId
  * GET /api/alerts/inventory/:alertId
  * Get detailed alert information
  */
-router.get('/:alertId', authenticate, async (req, res) => {
+router.get(['/:alertId', '/inventory/:alertId'], authenticate, async (req, res) => {
   try {
     const { alertId } = req.params;
     const sellerEmail = req.user?.email;
@@ -79,11 +81,12 @@ router.get('/:alertId', authenticate, async (req, res) => {
 });
 
 /**
+ * POST /api/alerts/configure
  * POST /api/alerts/inventory/configure
  * Create/update alert rule for product
  * Body: { productId, productName, alertType, notifyThreshold, reorderQuantity, maxStockLevel, leadTimeDays }
  */
-router.post('/configure', authenticate, async (req, res) => {
+router.post(['/configure', '/inventory/configure'], authenticate, async (req, res) => {
   try {
     const sellerEmail = req.user?.email;
     const {
@@ -155,7 +158,7 @@ router.post('/configure', authenticate, async (req, res) => {
 
     await alert.save();
 
-    logger.info(`Alert rule created: ${alertId} for product ${productId}`);
+    logger.info(`Alert rule created: ${alert.alertId} for product ${productId}`);
 
     return res.json({
       success: true,
@@ -169,10 +172,11 @@ router.post('/configure', authenticate, async (req, res) => {
 });
 
 /**
+ * PATCH /api/alerts/:alertId/acknowledge
  * PATCH /api/alerts/inventory/:alertId/acknowledge
  * Mark alert as acknowledged
  */
-router.patch('/:alertId/acknowledge', authenticate, async (req, res) => {
+router.patch(['/:alertId/acknowledge', '/inventory/:alertId/acknowledge'], authenticate, async (req, res) => {
   try {
     const { alertId } = req.params;
     const sellerEmail = req.user?.email;
@@ -183,11 +187,23 @@ router.patch('/:alertId/acknowledge', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Alert not found' });
     }
 
-    // Add notification acknowledgement
-    if (alert.notifications && alert.notifications.length > 0) {
-      alert.notifications[alert.notifications.length - 1].acknowledgedAt = new Date();
-      alert.notifications[alert.notifications.length - 1].acknowledgedBy = sellerEmail;
+    const acknowledgedAt = new Date();
+
+    // Persist acknowledgement even when the alert was created without a prior notification record.
+    if (!Array.isArray(alert.notifications)) {
+      alert.notifications = [];
     }
+
+    if (alert.notifications.length === 0) {
+      alert.notifications.push({
+        sentAt: alert.triggeredAt || acknowledgedAt,
+        channel: 'dashboard',
+        status: 'sent',
+      });
+    }
+
+    alert.notifications[alert.notifications.length - 1].acknowledgedAt = acknowledgedAt;
+    alert.notifications[alert.notifications.length - 1].acknowledgedBy = sellerEmail;
 
     await alert.save();
 
@@ -203,11 +219,12 @@ router.patch('/:alertId/acknowledge', authenticate, async (req, res) => {
 });
 
 /**
+ * PATCH /api/alerts/:alertId/resolve
  * PATCH /api/alerts/inventory/:alertId/resolve
  * Mark alert as resolved
  * Body: { action, reason, quantity }
  */
-router.patch('/:alertId/resolve', authenticate, async (req, res) => {
+router.patch(['/:alertId/resolve', '/inventory/:alertId/resolve'], authenticate, async (req, res) => {
   try {
     const { alertId } = req.params;
     const sellerEmail = req.user?.email;
@@ -243,10 +260,11 @@ router.patch('/:alertId/resolve', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/alerts/dashboard/summary
  * GET /api/alerts/inventory/dashboard/summary
  * Get inventory health dashboard summary
  */
-router.get('/dashboard/summary', authenticate, async (req, res) => {
+router.get(['/dashboard/summary', '/inventory/dashboard/summary'], authenticate, async (req, res) => {
   try {
     const sellerEmail = req.user?.email;
 

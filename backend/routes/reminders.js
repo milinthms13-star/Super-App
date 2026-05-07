@@ -2180,6 +2180,972 @@ router.put('/:id/sms-config', authenticate, async (req, res) => {
   }
 });
 
+// ==================== PHASE 3: EMAIL DELIVERY ====================
+
+// GET /api/reminders/:id/email-delivery-status - Check email delivery status for a reminder
+router.get('/:id/email-delivery-status', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    }).select('notificationLog reminders email');
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    if (!reminder.reminders || !reminder.reminders.includes('Email')) {
+      return res.status(400).json({
+        success: false,
+        message: 'This reminder does not have Email enabled'
+      });
+    }
+
+    // Filter email logs from notification log
+    const emailLogs = (reminder.notificationLog || []).filter(log => log.channel === 'Email');
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        email: reminder.email,
+        emailEnabled: true,
+        deliveryStatus: emailLogs.map(log => ({
+          offsetMinutes: log.offsetMinutes,
+          sentAt: log.firedAt,
+          status: log.status,
+          message: log.status === 'sent' ? 'Email sent successfully' : 'Email delivery pending'
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching email delivery status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch email delivery status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/reminders/:id/resend-email - Manually trigger email resend for a reminder
+router.post('/:id/resend-email', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    if (!reminder.reminders || !reminder.reminders.includes('Email')) {
+      return res.status(400).json({
+        success: false,
+        message: 'This reminder does not have Email enabled'
+      });
+    }
+
+    if (!reminder.email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email address not configured for this reminder'
+      });
+    }
+
+    if (reminder.completed) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot resend email for completed reminder'
+      });
+    }
+
+    // Clear previous email logs to force resend
+    reminder.notificationLog = (reminder.notificationLog || []).filter(log => log.channel !== 'Email');
+    
+    await reminder.save();
+
+    logger.info(`Reminder ${reminderId} email marked for resend`);
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        email: reminder.email,
+        message: 'Email will be resent within the next 5 minutes'
+      }
+    });
+  } catch (error) {
+    logger.error('Error triggering email resend:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resend email',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// PUT /api/reminders/:id/email-config - Configure email address for a reminder
+router.put('/:id/email-config', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminderId = req.params.id;
+    const { email } = req.body;
+
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid email address is required'
+      });
+    }
+
+    // Email validation regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.toLowerCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email address format'
+      });
+    }
+
+    const reminder = await Reminder.findOne({
+      _id: reminderId,
+      userId: userId
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reminder not found'
+      });
+    }
+
+    reminder.email = email.toLowerCase();
+
+    // Ensure Email is in reminders channels if setting email address
+    if (!reminder.reminders || !reminder.reminders.includes('Email')) {
+      reminder.reminders = reminder.reminders || [];
+      if (!reminder.reminders.includes('Email')) {
+        reminder.reminders.push('Email');
+      }
+    }
+
+    await reminder.save();
+
+    logger.info(`Email config updated for reminder ${reminderId}`);
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        email: reminder.email,
+        channels: reminder.reminders,
+        message: 'Email configuration updated successfully'
+      }
+    });
+  } catch (error) {
+    logger.error('Error updating email config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update email configuration',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ==================== PHASE 4: WHATSAPP DELIVERY ====================
+
+// GET /api/reminders/:id/whatsapp-delivery-status
+router.get('/:id/whatsapp-delivery-status', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId }).select('notificationLog reminders whatsappPhoneNumber');
+    
+    if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
+    
+    const whatsappLogs = (reminder.notificationLog || []).filter(log => log.channel === 'WhatsApp');
+    
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        whatsappPhoneNumber: reminder.whatsappPhoneNumber,
+        whatsappEnabled: reminder.reminders?.includes('WhatsApp'),
+        deliveryStatus: whatsappLogs.map(log => ({
+          offsetMinutes: log.offsetMinutes,
+          sentAt: log.firedAt,
+          status: log.status
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching WhatsApp delivery status:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch WhatsApp delivery status' });
+  }
+});
+
+// POST /api/reminders/:id/resend-whatsapp
+router.post('/:id/resend-whatsapp', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId });
+    
+    if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
+    if (!reminder.whatsappPhoneNumber) return res.status(400).json({ success: false, message: 'WhatsApp phone not configured' });
+    
+    reminder.notificationLog = (reminder.notificationLog || []).filter(log => log.channel !== 'WhatsApp');
+    await reminder.save();
+    
+    res.json({ success: true, data: { reminderId: reminder._id, message: 'WhatsApp will be resent within 5 minutes' } });
+  } catch (error) {
+    logger.error('Error resending WhatsApp:', error);
+    res.status(500).json({ success: false, message: 'Failed to resend WhatsApp' });
+  }
+});
+
+// PUT /api/reminders/:id/whatsapp-config
+router.put('/:id/whatsapp-config', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { whatsappPhoneNumber } = req.body;
+    
+    if (!whatsappPhoneNumber || !/^\+?[\d\s-]{10,}$/.test(whatsappPhoneNumber.replace(/\s/g, ''))) {
+      return res.status(400).json({ success: false, message: 'Invalid phone number format' });
+    }
+    
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId });
+    if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
+    
+    reminder.whatsappPhoneNumber = whatsappPhoneNumber;
+    if (!reminder.reminders?.includes('WhatsApp')) reminder.reminders.push('WhatsApp');
+    await reminder.save();
+    
+    res.json({ success: true, data: { reminderId: reminder._id, whatsappPhoneNumber: reminder.whatsappPhoneNumber } });
+  } catch (error) {
+    logger.error('Error updating WhatsApp config:', error);
+    res.status(500).json({ success: false, message: 'Failed to update WhatsApp configuration' });
+  }
+});
+
+// ==================== PHASE 4: TELEGRAM DELIVERY ====================
+
+// GET /api/reminders/:id/telegram-delivery-status
+router.get('/:id/telegram-delivery-status', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId }).select('notificationLog reminders telegramChatId');
+    
+    if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
+    
+    const telegramLogs = (reminder.notificationLog || []).filter(log => log.channel === 'Telegram');
+    
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        telegramChatId: reminder.telegramChatId,
+        telegramEnabled: reminder.reminders?.includes('Telegram'),
+        deliveryStatus: telegramLogs.map(log => ({
+          offsetMinutes: log.offsetMinutes,
+          sentAt: log.firedAt,
+          status: log.status
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching Telegram delivery status:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch Telegram delivery status' });
+  }
+});
+
+// POST /api/reminders/:id/resend-telegram
+router.post('/:id/resend-telegram', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId });
+    
+    if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
+    if (!reminder.telegramChatId) return res.status(400).json({ success: false, message: 'Telegram chat ID not configured' });
+    
+    reminder.notificationLog = (reminder.notificationLog || []).filter(log => log.channel !== 'Telegram');
+    await reminder.save();
+    
+    res.json({ success: true, data: { reminderId: reminder._id, message: 'Telegram will be resent within 5 minutes' } });
+  } catch (error) {
+    logger.error('Error resending Telegram:', error);
+    res.status(500).json({ success: false, message: 'Failed to resend Telegram' });
+  }
+});
+
+// PUT /api/reminders/:id/telegram-config
+router.put('/:id/telegram-config', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { telegramChatId } = req.body;
+    
+    if (!telegramChatId || !/^-?\d+$/.test(String(telegramChatId).trim())) {
+      return res.status(400).json({ success: false, message: 'Invalid Telegram chat ID' });
+    }
+    
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId });
+    if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
+    
+    reminder.telegramChatId = String(telegramChatId);
+    if (!reminder.reminders?.includes('Telegram')) reminder.reminders.push('Telegram');
+    await reminder.save();
+    
+    res.json({ success: true, data: { reminderId: reminder._id, telegramChatId: reminder.telegramChatId } });
+  } catch (error) {
+    logger.error('Error updating Telegram config:', error);
+    res.status(500).json({ success: false, message: 'Failed to update Telegram configuration' });
+  }
+});
+
+// ==================== PHASE 4: PUSH NOTIFICATIONS ====================
+
+// GET /api/reminders/:id/push-delivery-status
+router.get('/:id/push-delivery-status', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId }).select('notificationLog reminders pushEnabled');
+    
+    if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
+    
+    const pushLogs = (reminder.notificationLog || []).filter(log => log.channel === 'Push');
+    
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        pushEnabled: reminder.pushEnabled,
+        deliveryStatus: pushLogs.map(log => ({
+          offsetMinutes: log.offsetMinutes,
+          sentAt: log.firedAt,
+          status: log.status,
+          devicesReached: log.metadata?.devicesReached || 0
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching push delivery status:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch push delivery status' });
+  }
+});
+
+// PUT /api/reminders/:id/push-config
+router.put('/:id/push-config', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { pushEnabled } = req.body;
+    
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId });
+    if (!reminder) return res.status(404).json({ success: false, message: 'Reminder not found' });
+    
+    reminder.pushEnabled = Boolean(pushEnabled);
+    if (pushEnabled && !reminder.reminders?.includes('Push')) reminder.reminders.push('Push');
+    else if (!pushEnabled) reminder.reminders = reminder.reminders?.filter(r => r !== 'Push') || [];
+    
+    await reminder.save();
+    
+    res.json({ success: true, data: { reminderId: reminder._id, pushEnabled: reminder.pushEnabled } });
+  } catch (error) {
+    logger.error('Error updating push config:', error);
+    res.status(500).json({ success: false, message: 'Failed to update push configuration' });
+  }
+});
+
+// ==================== PHASE 4: DELIVERY ANALYTICS ====================
+
+// GET /api/reminders/analytics/delivery-stats
+router.get('/analytics/delivery-stats', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { daysBack = 30, channel } = req.query;
+    
+    const ReminderDeliveryLog = require('../models/ReminderDeliveryLog');
+    
+    if (channel) {
+      const stats = await ReminderDeliveryLog.aggregate([
+        {
+          $match: {
+            userId,
+            channel,
+            createdAt: { $gte: new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000) }
+          }
+        },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      
+      const total = stats.reduce((sum, s) => sum + s.count, 0);
+      const sent = stats.find(s => s._id === 'sent')?.count || 0;
+      
+      res.json({
+        success: true,
+        data: {
+          channel,
+          period: `${daysBack} days`,
+          total,
+          sent,
+          failed: stats.find(s => s._id === 'failed')?.count || 0,
+          successRate: total > 0 ? ((sent / total) * 100).toFixed(2) + '%' : '0%'
+        }
+      });
+    } else {
+      const analytics = await ReminderDeliveryLog.getAnalytics(userId, daysBack);
+      res.json({ success: true, data: analytics });
+    }
+  } catch (error) {
+    logger.error('Error fetching analytics:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch analytics' });
+  }
+});
+
+// GET /api/reminders/analytics/failed-deliveries
+router.get('/analytics/failed-deliveries', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { channel, limit = 10 } = req.query;
+    
+    const ReminderDeliveryLog = require('../models/ReminderDeliveryLog');
+    const query = { userId, status: 'failed', isRetry: false };
+    if (channel) query.channel = channel;
+    
+    const failed = await ReminderDeliveryLog.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .populate('reminderId', 'title dueDate');
+    
+    res.json({
+      success: true,
+      data: failed.map(log => ({
+        logId: log._id,
+        reminderId: log.reminderId,
+        channel: log.channel,
+        error: log.errorMessage,
+        failedAt: log.createdAt,
+        canRetry: log.retryCount < log.maxRetries
+      }))
+    });
+  } catch (error) {
+    logger.error('Error fetching failed deliveries:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch failed deliveries' });
+  }
+});
+
+// POST /api/reminders/analytics/retry/:logId
+router.post('/analytics/retry/:logId', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const ReminderDeliveryLog = require('../models/ReminderDeliveryLog');
+    
+    const log = await ReminderDeliveryLog.findById(req.params.logId);
+    if (!log || log.userId !== userId) return res.status(404).json({ success: false, message: 'Log not found' });
+    
+    const result = await log.retry();
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error retrying delivery:', error);
+    res.status(500).json({ success: false, message: 'Failed to retry delivery' });
+  }
+});
+
+// ==================== PHASE 4: TEMPLATE CUSTOMIZATION ====================
+
+// POST /api/reminders/templates - Create template
+router.post('/templates', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const templateService = require('../services/reminderTemplateService');
+    
+    const template = await templateService.createTemplate(userId, req.body);
+    
+    res.status(201).json({
+      success: true,
+      data: { id: template._id, name: template.name, message: 'Template created successfully' }
+    });
+  } catch (error) {
+    logger.error('Error creating template:', error);
+    res.status(500).json({ success: false, message: 'Failed to create template' });
+  }
+});
+
+// GET /api/reminders/templates - List templates
+router.get('/templates', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const templateService = require('../services/reminderTemplateService');
+    
+    const templates = await templateService.getUserTemplates(userId);
+    
+    res.json({ success: true, data: templates });
+  } catch (error) {
+    logger.error('Error fetching templates:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch templates' });
+  }
+});
+
+// GET /api/reminders/templates/:templateId - Get single template
+router.get('/templates/:templateId', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const templateService = require('../services/reminderTemplateService');
+    
+    const template = await templateService.getTemplate(req.params.templateId, userId);
+    
+    res.json({ success: true, data: template });
+  } catch (error) {
+    logger.error('Error fetching template:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch template' });
+  }
+});
+
+// PUT /api/reminders/templates/:templateId - Update template
+router.put('/templates/:templateId', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const templateService = require('../services/reminderTemplateService');
+    
+    const template = await templateService.updateTemplate(req.params.templateId, userId, req.body);
+    
+    res.json({ success: true, data: { id: template._id, message: 'Template updated successfully' } });
+  } catch (error) {
+    logger.error('Error updating template:', error);
+    res.status(500).json({ success: false, message: 'Failed to update template' });
+  }
+});
+
+// DELETE /api/reminders/templates/:templateId - Delete template
+router.delete('/templates/:templateId', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const templateService = require('../services/reminderTemplateService');
+    
+    await templateService.deleteTemplate(req.params.templateId, userId);
+    
+    res.json({ success: true, data: { message: 'Template deleted successfully' } });
+  } catch (error) {
+    logger.error('Error deleting template:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete template' });
+  }
+});
+
+// POST /api/reminders/templates/:templateId/clone - Clone template
+router.post('/templates/:templateId/clone', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { newName } = req.body;
+    const templateService = require('../services/reminderTemplateService');
+    
+    const clone = await templateService.cloneTemplate(req.params.templateId, userId, newName);
+    
+    res.status(201).json({ success: true, data: { id: clone._id, message: 'Template cloned successfully' } });
+  } catch (error) {
+    logger.error('Error cloning template:', error);
+    res.status(500).json({ success: false, message: 'Failed to clone template' });
+  }
+});
+
+// ==================== PHASE 5: ANALYTICS DASHBOARD ====================
+
+// GET /api/reminders/analytics/dashboard - Get full dashboard overview
+router.get('/analytics/dashboard', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const daysBack = parseInt(req.query.daysBack) || 30;
+    const analyticsDashboardService = require('../services/analyticsDashboardService');
+    
+    const dashboardData = await analyticsDashboardService.getDashboardOverview(userId, daysBack);
+    
+    res.json({ success: true, data: dashboardData });
+  } catch (error) {
+    logger.error('Error fetching analytics dashboard:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch analytics dashboard' });
+  }
+});
+
+// GET /api/reminders/analytics/channel-comparison - Compare channels
+router.get('/analytics/channel-comparison', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const daysBack = parseInt(req.query.daysBack) || 30;
+    const analyticsDashboardService = require('../services/analyticsDashboardService');
+    
+    const comparison = await analyticsDashboardService.getChannelComparison(userId, daysBack);
+    
+    res.json({ success: true, data: comparison });
+  } catch (error) {
+    logger.error('Error fetching channel comparison:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch channel comparison' });
+  }
+});
+
+// GET /api/reminders/analytics/reminder-types - Analyze by reminder type
+router.get('/analytics/reminder-types', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const daysBack = parseInt(req.query.daysBack) || 30;
+    const analyticsDashboardService = require('../services/analyticsDashboardService');
+    
+    const analysis = await analyticsDashboardService.getReminderTypeAnalysis(userId, daysBack);
+    
+    res.json({ success: true, data: analysis });
+  } catch (error) {
+    logger.error('Error fetching reminder type analysis:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch reminder type analysis' });
+  }
+});
+
+// GET /api/reminders/analytics/priority-impact - Analyze priority impact
+router.get('/analytics/priority-impact', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const daysBack = parseInt(req.query.daysBack) || 30;
+    const analyticsDashboardService = require('../services/analyticsDashboardService');
+    
+    const impact = await analyticsDashboardService.getPriorityImpactAnalysis(userId, daysBack);
+    
+    res.json({ success: true, data: impact });
+  } catch (error) {
+    logger.error('Error fetching priority impact analysis:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch priority impact analysis' });
+  }
+});
+
+// GET /api/reminders/analytics/template-usage - Template usage stats
+router.get('/analytics/template-usage', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const daysBack = parseInt(req.query.daysBack) || 30;
+    const analyticsDashboardService = require('../services/analyticsDashboardService');
+    
+    const usage = await analyticsDashboardService.getTemplateUsageAnalytics(userId, daysBack);
+    
+    res.json({ success: true, data: usage });
+  } catch (error) {
+    logger.error('Error fetching template usage analytics:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch template usage analytics' });
+  }
+});
+
+// ==================== PHASE 5: BULK TEMPLATE MANAGEMENT ====================
+
+// POST /api/reminders/bulk/apply-template - Apply template to multiple reminders
+router.post('/bulk/apply-template', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { templateId, reminderIds } = req.body;
+    
+    if (!templateId || !Array.isArray(reminderIds) || reminderIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Template ID and reminder IDs required' });
+    }
+
+    const bulkService = require('../services/bulkTemplateManagementService');
+    const result = await bulkService.applyTemplateToReminders(userId, templateId, reminderIds);
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error applying template in bulk:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to apply template' });
+  }
+});
+
+// POST /api/reminders/bulk/snooze - Snooze multiple reminders
+router.post('/bulk/snooze', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { reminderIds, snoozeMinutes } = req.body;
+    
+    if (!Array.isArray(reminderIds) || !snoozeMinutes) {
+      return res.status(400).json({ success: false, message: 'Reminder IDs and snooze duration required' });
+    }
+
+    const bulkService = require('../services/bulkTemplateManagementService');
+    const result = await bulkService.bulkSnooze(userId, reminderIds, snoozeMinutes);
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error snooping reminders in bulk:', error);
+    res.status(500).json({ success: false, message: 'Failed to snooze reminders' });
+  }
+});
+
+// POST /api/reminders/bulk/delete - Delete multiple reminders
+router.post('/bulk/delete', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { reminderIds } = req.body;
+    
+    if (!Array.isArray(reminderIds) || reminderIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Reminder IDs required' });
+    }
+
+    const bulkService = require('../services/bulkTemplateManagementService');
+    const result = await bulkService.bulkDelete(userId, reminderIds);
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error deleting reminders in bulk:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete reminders' });
+  }
+});
+
+// POST /api/reminders/bulk/update-priority - Update priority for multiple reminders
+router.post('/bulk/update-priority', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { reminderIds, priority } = req.body;
+    
+    if (!Array.isArray(reminderIds) || !priority) {
+      return res.status(400).json({ success: false, message: 'Reminder IDs and priority required' });
+    }
+
+    const bulkService = require('../services/bulkTemplateManagementService');
+    const result = await bulkService.bulkUpdatePriority(userId, reminderIds, priority);
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error updating priority in bulk:', error);
+    res.status(500).json({ success: false, message: 'Failed to update priority' });
+  }
+});
+
+// GET /api/reminders/bulk/group-summary - Get reminders grouped by field
+router.get('/bulk/group-summary', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const groupBy = req.query.groupBy || 'priority';
+    
+    const bulkService = require('../services/bulkTemplateManagementService');
+    const summary = await bulkService.getReminderGroupSummary(userId, groupBy);
+    
+    res.json({ success: true, data: summary });
+  } catch (error) {
+    logger.error('Error getting group summary:', error);
+    res.status(500).json({ success: false, message: 'Failed to get group summary' });
+  }
+});
+
+// ==================== PHASE 5: AI TEMPLATE SUGGESTIONS ====================
+
+// POST /api/reminders/ai-suggestions/generate - Generate AI template suggestions
+router.post('/ai-suggestions/generate', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { title, description, category, priority } = req.body;
+    
+    if (!title || !category) {
+      return res.status(400).json({ success: false, message: 'Title and category required' });
+    }
+
+    const aiService = require('../services/aiTemplateSuggestionsService');
+    const suggestions = await aiService.generateSuggestions(userId, {
+      title,
+      description,
+      category,
+      priority: priority || 'medium'
+    });
+    
+    res.json({ success: true, data: suggestions });
+  } catch (error) {
+    logger.error('Error generating AI suggestions:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to generate suggestions' });
+  }
+});
+
+// POST /api/reminders/ai-suggestions/accept - Accept AI suggestion as template
+router.post('/ai-suggestions/accept', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { suggestion, customName } = req.body;
+    
+    if (!suggestion) {
+      return res.status(400).json({ success: false, message: 'Suggestion required' });
+    }
+
+    const aiService = require('../services/aiTemplateSuggestionsService');
+    const result = await aiService.acceptSuggestion(userId, suggestion, customName);
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error accepting suggestion:', error);
+    res.status(500).json({ success: false, message: 'Failed to accept suggestion' });
+  }
+});
+
+// POST /api/reminders/ai-suggestions/enhance - Enhance existing template
+router.post('/ai-suggestions/enhance', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { templateId } = req.body;
+    
+    if (!templateId) {
+      return res.status(400).json({ success: false, message: 'Template ID required' });
+    }
+
+    const aiService = require('../services/aiTemplateSuggestionsService');
+    const result = await aiService.enhanceTemplate(userId, templateId);
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error enhancing template:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to enhance template' });
+  }
+});
+
+// ==================== PHASE 5: TEMPLATE LIBRARY ====================
+
+// GET /api/reminders/library/templates - Browse library templates
+router.get('/library/templates', authenticate, async (req, res) => {
+  try {
+    const query = req.query.query || '';
+    const category = req.query.category || null;
+    const tags = req.query.tags ? (Array.isArray(req.query.tags) ? req.query.tags : [req.query.tags]) : [];
+    
+    const libraryService = require('../services/templateLibraryService');
+    const templates = await libraryService.searchLibrary(query, category, tags);
+    
+    res.json({ success: true, data: templates });
+  } catch (error) {
+    logger.error('Error fetching library templates:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch library templates' });
+  }
+});
+
+// GET /api/reminders/library/categories - Get template categories
+router.get('/library/categories', authenticate, async (req, res) => {
+  try {
+    const libraryService = require('../services/templateLibraryService');
+    const categories = await libraryService.getLibraryCategories();
+    
+    res.json({ success: true, data: categories });
+  } catch (error) {
+    logger.error('Error fetching categories:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch categories' });
+  }
+});
+
+// GET /api/reminders/library/tags - Get popular tags
+router.get('/library/tags', authenticate, async (req, res) => {
+  try {
+    const libraryService = require('../services/templateLibraryService');
+    const tags = await libraryService.getLibraryTags();
+    
+    res.json({ success: true, data: tags });
+  } catch (error) {
+    logger.error('Error fetching tags:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch tags' });
+  }
+});
+
+// POST /api/reminders/library/install - Install library template
+router.post('/library/install', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { libraryTemplateId, customName } = req.body;
+    
+    if (!libraryTemplateId) {
+      return res.status(400).json({ success: false, message: 'Library template ID required' });
+    }
+
+    const libraryService = require('../services/templateLibraryService');
+    const result = await libraryService.installTemplate(userId, libraryTemplateId, customName);
+    
+    res.json({ success: true, data: result });
+  } catch (error) {
+    logger.error('Error installing library template:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to install template' });
+  }
+});
+
+// ==================== PHASE 5: WHATSAPP GROUPS ====================
+
+// PUT /api/reminders/:id/whatsapp-group-config - Configure WhatsApp group delivery
+router.put('/:id/whatsapp-group-config', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const { whatsappGroupId, whatsappGroupName } = req.body;
+    
+    if (!whatsappGroupId) {
+      return res.status(400).json({ success: false, message: 'WhatsApp group ID required' });
+    }
+
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId });
+    if (!reminder) {
+      return res.status(404).json({ success: false, message: 'Reminder not found' });
+    }
+
+    reminder.whatsappGroupId = whatsappGroupId;
+    reminder.whatsappGroupName = whatsappGroupName || 'Default Group';
+    await reminder.save();
+
+    logger.info(`WhatsApp group configured for reminder ${req.params.id}`);
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        whatsappGroupId,
+        whatsappGroupName: reminder.whatsappGroupName,
+        message: 'WhatsApp group configured successfully'
+      }
+    });
+  } catch (error) {
+    logger.error('Error configuring WhatsApp group:', error);
+    res.status(500).json({ success: false, message: 'Failed to configure WhatsApp group' });
+  }
+});
+
+// GET /api/reminders/:id/whatsapp-group-status - Check group delivery status
+router.get('/:id/whatsapp-group-status', authenticate, async (req, res) => {
+  try {
+    const userId = getReminderOwnerId(req.user);
+    const reminder = await Reminder.findOne({ _id: req.params.id, userId })
+      .select('whatsappGroupId whatsappGroupName notificationLog');
+    
+    if (!reminder) {
+      return res.status(404).json({ success: false, message: 'Reminder not found' });
+    }
+
+    const groupLogs = (reminder.notificationLog || []).filter(log => log.channel === 'whatsapp-group');
+
+    res.json({
+      success: true,
+      data: {
+        reminderId: reminder._id,
+        whatsappGroupId: reminder.whatsappGroupId,
+        whatsappGroupName: reminder.whatsappGroupName,
+        deliveryStatus: groupLogs.map(log => ({
+          offsetMinutes: log.offsetMinutes,
+          sentAt: log.firedAt,
+          status: log.status
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching WhatsApp group status:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch group status' });
+  }
+});
+
 module.exports = router;
 module.exports.__testables = {
   getReminderOwnerId,
