@@ -551,6 +551,7 @@ router.post('/send-otp', async (req, res) => {
       `;
 
       const emailMode = getEmailMode();
+      const smtpConfig = getSmtpConfig();
 
       if (!hasRealEmailConfig()) {
         logger.error('OTP email delivery is not configured for production use');
@@ -579,7 +580,7 @@ router.post('/send-otp', async (req, res) => {
         }));
       } else {
         const transporter = getEmailService();
-        const fromAddress = getSmtpConfig().from;
+        const fromAddress = smtpConfig.from;
         await transporter.sendMail({
           from: `NilaHub <${fromAddress}>`,
           to: email,
@@ -599,7 +600,12 @@ router.post('/send-otp', async (req, res) => {
       });
 
     } catch (emailError) {
-      logger.error('Email send failed:', emailError);
+      const smtpConfig = getSmtpConfig();
+      logger.error(
+        `OTP email send failed via ${getEmailMode()} for ${email} ` +
+        `(host=${smtpConfig.host}, port=${smtpConfig.port}, secure=${smtpConfig.secure}): ` +
+        `${emailError.code || 'NO_CODE'} ${emailError.message}`
+      );
       return res.status(500).json({
         success: false,
         message: 'Failed to send email. Please try again later.',
