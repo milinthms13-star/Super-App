@@ -211,4 +211,64 @@ describe("ReminderAlert", () => {
     ).toBeInTheDocument();
     expect(createVoiceCallReminder).not.toHaveBeenCalled();
   });
+
+  test("creates a text-based voice call reminder and reloads the reminder list", async () => {
+    fetchReminders
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            _id: "voice-1",
+            title: "Medicine check",
+            category: "Personal",
+            priority: "Medium",
+            dueDate: "2030-07-02",
+            dueTime: "08:00",
+            reminders: ["Call"],
+            status: "Reminder scheduled",
+            recurring: "none",
+            completed: false,
+            recipientPhoneNumber: "+919876543210",
+          },
+        ],
+      });
+    createVoiceCallReminder.mockResolvedValue({
+      data: {
+        _id: "voice-1",
+        title: "Medicine check",
+      },
+    });
+
+    render(<ReminderAlert customLinks={[]} onCustomLinksChange={jest.fn()} />);
+
+    const addButton = await screen.findByRole("button", { name: /add reminder/i });
+    await waitFor(() => expect(addButton).not.toBeDisabled());
+    fireEvent.click(addButton);
+    fireEvent.change(screen.getByPlaceholderText("Example: Doctor follow-up"), {
+      target: { value: "Medicine check" },
+    });
+    fireEvent.change(screen.getByLabelText(/Due date/i), {
+      target: { value: "2030-07-02" },
+    });
+    fireEvent.click(screen.getByLabelText(/Send reminder via Voice call/i));
+    fireEvent.change(screen.getByLabelText(/Phone number/i), {
+      target: { value: "+919876543210" },
+    });
+    fireEvent.change(screen.getByLabelText(/spoken message/i), {
+      target: { value: "Please take your medicine." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save reminder/i }));
+
+    await waitFor(() => {
+      expect(createVoiceCallReminder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Medicine check",
+          recipientPhoneNumber: "+919876543210",
+          voiceMessage: "Please take your medicine.",
+          reminders: expect.arrayContaining(["Call"]),
+        })
+      );
+      expect(fetchReminders).toHaveBeenCalledTimes(2);
+    });
+  });
 });

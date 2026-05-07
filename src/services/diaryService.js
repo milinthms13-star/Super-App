@@ -821,6 +821,276 @@ export const extractActionItems = async (entryId) => {
   }
 };
 
+// ============================================================================
+// PDF EXPORT FUNCTIONALITY
+// ============================================================================
+
+/**
+ * Export a single diary entry as PDF
+ * @param {Object} entry - Diary entry object with title, content, mood, date, etc.
+ * @returns {Promise<void>} - Generates PDF download
+ */
+export const exportEntryAsPDF = (entry) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const jsPDF = window.jspdf?.jsPDF;
+      if (!jsPDF) {
+        throw new Error("jsPDF library not loaded");
+      }
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 15;
+      const lineHeight = 7;
+      let yPosition = margin;
+
+      // Set fonts and colors
+      const primaryColor = [102, 126, 234]; // #667eea
+      const textColor = [51, 51, 51]; // Dark gray
+      const accentColor = [200, 200, 200]; // Light gray
+
+      // Title
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(...primaryColor);
+      doc.text(entry.title || "Untitled Entry", margin, yPosition);
+      yPosition += 12;
+
+      // Date and metadata
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...accentColor);
+      const entryDate = new Date(entry.createdAt).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      doc.text(`Date: ${entryDate}`, margin, yPosition);
+      yPosition += 6;
+
+      if (entry.mood) {
+        const moodEmoji = { happy: "😊", sad: "😢", angry: "😠", neutral: "😐", anxious: "😰", grateful: "🙏" }[entry.mood] || "📝";
+        doc.text(`Mood: ${moodEmoji} ${entry.mood}`, margin, yPosition);
+        yPosition += 6;
+      }
+
+      if (entry.category) {
+        doc.text(`Category: ${entry.category}`, margin, yPosition);
+        yPosition += 6;
+      }
+
+      if (entry.tags && entry.tags.length > 0) {
+        doc.text(`Tags: ${entry.tags.join(", ")}`, margin, yPosition);
+        yPosition += 6;
+      }
+
+      yPosition += 4;
+
+      // Divider line
+      doc.setDrawColor(...accentColor);
+      doc.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 8;
+
+      // Content
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(...textColor);
+
+      // Strip HTML tags from content if needed
+      let content = entry.content || "";
+      content = content
+        .replace(/<[^>]*>/g, "") // Remove HTML tags
+        .replace(/&nbsp;/g, " ")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&");
+
+      const splitText = doc.splitTextToSize(content, pageWidth - 2 * margin);
+
+      for (let i = 0; i < splitText.length; i++) {
+        if (yPosition + lineHeight > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+        doc.text(splitText[i], margin, yPosition);
+        yPosition += lineHeight;
+      }
+
+      // Footer with generation info
+      yPosition = pageHeight - margin;
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...accentColor);
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`,
+        margin,
+        yPosition
+      );
+
+      // Generate filename
+      const fileName = `diary-${entry.title?.replace(/\s+/g, "-").toLowerCase() || "entry"}-${new Date(entry.createdAt).toISOString().split("T")[0]}.pdf`;
+
+      // Download PDF
+      doc.save(fileName);
+      resolve();
+    } catch (error) {
+      console.error("Error exporting entry as PDF:", error);
+      reject(new Error("Failed to export entry as PDF: " + error.message));
+    }
+  });
+};
+
+/**
+ * Export multiple diary entries as PDF
+ * @param {Array} entries - Array of diary entry objects
+ * @param {Object} options - Export options
+ * @param {string} options.title - Document title
+ * @param {boolean} options.includeStats - Include mood statistics
+ * @returns {Promise<void>} - Generates PDF download
+ */
+export const exportEntriesAsPDF = (entries, options = {}) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const jsPDF = window.jspdf?.jsPDF;
+      if (!jsPDF) {
+        throw new Error("jsPDF library not loaded");
+      }
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 15;
+      const lineHeight = 6;
+      let yPosition = margin;
+
+      const primaryColor = [102, 126, 234];
+      const textColor = [51, 51, 51];
+      const accentColor = [200, 200, 200];
+
+      // Document Title
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(24);
+      doc.setTextColor(...primaryColor);
+      doc.text(options.title || "My Diary Export", margin, yPosition);
+      yPosition += 10;
+
+      // Summary
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...accentColor);
+      doc.text(
+        `Total Entries: ${entries.length} | Generated: ${new Date().toLocaleDateString()}`,
+        margin,
+        yPosition
+      );
+      yPosition += 8;
+
+      // Divider
+      doc.setDrawColor(...accentColor);
+      doc.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 10;
+
+      // Process each entry
+      entries.forEach((entry, index) => {
+        // Check if page break needed
+        if (yPosition + 20 > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        // Entry header
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13);
+        doc.setTextColor(...primaryColor);
+        doc.text(`${index + 1}. ${entry.title || "Untitled"}`, margin, yPosition);
+        yPosition += 7;
+
+        // Entry metadata
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(...accentColor);
+        const entryDate = new Date(entry.createdAt).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        let metadataText = `${entryDate}`;
+        if (entry.mood) {
+          metadataText += ` • ${entry.mood}`;
+        }
+        if (entry.category) {
+          metadataText += ` • ${entry.category}`;
+        }
+        doc.text(metadataText, margin, yPosition);
+        yPosition += 5;
+
+        // Entry content preview (first 200 chars)
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(...textColor);
+        let preview = entry.content || "";
+        preview = preview
+          .replace(/<[^>]*>/g, "")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+          .substring(0, 200);
+        if (entry.content && entry.content.length > 200) {
+          preview += "...";
+        }
+        const previewLines = doc.splitTextToSize(preview, pageWidth - 2 * margin - 5);
+        previewLines.forEach((line) => {
+          if (yPosition + lineHeight > pageHeight - margin) {
+            doc.addPage();
+            yPosition = margin;
+          }
+          doc.text(line, margin + 5, yPosition);
+          yPosition += lineHeight;
+        });
+
+        yPosition += 3;
+
+        // Entry divider
+        doc.setDrawColor(...accentColor);
+        doc.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 5;
+      });
+
+      // Footer
+      yPosition = pageHeight - margin;
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(...accentColor);
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString()} • Diary Export`,
+        margin,
+        yPosition
+      );
+
+      // Save
+      const fileName = `diary-export-${new Date().toISOString().split("T")[0]}.pdf`;
+      doc.save(fileName);
+      resolve();
+    } catch (error) {
+      console.error("Error exporting entries as PDF:", error);
+      reject(new Error("Failed to export entries as PDF: " + error.message));
+    }
+  });
+};
+
 export default {
   buildLocalDateParam,
   buildTimezoneOffsetParam,
@@ -863,4 +1133,7 @@ export default {
   getMoodInsights,
   getWellnessRecommendations,
   extractActionItems,
+  // PDF Export
+  exportEntryAsPDF,
+  exportEntriesAsPDF,
 };

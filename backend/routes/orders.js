@@ -1494,11 +1494,19 @@ router.get('/mine', authenticate, cacheOrders, async (req, res) => {
   try {
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
     const orders = await orderStore.listOrdersByEmail(req.user.email, { cursor: cursor || null, limit });
+    const lastOrderCreatedAt =
+      orders.length === limit && orders[orders.length - 1]?.createdAt
+        ? new Date(orders[orders.length - 1].createdAt)
+        : null;
+
     return res.json({
       success: true,
       orders: orders.map(serializeOrder),
       pagination: {
-        cursor: orders.length === limit ? orders[orders.length - 1].createdAt.toISOString() : null,
+        cursor:
+          lastOrderCreatedAt && !Number.isNaN(lastOrderCreatedAt.getTime())
+            ? lastOrderCreatedAt.toISOString()
+            : null,
         limit,
         hasMore: orders.length === limit,
       },

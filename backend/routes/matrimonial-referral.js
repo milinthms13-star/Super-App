@@ -5,14 +5,15 @@
 
 const express = require('express');
 const router = express.Router();
-const { authenticateToken } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
+
 const referralService = require('../utils/referralSystemService');
 
 /**
  * POST /api/matrimonial/referral/generate
  * Generate new referral code for user
  */
-router.post('/generate', authenticateToken, async (req, res) => {
+router.post('/generate', authenticate, async (req, res) => {
   try {
     const userId = req.user._id;
     const { tier, expiryDays } = req.body;
@@ -58,7 +59,7 @@ router.get('/validate/:code', async (req, res) => {
  * POST /api/matrimonial/referral/apply
  * Apply referral code at signup
  */
-router.post('/apply', authenticateToken, async (req, res) => {
+router.post('/apply', authenticate, async (req, res) => {
   try {
     const { referralCode } = req.body;
     const newUserId = req.user._id;
@@ -81,7 +82,7 @@ router.post('/apply', authenticateToken, async (req, res) => {
  * GET /api/matrimonial/referral/stats
  * Get referrer statistics and rewards
  */
-router.get('/stats', authenticateToken, async (req, res) => {
+router.get('/stats', authenticate, async (req, res) => {
   try {
     const userId = req.user._id;
     const stats = await referralService.getReferrerStats(userId);
@@ -100,7 +101,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
  * POST /api/matrimonial/referral/:referralId/claim
  * Claim referral reward
  */
-router.post('/:referralId/claim', authenticateToken, async (req, res) => {
+router.post('/:referralId/claim', authenticate, async (req, res) => {
   try {
     const { referralId } = req.params;
     const result = await referralService.claimReferralReward(referralId);
@@ -145,7 +146,7 @@ router.get('/leaderboard', async (req, res) => {
  * GET /api/matrimonial/referral/campaign-performance
  * Get referral campaign performance
  */
-router.get('/campaign-performance', authenticateToken, async (req, res) => {
+router.get('/campaign-performance', authenticate, async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
     const performance = await referralService.getCampaignPerformance(days);
@@ -164,7 +165,7 @@ router.get('/campaign-performance', authenticateToken, async (req, res) => {
  * GET /api/matrimonial/referral/my-codes
  * Get all referral codes created by user
  */
-router.get('/my-codes', authenticateToken, async (req, res) => {
+router.get('/my-codes', authenticate, async (req, res) => {
   try {
     const userId = req.user._id;
     const codes = await referralService.Referral.find({ referrerId: userId })

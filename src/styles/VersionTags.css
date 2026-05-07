@@ -1,0 +1,354 @@
+/* ============================================================================
+   VERSION TAGS STYLING
+   ============================================================================
+   Tag management system for marking and categorizing diary entry versions
+*/
+
+.version-tags-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  max-width: 600px;
+}
+
+/* ============================================================================
+   HEADER
+   ============================================================================ */
+
+.tags-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.tags-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+/* ============================================================================
+   ERROR HANDLING
+   ============================================================================ */
+
+.tags-error {
+  padding: 12px;
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.tags-error p {
+  margin: 0;
+}
+
+/* ============================================================================
+   CURRENT TAGS
+   ============================================================================ */
+
+.current-tags {
+  padding: 12px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+}
+
+.no-tags {
+  margin: 0;
+  color: #999;
+  font-size: 13px;
+  flex: 1;
+}
+
+.tags-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background-color: white;
+  border: 2px solid;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.tag-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.tag-icon {
+  font-size: 13px;
+}
+
+.tag-name {
+  text-transform: capitalize;
+}
+
+.tag-remove {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  font-size: 12px;
+  transition: color 0.2s;
+}
+
+.tag-remove:hover {
+  color: #dc2626;
+}
+
+/* ============================================================================
+   ADD TAG FORM
+   ============================================================================ */
+
+.add-tag-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background-color: #f0e5ff;
+  border: 1px solid #d8b4fe;
+  border-radius: 8px;
+}
+
+.btn-add-tag {
+  padding: 10px 16px;
+  background-color: #a78bfa;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-add-tag:hover:not(:disabled) {
+  background-color: #9370db;
+}
+
+.btn-add-tag:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tag-form-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  text-transform: uppercase;
+}
+
+.form-group select,
+.form-group input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+}
+
+.form-group select:focus,
+.form-group input:focus {
+  outline: none;
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1);
+}
+
+.form-group select:disabled,
+.form-group input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.reason-input {
+  resize: vertical;
+  min-height: 60px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.tag-description {
+  margin: 0;
+  font-size: 12px;
+  color: #6b21a8;
+  font-style: italic;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-confirm,
+.btn-cancel {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-confirm {
+  background-color: #a78bfa;
+  color: white;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background-color: #9370db;
+}
+
+.btn-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  background-color: #e5e7eb;
+  color: #333;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background-color: #d1d5db;
+}
+
+/* ============================================================================
+   TAG INFO BOX
+   ============================================================================ */
+
+.tag-info-box {
+  padding: 12px;
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.tag-info-box h4 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+}
+
+.tag-info-box ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.6;
+}
+
+.tag-info-box li {
+  margin-bottom: 4px;
+}
+
+.tag-info-box strong {
+  color: #333;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .version-tags-container {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .tags-grid {
+    gap: 6px;
+  }
+
+  .tag-badge {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .tag-icon {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .version-tags-container {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .btn-confirm,
+  .btn-cancel {
+    width: 100%;
+  }
+
+  .tag-info-box {
+    font-size: 11px;
+  }
+
+  .tag-info-box h4 {
+    font-size: 12px;
+  }
+}

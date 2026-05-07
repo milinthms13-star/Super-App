@@ -1,0 +1,511 @@
+/* ============================================================================
+   VERSION COMMENTS STYLING
+   ============================================================================
+   Comments system for diary entry versions with threading support
+*/
+
+.version-comments-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  max-width: 900px;
+}
+
+/* ============================================================================
+   HEADER
+   ============================================================================ */
+
+.comments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-title h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+}
+
+.comment-count {
+  font-size: 12px;
+  color: #999;
+  background-color: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+/* ============================================================================
+   ERROR HANDLING
+   ============================================================================ */
+
+.comments-error {
+  padding: 12px;
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.comments-error p {
+  margin: 0;
+}
+
+/* ============================================================================
+   ADD COMMENT FORM
+   ============================================================================ */
+
+.add-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.reply-context {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+.cancel-reply {
+  background: none;
+  border: none;
+  color: #92400e;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cancel-reply:hover {
+  color: #78350f;
+}
+
+.comment-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.comment-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.comment-textarea:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.comment-form-footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.sentiment-select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+}
+
+.sentiment-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.sentiment-select:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-submit-comment {
+  padding: 8px 16px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.btn-submit-comment:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.btn-submit-comment:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+   SORT OPTIONS
+   ============================================================================ */
+
+.comments-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #666;
+}
+
+.comments-sort select {
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.comments-sort select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* ============================================================================
+   COMMENTS LIST
+   ============================================================================ */
+
+.comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.comments-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+  font-size: 14px;
+}
+
+/* ============================================================================
+   COMMENT ITEM
+   ============================================================================ */
+
+.comment-item {
+  padding: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+}
+
+.comment-item:hover {
+  background-color: #f9fafb;
+}
+
+.comment-top-level {
+  margin-bottom: 4px;
+}
+
+.comment-reply {
+  margin-left: 20px;
+  border-left: 2px solid #a78bfa;
+  background-color: #faf5ff;
+}
+
+/* Comment Header */
+.comment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.comment-author-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.comment-author {
+  font-weight: 600;
+  color: #333;
+  font-size: 13px;
+}
+
+.comment-time {
+  font-size: 12px;
+  color: #999;
+}
+
+.comment-sentiment {
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.comment-sentiment.positive {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.comment-sentiment.neutral {
+  background-color: #f3f4f6;
+  color: #666;
+}
+
+.comment-sentiment.negative {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* Comment Text */
+.comment-text {
+  padding: 8px 0;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+/* Comment Actions */
+.comment-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  padding: 4px 8px;
+  background: none;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #666;
+}
+
+.action-btn:hover:not(:disabled) {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.like-btn.liked {
+  background-color: #eff6ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.reply-btn {
+  color: #667eea;
+  border-color: #a78bfa;
+}
+
+.reply-btn:hover:not(:disabled) {
+  border-color: #667eea;
+  background-color: #f5f3ff;
+}
+
+.delete-btn {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.delete-btn:hover:not(:disabled) {
+  border-color: #dc2626;
+  background-color: #fee2e2;
+}
+
+/* Comment Replies */
+.comment-replies {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ============================================================================
+   STATISTICS
+   ============================================================================ */
+
+.comments-stats {
+  padding: 12px;
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 20px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #999;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+}
+
+.sentiment-breakdown {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sentiment-badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: white;
+  border: 1px solid #d1d5db;
+  color: #666;
+}
+
+.sentiment-badge.positive {
+  background-color: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.sentiment-badge.neutral {
+  background-color: white;
+  color: #666;
+}
+
+.sentiment-badge.negative {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .version-comments-container {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .comment-reply {
+    margin-left: 12px;
+  }
+
+  .comment-textarea {
+    min-height: 80px;
+  }
+
+  .comment-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .comment-form-footer {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sentiment-select,
+  .btn-submit-comment {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .version-comments-container {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .comment-actions {
+    gap: 4px;
+  }
+
+  .action-btn {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+
+  .header-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .comments-stats {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}

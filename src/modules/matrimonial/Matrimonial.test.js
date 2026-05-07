@@ -105,6 +105,22 @@ const buildUser = (overrides = {}) => ({
   ...overrides,
 });
 
+const buildLiveProfile = (overrides = {}) => ({
+  id: "self-profile",
+  userId: "user-1",
+  verificationStatus: "verified",
+  profileStatus: "approved",
+  privacy: {
+    hidePhone: false,
+    hidePhotos: false,
+    premiumOnlyContact: false,
+  },
+  languages: ["Malayalam", "English"],
+  hobbies: ["Travel", "Reading"],
+  ...buildUser(),
+  ...overrides,
+});
+
 const configureLiveAxios = ({
   profile = null,
   searchProfiles = baseProfiles,
@@ -343,6 +359,145 @@ describe("Matrimonial", () => {
         })
       );
     });
+  });
+
+  test("shows privacy-aware contact gating for premium-only profiles", async () => {
+    configureLiveAxios({
+      profile: buildLiveProfile(),
+      searchProfiles: [
+        {
+          ...baseProfiles[0],
+          phone: "9876543210",
+          privacy: {
+            hidePhone: false,
+            hidePhotos: false,
+            premiumOnlyContact: true,
+          },
+          premiumOnlyContact: true,
+          contactVisibility: "premium_required",
+        },
+      ],
+    });
+
+    render(<Matrimonial />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/anjali sharma/i).length).toBeGreaterThan(0);
+    });
+
+    expect(
+      screen.getByText(/premium required to view contact details/i)
+    ).toBeInTheDocument();
+  });
+
+  test("reports and blocks selected profiles through the live moderation actions", async () => {
+    configureLiveAxios({
+      profile: buildLiveProfile(),
+    });
+
+    render(<Matrimonial />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/anjali sharma/i).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /report anjali sharma for inappropriate content/i,
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/anjali sharma was flagged for moderation review/i)
+      ).toBeInTheDocument();
+    });
+
+    expect(axios.post).toHaveBeenCalledWith(
+      expect.stringMatching(/\/matrimonial\/profiles\/profile-1\/report$/),
+      expect.objectContaining({
+        reason: expect.stringMatching(/reported from the matrimonial workspace/i),
+      }),
+      expect.objectContaining({
+        timeout: 10000,
+      })
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /block anjali sharma from viewing your profile/i,
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/anjali sharma was blocked from your discovery list/i)
+      ).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", {
+          name: /view profile for anjali sharma/i,
+        })
+      ).not.toBeInTheDocument();
+    });
+
+    expect(axios.post).toHaveBeenCalledWith(
+      expect.stringMatching(/\/matrimonial\/profiles\/profile-1\/block$/),
+      {},
+      expect.objectContaining({
+        timeout: 10000,
+      })
+    );
+  });
+
+  test("unlocks secure messaging in premium preview and sends a live message", async () => {
+    configureLiveAxios({
+      profile: buildLiveProfile(),
+      threads: [
+        {
+          id: "thread-1",
+          profile: {
+            ...baseProfiles[0],
+            id: "profile-1",
+          },
+          unreadCount: 2,
+          lastMessage: {
+            content: "Hello from a matched connection",
+            createdAt: "2026-05-07T10:00:00.000Z",
+          },
+        },
+      ],
+    });
+
+    render(<Matrimonial />);
+
+    fireEvent.click(screen.getByRole("button", { name: /preview premium/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /messages/i }));
+
+    const composer = await screen.findByLabelText(/message anjali sharma/i);
+    fireEvent.change(composer, {
+      target: { value: "Namaste, happy to connect." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/message sent to anjali sharma/i)
+      ).toBeInTheDocument();
+    });
+
+    expect(axios.post).toHaveBeenCalledWith(
+      expect.stringMatching(/\/matrimonial\/messages$/),
+      expect.objectContaining({
+        toProfileId: "profile-1",
+        content: "Namaste, happy to connect.",
+      }),
+      expect.objectContaining({
+        timeout: 10000,
+      })
+    );
   });
 
   test("falls back to demo profiles when the live search request fails", async () => {

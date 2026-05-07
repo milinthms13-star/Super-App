@@ -312,6 +312,22 @@ const formatCompactNumber = (value) =>
     maximumFractionDigits: 1,
   }).format(Number(value || 0));
 
+const formatDateTime = (value) => {
+  if (!value) {
+    return "To be scheduled";
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "To be scheduled";
+  }
+
+  return parsedDate.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
+
 const resolveErrorMessage = (error, fallbackMessage) =>
   error?.response?.data?.message || error?.message || fallbackMessage;
 
@@ -440,7 +456,40 @@ const normalizeProperty = (property, index) => {
     reviewCount,
     premiumPlan: property?.premiumPlan || "Featured Listing",
     projectUnits: typeof property?.projectUnits === "number" ? property.projectUnits : 1,
-    leads: Array.isArray(property?.leads) ? property.leads : [],
+    leads: Array.isArray(property?.leads)
+      ? property.leads.map((lead, leadIndex) => ({
+          id: lead?.id || `lead-${leadIndex + 1}`,
+          name: lead?.name || "Buyer",
+          email: lead?.email || "",
+          channel: lead?.channel || "Enquiry",
+          priority: lead?.priority || "Warm",
+          status: lead?.status || "new",
+          message: lead?.message || "",
+          followUpAt: lead?.followUpAt || null,
+          followUpNote: lead?.followUpNote || "",
+          assignedTo: lead?.assignedTo || "",
+          lastContactedAt: lead?.lastContactedAt || null,
+          createdAt: lead?.createdAt || new Date().toISOString(),
+          updatedAt: lead?.updatedAt || lead?.createdAt || new Date().toISOString(),
+        }))
+      : [],
+    visits: Array.isArray(property?.visits)
+      ? property.visits.map((visit, visitIndex) => ({
+          id: visit?.id || `visit-${visitIndex + 1}`,
+          leadId: visit?.leadId || "",
+          buyerName: visit?.buyerName || "Buyer",
+          buyerEmail: visit?.buyerEmail || "",
+          buyerPhone: visit?.buyerPhone || "",
+          scheduledAt: visit?.scheduledAt || new Date().toISOString(),
+          durationMinutes: Number(visit?.durationMinutes || 45),
+          mode: visit?.mode || "onsite",
+          note: visit?.note || "",
+          status: visit?.status || "scheduled",
+          reminderAt: visit?.reminderAt || null,
+          createdAt: visit?.createdAt || new Date().toISOString(),
+          updatedAt: visit?.updatedAt || visit?.createdAt || new Date().toISOString(),
+        }))
+      : [],
     chatPreview:
       Array.isArray(property?.chatPreview) && property.chatPreview.length > 0
         ? property.chatPreview
@@ -478,6 +527,9 @@ const RealEstate = () => {
     createRealEstateListing = async () => null,
     updateRealEstateListing = async () => null,
     sendRealEstateEnquiry = async () => null,
+    updateRealEstateLead = async () => null,
+    scheduleRealEstateVisit = async () => null,
+    updateRealEstateVisit = async () => null,
     sendRealEstateMessage = async () => null,
     addRealEstateReview = async () => null,
     reportRealEstateListing = async () => null,
@@ -500,6 +552,9 @@ const RealEstate = () => {
   const [reviewComment, setReviewComment] = useState("");
   const [reviewRating, setReviewRating] = useState("5");
   const [reportReason, setReportReason] = useState("");
+  const [visitDateTime, setVisitDateTime] = useState("");
+  const [visitMode, setVisitMode] = useState("onsite");
+  const [visitNote, setVisitNote] = useState("");
   const [listingForm, setListingForm] = useState(DEFAULT_LISTING_FORM);
   const [editListingId, setEditListingId] = useState("");
   const { ownerId: currentOwnerId } = useMemo(() => getUserIdentity(currentUser), [currentUser]);
@@ -691,6 +746,19 @@ const RealEstate = () => {
       .slice(0, 6);
   }, [visibleLeadProperties]);
 
+  const visitBoard = useMemo(() => {
+    return visibleLeadProperties
+      .flatMap((property) =>
+        (Array.isArray(property.visits) ? property.visits : []).map((visit) => ({
+          ...visit,
+          propertyTitle: property.title,
+          propertyId: property.id,
+        }))
+      )
+      .sort((first, second) => new Date(first.scheduledAt) - new Date(second.scheduledAt))
+      .slice(0, 6);
+  }, [visibleLeadProperties]);
+
   const similarProperties = useMemo(() => {
     if (!selectedProperty) {
       return [];
@@ -767,6 +835,52 @@ const RealEstate = () => {
       setEnquiryMessage("");
     } catch (error) {
       setStatusMessage(resolveErrorMessage(error, "Enquiry could not be sent."));
+    }
+  };
+
+  const handleLeadUpdate = async (propertyId, leadId, payload, successMessage) => {
+    try {
+      await updateRealEstateLead(propertyId, leadId, payload);
+      setStatusMessage(successMessage);
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Lead update could not be saved."));
+    }
+  };
+
+  const handleVisitSchedule = async () => {
+    if (!selectedProperty || !visitDateTime) {
+      setStatusMessage("Pick a visit date and time before scheduling a property visit.");
+      return;
+    }
+
+    try {
+      await scheduleRealEstateVisit(selectedProperty.id, {
+        scheduledAt: new Date(visitDateTime).toISOString(),
+        durationMinutes: 45,
+        mode: visitMode,
+        note: visitNote.trim(),
+      });
+      setVisitDateTime("");
+      setVisitMode("onsite");
+      setVisitNote("");
+      setStatusMessage(`Visit scheduled for ${selectedProperty.title}. Seller reminders are now queued.`);
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Visit could not be scheduled."));
+    }
+  };
+
+  const handleVisitStatusUpdate = async (propertyId, visitId, status) => {
+    try {
+      await updateRealEstateVisit(propertyId, visitId, { status });
+      setStatusMessage(
+        status === "confirmed"
+          ? "Visit confirmed and reminder timeline refreshed."
+          : status === "completed"
+            ? "Visit marked as completed."
+            : "Visit updated successfully."
+      );
+    } catch (error) {
+      setStatusMessage(resolveErrorMessage(error, "Visit update could not be saved."));
     }
   };
 
@@ -1223,13 +1337,94 @@ const RealEstate = () => {
                     <div key={`${lead.propertyId}-${lead.name}`} className="realestate-lead-item">
                       <strong>{lead.name}</strong>
                       <span>{lead.propertyTitle}</span>
-                      <span>{lead.channel} / {lead.priority}</span>
+                      <span>{lead.channel} / {lead.priority} / {lead.status}</span>
+                      <span>
+                        {lead.followUpAt
+                          ? `Follow-up ${formatDateTime(lead.followUpAt)}`
+                          : "No follow-up reminder set"}
+                      </span>
+                      <div className="realestate-inline-actions">
+                        <button
+                          type="button"
+                          className="realestate-inline-button"
+                          onClick={() =>
+                            handleLeadUpdate(
+                              lead.propertyId,
+                              lead.id,
+                              { status: "contacted" },
+                              `${lead.name} marked as contacted.`
+                            )
+                          }
+                        >
+                          Mark contacted
+                        </button>
+                        <button
+                          type="button"
+                          className="realestate-inline-button"
+                          onClick={() =>
+                            handleLeadUpdate(
+                              lead.propertyId,
+                              lead.id,
+                              {
+                                followUpAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                                followUpNote: "Follow-up scheduled from the lead dashboard.",
+                              },
+                              `Follow-up reminder created for ${lead.name}.`
+                            )
+                          }
+                        >
+                          Follow up tomorrow
+                        </button>
+                      </div>
                     </div>
                   ))
                 ) : (
                   <div className="realestate-lead-item">
                     <strong>No active leads yet</strong>
                     <span>New enquiries will appear here as buyers contact your listings.</span>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="realestate-surface-card">
+              <div className="realestate-section-heading">
+                <h2>Visit schedule</h2>
+                <p>Track scheduled visits, confirm attendance, and avoid overlapping slots.</p>
+              </div>
+              <div className="realestate-lead-list">
+                {visitBoard.length ? (
+                  visitBoard.map((visit) => (
+                    <div key={`${visit.propertyId}-${visit.id}`} className="realestate-lead-item">
+                      <strong>{visit.buyerName}</strong>
+                      <span>{visit.propertyTitle}</span>
+                      <span>{formatDateTime(visit.scheduledAt)} / {visit.mode} / {visit.status}</span>
+                      <div className="realestate-inline-actions">
+                        {visit.status === "scheduled" ? (
+                          <button
+                            type="button"
+                            className="realestate-inline-button"
+                            onClick={() => handleVisitStatusUpdate(visit.propertyId, visit.id, "confirmed")}
+                          >
+                            Confirm visit
+                          </button>
+                        ) : null}
+                        {visit.status === "confirmed" ? (
+                          <button
+                            type="button"
+                            className="realestate-inline-button"
+                            onClick={() => handleVisitStatusUpdate(visit.propertyId, visit.id, "completed")}
+                          >
+                            Mark completed
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="realestate-lead-item">
+                    <strong>No visits booked yet</strong>
+                    <span>New buyer visit requests will appear here with their next reminder.</span>
                   </div>
                 )}
               </div>
@@ -1297,10 +1492,18 @@ const RealEstate = () => {
                 <label className="realestate-field">
                   <span>Type</span>
                   <select name="type" value={listingForm.type} onChange={handleListingInputChange}>
+                    <option value="Apartment">Apartment</option>
                     <option value="Flat">Flat</option>
                     <option value="Villa">Villa</option>
+                    <option value="House">House</option>
+                    <option value="Plot">Plot</option>
                     <option value="Land">Land</option>
                     <option value="Commercial">Commercial</option>
+                    <option value="Office">Office</option>
+                    <option value="Shop">Shop</option>
+                    <option value="Warehouse">Warehouse</option>
+                    <option value="Farm land">Farm land</option>
+                    <option value="Studio">Studio</option>
                   </select>
                 </label>
 
@@ -1532,6 +1735,42 @@ const RealEstate = () => {
                     placeholder="Share budget, move-in timeline, or site visit request"
                   />
                 </label>
+
+                {!canManageProperty(selectedProperty) ? (
+                  <section className="realestate-chat-card">
+                    <div className="realestate-section-heading">
+                      <h3>Schedule visit</h3>
+                      <p>Book an onsite or virtual visit with conflict-aware seller scheduling.</p>
+                    </div>
+                    <label className="realestate-field">
+                      <span>Visit date and time</span>
+                      <input
+                        type="datetime-local"
+                        value={visitDateTime}
+                        onChange={(event) => setVisitDateTime(event.target.value)}
+                      />
+                    </label>
+                    <label className="realestate-field">
+                      <span>Visit mode</span>
+                      <select value={visitMode} onChange={(event) => setVisitMode(event.target.value)}>
+                        <option value="onsite">Onsite</option>
+                        <option value="virtual">Virtual</option>
+                      </select>
+                    </label>
+                    <label className="realestate-field">
+                      <span>Visit note</span>
+                      <textarea
+                        rows="2"
+                        value={visitNote}
+                        onChange={(event) => setVisitNote(event.target.value)}
+                        placeholder="Share gate access, preferred slot, or virtual meeting details"
+                      />
+                    </label>
+                    <button type="button" className="realestate-primary-button" onClick={handleVisitSchedule}>
+                      Schedule visit
+                    </button>
+                  </section>
+                ) : null}
 
                 <section className="realestate-chat-card">
                   <div className="realestate-section-heading">

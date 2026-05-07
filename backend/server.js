@@ -186,6 +186,10 @@ pushNotificationScheduler.startPushNotificationScheduler();
 const whatsappGroupReminderScheduler = require('./services/whatsappGroupReminderScheduler');
 whatsappGroupReminderScheduler.startWhatsAppGroupReminderScheduler();
 
+// Initialize Diary Draft Expiration Scheduler (Phase 4.5)
+const draftExpirationScheduler = require('./services/draftExpirationScheduler');
+draftExpirationScheduler.startDraftExpirationScheduler();
+
 server.listen(PORT, () => {
   logger.info(`Server started on port ${PORT}`);
   logger.info(`WebSocket server initialized`);

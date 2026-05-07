@@ -25,10 +25,84 @@ const buildClassifiedPlanLabel = (plan = 'free') => {
   return 'Free';
 };
 
+const parseOptionalDate = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const isPromotionActive = (record = {}, now = new Date()) => {
+  const promotionExpiry = parseOptionalDate(record?.promotionPlanExpiry || record?.expiryDate);
+  return !promotionExpiry || promotionExpiry >= now;
+};
+
+const isClassifiedRecordVisible = (record = {}, now = new Date()) => {
+  if (Boolean(record?.autoRenew)) {
+    return true;
+  }
+
+  const expiryDate = parseOptionalDate(record?.expiryDate);
+  return !expiryDate || expiryDate >= now;
+};
+
+const buildClassifiedSearchTextMatch = (record = {}, searchText = '') => {
+  if (!searchText || !searchText.trim()) {
+    return true;
+  }
+
+  const normalizedText = searchText.trim().toLowerCase();
+  const searchableText = [
+    record?.title,
+    record?.description,
+    record?.category,
+    record?.location,
+    record?.seller,
+    ...(Array.isArray(record?.tags) ? record.tags : []),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  return searchableText.includes(normalizedText);
+};
+
+const sortClassifiedRecords = (records = [], sortBy = 'featured') => {
+  const sortedRecords = [...records];
+
+  sortedRecords.sort((first, second) => {
+    if (sortBy === 'latest') {
+      return new Date(second.createdAt || second.listedDate || 0) - new Date(first.createdAt || first.listedDate || 0);
+    }
+
+    if (sortBy === 'price-low') {
+      return Number(first.price || 0) - Number(second.price || 0);
+    }
+
+    if (sortBy === 'price-high') {
+      return Number(second.price || 0) - Number(first.price || 0);
+    }
+
+    if (sortBy === 'popular') {
+      return Number(second.chats || 0) + Number(second.favorites || 0) - Number(first.chats || 0) - Number(first.favorites || 0);
+    }
+
+    return (
+      Number(Boolean(second.featured)) - Number(Boolean(first.featured)) ||
+      Number(Boolean(second.urgent)) - Number(Boolean(first.urgent)) ||
+      new Date(second.createdAt || second.listedDate || 0) - new Date(first.createdAt || first.listedDate || 0)
+    );
+  });
+
+  return sortedRecords;
+};
+
 const serializeClassifiedAd = (record, index = 0) => {
   const plainRecord =
     typeof record?.toObject === 'function' ? record.toObject() : { ...(record || {}) };
   const id = String(plainRecord._id || plainRecord.id || `classified-${index + 1}`);
+  const now = new Date();
 
   return {
     id,
@@ -52,8 +126,8 @@ const serializeClassifiedAd = (record, index = 0) => {
     locality: String(plainRecord.locality || plainRecord.location || 'Prime area').trim(),
     coordinates: plainRecord.coordinates || { type: 'Point', coordinates: [0, 0] },
     condition: String(plainRecord.condition || 'Used').trim(),
-    featured: Boolean(plainRecord.featured),
-    urgent: Boolean(plainRecord.urgent),
+    featured: Boolean(plainRecord.featured) && isPromotionActive(plainRecord, now),
+    urgent: Boolean(plainRecord.urgent) && isPromotionActive(plainRecord, now),
     verified: plainRecord.verified !== false,
     views: Number(plainRecord.views || 0),
     favorites: Number(plainRecord.favorites || 0),
@@ -129,9 +203,22 @@ const flattenClassifiedReports = (ads = []) =>
 
 const listClassifiedModuleDataFromMongo = async (filters = {}, options = {}) => {
   const { category, location, searchText, page = 1, limit = 20 } = { ...filters };
-  const { skip = (page - 1) * limit } = options;
+  const {
+    skip = (page - 1) * limit,
+    includeExpired = false,
+    includeRejected = false,
+  } = options;
 
   let query = { isDraft: false };
+  const andConditions = [];
+
+  if (!includeRejected) {
+    query.moderationStatus = { $ne: 'rejected' };
+  }
+
+  if (!includeExpired) {
+    andConditions.push(buildNonExpiredQuery(new Date()));
+  }
 
   if (category && category !== 'All') {
     query.category = category;
@@ -143,12 +230,18 @@ const listClassifiedModuleDataFromMongo = async (filters = {}, options = {}) => 
 
   if (searchText && searchText.trim()) {
     const searchRegex = new RegExp(searchText.trim(), 'i');
-    query.$or = [
+    andConditions.push({
+      $or: [
       { title: searchRegex },
       { description: searchRegex },
       { tags: searchRegex },
       { seller: searchRegex },
-    ];
+      ],
+    });
+  }
+
+  if (andConditions.length > 0) {
+    query.$and = andConditions;
   }
 
   const records = await ClassifiedAd.find(query)
@@ -188,17 +281,80 @@ const listClassifiedModuleData = async (filters = {}, options = {}) => {
     return listClassifiedModuleDataFromMongo(filters, options);
   }
 
+  const {
+    category,
+    location,
+    searchText,
+    page = 1,
+    limit = 20,
+  } = { ...filters };
+  const {
+    skip = (page - 1) * limit,
+    includeExpired = false,
+    includeRejected = false,
+  } = options;
   const currentData = await devAppDataStore.readAppData();
-  return {
-    classifiedsListings: Array.isArray(currentData.moduleData?.classifiedsListings)
+  const allSerializedListings = (
+    Array.isArray(currentData.moduleData?.classifiedsListings)
       ? currentData.moduleData.classifiedsListings
-      : [],
-    classifiedsMessages: Array.isArray(currentData.moduleData?.classifiedsMessages)
-      ? currentData.moduleData.classifiedsMessages
-      : [],
-    classifiedsReports: Array.isArray(currentData.moduleData?.classifiedsReports)
-      ? currentData.moduleData.classifiedsReports
-      : [],
+      : []
+  ).map((record, index) => serializeClassifiedAd(record, index));
+  const filteredRecords = sortClassifiedRecords(
+    allSerializedListings.filter((listing) => {
+      if (Boolean(listing?.isDraft)) {
+        return false;
+      }
+
+      if (!includeRejected && String(listing?.moderationStatus || '').trim().toLowerCase() === 'rejected') {
+        return false;
+      }
+
+      if (!includeExpired && !isClassifiedRecordVisible(listing, new Date())) {
+        return false;
+      }
+
+      if (category && category !== 'All' && listing.category !== category) {
+        return false;
+      }
+
+      if (location && location !== 'All' && listing.location !== location) {
+        return false;
+      }
+
+      return buildClassifiedSearchTextMatch(listing, searchText);
+    }),
+    'featured'
+  );
+  const listings = filteredRecords.slice(skip, skip + limit);
+
+  return {
+    classifiedsListings: listings,
+    classifiedsMessages: flattenClassifiedMessages(
+      listings.map((listing) => ({
+        ...listing,
+        messages:
+          (Array.isArray(currentData.moduleData?.classifiedsListings)
+            ? currentData.moduleData.classifiedsListings
+            : []
+          ).find((record) => String(record?.id || record?._id || '') === String(listing.id))?.messages || [],
+      }))
+    ),
+    classifiedsReports: flattenClassifiedReports(
+      listings.map((listing) => ({
+        ...listing,
+        reports:
+          (Array.isArray(currentData.moduleData?.classifiedsListings)
+            ? currentData.moduleData.classifiedsListings
+            : []
+          ).find((record) => String(record?.id || record?._id || '') === String(listing.id))?.reports || [],
+      }))
+    ),
+    pagination: {
+      total: filteredRecords.length,
+      page,
+      limit,
+      pages: Math.ceil(filteredRecords.length / limit),
+    },
   };
 };
 
@@ -398,9 +554,101 @@ const findNearbyListings = async (coordinates = [0, 0], radiusKm = 50) => {
   return listings.map(serializeClassifiedAd);
 };
 
+const incrementClassifiedView = async (listingId) => {
+  if (!useMongoClassifieds()) {
+    return null;
+  }
+
+  const updated = await ClassifiedAd.findByIdAndUpdate(
+    listingId,
+    {
+      $inc: {
+        views: 1,
+        'analytics.uniqueVisitors': 1,
+      },
+    },
+    {
+      new: true,
+      runValidators: true,
+    }
+  );
+
+  return updated ? serializeClassifiedAd(updated) : null;
+};
+
+const buildNonExpiredQuery = (now = new Date()) => {
+  // Non-expired logic:
+  // - expiryDate is missing => treat as non-expiring => show
+  // - expiryDate >= now => show
+  // - autoRenew === true => treat as renewed/kept => show
+  return {
+    $or: [
+      { expiryDate: { $exists: false } },
+      { expiryDate: null },
+      { expiryDate: { $gte: now } },
+      { autoRenew: true },
+    ],
+  };
+};
+
 const searchClassifieds = async (query = {}, options = {}) => {
   if (!useMongoClassifieds()) {
-    return [];
+    const {
+      text = '',
+      category = null,
+      location = null,
+      minPrice = 0,
+      maxPrice = Infinity,
+      condition = null,
+      sortBy = 'featured',
+      page = 1,
+      limit = 20,
+    } = query;
+    const { skip = (page - 1) * limit } = options;
+    const moduleData = await listClassifiedModuleData(
+      {
+        category,
+        location,
+        searchText: text,
+        page,
+        limit: Number.MAX_SAFE_INTEGER,
+      },
+      {
+        includeExpired: false,
+        includeRejected: false,
+        skip: 0,
+      }
+    );
+    const filteredListings = sortClassifiedRecords(
+      (Array.isArray(moduleData.classifiedsListings) ? moduleData.classifiedsListings : []).filter((listing) => {
+        const price = Number(listing?.price || 0);
+
+        if (minPrice > 0 && price < minPrice) {
+          return false;
+        }
+
+        if (maxPrice < Infinity && price > maxPrice) {
+          return false;
+        }
+
+        if (condition && listing.condition !== condition) {
+          return false;
+        }
+
+        return true;
+      }),
+      sortBy
+    );
+
+    return {
+      listings: filteredListings.slice(skip, skip + limit),
+      pagination: {
+        total: filteredListings.length,
+        page,
+        limit,
+        pages: Math.ceil(filteredListings.length / limit),
+      },
+    };
   }
 
   const {
@@ -417,16 +665,25 @@ const searchClassifieds = async (query = {}, options = {}) => {
 
   const { skip = (page - 1) * limit } = options;
 
-  let dbQuery = { isDraft: false, moderationStatus: { $ne: 'rejected' } };
+  const expiryFilter = buildNonExpiredQuery(new Date());
+
+  const dbQuery = {
+    isDraft: false,
+    moderationStatus: { $ne: 'rejected' },
+    ...(expiryFilter ? { $and: [expiryFilter] } : {}),
+  };
 
   if (text && text.trim()) {
     const searchRegex = new RegExp(text.trim(), 'i');
-    dbQuery.$or = [
-      { title: searchRegex },
-      { description: searchRegex },
-      { tags: searchRegex },
-      { seller: searchRegex },
-    ];
+    dbQuery.$and = dbQuery.$and || [];
+    dbQuery.$and.push({
+      $or: [
+        { title: searchRegex },
+        { description: searchRegex },
+        { tags: searchRegex },
+        { seller: searchRegex },
+      ],
+    });
   }
 
   if (category) {
@@ -528,6 +785,8 @@ module.exports = {
   findClassifiedAdById,
   findClassifiedAdBySlug,
   findNearbyListings,
+  incrementClassifiedView,
+  buildNonExpiredQuery,
   searchClassifieds,
   blockUser,
   unblockUser,

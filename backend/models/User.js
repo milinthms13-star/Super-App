@@ -183,6 +183,14 @@ const UserSchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+    classifiedsSavedSearches: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+    classifiedsRecentlyViewed: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
     savedAddresses: {
       type: [mongoose.Schema.Types.Mixed],
       default: [],

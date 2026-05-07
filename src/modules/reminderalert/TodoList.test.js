@@ -62,4 +62,38 @@ describe("TodoList", () => {
     });
     expect(screen.getByText("No reminders found")).toBeInTheDocument();
   });
+
+  test("deletes a reminder from the list after confirmation", async () => {
+    fetchReminders.mockResolvedValue({
+      data: [
+        {
+          _id: "rem-2",
+          title: "Book lab test",
+          description: "Before Friday",
+          category: "Personal",
+          priority: "Medium",
+          status: "Reminder scheduled",
+          completed: false,
+        },
+      ],
+    });
+    toggleReminderCompletion.mockResolvedValue({ data: {} });
+    deleteReminder.mockResolvedValue({});
+
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<TodoList category="All" showCompleted={false} />);
+
+    expect(await screen.findByText("Book lab test")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle(/delete reminder/i));
+
+    await waitFor(() => {
+      expect(deleteReminder).toHaveBeenCalledWith("rem-2");
+      expect(screen.queryByText("Book lab test")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText("No reminders found")).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
 });

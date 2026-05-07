@@ -21,6 +21,7 @@ const {
   moderateClassifiedAd,
   deleteClassifiedAd,
   findClassifiedAdById,
+  incrementClassifiedView,
   searchClassifieds,
 } = require('../utils/classifiedStore');
 const {
@@ -173,6 +174,28 @@ const classifiedsModerationSchema = Joi.object({
   action: Joi.string().valid('approve', 'flag', 'reject').required(),
 });
 
+const classifiedsRenewalSchema = Joi.object({
+  durationDays: Joi.number().integer().min(1).max(365).default(30),
+  autoRenew: Joi.boolean().optional(),
+});
+
+const classifiedsSavedSearchSchema = Joi.object({
+  name: Joi.string().trim().min(2).max(80).required(),
+  filters: Joi.object({
+    searchText: Joi.string().allow('').trim().default(''),
+    categoryFilter: Joi.array().items(Joi.string().trim().min(1)).default([]),
+    locationFilter: Joi.array().items(Joi.string().trim().min(1)).default([]),
+    conditionFilter: Joi.array().items(Joi.string().trim().min(1)).default([]),
+    priceFilter: Joi.array()
+      .items(Joi.string().valid('Under 10k', '10k - 50k', '50k - 1L', '1L+'))
+      .default([]),
+    sortBy: Joi.string()
+      .valid('featured', 'latest', 'price-low', 'price-high', 'popular')
+      .default('featured'),
+  }).default(),
+  notificationsEnabled: Joi.boolean().default(true),
+});
+
 const realEstateListingSchema = Joi.object({
   title: Joi.string().trim().min(3).max(140).required(),
   intent: Joi.string().valid('sale', 'rent', 'project').default('sale'),
@@ -222,6 +245,32 @@ const realEstateReportSchema = Joi.object({
 const realEstateModerationSchema = Joi.object({
   action: Joi.string().valid('approve', 'flag', 'reject').required(),
 });
+
+const realEstateLeadUpdateSchema = Joi.object({
+  status: Joi.string()
+    .valid('new', 'contacted', 'site_visit_scheduled', 'negotiating', 'closed', 'lost')
+    .optional(),
+  followUpAt: Joi.date().iso().allow(null).optional(),
+  followUpNote: Joi.string().allow('').trim().max(300).optional(),
+  assignedTo: Joi.string().allow('').trim().max(120).optional(),
+}).min(1);
+
+const realEstateVisitSchema = Joi.object({
+  scheduledAt: Joi.date().iso().required(),
+  durationMinutes: Joi.number().integer().min(15).max(240).default(45),
+  mode: Joi.string().valid('onsite', 'virtual').default('onsite'),
+  note: Joi.string().allow('').trim().max(500).default(''),
+  leadId: Joi.string().allow('').trim().default(''),
+  buyerPhone: Joi.string().allow('').trim().default(''),
+});
+
+const realEstateVisitUpdateSchema = Joi.object({
+  status: Joi.string().valid('scheduled', 'confirmed', 'completed', 'cancelled').optional(),
+  scheduledAt: Joi.date().iso().optional(),
+  durationMinutes: Joi.number().integer().min(15).max(240).optional(),
+  reminderAt: Joi.date().iso().allow(null).optional(),
+  note: Joi.string().allow('').trim().max(500).optional(),
+}).min(1);
 
 const slugifyCategoryName = (value = '') =>
   String(value || '')
@@ -293,6 +342,105 @@ const buildClassifiedPlanLabel = (plan = 'free') => {
   return 'Free';
 };
 
+const CLASSIFIED_PLAN_DURATION_DAYS = {
+  free: 30,
+  featured: 7,
+  urgent: 3,
+  subscription: 365,
+};
+
+const toIsoDateOrNull = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate.toISOString();
+};
+
+const addDaysToIsoDate = (value, days) => {
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  parsedDate.setDate(parsedDate.getDate() + Number(days || 0));
+  return parsedDate.toISOString();
+};
+
+const isPromotionWindowActive = (value, now = new Date()) => {
+  if (!value) {
+    return true;
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return true;
+  }
+
+  return parsedDate >= now;
+};
+
+const buildClassifiedLifecycleFields = (plan = 'free', now = new Date()) => {
+  const normalizedPlan = ['free', 'featured', 'urgent', 'subscription'].includes(plan)
+    ? plan
+    : 'free';
+  const nowIso = new Date(now).toISOString();
+  const expiryDate = addDaysToIsoDate(nowIso, CLASSIFIED_PLAN_DURATION_DAYS[normalizedPlan]);
+
+  if (normalizedPlan === 'subscription') {
+    return {
+      expiryDate,
+      autoRenew: true,
+      promotionPlanExpiry: null,
+      subscriptionTier: 'pro',
+      subscriptionExpiryDate: expiryDate,
+    };
+  }
+
+  return {
+    expiryDate,
+    autoRenew: false,
+    promotionPlanExpiry:
+      normalizedPlan === 'featured' || normalizedPlan === 'urgent' ? expiryDate : null,
+    subscriptionTier: 'none',
+    subscriptionExpiryDate: null,
+  };
+};
+
+const buildClassifiedRenewalFields = (listing = {}, payload = {}, now = new Date()) => {
+  const durationDays = Number(payload?.durationDays || 30);
+  const nowDate = new Date(now);
+  const currentExpiry = listing?.expiryDate ? new Date(listing.expiryDate) : null;
+  const renewalBase =
+    currentExpiry && !Number.isNaN(currentExpiry.getTime()) && currentExpiry > nowDate
+      ? currentExpiry
+      : nowDate;
+  const renewalBaseIso = renewalBase.toISOString();
+  const renewedExpiryDate = addDaysToIsoDate(renewalBaseIso, durationDays);
+  const normalizedMonetizationPlan = String(listing?.monetizationPlan || '').trim().toLowerCase();
+  const hasPromotedPlacement = Boolean(
+    listing?.featured ||
+      listing?.urgent ||
+      normalizedMonetizationPlan === 'featured' ||
+      normalizedMonetizationPlan === 'urgent'
+  );
+  const isSubscriptionPlan =
+    normalizedMonetizationPlan === 'seller pro' ||
+    String(listing?.subscriptionTier || '').trim().toLowerCase() !== 'none';
+
+  return {
+    expiryDate: renewedExpiryDate,
+    autoRenew:
+      typeof payload?.autoRenew === 'boolean' ? payload.autoRenew : Boolean(listing?.autoRenew),
+    promotionPlanExpiry: hasPromotedPlacement ? renewedExpiryDate : null,
+    subscriptionExpiryDate: isSubscriptionPlan ? renewedExpiryDate : null,
+    subscriptionTier: isSubscriptionPlan
+      ? String(listing?.subscriptionTier || 'pro').trim() || 'pro'
+      : String(listing?.subscriptionTier || 'none').trim() || 'none',
+  };
+};
+
 const normalizeClassifiedMediaGallery = (mediaGallery = []) =>
   (Array.isArray(mediaGallery) ? mediaGallery : [])
     .map((item, index) => {
@@ -345,8 +493,12 @@ const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
   image: String(listing.image || 'Listing').trim(),
   posted: String(listing.posted || new Date().toISOString().slice(0, 10)).trim(),
   condition: String(listing.condition || 'Used').trim(),
-  featured: Boolean(listing.featured),
-  urgent: Boolean(listing.urgent),
+  featured:
+    Boolean(listing.featured) &&
+    isPromotionWindowActive(listing.promotionPlanExpiry || listing.expiryDate),
+  urgent:
+    Boolean(listing.urgent) &&
+    isPromotionWindowActive(listing.promotionPlanExpiry || listing.expiryDate),
   verified: Boolean(listing.verified),
   views: Number(listing.views || 0),
   favorites: Number(listing.favorites || 0),
@@ -369,6 +521,11 @@ const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
     listing.monetizationPlan ||
       buildClassifiedPlanLabel(listing.plan || (listing.featured ? 'featured' : 'free'))
   ).trim(),
+  promotionPlanExpiry: toIsoDateOrNull(listing.promotionPlanExpiry),
+  subscriptionTier: String(listing.subscriptionTier || 'none').trim(),
+  subscriptionExpiryDate: toIsoDateOrNull(listing.subscriptionExpiryDate),
+  expiryDate: toIsoDateOrNull(listing.expiryDate),
+  autoRenew: Boolean(listing.autoRenew),
   reviews: Array.isArray(listing.reviews) ? listing.reviews : [],
   averageRating:
     Array.isArray(listing.reviews) && listing.reviews.length > 0
@@ -409,6 +566,241 @@ const normalizeClassifiedsModule = (moduleData = {}) => {
       createdAt: String(report.createdAt || new Date().toISOString()).trim(),
     })),
   };
+};
+
+const normalizeEmailAddress = (value = '') => String(value || '').trim().toLowerCase();
+
+const normalizeStringList = (values = []) =>
+  [...new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean))];
+
+const normalizeClassifiedSavedSearchFilters = (filters = {}) => {
+  const sortBy = String(filters?.sortBy || 'featured').trim();
+  const supportedSortOptions = new Set(['featured', 'latest', 'price-low', 'price-high', 'popular']);
+
+  return {
+    searchText: String(filters?.searchText || '').trim(),
+    categoryFilter: normalizeStringList(filters?.categoryFilter),
+    locationFilter: normalizeStringList(filters?.locationFilter),
+    conditionFilter: normalizeStringList(filters?.conditionFilter),
+    priceFilter: normalizeStringList(filters?.priceFilter).filter((priceRange) =>
+      ['Under 10k', '10k - 50k', '50k - 1L', '1L+'].includes(priceRange)
+    ),
+    sortBy: supportedSortOptions.has(sortBy) ? sortBy : 'featured',
+  };
+};
+
+const normalizeClassifiedSavedSearchRecord = (search = {}, index = 0) => ({
+  id: String(search.id || `classified-search-${index + 1}`).trim(),
+  name: String(search.name || 'Saved search').trim(),
+  filters: normalizeClassifiedSavedSearchFilters(search.filters),
+  notificationsEnabled: search.notificationsEnabled !== false,
+  lastSeenListingIds: normalizeStringList(search.lastSeenListingIds),
+  createdAt: String(search.createdAt || new Date().toISOString()).trim(),
+  updatedAt: String(search.updatedAt || search.createdAt || new Date().toISOString()).trim(),
+  lastMatchedAt: search.lastMatchedAt ? String(search.lastMatchedAt).trim() : null,
+});
+
+const normalizeClassifiedRecentViewRecord = (record = {}, index = 0) => ({
+  listingId: String(record.listingId || record.id || `classified-recent-${index + 1}`).trim(),
+  viewedAt: String(record.viewedAt || new Date().toISOString()).trim(),
+});
+
+const normalizeUserClassifiedsState = (state = {}) => ({
+  savedSearches: (Array.isArray(state.savedSearches) ? state.savedSearches : [])
+    .map(normalizeClassifiedSavedSearchRecord)
+    .filter((search) => search.id && search.name),
+  recentlyViewed: (Array.isArray(state.recentlyViewed) ? state.recentlyViewed : [])
+    .map(normalizeClassifiedRecentViewRecord)
+    .filter((record) => record.listingId),
+});
+
+const resolveClassifiedPriceRangeMatch = (price = 0, priceFilter = []) => {
+  if (!Array.isArray(priceFilter) || priceFilter.length === 0) {
+    return true;
+  }
+
+  return priceFilter.some((range) => {
+    if (range === 'Under 10k') return price < 10000;
+    if (range === '10k - 50k') return price >= 10000 && price <= 50000;
+    if (range === '50k - 1L') return price > 50000 && price <= 100000;
+    if (range === '1L+') return price > 100000;
+    return false;
+  });
+};
+
+const matchesClassifiedSavedSearchFilters = (listing = {}, filters = {}) => {
+  const normalizedFilters = normalizeClassifiedSavedSearchFilters(filters);
+  const normalizedListing = normalizeClassifiedsListingRecord(listing);
+  const moderationStatus = String(normalizedListing.moderationStatus || '').trim().toLowerCase();
+  const availabilityStatus = String(normalizedListing.status || 'available').trim().toLowerCase();
+
+  if (moderationStatus && moderationStatus !== 'approved') {
+    return false;
+  }
+
+  if (availabilityStatus === 'sold' || availabilityStatus === 'rented') {
+    return false;
+  }
+
+  const searchHaystack = [
+    normalizedListing.title,
+    normalizedListing.description,
+    normalizedListing.category,
+    normalizedListing.location,
+    normalizedListing.seller,
+    ...(Array.isArray(normalizedListing.tags) ? normalizedListing.tags : []),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  const matchesSearch =
+    !normalizedFilters.searchText ||
+    searchHaystack.includes(normalizedFilters.searchText.toLowerCase());
+
+  const matchesCategory =
+    normalizedFilters.categoryFilter.length === 0 ||
+    normalizedFilters.categoryFilter.includes(normalizedListing.category);
+  const matchesLocation =
+    normalizedFilters.locationFilter.length === 0 ||
+    normalizedFilters.locationFilter.includes(normalizedListing.location);
+  const matchesCondition =
+    normalizedFilters.conditionFilter.length === 0 ||
+    normalizedFilters.conditionFilter.includes(normalizedListing.condition);
+  const matchesPrice = resolveClassifiedPriceRangeMatch(
+    Number(normalizedListing.price || 0),
+    normalizedFilters.priceFilter
+  );
+
+  return matchesSearch && matchesCategory && matchesLocation && matchesCondition && matchesPrice;
+};
+
+const buildClassifiedSavedSearchSummary = (search = {}, listings = []) => {
+  const normalizedSearch = normalizeClassifiedSavedSearchRecord(search);
+  const matchingListings = (Array.isArray(listings) ? listings : [])
+    .map((listing, index) => normalizeClassifiedsListingRecord(listing, index))
+    .filter((listing) => matchesClassifiedSavedSearchFilters(listing, normalizedSearch.filters))
+    .sort(
+      (first, second) =>
+        new Date(second.createdAt || second.updatedAt || second.posted || 0) -
+        new Date(first.createdAt || first.updatedAt || first.posted || 0)
+    );
+  const matchedListingIds = matchingListings.map((listing) => String(listing.id));
+  const unseenMatches = matchingListings.filter(
+    (listing) => !normalizedSearch.lastSeenListingIds.includes(String(listing.id))
+  );
+
+  return {
+    ...normalizedSearch,
+    matchCount: matchingListings.length,
+    newMatchCount: unseenMatches.length,
+    matchedListingIds,
+    previewListings: unseenMatches.slice(0, 3),
+    lastMatchedAt:
+      matchingListings[0]?.createdAt ||
+      matchingListings[0]?.updatedAt ||
+      matchingListings[0]?.posted ||
+      normalizedSearch.lastMatchedAt,
+  };
+};
+
+const getSearchableClassifiedListings = async () => {
+  const moduleData = await listClassifiedModuleData({ page: 1, limit: 500 });
+  return Array.isArray(moduleData?.classifiedsListings) ? moduleData.classifiedsListings : [];
+};
+
+const buildUserClassifiedsResponse = async (state = {}) => {
+  const normalizedState = normalizeUserClassifiedsState(state);
+  const searchableListings = await getSearchableClassifiedListings();
+  const recentlyViewedLookup = new Map(
+    searchableListings.map((listing) => [String(listing.id), normalizeClassifiedsListingRecord(listing)])
+  );
+
+  return {
+    savedSearches: normalizedState.savedSearches.map((search) =>
+      buildClassifiedSavedSearchSummary(search, searchableListings)
+    ),
+    recentlyViewed: normalizedState.recentlyViewed
+      .map((entry) => {
+        const matchedListing = recentlyViewedLookup.get(String(entry.listingId));
+        if (!matchedListing) {
+          return null;
+        }
+
+        return {
+          ...matchedListing,
+          viewedAt: entry.viewedAt,
+        };
+      })
+      .filter(Boolean),
+  };
+};
+
+const getUserClassifiedsStateFromFile = async (userEmail) => {
+  const currentData = await devAppDataStore.readAppData();
+  const normalizedEmail = normalizeEmailAddress(userEmail);
+  return normalizeUserClassifiedsState(currentData.userClassifieds?.[normalizedEmail]);
+};
+
+const saveUserClassifiedsStateToFile = async (userEmail, updater) => {
+  const normalizedEmail = normalizeEmailAddress(userEmail);
+  const nextData = await devAppDataStore.updateAppData(async (currentData) => {
+    const currentState = normalizeUserClassifiedsState(currentData.userClassifieds?.[normalizedEmail]);
+    const nextState = normalizeUserClassifiedsState(await updater(currentState));
+
+    return {
+      ...currentData,
+      userClassifieds: {
+        ...(currentData.userClassifieds || {}),
+        [normalizedEmail]: nextState,
+      },
+    };
+  });
+
+  return normalizeUserClassifiedsState(nextData.userClassifieds?.[normalizedEmail]);
+};
+
+const getUserClassifiedsState = async (userEmail) => {
+  const normalizedEmail = normalizeEmailAddress(userEmail);
+
+  if (useMongoClassifieds()) {
+    const user = await User.findOne({ email: normalizedEmail })
+      .select('classifiedsSavedSearches classifiedsRecentlyViewed')
+      .lean();
+
+    if (user) {
+      return normalizeUserClassifiedsState({
+        savedSearches: user.classifiedsSavedSearches,
+        recentlyViewed: user.classifiedsRecentlyViewed,
+      });
+    }
+  }
+
+  return getUserClassifiedsStateFromFile(normalizedEmail);
+};
+
+const updateUserClassifiedsState = async (userEmail, updater) => {
+  const normalizedEmail = normalizeEmailAddress(userEmail);
+
+  if (useMongoClassifieds()) {
+    const user = await User.findOne({ email: normalizedEmail });
+
+    if (user) {
+      const currentState = normalizeUserClassifiedsState({
+        savedSearches: user.classifiedsSavedSearches,
+        recentlyViewed: user.classifiedsRecentlyViewed,
+      });
+      const nextState = normalizeUserClassifiedsState(await updater(currentState));
+
+      user.classifiedsSavedSearches = nextState.savedSearches;
+      user.classifiedsRecentlyViewed = nextState.recentlyViewed;
+      await user.save();
+      return nextState;
+    }
+  }
+
+  return saveUserClassifiedsStateToFile(normalizedEmail, updater);
 };
 
 const canManageClassifieds = (user = {}) =>
@@ -469,6 +861,176 @@ const isRealEstateListingOwner = (listing = {}, user = {}) => {
     (normalizedUserEmail && normalizedSellerEmail && normalizedUserEmail === normalizedSellerEmail) ||
       (ownerId && resolvedOwnerId && ownerId === resolvedOwnerId)
   );
+};
+
+const normalizeRealEstateLeadRecord = (lead = {}, index = 0) => ({
+  id: String(lead.id || `realestate-lead-${index + 1}`).trim(),
+  name: String(lead.name || 'Buyer').trim(),
+  email: String(lead.email || '').trim().toLowerCase(),
+  phone: String(lead.phone || '').trim(),
+  channel: String(lead.channel || 'Enquiry').trim(),
+  priority: String(lead.priority || 'Warm').trim(),
+  status: String(lead.status || 'new').trim(),
+  message: String(lead.message || '').trim(),
+  followUpAt: toIsoDateOrNull(lead.followUpAt),
+  followUpNote: String(lead.followUpNote || '').trim(),
+  assignedTo: String(lead.assignedTo || '').trim(),
+  lastContactedAt: toIsoDateOrNull(lead.lastContactedAt),
+  createdAt: String(lead.createdAt || new Date().toISOString()).trim(),
+  updatedAt: String(lead.updatedAt || lead.createdAt || new Date().toISOString()).trim(),
+});
+
+const normalizeRealEstateVisitRecord = (visit = {}, index = 0) => ({
+  id: String(visit.id || `realestate-visit-${index + 1}`).trim(),
+  leadId: String(visit.leadId || '').trim(),
+  buyerName: String(visit.buyerName || 'Buyer').trim(),
+  buyerEmail: String(visit.buyerEmail || '').trim().toLowerCase(),
+  buyerPhone: String(visit.buyerPhone || '').trim(),
+  scheduledAt: toIsoDateOrNull(visit.scheduledAt) || new Date().toISOString(),
+  durationMinutes: Number(visit.durationMinutes || 45),
+  mode: String(visit.mode || 'onsite').trim(),
+  note: String(visit.note || '').trim(),
+  status: String(visit.status || 'scheduled').trim(),
+  reminderAt: toIsoDateOrNull(visit.reminderAt),
+  createdAt: String(visit.createdAt || new Date().toISOString()).trim(),
+  updatedAt: String(visit.updatedAt || visit.createdAt || new Date().toISOString()).trim(),
+});
+
+const buildRealEstateLeadUpdate = (lead = {}, payload = {}, now = new Date()) => {
+  const normalizedLead = normalizeRealEstateLeadRecord(lead);
+  const nextStatus =
+    payload.status !== undefined ? String(payload.status).trim() : normalizedLead.status;
+  const nextLead = {
+    ...normalizedLead,
+    status: nextStatus || 'new',
+    followUpAt:
+      payload.followUpAt !== undefined ? toIsoDateOrNull(payload.followUpAt) : normalizedLead.followUpAt,
+    followUpNote:
+      payload.followUpNote !== undefined
+        ? String(payload.followUpNote || '').trim()
+        : normalizedLead.followUpNote,
+    assignedTo:
+      payload.assignedTo !== undefined
+        ? String(payload.assignedTo || '').trim()
+        : normalizedLead.assignedTo,
+    updatedAt: new Date(now).toISOString(),
+  };
+
+  if (payload.status !== undefined && nextStatus !== 'new') {
+    nextLead.lastContactedAt = new Date(now).toISOString();
+  }
+
+  return nextLead;
+};
+
+const buildRealEstateVisitRecord = (payload = {}, user = {}, now = new Date()) => {
+  const scheduledAtIso = toIsoDateOrNull(payload.scheduledAt) || new Date(now).toISOString();
+  const scheduledAtDate = new Date(scheduledAtIso);
+  const reminderCandidate = new Date(scheduledAtDate.getTime() - 2 * 60 * 60 * 1000);
+  const reminderAt =
+    reminderCandidate > new Date(now) ? reminderCandidate.toISOString() : new Date(now).toISOString();
+
+  return normalizeRealEstateVisitRecord({
+    id:
+      typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `realestate-visit-${Date.now()}`,
+    leadId: payload.leadId,
+    buyerName: user?.name?.trim() || 'Buyer',
+    buyerEmail: user?.email,
+    buyerPhone: payload.buyerPhone,
+    scheduledAt: scheduledAtIso,
+    durationMinutes: Number(payload.durationMinutes || 45),
+    mode: payload.mode || 'onsite',
+    note: payload.note,
+    status: 'scheduled',
+    reminderAt,
+    createdAt: new Date(now).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+  });
+};
+
+const buildRealEstateVisitUpdate = (visit = {}, payload = {}, now = new Date()) => {
+  const normalizedVisit = normalizeRealEstateVisitRecord(visit);
+  const scheduledAt =
+    payload.scheduledAt !== undefined
+      ? toIsoDateOrNull(payload.scheduledAt) || normalizedVisit.scheduledAt
+      : normalizedVisit.scheduledAt;
+  const durationMinutes =
+    payload.durationMinutes !== undefined
+      ? Number(payload.durationMinutes || normalizedVisit.durationMinutes)
+      : normalizedVisit.durationMinutes;
+  const reminderAt =
+    payload.reminderAt !== undefined
+      ? toIsoDateOrNull(payload.reminderAt)
+      : payload.scheduledAt !== undefined
+        ? new Date(new Date(scheduledAt).getTime() - 2 * 60 * 60 * 1000).toISOString()
+        : normalizedVisit.reminderAt;
+
+  return normalizeRealEstateVisitRecord({
+    ...normalizedVisit,
+    status:
+      payload.status !== undefined ? String(payload.status).trim() : normalizedVisit.status,
+    scheduledAt,
+    durationMinutes,
+    reminderAt,
+    note: payload.note !== undefined ? String(payload.note || '').trim() : normalizedVisit.note,
+    updatedAt: new Date(now).toISOString(),
+  });
+};
+
+const REAL_ESTATE_ACTIVE_VISIT_STATUSES = new Set(['scheduled', 'confirmed']);
+
+const findRealEstateVisitConflict = (properties = [], candidateVisit = {}, owner = {}) => {
+  const candidate = normalizeRealEstateVisitRecord(candidateVisit);
+  const candidateStart = new Date(candidate.scheduledAt);
+  const candidateEnd = new Date(
+    candidateStart.getTime() + Number(candidate.durationMinutes || 45) * 60 * 1000
+  );
+  const targetOwnerId = String(owner.ownerId || '').trim();
+  const targetSellerEmail = String(owner.sellerEmail || '').trim().toLowerCase();
+
+  if (Number.isNaN(candidateStart.getTime()) || Number.isNaN(candidateEnd.getTime())) {
+    return null;
+  }
+
+  for (const property of Array.isArray(properties) ? properties : []) {
+    const matchesOwner =
+      (targetOwnerId && String(property?.ownerId || '').trim() === targetOwnerId) ||
+      (targetSellerEmail &&
+        String(property?.sellerEmail || '').trim().toLowerCase() === targetSellerEmail);
+
+    if (!matchesOwner) {
+      continue;
+    }
+
+    for (const visit of Array.isArray(property?.visits) ? property.visits : []) {
+      const normalizedVisit = normalizeRealEstateVisitRecord(visit);
+      if (!REAL_ESTATE_ACTIVE_VISIT_STATUSES.has(normalizedVisit.status)) {
+        continue;
+      }
+
+      const visitStart = new Date(normalizedVisit.scheduledAt);
+      const visitEnd = new Date(
+        visitStart.getTime() + Number(normalizedVisit.durationMinutes || 45) * 60 * 1000
+      );
+      const overlaps = candidateStart < visitEnd && candidateEnd > visitStart;
+
+      if (!overlaps) {
+        continue;
+      }
+
+      return {
+        propertyId: String(property?.id || property?._id || '').trim(),
+        propertyTitle: String(property?.title || 'Property').trim(),
+        visitId: normalizedVisit.id,
+        scheduledAt: normalizedVisit.scheduledAt,
+        status: normalizedVisit.status,
+      };
+    }
+  }
+
+  return null;
 };
 
 const adminOnly = (req, res, next) => {
@@ -720,9 +1282,262 @@ router.get('/classifieds/search', searchLimiter, async (req, res) => {
   }
 });
 
+router.get('/classifieds/saved-searches', authenticate, async (req, res) => {
+  try {
+    const state = await getUserClassifiedsState(req.user?.email);
+    const response = await buildUserClassifiedsResponse(state);
+
+    return res.json({
+      success: true,
+      data: {
+        savedSearches: response.savedSearches,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load saved searches.',
+      error: error.message,
+    });
+  }
+});
+
+router.post('/classifieds/saved-searches', authenticate, async (req, res) => {
+  const { error, value } = classifiedsSavedSearchSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const searchableListings = await getSearchableClassifiedListings();
+    const matchedListings = searchableListings.filter((listing) =>
+      matchesClassifiedSavedSearchFilters(listing, value.filters)
+    );
+    const now = new Date().toISOString();
+    const savedSearch = normalizeClassifiedSavedSearchRecord({
+      id:
+        typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `classified-search-${Date.now()}`,
+      name: value.name,
+      filters: value.filters,
+      notificationsEnabled: value.notificationsEnabled,
+      lastSeenListingIds: matchedListings.map((listing) => String(listing.id)),
+      createdAt: now,
+      updatedAt: now,
+      lastMatchedAt:
+        matchedListings[0]?.createdAt || matchedListings[0]?.updatedAt || matchedListings[0]?.posted || null,
+    });
+
+    const nextState = await updateUserClassifiedsState(req.user?.email, (currentState) => ({
+      ...currentState,
+      savedSearches: [savedSearch, ...currentState.savedSearches],
+    }));
+    const response = await buildUserClassifiedsResponse(nextState);
+
+    return res.json({
+      success: true,
+      data: {
+        savedSearches: response.savedSearches,
+        savedSearch,
+      },
+    });
+  } catch (saveError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to save this classifieds search.',
+      error: saveError.message,
+    });
+  }
+});
+
+router.patch('/classifieds/saved-searches/:searchId/acknowledge', authenticate, async (req, res) => {
+  try {
+    const state = await getUserClassifiedsState(req.user?.email);
+    const searchableListings = await getSearchableClassifiedListings();
+    const matchedSearch = state.savedSearches.find((search) => search.id === req.params.searchId);
+
+    if (!matchedSearch) {
+      return res.status(404).json({
+        success: false,
+        message: 'Saved search not found.',
+      });
+    }
+
+    const summary = buildClassifiedSavedSearchSummary(matchedSearch, searchableListings);
+    const nextState = await updateUserClassifiedsState(req.user?.email, (currentState) => ({
+      ...currentState,
+      savedSearches: currentState.savedSearches.map((search) =>
+        search.id === req.params.searchId
+          ? normalizeClassifiedSavedSearchRecord({
+              ...search,
+              lastSeenListingIds: summary.matchedListingIds,
+              updatedAt: new Date().toISOString(),
+              lastMatchedAt: summary.lastMatchedAt,
+            })
+          : search
+      ),
+    }));
+    const response = await buildUserClassifiedsResponse(nextState);
+    const updatedSearch = response.savedSearches.find((search) => search.id === req.params.searchId) || null;
+
+    return res.json({
+      success: true,
+      data: {
+        savedSearches: response.savedSearches,
+        savedSearch: updatedSearch,
+      },
+    });
+  } catch (acknowledgeError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to acknowledge saved-search alerts.',
+      error: acknowledgeError.message,
+    });
+  }
+});
+
+router.delete('/classifieds/saved-searches/:searchId', authenticate, async (req, res) => {
+  try {
+    const nextState = await updateUserClassifiedsState(req.user?.email, (currentState) => ({
+      ...currentState,
+      savedSearches: currentState.savedSearches.filter((search) => search.id !== req.params.searchId),
+    }));
+    const response = await buildUserClassifiedsResponse(nextState);
+
+    return res.json({
+      success: true,
+      data: {
+        savedSearches: response.savedSearches,
+      },
+    });
+  } catch (deleteError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete the saved search.',
+      error: deleteError.message,
+    });
+  }
+});
+
+router.get('/classifieds/recently-viewed', authenticate, async (req, res) => {
+  try {
+    const state = await getUserClassifiedsState(req.user?.email);
+    const response = await buildUserClassifiedsResponse(state);
+
+    return res.json({
+      success: true,
+      data: {
+        recentlyViewed: response.recentlyViewed,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load recently viewed classifieds.',
+      error: error.message,
+    });
+  }
+});
+
+router.post('/classifieds/listings/:listingId/view', authenticate, async (req, res) => {
+  const now = new Date().toISOString();
+
+  try {
+    let viewedListing = null;
+
+    if (useMongoClassifieds()) {
+      viewedListing = await incrementClassifiedView(req.params.listingId);
+    } else {
+      const nextData = await devAppDataStore.updateAppData(async (currentData) => {
+        const currentModuleData = normalizeClassifiedsModule(currentData.moduleData);
+        let matchedListing = null;
+
+        const nextListings = currentModuleData.classifiedsListings.map((listing) => {
+          if (listing.id !== req.params.listingId) {
+            return listing;
+          }
+
+          matchedListing = normalizeClassifiedsListingRecord({
+            ...listing,
+            views: Number(listing.views || 0) + 1,
+            updatedAt: now,
+          });
+
+          return matchedListing;
+        });
+
+        viewedListing = matchedListing;
+
+        return {
+          ...currentData,
+          moduleData: {
+            ...currentData.moduleData,
+            ...currentModuleData,
+            classifiedsListings: nextListings,
+          },
+        };
+      });
+
+      if (!viewedListing) {
+        const normalizedModuleData = normalizeClassifiedsModule(nextData.moduleData);
+        viewedListing = normalizedModuleData.classifiedsListings.find(
+          (listing) => listing.id === req.params.listingId
+        ) || null;
+      }
+    }
+
+    if (!viewedListing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Classified listing not found.',
+      });
+    }
+
+    const nextState = await updateUserClassifiedsState(req.user?.email, (currentState) => {
+      const recentViews = currentState.recentlyViewed.filter(
+        (entry) => String(entry.listingId) !== String(req.params.listingId)
+      );
+
+      return {
+        ...currentState,
+        recentlyViewed: [
+          {
+            listingId: String(req.params.listingId),
+            viewedAt: now,
+          },
+          ...recentViews,
+        ].slice(0, 12),
+      };
+    });
+    const response = await buildUserClassifiedsResponse(nextState);
+
+    return res.json({
+      success: true,
+      data: {
+        listing: viewedListing,
+        moduleData: await listClassifiedModuleData(),
+        recentlyViewed: response.recentlyViewed,
+      },
+    });
+  } catch (viewError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to track the classifieds view.',
+      error: viewError.message,
+    });
+  }
+});
+
 router.get('/admin', authenticate, adminOnly, async (req, res) => {
   const appData = await devAppDataStore.readAppData();
-  const classifiedsModuleData = await listClassifiedModuleData();
+  const classifiedsModuleData = await listClassifiedModuleData({}, {
+    includeExpired: true,
+    includeRejected: true,
+  });
   const realestateProperties = await listRealEstateProperties();
   const restaurants = await listRestaurants();
   const registeredAccounts = await getRegisteredAccountsFromDB();
@@ -1224,10 +2039,12 @@ router.post('/classifieds/listings', authenticate, createListingLimiter, async (
     typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : `classified-${Date.now()}`;
+  const lifecycleFields = buildClassifiedLifecycleFields(value.plan, now);
 
   const createdListing = normalizeClassifiedsListingRecord({
     id: listingId,
     ...value,
+    ...lifecycleFields,
     seller: sellerName,
     sellerRole,
     sellerEmail: req.user.email,
@@ -1330,8 +2147,20 @@ router.patch('/classifieds/listings/:listingId', authenticate, async (req, res) 
       });
     }
 
+    const lifecycleUpdates =
+      value.plan !== undefined ? buildClassifiedLifecycleFields(value.plan, new Date()) : {};
+    const planUpdates =
+      value.plan !== undefined
+        ? {
+            featured: value.plan === 'featured' || value.plan === 'subscription',
+            urgent: value.plan === 'urgent',
+            monetizationPlan: buildClassifiedPlanLabel(value.plan),
+          }
+        : {};
     const updatedListing = await updateClassifiedAd(req.params.listingId, {
       ...value,
+      ...lifecycleUpdates,
+      ...planUpdates,
       mediaGallery: normalizeClassifiedMediaGallery(value.mediaGallery),
     });
 
@@ -1375,9 +2204,12 @@ router.patch('/classifieds/listings/:listingId', authenticate, async (req, res) 
         return listing;
       }
 
+      const lifecycleUpdates =
+        value.plan !== undefined ? buildClassifiedLifecycleFields(value.plan, new Date()) : {};
       updatedListing = normalizeClassifiedsListingRecord({
         ...listing,
         ...value,
+        ...lifecycleUpdates,
         mediaGallery:
           value.mediaGallery !== undefined
             ? normalizeClassifiedMediaGallery(value.mediaGallery)
@@ -1389,6 +2221,107 @@ router.patch('/classifieds/listings/:listingId', authenticate, async (req, res) 
         urgent: value.plan !== undefined ? value.plan === 'urgent' : listing.urgent,
         monetizationPlan:
           value.plan !== undefined ? buildClassifiedPlanLabel(value.plan) : listing.monetizationPlan,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return updatedListing;
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        ...latestModuleData,
+        classifiedsListings: nextListings,
+      },
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: normalizeClassifiedsModule(nextData.moduleData),
+      listing: updatedListing,
+    },
+  });
+});
+
+router.patch('/classifieds/listings/:listingId/renew', authenticate, async (req, res) => {
+  const { error, value } = classifiedsRenewalSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  if (useMongoClassifieds()) {
+    const matchedListing = await findClassifiedAdById(req.params.listingId);
+
+    if (!matchedListing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Classified listing not found.',
+      });
+    }
+
+    const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+    const isOwner = matchedListing.sellerEmail === req.user.email?.trim().toLowerCase();
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only the seller or admin can renew this listing.',
+      });
+    }
+
+    const renewalUpdates = buildClassifiedRenewalFields(matchedListing, value, new Date());
+    const updatedListing = await updateClassifiedAd(req.params.listingId, renewalUpdates);
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await listClassifiedModuleData(),
+        listing: updatedListing,
+      },
+    });
+  }
+
+  const currentData = await devAppDataStore.readAppData();
+  const currentModuleData = normalizeClassifiedsModule(currentData.moduleData);
+  const matchedListing = currentModuleData.classifiedsListings.find(
+    (listing) => listing.id === req.params.listingId
+  );
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Classified listing not found.',
+    });
+  }
+
+  const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+  const isOwner = matchedListing.sellerEmail === req.user.email?.trim().toLowerCase();
+
+  if (!isAdmin && !isOwner) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only the seller or admin can renew this listing.',
+    });
+  }
+
+  let updatedListing = null;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const latestModuleData = normalizeClassifiedsModule(latestData.moduleData);
+    const nextListings = latestModuleData.classifiedsListings.map((listing) => {
+      if (listing.id !== req.params.listingId) {
+        return listing;
+      }
+
+      const renewalUpdates = buildClassifiedRenewalFields(listing, value, new Date());
+      updatedListing = normalizeClassifiedsListingRecord({
+        ...listing,
+        ...renewalUpdates,
         updatedAt: new Date().toISOString(),
       });
 
@@ -1940,6 +2873,7 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
     hasVideoTour: Boolean(value.hasVideoTour),
     projectUnits: value.intent === 'project' ? 1 : 1,
     leads: [],
+    visits: [],
     chatPreview: [],
     similarTags: [value.type, value.location, value.intent].filter(Boolean),
     reviews: [],
@@ -2140,7 +3074,13 @@ router.post('/realestate/listings/:listingId/enquiries', authenticate, async (re
     email: req.user.email,
     channel: value.channel,
     priority: value.message ? 'Hot' : 'Warm',
+    status: 'new',
     message: value.message,
+    followUpAt: null,
+    followUpNote: '',
+    assignedTo: '',
+    lastContactedAt: null,
+    updatedAt: new Date(),
     createdAt: new Date(),
   };
 
@@ -2202,6 +3142,381 @@ router.post('/realestate/listings/:listingId/enquiries', authenticate, async (re
           ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
           : [],
       },
+    },
+  });
+});
+
+router.patch('/realestate/listings/:listingId/leads/:leadId', authenticate, async (req, res) => {
+  const { error, value } = realEstateLeadUpdateSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const matchedListing = useMongoRealEstate()
+    ? await findRealEstatePropertyById(req.params.listingId)
+    : (Array.isArray((await devAppDataStore.readAppData()).moduleData?.realestateProperties)
+        ? (await devAppDataStore.readAppData()).moduleData.realestateProperties
+            .map(serializeRealEstateProperty)
+            .find((listing) => matchesRealEstateListingId(listing, req.params.listingId))
+        : null);
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+  if (!isAdmin && !isRealEstateListingOwner(matchedListing, req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only the listing owner or admin can update lead status.',
+    });
+  }
+
+  const existingLeads = Array.isArray(matchedListing.leads) ? matchedListing.leads : [];
+  const leadExists = existingLeads.some((lead) => String(lead.id) === String(req.params.leadId));
+
+  if (!leadExists) {
+    return res.status(404).json({
+      success: false,
+      message: 'Lead not found for this property.',
+    });
+  }
+
+  const nextLeads = existingLeads.map((lead) =>
+    String(lead.id) === String(req.params.leadId)
+      ? buildRealEstateLeadUpdate(lead, value, new Date())
+      : normalizeRealEstateLeadRecord(lead)
+  );
+
+  if (useMongoRealEstate()) {
+    const listing = await updateRealEstateProperty(req.params.listingId, {
+      leads: nextLeads,
+      updatedAt: new Date(),
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+      },
+    });
+  }
+
+  let updatedListing = null;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      updatedListing = serializeRealEstateProperty({
+        ...listing,
+        leads: nextLeads,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        ...listing,
+        leads: nextLeads,
+        updatedAt: updatedListing.updatedAt,
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+      listing: updatedListing,
+    },
+  });
+});
+
+router.post('/realestate/listings/:listingId/visits', authenticate, async (req, res) => {
+  const { error, value } = realEstateVisitSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  if (value.buyerPhone && !validatePhone(value.buyerPhone)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Buyer phone must contain at least 10 digits.',
+    });
+  }
+
+  const matchedListing = useMongoRealEstate()
+    ? await findRealEstatePropertyById(req.params.listingId)
+    : (Array.isArray((await devAppDataStore.readAppData()).moduleData?.realestateProperties)
+        ? (await devAppDataStore.readAppData()).moduleData.realestateProperties
+            .map(serializeRealEstateProperty)
+            .find((listing) => matchesRealEstateListingId(listing, req.params.listingId))
+        : null);
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  const scheduledVisit = buildRealEstateVisitRecord(value, req.user, new Date());
+  const allProperties = useMongoRealEstate()
+    ? await listRealEstateProperties()
+    : Array.isArray((await devAppDataStore.readAppData()).moduleData?.realestateProperties)
+      ? (await devAppDataStore.readAppData()).moduleData.realestateProperties.map(serializeRealEstateProperty)
+      : [];
+  const conflictingVisit = findRealEstateVisitConflict(allProperties, scheduledVisit, {
+    ownerId: matchedListing.ownerId,
+    sellerEmail: matchedListing.sellerEmail,
+  });
+
+  if (conflictingVisit) {
+    return res.status(409).json({
+      success: false,
+      message: `Visit slot conflicts with ${conflictingVisit.propertyTitle} at ${new Date(conflictingVisit.scheduledAt).toLocaleString('en-IN')}.`,
+      conflict: conflictingVisit,
+    });
+  }
+
+  const existingLeads = Array.isArray(matchedListing.leads) ? matchedListing.leads : [];
+  const nextLeads = existingLeads.map((lead) =>
+    value.leadId && String(lead.id) === String(value.leadId)
+      ? buildRealEstateLeadUpdate(
+          lead,
+          {
+            status: 'site_visit_scheduled',
+            followUpAt: scheduledVisit.scheduledAt,
+            followUpNote:
+              String(lead.followUpNote || '').trim() || 'Site visit scheduled from the buyer workspace.',
+          },
+          new Date()
+        )
+      : normalizeRealEstateLeadRecord(lead)
+  );
+  const nextVisits = [
+    ...(Array.isArray(matchedListing.visits) ? matchedListing.visits.map(normalizeRealEstateVisitRecord) : []),
+    scheduledVisit,
+  ];
+
+  if (useMongoRealEstate()) {
+    const listing = await updateRealEstateProperty(req.params.listingId, {
+      leads: nextLeads,
+      visits: nextVisits,
+      updatedAt: new Date(),
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+        visit: scheduledVisit,
+      },
+    });
+  }
+
+  let updatedListing = null;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      updatedListing = serializeRealEstateProperty({
+        ...listing,
+        leads: nextLeads,
+        visits: nextVisits,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        ...listing,
+        leads: nextLeads,
+        visits: nextVisits,
+        updatedAt: updatedListing.updatedAt,
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+      listing: updatedListing,
+      visit: scheduledVisit,
+    },
+  });
+});
+
+router.patch('/realestate/listings/:listingId/visits/:visitId', authenticate, async (req, res) => {
+  const { error, value } = realEstateVisitUpdateSchema.validate(req.body, { stripUnknown: true });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const matchedListing = useMongoRealEstate()
+    ? await findRealEstatePropertyById(req.params.listingId)
+    : (Array.isArray((await devAppDataStore.readAppData()).moduleData?.realestateProperties)
+        ? (await devAppDataStore.readAppData()).moduleData.realestateProperties
+            .map(serializeRealEstateProperty)
+            .find((listing) => matchesRealEstateListingId(listing, req.params.listingId))
+        : null);
+
+  if (!matchedListing) {
+    return res.status(404).json({
+      success: false,
+      message: 'Real-estate listing not found.',
+    });
+  }
+
+  const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
+  if (!isAdmin && !isRealEstateListingOwner(matchedListing, req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only the listing owner or admin can update visits.',
+    });
+  }
+
+  const existingVisits = Array.isArray(matchedListing.visits) ? matchedListing.visits : [];
+  const visitExists = existingVisits.some((visit) => String(visit.id) === String(req.params.visitId));
+
+  if (!visitExists) {
+    return res.status(404).json({
+      success: false,
+      message: 'Visit not found for this property.',
+    });
+  }
+
+  const nextVisits = existingVisits.map((visit) =>
+    String(visit.id) === String(req.params.visitId)
+      ? buildRealEstateVisitUpdate(visit, value, new Date())
+      : normalizeRealEstateVisitRecord(visit)
+  );
+
+  const updatedVisit = nextVisits.find((visit) => String(visit.id) === String(req.params.visitId));
+
+  if (updatedVisit && REAL_ESTATE_ACTIVE_VISIT_STATUSES.has(updatedVisit.status)) {
+    const allProperties = useMongoRealEstate()
+      ? await listRealEstateProperties()
+      : Array.isArray((await devAppDataStore.readAppData()).moduleData?.realestateProperties)
+        ? (await devAppDataStore.readAppData()).moduleData.realestateProperties.map(serializeRealEstateProperty)
+        : [];
+    const conflictingVisit = findRealEstateVisitConflict(
+      allProperties
+        .map((property) =>
+          matchesRealEstateListingId(property, req.params.listingId)
+            ? { ...property, visits: property.visits.filter((visit) => String(visit.id) !== String(req.params.visitId)) }
+            : property
+        ),
+      updatedVisit,
+      {
+        ownerId: matchedListing.ownerId,
+        sellerEmail: matchedListing.sellerEmail,
+      }
+    );
+
+    if (conflictingVisit) {
+      return res.status(409).json({
+        success: false,
+        message: `Updated visit conflicts with ${conflictingVisit.propertyTitle} at ${new Date(conflictingVisit.scheduledAt).toLocaleString('en-IN')}.`,
+        conflict: conflictingVisit,
+      });
+    }
+  }
+
+  if (useMongoRealEstate()) {
+    const listing = await updateRealEstateProperty(req.params.listingId, {
+      visits: nextVisits,
+      updatedAt: new Date(),
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: await buildRealEstateModuleData(),
+        listing,
+        visit: updatedVisit,
+      },
+    });
+  }
+
+  let updatedListing = null;
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => {
+    const nextListings = (latestData.moduleData?.realestateProperties || []).map((listing) => {
+      if (!matchesRealEstateListingId(listing, req.params.listingId)) {
+        return listing;
+      }
+
+      updatedListing = serializeRealEstateProperty({
+        ...listing,
+        visits: nextVisits,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        ...listing,
+        visits: nextVisits,
+        updatedAt: updatedListing.updatedAt,
+      };
+    });
+
+    return {
+      ...latestData,
+      moduleData: {
+        ...latestData.moduleData,
+        realestateProperties: nextListings,
+      },
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      moduleData: {
+        realestateProperties: Array.isArray(nextData.moduleData?.realestateProperties)
+          ? nextData.moduleData.realestateProperties.map(serializeRealEstateProperty)
+          : [],
+      },
+      listing: updatedListing,
+      visit: updatedVisit,
     },
   });
 });
@@ -2633,4 +3948,15 @@ module.exports.__testables = {
   normalizeClassifiedsListingRecord,
   normalizeClassifiedsModule,
   buildClassifiedPlanLabel,
+  buildClassifiedLifecycleFields,
+  buildClassifiedRenewalFields,
+  normalizeClassifiedSavedSearchRecord,
+  matchesClassifiedSavedSearchFilters,
+  buildClassifiedSavedSearchSummary,
+  normalizeRealEstateLeadRecord,
+  normalizeRealEstateVisitRecord,
+  buildRealEstateLeadUpdate,
+  buildRealEstateVisitRecord,
+  buildRealEstateVisitUpdate,
+  findRealEstateVisitConflict,
 };

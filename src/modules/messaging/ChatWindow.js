@@ -36,6 +36,8 @@ const ChatWindow = ({
   onRestoreClearedChat,
   isChatCleared = false,
   onDeleteAllMessages,
+  onRetryMessage,
+  onExportChat,
 }) => {
   const { currentUser } = useApp();
   const [messageInput, setMessageInput] = useState('');
@@ -491,6 +493,14 @@ const ChatWindow = ({
           >
             Delete All
           </button>
+          <button
+            className="btn-icon"
+            title="Export chat transcript"
+            onClick={onExportChat}
+            type="button"
+          >
+            Export
+          </button>
           <button className="btn-icon" title="Voice Call" onClick={() => onStartCall('audio')} type="button">
             Audio
           </button>
@@ -552,7 +562,7 @@ const ChatWindow = ({
                 key={message._id || index}
                 className={`message ${isOwnMessage ? 'sent' : 'received'} ${
                   message.isDeleted ? 'deleted' : ''
-                } ${message.isPending ? 'pending' : ''}`}
+                } ${message.isPending ? 'pending' : ''} ${message.isFailed ? 'failed' : ''}`}
                 data-message-id={message._id}
                 onContextMenu={(event) => handleContextMenu(event, message, isOwnMessage)}
               >
@@ -666,6 +676,11 @@ const ChatWindow = ({
                     {message.isPending && (
                       <span className="message-pending-label">Sending...</span>
                     )}
+                    {message.isFailed && (
+                      <span className="message-pending-label">
+                        Failed to send
+                      </span>
+                    )}
                     {message.edits?.length > 0 && !message.isDeleted && (
                       <span className="message-edited-label">Edited</span>
                     )}
@@ -683,6 +698,16 @@ const ChatWindow = ({
                         title="Recall message"
                       >
                         Recall
+                      </button>
+                    )}
+                    {message.isFailed && !message.isDeleted && (
+                      <button
+                        className="message-inline-action"
+                        onClick={() => onRetryMessage?.(message)}
+                        type="button"
+                        title={message.errorMessage || 'Retry sending message'}
+                      >
+                        Retry
                       </button>
                     )}
                     {!message.isDeleted && (

@@ -1,0 +1,635 @@
+/* ============================================================================
+   DIARY ANALYTICS DASHBOARD STYLES
+   ============================================================================ */
+
+.diary-analytics-container {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 16px;
+  padding: 24px;
+  margin: 20px 0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Loading State */
+.diary-analytics-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  gap: 16px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e0e0e0;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Error State */
+.diary-analytics-error {
+  background: #ffe0e0;
+  border: 2px solid #ff6b6b;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  color: #c92a2a;
+}
+
+.diary-analytics-error button {
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.diary-analytics-error button:hover {
+  background: #ff5252;
+}
+
+/* Tab Navigation */
+.diary-analytics-tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+  padding-bottom: 16px;
+}
+
+.diary-analytics-tab {
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  transition: all 0.3s ease;
+}
+
+.diary-analytics-tab:hover {
+  background: rgba(255, 255, 255, 0.8);
+  transform: translateY(-2px);
+}
+
+.diary-analytics-tab.active {
+  background: white;
+  border-color: #667eea;
+  color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+/* Analytics Panel */
+.diary-analytics-panel {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.diary-analytics-panel h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #333;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.diary-analytics-panel h4 {
+  color: #555;
+  font-size: 16px;
+  font-weight: 500;
+  margin-top: 20px;
+  margin-bottom: 12px;
+}
+
+/* ============================================================================
+   WRITING STATS
+   ============================================================================ */
+
+.diary-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.diary-stat-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.diary-stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.diary-stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.diary-stat-label {
+  font-size: 14px;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+/* Monthly Breakdown Table */
+.diary-stats-monthly {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #f0f0f0;
+}
+
+.diary-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+
+.diary-stats-table tr {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.diary-stats-table tr:hover {
+  background: #f9f9f9;
+}
+
+.diary-stats-month {
+  padding: 12px;
+  color: #555;
+  font-weight: 500;
+  text-align: left;
+}
+
+.diary-stats-count {
+  padding: 12px;
+  color: #667eea;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ============================================================================
+   MOOD TRENDS
+   ============================================================================ */
+
+.diary-mood-distribution {
+  margin-bottom: 24px;
+}
+
+.diary-mood-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.diary-mood-bar-container {
+  display: grid;
+  grid-template-columns: 80px 1fr 60px;
+  gap: 12px;
+  align-items: center;
+}
+
+.diary-mood-bar-label {
+  font-weight: 500;
+  color: #555;
+  font-size: 14px;
+}
+
+.diary-mood-bar {
+  background: #f0f0f0;
+  border-radius: 8px;
+  height: 24px;
+  overflow: hidden;
+  position: relative;
+}
+
+.diary-mood-bar-fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.3s ease;
+  min-width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+}
+
+.mood-happy { background: linear-gradient(90deg, #ffd700 0%, #ffed4e 100%); color: #333; }
+.mood-sad { background: linear-gradient(90deg, #4a90e2 0%, #7b68ee 100%); }
+.mood-angry { background: linear-gradient(90deg, #ff6b6b 0%, #ee5a6f 100%); }
+.mood-anxious { background: linear-gradient(90deg, #ffa500 0%, #ff8c00 100%); }
+.mood-neutral { background: linear-gradient(90deg, #95a5a6 0%, #a9a9a9 100%); }
+.mood-grateful { background: linear-gradient(90deg, #2ecc71 0%, #27ae60 100%); }
+.mood-peaceful { background: linear-gradient(90deg, #9b59b6 0%, #8e44ad 100%); }
+.mood-energetic { background: linear-gradient(90deg, #e74c3c 0%, #c0392b 100%); }
+
+.diary-mood-bar-count {
+  text-align: right;
+  font-weight: 600;
+  color: #667eea;
+  min-width: 60px;
+}
+
+/* Mood Variability */
+.diary-mood-variability {
+  background: #f9f9f9;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.diary-variability-indicator {
+  margin-top: 12px;
+}
+
+.diary-variability-gauge {
+  background: #e0e0e0;
+  height: 24px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.diary-variability-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50 0%, #ff9800 50%, #f44336 100%);
+  border-radius: 12px;
+  transition: width 0.4s ease;
+}
+
+.diary-variability-text {
+  margin: 0;
+  color: #555;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* ============================================================================
+   WELLNESS SCORE
+   ============================================================================ */
+
+.diary-wellness-score-container {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 32px;
+  margin-bottom: 24px;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .diary-wellness-score-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Wellness Circle */
+.diary-wellness-circle {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    #667eea 0%,
+    #764ba2 50%,
+    #f093fb 100%
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  margin: 0 auto;
+}
+
+.diary-wellness-circle::before {
+  content: '';
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: white;
+  z-index: 1;
+}
+
+.diary-wellness-value,
+.diary-wellness-label {
+  position: relative;
+  z-index: 2;
+}
+
+.diary-wellness-value {
+  font-size: 48px;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.diary-wellness-label {
+  font-size: 12px;
+  color: #999;
+  display: block;
+  text-align: center;
+  margin-top: -8px;
+}
+
+/* Breakdown */
+.diary-wellness-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.diary-wellness-component {
+  display: grid;
+  grid-template-columns: 150px 1fr 60px;
+  gap: 12px;
+  align-items: center;
+}
+
+.diary-wellness-name {
+  font-weight: 500;
+  color: #555;
+  font-size: 14px;
+}
+
+.diary-wellness-bar {
+  background: #f0f0f0;
+  border-radius: 8px;
+  height: 20px;
+  overflow: hidden;
+}
+
+.diary-wellness-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  transition: width 0.4s ease;
+}
+
+.diary-wellness-percent {
+  text-align: right;
+  font-weight: 600;
+  color: #667eea;
+  font-size: 14px;
+}
+
+/* Wellness Insights */
+.diary-wellness-insights {
+  background: #f0f4ff;
+  border-left: 4px solid #667eea;
+  padding: 16px;
+  border-radius: 4px;
+  margin-top: 20px;
+}
+
+.diary-wellness-insight-text {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ============================================================================
+   STREAKS
+   ============================================================================ */
+
+.diary-streaks-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.diary-streak-card {
+  background: white;
+  border: 2px solid #f0f0f0;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.diary-streak-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2);
+  transform: translateY(-4px);
+}
+
+.diary-streak-card.current-streak {
+  border-color: #ff9800;
+  background: linear-gradient(135deg, #fff9e6 0%, #ffe0b2 100%);
+}
+
+.diary-streak-card.longest-streak {
+  border-color: #ffd700;
+  background: linear-gradient(135deg, #fffef5 0%, #fff9e6 100%);
+}
+
+.diary-streak-card.total-days {
+  border-color: #667eea;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
+}
+
+.diary-streak-flame {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.diary-streak-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.diary-streak-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.diary-streak-subtitle {
+  font-size: 12px;
+  color: #999;
+  font-weight: 400;
+}
+
+/* Milestones */
+.diary-milestones {
+  background: #f9f9f9;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 20px;
+  border-top: 2px solid #ffd700;
+}
+
+.diary-milestones-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.diary-milestone {
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+  color: #333;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+/* Last Entry */
+.diary-last-entry {
+  background: #f0f4ff;
+  border-left: 4px solid #667eea;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #555;
+}
+
+.diary-last-entry p {
+  margin: 0;
+}
+
+/* Refresh Button */
+.diary-analytics-refresh {
+  display: block;
+  margin: 24px auto 0;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.diary-analytics-refresh:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.diary-analytics-refresh:active {
+  transform: translateY(0);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .diary-analytics-container {
+    padding: 16px;
+  }
+
+  .diary-analytics-tabs {
+    gap: 8px;
+  }
+
+  .diary-analytics-tab {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .diary-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .diary-mood-bar-container {
+    grid-template-columns: 60px 1fr 50px;
+    font-size: 12px;
+  }
+
+  .diary-streaks-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .diary-wellness-component {
+    grid-template-columns: 120px 1fr 50px;
+  }
+}
+
+@media (max-width: 480px) {
+  .diary-analytics-container {
+    padding: 12px;
+    border-radius: 8px;
+    margin: 16px 0;
+  }
+
+  .diary-analytics-tabs {
+    flex-direction: column;
+  }
+
+  .diary-analytics-tab {
+    width: 100%;
+    text-align: center;
+  }
+
+  .diary-streaks-container {
+    grid-template-columns: 1fr;
+  }
+
+  .diary-wellness-circle {
+    width: 150px;
+    height: 150px;
+  }
+
+  .diary-wellness-circle::before {
+    width: 135px;
+    height: 135px;
+  }
+
+  .diary-wellness-value {
+    font-size: 36px;
+  }
+
+  .diary-stat-card {
+    padding: 16px;
+  }
+
+  .diary-stat-value {
+    font-size: 24px;
+  }
+}

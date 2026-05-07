@@ -35,8 +35,11 @@ import {
   inferMessageTypeFromMimeType,
   isSameEntity,
   loadClearedChats,
+  loadMessagingOutbox,
   mergePagedMessages,
+  mergeOutboxEntriesIntoMessages,
   saveClearedChats,
+  saveMessagingOutbox,
 } from './utils';
 
 const getOtherParticipant = (chat, currentUser) =>
@@ -110,6 +113,7 @@ const DEFAULT_MESSAGE_PAGINATION = {
   limit: MESSAGE_PAGE_SIZE,
 };
 const EMERGENCY_CALL_STORAGE_KEY = 'malabarbazaar-emergency-call';
+const MESSAGE_OUTBOX_RETRY_LIMIT = 5;
 
 const readPendingEmergencyCall = () => {
   if (typeof window === 'undefined') {
@@ -134,6 +138,14 @@ const clearPendingEmergencyCall = () => {
   } catch (error) {
     // Ignore storage cleanup failures so emergency calls still open.
   }
+};
+
+const generateClientMessageId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `client-message-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
 const buildNotificationTitle = (notification = {}) => {
@@ -218,6 +230,9 @@ const Messaging = () => {
   const [clearedChats, setClearedChats] = useState(() => loadClearedChats());
   const [showScheduledBlockManager, setShowScheduledBlockManager] = useState(false);
   const [selectedContactForScheduledBlock, setSelectedContactForScheduledBlock] = useState(null);
+  const [isNetworkOnline, setIsNetworkOnline] = useState(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine !== false
+  );
 
   // Chatroom states
   const [loadingChatrooms, setLoadingChatrooms] = useState(false);
@@ -232,6 +247,8 @@ const Messaging = () => {
   const activeCallRef = useRef(null);
   const incomingCallRef = useRef(null);
   const clearedChatsRef = useRef(loadClearedChats());
+  const outboxRef = useRef([]);
+  const isFlushingOutboxRef = useRef(false);
   const currentUserId = getEntityId(currentUser);
   const resolvedCurrentUserId = useMemo(() => {
     const selectedChatParticipant = selectedChat?.participants?.find((participant) =>
@@ -257,6 +274,71 @@ const Messaging = () => {
 
     return latestReplyableMessage?._id || '';
   }, [currentUser, messages]);
+
+  const persistOutbox = useCallback((nextQueue) => {
+    outboxRef.current = Array.isArray(nextQueue) ? nextQueue : [];
+    saveMessagingOutbox(currentUserId, outboxRef.current);
+  }, [currentUserId]);
+
+  const upsertOutboxEntry = useCallback((entry) => {
+    if (!entry?.clientMessageId) {
+      return;
+    }
+
+    const nextQueue = [
+      ...outboxRef.current.filter(
+        (queuedMessage) => queuedMessage.clientMessageId !== entry.clientMessageId
+      ),
+      entry,
+    ].sort(
+      (first, second) =>
+        new Date(first.createdAt || 0).getTime() - new Date(second.createdAt || 0).getTime()
+    );
+
+    persistOutbox(nextQueue);
+  }, [persistOutbox]);
+
+  const removeOutboxEntry = useCallback((clientMessageId) => {
+    if (!clientMessageId) {
+      return;
+    }
+
+    persistOutbox(
+      outboxRef.current.filter(
+        (queuedMessage) => queuedMessage.clientMessageId !== clientMessageId
+      )
+    );
+  }, [persistOutbox]);
+
+  const mergeChatOutboxIntoMessages = useCallback((chatId, nextMessages = []) => {
+    const resolvedChatId = getEntityId(chatId);
+    if (!resolvedChatId) {
+      return Array.isArray(nextMessages) ? nextMessages : [];
+    }
+
+    const queuedMessages = outboxRef.current.filter(
+      (queuedMessage) => getEntityId(queuedMessage.chatId) === resolvedChatId
+    );
+
+    return mergeOutboxEntriesIntoMessages(nextMessages, queuedMessages);
+  }, []);
+
+  const syncFailedMessageState = useCallback((clientMessageId, updates = {}) => {
+    if (!clientMessageId) {
+      return;
+    }
+
+    setMessages((prevMessages) =>
+      prevMessages.map((message) =>
+        message.clientMessageId === clientMessageId || message._id === clientMessageId
+          ? {
+              ...message,
+              ...updates,
+            }
+          : message
+      )
+    );
+  }, []);
 
   const activateEmergencyIncomingCall = useCallback((callData = {}) => {
     const emergencyCallId = getEntityId(callData?._id || callData?.callId);
@@ -454,8 +536,25 @@ const Messaging = () => {
         limit: MESSAGE_PAGE_SIZE,
       });
 
+      const confirmedClientMessageIds = new Set(
+        (response?.messages || [])
+          .map((message) => String(message?.clientMessageId || '').trim())
+          .filter(Boolean)
+      );
+
+      if (confirmedClientMessageIds.size > 0) {
+        persistOutbox(
+          outboxRef.current.filter(
+            (queuedMessage) => !confirmedClientMessageIds.has(String(queuedMessage.clientMessageId || '').trim())
+          )
+        );
+      }
+
       const clearedAt = getChatClearTimestamp(chatId, clearedChatsRef.current);
-      const nextMessages = filterMessagesByClearTimestamp(response?.messages || [], clearedAt);
+      const nextMessages = mergeChatOutboxIntoMessages(
+        chatId,
+        filterMessagesByClearTimestamp(response?.messages || [], clearedAt)
+      );
 
       if (appendOlderMessages) {
         setMessages((prevMessages) => mergePagedMessages(nextMessages, prevMessages));
@@ -473,7 +572,119 @@ const Messaging = () => {
     } catch (error) {
       console.error('Error loading messages:', error);
     }
-  }, [apiCall]);
+  }, [apiCall, mergeChatOutboxIntoMessages, persistOutbox]);
+
+  const retryQueuedMessage = useCallback(async (queuedMessage, { manual = false } = {}) => {
+    if (!queuedMessage?.clientMessageId || !queuedMessage?.chatId) {
+      return null;
+    }
+
+    const nextAttemptCount = Number(queuedMessage.attemptCount || 0) + 1;
+    const optimisticUpdates = {
+      isPending: true,
+      isFailed: false,
+      errorMessage: '',
+      deliveryStatus: Array.isArray(queuedMessage.deliveryStatus)
+        ? queuedMessage.deliveryStatus.map((status) => ({
+            ...status,
+            status: isSameEntity(status.userId, currentUser) ? 'seen' : 'sending',
+          }))
+        : [],
+    };
+
+    syncFailedMessageState(queuedMessage.clientMessageId, optimisticUpdates);
+
+    try {
+      const response = await apiCall('/messaging/messages', 'POST', {
+        chatId: queuedMessage.chatId,
+        content: queuedMessage.content || '',
+        messageType: queuedMessage.messageType || 'text',
+        media: queuedMessage.media || undefined,
+        replyTo: getEntityId(queuedMessage.replyTo) || null,
+        clientMessageId: queuedMessage.clientMessageId,
+      });
+
+      if (response?.message) {
+        removeOutboxEntry(queuedMessage.clientMessageId);
+        setMessages((prevMessages) => mergeConfirmedMessage(prevMessages, response.message));
+        updateChatPreview(response.message);
+      } else {
+        const nextQueuedMessage = {
+          ...queuedMessage,
+          attemptCount: nextAttemptCount,
+          lastAttemptAt: new Date().toISOString(),
+          errorMessage: 'Server did not confirm the message. It will retry automatically.',
+        };
+
+        upsertOutboxEntry(nextQueuedMessage);
+        syncFailedMessageState(queuedMessage.clientMessageId, {
+          isPending: false,
+          isFailed: true,
+          errorMessage: nextQueuedMessage.errorMessage,
+        });
+      }
+
+      return response?.message || null;
+    } catch (error) {
+      const nextQueuedMessage = {
+        ...queuedMessage,
+        attemptCount: nextAttemptCount,
+        lastAttemptAt: new Date().toISOString(),
+        errorMessage:
+          error?.response?.data?.message || error?.message || 'Unable to send the message.',
+      };
+
+      upsertOutboxEntry(nextQueuedMessage);
+      syncFailedMessageState(queuedMessage.clientMessageId, {
+        isPending: false,
+        isFailed: true,
+        errorMessage: nextQueuedMessage.errorMessage,
+      });
+
+      if (manual) {
+        throw error;
+      }
+
+      return null;
+    }
+  }, [
+    apiCall,
+    currentUser,
+    removeOutboxEntry,
+    syncFailedMessageState,
+    updateChatPreview,
+    upsertOutboxEntry,
+  ]);
+
+  const flushMessageOutbox = useCallback(async () => {
+    if (isFlushingOutboxRef.current || !isNetworkOnline || outboxRef.current.length === 0) {
+      return;
+    }
+
+    isFlushingOutboxRef.current = true;
+
+    try {
+      const queuedMessages = [...outboxRef.current]
+        .filter((queuedMessage) => Number(queuedMessage.attemptCount || 0) < MESSAGE_OUTBOX_RETRY_LIMIT)
+        .sort(
+          (first, second) =>
+            new Date(first.createdAt || 0).getTime() - new Date(second.createdAt || 0).getTime()
+        );
+
+      for (const queuedMessage of queuedMessages) {
+        // Continue best-effort flushing without aborting the whole queue on one failure.
+        // Each failed retry updates the outbox entry with the latest error details.
+        // eslint-disable-next-line no-await-in-loop
+        await retryQueuedMessage(queuedMessage);
+      }
+
+      if (queuedMessages.length > 0) {
+        await loadChats();
+      }
+    } finally {
+      isFlushingOutboxRef.current = false;
+    }
+  }, [isNetworkOnline, loadChats, retryQueuedMessage]);
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -600,6 +811,10 @@ const Messaging = () => {
   }, [incomingCall]);
 
   useEffect(() => {
+    outboxRef.current = loadMessagingOutbox(currentUserId);
+  }, [currentUserId]);
+
+  useEffect(() => {
     const applyPendingEmergencyCall = (callData = readPendingEmergencyCall()) => {
       if (!callData) {
         return;
@@ -674,6 +889,35 @@ const Messaging = () => {
   }, [selectedChat, loadMessages, checkEncryptionStatus]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleBrowserOnline = () => {
+      setIsNetworkOnline(true);
+    };
+
+    const handleBrowserOffline = () => {
+      setIsNetworkOnline(false);
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleBrowserOnline);
+    window.addEventListener('offline', handleBrowserOffline);
+
+    return () => {
+      window.removeEventListener('online', handleBrowserOnline);
+      window.removeEventListener('offline', handleBrowserOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isNetworkOnline) {
+      flushMessageOutbox();
+    }
+  }, [flushMessageOutbox, isNetworkOnline]);
+
+  useEffect(() => {
     if (!currentUser) {
       return undefined;
     }
@@ -697,9 +941,18 @@ const Messaging = () => {
 
     newSocket.on('connect', () => {
       setIsOnline(true);
+      flushMessageOutbox();
+
+      if (selectedChat?._id) {
+        newSocket.emit('chat:join', selectedChat._id);
+      }
     });
 
     newSocket.on('disconnect', () => {
+      setIsOnline(false);
+    });
+
+    newSocket.on('connect_error', () => {
       setIsOnline(false);
     });
 
@@ -1089,6 +1342,7 @@ const Messaging = () => {
     addNotificationEntry,
     apiCall,
     currentUser,
+    flushMessageOutbox,
     loadMessages,
     maybeShowDesktopNotification,
     resolvedCurrentUserId,
@@ -1453,13 +1707,21 @@ const Messaging = () => {
     }
 
     const tempMessageId = `temp_${Date.now()}`;
+    const clientMessageId = generateClientMessageId();
+    const normalizedReplyTo = getEntityId(replyTo) || null;
+    const optimisticCreatedAt = new Date().toISOString();
+    const optimisticDeliveryStatus = selectedChat.participants.map((userId) => ({
+      userId,
+      status: isSameEntity(userId, currentUser) ? 'seen' : 'sending',
+    }));
 
     try {
       const messageData = {
         chatId: selectedChat._id,
         content: content || fileData?.fileName || '',
         messageType,
-        replyTo: getEntityId(replyTo) || null,
+        replyTo: normalizedReplyTo,
+        clientMessageId,
       };
 
       if (fileData) {
@@ -1473,18 +1735,16 @@ const Messaging = () => {
       // OPTIMISTIC UPDATE: Add message to UI immediately (before API response)
       const optimisticMessage = {
         _id: tempMessageId,
+        clientMessageId,
         chatId: selectedChat._id,
         senderId: currentUser,
         content: messageData.content,
         messageType,
         media: messageData.media,
-        replyTo: replyTo || null,
-        createdAt: new Date().toISOString(),
+        replyTo: normalizedReplyTo,
+        createdAt: optimisticCreatedAt,
         isPending: true, // Mark as pending
-        deliveryStatus: selectedChat.participants.map((userId) => ({
-          userId,
-          status: isSameEntity(userId, currentUser) ? 'seen' : 'sending',
-        })),
+        deliveryStatus: optimisticDeliveryStatus,
       };
 
       console.log('📤 Optimistic message added:', optimisticMessage);
@@ -1497,26 +1757,71 @@ const Messaging = () => {
 
       if (response?.message) {
         // Replace temp message with real message from server
+        removeOutboxEntry(clientMessageId);
         console.log('✅ Replacing temp message with real message:', response.message);
         setMessages((prevMessages) => mergeConfirmedMessage(prevMessages, response.message));
         updateChatPreview(response.message);
       } else {
         // Remove optimistic message on error
         console.error('❌ Server error - removing optimistic message');
-        setMessages((prevMessages) =>
-          prevMessages.filter((msg) => msg._id !== tempMessageId)
-        );
+        const errorMessage = 'Server did not confirm the message. It will retry automatically.';
+        upsertOutboxEntry({
+          clientMessageId,
+          tempMessageId,
+          chatId: selectedChat._id,
+          senderId: currentUser,
+          content: messageData.content,
+          messageType,
+          media: messageData.media || null,
+          replyTo: normalizedReplyTo,
+          createdAt: optimisticCreatedAt,
+          attemptCount: 1,
+          errorMessage,
+          deliveryStatus: optimisticDeliveryStatus,
+        });
+        syncFailedMessageState(clientMessageId, {
+          isPending: false,
+          isFailed: true,
+          errorMessage,
+        });
       }
 
       return response?.message || null;
     } catch (error) {
       console.error('❌ Error sending message:', error);
       console.error('Server response payload:', error?.response?.data);
-      setMessages((prevMessages) =>
-        prevMessages.filter((message) => message._id !== tempMessageId)
-      );
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Message queued and will retry automatically when you are back online.';
+      upsertOutboxEntry({
+        clientMessageId,
+        tempMessageId,
+        chatId: selectedChat._id,
+        senderId: currentUser,
+        content: content || fileData?.fileName || '',
+        messageType,
+        media:
+          fileData
+            ? {
+                type: fileData.mimeType,
+                url: fileData.s3Url,
+                size: fileData.fileSize,
+              }
+            : null,
+        replyTo: normalizedReplyTo,
+        createdAt: optimisticCreatedAt,
+        attemptCount: 1,
+        errorMessage,
+        deliveryStatus: optimisticDeliveryStatus,
+      });
+      syncFailedMessageState(clientMessageId, {
+        isPending: false,
+        isFailed: true,
+        errorMessage,
+      });
       loadChats();
-      throw error;
+      return null;
     }
   };
 
@@ -1602,6 +1907,56 @@ const Messaging = () => {
     } catch (error) {
       console.error('Error deleting all messages:', error);
       alert('Failed to delete messages. Please try again.');
+    }
+  };
+
+  const handleRetryMessage = async (message) => {
+    try {
+      const queuedMessage = outboxRef.current.find(
+        (entry) => entry.clientMessageId === message?.clientMessageId
+      );
+
+      if (!queuedMessage) {
+        return;
+      }
+
+      await retryQueuedMessage(queuedMessage, { manual: true });
+    } catch (error) {
+      console.error('Error retrying queued message:', error);
+    }
+  };
+
+  const handleExportChat = async () => {
+    if (!selectedChat?._id || typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const response = await apiCall(`/messaging/chats/${selectedChat._id}/export`, 'GET');
+      const exportPayload = response?.chatExport;
+
+      if (!exportPayload) {
+        throw new Error('No export data was returned.');
+      }
+
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+        type: 'application/json',
+      });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const chatLabel =
+        selectedChat?.groupName ||
+        getOtherParticipant(selectedChat, currentUser)?.name ||
+        'chat';
+
+      link.href = downloadUrl;
+      link.download = `${String(chatLabel).trim().replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'chat'}-export.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Error exporting chat:', error);
     }
   };
 
@@ -2073,6 +2428,8 @@ const Messaging = () => {
                   loadingOlderMessages={loadingOlderMessages}
                   onShowOlderMessages={handleShowOlderMessages}
                   onShowLatestOnly={handleShowLatestOnly}
+                  onRetryMessage={handleRetryMessage}
+                  onExportChat={() => {}}
                 />
                 <div className="chatroom-panel-sidebar">
                   <ChatroomPanel
@@ -2252,6 +2609,8 @@ const Messaging = () => {
                 onRestoreClearedChat={handleRestoreClearedChat}
                 isChatCleared={Boolean(selectedChatClearedAt)}
                 onDeleteAllMessages={handleDeleteAllMessages}
+                onRetryMessage={handleRetryMessage}
+                onExportChat={handleExportChat}
               />
 
               {showAISuggestions && selectedChat?._id && latestMessageId && (

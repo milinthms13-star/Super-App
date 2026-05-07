@@ -11,6 +11,8 @@ import {
   clearDraftFromStorage,
   debounce,
 } from "../../utils/diaryHelpers";
+// Phase 4.4: Version History Timeline
+import VersionHistoryTimeline from "./VersionHistoryTimeline";
 
 const MOODS = Object.entries(MOOD_CONFIG).map(([value, config]) => ({
   value,
@@ -19,6 +21,58 @@ const MOODS = Object.entries(MOOD_CONFIG).map(([value, config]) => ({
 }));
 
 const EDITOR_CATEGORIES = CATEGORIES.filter((c) => c !== "All");
+
+// Entry Templates - Pre-filled templates for common entry types
+const ENTRY_TEMPLATES = {
+  gratitude: {
+    title: "Gratitude Journal",
+    content: "<h3>Today I'm Grateful For:</h3><ol><li>Something that made me happy...</li><li>Someone who helped me...</li><li>An unexpected good thing...</li></ol>",
+    category: "Personal",
+    mood: "happy",
+  },
+  reflection: {
+    title: "Daily Reflection",
+    content: "<h3>What Went Well:</h3><p>...</p><h3>What Could Improve:</h3><p>...</p><h3>Tomorrow's Focus:</h3><p>...</p>",
+    category: "Personal",
+    mood: "neutral",
+  },
+  workDay: {
+    title: "Work Day Summary",
+    content: "<h3>Accomplished:</h3><ul><li>...</li></ul><h3>Challenges:</h3><ul><li>...</li></ul><h3>Tomorrow's Priorities:</h3><ul><li>...</li></ul>",
+    category: "Work",
+    mood: "focused",
+  },
+  health: {
+    title: "Health & Wellness Check-in",
+    content: "<h3>Sleep Quality:</h3><p>...</p><h3>Exercise/Activity:</h3><p>...</p><h3>Nutrition:</h3><p>...</p><h3>Mental State:</h3><p>...</p>",
+    category: "Health",
+    mood: "neutral",
+  },
+  weeklyReview: {
+    title: "Weekly Review",
+    content: "<h3>Week Highlights:</h3><p>...</p><h3>Lessons Learned:</h3><p>...</p><h3>Next Week Goals:</h3><p>...</p>",
+    category: "Personal",
+    mood: "reflective",
+  },
+  goals: {
+    title: "Goal Progress Update",
+    content: "<h3>Goal:</h3><p>...</p><h3>Progress Made:</h3><p>...</p><h3>Obstacles:</h3><p>...</p><h3>Next Steps:</h3><p>...</p>",
+    category: "Work",
+    mood: "focused",
+  },
+  travel: {
+    title: "Travel Log",
+    content: "<h3>Location:</h3><p>...</p><h3>Highlights:</h3><p>...</p><h3>Food & Experiences:</h3><p>...</p><h3>Reflections:</h3><p>...</p>",
+    category: "Adventure",
+    mood: "happy",
+  },
+  relationship: {
+    title: "Relationship Reflection",
+    content: "<h3>Who:</h3><p>...</p><h3>What Happened:</h3><p>...</p><h3>How It Made Me Feel:</h3><p>...</p><h3>Next Actions:</h3><p>...</p>",
+    category: "Personal",
+    mood: "neutral",
+  },
+};
 
 const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
   const [formData, setFormData] = useState({
@@ -35,6 +89,11 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
   const [selectedFiles, setSelectedFiles] = useState([]) ;
   const [filePreviews, setFilePreviews] = useState([]) ;
   const [autosaveStatus, setAutosaveStatus] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  // Phase 4.4: Version History
+  const [versions, setVersions] = useState([]);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(false);
   const quillRef = useRef(null);
 
   // Load draft from localStorage on mount (only for new entries)
@@ -155,6 +214,84 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
     }));
   };
 
+  const handleApplyTemplate = (templateKey) => {
+    const template = ENTRY_TEMPLATES[templateKey];
+    if (template) {
+      setFormData((current) => ({
+        ...current,
+        title: template.title,
+        content: template.content,
+        category: template.category,
+        mood: template.mood,
+      }));
+      setSelectedTemplate(templateKey);
+    }
+  };
+
+  // Phase 4.4: Version History Functions
+  const fetchVersions = async () => {
+    if (!entry?._id) return;
+    
+    try {
+      setLoadingVersions(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/diary/${entry._id}/versions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setVersions(Array.isArray(data.data) ? data.data : []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch versions:', error);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  // Fetch versions when entry is loaded
+  useEffect(() => {
+    if (entry?._id) {
+      fetchVersions();
+    }
+  }, [entry?._id]);
+
+  const handleRestoreVersion = async (version) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/diary/${entry._id}/restore-version`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ versionId: version._id })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Update form with restored version
+        setFormData({
+          title: data.data.title,
+          content: data.data.content,
+          mood: data.data.mood,
+          category: data.data.category,
+          tags: data.data.tags || [],
+          isDraft: data.data.isDraft,
+          entryDate: data.data.entryDate ? data.data.entryDate.split("T")[0] : formData.entryDate,
+        });
+        // Refresh versions
+        await fetchVersions();
+        setShowVersionHistory(false);
+        setAutosaveStatus("Restored from version history");
+      }
+    } catch (error) {
+      console.error('Failed to restore version:', error);
+      setAutosaveStatus("Failed to restore version");
+    }
+  };
+
   const validateForm = () => {
     const newErrors = {};
     if (!formData.title.trim()) {
@@ -180,9 +317,22 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
       <div className="diary-editor-modal">
         <div className="diary-editor-header">
           <h2>{entry ? "Edit Entry" : "New Diary Entry"}</h2>
-          <button className="diary-close-btn" onClick={onClose} disabled={submitting}>
-            ✕
-          </button>
+          <div className="diary-editor-header-actions">
+            {/* Phase 4.4: Version History Button (only for existing entries) */}
+            {entry && versions.length > 0 && (
+              <button
+                type="button"
+                className="diary-version-history-btn"
+                onClick={() => setShowVersionHistory(!showVersionHistory)}
+                title="View version history"
+              >
+                📜 History ({versions.length})
+              </button>
+            )}
+            <button className="diary-close-btn" onClick={onClose} disabled={submitting}>
+              ✕
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="diary-editor-form">
@@ -197,6 +347,37 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
               disabled={submitting}
             />
           </div>
+
+          {/* Template Selector (only for new entries) */}
+          {!entry && (
+            <div className="diary-form-group">
+              <label>📝 Quick Start with Template (Optional)</label>
+              <select
+                value={selectedTemplate}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleApplyTemplate(e.target.value);
+                  }
+                  e.target.value = "";
+                }}
+                disabled={submitting}
+                className="diary-template-select"
+              >
+                <option value="">-- Choose a template to start --</option>
+                <option value="gratitude">🙏 Gratitude Journal</option>
+                <option value="reflection">🤔 Daily Reflection</option>
+                <option value="workDay">💼 Work Day Summary</option>
+                <option value="health">💪 Health & Wellness Check-in</option>
+                <option value="weeklyReview">📊 Weekly Review</option>
+                <option value="goals">🎯 Goal Progress Update</option>
+                <option value="travel">✈️ Travel Log</option>
+                <option value="relationship">💝 Relationship Reflection</option>
+              </select>
+              {selectedTemplate && (
+                <p className="diary-template-applied">✓ Template applied! Customize as needed.</p>
+              )}
+            </div>
+          )}
 
           {/* Title */}
           <div className="diary-form-group">
@@ -399,6 +580,18 @@ const DiaryEditor = ({ entry, onSave, onClose, submitting }) => {
             </button>
           </div>
         </form>
+
+        {/* Phase 4.4: Version History Timeline */}
+        {showVersionHistory && entry && versions.length > 0 && (
+          <div className="diary-editor-version-history-section">
+            <VersionHistoryTimeline
+              entryId={entry._id}
+              versions={versions}
+              onRestore={handleRestoreVersion}
+              loading={loadingVersions}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

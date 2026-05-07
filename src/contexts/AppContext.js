@@ -908,6 +908,102 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     return response.data.data;
   };
 
+  const getClassifiedSavedSearches = async () => {
+    const response = await axios.get(`${API_BASE_URL}/app-data/classifieds/saved-searches`, {
+      headers: authHeaders,
+    });
+
+    if (!response.data?.success) {
+      throw new Error("Unable to load saved classifieds searches.");
+    }
+
+    return Array.isArray(response.data.data?.savedSearches)
+      ? response.data.data.savedSearches
+      : [];
+  };
+
+  const saveClassifiedSearch = async (payload) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/app-data/classifieds/saved-searches`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to save this classifieds search.");
+    }
+
+    return {
+      savedSearches: Array.isArray(response.data.data?.savedSearches)
+        ? response.data.data.savedSearches
+        : [],
+      savedSearch: response.data.data?.savedSearch || null,
+    };
+  };
+
+  const acknowledgeClassifiedSavedSearch = async (searchId) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/app-data/classifieds/saved-searches/${encodeURIComponent(searchId)}/acknowledge`,
+      {},
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to acknowledge saved-search alerts.");
+    }
+
+    return {
+      savedSearches: Array.isArray(response.data.data?.savedSearches)
+        ? response.data.data.savedSearches
+        : [],
+      savedSearch: response.data.data?.savedSearch || null,
+    };
+  };
+
+  const deleteClassifiedSavedSearch = async (searchId) => {
+    const response = await axios.delete(
+      `${API_BASE_URL}/app-data/classifieds/saved-searches/${encodeURIComponent(searchId)}`,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to delete this classifieds saved search.");
+    }
+
+    return Array.isArray(response.data.data?.savedSearches)
+      ? response.data.data.savedSearches
+      : [];
+  };
+
+  const getRecentlyViewedClassifieds = async () => {
+    const response = await axios.get(`${API_BASE_URL}/app-data/classifieds/recently-viewed`, {
+      headers: authHeaders,
+    });
+
+    if (!response.data?.success) {
+      throw new Error("Unable to load recently viewed classifieds.");
+    }
+
+    return Array.isArray(response.data.data?.recentlyViewed)
+      ? response.data.data.recentlyViewed
+      : [];
+  };
+
+  const trackClassifiedListingView = async (listingId) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/app-data/classifieds/listings/${encodeURIComponent(listingId)}/view`,
+      {},
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to track the classifieds view.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data;
+  };
+
   const createRealEstateListing = async (listingData) => {
     const response = await axios.post(`${API_BASE_URL}/app-data/realestate/listings`, listingData, {
       headers: authHeaders,
@@ -949,6 +1045,51 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
 
     applyModuleData(response.data.data?.moduleData || {});
     return response.data.data?.listing;
+  };
+
+  const updateRealEstateLead = async (listingId, leadId, payload) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}/leads/${encodeURIComponent(leadId)}`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to update the real-estate lead.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.listing;
+  };
+
+  const scheduleRealEstateVisit = async (listingId, payload) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}/visits`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to schedule the real-estate visit.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.visit || response.data.data?.listing;
+  };
+
+  const updateRealEstateVisit = async (listingId, visitId, payload) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/app-data/realestate/listings/${encodeURIComponent(listingId)}/visits/${encodeURIComponent(visitId)}`,
+      payload,
+      { headers: authHeaders }
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Unable to update the real-estate visit.");
+    }
+
+    applyModuleData(response.data.data?.moduleData || {});
+    return response.data.data?.visit || response.data.data?.listing;
   };
 
   const sendRealEstateMessage = async (listingId, payload) => {
@@ -1599,9 +1740,18 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         updateClassifiedListing,
         moderateClassifiedListing,
         deleteClassifiedListing,
+        getClassifiedSavedSearches,
+        saveClassifiedSearch,
+        acknowledgeClassifiedSavedSearch,
+        deleteClassifiedSavedSearch,
+        getRecentlyViewedClassifieds,
+        trackClassifiedListingView,
         createRealEstateListing,
         updateRealEstateListing,
         sendRealEstateEnquiry,
+        updateRealEstateLead,
+        scheduleRealEstateVisit,
+        updateRealEstateVisit,
         sendRealEstateMessage,
         addRealEstateReview,
         reportRealEstateListing,

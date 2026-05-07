@@ -1,5 +1,5 @@
 const axios = require('axios');
-const logger = require('../config/logger');
+const logger = require('../utils/logger');
 
 /**
  * Diary AI Summary Service

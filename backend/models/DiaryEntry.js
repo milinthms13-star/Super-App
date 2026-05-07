@@ -161,4 +161,17 @@ diaryEntrySchema.virtual('formattedDate').get(function() {
   });
 });
 
+// Post-save hook to update streaks
+diaryEntrySchema.post('save', async function() {
+  if (this.isDraft || this.isDeleted) return; // Only update for published entries
+
+  try {
+    const DiaryStreak = require('./DiaryStreak');
+    await DiaryStreak.updateStreak(this.userId, this.entryDate || this.createdAt);
+  } catch (error) {
+    // Log but don't throw - streak updates shouldn't block entry saves
+    console.error('Failed to update streak:', error.message);
+  }
+});
+
 module.exports = mongoose.model('DiaryEntry', diaryEntrySchema);

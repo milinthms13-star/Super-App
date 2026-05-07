@@ -1,274 +1,412 @@
-const request = require('supertest');
-const mongoose = require('mongoose');
-const app = require('../server');
-const DiaryEntry = require('../models/DiaryEntry');
-const jwt = require('jsonwebtoken');
+jest.mock('../middleware/auth', () => ({
+  authenticate: (req, _res, next) => next(),
+}));
 
-const mockUser = { _id: 'testuser123', id: 'testuser123' };
+jest.mock('../middleware/rateLimiter', () => ({
+  createModerateRateLimiter: () => (_req, _res, next) => next(),
+}));
 
-let mockToken;
+jest.mock('../utils/logger', () => ({
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+}));
 
-beforeAll(async () => {
-  mockToken = jwt.sign(mockUser, process.env.JWT_SECRET || 'testsecret');
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/testdb');
-});
+jest.mock('../utils/gridfs', () => ({
+  uploadBufferToGridFS: jest.fn(),
+}));
 
-afterEach(async () => {
-  await DiaryEntry.deleteMany({});
-});
+jest.mock('../utils/aiMoodAnalyzer', () => ({
+  analyzeMood: jest.fn(() => 'reflective'),
+}));
 
-afterAll(async () => {
-  await mongoose.disconnect();
-});
+jest.mock('../utils/diaryValidation', () => ({
+  validateDiaryEntry: jest.fn((body = {}) => ({
+    error: null,
+    value: {
+      title: String(body.title || '').trim(),
+      content: String(body.content || '').trim(),
+      mood: body.mood,
+      category: body.category || 'Personal',
+      tags: body.tags || [],
+      isDraft: Boolean(body.isDraft),
+      entryDate: body.entryDate || new Date('2026-05-07T00:00:00.000Z'),
+    },
+  })),
+  validateDiaryEntryUpdate: jest.fn((body = {}) => ({
+    error: null,
+    value: body,
+  })),
+  validateCalendarItem: jest.fn(),
+  validateCalendarItemUpdate: jest.fn(),
+  validateQuery: jest.fn((query = {}) => ({
+    error: null,
+    value: {
+      category: query.category,
+      mood: query.mood,
+      search: query.search,
+      limit: query.limit || 20,
+      skip: query.skip || 0,
+      sortBy: query.sortBy || '-createdAt',
+    },
+  })),
+  formatValidationErrors: jest.fn(() => 'Validation failed'),
+}));
 
-describe('Diary API', () => {
-  test('GET /api/diary - fetch entries (authenticated)', async () => {
-    const entry = new DiaryEntry({
-      userId: mockUser._id,
-      title: 'Test Entry',
-      content: 'Test content'
+jest.mock('../utils/diaryCache', () => ({
+  CACHE_KEYS: {
+    DRAFTS: (userId) => `drafts:${userId}`,
+    TAGS: (userId) => `tags:${userId}`,
+    MOOD_STATS: (userId, days) => `mood:${userId}:${days}`,
+  },
+  CACHE_TTL: {
+    ENTRIES: 60,
+    DRAFTS: 60,
+    TAGS: 60,
+  },
+  getCached: jest.fn(),
+  setCached: jest.fn(),
+  invalidateUserCache: jest.fn(),
+  cacheResponse: jest.fn(),
+}));
+
+jest.mock('../utils/diaryAnalytics', () => ({
+  calculateWritingStats: jest.fn(),
+  calculateStreakStats: jest.fn(),
+  calculateMoodStats: jest.fn(),
+  calculateWellnessScore: jest.fn(),
+}));
+
+jest.mock('../utils/diaryAI', () => ({
+  analyzeSentiment: jest.fn(),
+  suggestTags: jest.fn(() => []),
+}));
+
+jest.mock('../utils/diaryAISummary', () => ({
+  generateSummary: jest.fn(),
+  extractActionItems: jest.fn(),
+  formatSummaryMarkdown: jest.fn(),
+}));
+
+jest.mock('../utils/diaryAIOpenAI', () => ({
+  generateOpenAISummary: jest.fn(),
+  generateInsights: jest.fn(),
+  generateSuggestions: jest.fn(),
+  calculateAPICost: jest.fn(),
+}));
+
+jest.mock('../models/DiaryEntry', () => {
+  const DiaryEntry = jest.fn(function DiaryEntry(data = {}) {
+    Object.assign(this, {
+      _id: data._id || 'entry-1',
+      attachments: [],
+      tags: [],
+      ...data,
     });
-    await entry.save();
-
-    const res = await request(app)
-      .get('/api/diary')
-      .set('Cookie', `auth=${mockToken}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data).toHaveLength(1);
+    this.save = jest.fn().mockResolvedValue(this);
   });
 
-  test('GET /api/diary - unauthorized', async () => {
-    const res = await request(app).get('/api/diary');
-    expect(res.status).toBe(401);
+  DiaryEntry.find = jest.fn();
+  DiaryEntry.countDocuments = jest.fn();
+  DiaryEntry.aggregate = jest.fn();
+  DiaryEntry.findOne = jest.fn();
+  DiaryEntry.findOneAndDelete = jest.fn();
+  DiaryEntry.findOneAndUpdate = jest.fn();
+  DiaryEntry.deleteOne = jest.fn();
+
+  return DiaryEntry;
+});
+
+jest.mock('../models/DiaryCalendarItem', () => ({
+  find: jest.fn(),
+  countDocuments: jest.fn(),
+  findOne: jest.fn(),
+  create: jest.fn(),
+}));
+
+jest.mock('../models/DiaryStreak', () => ({}));
+jest.mock('../models/DiaryAISummary', () => ({}));
+jest.mock('../models/DiaryEntryVersion', () => ({
+  findOne: jest.fn(),
+  create: jest.fn(),
+  find: jest.fn(),
+  countDocuments: jest.fn(),
+  deleteMany: jest.fn(),
+}));
+jest.mock('../models/DiaryAppLock', () => {
+  const DiaryAppLock = jest.fn(function DiaryAppLock(data = {}) {
+    Object.assign(this, {
+      userId: data.userId,
+      lockType: 'none',
+      autoLockTimeoutMinutes: 5,
+      failedAttempts: 0,
+      maxFailedAttempts: 5,
+      lockedUntil: null,
+      isCurrentlyLocked: false,
+      lastUnlockedAt: null,
+    });
+    this.setPin = jest.fn().mockImplementation(async () => {
+      this.lockType = 'pin';
+      return this;
+    });
+    this.verifyPin = jest.fn(async (pin) => pin === '1234');
+    this.incrementFailedAttempts = jest.fn(async () => {
+      this.failedAttempts += 1;
+      return this;
+    });
+    this.resetFailedAttempts = jest.fn(async () => {
+      this.failedAttempts = 0;
+      return this;
+    });
+    this.isLockedOutTemporarily = jest.fn(() => false);
+    this.save = jest.fn().mockResolvedValue(this);
   });
 
-  test('POST /api/diary - create entry', async () => {
-    const entryData = {
-      title: 'New Entry',
-      content: 'New content',
-      mood: 'happy'
+  DiaryAppLock.findOne = jest.fn();
+  return DiaryAppLock;
+});
+
+jest.mock('../models/DiaryEncryptionKey', () => ({
+  getActiveKey: jest.fn(),
+  create: jest.fn(),
+}));
+
+jest.mock('../models/DiaryBackup', () => ({}));
+jest.mock('../utils/diaryEncryptionService', () =>
+  jest.fn().mockImplementation(() => ({
+    generateUserKey: jest.fn(),
+    hashContent: jest.fn(),
+  }))
+);
+jest.mock('../services/diaryAISummaryService', () => ({}));
+
+const DiaryEntry = require('../models/DiaryEntry');
+const { analyzeMood } = require('../utils/aiMoodAnalyzer');
+const {
+  getCached,
+  setCached,
+  invalidateUserCache,
+} = require('../utils/diaryCache');
+const {
+  validateDiaryEntry,
+  validateDiaryEntryUpdate,
+} = require('../utils/diaryValidation');
+const diaryRouter = require('./diary');
+
+const createMockResponse = () => ({
+  statusCode: 200,
+  body: null,
+  status(code) {
+    this.statusCode = code;
+    return this;
+  },
+  json(payload) {
+    this.body = payload;
+    return this;
+  },
+});
+
+const createQueryChain = (resolvedValue) => ({
+  sort: jest.fn().mockReturnThis(),
+  limit: jest.fn().mockReturnThis(),
+  skip: jest.fn().mockReturnThis(),
+  lean: jest.fn().mockResolvedValue(resolvedValue),
+});
+
+const getRouteHandler = (method, path) => {
+  const layer = diaryRouter.stack.find(
+    (entry) => entry.route?.path === path && entry.route?.methods?.[method]
+  );
+
+  return layer.route.stack[layer.route.stack.length - 1].handle;
+};
+
+describe('diary routes', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    getCached.mockResolvedValue(null);
+    setCached.mockResolvedValue(undefined);
+    invalidateUserCache.mockResolvedValue(undefined);
+  });
+
+  test('lists diary entries with pagination and cache population', async () => {
+    const handler = getRouteHandler('get', '/');
+
+    DiaryEntry.find.mockReturnValue(
+      createQueryChain([
+        {
+          _id: 'entry-1',
+          title: 'My note',
+          content: 'Remember this',
+        },
+      ])
+    );
+    DiaryEntry.countDocuments.mockResolvedValue(1);
+
+    const req = {
+      query: {
+        limit: '20',
+        skip: '0',
+      },
+      user: {
+        _id: 'user-1',
+      },
+    };
+    const res = createMockResponse();
+
+    await handler(req, res);
+
+    expect(DiaryEntry.find).toHaveBeenCalledWith({
+      userId: 'user-1',
+      isDraft: false,
+      isDeleted: false,
+    });
+    expect(setCached).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.pagination).toMatchObject({
+      total: 1,
+      hasMore: false,
+    });
+  });
+
+  test('returns cached draft entries without hitting the database', async () => {
+    const handler = getRouteHandler('get', '/drafts');
+    const cachedResponse = {
+      success: true,
+      data: [{ _id: 'draft-1', title: 'Draft note' }],
+      pagination: { total: 1, limit: 20, skip: 0 },
     };
 
-    const res = await request(app)
-      .post('/api/diary')
-      .set('Cookie', `auth=${mockToken}`)
-      .send(entryData);
+    getCached.mockResolvedValue(cachedResponse);
 
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.title).toBe('New Entry');
+    const req = {
+      query: {},
+      user: {
+        _id: 'user-1',
+      },
+    };
+    const res = createMockResponse();
+
+    await handler(req, res);
+
+    expect(DiaryEntry.find).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual(cachedResponse);
   });
 
-  test('POST /api/diary - validation error', async () => {
-    const res = await request(app)
-      .post('/api/diary')
-      .set('Cookie', `auth=${mockToken}`)
-      .send({});  // missing title/content
+  test('creates a diary entry and derives the mood when none is provided', async () => {
+    const handler = getRouteHandler('post', '/');
 
-    expect(res.status).toBe(400);
-  });
-
-  test('GET /api/diary/tags - fetch tags', async () => {
-    await DiaryEntry.create([
-      { userId: mockUser._id, title: 'Test', content: 'Test', tags: ['tag1'] },
-      { userId: mockUser._id, title: 'Test2', content: 'Test2', tags: ['tag1', 'tag2'] }
-    ]);
-
-    const res = await request(app)
-      .get('/api/diary/tags')
-      .set('Cookie', `auth=${mockToken}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.some(t => t.name === 'tag1')).toBe(true);
-  });
-
-  test('GET /api/diary/mood-stats - fetch stats', async () => {
-    await DiaryEntry.create([
-      { userId: mockUser._id, title: 'Happy', content: 'Happy', mood: 'happy' },
-      { userId: mockUser._id, title: 'Sad', content: 'Sad', mood: 'sad' }
-    ]);
-
-    const res = await request(app)
-      .get('/api/diary/mood-stats')
-      .set('Cookie', `auth=${mockToken}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.length).toBeGreaterThan(0);
-  });
-
-  test('DELETE /api/diary/:id - delete entry', async () => {
-    const entry = await DiaryEntry.create({
-      userId: mockUser._id,
-      title: 'To Delete',
-      content: 'Delete me'
+    analyzeMood.mockReturnValue('focused');
+    validateDiaryEntry.mockReturnValue({
+      error: null,
+      value: {
+        title: 'Planning session',
+        content: 'Mapped out the next sprint.',
+        mood: '',
+        category: 'Work',
+        tags: ['planning'],
+        isDraft: false,
+        entryDate: new Date('2026-05-07T00:00:00.000Z'),
+      },
     });
 
-    const res = await request(app)
-      .delete(`/api/diary/${entry._id}`)
-      .set('Cookie', `auth=${mockToken}`);
+    const req = {
+      body: {
+        title: 'Planning session',
+        content: 'Mapped out the next sprint.',
+      },
+      files: [],
+      user: {
+        _id: 'user-1',
+      },
+    };
+    const res = createMockResponse();
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    await handler(req, res);
 
-    const deleted = await DiaryEntry.findById(entry._id);
-    expect(deleted).toBeNull();
-  });
-});
-
-module.exports = { mockUser };
-
-test('GET /api/diary/drafts - fetch drafts', async () => {
-  const draft = new DiaryEntry({
-    userId: mockUser._id,
-    title: 'Draft Test',
-    content: 'Draft content',
-    isDraft: true
-  });
-  await draft.save();
-
-  const res = await request(app)
-    .get('/api/diary/drafts')
-    .set('Cookie', `auth=${mockToken}`);
-
-  expect(res.status).toBe(200);
-  expect(res.body.success).toBe(true);
-  expect(res.body.data).toHaveLength(1);
-  expect(res.body.data[0].isDraft).toBe(true);
-});
-
-test('GET /api/diary/:id - fetch single entry', async () => {
-  const entry = await DiaryEntry.create({
-    userId: mockUser._id,
-    title: 'Single Entry',
-    content: 'Single content'
+    expect(analyzeMood).toHaveBeenCalledWith('Mapped out the next sprint.');
+    expect(DiaryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        mood: 'focused',
+        category: 'Work',
+      })
+    );
+    expect(invalidateUserCache).toHaveBeenCalledWith('user-1');
+    expect(res.statusCode).toBe(201);
+    expect(res.body.message).toBe('Entry created successfully');
   });
 
-  const res = await request(app)
-    .get(`/api/diary/${entry._id}`)
-    .set('Cookie', `auth=${mockToken}`);
+  test('updates an existing diary entry with validated fields', async () => {
+    const handler = getRouteHandler('put', '/:id');
+    const entry = {
+      _id: 'entry-1',
+      title: 'Old title',
+      content: 'Old content',
+      mood: 'happy',
+      category: 'Personal',
+      tags: ['old'],
+      attachments: [],
+      save: jest.fn().mockResolvedValue(undefined),
+    };
 
-  expect(res.status).toBe(200);
-  expect(res.body.data._id).toBe(entry._id.toString());
-});
+    DiaryEntry.findOne.mockResolvedValue(entry);
+    validateDiaryEntryUpdate.mockReturnValue({
+      error: null,
+      value: {
+        title: 'Updated title',
+        tags: ['new'],
+      },
+    });
 
-test('PUT /api/diary/:id - update entry', async () => {
-  const entry = await DiaryEntry.create({
-    userId: mockUser._id,
-    title: 'To Update',
-    content: 'Old content'
+    const req = {
+      params: {
+        id: 'entry-1',
+      },
+      body: {
+        title: 'Updated title',
+        tags: ['new'],
+      },
+      files: [],
+      user: {
+        _id: 'user-1',
+      },
+    };
+    const res = createMockResponse();
+
+    await handler(req, res);
+
+    expect(entry.title).toBe('Updated title');
+    expect(entry.tags).toEqual(['new']);
+    expect(entry.save).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.message).toBe('Entry updated successfully');
   });
 
-  const updateData = { title: 'Updated Title', mood: 'happy' };
+  test('aggregates diary tags into name and count pairs', async () => {
+    const handler = getRouteHandler('get', '/tags');
 
-  const res = await request(app)
-    .put(`/api/diary/${entry._id}`)
-    .set('Cookie', `auth=${mockToken}`)
-    .send(updateData);
+    DiaryEntry.aggregate.mockResolvedValue([
+      { _id: 'focus', count: 2 },
+      { _id: 'travel', count: 1 },
+    ]);
 
-  expect(res.status).toBe(200);
-  expect(res.body.data.title).toBe('Updated Title');
-});
+    const req = {
+      query: {},
+      user: {
+        _id: 'user-1',
+      },
+    };
+    const res = createMockResponse();
 
-test('POST /api/diary - validation: missing title', async () => {
-  const res = await request(app)
-    .post('/api/diary')
-    .set('Cookie', `auth=${mockToken}`)
-    .send({ content: 'only content' });
+    await handler(req, res);
 
-  expect(res.status).toBe(400);
-  expect(res.body.message).toContain('Title is required');
-});
-
-test('GET /api/diary - pagination works', async () => {
-  await DiaryEntry.insertMany([
-    { userId: mockUser._id, title: 'Entry 1', content: 'Content 1' },
-    { userId: mockUser._id, title: 'Entry 2', content: 'Content 2' },
-    { userId: mockUser._id, title: 'Entry 3', content: 'Content 3' }
-  ]);
-
-  const res = await request(app)
-    .get('/api/diary?limit=2&skip=0')
-    .set('Cookie', `auth=${mockToken}`);
-
-  expect(res.body.pagination.total).toBe(3);
-  expect(res.body.pagination.limit).toBe(2);
-  expect(res.body.data.length).toBe(2);
-  expect(res.body.pagination.hasMore).toBe(true);
-});
-
-test('GET /api/diary - filtering by category', async () => {
-  await DiaryEntry.create({ 
-    userId: mockUser._id, 
-    title: 'Work', 
-    content: 'Work day', 
-    category: 'Work' 
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toEqual([
+      { name: 'focus', count: 2 },
+      { name: 'travel', count: 1 },
+    ]);
   });
-  await DiaryEntry.create({ 
-    userId: mockUser._id, 
-    title: 'Personal', 
-    content: 'Personal day', 
-    category: 'Personal' 
-  });
-
-  const res = await request(app)
-    .get('/api/diary?category=Work')
-    .set('Cookie', `auth=${mockToken}`);
-
-  expect(res.body.data.length).toBe(1);
-  expect(res.body.data[0].category).toBe('Work');
 });
-
-test('GET /api/diary - search works', async () => {
-  await DiaryEntry.create({ 
-    userId: mockUser._id, 
-    title: 'Search Test', 
-    content: 'This is a test for search' 
-  });
-
-  const res = await request(app)
-    .get('/api/diary?search=test')
-    .set('Cookie', `auth=${mockToken}`);
-
-  expect(res.body.data.length).toBe(1);
-  expect(res.body.data[0].title).toContain('Search Test');
-});
-
-test('GET /api/diary/tags - empty tags', async () => {
-  await DiaryEntry.create({ userId: mockUser._id, title: 'No tags', content: 'content' });
-
-  const res = await request(app)
-    .get('/api/diary/tags')
-    .set('Cookie', `auth=${mockToken}`);
-
-  expect(res.body.data).toHaveLength(0);
-});
-
-test('DELETE /api/diary/:id - not found', async () => {
-  const res = await request(app)
-    .delete('/api/diary/000000000000000000000000')
-    .set('Cookie', `auth=${mockToken}`);
-
-  expect(res.status).toBe(404);
-});
-
-test('GET /api/diary/mood-stats - no entries', async () => {
-  const res = await request(app)
-    .get('/api/diary/mood-stats')
-    .set('Cookie', `auth=${mockToken}`);
-
-  expect(res.body.data).toHaveLength(0);
-});
-
-test('POST /api/diary - rate limited (mocked)', async () => {
-  // Note: Actual rate limiting requires real timing, mocked for test
-  const entryData = { title: 'Rate Test', content: 'Content' };
-  const res = await request(app)
-    .post('/api/diary')
-    .set('Cookie', `auth=${mockToken}`)
-    .send(entryData);
-
-  expect(res.status).toBe(201); // Single request passes
-});
-

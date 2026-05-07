@@ -50,6 +50,71 @@ const realEstateModerationSchema = Joi.object({
   action: Joi.string().valid('approve', 'flag', 'reject').required(),
 });
 
+const validatePhone = (value = '') => {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length >= 10;
+};
+
+const validatePincode = (value = '') => /^\d{6}$/.test(String(value || '').trim());
+
+const validateDeliveryAddress = (value = {}) => {
+  const errors = [];
+
+  if (!value || typeof value !== 'object') {
+    return {
+      isValid: false,
+      errors: ['Delivery address details are required.'],
+    };
+  }
+
+  if (!validatePhone(value.receiverPhone)) {
+    errors.push('Receiver phone must contain at least 10 digits.');
+  }
+
+  if (!validatePincode(value.pincode)) {
+    errors.push('Pincode must be a valid 6-digit Indian pincode.');
+  }
+
+  ['country', 'state', 'district', 'houseName', 'addressLine'].forEach((field) => {
+    if (!String(value[field] || '').trim()) {
+      errors.push(`${field} is required.`);
+    }
+  });
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+const validateReturnRequest = (value = {}) => {
+  const errors = [];
+
+  if (!value || typeof value !== 'object') {
+    return {
+      isValid: false,
+      errors: ['Return request data is required.'],
+    };
+  }
+
+  if (!String(value.itemId || '').trim()) {
+    errors.push('itemId is required.');
+  }
+
+  if (!['damaged', 'not_satisfied', 'wrong_item'].includes(String(value.reason || '').trim())) {
+    errors.push('reason must be one of damaged, not_satisfied, or wrong_item.');
+  }
+
+  if (value.details && String(value.details).length > 600) {
+    errors.push('details cannot exceed 600 characters.');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
 module.exports = {
   realEstateListingCreateSchema,
   realEstateListingUpdateSchema,
@@ -58,5 +123,9 @@ module.exports = {
   realEstateReviewSchema,
   realEstateReportSchema,
   realEstateModerationSchema,
+  validatePhone,
+  validatePincode,
+  validateDeliveryAddress,
+  validateReturnRequest,
 };
 

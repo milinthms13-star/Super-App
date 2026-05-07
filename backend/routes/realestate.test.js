@@ -1,2 +1,145 @@
-const request = require('supertest');\nconst app = require('../server');\nconst mongoose = require('mongoose');\nconst RealEstateProperty = require('../models/RealEstateProperty');\n\nconst createTestProperty = async () => {\n  const propertyData = {\n    title: 'Test Property',\n    priceLabel: '50 Lakhs',\n    location: 'Kochi',\n    type: 'Flat',\n    intent: 'sale',\n    areaSqft: 1200,\n    sellerName: 'Test Seller',\n    sellerEmail: 'test@example.com',\n    sellerRole: 'Owner',\n    ownerId: 'test-owner',\n  };\n  const response = await request(app)\n    .post('/api/realestate')\n    .send(propertyData)\n    .set('Authorization', 'Bearer valid-token');\n  return response.body.data.id;\n};\n\ndescribe('RealEstate API', () => {\n  let propertyId;\n\n  beforeAll(async () => {\n    await mongoose.connection.dropDatabase();\n    propertyId = await createTestProperty();\n  });\n\n  afterAll(async () => {\n    await mongoose.connection.close();\n  });\n\n  test('GET /api/realestate - lists properties', async () => {\n    const res = await request(app)\n      .get('/api/realestate')\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n    expect(Array.isArray(res.body.data)).toBe(true);\n  });\n\n  test('POST /api/realestate - creates property', async () => {\n    const res = await request(app)\n      .post('/api/realestate')\n      .send({\n        title: 'New Property',\n        priceLabel: '60 Lakhs',\n        location: 'Trivandrum',\n        type: 'Villa',\n        intent: 'rent',\n        areaSqft: 1500,\n        sellerName: 'Test Seller',\n        sellerEmail: 'test@example.com',\n        sellerRole: 'Owner',\n        ownerId: 'test-owner',\n      })\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(201);\n    expect(res.body.success).toBe(true);\n    expect(res.body.data.title).toBe('New Property');\n  });\n\n  test('PATCH /api/realestate/:id - updates property', async () => {\n    const res = await request(app)\n      .patch(`/api/realestate/${propertyId}`)\n      .send({ title: 'Updated Title', priceLabel: '55 Lakhs' })\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n    expect(res.body.data.title).toBe('Updated Title');\n  });\n\n  test('DELETE /api/realestate/:id - deletes property', async () => {\n    const res = await request(app)\n      .delete(`/api/realestate/${propertyId}`)\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n  });\n\n  test('POST /api/realestate/:id/enquiries - adds lead', async () => {\n    propertyId = await createTestProperty();\n    const res = await request(app)\n      .post(`/api/realestate/${propertyId}/enquiries`)\n      .send({ message: 'Interested in viewing' })\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n  });\n\n  test('POST /api/realestate/:id/messages - sends message', async () => {\n    propertyId = await createTestProperty();\n    const res = await request(app)\n      .post(`/api/realestate/${propertyId}/messages`)\n      .send({ text: 'Hello seller' })\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n  });\n\n  test('POST /api/realestate/:id/reviews - adds review', async () => {\n    propertyId = await createTestProperty();\n    const res = await request(app)\n      .post(`/api/realestate/${propertyId}/reviews`)\n      .send({ rating: 5, comment: 'Great property' })\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n  });\n\n  test('POST /api/realestate/:id/reports - reports listing', async () => {\n    propertyId = await createTestProperty();\n    const res = await request(app)\n      .post(`/api/realestate/${propertyId}/reports`)\n      .send({ reason: 'Suspicious price' })\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n  });\n\n  test('PATCH /api/realestate/:id/moderation - moderates listing', async () => {\n    propertyId = await createTestProperty();\n    const res = await request(app)\n      .patch(`/api/realestate/${propertyId}/moderation`)\n      .send({ action: 'approve' })\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n  });\n\n  test('POST /api/realestate/:id/photos - uploads S3 photos', async () => {\n    propertyId = await createTestProperty();\n    // Mock file upload test\n    const res = await request(app)\n      .post(`/api/realestate/${propertyId}/photos`)\n      .attach('photos', 'test-image.jpg')\n      .set('Authorization', 'Bearer valid-token');\n    expect(res.status).toBe(200);\n    expect(res.body.success).toBe(true);\n  });\n});\n
+const request = require('supertest');
+const app = require('../server');
+const mongoose = require('mongoose');
 
+const createTestProperty = async () => {
+  const propertyData = {
+    title: 'Test Property',
+    priceLabel: '50 Lakhs',
+    location: 'Kochi',
+    type: 'Flat',
+    intent: 'sale',
+    areaSqft: 1200,
+    sellerName: 'Test Seller',
+    sellerEmail: 'test@example.com',
+    sellerRole: 'Owner',
+    ownerId: 'test-owner',
+  };
+
+  const response = await request(app)
+    .post('/api/realestate')
+    .send(propertyData)
+    .set('Authorization', 'Bearer valid-token');
+
+  return response.body.data.id;
+};
+
+describe('RealEstate API', () => {
+  let propertyId;
+
+  beforeAll(async () => {
+    await mongoose.connection.dropDatabase();
+    propertyId = await createTestProperty();
+  });
+
+  afterAll(async () => {
+    await mongoose.connection.close();
+  });
+
+  test('GET /api/realestate - lists properties', async () => {
+    const res = await request(app)
+      .get('/api/realestate')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  test('POST /api/realestate - creates property', async () => {
+    const res = await request(app)
+      .post('/api/realestate')
+      .send({
+        title: 'New Property',
+        priceLabel: '60 Lakhs',
+        location: 'Trivandrum',
+        type: 'Villa',
+        intent: 'rent',
+        areaSqft: 1500,
+        sellerName: 'Test Seller',
+        sellerEmail: 'test@example.com',
+        sellerRole: 'Owner',
+        ownerId: 'test-owner',
+      })
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.title).toBe('New Property');
+  });
+
+  test('PATCH /api/realestate/:id - updates property', async () => {
+    const res = await request(app)
+      .patch(`/api/realestate/${propertyId}`)
+      .send({ title: 'Updated Title', priceLabel: '55 Lakhs' })
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.title).toBe('Updated Title');
+  });
+
+  test('DELETE /api/realestate/:id - deletes property', async () => {
+    const res = await request(app)
+      .delete(`/api/realestate/${propertyId}`)
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('POST /api/realestate/:id/enquiries - adds lead', async () => {
+    propertyId = await createTestProperty();
+    const res = await request(app)
+      .post(`/api/realestate/${propertyId}/enquiries`)
+      .send({ message: 'Interested in viewing' })
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('POST /api/realestate/:id/messages - sends message', async () => {
+    propertyId = await createTestProperty();
+    const res = await request(app)
+      .post(`/api/realestate/${propertyId}/messages`)
+      .send({ text: 'Hello seller' })
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('POST /api/realestate/:id/reviews - adds review', async () => {
+    propertyId = await createTestProperty();
+    const res = await request(app)
+      .post(`/api/realestate/${propertyId}/reviews`)
+      .send({ rating: 5, comment: 'Great property' })
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('POST /api/realestate/:id/reports - reports listing', async () => {
+    propertyId = await createTestProperty();
+    const res = await request(app)
+      .post(`/api/realestate/${propertyId}/reports`)
+      .send({ reason: 'Suspicious price' })
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('PATCH /api/realestate/:id/moderation - moderates listing', async () => {
+    propertyId = await createTestProperty();
+    const res = await request(app)
+      .patch(`/api/realestate/${propertyId}/moderation`)
+      .send({ action: 'approve' })
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+});

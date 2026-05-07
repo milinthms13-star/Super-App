@@ -49,6 +49,11 @@ const normalizeObjectId = (value) => {
   return String(value);
 };
 
+const normalizeClientMessageId = (value) => {
+  const normalizedValue = String(value || '').trim();
+  return normalizedValue || '';
+};
+
 const objectIdEquals = (value, other) => normalizeObjectId(value) === normalizeObjectId(other);
 
 const arrayHasObjectId = (values, candidate) =>
@@ -65,6 +70,38 @@ const getDirectChatRecipientId = (chat, currentUserId) => {
 
   return normalizeObjectId(otherParticipant);
 };
+
+const buildMessageExportPayload = (chat, messages = []) => ({
+  exportedAt: new Date().toISOString(),
+  chat: {
+    id: normalizeObjectId(chat?._id),
+    type: chat?.type || 'direct',
+    groupName: chat?.groupName || '',
+    participantCount: Array.isArray(chat?.participants) ? chat.participants.length : 0,
+  },
+  messages: (Array.isArray(messages) ? messages : []).map((message) => ({
+    id: normalizeObjectId(message?._id),
+    clientMessageId: normalizeClientMessageId(message?.clientMessageId),
+    sender: {
+      id: normalizeObjectId(message?.senderId?._id || message?.senderId),
+      name: message?.senderId?.name || 'User',
+      email: message?.senderId?.email || '',
+    },
+    content: message?.content || '',
+    messageType: message?.messageType || 'text',
+    media: message?.media || null,
+    createdAt: message?.createdAt || null,
+    isDeleted: Boolean(message?.isDeleted),
+    isEdited: Array.isArray(message?.edits) && message.edits.length > 0,
+    reactions: Array.isArray(message?.reactions)
+      ? message.reactions.map((reaction) => ({
+          userId: normalizeObjectId(reaction?.userId?._id || reaction?.userId),
+          emoji: reaction?.emoji || '',
+          reactedAt: reaction?.reactedAt || null,
+        }))
+      : [],
+  })),
+});
 
 const emitToChatParticipants = async (chatId, event, data, excludeUserId = null) => {
   const chat = await Chat.findById(chatId).select('participants');
@@ -367,6 +404,56 @@ router.get('/chats/:chatId', authenticate, attachMessagingUser, async (req, res,
   }
 });
 
+// Export chat transcript
+router.get('/chats/:chatId/export', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { chatId } = req.params;
+    const { format = 'json' } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+      return res.status(400).json({ message: 'Invalid chat ID' });
+    }
+
+    const { chat, authorized } = await getAuthorizedChat(chatId, req.user._id);
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ message: 'Not authorized to export this chat' });
+    }
+
+    const messages = await Message.find({
+      chatId,
+      isDeleted: false,
+    })
+      .populate('senderId', 'name avatar email')
+      .sort({ createdAt: 1 });
+
+    const exportPayload = buildMessageExportPayload(chat, messages);
+
+    if (String(format).trim().toLowerCase() === 'txt') {
+      const transcript = exportPayload.messages
+        .map((message) => {
+          const timestamp = message.createdAt
+            ? new Date(message.createdAt).toLocaleString('en-IN')
+            : 'Unknown time';
+          return `[${timestamp}] ${message.sender.name}: ${message.content || `[${message.messageType}]`}`;
+        })
+        .join('\n');
+
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.send(transcript);
+    }
+
+    return res.json({
+      chatExport: exportPayload,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Update group chat
 router.put('/chats/:chatId', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
@@ -506,11 +593,12 @@ router.delete('/chats/:chatId/members/:userId', authenticate, attachMessagingUse
 // Send message
 router.post('/messages', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
-    const { chatId, content, messageType, media, replyTo } = req.body;
+    const { chatId, content, messageType, media, replyTo, clientMessageId } = req.body;
     const normalizedMessageType =
       typeof messageType === 'string' && messageType.trim() ? messageType.trim() : 'text';
     const normalizedContent = typeof content === 'string' ? content.trim() : '';
     const normalizedReplyTo = normalizeObjectId(replyTo);
+    const normalizedClientMessageId = normalizeClientMessageId(clientMessageId);
 
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
       return res.status(400).json({ message: 'Invalid chat ID' });
@@ -529,6 +617,21 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     // Verify user is participant
     if (!arrayHasObjectId(chat.participants, req.user._id)) {
       return res.status(403).json({ message: 'Not authorized to send message in this chat' });
+    }
+
+    if (normalizedClientMessageId) {
+      const existingMessage = await Message.findOne({
+        chatId,
+        senderId: req.user._id,
+        clientMessageId: normalizedClientMessageId,
+      }).populate('senderId', 'name avatar email');
+
+      if (existingMessage) {
+        return res.status(200).json({
+          message: existingMessage,
+          duplicate: true,
+        });
+      }
     }
 
     // Check if sender is blocked by any recipient in the chat
@@ -572,6 +675,7 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     const message = new Message({
       chatId,
       senderId: req.user._id,
+      clientMessageId: normalizedClientMessageId || undefined,
       messageType: normalizedMessageType,
       content: normalizedContent,
       media: media || undefined,
@@ -590,6 +694,21 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     try {
       await message.save();
     } catch (saveError) {
+      if (saveError?.code === 11000 && normalizedClientMessageId) {
+        const existingMessage = await Message.findOne({
+          chatId,
+          senderId: req.user._id,
+          clientMessageId: normalizedClientMessageId,
+        }).populate('senderId', 'name avatar email');
+
+        if (existingMessage) {
+          return res.status(200).json({
+            message: existingMessage,
+            duplicate: true,
+          });
+        }
+      }
+
       logger.error(
         `Message save failed for chat ${chatId} by ${req.user._id}: ${saveError.message}`
       );
@@ -987,6 +1106,48 @@ router.post('/messages/:messageId/reactions', authenticate, attachMessagingUser,
     await emitToChatParticipants(message.chatId, 'message:updated', message, req.user._id);
 
     logger.info(`Reaction added to message ${messageId}`);
+    res.json({ message });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Toggle important / bookmarked message
+router.put('/messages/:messageId/important', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { messageId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(messageId)) {
+      return res.status(400).json({ message: 'Invalid message ID' });
+    }
+
+    const message = await Message.findById(messageId);
+
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    const { chat, authorized } = await getAuthorizedChat(message.chatId, req.user._id);
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    if (!authorized) {
+      return res.status(403).json({ message: 'Not authorized to update this message' });
+    }
+
+    if (arrayHasObjectId(message.markedAsImportantBy, req.user._id)) {
+      message.markedAsImportantBy = (message.markedAsImportantBy || []).filter(
+        (userId) => !objectIdEquals(userId, req.user._id)
+      );
+    } else {
+      message.markedAsImportantBy.push(req.user._id);
+    }
+
+    await message.save();
+    await message.populate('senderId', 'name avatar email');
+    await emitToChatParticipants(message.chatId, 'message:updated', message, req.user._id);
+
     res.json({ message });
   } catch (err) {
     next(err);
@@ -2876,3 +3037,7 @@ function extractKeywords(messages) {
 }
 
 module.exports = router;
+module.exports.__testables = {
+  normalizeClientMessageId,
+  buildMessageExportPayload,
+};

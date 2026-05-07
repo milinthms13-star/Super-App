@@ -9,7 +9,6 @@ const Settlement = require('../models/Settlement');
 const Order = require('../models/Order');
 const SellerAnalytics = require('../models/SellerAnalytics');
 const { authenticate } = require('../middleware/auth');
-const { commissionService } = require('../utils');
 const {
   calculateVendorSettlement,
   generateSettlementReport,

@@ -48,6 +48,9 @@ const createContextState = (overrides = {}) => ({
   createRealEstateListing: jest.fn(async () => null),
   updateRealEstateListing: jest.fn(async () => null),
   sendRealEstateEnquiry: jest.fn(async () => null),
+  updateRealEstateLead: jest.fn(async () => null),
+  scheduleRealEstateVisit: jest.fn(async () => null),
+  updateRealEstateVisit: jest.fn(async () => null),
   sendRealEstateMessage: jest.fn(async () => null),
   addRealEstateReview: jest.fn(async () => null),
   reportRealEstateListing: jest.fn(async () => null),
@@ -306,5 +309,64 @@ describe("RealEstate", () => {
 
     expect(screen.getByText("Haritha")).toBeInTheDocument();
     expect(screen.queryByText("External Lead")).not.toBeInTheDocument();
+  });
+
+  test("lets sellers update lead status from the CRM dashboard", async () => {
+    contextState.currentUser = {
+      id: "biz-9",
+      name: "Dhanya",
+      email: "biz-9@example.com",
+      businessName: "Dhanya Realty",
+      registrationType: "entrepreneur",
+      role: "business",
+    };
+    contextState.mockData.realestateProperties = [
+      createProperty({
+        id: "re-owned",
+        ownerId: "biz-9",
+        sellerEmail: "biz-9@example.com",
+        leads: [{ id: "lead-1", name: "Haritha", channel: "Chat", priority: "Hot", status: "new" }],
+      }),
+    ];
+
+    render(<RealEstate />);
+
+    fireEvent.click(screen.getByRole("button", { name: /agent \/ broker/i }));
+    fireEvent.click(screen.getByRole("button", { name: /mark contacted/i }));
+
+    await waitFor(() => {
+      expect(contextState.updateRealEstateLead).toHaveBeenCalledWith(
+        "re-owned",
+        "lead-1",
+        expect.objectContaining({ status: "contacted" })
+      );
+      expect(screen.getByText(/haritha marked as contacted/i)).toBeInTheDocument();
+    });
+  });
+
+  test("lets buyers schedule a property visit from the detail panel", async () => {
+    const expectedVisitIso = new Date("2026-05-10T11:00").toISOString();
+    render(<RealEstate />);
+
+    fireEvent.change(screen.getByLabelText(/visit date and time/i), {
+      target: { value: "2026-05-10T11:00" },
+    });
+    fireEvent.change(screen.getByLabelText(/visit note/i), {
+      target: { value: "Please confirm gate access." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /schedule visit/i }));
+
+    await waitFor(() => {
+      expect(contextState.scheduleRealEstateVisit).toHaveBeenCalledWith(
+        "re-1",
+        expect.objectContaining({
+          scheduledAt: expectedVisitIso,
+          durationMinutes: 45,
+          mode: "onsite",
+          note: "Please confirm gate access.",
+        })
+      );
+      expect(screen.getByText(/visit scheduled for skyline residency 3 bhk/i)).toBeInTheDocument();
+    });
   });
 });

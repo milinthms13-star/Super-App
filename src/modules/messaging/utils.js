@@ -82,6 +82,7 @@ export const getAvatarLabel = (...values) => {
 };
 
 const CLEARED_CHATS_STORAGE_KEY = "linkup-cleared-chats";
+const OUTBOX_STORAGE_KEY_PREFIX = "linkup-message-outbox";
 
 const toTimestamp = (value) => {
   if (!value) {
@@ -116,6 +117,68 @@ export const saveClearedChats = (clearedChats = {}) => {
   } catch (error) {
     // Ignore storage failures and keep the chat usable.
   }
+};
+
+export const getMessagingOutboxStorageKey = (userId) => {
+  const resolvedUserId = getEntityId(userId);
+  return resolvedUserId ? `${OUTBOX_STORAGE_KEY_PREFIX}:${resolvedUserId}` : OUTBOX_STORAGE_KEY_PREFIX;
+};
+
+export const loadMessagingOutbox = (userId) => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(getMessagingOutboxStorageKey(userId));
+    const parsedValue = storedValue ? JSON.parse(storedValue) : [];
+    return Array.isArray(parsedValue) ? parsedValue : [];
+  } catch (error) {
+    return [];
+  }
+};
+
+export const saveMessagingOutbox = (userId, queue = []) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      getMessagingOutboxStorageKey(userId),
+      JSON.stringify(Array.isArray(queue) ? queue : [])
+    );
+  } catch (error) {
+    // Ignore storage failures and keep messaging usable.
+  }
+};
+
+export const mergeOutboxEntriesIntoMessages = (messages = [], outboxEntries = []) => {
+  const baseMessages = Array.isArray(messages) ? messages : [];
+  const queuedMessages = (Array.isArray(outboxEntries) ? outboxEntries : [])
+    .map((entry) => {
+      if (!entry?.clientMessageId) {
+        return null;
+      }
+
+      return {
+        _id: entry.tempMessageId || entry.clientMessageId,
+        clientMessageId: entry.clientMessageId,
+        chatId: entry.chatId,
+        senderId: entry.senderId,
+        content: entry.content || "",
+        messageType: entry.messageType || "text",
+        media: entry.media || null,
+        replyTo: entry.replyTo || null,
+        createdAt: entry.createdAt || new Date().toISOString(),
+        isFailed: true,
+        errorMessage: entry.errorMessage || "Waiting to retry",
+        deliveryStatus: Array.isArray(entry.deliveryStatus) ? entry.deliveryStatus : [],
+      };
+    })
+    .filter(Boolean);
+
+  return mergePagedMessages(baseMessages, queuedMessages);
 };
 
 export const getChatClearTimestamp = (chatId, clearedChats = {}) => {

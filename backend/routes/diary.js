@@ -16,6 +16,94 @@ const {
   validateQuery,
   formatValidationErrors
 } = require('../utils/diaryValidation');
+const {
+  CACHE_KEYS,
+  CACHE_TTL,
+  getCached,
+  setCached,
+  invalidateUserCache,
+  cacheResponse,
+} = require('../utils/diaryCache');
+const {
+  calculateWritingStats,
+  calculateStreakStats,
+  calculateMoodStats,
+  calculateWellnessScore,
+  calculateTagAnalytics,
+  calculateSentimentTrend,
+  calculateWritingHeatmap,
+  calculateWordCountAnalytics,
+  getDashboardAnalytics,
+} = require('../utils/diaryAnalytics');
+const {
+  analyzeSentiment,
+  suggestTags,
+} = require('../utils/diaryAI');
+const {
+  generateSummary,
+  extractActionItems,
+  formatSummaryMarkdown,
+} = require('../utils/diaryAISummary');
+const {
+  generateOpenAISummary,
+  generateInsights,
+  generateSuggestions,
+  calculateAPICost,
+} = require('../utils/diaryAIOpenAI');
+const DiaryStreak = require('../models/DiaryStreak');
+const DiaryAISummary = require('../models/DiaryAISummary');
+// Phase 4.6: Diff utility for version comparison
+const {
+  calculateEntryDiff,
+  calculateSimilarity,
+  formatDiffForDisplay,
+  createDiffSummary,
+} = require('../utils/diaryDiff');
+
+// Phase 4.7: Version comments, tags, and sharing
+const {
+  addCommentToVersion,
+  getVersionComments,
+  updateComment,
+  deleteComment,
+  toggleCommentLike,
+  getVersionCommentStats,
+  searchComments,
+} = require('../utils/diaryVersionComments');
+const {
+  addTagToVersion,
+  getVersionTags,
+  getVersionsByTag,
+  removeTagFromVersion,
+  updateTag,
+  getEntryTagStats,
+  getPredefinedTags,
+  bulkAddTag,
+} = require('../utils/diaryVersionTags');
+const {
+  generateVersionShareLink,
+  getSharedVersion,
+  revokeVersionShare,
+  exportVersionAsJSON,
+  exportVersionAsCSV,
+  getEntryShares,
+  createVersionSnapshot,
+} = require('../utils/diaryVersionShare');
+
+// Phase 5: Advanced Search and Filtering
+const {
+  searchEntries,
+  searchWithHighlight,
+  filterEntries,
+  getSearchSuggestions,
+  getSearchHistory,
+  clearSearchHistory,
+  saveFilter,
+  getSavedFilters,
+  useSavedFilter,
+  deleteSavedFilter,
+  getFilterSuggestions,
+} = require('../utils/diarySearch');
 
 // Create rate limiter for diary
 const diaryRateLimiter = createModerateRateLimiter({
@@ -32,6 +120,16 @@ router.use(diaryRateLimiter);
 // GET /api/diary - Get all diary entries for the authenticated user
 router.get('/', async (req, res) => {
   try {
+    const userId = req.user._id || req.user.id;
+
+    // Build cache key from query parameters
+    const cacheKey = `diary:entries:${userId}:${JSON.stringify(req.query)}`;
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug(`Cache hit for diary entries list`);
+      return res.json(cached);
+    }
+
     const { error, value: queryParams } = validateQuery(req.query, 'diary');
     if (error) {
       return res.status(400).json({
@@ -41,7 +139,6 @@ router.get('/', async (req, res) => {
     }
 
     const { category, mood, search, limit, skip, sortBy } = queryParams;
-    const userId = req.user._id || req.user.id;
 
     const query = { userId, isDraft: false, isDeleted: false };
 
@@ -68,7 +165,7 @@ router.get('/', async (req, res) => {
 
     const total = await DiaryEntry.countDocuments(query);
 
-    res.json({
+    const response = {
       success: true,
       data: entries,
       pagination: {
@@ -77,7 +174,12 @@ router.get('/', async (req, res) => {
         skip: parseInt(skip),
         hasMore: total > parseInt(skip) + parseInt(limit)
       }
-    });
+    };
+
+    // Cache the response
+    await setCached(cacheKey, response, CACHE_TTL.ENTRIES);
+
+    res.json(response);
   } catch (error) {
     logger.error('Error fetching diary entries:', error);
     res.status(500).json({
@@ -92,6 +194,15 @@ router.get('/', async (req, res) => {
 router.get('/drafts', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
+    const cacheKey = CACHE_KEYS.DRAFTS(userId);
+    
+    // Check cache
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug(`Cache hit for diary drafts`);
+      return res.json(cached);
+    }
+
     const { limit = 20, skip = 0 } = req.query;
 
     const drafts = await DiaryEntry.find({ userId, isDraft: true })
@@ -102,11 +213,16 @@ router.get('/drafts', async (req, res) => {
 
     const total = await DiaryEntry.countDocuments({ userId, isDraft: true });
 
-    res.json({
+    const response = {
       success: true,
       data: drafts,
       pagination: { total, limit: parseInt(limit), skip: parseInt(skip) }
-    });
+    };
+
+    // Cache the response
+    await setCached(cacheKey, response, CACHE_TTL.DRAFTS);
+
+    res.json(response);
   } catch (error) {
     logger.error('Error fetching draft entries:', error);
     res.status(500).json({
@@ -120,6 +236,14 @@ router.get('/drafts', async (req, res) => {
 router.get('/tags', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
+    const cacheKey = CACHE_KEYS.TAGS(userId);
+    
+    // Check cache
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug(`Cache hit for diary tags`);
+      return res.json(cached);
+    }
 
     const tags = await DiaryEntry.aggregate([
       { $match: { userId } },
@@ -128,10 +252,15 @@ router.get('/tags', async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    res.json({
+    const response = {
       success: true,
       data: tags.map(t => ({ name: t._id, count: t.count }))
-    });
+    };
+
+    // Cache the response
+    await setCached(cacheKey, response, CACHE_TTL.TAGS);
+
+    res.json(response);
   } catch (error) {
     logger.error('Error fetching tags:', error);
     res.status(500).json({
@@ -146,6 +275,14 @@ router.get('/mood-stats', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
     const { days = 30 } = req.query;
+    const cacheKey = CACHE_KEYS.MOOD_STATS(userId, days);
+    
+    // Check cache
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug(`Cache hit for mood stats`);
+      return res.json(cached);
+    }
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - parseInt(days));
@@ -165,10 +302,15 @@ router.get('/mood-stats', async (req, res) => {
       }
     ]);
 
-    res.json({
+    const response = {
       success: true,
       data: stats
-    });
+    };
+
+    // Cache the response
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+
+    res.json(response);
   } catch (error) {
     logger.error('Error fetching mood stats:', error);
     res.status(500).json({
@@ -644,6 +786,10 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
 
     logger.info(`Diary entry created: ${entry.title} for user ${req.user._id || req.user.id}`);
 
+    // Invalidate user cache after creating entry
+    const userId = req.user._id || req.user.id;
+    await invalidateUserCache(userId);
+
     res.status(201).json({
       success: true,
       data: entry,
@@ -719,6 +865,9 @@ router.put('/:id', upload.array('attachments', 5), async (req, res) => {
 
     logger.info(`Diary entry updated: ${entry.title} for user ${userId}`);
 
+    // Invalidate user cache after updating entry
+    await invalidateUserCache(userId);
+
     res.json({
       success: true,
       data: entry,
@@ -730,38 +879,6 @@ router.put('/:id', upload.array('attachments', 5), async (req, res) => {
       success: false,
       message: 'Failed to update diary entry',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-});
-
-// DELETE /api/diary/:id - Delete diary entry
-router.delete('/:id', async (req, res) => {
-  try {
-    const userId = req.user._id || req.user.id;
-
-    const entry = await DiaryEntry.findOneAndDelete({
-      _id: req.params.id,
-      userId
-    });
-
-    if (!entry) {
-      return res.status(404).json({
-        success: false,
-        message: 'Diary entry not found'
-      });
-    }
-
-    logger.info(`Diary entry deleted: ${entry.title} for user ${userId}`);
-
-    res.json({
-      success: true,
-      message: 'Entry deleted successfully'
-    });
-  } catch (error) {
-    logger.error('Error deleting diary entry:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to delete diary entry'
     });
   }
 });
@@ -1005,6 +1122,9 @@ router.post('/:entryId/autosave', async (req, res) => {
     entry.updatedAt = new Date();
     await entry.save();
 
+    // Invalidate user cache after autosave
+    await invalidateUserCache(userId);
+
     res.json({
       success: true,
       data: entry,
@@ -1161,6 +1281,9 @@ router.delete('/:entryId', async (req, res) => {
     entry.permanentlyDeleteAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     await entry.save();
 
+    // Invalidate user cache after soft delete
+    await invalidateUserCache(userId);
+
     res.json({
       success: true,
       message: 'Entry moved to trash. It will be permanently deleted after 30 days.'
@@ -1230,6 +1353,9 @@ router.post('/:entryId/recover', async (req, res) => {
     entry.permanentlyDeleteAt = null;
     entry.updatedAt = new Date();
     await entry.save();
+
+    // Invalidate user cache after recovery
+    await invalidateUserCache(userId);
 
     res.json({
       success: true,
@@ -2152,6 +2278,1959 @@ router.get('/:entryId/ai/action-items', async (req, res) => {
       success: false,
       message: 'Failed to extract action items',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ============================================================================
+// PHASE 4: ANALYTICS, STREAKS, SENTIMENT ANALYSIS, AUTO-TAGGING
+// ============================================================================
+
+// GET /api/diary/analytics/writing-stats - Writing statistics
+router.get('/analytics/writing-stats', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { period = '30', daysBack = 30 } = req.query;
+    const cacheKey = `diary:analytics:writing-stats:${userId}:${daysBack}`;
+
+    // Check cache
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for writing stats');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const stats = calculateWritingStats(entries);
+
+    const response = {
+      success: true,
+      data: stats,
+      period: `${daysBack} days`
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching writing stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch writing statistics'
+    });
+  }
+});
+
+// GET /api/diary/analytics/mood-trends - Mood trends and emotional patterns
+router.get('/analytics/mood-trends', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { daysBack = 30 } = req.query;
+    const cacheKey = `diary:analytics:mood-trends:${userId}:${daysBack}`;
+
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for mood trends');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const moodStats = calculateMoodStats(entries, parseInt(daysBack));
+
+    const response = {
+      success: true,
+      data: moodStats,
+      period: `${daysBack} days`
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching mood trends:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch mood trends'
+    });
+  }
+});
+
+// GET /api/diary/analytics/wellness-score - Overall wellness score
+router.get('/analytics/wellness-score', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { daysBack = 30 } = req.query;
+    const cacheKey = `diary:analytics:wellness:${userId}:${daysBack}`;
+
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for wellness score');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const wellnessScore = calculateWellnessScore(entries, parseInt(daysBack));
+
+    const response = {
+      success: true,
+      data: wellnessScore,
+      period: `${daysBack} days`
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching wellness score:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch wellness score'
+    });
+  }
+});
+
+// GET /api/diary/streaks - Get streak information
+router.get('/streaks', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const cacheKey = `diary:streaks:${userId}`;
+
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for streaks');
+      return res.json(cached);
+    }
+
+    const streakInfo = await DiaryStreak.getStreakInfo(userId);
+
+    const response = {
+      success: true,
+      data: streakInfo
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.ENTRIES);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching streaks:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch streak information'
+    });
+  }
+});
+
+// GET /api/diary/:entryId/sentiment - Analyze entry sentiment
+router.get('/:entryId/sentiment', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { entryId } = req.params;
+
+    const entry = await DiaryEntry.findOne({ _id: entryId, userId });
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Entry not found'
+      });
+    }
+
+    const sentiment = analyzeSentiment(entry.content);
+
+    res.json({
+      success: true,
+      data: {
+        entryId,
+        ...sentiment
+      }
+    });
+  } catch (error) {
+    logger.error('Error analyzing sentiment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to analyze sentiment'
+    });
+  }
+});
+
+// POST /api/diary/:entryId/suggest-tags - Get AI suggestions for entry tags
+router.post('/:entryId/suggest-tags', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { entryId } = req.params;
+
+    const entry = await DiaryEntry.findOne({ _id: entryId, userId });
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Entry not found'
+      });
+    }
+
+    const suggestedTags = suggestTags(entry.content, entry.title, entry.tags);
+
+    res.json({
+      success: true,
+      data: suggestedTags,
+      message: 'Tags suggested successfully'
+    });
+  } catch (error) {
+    logger.error('Error suggesting tags:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to suggest tags'
+    });
+  }
+});
+
+// POST /api/diary/:entryId/apply-tags - Apply suggested tags to entry
+router.post('/:entryId/apply-tags', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { entryId } = req.params;
+    const { tags } = req.body;
+
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tags must be a non-empty array'
+      });
+    }
+
+    const entry = await DiaryEntry.findOneAndUpdate(
+      { _id: entryId, userId },
+      { $set: { tags } },
+      { new: true }
+    );
+
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Entry not found'
+      });
+    }
+
+    await invalidateUserCache(userId);
+
+    res.json({
+      success: true,
+      data: entry,
+      message: 'Tags applied successfully'
+    });
+  } catch (error) {
+    logger.error('Error applying tags:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to apply tags'
+    });
+  }
+});
+
+// ============================================================================
+// PHASE 4.3: AI SUMMARY & ACTION ITEMS
+// ============================================================================
+
+// GET /api/diary/ai/summary - Generate AI summary for period (OpenAI + Fallback + Persistent)
+router.get('/ai/summary', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { period = 'week', daysBack = 7, persist = 'true' } = req.query;
+    const cacheKey = `diary:ai-summary:${userId}:${period}`;
+
+    // Check cache first
+    const cached = await getCached(cacheKey);
+    if (cached && cached.data) {
+      logger.debug('Cache hit for AI summary');
+      return res.json(cached);
+    }
+
+    // Check for recent persistent summary in DB
+    const persistedSummary = await DiaryAISummary.getLatestSummary(
+      userId,
+      period
+    );
+    if (persistedSummary && persistedSummary.generatedAt) {
+      // Return persisted if less than 1 hour old
+      const ageMinutes =
+        (Date.now() - persistedSummary.generatedAt.getTime()) / (1000 * 60);
+      if (ageMinutes < 60) {
+        logger.debug('Using persisted summary (fresh)');
+        const response = {
+          success: true,
+          data: persistedSummary.summary,
+          source: 'persisted'
+        };
+        await setCached(cacheKey, response, 60 * 60 * 1000);
+        return res.json(response);
+      }
+    }
+
+    const startDate = new Date();
+    const endDate = new Date();
+
+    if (period === 'week') {
+      startDate.setDate(startDate.getDate() - 7);
+    } else if (period === 'month') {
+      startDate.setDate(startDate.getDate() - 30);
+    } else if (period === 'custom') {
+      startDate.setDate(startDate.getDate() - parseInt(daysBack));
+    }
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate, $lte: endDate },
+      isDraft: false,
+      isDeleted: false
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (entries.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          period,
+          summary: 'No entries found for this period.',
+          keyThemes: [],
+          moodSummary: 'N/A',
+          highlights: [],
+          entryCount: 0,
+          generatedAt: new Date()
+        }
+      });
+    }
+
+    // Calculate stats
+    const totalWords = entries.reduce((sum, e) => {
+      const content = (e.content || '').replace(/<[^>]*>/g, '');
+      return (
+        sum + content.split(/\s+/).filter((w) => w.length > 0).length
+      );
+    }, 0);
+
+    // Try OpenAI first, fallback to keyword-based
+    let summary = null;
+    let aiProvider = 'keyword-based';
+    let tokensUsed = 0;
+
+    const openaiSummary = await generateOpenAISummary(entries, period);
+    if (openaiSummary) {
+      summary = openaiSummary;
+      aiProvider = 'openai';
+      tokensUsed = openaiSummary.tokensUsed || 0;
+    } else {
+      // Fallback to keyword-based
+      summary = await generateSummary(entries, period);
+    }
+
+    summary.entryCount = entries.length;
+    summary.totalWords = totalWords;
+    summary.generatedAt = new Date();
+
+    const response = {
+      success: true,
+      data: summary,
+      source: 'generated',
+      aiProvider
+    };
+
+    // Persist summary if requested
+    if (persist === 'true' || persist === true) {
+      try {
+        const newSummary = new DiaryAISummary({
+          userId,
+          period,
+          startDate,
+          endDate,
+          entryCount: entries.length,
+          totalWords,
+          summary: summary,
+          aiProvider,
+          openAITokensUsed: tokensUsed
+        });
+        await newSummary.save();
+        logger.debug('Summary persisted to database');
+        response.persisted = true;
+      } catch (persistError) {
+        logger.warn('Failed to persist summary:', persistError.message);
+        // Continue without persisting
+      }
+    }
+
+    // Cache for 1 hour
+    await setCached(cacheKey, response, 60 * 60 * 1000);
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Error generating summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate summary'
+    });
+  }
+});
+
+// GET /api/diary/ai/summary/markdown - Get summary as markdown
+router.get('/ai/summary/markdown', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { period = 'week', daysBack = 7 } = req.query;
+
+    const startDate = new Date();
+    if (period === 'week') {
+      startDate.setDate(startDate.getDate() - 7);
+    } else if (period === 'month') {
+      startDate.setDate(startDate.getDate() - 30);
+    } else if (period === 'custom') {
+      startDate.setDate(startDate.getDate() - parseInt(daysBack));
+    }
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const summary = await generateSummary(entries, period);
+    const markdown = formatSummaryMarkdown(summary);
+
+    res.json({
+      success: true,
+      data: {
+        markdown,
+        filename: `diary-summary-${period}-${new Date().toISOString().split('T')[0]}.md`
+      }
+    });
+  } catch (error) {
+    logger.error('Error generating markdown summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate markdown summary'
+    });
+  }
+});
+
+// GET /api/diary/ai/action-items - Extract action items from entries
+router.get('/ai/action-items', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { daysBack = 30 } = req.query;
+    const cacheKey = `diary:ai-action-items:${userId}:${daysBack}`;
+
+    // Check cache
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for action items');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const actionItems = await extractActionItems(entries);
+
+    const response = {
+      success: true,
+      data: {
+        actionItems,
+        count: actionItems.length,
+        period: `${daysBack} days`
+      }
+    };
+
+    // Cache for 30 minutes
+    await setCached(cacheKey, response, 30 * 60 * 1000);
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Error extracting action items:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to extract action items'
+    });
+  }
+});
+
+// ============================================================================
+// PHASE 4.4: PERSISTENT SUMMARIES & HISTORY
+// ============================================================================
+
+// GET /api/diary/ai/summaries - Get all summaries for user
+router.get('/ai/summaries', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { period, limit = 10, skip = 0 } = req.query;
+
+    const query = { userId, isDeleted: false };
+    if (period) {
+      query.period = period;
+    }
+
+    const summaries = await DiaryAISummary.find(query)
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(skip))
+      .lean();
+
+    const total = await DiaryAISummary.countDocuments(query);
+
+    res.json({
+      success: true,
+      data: summaries,
+      pagination: {
+        total,
+        limit: parseInt(limit),
+        skip: parseInt(skip),
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching summaries:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch summaries'
+    });
+  }
+});
+
+// GET /api/diary/ai/summaries/:id - Get specific summary
+router.get('/ai/summaries/:summaryId', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { summaryId } = req.params;
+
+    const summary = await DiaryAISummary.findOne({
+      _id: summaryId,
+      userId,
+      isDeleted: false
+    });
+
+    if (!summary) {
+      return res.status(404).json({
+        success: false,
+        message: 'Summary not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: summary
+    });
+  } catch (error) {
+    logger.error('Error fetching summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch summary'
+    });
+  }
+});
+
+// POST /api/diary/ai/summaries/:id/feedback - Record user feedback
+router.post('/ai/summaries/:summaryId/feedback', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { summaryId } = req.params;
+    const { rating, helpful, notes } = req.body;
+
+    if (!rating || typeof helpful !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'Rating and helpful flag required'
+      });
+    }
+
+    const summary = await DiaryAISummary.findOneAndUpdate(
+      { _id: summaryId, userId },
+      {
+        userFeedback: {
+          rating: parseInt(rating),
+          helpful,
+          notes: notes || ''
+        }
+      },
+      { new: true }
+    );
+
+    if (!summary) {
+      return res.status(404).json({
+        success: false,
+        message: 'Summary not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: summary,
+      message: 'Feedback recorded'
+    });
+  } catch (error) {
+    logger.error('Error recording feedback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to record feedback'
+    });
+  }
+});
+
+// POST /api/diary/ai/summaries/:id/mark-action - Mark action item completed
+router.post('/ai/summaries/:summaryId/mark-action', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { summaryId } = req.params;
+    const { actionIndex } = req.body;
+
+    if (typeof actionIndex !== 'number') {
+      return res.status(400).json({
+        success: false,
+        message: 'Action index required'
+      });
+    }
+
+    const summary = await DiaryAISummary.findOne({
+      _id: summaryId,
+      userId
+    });
+
+    if (!summary) {
+      return res.status(404).json({
+        success: false,
+        message: 'Summary not found'
+      });
+    }
+
+    if (
+      summary.summary?.actionItems &&
+      summary.summary.actionItems[actionIndex]
+    ) {
+      summary.summary.actionItems[actionIndex].completed = true;
+      await summary.save();
+    }
+
+    res.json({
+      success: true,
+      data: summary,
+      message: 'Action marked complete'
+    });
+  } catch (error) {
+    logger.error('Error marking action:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark action'
+    });
+  }
+});
+
+// POST /api/diary/ai/summaries/:id/share - Create share link
+router.post('/ai/summaries/:summaryId/share', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { summaryId } = req.params;
+    const { expirationDays = 7 } = req.body;
+
+    const summary = await DiaryAISummary.findOne({
+      _id: summaryId,
+      userId
+    });
+
+    if (!summary) {
+      return res.status(404).json({
+        success: false,
+        message: 'Summary not found'
+      });
+    }
+
+    await summary.createShareLink(expirationDays);
+
+    res.json({
+      success: true,
+      data: {
+        sharedLink: summary.sharedLink,
+        shareUrl: `${process.env.APP_URL}/diary/shared-summary/${summary.sharedLink}`,
+        expiresAt: summary.shareExpiresAt
+      },
+      message: 'Share link created'
+    });
+  } catch (error) {
+    logger.error('Error creating share link:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create share link'
+    });
+  }
+});
+
+// DELETE /api/diary/ai/summaries/:id - Delete summary
+router.delete('/ai/summaries/:summaryId', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { summaryId } = req.params;
+
+    const summary = await DiaryAISummary.softDelete(summaryId);
+
+    if (!summary) {
+      return res.status(404).json({
+        success: false,
+        message: 'Summary not found'
+      });
+    }
+
+    await invalidateUserCache(userId);
+
+    res.json({
+      success: true,
+      message: 'Summary deleted'
+    });
+  } catch (error) {
+    logger.error('Error deleting summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete summary'
+    });
+  }
+});
+
+// Phase 4.5: Draft Expiration Management
+const draftExpiration = require('../utils/diaryDraftExpiration');
+
+/**
+ * GET /api/diary/admin/draft-expiration/stats
+ * Get statistics about expired drafts (how many would be deleted)
+ * Admin/utility endpoint
+ */
+router.get('/admin/draft-expiration/stats', async (req, res) => {
+  try {
+    const stats = await draftExpiration.getExpirationStats();
+    
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    logger.error('Error getting expiration stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get expiration stats',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/diary/admin/cleanup-drafts
+ * Manually trigger draft expiration cleanup
+ * Requires admin authentication
+ */
+router.post('/admin/cleanup-drafts', async (req, res) => {
+  try {
+    // Optional: Add admin check if you have admin middleware
+    // if (!req.user.isAdmin) { return res.status(403).json({...}); }
+    
+    const result = await draftExpiration.runExpirationJob();
+    
+    res.json({
+      success: result.success,
+      data: {
+        totalProcessed: result.totalProcessed,
+        totalDeleted: result.totalDeleted,
+        totalFailed: result.totalFailed,
+        batches: result.batches,
+        duration: result.duration,
+        timestamp: result.timestamp
+      }
+    });
+  } catch (error) {
+    logger.error('Error running cleanup job:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to run cleanup job',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/diary/admin/draft-expiration/config
+ * Get configuration about draft retention
+ */
+router.get('/admin/draft-expiration/config', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        retentionDays: draftExpiration.DRAFT_RETENTION_DAYS,
+        batchSize: draftExpiration.BATCH_SIZE,
+        scheduledTime: '03:00 AM UTC (daily)',
+        description: 'Automatically deletes draft entries older than retentionDays',
+        environmentVariable: 'DIARY_DRAFT_RETENTION_DAYS'
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get config',
+      error: error.message
+    });
+  }
+});
+
+// Phase 4.6: Diff/Comparison Endpoints
+
+/**
+ * POST /api/diary/:id/diff
+ * Calculate diff between two versions of an entry
+ * Body: { versionId1, versionId2 }
+ */
+router.post('/:id/diff', authenticate, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { id } = req.params;
+    const { versionId1, versionId2 } = req.body;
+
+    // Fetch the entry to verify ownership
+    const entry = await DiaryEntry.findById(id);
+    
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Entry not found'
+      });
+    }
+
+    if (entry.userId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    // If versions not provided, compare current with previous
+    // For now, we'll just fetch the current version and compare
+    // In a full implementation, versions would be stored separately
+    const diff = calculateEntryDiff(
+      { content: entry.content, title: entry.title, mood: entry.mood, category: entry.category, tags: entry.tags, isPrivate: entry.isPrivate },
+      { content: entry.content, title: entry.title, mood: entry.mood, category: entry.category, tags: entry.tags, isPrivate: entry.isPrivate }
+    );
+
+    const summary = createDiffSummary(diff);
+
+    res.json({
+      success: true,
+      data: {
+        diff,
+        summary,
+        entryId: id,
+        versionId1,
+        versionId2
+      }
+    });
+  } catch (error) {
+    logger.error('Error calculating diff:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to calculate diff',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/diary/:id/diff/content
+ * Get formatted diff of content between two versions
+ * Query: ?versionId1=xxx&versionId2=yyy
+ */
+router.get('/:id/diff/content', authenticate, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { id } = req.params;
+    const { versionId1, versionId2 } = req.query;
+
+    // Fetch entry
+    const entry = await DiaryEntry.findById(id);
+    
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Entry not found'
+      });
+    }
+
+    if (entry.userId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    // Format diff for display
+    const oldText = entry.content || '';
+    const newText = entry.content || '';
+    const formattedDiff = formatDiffForDisplay(oldText, newText);
+
+    res.json({
+      success: true,
+      data: {
+        diff: formattedDiff,
+        entryId: id,
+        versionId1,
+        versionId2,
+        similarity: calculateSimilarity(oldText, newText)
+      }
+    });
+  } catch (error) {
+    logger.error('Error getting formatted diff:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get formatted diff',
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
+// PHASE 4.7: VERSION COMMENTS, TAGS, AND SHARING
+// ============================================================================
+
+// POST /api/diary/:entryId/versions/:versionId/comments - Add comment to version
+router.post('/:entryId/versions/:versionId/comments', authenticate, async (req, res) => {
+  try {
+    const { entryId, versionId } = req.params;
+    const userId = req.user._id;
+    const { text, lineReference, isPrivate, parentCommentId, sentiment } = req.body;
+
+    if (!text || text.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Comment text is required' });
+    }
+
+    // Verify entry ownership
+    const entry = await DiaryEntry.findOne({ _id: entryId, userId });
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'Entry not found' });
+    }
+
+    const version = await DiaryEntryVersion.findOne({ _id: versionId, entryId });
+    if (!version) {
+      return res.status(404).json({ success: false, message: 'Version not found' });
+    }
+
+    const comment = await addCommentToVersion(userId, entryId, versionId, version.versionNumber, {
+      text: text.trim(),
+      lineReference,
+      isPrivate,
+      parentCommentId,
+      sentiment
+    });
+
+    res.status(201).json({ success: true, comment });
+  } catch (error) {
+    logger.error('Failed to add comment:', error);
+    res.status(500).json({ success: false, message: 'Failed to add comment', error: error.message });
+  }
+});
+
+// GET /api/diary/:entryId/versions/:versionId/comments - Get comments for version
+router.get('/:entryId/versions/:versionId/comments', authenticate, async (req, res) => {
+  try {
+    const { entryId, versionId } = req.params;
+    const { includeReplies = true } = req.query;
+
+    const comments = await getVersionComments(entryId, versionId, includeReplies === 'true');
+    const stats = await getVersionCommentStats(versionId);
+
+    res.json({ success: true, comments, stats });
+  } catch (error) {
+    logger.error('Failed to get comments:', error);
+    res.status(500).json({ success: false, message: 'Failed to get comments', error: error.message });
+  }
+});
+
+// PATCH /api/diary/:entryId/comments/:commentId - Update comment
+router.patch('/:entryId/comments/:commentId', authenticate, async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const userId = req.user._id;
+    const { text, sentiment } = req.body;
+
+    const updatedComment = await updateComment(commentId, userId, { text, sentiment });
+    res.json({ success: true, comment: updatedComment });
+  } catch (error) {
+    logger.error('Failed to update comment:', error);
+    res.status(error.message.includes('Unauthorized') ? 403 : 500).json({
+      success: false,
+      message: 'Failed to update comment',
+      error: error.message
+    });
+  }
+});
+
+// DELETE /api/diary/:entryId/comments/:commentId - Delete comment
+router.delete('/:entryId/comments/:commentId', authenticate, async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const userId = req.user._id;
+
+    const result = await deleteComment(commentId, userId);
+    res.json(result);
+  } catch (error) {
+    logger.error('Failed to delete comment:', error);
+    res.status(error.message.includes('Unauthorized') ? 403 : 500).json({
+      success: false,
+      message: 'Failed to delete comment',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/diary/:entryId/comments/:commentId/like - Like/unlike comment
+router.post('/:entryId/comments/:commentId/like', authenticate, async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    const userId = req.user._id;
+    const { isLike } = req.body;
+
+    const updatedComment = await toggleCommentLike(commentId, userId, isLike);
+    res.json({ success: true, comment: updatedComment });
+  } catch (error) {
+    logger.error('Failed to toggle like:', error);
+    res.status(500).json({ success: false, message: 'Failed to toggle like', error: error.message });
+  }
+});
+
+// POST /api/diary/:entryId/versions/:versionId/tags - Add tag to version
+router.post('/:entryId/versions/:versionId/tags', authenticate, async (req, res) => {
+  try {
+    const { entryId, versionId } = req.params;
+    const userId = req.user._id;
+    const { name, color, description, reason } = req.body;
+
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Tag name is required' });
+    }
+
+    // Verify entry ownership
+    const entry = await DiaryEntry.findOne({ _id: entryId, userId });
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'Entry not found' });
+    }
+
+    const version = await DiaryEntryVersion.findOne({ _id: versionId, entryId });
+    if (!version) {
+      return res.status(404).json({ success: false, message: 'Version not found' });
+    }
+
+    const tag = await addTagToVersion(userId, entryId, versionId, version.versionNumber, {
+      name: name.trim(),
+      color,
+      description,
+      reason
+    });
+
+    res.status(201).json({ success: true, tag });
+  } catch (error) {
+    logger.error('Failed to add tag:', error);
+    res.status(error.message.includes('already exists') ? 409 : 500).json({
+      success: false,
+      message: 'Failed to add tag',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/diary/:entryId/versions/:versionId/tags - Get tags for version
+router.get('/:entryId/versions/:versionId/tags', authenticate, async (req, res) => {
+  try {
+    const { versionId } = req.params;
+
+    const tags = await getVersionTags(versionId);
+    res.json({ success: true, tags });
+  } catch (error) {
+    logger.error('Failed to get tags:', error);
+    res.status(500).json({ success: false, message: 'Failed to get tags', error: error.message });
+  }
+});
+
+// DELETE /api/diary/:entryId/tags/:tagId - Remove tag
+router.delete('/:entryId/tags/:tagId', authenticate, async (req, res) => {
+  try {
+    const { tagId } = req.params;
+    const userId = req.user._id;
+
+    const result = await removeTagFromVersion(tagId, userId);
+    res.json(result);
+  } catch (error) {
+    logger.error('Failed to remove tag:', error);
+    res.status(error.message.includes('Unauthorized') ? 403 : 500).json({
+      success: false,
+      message: 'Failed to remove tag',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/diary/tags/predefined - Get predefined tags
+router.get('/tags/predefined', authenticate, (req, res) => {
+  try {
+    const tags = getPredefinedTags();
+    res.json({ success: true, tags });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to get predefined tags' });
+  }
+});
+
+// GET /api/diary/:entryId/tags/stats - Get tag statistics for entry
+router.get('/:entryId/tags/stats', authenticate, async (req, res) => {
+  try {
+    const { entryId } = req.params;
+    const userId = req.user._id;
+
+    // Verify ownership
+    const entry = await DiaryEntry.findOne({ _id: entryId, userId });
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'Entry not found' });
+    }
+
+    const stats = await getEntryTagStats(entryId);
+    res.json({ success: true, stats });
+  } catch (error) {
+    logger.error('Failed to get tag stats:', error);
+    res.status(500).json({ success: false, message: 'Failed to get tag stats', error: error.message });
+  }
+});
+
+// POST /api/diary/:entryId/versions/:versionId/share - Generate share link
+router.post('/:entryId/versions/:versionId/share', authenticate, async (req, res) => {
+  try {
+    const { entryId, versionId } = req.params;
+    const userId = req.user._id;
+    const { expiresIn, isPublic } = req.body;
+
+    // Verify entry ownership
+    const entry = await DiaryEntry.findOne({ _id: entryId, userId });
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'Entry not found' });
+    }
+
+    const shareData = await generateVersionShareLink(entryId, versionId, {
+      expiresIn: expiresIn || 7,
+      isPublic: isPublic || false
+    });
+
+    res.status(201).json({ success: true, share: shareData });
+  } catch (error) {
+    logger.error('Failed to generate share link:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate share link', error: error.message });
+  }
+});
+
+// GET /api/diary/:entryId/shares - Get all active shares for entry
+router.get('/:entryId/shares', authenticate, async (req, res) => {
+  try {
+    const { entryId } = req.params;
+    const userId = req.user._id;
+
+    const shares = await getEntryShares(entryId, userId);
+    res.json({ success: true, shares });
+  } catch (error) {
+    logger.error('Failed to get shares:', error);
+    res.status(error.message.includes('Unauthorized') ? 403 : 500).json({
+      success: false,
+      message: 'Failed to get shares',
+      error: error.message
+    });
+  }
+});
+
+// DELETE /api/diary/:entryId/share/:shareToken - Revoke share
+router.delete('/:entryId/share/:shareToken', authenticate, async (req, res) => {
+  try {
+    const { entryId, shareToken } = req.params;
+    const userId = req.user._id;
+
+    const result = await revokeVersionShare(entryId, shareToken, userId);
+    res.json(result);
+  } catch (error) {
+    logger.error('Failed to revoke share:', error);
+    res.status(error.message.includes('Unauthorized') ? 403 : 500).json({
+      success: false,
+      message: 'Failed to revoke share',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/diary/versions/:versionId/export/json - Export version as JSON
+router.get('/:entryId/versions/:versionId/export/json', authenticate, async (req, res) => {
+  try {
+    const { versionId, entryId } = req.params;
+    const userId = req.user._id;
+
+    // Verify ownership
+    const entry = await DiaryEntry.findOne({ _id: entryId, userId });
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'Entry not found' });
+    }
+
+    const exportData = await exportVersionAsJSON(versionId, true);
+    res.json({ success: true, export: exportData });
+  } catch (error) {
+    logger.error('Failed to export version:', error);
+    res.status(500).json({ success: false, message: 'Failed to export version', error: error.message });
+  }
+});
+
+// GET /api/diary/versions/:versionId/export/csv - Export version as CSV
+router.get('/:entryId/versions/:versionId/export/csv', authenticate, async (req, res) => {
+  try {
+    const { versionId, entryId } = req.params;
+    const userId = req.user._id;
+
+    // Verify ownership
+    const entry = await DiaryEntry.findOne({ _id: entryId, userId });
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'Entry not found' });
+    }
+
+    const csvData = await exportVersionAsCSV(versionId);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=diary-version.csv');
+    res.send(csvData);
+  } catch (error) {
+    logger.error('Failed to export version:', error);
+    res.status(500).json({ success: false, message: 'Failed to export version', error: error.message });
+  }
+});
+
+// ============================================================================
+// PHASE 5: ADVANCED SEARCH AND FILTERING
+// ============================================================================
+
+// POST /api/diary/search - Full-text search with advanced options
+router.post('/search/query', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { query, limit, skip, tags, dateFrom, dateTo, sentiment } = req.body;
+
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    const results = await searchEntries(userId, query, {
+      limit: Math.min(parseInt(limit) || 20, 100),
+      skip: Math.max(0, parseInt(skip) || 0),
+      tags: Array.isArray(tags) ? tags : [],
+      dateFrom,
+      dateTo,
+      sentiment: Array.isArray(sentiment) ? sentiment : []
+    });
+
+    res.json({
+      success: true,
+      data: results
+    });
+  } catch (error) {
+    logger.error('Search error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Search failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/diary/search/highlight - Search with content highlighting
+router.post('/search/highlight', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { query, limit, skip } = req.body;
+
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    const results = await searchWithHighlight(userId, query, {
+      limit: Math.min(parseInt(limit) || 20, 100),
+      skip: Math.max(0, parseInt(skip) || 0)
+    });
+
+    res.json({
+      success: true,
+      data: results
+    });
+  } catch (error) {
+    logger.error('Search highlight error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Search failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// POST /api/diary/filter - Advanced filtering
+router.post('/filter/apply', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const filters = req.body;
+
+    const results = await filterEntries(userId, {
+      ...filters,
+      limit: Math.min(parseInt(filters.limit) || 100, 500),
+      skip: Math.max(0, parseInt(filters.skip) || 0)
+    });
+
+    res.json({
+      success: true,
+      data: results
+    });
+  } catch (error) {
+    logger.error('Filter error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Filtering failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/diary/search/suggestions - Get search suggestions/autocomplete
+router.get('/search/suggestions', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { query, type } = req.query;
+
+    if (!query || query.length < 2) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
+    const suggestions = await getSearchSuggestions(query, userId, type || 'all');
+
+    res.json({
+      success: true,
+      data: suggestions
+    });
+  } catch (error) {
+    logger.error('Search suggestions error:', error);
+    res.json({
+      success: true,
+      data: []
+    });
+  }
+});
+
+// GET /api/diary/search/history - Get user search history
+router.get('/search/history', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const history = await getSearchHistory(userId);
+
+    res.json({
+      success: true,
+      data: history
+    });
+  } catch (error) {
+    logger.error('Get search history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch search history'
+    });
+  }
+});
+
+// DELETE /api/diary/search/history - Clear search history
+router.delete('/search/history', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    await clearSearchHistory(userId);
+
+    res.json({
+      success: true,
+      message: 'Search history cleared'
+    });
+  } catch (error) {
+    logger.error('Clear search history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear search history'
+    });
+  }
+});
+
+// POST /api/diary/filters/save - Save a filter
+router.post('/filters/save', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { name, config } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Filter name is required'
+      });
+    }
+
+    if (!config || typeof config !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'Filter configuration is required'
+      });
+    }
+
+    const savedFilter = await saveFilter(userId, name.trim(), config);
+
+    res.status(201).json({
+      success: true,
+      data: savedFilter,
+      message: 'Filter saved successfully'
+    });
+  } catch (error) {
+    logger.error('Save filter error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to save filter',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/diary/filters - Get saved filters
+router.get('/filters/list', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const filters = await getSavedFilters(userId);
+
+    res.json({
+      success: true,
+      data: filters
+    });
+  } catch (error) {
+    logger.error('Get filters error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch filters'
+    });
+  }
+});
+
+// POST /api/diary/filters/:filterId/use - Use saved filter
+router.post('/filters/:filterId/use', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { filterId } = req.params;
+
+    const results = await useSavedFilter(userId, filterId);
+
+    res.json({
+      success: true,
+      data: results
+    });
+  } catch (error) {
+    logger.error('Use filter error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to use filter'
+    });
+  }
+});
+
+// DELETE /api/diary/filters/:filterId - Delete saved filter
+router.delete('/filters/:filterId', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { filterId } = req.params;
+
+    await deleteSavedFilter(userId, filterId);
+
+    res.json({
+      success: true,
+      message: 'Filter deleted successfully'
+    });
+  } catch (error) {
+    logger.error('Delete filter error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete filter'
+    });
+  }
+});
+
+// GET /api/diary/filter-suggestions - Get filter suggestions
+router.get('/filters/suggestions', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const suggestions = await getFilterSuggestions(userId);
+
+    res.json({
+      success: true,
+      data: suggestions
+    });
+  } catch (error) {
+    logger.error('Get filter suggestions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get filter suggestions'
+    });
+  }
+});
+
+// ============================================================================
+// PHASE 6: ANALYTICS & STATISTICS
+// ============================================================================
+
+// GET /api/diary/analytics/dashboard - Get comprehensive analytics dashboard
+router.get('/analytics/dashboard', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { daysBack = 90 } = req.query;
+    const cacheKey = `diary:analytics:dashboard:${userId}:${daysBack}`;
+
+    // Check cache
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for analytics dashboard');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const dashboardData = await getDashboardAnalytics(entries);
+
+    const response = {
+      success: true,
+      data: dashboardData,
+      period: `${daysBack} days`
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching analytics dashboard:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch analytics dashboard',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/diary/analytics/tags - Get tag usage analytics
+router.get('/analytics/tags', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { limit = 10, daysBack = 90 } = req.query;
+    const cacheKey = `diary:analytics:tags:${userId}:${limit}`;
+
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for tag analytics');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const tagAnalytics = calculateTagAnalytics(entries, parseInt(limit));
+
+    const response = {
+      success: true,
+      data: tagAnalytics
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching tag analytics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch tag analytics',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/diary/analytics/sentiment-trend - Get sentiment trend data
+router.get('/analytics/sentiment-trend', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { groupBy = 'week', daysBack = 90 } = req.query;
+    const cacheKey = `diary:analytics:sentiment:${userId}:${groupBy}`;
+
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for sentiment trend');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const sentimentTrend = calculateSentimentTrend(entries, groupBy);
+
+    const response = {
+      success: true,
+      data: sentimentTrend,
+      groupBy
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching sentiment trend:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch sentiment trend',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/diary/analytics/heatmap - Get writing activity heatmap
+router.get('/analytics/heatmap', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { monthsBack = 6 } = req.query;
+    const cacheKey = `diary:analytics:heatmap:${userId}:${monthsBack}`;
+
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for heatmap');
+      return res.json(cached);
+    }
+
+    const entries = await DiaryEntry.find({
+      userId,
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const heatmap = calculateWritingHeatmap(entries, parseInt(monthsBack));
+
+    const response = {
+      success: true,
+      data: heatmap,
+      monthsBack: parseInt(monthsBack)
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching heatmap:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch heatmap',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/diary/analytics/word-count - Get word count analytics
+router.get('/analytics/word-count', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { daysBack = 90 } = req.query;
+    const cacheKey = `diary:analytics:words:${userId}:${daysBack}`;
+
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for word count analytics');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const wordCountAnalytics = calculateWordCountAnalytics(entries);
+
+    const response = {
+      success: true,
+      data: wordCountAnalytics
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching word count analytics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch word count analytics',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/diary/analytics/monthly-summary - Get monthly summary
+router.get('/analytics/monthly-summary/:year/:month', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { year, month } = req.params;
+
+    const yearNum = parseInt(year);
+    const monthNum = parseInt(month);
+
+    if (isNaN(yearNum) || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid year or month'
+      });
+    }
+
+    const cacheKey = `diary:analytics:monthly:${userId}:${year}:${month}`;
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for monthly summary');
+      return res.json(cached);
+    }
+
+    const startDate = new Date(yearNum, monthNum - 1, 1);
+    const endDate = new Date(yearNum, monthNum, 1);
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate, $lt: endDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    const writingStats = calculateWritingStats(entries);
+    const moodStats = calculateMoodStats(entries);
+    const tagAnalytics = calculateTagAnalytics(entries, 5);
+    const wellnessScore = calculateWellnessScore(entries);
+
+    const response = {
+      success: true,
+      data: {
+        year: yearNum,
+        month: monthNum,
+        entryCount: entries.length,
+        writingStats,
+        moodStats,
+        topTags: tagAnalytics.tagFrequency,
+        wellnessScore
+      }
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error fetching monthly summary:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch monthly summary',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// GET /api/diary/analytics/insights - Get detailed analytics insights
+router.get('/analytics/insights', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { daysBack = 90 } = req.query;
+    const cacheKey = `diary:analytics:insights:${userId}:${daysBack}`;
+
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      logger.debug('Cache hit for insights');
+      return res.json(cached);
+    }
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(daysBack));
+
+    const entries = await DiaryEntry.find({
+      userId,
+      createdAt: { $gte: startDate },
+      isDraft: false,
+      isDeleted: false
+    }).lean();
+
+    if (entries.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          insights: [],
+          message: 'Not enough data for insights',
+          period: `${daysBack} days`
+        }
+      });
+    }
+
+    // Calculate various analytics
+    const writingStats = calculateWritingStats(entries);
+    const streakStats = calculateStreakStats(entries);
+    const moodStats = calculateMoodStats(entries);
+    const tagAnalytics = calculateTagAnalytics(entries, 5);
+
+    // Generate insights
+    const insights = [];
+
+    if (writingStats.entriesPerDay !== undefined) {
+      if (writingStats.entriesPerDay > 1) {
+        insights.push({
+          type: 'writing_frequency',
+          message: `You\'re writing ${writingStats.entriesPerDay.toFixed(1)} entries per day - great consistency!`,
+          severity: 'positive'
+        });
+      } else if (writingStats.entriesPerDay > 0.5) {
+        insights.push({
+          type: 'writing_frequency',
+          message: 'You have a solid writing habit. Keep it up!',
+          severity: 'positive'
+        });
+      } else {
+        insights.push({
+          type: 'writing_frequency',
+          message: 'Consider writing more frequently for better emotional tracking',
+          severity: 'suggestion'
+        });
+      }
+    }
+
+    if (streakStats.currentStreak !== undefined) {
+      if (streakStats.currentStreak > 30) {
+        insights.push({
+          type: 'streak',
+          message: `Amazing! You\'ve been writing for ${streakStats.currentStreak} days straight!`,
+          severity: 'positive'
+        });
+      }
+    }
+
+    if (moodStats.dominantMood) {
+      insights.push({
+        type: 'mood_pattern',
+        message: `Your most common mood is "${moodStats.dominantMood}". Pay attention to what triggers this mood.`,
+        severity: 'info'
+      });
+    }
+
+    if (moodStats.moodVariability !== undefined) {
+      if (moodStats.moodVariability > 0.7) {
+        insights.push({
+          type: 'mood_variability',
+          message: 'Your mood varies significantly. Consider exploring what\'s causing these changes.',
+          severity: 'suggestion'
+        });
+      }
+    }
+
+    if (writingStats.avgWords !== undefined) {
+      if (writingStats.avgWords < 100) {
+        insights.push({
+          type: 'content_length',
+          message: 'Your entries are quite brief. Try writing more to capture deeper thoughts.',
+          severity: 'suggestion'
+        });
+      } else if (writingStats.avgWords > 500) {
+        insights.push({
+          type: 'content_length',
+          message: 'Wow! Your entries are detailed and thoughtful.',
+          severity: 'positive'
+        });
+      }
+    }
+
+    const response = {
+      success: true,
+      data: {
+        insights,
+        analytics: {
+          writingStats,
+          moodStats,
+          topTags: tagAnalytics.tagFrequency,
+          streakStats
+        },
+        period: `${daysBack} days`
+      }
+    };
+
+    await setCached(cacheKey, response, CACHE_TTL.MOOD_STATS);
+    res.json(response);
+  } catch (error) {
+    logger.error('Error generating insights:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate insights',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+module.exports = router;
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch filter suggestions'
     });
   }
 });

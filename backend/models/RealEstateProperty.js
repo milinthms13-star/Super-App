@@ -14,8 +14,42 @@ const realEstateLeadSchema = new mongoose.Schema({
     enum: ['Hot', 'Warm', 'Cold'], 
     default: 'Warm' 
   },
+  status: {
+    type: String,
+    enum: ['new', 'contacted', 'site_visit_scheduled', 'negotiating', 'closed', 'lost'],
+    default: 'new'
+  },
   message: { type: String, trim: true },
+  followUpAt: { type: Date, default: null },
+  followUpNote: { type: String, trim: true },
+  assignedTo: { type: String, trim: true },
+  lastContactedAt: { type: Date, default: null },
+  updatedAt: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now }
+});
+
+const realEstateVisitSchema = new mongoose.Schema({
+  id: { type: String, required: true, trim: true },
+  leadId: { type: String, trim: true },
+  buyerName: { type: String, required: true, trim: true },
+  buyerEmail: { type: String, trim: true, lowercase: true },
+  buyerPhone: { type: String, trim: true },
+  scheduledAt: { type: Date, required: true },
+  durationMinutes: { type: Number, min: 15, max: 240, default: 45 },
+  mode: {
+    type: String,
+    enum: ['onsite', 'virtual'],
+    default: 'onsite'
+  },
+  note: { type: String, trim: true },
+  status: {
+    type: String,
+    enum: ['scheduled', 'confirmed', 'completed', 'cancelled'],
+    default: 'scheduled'
+  },
+  reminderAt: { type: Date, default: null },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
 const realEstateMessageSchema = new mongoose.Schema({
@@ -64,7 +98,20 @@ const realEstatePropertySchema = new mongoose.Schema({
   locality: { type: String, trim: true },
   type: { 
     type: String, 
-    enum: ['Flat', 'Villa', 'House', 'Land', 'Commercial', 'Studio', 'Plot'], 
+    enum: [
+      'Apartment',
+      'Villa',
+      'House',
+      'Flat',
+      'Plot',
+      'Land',
+      'Commercial',
+      'Office',
+      'Shop',
+      'Warehouse',
+      'Farm land',
+      'Studio'
+    ], 
     required: true 
   },
   intent: { 
@@ -84,7 +131,7 @@ const realEstatePropertySchema = new mongoose.Schema({
   sellerName: { type: String, required: true, trim: true },
   sellerRole: { 
     type: String, 
-    enum: ['Owner', 'Agent', 'Builder'], 
+    enum: ['Owner', 'Agent', 'Builder', 'Admin'], 
     required: true 
   },
   sellerEmail: { type: String, required: true, trim: true, lowercase: true },
@@ -94,7 +141,7 @@ const realEstatePropertySchema = new mongoose.Schema({
   verified: { type: Boolean, default: false },
   verificationStatus: { 
     type: String, 
-    enum: ['Pending', 'Verified', 'Rejected'], 
+    enum: ['Pending', 'Verified', 'Rejected', 'Flagged'], 
     default: 'Pending' 
   },
   featured: { type: Boolean, default: false },
@@ -108,6 +155,7 @@ const realEstatePropertySchema = new mongoose.Schema({
   hasVideoTour: { type: Boolean, default: false },
   projectUnits: { type: Number },
   leads: [realEstateLeadSchema],
+  visits: [realEstateVisitSchema],
   chatPreview: [realEstateMessageSchema],
   reviews: [realEstateReviewSchema],
   reports: [realEstateReportSchema],

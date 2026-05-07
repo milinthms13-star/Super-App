@@ -17,6 +17,9 @@ import {
   getAppLockStatus,
   // Phase 5.2: E2EE, Cloud Backup, AI
   getEncryptionStatus,
+  // PDF Export
+  exportEntryAsPDF,
+  exportEntriesAsPDF,
 } from "../../services/diaryService";
 import notificationService from "../../services/notificationService";
 import DiaryEditor from "./DiaryEditor";
@@ -32,6 +35,11 @@ import AutosaveIndicator from "./AutosaveIndicator";
 // Phase 5.2 Components
 import AIInsights from "./AIInsights";
 import EncryptionBackupSettings from "./EncryptionBackupSettings";
+// Phase 4 Components
+import DiaryAnalyticsDashboard from "./DiaryAnalyticsDashboard";
+import DiaryAISummaryPanel from "./DiaryAISummaryPanel";
+// Phase 4.4 Components
+import AutosaveRecoveryModal from "./AutosaveRecoveryModal";
 import { io } from "socket.io-client";
 import {
   stripHtml,
@@ -80,6 +88,24 @@ const Diary = () => {
   const [showEncryptionBackup, setShowEncryptionBackup] = useState(false);
   const [showAIInsights, setShowAIInsights] = useState(false);
 
+  // Phase 4: Analytics Dashboard
+  const [showAnalyticsDashboard, setShowAnalyticsDashboard] = useState(false);
+  const [analyticsPeriod, setAnalyticsPeriod] = useState(30);
+
+  // Phase 4.3: AI Summary Panel
+  const [showAISummary, setShowAISummary] = useState(false);
+  const [aiSummaryPeriod, setAiSummaryPeriod] = useState('week');
+
+  // Phase 4.4: Auto-save Recovery
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [draftEntries, setDraftEntries] = useState([]);
+  const [loadingRecovery, setLoadingRecovery] = useState(false);
+
+  // PDF Export
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportOption, setExportOption] = useState("current"); // current, all, filtered
+  const [exporting, setExporting] = useState(false);
+
   // Current entry state for autosave (updated when editing)
   const [currentEntryForAutosave, setCurrentEntryForAutosave] = useState(null);
 
@@ -90,6 +116,7 @@ const Diary = () => {
     loadTags();
     loadMoodStats();
     loadUpcomingReminders();
+    loadDrafts(); // Phase 4.4: Fetch drafts for recovery
     setupNotifications();
   }, []);
 
@@ -245,6 +272,29 @@ const Diary = () => {
     }
   };
 
+  // Phase 4.4: Load draft entries for recovery
+  const loadDrafts = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/diary?isDraft=true', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const drafts = Array.isArray(data.data) ? data.data : [];
+        
+        if (drafts.length > 0) {
+          setDraftEntries(drafts);
+          setShowRecoveryModal(true);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load drafts:', error);
+      // Silently fail - recovery modal just won't show
+    }
+  };
+
   const loadCalendarItems = async () => {
     try {
       const response = await fetchDiaryCalendarItems({ limit: 500 });
@@ -362,8 +412,113 @@ const Diary = () => {
     }
   };
 
+  // Phase 4.4: Autosave Recovery Handlers
+  const handleRecoverDrafts = async (selectedDrafts) => {
+    try {
+      setLoadingRecovery(true);
+      
+      for (const draft of selectedDrafts) {
+        // Load draft into editor for user to review/save
+        setEditingEntry(draft);
+        setShowEditor(true);
+      }
+      
+      setShowRecoveryModal(false);
+      setDraftEntries([]);
+    } catch (error) {
+      console.error('Error recovering drafts:', error);
+      setError('Failed to recover drafts');
+    } finally {
+      setLoadingRecovery(false);
+    }
+  };
+
+  const handleDiscardDrafts = async (draftIds) => {
+    try {
+      setLoadingRecovery(true);
+      const token = localStorage.getItem('token');
+      
+      for (const draftId of draftIds) {
+        await fetch(`/api/diary/${draftId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+      
+      // Remove from state
+      setDraftEntries(prev => 
+        prev.filter(draft => !draftIds.includes(draft._id))
+      );
+      
+      if (draftEntries.filter(d => !draftIds.includes(d._id)).length === 0) {
+        setShowRecoveryModal(false);
+      }
+    } catch (error) {
+      console.error('Error discarding drafts:', error);
+      setError('Failed to discard drafts');
+    } finally {
+      setLoadingRecovery(false);
+    }
+  };
+
+  // PDF Export Handler
+  const handleExportPDF = async () => {
+    try {
+      setExporting(true);
+      
+      if (exportOption === "current" && editingEntry) {
+        // Export single entry
+        await exportEntryAsPDF(editingEntry);
+        notificationService.success("Diary entry exported as PDF");
+      } else if (exportOption === "all") {
+        // Export all entries
+        await exportEntriesAsPDF(entries, { title: "My Diary - All Entries" });
+        notificationService.success("All diary entries exported as PDF");
+      } else if (exportOption === "filtered") {
+        // Export filtered entries
+        const filtered = entries.filter((entry) => {
+          const categoryMatch = selectedCategory === "All" || entry.category === selectedCategory;
+          const moodMatch = selectedMood === "All" || entry.mood === selectedMood;
+          const tagsMatch = selectedTags.length === 0 || selectedTags.some((tag) => entry.tags?.includes(tag));
+          const searchMatch = !searchQuery || 
+            entry.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            entry.content?.toLowerCase().includes(searchQuery.toLowerCase());
+          return categoryMatch && moodMatch && tagsMatch && searchMatch;
+        });
+        
+        if (filtered.length === 0) {
+          notificationService.warning("No entries match current filters");
+          return;
+        }
+        
+        await exportEntriesAsPDF(filtered, { title: `My Diary - Filtered (${filtered.length} entries)` });
+        notificationService.success(`${filtered.length} diary entries exported as PDF`);
+      }
+      
+      setShowExportModal(false);
+    } catch (err) {
+      console.error("Export error:", err);
+      notificationService.error("Failed to export PDF: " + (err.message || "Unknown error"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="diary-page">
+      {/* Phase 4.4: Auto-save Recovery Modal */}
+      <AutosaveRecoveryModal
+        isOpen={showRecoveryModal}
+        drafts={draftEntries}
+        onRecover={handleRecoverDrafts}
+        onDiscard={handleDiscardDrafts}
+        onClose={() => {
+          setShowRecoveryModal(false);
+          setDraftEntries([]);
+        }}
+        loading={loadingRecovery}
+      />
+
       <section className="diary-hero">
         <div>
           <p className="diary-eyebrow">Personal Reflection</p>
@@ -435,6 +590,35 @@ const Diary = () => {
             >
               ✨ AI
             </button>
+
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowExportModal(true)}
+              title="Export diary entries as PDF"
+            >
+              📄 Export
+            </button>
+
+            {/* Phase 4: Analytics Dashboard Button */}
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowAnalyticsDashboard(true)}
+              title="View writing analytics and insights"
+            >
+              📊 Analytics
+            </button>
+
+            {/* Phase 4.3: AI Summary Button */}
+            <button
+              type="button"
+              className="diary-secondary-btn"
+              onClick={() => setShowAISummary(true)}
+              title="View AI-generated summary and insights"
+            >
+              ✨ AI Summary
+            </button>
           </div>
         </div>
       </section>
@@ -505,6 +689,144 @@ const Diary = () => {
             await loadEntries(false);
           }}
         />
+      )}
+
+      {/* PDF Export Modal */}
+      {showExportModal && (
+        <div className="diary-modal-overlay" onClick={() => !exporting && setShowExportModal(false)}>
+          <div className="diary-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="diary-modal-header">
+              <h2>📄 Export Diary as PDF</h2>
+              <button
+                type="button"
+                className="diary-modal-close"
+                onClick={() => !exporting && setShowExportModal(false)}
+                disabled={exporting}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="diary-modal-body">
+              <p className="diary-export-description">
+                Choose what you'd like to export:
+              </p>
+
+              <div className="diary-export-options">
+                <label className="diary-export-option">
+                  <input
+                    type="radio"
+                    value="current"
+                    checked={exportOption === "current"}
+                    onChange={(e) => setExportOption(e.target.value)}
+                    disabled={!editingEntry || exporting}
+                  />
+                  <span>Current Entry</span>
+                  {editingEntry && (
+                    <small>{editingEntry.title || "Untitled"}</small>
+                  )}
+                </label>
+
+                <label className="diary-export-option">
+                  <input
+                    type="radio"
+                    value="filtered"
+                    checked={exportOption === "filtered"}
+                    onChange={(e) => setExportOption(e.target.value)}
+                    disabled={exporting}
+                  />
+                  <span>Filtered Entries</span>
+                  <small>Based on current filters (category, mood, tags, search)</small>
+                </label>
+
+                <label className="diary-export-option">
+                  <input
+                    type="radio"
+                    value="all"
+                    checked={exportOption === "all"}
+                    onChange={(e) => setExportOption(e.target.value)}
+                    disabled={entries.length === 0 || exporting}
+                  />
+                  <span>All Entries</span>
+                  <small>{entries.length} entries total</small>
+                </label>
+              </div>
+
+              {exportOption === "current" && !editingEntry && (
+                <div className="diary-warning">
+                  ⚠️ Select an entry to export it
+                </div>
+              )}
+            </div>
+
+            <div className="diary-modal-footer">
+              <button
+                type="button"
+                className="diary-modal-cancel-btn"
+                onClick={() => setShowExportModal(false)}
+                disabled={exporting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="diary-modal-action-btn"
+                onClick={handleExportPDF}
+                disabled={
+                  exporting ||
+                  (exportOption === "current" && !editingEntry) ||
+                  (exportOption === "all" && entries.length === 0)
+                }
+              >
+                {exporting ? "Exporting..." : "Download PDF"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 4: Analytics Dashboard Modal */}
+      {showAnalyticsDashboard && (
+        <div className="diary-modal-overlay" onClick={() => setShowAnalyticsDashboard(false)}>
+          <div className="diary-modal-content diary-analytics-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="diary-modal-header">
+              <h2>📊 Diary Analytics</h2>
+              <button
+                type="button"
+                className="diary-modal-close"
+                onClick={() => setShowAnalyticsDashboard(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="diary-modal-body diary-analytics-body">
+              <DiaryAnalyticsDashboard userId={localStorage.getItem('userId')} dateRange={analyticsPeriod} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 4.3: AI Summary Modal */}
+      {showAISummary && (
+        <div className="diary-modal-overlay" onClick={() => setShowAISummary(false)}>
+          <div className="diary-modal-content diary-ai-summary-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="diary-modal-header">
+              <h2>✨ AI Summary & Insights</h2>
+              <button
+                type="button"
+                className="diary-modal-close"
+                onClick={() => setShowAISummary(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="diary-modal-body diary-ai-summary-body">
+              <DiaryAISummaryPanel userId={localStorage.getItem('userId')} dateRange={aiSummaryPeriod} />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Today's Summary Section */}

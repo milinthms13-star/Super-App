@@ -388,6 +388,22 @@
   color: var(--classifieds-muted);
 }
 
+.classifieds-filter-actions,
+.classifieds-saved-searches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+
+.classifieds-saved-search-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .classifieds-detail-header,
 .classifieds-detail-price,
 .classifieds-seller-card,

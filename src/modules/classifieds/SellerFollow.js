@@ -1,6 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
-const SellerFollow = ({ seller, isFollowing = false, onFollowChange }) => {
+const SellerFollow = ({
+  seller,
+  isFollowing = false,
+  onFollowChange,
+  onMessageSeller,
+  onViewStore,
+  onViewAllListings,
+  onViewReviews,
+  onReportSeller,
+}) => {
   const [followState, setFollowState] = useState(isFollowing);
   const [followerCount, setFollowerCount] = useState(seller?.followers || 0);
   const [isLoading, setIsLoading] = useState(false);
@@ -59,6 +68,7 @@ const SellerFollow = ({ seller, isFollowing = false, onFollowChange }) => {
 
         {/* Follow Button */}
         <button
+          type="button"
           className={`follow-btn ${followState ? 'following' : ''} ${isLoading ? 'loading' : ''}`}
           onClick={handleFollowToggle}
           disabled={isLoading}
@@ -92,11 +102,12 @@ const SellerFollow = ({ seller, isFollowing = false, onFollowChange }) => {
 
       {/* Action Menu */}
       <div className="seller-actions">
-        <button className="action-btn">
+        <button type="button" className="action-btn" onClick={onMessageSeller}>
           💬 Message Seller
         </button>
         <div className="more-options">
           <button
+            type="button"
             className="more-btn"
             onClick={() => setShowDropdown(!showDropdown)}
           >
@@ -104,10 +115,46 @@ const SellerFollow = ({ seller, isFollowing = false, onFollowChange }) => {
           </button>
           {showDropdown && (
             <div className="dropdown-menu">
-              <button className="dropdown-item">👁️ View Store</button>
-              <button className="dropdown-item">📋 View All Listings</button>
-              <button className="dropdown-item">⭐ View Reviews</button>
-              <button className="dropdown-item danger">🚩 Report Seller</button>
+              <button
+                type="button"
+                className="dropdown-item"
+                onClick={() => {
+                  setShowDropdown(false);
+                  onViewStore?.();
+                }}
+              >
+                👁️ View Store
+              </button>
+              <button
+                type="button"
+                className="dropdown-item"
+                onClick={() => {
+                  setShowDropdown(false);
+                  onViewAllListings?.();
+                }}
+              >
+                📋 View All Listings
+              </button>
+              <button
+                type="button"
+                className="dropdown-item"
+                onClick={() => {
+                  setShowDropdown(false);
+                  onViewReviews?.();
+                }}
+              >
+                ⭐ View Reviews
+              </button>
+              <button
+                type="button"
+                className="dropdown-item danger"
+                onClick={() => {
+                  setShowDropdown(false);
+                  onReportSeller?.();
+                }}
+              >
+                🚩 Report Seller
+              </button>
             </div>
           )}
         </div>

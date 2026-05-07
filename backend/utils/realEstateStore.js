@@ -11,8 +11,30 @@ const normalizeRealEstateLead = (lead = {}, index = 0) => ({
   email: String(lead.email || '').trim().toLowerCase(),
   channel: String(lead.channel || 'Enquiry').trim(),
   priority: String(lead.priority || 'Warm').trim(),
+  status: String(lead.status || 'new').trim(),
   message: String(lead.message || '').trim(),
+  followUpAt: lead.followUpAt ? new Date(lead.followUpAt).toISOString() : null,
+  followUpNote: String(lead.followUpNote || '').trim(),
+  assignedTo: String(lead.assignedTo || '').trim(),
+  lastContactedAt: lead.lastContactedAt ? new Date(lead.lastContactedAt).toISOString() : null,
+  updatedAt: lead.updatedAt ? new Date(lead.updatedAt).toISOString() : new Date().toISOString(),
   createdAt: lead.createdAt ? new Date(lead.createdAt).toISOString() : new Date().toISOString(),
+});
+
+const normalizeRealEstateVisit = (visit = {}, index = 0) => ({
+  id: String(visit.id || `visit-${index + 1}`),
+  leadId: String(visit.leadId || '').trim(),
+  buyerName: String(visit.buyerName || 'Buyer').trim(),
+  buyerEmail: String(visit.buyerEmail || '').trim().toLowerCase(),
+  buyerPhone: String(visit.buyerPhone || '').trim(),
+  scheduledAt: visit.scheduledAt ? new Date(visit.scheduledAt).toISOString() : new Date().toISOString(),
+  durationMinutes: Number(visit.durationMinutes || 45),
+  mode: String(visit.mode || 'onsite').trim(),
+  note: String(visit.note || '').trim(),
+  status: String(visit.status || 'scheduled').trim(),
+  reminderAt: visit.reminderAt ? new Date(visit.reminderAt).toISOString() : null,
+  createdAt: visit.createdAt ? new Date(visit.createdAt).toISOString() : new Date().toISOString(),
+  updatedAt: visit.updatedAt ? new Date(visit.updatedAt).toISOString() : new Date().toISOString(),
 });
 
 const normalizeRealEstateMessage = (message = {}, index = 0) => ({
@@ -109,6 +131,7 @@ const serializeRealEstateProperty = (record, index = 0) => {
     hasVideoTour: Boolean(plainRecord.hasVideoTour),
     projectUnits: typeof plainRecord.projectUnits === 'number' ? plainRecord.projectUnits : 1,
     leads: Array.isArray(plainRecord.leads) ? plainRecord.leads.map(normalizeRealEstateLead) : [],
+    visits: Array.isArray(plainRecord.visits) ? plainRecord.visits.map(normalizeRealEstateVisit) : [],
     chatPreview:
       Array.isArray(plainRecord.chatPreview)
         ? plainRecord.chatPreview.map(normalizeRealEstateMessage)
@@ -261,6 +284,7 @@ module.exports = {
   useMongoRealEstate,
   serializeRealEstateProperty,
   normalizeRealEstateLead,
+  normalizeRealEstateVisit,
   normalizeRealEstateMessage,
   normalizeRealEstateReview,
   normalizeRealEstateReport,

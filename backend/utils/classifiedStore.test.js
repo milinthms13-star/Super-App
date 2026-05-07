@@ -1,6 +1,7 @@
 const {
   serializeClassifiedAd,
   buildClassifiedPlanLabel,
+  buildNonExpiredQuery,
 } = require('./classifiedStore');
 
 describe('classifiedStore', () => {
@@ -51,5 +52,18 @@ describe('classifiedStore', () => {
     expect(buildClassifiedPlanLabel('featured')).toBe('Featured');
     expect(buildClassifiedPlanLabel('urgent')).toBe('Urgent');
     expect(buildClassifiedPlanLabel('subscription')).toBe('Seller Pro');
+  });
+
+  test('builds a non-expired query that keeps renewable or active listings visible', () => {
+    const now = new Date('2026-05-07T00:00:00.000Z');
+
+    expect(buildNonExpiredQuery(now)).toEqual({
+      $or: [
+        { expiryDate: { $exists: false } },
+        { expiryDate: null },
+        { expiryDate: { $gte: now } },
+        { autoRenew: true },
+      ],
+    });
   });
 });

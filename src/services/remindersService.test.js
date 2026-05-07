@@ -18,6 +18,7 @@ import axios from "axios";
 
 import {
   createReminder,
+  createVoiceCallReminder,
   fetchReminders,
   toggleReminderCompletion,
   updateReminder,
@@ -116,5 +117,58 @@ describe("remindersService", () => {
       "/reminders/rem-2",
       { completed: true }
     );
+  });
+
+  test("forces Call as the reminder type when creating a voice call reminder", async () => {
+    mockAxiosInstance.post.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          _id: "voice-1",
+          title: "Medicine check-in",
+          dueDate: "2030-05-16T00:00:00.000Z",
+          reminders: ["Call"],
+          recipientPhoneNumber: "+919876543210",
+        },
+      },
+    });
+
+    await createVoiceCallReminder({
+      title: "Medicine check-in",
+      dueDate: new Date("2030-05-16T00:00:00.000Z"),
+      reminders: ["SMS"],
+      recipientPhoneNumber: "+919876543210",
+      voiceMessage: "Please take your medicine.",
+    });
+
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      "/reminders/voice-call",
+      expect.objectContaining({
+        title: "Medicine check-in",
+        dueDate: "2030-05-16",
+        reminders: ["Call"],
+        recipientPhoneNumber: "+919876543210",
+      })
+    );
+  });
+
+  test("surfaces backend error messages when fetching reminders fails", async () => {
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    mockAxiosInstance.get.mockRejectedValue({
+      response: {
+        data: {
+          message: "Session expired",
+        },
+      },
+    });
+
+    await expect(fetchReminders({ category: "Work" })).rejects.toThrow(
+      "Session expired"
+    );
+
+    consoleErrorSpy.mockRestore();
   });
 });

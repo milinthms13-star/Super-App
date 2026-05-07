@@ -129,3 +129,38 @@ test('renders voice notes with a playable audio source', () => {
   expect(source).toHaveAttribute('src', 'https://example.com/uploads/voice-note.webm');
   expect(source).toHaveAttribute('type', 'audio/webm');
 });
+
+test('retries a failed outgoing message from the inline action', () => {
+  const onRetryMessage = jest.fn();
+  const failedMessage = {
+    ...baseMessage,
+    _id: 'failed-1',
+    clientMessageId: 'client-1',
+    isFailed: true,
+    errorMessage: 'Offline',
+  };
+
+  renderChatWindow({
+    messages: [failedMessage],
+    onRetryMessage,
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+  expect(onRetryMessage).toHaveBeenCalledWith(expect.objectContaining({
+    _id: 'failed-1',
+    clientMessageId: 'client-1',
+    isFailed: true,
+  }));
+  expect(screen.getByText(/failed to send/i)).toBeInTheDocument();
+});
+
+test('exports the active chat transcript from the header action', () => {
+  const onExportChat = jest.fn();
+
+  renderChatWindow({ onExportChat });
+
+  fireEvent.click(screen.getByRole('button', { name: /export/i }));
+
+  expect(onExportChat).toHaveBeenCalledTimes(1);
+});

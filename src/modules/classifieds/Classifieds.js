@@ -145,6 +145,27 @@ const formatPrice = (value) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
 
+const getSellerIdentity = (listing = {}) => ({
+  sellerName: String(listing?.seller || "").trim().toLowerCase(),
+  sellerEmail: String(listing?.sellerEmail || "")
+    .trim()
+    .toLowerCase(),
+});
+
+const isSameSeller = (listing = {}, seller = {}) => {
+  const listingIdentity = getSellerIdentity(listing);
+  const sellerIdentity = {
+    sellerName: String(seller?.name || "").trim().toLowerCase(),
+    sellerEmail: String(seller?.email || "").trim().toLowerCase(),
+  };
+
+  if (sellerIdentity.sellerEmail && listingIdentity.sellerEmail) {
+    return sellerIdentity.sellerEmail === listingIdentity.sellerEmail;
+  }
+
+  return Boolean(sellerIdentity.sellerName) && sellerIdentity.sellerName === listingIdentity.sellerName;
+};
+
 const Classifieds = () => {
   const {
     currentUser,
@@ -158,6 +179,12 @@ const Classifieds = () => {
     updateClassifiedListing,
     moderateClassifiedListing,
     deleteClassifiedListing,
+    getClassifiedSavedSearches = async () => [],
+    saveClassifiedSearch = async () => ({ savedSearches: [] }),
+    acknowledgeClassifiedSavedSearch = async () => ({ savedSearches: [] }),
+    deleteClassifiedSavedSearch = async () => [],
+    getRecentlyViewedClassifieds = async () => [],
+    trackClassifiedListingView = async () => ({}),
     mockData,
   } = useApp();
   const [activeRole, setActiveRole] = useState(() => getBaseRole(currentUser));
@@ -178,6 +205,7 @@ const Classifieds = () => {
   const [submitting, setSubmitting] = useState(false);
   const [editingListingId, setEditingListingId] = useState("");
   const [savedSearches, setSavedSearches] = useState([]);
+  const [recentlyViewedListings, setRecentlyViewedListings] = useState([]);
   const [selectedListings, setSelectedListings] = useState(new Set());
   const [bulkAction, setBulkAction] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -208,27 +236,33 @@ const Classifieds = () => {
   const [savedTemplates, setSavedTemplates] = useState([]);
   const [scheduledListings, setScheduledListings] = useState([]);
   const fileInputRef = useRef(null);
+  const trackedViewIdsRef = useRef(new Set());
 
-  const handleSaveSearch = () => {
+  const handleSaveSearch = async () => {
     const searchName = prompt("Enter a name for this saved search:");
     if (!searchName?.trim()) return;
 
-    const searchData = {
-      id: `search-${Date.now()}`,
-      name: searchName.trim(),
-      filters: {
-        searchText,
-        categoryFilter,
-        locationFilter,
-        conditionFilter,
-        priceFilter,
-        sortBy,
-      },
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const response = await saveClassifiedSearch({
+        name: searchName.trim(),
+        filters: {
+          searchText,
+          categoryFilter,
+          locationFilter,
+          conditionFilter,
+          priceFilter,
+          sortBy,
+        },
+        notificationsEnabled: true,
+      });
 
-    setSavedSearches(current => [...current, searchData]);
-    setStatusMessage(`Search "${searchName}" saved successfully.`);
+      setSavedSearches(Array.isArray(response?.savedSearches) ? response.savedSearches : []);
+      setStatusMessage(`Search "${searchName}" saved successfully with alerts enabled.`);
+    } catch (error) {
+      setStatusMessage(
+        error.response?.data?.message || error.message || "Saved search could not be stored."
+      );
+    }
   };
 
   const handleImageUpload = (files) => {
@@ -298,7 +332,7 @@ const Classifieds = () => {
     }
   };
 
-  const handleLoadSearch = (search) => {
+  const handleLoadSearch = async (search) => {
     setSearchText(search.filters.searchText || "");
     setCategoryFilter(search.filters.categoryFilter || []);
     setLocationFilter(search.filters.locationFilter || []);
@@ -306,11 +340,27 @@ const Classifieds = () => {
     setPriceFilter(search.filters.priceFilter || []);
     setSortBy(search.filters.sortBy || "featured");
     addToast(`Loaded saved search "${search.name}".`, 'info');
+
+    try {
+      const response = await acknowledgeClassifiedSavedSearch(search.id);
+      if (Array.isArray(response?.savedSearches)) {
+        setSavedSearches(response.savedSearches);
+      }
+    } catch (error) {
+      // Alerts are helpful but optional; loading the search still succeeds.
+    }
   };
 
-  const handleDeleteSearch = (searchId) => {
-    setSavedSearches(current => current.filter(search => search.id !== searchId));
-    addToast("Saved search deleted.", 'info');
+  const handleDeleteSearch = async (searchId) => {
+    try {
+      const nextSavedSearches = await deleteClassifiedSavedSearch(searchId);
+      setSavedSearches(Array.isArray(nextSavedSearches) ? nextSavedSearches : []);
+      addToast("Saved search deleted.", 'info');
+    } catch (error) {
+      setStatusMessage(
+        error.response?.data?.message || error.message || "Saved search could not be deleted."
+      );
+    }
   };
 
   const addToast = (message, type = 'info', duration = 4000) => {
@@ -372,6 +422,32 @@ const Classifieds = () => {
   useEffect(() => {
     setActiveRole(getBaseRole(currentUser));
   }, [currentUser]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    Promise.all([getClassifiedSavedSearches(), getRecentlyViewedClassifieds()])
+      .then(([savedSearchRecords, recentlyViewedRecords]) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setSavedSearches(Array.isArray(savedSearchRecords) ? savedSearchRecords : []);
+        setRecentlyViewedListings(Array.isArray(recentlyViewedRecords) ? recentlyViewedRecords : []);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+
+        setSavedSearches([]);
+        setRecentlyViewedListings([]);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const listings = useMemo(
     () =>
@@ -543,9 +619,35 @@ const Classifieds = () => {
     : 0;
 
   const sellerListings = useMemo(
-    () => listings.filter(listing => listing.sellerEmail === currentUser?.email),
-    [listings, currentUser?.email]
+    () => {
+      const normalizedEmail = String(currentUser?.email || "")
+        .trim()
+        .toLowerCase();
+      const normalizedNames = [
+        currentUser?.businessName,
+        currentUser?.name,
+      ]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter(Boolean);
+
+      return listings.filter((listing) => {
+        if (normalizedEmail) {
+          return String(listing.sellerEmail || "").trim().toLowerCase() === normalizedEmail;
+        }
+
+        return normalizedNames.includes(String(listing.seller || "").trim().toLowerCase());
+      });
+    },
+    [currentUser?.businessName, currentUser?.email, currentUser?.name, listings]
   );
+
+  const selectedSellerListings = useMemo(() => {
+    if (!selectedSellerStore) {
+      return [];
+    }
+
+    return listings.filter((listing) => isSameSeller(listing, selectedSellerStore));
+  }, [listings, selectedSellerStore]);
 
   const sellerStats = useMemo(() => {
     if (!sellerListings.length) return null;
@@ -566,10 +668,60 @@ const Classifieds = () => {
     };
   }, [sellerListings]);
 
+  const openSellerStore = (listing = selectedListing) => {
+    if (!listing) {
+      return;
+    }
+
+    const matchingListings = listings.filter((candidate) => isSameSeller(candidate, {
+      name: listing.seller,
+      email: listing.sellerEmail,
+    }));
+
+    const ratingValues = matchingListings
+      .map((candidate) => Number(candidate.sellerRating || candidate.averageRating || 0))
+      .filter((value) => value > 0);
+    const responseTimes = matchingListings
+      .map((candidate) => Number(candidate.responseTimeMinutes || 0))
+      .filter((value) => value > 0);
+
+    const averageRating =
+      ratingValues.length > 0
+        ? Math.round(
+            (ratingValues.reduce((sum, value) => sum + value, 0) / ratingValues.length) * 10
+          ) / 10
+        : 4.8;
+    const averageResponseTime =
+      responseTimes.length > 0
+        ? Math.round(responseTimes.reduce((sum, value) => sum + value, 0) / responseTimes.length)
+        : 120;
+
+    setSelectedSellerStore({
+      name: listing.seller,
+      email: listing.sellerEmail || "",
+      avatar: listing.sellerAvatar || "/default-avatar.png",
+      verified: matchingListings.some((candidate) => candidate.verified),
+      followers: Math.max(...matchingListings.map((candidate) => Number(candidate.followers || 0)), 0),
+      rating: averageRating,
+      reviewCount: matchingListings.reduce(
+        (sum, candidate) => sum + Number(candidate.sellerReviewCount || candidate.totalReviews || 0),
+        0
+      ),
+      responseTime: `~${averageResponseTime} min`,
+      bio:
+        listing.sellerBio ||
+        `${listing.sellerRole || "Seller"} with ${matchingListings.length || 1} active marketplace listing${
+          matchingListings.length === 1 ? "" : "s"
+        }.`,
+    });
+    setStoreOpen(true);
+  };
+
   const featuredListings = filteredListings.filter((listing) => listing.featured).slice(0, 3);
   const recentListings = [...filteredListings]
     .sort((first, second) => new Date(second.posted) - new Date(first.posted))
     .slice(0, 4);
+  const savedSearchAlerts = savedSearches.filter((search) => Number(search?.newMatchCount || 0) > 0);
   const leadBoard = useMemo(
     () =>
       listings
@@ -596,6 +748,29 @@ const Classifieds = () => {
     }),
     [classifiedFavorites.length, listings, reportRecords.length]
   );
+
+  useEffect(() => {
+    if (!selectedListing?.id) {
+      return;
+    }
+
+    const listingId = String(selectedListing.id);
+    if (trackedViewIdsRef.current.has(listingId)) {
+      return;
+    }
+
+    trackedViewIdsRef.current.add(listingId);
+
+    trackClassifiedListingView(listingId)
+      .then((response) => {
+        if (Array.isArray(response?.recentlyViewed)) {
+          setRecentlyViewedListings(response.recentlyViewed);
+        }
+      })
+      .catch(() => {
+        trackedViewIdsRef.current.delete(listingId);
+      });
+  }, [selectedListing?.id]);
 
   const handleFavoriteToggle = (listing) => {
     const favoriteId = `classifieds-${listing.id}`;
@@ -944,20 +1119,62 @@ const Classifieds = () => {
                 <div className="classifieds-saved-searches">
                   <span>Saved searches:</span>
                   {savedSearches.map((search) => (
-                    <button
-                      key={search.id}
-                      type="button"
-                      className="classifieds-inline-button"
-                      onClick={() => handleLoadSearch(search)}
-                      title={`Load ${search.name}`}
-                    >
-                      {search.name}
-                    </button>
+                    <div key={search.id} className="classifieds-saved-search-chip">
+                      <button
+                        type="button"
+                        className="classifieds-inline-button"
+                        onClick={() => handleLoadSearch(search)}
+                        title={`Load ${search.name}`}
+                      >
+                        {search.name}
+                        {search.newMatchCount ? ` • ${search.newMatchCount} new` : ""}
+                      </button>
+                      <button
+                        type="button"
+                        className="classifieds-inline-button danger"
+                        onClick={() => handleDeleteSearch(search.id)}
+                        aria-label={`Delete saved search ${search.name}`}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
             </div>
           </article>
+
+          {savedSearchAlerts.length > 0 && (
+            <article className="classifieds-surface-card">
+              <div className="classifieds-section-heading">
+                <h2>Saved search alerts</h2>
+                <p>Fresh matches for the searches you asked us to watch.</p>
+              </div>
+              <div className="classifieds-mini-list">
+                {savedSearchAlerts.map((search) => (
+                  <div key={search.id} className="classifieds-mini-item">
+                    <strong>{search.name}</strong>
+                    <span>{search.newMatchCount} new match{search.newMatchCount === 1 ? "" : "es"}</span>
+                    {Array.isArray(search.previewListings) && search.previewListings.length > 0 ? (
+                      <span>
+                        {search.previewListings
+                          .slice(0, 2)
+                          .map((listing) => listing.title)
+                          .join(" • ")}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="classifieds-inline-button"
+                      onClick={() => handleLoadSearch(search)}
+                    >
+                      View matches
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </article>
+          )}
 
           <section className="classifieds-highlights-grid">
             <article className="classifieds-surface-card">
@@ -997,6 +1214,33 @@ const Classifieds = () => {
                     <span>{listing.posted}</span>
                   </button>
                 ))}
+              </div>
+            </article>
+
+            <article className="classifieds-surface-card">
+              <div className="classifieds-section-heading">
+                <h2>Recently viewed</h2>
+                <p>Pick up where you left off without searching again.</p>
+              </div>
+              <div className="classifieds-mini-list">
+                {recentlyViewedListings.length > 0 ? (
+                  recentlyViewedListings.slice(0, 4).map((listing) => (
+                    <button
+                      key={`${listing.id}-recent`}
+                      type="button"
+                      className="classifieds-mini-item"
+                      onClick={() => setSelectedListingId(listing.id)}
+                    >
+                      <strong>{listing.title}</strong>
+                      <span>{listing.location} • Viewed recently</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="classifieds-mini-item">
+                    <strong>No recent views yet</strong>
+                    <span>Open an ad to build your quick-return list.</span>
+                  </div>
+                )}
               </div>
             </article>
           </section>
@@ -1551,11 +1795,18 @@ const Classifieds = () => {
                   <SellerFollow
                     seller={{
                       name: selectedListing.seller,
+                      email: selectedListing.sellerEmail,
                       avatar: selectedListing.sellerAvatar || '/default-avatar.png',
                       verified: selectedListing.verified,
                       rating: selectedListing.sellerRating || 4.8,
-                      reviewCount: selectedListing.sellerReviewCount || 45,
-                      listingCount: selectedListing.sellerListingCount || 24,
+                      reviewCount: selectedListing.sellerReviewCount || selectedListing.totalReviews || 0,
+                      listingCount:
+                        listings.filter((listing) =>
+                          isSameSeller(listing, {
+                            name: selectedListing.seller,
+                            email: selectedListing.sellerEmail,
+                          })
+                        ).length || 1,
                       followers: selectedListing.followers || 0,
                       responseTime: `~${selectedListing.responseTimeMinutes} min`,
                       memberSince: 'Jan 2024',
@@ -1576,7 +1827,30 @@ const Classifieds = () => {
                         addToast(`You unfollowed ${selectedListing.seller}.`, 'info');
                       }
                     }}
+                    onMessageSeller={() => {
+                      setChatWithListing(selectedListing);
+                      setChatOpen(true);
+                    }}
+                    onViewStore={() => openSellerStore(selectedListing)}
+                    onViewAllListings={() => openSellerStore(selectedListing)}
+                    onViewReviews={() => setShowReviewForm(true)}
+                    onReportSeller={() => {
+                      setReportReason((currentReason) =>
+                        currentReason || `Seller conduct review requested for ${selectedListing.seller}`
+                      );
+                      addToast(`Seller report draft prepared for ${selectedListing.seller}.`, 'warning');
+                    }}
                   />
+                </div>
+
+                <div className="classifieds-inline-actions">
+                  <button
+                    type="button"
+                    className="classifieds-inline-button"
+                    onClick={() => openSellerStore(selectedListing)}
+                  >
+                    View seller store
+                  </button>
                 </div>
 
                 <div className="classifieds-kpi-row">
@@ -1821,25 +2095,29 @@ const Classifieds = () => {
       )}
 
       {storeOpen && selectedSellerStore && (
-        <SellerStore
-          seller={selectedSellerStore}
-          listings={mockData.filter(l => l.seller === selectedSellerStore.name)}
-          onListingClick={(listing) => {
-            setSelectedListingId(listing.id);
-            setStoreOpen(false);
-            addToast(`Viewing ${listing.title}`, 'info');
-          }}
-          onClose={() => {
-            setStoreOpen(false);
-            setSelectedSellerStore(null);
-          }}
-        />
+        <div className="seller-store-modal" role="dialog" aria-label="Seller store">
+          <div className="seller-store-content">
+            <SellerStore
+              seller={selectedSellerStore}
+              listings={selectedSellerListings}
+              onListingClick={(listing) => {
+                setSelectedListingId(listing.id);
+                setStoreOpen(false);
+                addToast(`Viewing ${listing.title}`, 'info');
+              }}
+              onClose={() => {
+                setStoreOpen(false);
+                setSelectedSellerStore(null);
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {bulkActionsOpen && getBaseRole(currentUser) === 'seller' && (
         <BulkActions
-          listings={mockData}
-          userListings={mockData.filter(l => l.seller === currentUser?.name)}
+          listings={listings}
+          userListings={sellerListings}
           onAction={(action, listingIds) => {
             addToast(`${action} action completed for ${listingIds.length} listings`, 'success');
           }}
@@ -1848,7 +2126,7 @@ const Classifieds = () => {
 
       {reportingOpen && getBaseRole(currentUser) === 'seller' && (
         <AdvancedReporting
-          listings={mockData.filter(l => l.seller === currentUser?.name)}
+          listings={sellerListings}
           analyticsData={{}}
         />
       )}
@@ -1933,7 +2211,7 @@ const Classifieds = () => {
 
       {bulkImportOpen && (
         <BulkImport
-          existingListings={mockData}
+          existingListings={listings}
           onImport={(importedListings) => {
             addToast(`Imported ${importedListings.length} listings successfully`, 'success');
             setBulkImportOpen(false);
@@ -1945,7 +2223,7 @@ const Classifieds = () => {
       {quickDuplicateOpen && selectedListingForDuplicate && (
         <QuickDuplicate
           selectedListing={selectedListingForDuplicate}
-          allListings={mockData}
+          allListings={listings}
           onDuplicate={(duplicates) => {
             addToast(`Created ${duplicates.length} duplicate listing(s)`, 'success');
             setQuickDuplicateOpen(false);

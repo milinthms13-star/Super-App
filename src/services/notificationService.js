@@ -2,30 +2,41 @@
  * Notification Service
  * Handles browser notifications, WebSocket listeners, and reminder alerts
  */
+/* global globalThis */
+// eslint-disable-next-line no-undef
+const getNotificationApi = () =>
+  typeof globalThis !== 'undefined' ? globalThis.Notification : undefined;
+
+// eslint-disable-next-line no-undef
+const hasWindow = () =>
+  typeof globalThis !== 'undefined' && typeof globalThis.window !== 'undefined';
 
 class NotificationService {
   constructor() {
-    this.permission = Notification.permission;
+    this.permission = getNotificationApi()?.permission || 'default';
     this.socket = null;
     this.activeReminders = new Map();
+    this.localCheckInterval = null;
   }
 
   /**
    * Initialize notification permissions
    */
   async requestPermission() {
-    if (!('Notification' in window)) {
+    if (!hasWindow() || !getNotificationApi()) {
       console.log('Browser does not support notifications');
       return false;
     }
 
-    if (Notification.permission === 'granted') {
+    const NotificationApi = getNotificationApi();
+
+    if (NotificationApi.permission === 'granted') {
       this.permission = 'granted';
       return true;
     }
 
-    if (Notification.permission !== 'denied') {
-      const result = await Notification.requestPermission();
+    if (NotificationApi.permission !== 'denied') {
+      const result = await NotificationApi.requestPermission();
       this.permission = result;
       return result === 'granted';
     }
@@ -37,7 +48,8 @@ class NotificationService {
    * Show browser notification
    */
   notify(options = {}) {
-    if (this.permission !== 'granted') {
+    const NotificationApi = getNotificationApi();
+    if (!NotificationApi || this.permission !== 'granted') {
       console.warn('Notification permission not granted');
       return;
     }
@@ -55,7 +67,7 @@ class NotificationService {
     } = options;
 
     try {
-      const notification = new Notification(title, {
+      const notification = new NotificationApi(title, {
         body,
         icon,
         badge,
@@ -70,7 +82,9 @@ class NotificationService {
       if (onError) notification.onerror = onError;
 
       notification.onclick = () => {
-        window.focus();
+        if (hasWindow() && typeof window.focus === 'function') {
+          window.focus();
+        }
         notification.close();
       };
 
@@ -126,6 +140,10 @@ class NotificationService {
    * Play notification sound
    */
   playSound(soundPath = '/notification-sound.mp3') {
+    if (typeof Audio === 'undefined') {
+      return;
+    }
+
     try {
       const audio = new Audio(soundPath);
       audio.volume = 0.5;
@@ -159,11 +177,13 @@ class NotificationService {
       this.notifyReminder(data);
 
       // Emit custom event for React components
-      window.dispatchEvent(
-        new CustomEvent('reminderNotification', {
-          detail: data,
-        })
-      );
+      if (hasWindow() && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(
+          new CustomEvent('reminderNotification', {
+            detail: data,
+          })
+        );
+      }
     });
 
     // Handle connection events
@@ -230,7 +250,7 @@ class NotificationService {
     return {
       permission: this.permission,
       canNotify: this.permission === 'granted',
-      available: 'Notification' in window,
+      available: Boolean(getNotificationApi()),
     };
   }
 
@@ -239,6 +259,33 @@ class NotificationService {
    */
   clearActiveReminders() {
     this.activeReminders.clear();
+  }
+
+  success(message = 'Action completed') {
+    return this.notify({
+      title: 'Success',
+      body: message,
+      tag: 'notification-success',
+      requireInteraction: false,
+    });
+  }
+
+  warning(message = 'Please review this action') {
+    return this.notify({
+      title: 'Warning',
+      body: message,
+      tag: 'notification-warning',
+      requireInteraction: false,
+    });
+  }
+
+  error(message = 'Something went wrong') {
+    return this.notify({
+      title: 'Error',
+      body: message,
+      tag: 'notification-error',
+      requireInteraction: false,
+    });
   }
 
   /**

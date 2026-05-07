@@ -30,6 +30,13 @@ const messageSchema = new mongoose.Schema(
       sparse: true, // Not required for media messages
     },
 
+    // Client-generated id for retry-safe / offline-safe deduplication
+    clientMessageId: {
+      type: String,
+      sparse: true,
+      trim: true,
+    },
+
     // Media information
     media: {
       type: {
@@ -174,6 +181,7 @@ const messageSchema = new mongoose.Schema(
 
 // Indexes for performance
 messageSchema.index({ chatId: 1, createdAt: -1 });
+messageSchema.index({ chatId: 1, senderId: 1, clientMessageId: 1 }, { unique: true, sparse: true });
 messageSchema.index({ senderId: 1 });
 messageSchema.index({ createdAt: -1 });
 messageSchema.index({ 'mentions._id': 1 });
