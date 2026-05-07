@@ -252,7 +252,26 @@ const UserSchema = new mongoose.Schema(
       type: String,
       lowercase: true,
       trim: true
-    }]
+    }],
+
+    // KYC fields
+    kycStatus: {
+      type: String,
+      enum: ['not_submitted', 'pending', 'approved', 'rejected'],
+      default: 'not_submitted',
+      index: true
+    },
+    kycDocuments: [{
+      type: mongoose.Schema.Types.Mixed, // {type, url, uploadedAt, status, remarks}
+      default: []
+    }],
+    kycHistory: [{
+      status: String,
+      changedAt: Date,
+      remarks: String,
+      adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    }],
+    kycLastChecked: Date
   },
   {
     timestamps: true,
@@ -262,5 +281,32 @@ const UserSchema = new mongoose.Schema(
 
 UserSchema.index({ classifiedsTotalRating: -1 });
 UserSchema.index({ classifiedsReviewCount: 1 });
+
+
+// Profile completion score (virtual)
+UserSchema.virtual('profileCompletionScore').get(function () {
+  // List of important fields for scoring
+  const fields = [
+    'name', 'avatar', 'phone', 'age', 'gender', 'religion', 'caste', 'community',
+    'education', 'profession', 'location', 'maritalStatus', 'familyDetails', 'bio',
+    'languages', 'hobbies', 'privacy', 'businessName', 'registrationType', 'role',
+    'cart', 'favorites', 'savedAddresses', 'preferences'
+  ];
+  let filled = 0;
+  fields.forEach(f => {
+    const val = this[f];
+    if (Array.isArray(val)) {
+      if (val.length > 0) filled++;
+    } else if (val && typeof val === 'object') {
+      if (Object.keys(val).length > 0) filled++;
+    } else if (val !== undefined && val !== null && val !== '') {
+      filled++;
+    }
+  });
+  return Math.round((filled / fields.length) * 100);
+});
+
+UserSchema.set('toJSON', { virtuals: true });
+UserSchema.set('toObject', { virtuals: true });
 
 module.exports = mongoose.model('User', UserSchema);

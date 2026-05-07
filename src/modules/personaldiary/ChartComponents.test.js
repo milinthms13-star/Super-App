@@ -6,11 +6,11 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import SentimentChart from '../SentimentChart';
-import MoodDistributionChart from '../MoodDistributionChart';
-import TagFrequencyChart from '../TagFrequencyChart';
-import WritingHeatmap from '../WritingHeatmap';
-import WordCountChart from '../WordCountChart';
+import SentimentChart from './SentimentChart';
+import MoodDistributionChart from './MoodDistributionChart';
+import TagFrequencyChart from './TagFrequencyChart';
+import WritingHeatmap from './WritingHeatmap';
+import WordCountChart from './WordCountChart';
 
 describe('Chart Components', () => {
   // =========================================================================

@@ -189,6 +189,7 @@ function generateJSONExport(entries, analytics, options = {}) {
       exportFormat: 'json',
       includeAnalytics: options.includeAnalytics !== false,
       metadata: {
+        exportedAt: new Date().toISOString(),
         totalEntries: entries?.length || 0,
         totalWords: calculateTotalWords(entries),
         dateRange: generateDateRange(entries),
@@ -338,6 +339,9 @@ module.exports = {
   generateAnalyticsCSV,
   generatePDFMetadata,
   generateJSONExport,
+  escapeCSV,
+  generateDateRange,
+  countWords: calculateWordCount,
   calculateWordCount,
   calculateTotalWords,
   formatDate

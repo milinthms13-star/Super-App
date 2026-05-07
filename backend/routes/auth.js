@@ -1,3 +1,77 @@
+// Get profile completion score for current user
+router.get('/profile/completion', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, score: user.profileCompletionScore });
+  } catch (error) {
+    logger.error('Profile completion score error:', error);
+    res.status(500).json({ success: false, message: 'Failed to get profile completion score', error: error.message });
+  }
+});
+// --- KYC Verification Endpoints ---
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/kyc/' });
+
+// Submit KYC documents (user)
+router.post('/kyc/submit', authenticate, upload.array('documents', 5), async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // Accepts files and optional docType in body
+    const docs = (req.files || []).map((file, idx) => ({
+      type: req.body.docType?.[idx] || req.body.docType || 'other',
+      url: `/uploads/kyc/${file.filename}`,
+      originalName: file.originalname,
+      uploadedAt: new Date(),
+      status: 'pending',
+      remarks: ''
+    }));
+    user.kycDocuments = [...(user.kycDocuments || []), ...docs];
+    user.kycStatus = 'pending';
+    user.kycHistory = [...(user.kycHistory || []), { status: 'pending', changedAt: new Date(), remarks: 'Submitted by user' }];
+    await user.save();
+    res.json({ success: true, message: 'KYC documents submitted', kycStatus: user.kycStatus, kycDocuments: user.kycDocuments });
+  } catch (error) {
+    logger.error('KYC submit error:', error);
+    res.status(500).json({ success: false, message: 'Failed to submit KYC', error: error.message });
+  }
+});
+
+// Get KYC status (user)
+router.get('/kyc/status', authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    res.json({ success: true, kycStatus: user.kycStatus, kycDocuments: user.kycDocuments });
+  } catch (error) {
+    logger.error('KYC status error:', error);
+    res.status(500).json({ success: false, message: 'Failed to get KYC status', error: error.message });
+  }
+});
+
+// Admin: Update KYC status
+router.post('/kyc/admin/update', authenticate, async (req, res) => {
+  try {
+    // Only admin can update
+    if (!req.user || (req.user.role !== 'admin' && !req.user.roles?.includes('admin'))) {
+      return res.status(403).json({ success: false, message: 'Admin only' });
+    }
+    const { userId, status, remarks } = req.body;
+    if (!userId || !status) return res.status(400).json({ success: false, message: 'userId and status required' });
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    user.kycStatus = status;
+    user.kycLastChecked = new Date();
+    user.kycHistory = [...(user.kycHistory || []), { status, changedAt: new Date(), remarks: remarks || '', adminId: req.user._id }];
+    await user.save();
+    res.json({ success: true, message: 'KYC status updated', kycStatus: user.kycStatus });
+  } catch (error) {
+    logger.error('KYC admin update error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update KYC status', error: error.message });
+  }
+});
 const express = require('express');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
@@ -8,7 +82,78 @@ const { getRedisClient } = require('../config/redis');
 const logger = require('../utils/logger');
 const { authenticate, getJwtSecret } = require('../middleware/auth');
 const devAuthStore = require('../utils/devAuthStore');
-const { initializeGmailAuth, sendEmailViaGmail } = require('../config/gmail');
+
+// Google OAuth2
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/auth/google/callback`;
+
+if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+  passport.use(new GoogleStrategy({
+    clientID: GOOGLE_CLIENT_ID,
+    clientSecret: GOOGLE_CLIENT_SECRET,
+    callbackURL: GOOGLE_CALLBACK_URL,
+    scope: ['profile', 'email'],
+    passReqToCallback: true
+  }, async (req, accessToken, refreshToken, profile, done) => {
+    try {
+      // Find or create user
+      let user = await User.findOne({ googleId: profile.id });
+      if (!user) {
+        // Try by email
+        const email = profile.emails && profile.emails[0] && profile.emails[0].value;
+        user = await User.findOne({ email });
+        if (user) {
+          user.googleId = profile.id;
+          user.googleEmails = Array.from(new Set([...(user.googleEmails || []), email]));
+          await user.save();
+        } else {
+          // Create new user
+          user = await User.create({
+            email,
+            username: await generateUniqueUsername(email),
+            name: profile.displayName || email,
+            avatar: profile.photos && profile.photos[0] && profile.photos[0].value,
+            googleId: profile.id,
+            googleEmails: [email],
+            registrationType: 'user',
+            role: 'user',
+            roles: ['user'],
+          });
+        }
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err, null);
+    }
+  }));
+}
+
+router.use(passport.initialize());
+// Google OAuth2 login endpoint
+router.get('/google', (req, res, next) => {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return res.status(500).json({ success: false, message: 'Google OAuth not configured' });
+  }
+  passport.authenticate('google', { scope: ['profile', 'email'], session: false })(req, res, next);
+});
+
+// Google OAuth2 callback endpoint
+router.get('/google/callback', (req, res, next) => {
+  passport.authenticate('google', { session: false }, (err, user) => {
+    if (err || !user) {
+      return res.status(401).json({ success: false, message: 'Google login failed', error: err && err.message });
+    }
+    // Issue JWT and set cookie
+    const token = createAuthToken(user);
+    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
+    // Optionally redirect to frontend with token
+    const redirectUrl = `${process.env.FRONTEND_URL || '/'}?social=google&token=${token}`;
+    res.redirect(redirectUrl);
+  })(req, res, next);
+});
 
 const useMemoryAuth = () => {
   return process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production';

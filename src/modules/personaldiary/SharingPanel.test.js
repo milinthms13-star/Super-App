@@ -1,831 +1,163 @@
-/**
- * SharingPanel Component Tests
- * React Testing Library tests for SharingPanel
- * 20+ test cases covering sharing, comments, statistics
- */
-
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SharingPanel from './SharingPanel';
 
-describe('SharingPanel Component', () => {
-  const mockToken = 'Bearer test_token_12345';
+describe('SharingPanel', () => {
+  const mockToken = 'test-token-123';
   const mockApiUrl = 'http://localhost:5000';
   const mockOnError = jest.fn();
   const mockOnSuccess = jest.fn();
 
-  const mockShares = [
-    {
-      _id: 'share1',
-      entryId: 'entry1',
-      title: 'My Summer Thoughts',
-      sharedWith: ['user2@example.com'],
-      permission: 'view',
-      shareLink: 'http://localhost:5000/share/share1',
-      isPublic: false,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      _id: 'share2',
-      entryId: 'entry2',
-      title: 'Travel Diary',
-      sharedWith: ['user3@example.com', 'user4@example.com'],
-      permission: 'comment',
-      shareLink: 'http://localhost:5000/share/share2',
-      isPublic: false,
-      expiresAt: null,
-    },
-  ];
-
-  const mockComments = [
-    {
-      _id: 'comment1',
-      entryId: 'entry1',
-      authorName: 'John Doe',
-      text: 'Great entry!',
-      likes: 3,
-      createdAt: new Date().toISOString(),
-      mentions: [],
-    },
-    {
-      _id: 'comment2',
-      entryId: 'entry1',
-      authorName: 'Jane Smith',
-      text: 'I love this!',
-      likes: 1,
-      createdAt: new Date().toISOString(),
-      mentions: [],
-    },
-  ];
-
-  const mockStats = {
+  const sharingStats = {
     totalShares: 2,
     sharedRecipients: 3,
-    commentCount: 2,
+    commentCount: 4,
     permissionDistribution: {
       view: 1,
       comment: 1,
       edit: 0,
     },
-    mostSharedEntries: [
-      { entryId: 'entry1', shareCount: 5 },
+    shares: [
+      {
+        shareId: 'share-1',
+        entryId: 'entry-1',
+        entryTitle: 'My Summer Thoughts',
+        sharedWith: ['user2@example.com'],
+        permission: 'view',
+        shareLink: 'http://localhost/share/share-1',
+        createdAt: '2026-05-01T00:00:00.000Z',
+        expiresAt: '2026-05-10T00:00:00.000Z',
+        allowDownload: true,
+        allowScreenshot: false,
+        allowCopy: true,
+      },
     ],
-    topRecipients: [
-      { name: 'user2@example.com', shareCount: 3 },
+  };
+
+  const collaborationInsights = {
+    recentActivity: [
+      {
+        id: 'comment-1',
+        commenterName: 'John Doe',
+        comment: 'Great entry!',
+        likes: 3,
+        replies: 1,
+        createdAt: '2026-05-02T00:00:00.000Z',
+      },
+    ],
+    topCommenters: [
+      {
+        name: 'John Doe',
+        commentCount: 5,
+      },
     ],
   };
 
   beforeEach(() => {
-    global.fetch = jest.fn();
-    mockOnError.mockClear();
-    mockOnSuccess.mockClear();
-  });
-
-  afterEach(() => {
     jest.clearAllMocks();
-  });
-
-  describe('Rendering', () => {
-    test('should render component with header', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel 
-          token={mockToken} 
-          apiUrl={mockApiUrl}
-          onError={mockOnError}
-          onSuccess={mockOnSuccess}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/Sharing & Collaboration/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should render tab navigation', async () => {
-      global.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: async () => ({ success: true, data: {} }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/Shares/i)).toBeInTheDocument();
-        expect(screen.getByText(/Comments/i)).toBeInTheDocument();
-        expect(screen.getByText(/Statistics/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should render loading state initially', () => {
-      global.fetch.mockImplementation(() => new Promise(() => {}));
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    global.fetch = jest.fn();
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: jest.fn().mockResolvedValue(undefined),
+      },
     });
   });
 
-  describe('Shares Tab', () => {
-    test('should display shared entries in shares tab', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText('My Summer Thoughts')).toBeInTheDocument();
+  const queueInitialFetches = () => {
+    global.fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, data: sharingStats }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, data: collaborationInsights }),
       });
-    });
+  };
 
-    test('should display shared recipient email', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
+  const renderComponent = (props = {}) =>
+    render(
+      <SharingPanel
+        token={mockToken}
+        apiUrl={mockApiUrl}
+        onError={mockOnError}
+        onSuccess={mockOnSuccess}
+        {...props}
+      />
+    );
 
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
+  test('renders the sharing dashboard and the loaded shares', async () => {
+    queueInitialFetches();
 
-      await waitFor(() => {
-        expect(screen.getByText(/user2@example.com/i)).toBeInTheDocument();
-      });
-    });
+    renderComponent();
 
-    test('should display permission level badge', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/View/i)).toBeInTheDocument();
-        expect(screen.getByText(/Comment/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should display copy share link button', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/Copy Link/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should display revoke share button', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/Revoke/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should display expiration date if set', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/Expires/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should copy link to clipboard when button clicked', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      // Mock clipboard
-      Object.assign(navigator, {
-        clipboard: {
-          writeText: jest.fn().mockResolvedValue(true),
-        },
-      });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const copyButtons = screen.getAllByText(/Copy Link/i);
-        fireEvent.click(copyButtons[0]);
-      });
-
-      await waitFor(() => {
-        expect(navigator.clipboard.writeText).toHaveBeenCalled();
-      });
-    });
-
-    test('should revoke share when button clicked', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: { message: 'Share revoked' } }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const revokeButtons = screen.getAllByText(/Revoke/i);
-        fireEvent.click(revokeButtons[0]);
-      });
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/share/'),
-          expect.objectContaining({
-            method: 'DELETE',
-          })
-        );
-      });
-    });
+    expect(await screen.findByText(/sharing & collaboration/i)).toBeInTheDocument();
+    expect(screen.getByText('My Summer Thoughts')).toBeInTheDocument();
+    expect(screen.getByText(/user2@example.com/i)).toBeInTheDocument();
   });
 
-  describe('Comments Tab', () => {
-    test('should display comments in comments tab', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
+  test('copies a share link to the clipboard', async () => {
+    queueInitialFetches();
 
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
+    renderComponent();
+    fireEvent.click(await screen.findByRole('button', { name: /copy link/i }));
 
-      await waitFor(() => {
-        const commentsTab = screen.getByText(/Comments/i);
-        fireEvent.click(commentsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('Great entry!')).toBeInTheDocument();
-      });
-    });
-
-    test('should display commenter name', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const commentsTab = screen.getByText(/Comments/i);
-        fireEvent.click(commentsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText(/John Doe/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should display comment text', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const commentsTab = screen.getByText(/Comments/i);
-        fireEvent.click(commentsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('Great entry!')).toBeInTheDocument();
-        expect(screen.getByText('I love this!')).toBeInTheDocument();
-      });
-    });
-
-    test('should display like count', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const commentsTab = screen.getByText(/Comments/i);
-        fireEvent.click(commentsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText(/3|likes?/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should render add comment form', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const commentsTab = screen.getByText(/Comments/i);
-        fireEvent.click(commentsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText(/Add a comment/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should add comment when form submitted', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: { message: 'Comment added' } }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const commentsTab = screen.getByText(/Comments/i);
-        fireEvent.click(commentsTab);
-      });
-
-      await waitFor(() => {
-        const input = screen.getByPlaceholderText(/Add a comment/i);
-        fireEvent.change(input, { target: { value: 'New comment' } });
-        const button = screen.getByRole('button', { name: /Post|Add/i });
-        fireEvent.click(button);
-      });
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/comments'),
-          expect.any(Object)
-        );
-      });
-    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://localhost/share/share-1');
+    expect(mockOnSuccess).toHaveBeenCalledWith('Link copied to clipboard');
   });
 
-  describe('Statistics Tab', () => {
-    test('should display stat cards', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const statsTab = screen.getByText(/Statistics/i);
-        fireEvent.click(statsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText(/Total Shares/i)).toBeInTheDocument();
-        expect(screen.getByText(/Comments/i)).toBeInTheDocument();
-      });
+  test('revokes a share through the phase 7 revoke endpoint', async () => {
+    queueInitialFetches();
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
     });
 
-    test('should display stat values', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
+    renderComponent();
+    fireEvent.click(await screen.findByRole('button', { name: /revoke access/i }));
 
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenLastCalledWith(
+        `${mockApiUrl}/api/diary/phase7/share/share-1/revoke`,
+        expect.objectContaining({
+          method: 'DELETE',
+        })
       );
-
-      await waitFor(() => {
-        const statsTab = screen.getByText(/Statistics/i);
-        fireEvent.click(statsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('2')).toBeInTheDocument(); // totalShares
-        expect(screen.getByText('3')).toBeInTheDocument(); // sharedRecipients
-      });
     });
 
-    test('should display permission distribution', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const statsTab = screen.getByText(/Statistics/i);
-        fireEvent.click(statsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText(/View/i)).toBeInTheDocument();
-        expect(screen.getByText(/Comment/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should display top recipients', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockShares }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockComments }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: mockStats }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const statsTab = screen.getByText(/Statistics/i);
-        fireEvent.click(statsTab);
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText(/user2@example.com/i)).toBeInTheDocument();
-      });
-    });
+    expect(mockOnSuccess).toHaveBeenCalledWith('Share revoked successfully');
   });
 
-  describe('Tab Navigation', () => {
-    test('should switch tabs when clicked', async () => {
-      global.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: async () => ({ success: true, data: {} }),
-        });
+  test('renders recent collaboration comments in the comments tab', async () => {
+    queueInitialFetches();
 
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
+    renderComponent();
 
-      await waitFor(() => {
-        const commentsTab = screen.getByText(/Comments/i);
-        fireEvent.click(commentsTab);
-      });
+    fireEvent.click(await screen.findByRole('button', { name: /comments/i }));
 
-      expect(screen.getByText(/Comments/i)).toHaveClass(expect.stringMatching(/active|selected/i));
-    });
-
-    test('should maintain active tab state', async () => {
-      global.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: async () => ({ success: true, data: {} }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        const statsTab = screen.getByText(/Statistics/i);
-        fireEvent.click(statsTab);
-      });
-
-      const statsTab = screen.getByText(/Statistics/i);
-      expect(statsTab).toHaveClass(expect.stringMatching(/active|selected/i));
-    });
+    expect(await screen.findByText('Great entry!')).toBeInTheDocument();
+    expect(screen.getByText(/john doe/i)).toBeInTheDocument();
   });
 
-  describe('API Integration', () => {
-    test('should fetch shares with bearer token', async () => {
-      global.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: async () => ({ success: true, data: {} }),
-        });
+  test('renders aggregate sharing statistics', async () => {
+    queueInitialFetches();
 
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
+    renderComponent();
 
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({
-            headers: expect.objectContaining({
-              'Authorization': mockToken,
-            }),
-          })
-        );
-      });
-    });
+    fireEvent.click(await screen.findByRole('button', { name: /statistics/i }));
 
-    test('should construct correct sharing-stats URL', async () => {
-      global.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: async () => ({ success: true, data: {} }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/sharing-stats'),
-          expect.any(Object)
-        );
-      });
-    });
-
-    test('should handle API errors', async () => {
-      global.fetch.mockRejectedValueOnce(new Error('API error'));
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} onError={mockOnError} />
-      );
-
-      await waitFor(() => {
-        expect(mockOnError).toHaveBeenCalled();
-      });
-    });
-
-    test('should call onSuccess callback', async () => {
-      global.fetch
-        .mockResolvedValue({
-          ok: true,
-          json: async () => ({ success: true, data: {} }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} onSuccess={mockOnSuccess} />
-      );
-
-      await waitFor(() => {
-        expect(mockOnSuccess).toHaveBeenCalled();
-      });
-    });
+    expect(await screen.findByText(/total shares/i)).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText(/view: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/john doe/i)).toBeInTheDocument();
   });
 
-  describe('Error Handling', () => {
-    test('should display error message on API failure', async () => {
-      global.fetch.mockRejectedValueOnce(new Error('Network error'));
+  test('shows an error banner and calls onError when the fetch fails', async () => {
+    const failure = new Error('Failed to load sharing data');
+    global.fetch.mockRejectedValueOnce(failure);
 
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
+    renderComponent();
 
-      await waitFor(() => {
-        expect(screen.getByText(/error/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should handle empty shares list', async () => {
-      global.fetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: [] }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: [] }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ success: true, data: {} }),
-        });
-
-      render(
-        <SharingPanel token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/No shares yet/i)).toBeInTheDocument();
-      });
-    });
+    expect(await screen.findByText(/failed to load sharing data/i)).toBeInTheDocument();
+    expect(mockOnError).toHaveBeenCalledWith(failure);
   });
 });

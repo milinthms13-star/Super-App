@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
+import DashboardWebSocketClient from "../websocket/dashboardWebSocketClient";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
@@ -299,6 +300,24 @@ const openExternalLink = (url = "") => {
 };
 
 const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) => {
+    // Real-time analytics state
+    const [dashboardAnalytics, setDashboardAnalytics] = useState(null);
+    const wsClientRef = useRef(null);
+    // Setup WebSocket for real-time dashboard updates
+    useEffect(() => {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+      const wsClient = new DashboardWebSocketClient();
+      wsClientRef.current = wsClient;
+      wsClient.connect(token).catch(() => {});
+      const unsub = wsClient.on('dashboard:update', (data) => {
+        setDashboardAnalytics(data.dashboardData || data);
+      });
+      return () => {
+        unsub && unsub();
+        wsClient.disconnect();
+      };
+    }, []);
   const navigate = useNavigate();
   const {
     currentUser,
@@ -391,7 +410,18 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
     })),
   ];
 
+  // Example: show analytics data at the top (customize as needed)
   return (
+    <>
+      {dashboardAnalytics && (
+        <div className="dashboard-analytics-bar">
+          <strong>Real-Time Analytics:</strong>
+          <span> Success Rate: {dashboardAnalytics.successRate?.successRate ?? '-'}% </span>
+          <span> Total Deliveries: {dashboardAnalytics.successRate?.totalDeliveries ?? '-'} </span>
+          <span> Failed: {dashboardAnalytics.successRate?.failedDeliveries ?? '-'} </span>
+          <span> Pending: {dashboardAnalytics.successRate?.pendingDeliveries ?? '-'} </span>
+        </div>
+      )}
     <div className={`dashboard-container ${!isSeller ? "dashboard-container-compact" : ""}`}>
       {isLoading ? (
         <div className="premium-loading">

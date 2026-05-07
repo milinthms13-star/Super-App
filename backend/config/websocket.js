@@ -172,6 +172,18 @@ const initializeWebSocket = (server, options = {}) => {
      * @event message:send
      * @param {object} data - {chatId, content, messageType, media, replyTo}
      */
+    // --- Real-time dashboard update helper ---
+    const emitDashboardUpdate = async (source = 'message') => {
+      try {
+        const AnalyticsDashboardService = require('../services/analyticsDashboardService');
+        const dashboardService = new AnalyticsDashboardService();
+        const dashboardData = await dashboardService.getDashboardOverview(null, 1);
+        broadcast('dashboard:update', { source, dashboardData });
+      } catch (err) {
+        console.error('[WebSocket] Error emitting dashboard update:', err);
+      }
+    };
+
     socket.on('message:send', async (data, callback) => {
       try {
         const message = {
@@ -208,6 +220,9 @@ const initializeWebSocket = (server, options = {}) => {
             timestamp: new Date(),
           });
         }, 100);
+
+        // Emit dashboard update on message send
+        emitDashboardUpdate('message:send');
       } catch (error) {
         console.error('[WebSocket] Message send error:', error);
         if (callback) callback({ error: error.message });
@@ -226,7 +241,10 @@ const initializeWebSocket = (server, options = {}) => {
         userId: socket.userId,
         readAt: new Date(),
       });
+      // Emit dashboard update on message read
+      emitDashboardUpdate('message:read');
     });
+  // Optionally, add similar emitDashboardUpdate calls to message:delivered, message:failed, etc. if those events are handled elsewhere.
 
     /**
      * User is typing

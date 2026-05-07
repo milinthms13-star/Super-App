@@ -8,6 +8,11 @@ const getWellnessLevel = (score = 0) => {
   return 'Neutral';
 };
 
+const parseEntryDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 /**
  * Calculate comprehensive writing statistics
  */
@@ -49,13 +54,15 @@ const calculateWritingStats = (entries) => {
     shortestEntry = Math.min(shortestEntry, words);
 
     // Group by day
-    const date = new Date(entry.createdAt);
-    const dayKey = date.toISOString().split('T')[0];
-    entriesPerDay[dayKey] = (entriesPerDay[dayKey] || 0) + 1;
+    const date = parseEntryDate(entry.createdAt);
+    if (date) {
+      const dayKey = date.toISOString().split('T')[0];
+      entriesPerDay[dayKey] = (entriesPerDay[dayKey] || 0) + 1;
 
-    // Group by month
-    const monthKey = date.toISOString().slice(0, 7);
-    entriesPerMonth[monthKey] = (entriesPerMonth[monthKey] || 0) + 1;
+      // Group by month
+      const monthKey = date.toISOString().slice(0, 7);
+      entriesPerMonth[monthKey] = (entriesPerMonth[monthKey] || 0) + 1;
+    }
   });
 
   return {
@@ -87,8 +94,10 @@ const calculateStreakStats = (entries) => {
   // Get unique dates written
   const datesWritten = new Set();
   entries.forEach((entry) => {
-    const date = new Date(entry.createdAt).toISOString().split('T')[0];
-    datesWritten.add(date);
+    const date = parseEntryDate(entry.createdAt);
+    if (date) {
+      datesWritten.add(date.toISOString().split('T')[0]);
+    }
   });
 
   const sortedDates = Array.from(datesWritten).sort().reverse();
@@ -160,7 +169,10 @@ const calculateMoodStats = (entries, daysBack = 30) => {
   cutoffDate.setDate(cutoffDate.getDate() - daysBack);
 
   const recentEntries = entries.filter(
-    (e) => new Date(e.createdAt) >= cutoffDate
+    (e) => {
+      const date = parseEntryDate(e.createdAt);
+      return date && date >= cutoffDate;
+    }
   );
 
   if (recentEntries.length === 0) {
@@ -180,8 +192,9 @@ const calculateMoodStats = (entries, daysBack = 30) => {
     const mood = entry.mood || 'unknown';
     moodDistribution[mood] = (moodDistribution[mood] || 0) + 1;
 
+    const date = parseEntryDate(entry.createdAt);
     moodTrend.push({
-      date: new Date(entry.createdAt).toISOString().split('T')[0],
+      date: date ? date.toISOString().split('T')[0] : 'unknown',
       mood,
     });
   });
@@ -295,11 +308,14 @@ const calculateTagAnalytics = (entries, limit = 10) => {
       entry.tags.forEach((tag) => {
         tagFrequency[tag] = (tagFrequency[tag] || 0) + 1;
 
-        const date = new Date(entry.createdAt).toISOString().split('T')[0];
-        if (!tagTrend[tag]) {
-          tagTrend[tag] = {};
+        const date = parseEntryDate(entry.createdAt);
+        if (date) {
+          const dateKey = date.toISOString().split('T')[0];
+          if (!tagTrend[tag]) {
+            tagTrend[tag] = {};
+          }
+          tagTrend[tag][dateKey] = (tagTrend[tag][dateKey] || 0) + 1;
         }
-        tagTrend[tag][date] = (tagTrend[tag][date] || 0) + 1;
       });
     }
   });
@@ -332,7 +348,10 @@ const calculateSentimentTrend = (entries, groupBy = 'week') => {
 
   entries.forEach((entry) => {
     let groupKey;
-    const date = new Date(entry.createdAt);
+    const date = parseEntryDate(entry.createdAt);
+    if (!date) {
+      return;
+    }
 
     if (groupBy === 'day') {
       groupKey = date.toISOString().split('T')[0];
@@ -383,10 +402,16 @@ const calculateWritingHeatmap = (entries, monthsBack = 6) => {
   const heatmapData = {};
 
   entries
-    .filter((e) => new Date(e.createdAt) >= cutoffDate)
+    .filter((e) => {
+      const date = parseEntryDate(e.createdAt);
+      return date && date >= cutoffDate;
+    })
     .forEach((entry) => {
-      const date = new Date(entry.createdAt).toISOString().split('T')[0];
-      heatmapData[date] = (heatmapData[date] || 0) + 1;
+      const date = parseEntryDate(entry.createdAt);
+      if (date) {
+        const dateKey = date.toISOString().split('T')[0];
+        heatmapData[dateKey] = (heatmapData[dateKey] || 0) + 1;
+      }
     });
 
   return heatmapData;

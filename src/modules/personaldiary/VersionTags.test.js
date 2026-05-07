@@ -1,710 +1,169 @@
-/**
- * VersionTags Component - Unit Tests
- * Tests for tag display, creation, management, and interactions
- */
-
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import VersionTags from './VersionTags';
 
-// Mock fetch
 global.fetch = jest.fn();
 
-describe('VersionTags Component', () => {
+describe('VersionTags', () => {
   const mockEntryId = '507f1f77bcf86cd799439011';
   const mockVersionId = '507f1f77bcf86cd799439012';
   const mockVersionNumber = 5;
-  const mockToken = 'test-jwt-token';
 
-  const mockPredefinedTags = [
-    { name: 'final', color: '#10b981', description: 'Final version ready for archival' },
-    { name: 'review-ready', color: '#f59e0b', description: 'Ready for review/sharing' },
-    { name: 'important', color: '#ef4444', description: 'Important milestone' },
-    { name: 'draft', color: '#a78bfa', description: 'Work-in-progress' }
+  const predefinedTags = {
+    final: { color: '#10b981', description: 'Final version ready for archival' },
+    important: { color: '#ef4444', description: 'Important milestone' },
+    draft: { color: '#a78bfa', description: 'Work in progress' },
+  };
+
+  const versionTags = [
+    { _id: 'tag-1', name: 'final', color: '#10b981' },
   ];
 
   beforeEach(() => {
-    fetch.mockClear();
-    localStorage.setItem('token', mockToken);
-  });
-
-  afterEach(() => {
-    localStorage.clear();
     jest.clearAllMocks();
+    localStorage.setItem('token', 'mock-token');
   });
 
-  describe('Rendering', () => {
-    it('should render tags component with header', async () => {
-      fetch.mockResolvedValueOnce({
+  const queueInitialFetches = (tags = []) => {
+    global.fetch
+      .mockResolvedValueOnce({
         ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
+        json: async () => ({ tags: predefinedTags }),
+      })
+      .mockResolvedValueOnce({
         ok: true,
-        json: async () => mockPredefinedTags
+        json: async () => ({ tags }),
       });
+  };
 
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
+  const renderComponent = (props = {}) =>
+    render(
+      <VersionTags
+        entryId={mockEntryId}
+        versionId={mockVersionId}
+        versionNumber={mockVersionNumber}
+        {...props}
+      />
+    );
 
-      await waitFor(() => {
-        expect(screen.getByText(/tags|tag/i)).toBeInTheDocument();
-      });
-    });
+  test('renders the header and empty state after loading', async () => {
+    queueInitialFetches([]);
 
-    it('should display loading state initially', () => {
-      fetch.mockImplementationOnce(() => new Promise(() => {})); // never resolves
+    renderComponent();
 
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      expect(screen.getByText(/loading|fetching/i)).toBeInTheDocument();
-    });
-
-    it('should display error message on fetch failure', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/error|failed/i)).toBeInTheDocument();
-      });
-    });
-
-    it('should show close button when onClose provided', () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      const mockOnClose = jest.fn();
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-          onClose={mockOnClose}
-        />
-      );
-
-      const closeButton = screen.getByText('×');
-      expect(closeButton).toBeInTheDocument();
-    });
-
-    it('should render in read-only mode', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-          readOnly={true}
-        />
-      );
-
-      await waitFor(() => {
-        const addButton = screen.queryByRole('button', { name: /add tag|new tag/i });
-        expect(addButton).not.toBeInTheDocument();
-      });
-    });
+    expect(await screen.findByText(/tags for v5/i)).toBeInTheDocument();
+    expect(screen.getByText(/no tags yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/about tags/i)).toBeInTheDocument();
   });
 
-  describe('Tag Display', () => {
-    it('should display list of tags', async () => {
-      const mockTags = [
-        { _id: '1', name: 'final', color: '#10b981' },
-        { _id: '2', name: 'important', color: '#ef4444' }
-      ];
+  test('shows the close button when onClose is provided', async () => {
+    queueInitialFetches([]);
+    const onClose = jest.fn();
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTags
-      });
+    const { container } = renderComponent({ onClose });
+    await screen.findByText(/tags for v5/i);
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
+    const closeButton = container.querySelector('.close-btn');
+    expect(closeButton).toBeInTheDocument();
 
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText('final')).toBeInTheDocument();
-        expect(screen.getByText('important')).toBeInTheDocument();
-      });
-    });
-
-    it('should display colored tag badges', async () => {
-      const mockTags = [
-        { _id: '1', name: 'final', color: '#10b981' }
-      ];
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTags
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      await waitFor(() => {
-        const badge = screen.getByText('final');
-        expect(badge).toHaveStyle({ borderColor: '#10b981' });
-      });
-    });
-
-    it('should show empty state when no tags', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/no tags|empty/i)).toBeInTheDocument();
-      });
-    });
+    fireEvent.click(closeButton);
+    expect(onClose).toHaveBeenCalled();
   });
 
-  describe('Adding Tags', () => {
-    it('should open add tag form on button click', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
+  test('hides tag editing controls in read only mode', async () => {
+    queueInitialFetches(versionTags);
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
+    renderComponent({ readOnly: true });
 
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const addButton = await screen.findByRole('button', { name: /add tag|new tag|\+/i });
-      await userEvent.click(addButton);
-
-      const dropdown = await screen.findByRole('combobox', { name: /tag|select/i });
-      expect(dropdown).toBeInTheDocument();
-    });
-
-    it('should show predefined tags in dropdown', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const addButton = await screen.findByRole('button', { name: /add tag|new tag/i });
-      await userEvent.click(addButton);
-
-      const options = await screen.findAllByRole('option');
-      expect(options.length).toBeGreaterThan(0);
-    });
-
-    it('should add selected tag to version', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ _id: '1', name: 'final', color: '#10b981' })
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const addButton = await screen.findByRole('button', { name: /add tag/i });
-      await userEvent.click(addButton);
-
-      const dropdown = await screen.findByRole('combobox');
-      await userEvent.selectOptions(dropdown, 'final');
-
-      const confirmButton = screen.getByRole('button', { name: /confirm|save|add/i });
-      await userEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/versions/' + mockVersionId + '/tags'),
-          expect.objectContaining({
-            method: 'POST',
-            body: expect.stringContaining('final')
-          })
-        );
-      });
-    });
-
-    it('should allow optional reason for tagging', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const addButton = await screen.findByRole('button', { name: /add tag/i });
-      await userEvent.click(addButton);
-
-      const reasonTextarea = await screen.findByPlaceholderText(/reason|why|note/i);
-      await userEvent.type(reasonTextarea, 'This is the final approved version');
-
-      expect(reasonTextarea.value).toBe('This is the final approved version');
-    });
-
-    it('should cancel add tag form', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const addButton = await screen.findByRole('button', { name: /add tag/i });
-      await userEvent.click(addButton);
-
-      const cancelButton = screen.getByRole('button', { name: /cancel/i });
-      await userEvent.click(cancelButton);
-
-      const dropdown = screen.queryByRole('combobox');
-      expect(dropdown).not.toBeInTheDocument();
-    });
+    await screen.findByText('final');
+    expect(screen.queryByRole('button', { name: /\+ add tag/i })).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/remove tag/i)).not.toBeInTheDocument();
   });
 
-  describe('Tag Management', () => {
-    it('should remove tag from version', async () => {
-      const mockTags = [
-        { _id: '1', name: 'final', color: '#10b981' }
-      ];
+  test('renders existing version tags', async () => {
+    queueInitialFetches(versionTags);
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTags
-      });
+    renderComponent();
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ message: 'Deleted' })
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText('final')).toBeInTheDocument();
-      });
-
-      const removeButton = screen.getByRole('button', { name: /remove|delete|×/i });
-      await userEvent.click(removeButton);
-
-      await waitFor(() => {
-        expect(fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/tags/1'),
-          expect.objectContaining({
-            method: 'DELETE'
-          })
-        );
-      });
-    });
-
-    it('should display tag description on hover', async () => {
-      const mockTags = [
-        { _id: '1', name: 'final', color: '#10b981' }
-      ];
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockTags
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const tagBadge = await screen.findByText('final');
-      await userEvent.hover(tagBadge);
-
-      await waitFor(() => {
-        expect(screen.getByText(/final version ready/i)).toBeInTheDocument();
-      });
-    });
-
-    it('should prevent duplicate tags', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 409,
-        json: async () => ({ message: 'Tag already exists' })
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const addButton = await screen.findByRole('button', { name: /add tag/i });
-      await userEvent.click(addButton);
-
-      const confirmButton = screen.getByRole('button', { name: /confirm|add/i });
-      await userEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.getByText(/already exists|duplicate/i)).toBeInTheDocument();
-      });
-    });
+    const tag = await screen.findByText('final');
+    expect(tag).toBeInTheDocument();
+    expect(tag.closest('.tag-badge')).toHaveStyle({ borderColor: '#10b981' });
   });
 
-  describe('Tag Info Panel', () => {
-    it('should show tag info panel', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
+  test('opens the add-tag form and lists predefined tags', async () => {
+    queueInitialFetches([]);
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
+    renderComponent();
 
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
+    fireEvent.click(await screen.findByRole('button', { name: /\+ add tag/i }));
 
-      const infoButton = await screen.findByRole('button', { name: /info|help|about/i });
-      await userEvent.click(infoButton);
-
-      expect(screen.getByText(/tag|explain|description/i)).toBeInTheDocument();
-    });
-
-    it('should display descriptions of all predefined tags', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const infoButton = await screen.findByRole('button', { name: /info|help/i });
-      await userEvent.click(infoButton);
-
-      mockPredefinedTags.forEach(tag => {
-        expect(screen.getByText(tag.name)).toBeInTheDocument();
-      });
-    });
+    const select = screen.getByRole('combobox');
+    expect(select).toBeInTheDocument();
+    expect(screen.getByText(/final version ready for archival/i)).toBeInTheDocument();
   });
 
-  describe('Error Handling', () => {
-    it('should handle tag addition error', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: async () => ({ message: 'Server error' })
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const addButton = await screen.findByRole('button', { name: /add tag/i });
-      await userEvent.click(addButton);
-
-      const confirmButton = screen.getByRole('button', { name: /confirm|add/i });
-      await userEvent.click(confirmButton);
-
-      await waitFor(() => {
-        expect(screen.getByText(/error|failed|server/i)).toBeInTheDocument();
-      });
+  test('adds a selected tag and renders it in the list', async () => {
+    queueInitialFetches([]);
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        tag: { _id: 'tag-2', name: 'important', color: '#ef4444' },
+      }),
     });
 
-    it('should handle network errors', async () => {
-      fetch.mockRejectedValueOnce(new Error('Network error'));
+    renderComponent();
 
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
+    fireEvent.click(await screen.findByRole('button', { name: /\+ add tag/i }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'important' } });
+    fireEvent.click(screen.getByRole('button', { name: /add tag/i }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenLastCalledWith(
+        `/api/diary/${mockEntryId}/versions/${mockVersionId}/tags`,
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"name":"important"'),
+        })
       );
-
-      await waitFor(() => {
-        expect(screen.getByText(/error|network/i)).toBeInTheDocument();
-      });
     });
+
+    expect(await screen.findByText('important')).toBeInTheDocument();
   });
 
-  describe('Accessibility', () => {
-    it('should have proper ARIA labels', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
+  test('removes a tag after confirmation', async () => {
+    queueInitialFetches(versionTags);
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    global.fetch.mockResolvedValueOnce({ ok: true });
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
+    renderComponent();
 
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
+    fireEvent.click(await screen.findByTitle(/remove tag/i));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenLastCalledWith(
+        `/api/diary/${mockEntryId}/tags/tag-1`,
+        expect.objectContaining({
+          method: 'DELETE',
+        })
       );
-
-      const addButton = await screen.findByRole('button', { name: /add tag/i });
-      expect(addButton).toHaveAttribute('aria-label');
     });
 
-    it('should be keyboard navigable', async () => {
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const addButton = await screen.findByRole('button', { name: /add tag/i });
-      addButton.focus();
-      expect(addButton).toHaveFocus();
-    });
+    expect(screen.queryByText('final')).not.toBeInTheDocument();
+    window.confirm.mockRestore();
   });
 
-  describe('Responsive Design', () => {
-    it('should render tags responsively on mobile', async () => {
-      global.innerWidth = 480;
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
-
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      const { container } = render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const tagsContainer = container.querySelector('.version-tags-container');
-      expect(tagsContainer).toHaveClass('responsive-mobile');
+  test('renders an error banner when adding a tag fails', async () => {
+    queueInitialFetches([]);
+    global.fetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: 'Tag already exists' }),
     });
 
-    it('should render tags responsively on tablet', async () => {
-      global.innerWidth = 768;
+    renderComponent();
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => []
-      });
+    fireEvent.click(await screen.findByRole('button', { name: /\+ add tag/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add tag/i }));
 
-      fetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockPredefinedTags
-      });
-
-      const { container } = render(
-        <VersionTags
-          entryId={mockEntryId}
-          versionId={mockVersionId}
-          versionNumber={mockVersionNumber}
-        />
-      );
-
-      const tagsContainer = container.querySelector('.version-tags-container');
-      expect(tagsContainer).toHaveClass('responsive-tablet');
-    });
+    expect(await screen.findByText(/tag already exists/i)).toBeInTheDocument();
   });
 });

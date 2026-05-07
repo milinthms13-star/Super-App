@@ -95,7 +95,39 @@ const realEstatePropertySchema = new mongoose.Schema({
   priceLabel: { type: String, required: true, trim: true },
   priceValue: { type: Number, min: 0 },
   location: { type: String, required: true, trim: true },
+  latitude: { type: Number, min: -90, max: 90 },
+  longitude: { type: Number, min: -180, max: 180 },
+  city: { type: String, trim: true },
+  state: { type: String, trim: true },
+  pincode: { type: String, trim: true },
   locality: { type: String, trim: true },
+    constructionStatus: {
+      type: String,
+      enum: ['Under Construction', 'Ready to Move', 'Resale', 'Upcoming', 'New Launch'],
+      default: 'Ready to Move'
+    },
+    propertyAge: { type: String, trim: true }, // e.g., '0-1 year', '1-5 years', '5-10 years', '10+ years'
+    ownershipType: {
+      type: String,
+      enum: ['Freehold', 'Leasehold', 'Co-operative Society', 'Power of Attorney'],
+      default: 'Freehold'
+    },
+    floorNumber: { type: Number, min: 0 },
+    totalFloors: { type: Number, min: 0 },
+    facing: {
+      type: String,
+      enum: ['East', 'West', 'North', 'South', 'North-East', 'North-West', 'South-East', 'South-West', 'Other'],
+      default: 'Other'
+    },
+    cornerProperty: { type: Boolean, default: false },
+    gatedCommunity: { type: Boolean, default: false },
+    parkFacing: { type: Boolean, default: false },
+    roadWidth: { type: String, trim: true },
+    waterSupply: { type: String, trim: true },
+    powerBackup: { type: Boolean, default: false },
+    lift: { type: Boolean, default: false },
+    security: { type: Boolean, default: false },
+    vastuCompliant: { type: Boolean, default: false },
   type: { 
     type: String, 
     enum: [

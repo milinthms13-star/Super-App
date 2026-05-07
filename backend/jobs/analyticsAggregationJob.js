@@ -2,6 +2,10 @@ const cron = require('node-cron');
 const analyticsService = require('../services/analyticsService');
 const logger = require('../utils/logger');
 
+// WebSocket broadcast for real-time dashboard updates
+const { broadcast } = require('../config/websocket');
+const AnalyticsDashboardService = require('../services/analyticsDashboardService');
+
 /**
  * Analytics Aggregation Background Jobs
  * Scheduled tasks for calculating and storing analytics data
@@ -29,6 +33,17 @@ const startDailyAggregation = () => {
 
         const result = await analyticsService.calculateDailyAnalytics(date);
         logger.info(`Daily analytics aggregation completed: ${result._id}`);
+        // Emit real-time dashboard update after aggregation
+        try {
+          const dashboardService = new AnalyticsDashboardService();
+          dashboardService.getDashboardOverview(null, 7).then((dashboardData) => {
+            broadcast('dashboard:update', { source: 'daily', dashboardData });
+          }).catch((err) => {
+            logger.error('Error broadcasting dashboard update (daily):', err);
+          });
+        } catch (err) {
+          logger.error('Error preparing dashboard update (daily):', err);
+        }
       } catch (error) {
         logger.error('Error in daily analytics aggregation:', error);
       }
@@ -53,6 +68,17 @@ const startHourlyTrendAggregation = () => {
 
         const result = await analyticsService.calculateTrendingTopics(1); // Last 1 hour
         logger.info(`Hourly trends calculation completed: ${result._id}`);
+        // Emit real-time dashboard update after hourly trend aggregation
+        try {
+          const dashboardService = new AnalyticsDashboardService();
+          dashboardService.getDashboardOverview(null, 1).then((dashboardData) => {
+            broadcast('dashboard:update', { source: 'hourly', dashboardData });
+          }).catch((err) => {
+            logger.error('Error broadcasting dashboard update (hourly):', err);
+          });
+        } catch (err) {
+          logger.error('Error preparing dashboard update (hourly):', err);
+        }
       } catch (error) {
         logger.error('Error in hourly trends calculation:', error);
       }
@@ -95,6 +121,17 @@ const startUserStatsAggregation = () => {
         logger.info(
           `User stats aggregation completed: ${successful} successful, ${failed} failed`
         );
+        // Emit real-time dashboard update after user stats aggregation
+        try {
+          const dashboardService = new AnalyticsDashboardService();
+          dashboardService.getDashboardOverview(null, 1).then((dashboardData) => {
+            broadcast('dashboard:update', { source: 'userStats', dashboardData });
+          }).catch((err) => {
+            logger.error('Error broadcasting dashboard update (userStats):', err);
+          });
+        } catch (err) {
+          logger.error('Error preparing dashboard update (userStats):', err);
+        }
       } catch (error) {
         logger.error('Error in user stats aggregation:', error);
       }
@@ -144,6 +181,17 @@ const startConversationMetricsAggregation = () => {
         logger.info(
           `Conversation metrics aggregation completed: ${successful} successful, ${failed} failed`
         );
+        // Emit real-time dashboard update after conversation metrics aggregation
+        try {
+          const dashboardService = new AnalyticsDashboardService();
+          dashboardService.getDashboardOverview(null, 1).then((dashboardData) => {
+            broadcast('dashboard:update', { source: 'conversationMetrics', dashboardData });
+          }).catch((err) => {
+            logger.error('Error broadcasting dashboard update (conversationMetrics):', err);
+          });
+        } catch (err) {
+          logger.error('Error preparing dashboard update (conversationMetrics):', err);
+        }
       } catch (error) {
         logger.error('Error in conversation metrics aggregation:', error);
       }

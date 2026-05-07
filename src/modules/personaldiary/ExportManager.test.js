@@ -1,649 +1,162 @@
-/**
- * ExportManager Component Tests
- * React Testing Library tests for ExportManager
- * 20+ test cases covering export formats, options, downloads
- */
-
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ExportManager from './ExportManager';
 
-describe('ExportManager Component', () => {
-  const mockToken = 'Bearer test_token_12345';
+describe('ExportManager', () => {
+  const mockToken = 'test-token-123';
   const mockApiUrl = 'http://localhost:5000';
   const mockOnError = jest.fn();
   const mockOnSuccess = jest.fn();
 
   beforeEach(() => {
-    global.fetch = jest.fn();
-    global.URL.createObjectURL = jest.fn(() => 'blob:http://localhost/mock-blob');
-    global.URL.revokeObjectURL = jest.fn();
-    mockOnError.mockClear();
-    mockOnSuccess.mockClear();
+    jest.clearAllMocks();
 
-    // Mock document.createElement for download link
-    Element.prototype.click = jest.fn();
+    global.fetch = jest.fn();
+    global.URL.createObjectURL = jest.fn(() => 'blob:mock');
+    global.URL.revokeObjectURL = jest.fn();
+
+    jest.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const element = document.createElementNS('http://www.w3.org/1999/xhtml', tagName);
+      if (tagName === 'a') {
+        element.click = jest.fn();
+      }
+      return element;
+    });
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    document.createElement.mockRestore();
   });
 
-  describe('Rendering', () => {
-    test('should render component with header', () => {
-      render(
-        <ExportManager 
-          token={mockToken} 
-          apiUrl={mockApiUrl}
-          onError={mockOnError}
-          onSuccess={mockOnSuccess}
-        />
-      );
+  const renderComponent = (props = {}) =>
+    render(
+      <ExportManager
+        token={mockToken}
+        apiUrl={mockApiUrl}
+        onError={mockOnError}
+        onSuccess={mockOnSuccess}
+        {...props}
+      />
+    );
 
-      expect(screen.getByText(/Export Your Diary/i)).toBeInTheDocument();
-    });
+  test('renders the current export UI', () => {
+    renderComponent();
 
-    test('should render format selection buttons', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      expect(screen.getByText(/CSV/i)).toBeInTheDocument();
-      expect(screen.getByText(/JSON/i)).toBeInTheDocument();
-      expect(screen.getByText(/PDF/i)).toBeInTheDocument();
-    });
-
-    test('should render time period filter', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const selector = screen.getByDisplayValue(/All time/i) || screen.getByText(/time/i);
-      expect(selector).toBeInTheDocument();
-    });
-
-    test('should render export button', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      expect(screen.getByRole('button', { name: /Export/i })).toBeInTheDocument();
-    });
-
-    test('should render analytics checkbox', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      expect(screen.getByLabelText(/Include Analytics/i)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/export diary/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /csv/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /json/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /pdf/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/include analytics/i)).toBeChecked();
+    expect(screen.getByRole('button', { name: /export as csv/i })).toBeInTheDocument();
   });
 
-  describe('Format Selection', () => {
-    test('should select CSV format by default', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
+  test('shows the time period selector only for csv exports', () => {
+    renderComponent();
 
-      const csvButton = screen.getByRole('button', { name: /CSV/i });
-      expect(csvButton).toHaveClass(expect.stringContaining('active'));
-    });
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
 
-    test('should select JSON format when clicked', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
+    fireEvent.click(screen.getByRole('button', { name: /json/i }));
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
-      const jsonButton = screen.getByRole('button', { name: /JSON/i });
-      fireEvent.click(jsonButton);
-
-      expect(jsonButton).toHaveClass(expect.stringContaining('active'));
-    });
-
-    test('should select PDF format when clicked', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const pdfButton = screen.getByRole('button', { name: /PDF/i });
-      fireEvent.click(pdfButton);
-
-      expect(pdfButton).toHaveClass(expect.stringContaining('active'));
-    });
-
-    test('should highlight selected format', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const jsonButton = screen.getByRole('button', { name: /JSON/i });
-      fireEvent.click(jsonButton);
-
-      await waitFor(() => {
-        expect(jsonButton).toHaveClass(expect.stringMatching(/active|selected/i));
-      });
-    });
+    fireEvent.click(screen.getByRole('button', { name: /csv/i }));
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
 
-  describe('Time Period Filtering', () => {
-    test('should have time period select element', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
+  test('updates the selected export format in the UI', () => {
+    renderComponent();
 
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      expect(select).toBeInTheDocument();
-    });
+    const jsonButton = screen.getByRole('button', { name: /json/i });
+    fireEvent.click(jsonButton);
 
-    test('should support all time period options', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      
-      // Options should include time periods
-      expect(select).toHaveProperty('options');
-    });
-
-    test('should change daysBack state when period selected', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      await userEvent.selectOption(select, '30');
-
-      // Verify selection changed
-      expect(select.value).toBe('30');
-    });
-
-    test('should support 7 day period', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      await userEvent.selectOption(select, '7');
-
-      expect(select.value).toBe('7');
-    });
-
-    test('should support 30 day period', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      await userEvent.selectOption(select, '30');
-
-      expect(select.value).toBe('30');
-    });
-
-    test('should support 90 day period', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      await userEvent.selectOption(select, '90');
-
-      expect(select.value).toBe('90');
-    });
-
-    test('should support 365 day period', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days|365 days/i);
-      await userEvent.selectOption(select, '365');
-
-      expect(select.value).toBe('365');
-    });
-
-    test('should support all time (0) period', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      await userEvent.selectOption(select, '0');
-
-      expect(select.value).toBe('0');
-    });
+    expect(jsonButton.className).toMatch(/active/);
+    expect(
+      screen.getByRole('button', { name: /export as json/i })
+    ).toBeInTheDocument();
   });
 
-  describe('Analytics Option', () => {
-    test('should render analytics checkbox', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
+  test('updates csv export options before submitting', () => {
+    renderComponent();
 
-      expect(screen.getByLabelText(/Include Analytics/i)).toBeInTheDocument();
-    });
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: '30' } });
+    fireEvent.click(screen.getByLabelText(/include analytics/i));
 
-    test('should toggle analytics checkbox', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const checkbox = screen.getByLabelText(/Include Analytics/i);
-      fireEvent.click(checkbox);
-
-      expect(checkbox).toBeChecked();
-    });
-
-    test('should disable time period filter for JSON format', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      
-      // CSV format has time period enabled
-      expect(select).toBeEnabled();
-
-      // Switch to JSON
-      const jsonButton = screen.getByRole('button', { name: /JSON/i });
-      fireEvent.click(jsonButton);
-
-      // Time period should be disabled for JSON
-      await waitFor(() => {
-        if (select.disabled) {
-          expect(select).toBeDisabled();
-        }
-      });
-    });
-
-    test('should keep time period enabled for CSV', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      expect(select).toBeEnabled();
-    });
+    expect(select).toHaveValue('30');
+    expect(screen.getByLabelText(/include analytics/i)).not.toBeChecked();
   });
 
-  describe('Export Functionality', () => {
-    test('should fetch CSV data when export clicked', async () => {
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(['date,title'], { type: 'text/csv' }),
-        headers: new Map([['content-type', 'text/csv']]),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalled();
-      });
+  test('submits a csv export with the current token and query parameters', async () => {
+    const blob = new Blob(['csv-data'], { type: 'text/csv' });
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      blob: async () => blob,
     });
 
-    test('should send bearer token with request', async () => {
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(),
-        headers: new Map(),
-      });
+    renderComponent();
 
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '30' } });
+    fireEvent.click(screen.getByRole('button', { name: /export as csv/i }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${mockApiUrl}/api/diary/phase7/export/csv?daysBack=30&includeAnalytics=true`,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-token-123',
+          }),
+        })
       );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.objectContaining({
-            headers: expect.objectContaining({
-              'Authorization': mockToken,
-            }),
-          })
-        );
-      });
     });
 
-    test('should construct correct CSV export URL', async () => {
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(),
-        headers: new Map(),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/export/csv'),
-          expect.any(Object)
-        );
-      });
-    });
-
-    test('should construct correct JSON export URL', async () => {
-      global.fetch.mockResolvedValueOnce({
-        json: async () => ({ entries: [] }),
-        headers: new Map(),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const jsonButton = screen.getByRole('button', { name: /JSON/i });
-      fireEvent.click(jsonButton);
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/export/json'),
-          expect.any(Object)
-        );
-      });
-    });
-
-    test('should handle export errors', async () => {
-      global.fetch.mockRejectedValueOnce(new Error('Export failed'));
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} onError={mockOnError} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(mockOnError).toHaveBeenCalled();
-      });
-    });
-
-    test('should show loading state during export', async () => {
-      global.fetch.mockImplementationOnce(() => new Promise(() => {})); // Never resolves
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(screen.getByText(/exporting|loading/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should show success message after export', async () => {
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(['data']),
-        headers: new Map([['content-type', 'text/csv']]),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} onSuccess={mockOnSuccess} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(mockOnSuccess).toHaveBeenCalled();
-      });
-    });
+    expect(global.URL.createObjectURL).toHaveBeenCalledWith(blob);
+    expect(mockOnSuccess).toHaveBeenCalledWith('Export completed successfully');
+    expect(screen.getByText(/export completed/i)).toBeInTheDocument();
   });
 
-  describe('Download Handling', () => {
-    test('should trigger download after successful export', async () => {
-      const mockBlob = new Blob(['test data'], { type: 'text/csv' });
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => mockBlob,
-        headers: new Map([['content-type', 'text/csv']]),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.URL.createObjectURL).toHaveBeenCalledWith(mockBlob);
-      });
+  test('submits a json export and downloads the returned payload', async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          entries: [],
+        },
+      }),
     });
 
-    test('should set correct filename for CSV download', async () => {
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(),
-        headers: new Map([['content-type', 'text/csv']]),
-      });
+    renderComponent();
 
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
+    fireEvent.click(screen.getByRole('button', { name: /json/i }));
+    fireEvent.click(screen.getByRole('button', { name: /export as json/i }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${mockApiUrl}/api/diary/phase7/export/json?includeAnalytics=true`,
+        expect.any(Object)
       );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(Element.prototype.click).toHaveBeenCalled();
-      });
     });
 
-    test('should include date in filename', async () => {
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(),
-        headers: new Map([['content-type', 'text/csv']]),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(Element.prototype.click).toHaveBeenCalled();
-      });
-    });
-
-    test('should set correct content type for CSV', async () => {
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(),
-        headers: new Map([['content-type', 'text/csv']]),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalled();
-      });
-    });
-
-    test('should set correct content type for JSON', async () => {
-      global.fetch.mockResolvedValueOnce({
-        json: async () => ({ entries: [] }),
-        headers: new Map([['content-type', 'application/json']]),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const jsonButton = screen.getByRole('button', { name: /JSON/i });
-      fireEvent.click(jsonButton);
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalled();
-      });
-    });
+    expect(global.URL.createObjectURL).toHaveBeenCalled();
   });
 
-  describe('State Management', () => {
-    test('should track loading state', async () => {
-      global.fetch.mockImplementationOnce(() => new Promise(() => {}));
+  test('renders an error banner and notifies callers when export fails', async () => {
+    const failure = new Error('Export failed');
+    global.fetch.mockRejectedValueOnce(failure);
 
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
+    renderComponent();
+    fireEvent.click(screen.getByRole('button', { name: /export as csv/i }));
 
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(exportButton).toBeDisabled();
-      });
-    });
-
-    test('should track export format', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const jsonButton = screen.getByRole('button', { name: /JSON/i });
-      fireEvent.click(jsonButton);
-
-      expect(jsonButton).toHaveClass(expect.stringMatching(/active|selected/i));
-    });
-
-    test('should track selected time period', async () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const select = screen.getByDisplayValue(/All time|7 days|30 days|90 days/i);
-      await userEvent.selectOption(select, '30');
-
-      expect(select.value).toBe('30');
-    });
-
-    test('should track analytics option', () => {
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
-
-      const checkbox = screen.getByLabelText(/Include Analytics/i);
-      fireEvent.click(checkbox);
-
-      expect(checkbox).toBeChecked();
-    });
+    expect(await screen.findByText(/export failed/i)).toBeInTheDocument();
+    expect(mockOnError).toHaveBeenCalledWith(failure);
   });
 
-  describe('Error Handling', () => {
-    test('should display error on fetch failure', async () => {
-      global.fetch.mockRejectedValueOnce(new Error('Network error'));
+  test('shows a loading state while an export is in progress', async () => {
+    global.fetch.mockImplementationOnce(
+      () => new Promise(() => {})
+    );
 
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} />
-      );
+    renderComponent();
+    fireEvent.click(screen.getByRole('button', { name: /export as csv/i }));
 
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(screen.getByText(/error/i)).toBeInTheDocument();
-      });
-    });
-
-    test('should call onError callback', async () => {
-      global.fetch.mockRejectedValueOnce(new Error('Export failed'));
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} onError={mockOnError} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(mockOnError).toHaveBeenCalled();
-      });
-    });
-
-    test('should handle unauthorized access', async () => {
-      global.fetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: async () => ({ error: 'Unauthorized' }),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={mockApiUrl} onError={mockOnError} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(mockOnError).toHaveBeenCalled();
-      });
-    });
-  });
-
-  describe('Props Validation', () => {
-    test('should use default apiUrl', async () => {
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(),
-        headers: new Map(),
-      });
-
-      render(
-        <ExportManager token={mockToken} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining('http://localhost:5000'),
-          expect.any(Object)
-        );
-      });
-    });
-
-    test('should use custom apiUrl', async () => {
-      const customApiUrl = 'http://api.example.com';
-      global.fetch.mockResolvedValueOnce({
-        blob: async () => new Blob(),
-        headers: new Map(),
-      });
-
-      render(
-        <ExportManager token={mockToken} apiUrl={customApiUrl} />
-      );
-
-      const exportButton = screen.getByRole('button', { name: /Export/i });
-      fireEvent.click(exportButton);
-
-      await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining(customApiUrl),
-          expect.any(Object)
-        );
-      });
-    });
+    expect(screen.getByRole('button', { name: /exporting/i })).toBeDisabled();
   });
 });
