@@ -152,6 +152,16 @@ app.use('/api/wishlistshare', require('./routes/wishlistshare'));
 // FoodDelivery routes
 app.use('/api/fooddelivery', require('./routes/fooddelivery'));
 
+// Phase 6: Advanced Analytics & Reporting Routes
+app.use('/api/v1', require('./routes/phase6Routes'));
+
+// Phase 7: ML Fraud Detection & Alert Management Routes
+app.use('/api/v1', require('./routes/phase7Routes'));
+
+// Phase 8: Comprehensive Food Delivery Differentiation Features Routes
+// (Menu Variants, Scheduled Delivery, Loyalty/Referral, AI Recommendations, Advanced Analytics)
+app.use('/', require('./routes/phase8Routes'));
+
 // RideSharing routes
 app.use('/api/ridesharing', require('./routes/ridesharing'));
 

@@ -1,4 +1,62 @@
+const crypto = require('crypto');
 const mongoose = require('mongoose');
+
+const variantSchema = new mongoose.Schema({
+  id: {
+    type: String,
+    default: () => crypto.randomUUID(),
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  label: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  priceModifier: {
+    type: Number,
+    default: 0,
+  },
+  prepTimeModifier: {
+    type: Number,
+    default: 0,
+  },
+  available: {
+    type: Boolean,
+    default: true,
+  },
+}, { _id: false });
+
+const addonSchema = new mongoose.Schema({
+  id: {
+    type: String,
+    default: () => crypto.randomUUID(),
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  price: {
+    type: Number,
+    default: 0,
+  },
+  prepTimeModifier: {
+    type: Number,
+    default: 0,
+  },
+  available: {
+    type: Boolean,
+    default: true,
+  },
+  vegetarian: {
+    type: Boolean,
+    default: true,
+  },
+}, { _id: false });
 
 const menuItemSchema = new mongoose.Schema({
   restaurantId: {
@@ -45,6 +103,22 @@ const menuItemSchema = new mongoose.Schema({
     default: false,
   },
   allergens: [String],
+  variants: {
+    type: [variantSchema],
+    default: [],
+  },
+  addons: {
+    type: [addonSchema],
+    default: [],
+  },
+  recommendationTags: {
+    type: [String],
+    default: [],
+  },
+  popularityScore: {
+    type: Number,
+    default: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

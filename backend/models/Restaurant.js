@@ -74,9 +74,128 @@ const RestaurantReviewSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const RestaurantTeamMemberSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      default: () => crypto.randomUUID(),
+    },
+    userId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    email: {
+      type: String,
+      default: '',
+      trim: true,
+      lowercase: true,
+    },
+    name: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    role: {
+      type: String,
+      enum: ['manager', 'dispatcher', 'kitchen', 'support', 'analyst'],
+      default: 'support',
+      trim: true,
+    },
+    permissions: {
+      type: [String],
+      default: [],
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive'],
+      default: 'active',
+      trim: true,
+    },
+    invitedByUserId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    invitedByName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    invitedAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
+const RestaurantAuditEntrySchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      default: () => crypto.randomUUID(),
+    },
+    action: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    summary: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    targetType: {
+      type: String,
+      default: 'restaurant',
+      trim: true,
+    },
+    targetId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    performedByUserId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    performedByName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    performedByRole: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
 const RestaurantSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, index: true },
+    ownerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
     cuisine: { type: String, default: '', trim: true, index: true },
     rating: { type: Number, default: 0, min: 0, max: 5 },
     deliveryTime: { type: String, default: '', trim: true },
@@ -91,8 +210,16 @@ const RestaurantSchema = new mongoose.Schema(
     avgPreparationTime: { type: String, default: '', trim: true },
     walletOffers: { type: String, default: '', trim: true },
     cuisineTags: { type: [String], default: [] },
+    location: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+      address: { type: String, default: '', trim: true },
+      zone: { type: String, default: '', trim: true },
+    },
     menu: { type: [MenuItemSchema], default: [] },
     reviews: { type: [RestaurantReviewSchema], default: [] },
+    teamMembers: { type: [RestaurantTeamMemberSchema], default: [] },
+    operationsAuditLog: { type: [RestaurantAuditEntrySchema], default: [] },
   },
   {
     timestamps: true,
