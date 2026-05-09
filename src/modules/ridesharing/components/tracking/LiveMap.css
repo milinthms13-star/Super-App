@@ -1,0 +1,347 @@
+/**
+ * LiveMap.css
+ * Styling for real-time map component
+ */
+
+.live-map-container {
+  position: relative;
+  width: 100%;
+  height: 600px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #f5f5f5;
+}
+
+.map-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.live-map {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 16px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Alerts */
+.alert {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.alert-error {
+  background-color: #fee;
+  color: #c33;
+  border-left: 4px solid #e74c3c;
+}
+
+.alert button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+}
+
+/* ETA Card */
+.eta-card {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  min-width: 220px;
+  z-index: 5;
+  animation: slideUp 0.4s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.eta-time {
+  font-size: 28px;
+  font-weight: bold;
+  color: #667eea;
+  margin-bottom: 8px;
+}
+
+.eta-details {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 8px;
+}
+
+.eta-details p {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.traffic-status {
+  font-weight: 600;
+  margin-top: 6px !important;
+}
+
+.traffic-status[data-condition="light"] {
+  color: #10b981;
+}
+
+.traffic-status[data-condition="moderate"] {
+  color: #f59e0b;
+}
+
+.traffic-status[data-condition="heavy"] {
+  color: #ef4444;
+}
+
+.traffic-status[data-condition="severe"] {
+  color: #7f1d1d;
+}
+
+/* Nearby Drivers List */
+.drivers-list {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  max-height: 320px;
+  width: 280px;
+  overflow-y: auto;
+  z-index: 5;
+}
+
+.drivers-list h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.driver-card {
+  padding: 10px;
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.driver-card:hover {
+  border-color: #667eea;
+  background: #f9fafb;
+  transform: translateX(2px);
+}
+
+.driver-info {
+  flex: 1;
+}
+
+.driver-rating {
+  margin: 0;
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.driver-distance {
+  margin: 4px 0 0 0;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+/* Driver Detail Card */
+.driver-detail {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  min-width: 200px;
+  z-index: 5;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #9ca3af;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.3s ease;
+}
+
+.close-btn:hover {
+  color: #6b7280;
+}
+
+.detail-title {
+  margin: 0 0 12px 0;
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.driver-detail p {
+  margin: 8px 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+/* Map Control Buttons */
+.map-control-button {
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #667eea;
+  transition: all 0.3s ease;
+  margin: 10px;
+}
+
+.map-control-button:hover {
+  background: #f9fafb;
+  border-color: #667eea;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.2);
+}
+
+/* Scrollbar Styling */
+.drivers-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.drivers-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.drivers-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.drivers-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .live-map-container {
+    height: 400px;
+  }
+
+  .eta-card {
+    bottom: 12px;
+    left: 12px;
+    min-width: 180px;
+  }
+
+  .drivers-list {
+    bottom: 12px;
+    right: 12px;
+    width: 240px;
+    max-height: 280px;
+  }
+
+  .driver-detail {
+    top: 12px;
+    right: 12px;
+    min-width: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .live-map-container {
+    height: 350px;
+  }
+
+  .eta-card {
+    min-width: 160px;
+    padding: 12px;
+  }
+
+  .eta-time {
+    font-size: 24px;
+  }
+
+  .drivers-list {
+    width: 200px;
+    max-height: 240px;
+  }
+
+  .driver-detail {
+    min-width: 160px;
+    padding: 12px;
+  }
+}

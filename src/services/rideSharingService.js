@@ -2,9 +2,12 @@ import axios from 'axios';
 
 const API_BASE_URL = '/api/ridesharing';
 
+const getStoredAuthToken = () =>
+  localStorage.getItem('accessToken') || localStorage.getItem('token') || '';
+
 const getAuthHeaders = () => ({
   headers: {
-    Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+    Authorization: `Bearer ${getStoredAuthToken()}`,
   },
 });
 

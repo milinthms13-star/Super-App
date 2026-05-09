@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NilaHub Investor Valuation Report</title>
+  <style>
+    :root {
+      --ink: #152033;
+      --muted: #58657a;
+      --line: #d8dde6;
+      --panel: #f5f7fb;
+      --card: #ffffff;
+      --accent: #0d7a5f;
+      --accent-soft: #dff4ee;
+      --warm: #fff4d8;
+      --warm-ink: #8f6700;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background: #eef2f7;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: 14mm;
+      background: #ffffff;
+    }
+
+    .hero {
+      padding: 18mm 14mm;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at top right, rgba(13, 122, 95, 0.14), transparent 34%),
+        linear-gradient(145deg, #ffffff 0%, #f7fafc 100%);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 16px 0 10px;
+      font-size: 34px;
+      line-height: 1.12;
+    }
+
+    .subhead {
+      margin: 0;
+      max-width: 720px;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .meta {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .meta-card,
+    .value-card,
+    .section-card {
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    .meta-card strong,
+    .value-card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    .meta-card span,
+    .value-card span {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    h2 {
+      margin: 28px 0 14px;
+      font-size: 22px;
+    }
+
+    h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    p,
+    li {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    ul {
+      margin: 10px 0 0 18px;
+      padding: 0;
+    }
+
+    .value-grid,
+    .triple-grid,
+    .double-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .value-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .triple-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .double-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .headline-value {
+      font-size: 26px;
+      line-height: 1.2;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .summary {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .summary th,
+    .summary td {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    .summary th {
+      background: var(--panel);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: var(--warm);
+      color: var(--warm-ink);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .callout {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      background: #f6fbf9;
+      border: 1px solid #d4ebe3;
+    }
+
+    .quote {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.65;
+      color: #305549;
+    }
+
+    .footer-note {
+      margin-top: 24px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: #f6fbf9;
+      border: 1px solid #d4ebe3;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #305549;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .page {
+        width: auto;
+        min-height: auto;
+        margin: 0;
+        padding: 12mm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="eyebrow">Investor Material</div>
+      <h1>NilaHub Investor Valuation Report</h1>
+      <p class="subhead">
+        A readiness-adjusted valuation of the NilaHub software platform and assembled product IP, based on repository evidence available as of May 9, 2026.
+      </p>
+      <div class="meta">
+        <div class="meta-card">
+          <strong>Prepared</strong>
+          <span>May 9, 2026</span>
+        </div>
+        <div class="meta-card">
+          <strong>Valuation Basis</strong>
+          <span>Software asset and platform IP</span>
+        </div>
+        <div class="meta-card">
+          <strong>Best Use</strong>
+          <span>Investor discussion and diligence pack</span>
+        </div>
+      </div>
+    </section>
+
+    <h2>Valuation Conclusion</h2>
+    <section class="value-grid">
+      <div class="value-card">
+        <strong>Defensible Range</strong>
+        <div class="headline-value">$230K to $360K</div>
+        <div class="small">Current evidence-backed USD range</div>
+      </div>
+      <div class="value-card">
+        <strong>INR Range</strong>
+        <div class="headline-value">Rs. 1.91 cr to Rs. 2.99 cr</div>
+        <div class="small">Using internal working FX of 1 USD = Rs. 83</div>
+      </div>
+      <div class="value-card">
+        <strong>Discussion Anchor</strong>
+        <div class="headline-value">Rs. 2.5 cr to Rs. 2.75 cr</div>
+        <div class="small">Credible anchor for current investor talks</div>
+      </div>
+    </section>
+
+    <h2>What Is Being Valued</h2>
+    <section class="double-grid">
+      <div class="section-card">
+        <h3>Included</h3>
+        <ul>
+          <li>Application codebase and assembled product flows</li>
+          <li>Backend services, models, and routes</li>
+          <li>Cross-platform packaging for web, desktop, and Android</li>
+          <li>Monetization, settlement, analytics, and admin systems</li>
+          <li>Prepared investor screenshot assets</li>
+        </ul>
+      </div>
+      <div class="section-card">
+        <h3>Not Included</h3>
+        <ul>
+          <li>Audited revenue, GMV, or retention data</li>
+          <li>Cap table or equity structure</li>
+          <li>Legal IP diligence and assignment review</li>
+          <li>Third-party security, uptime, or compliance audit</li>
+          <li>Customer contracts or signed commercial commitments</li>
+        </ul>
+      </div>
+    </section>
+
+    <h2>Repository Evidence</h2>
+    <table class="summary">
+      <thead>
+        <tr>
+          <th>Area</th>
+          <th>Current Repo Evidence</th>
+          <th>Investor Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Product identity</td>
+          <td><code>package.json</code> uses product name NilaHub with Electron and Capacitor packaging</td>
+          <td>Platform is positioned for web, desktop, and mobile distribution</td>
+        </tr>
+        <tr>
+          <td>Live demo</td>
+          <td><a href="https://mysuperapp-ekr4.onrender.com/">https://mysuperapp-ekr4.onrender.com/</a></td>
+          <td>Moves the product from build-ready toward investor-demo ready</td>
+        </tr>
+        <tr>
+          <td>Founder profile</td>
+          <td>Dhanya Mohan, founder, with 20 years of development experience</td>
+          <td>Adds execution credibility to the investor narrative</td>
+        </tr>
+        <tr>
+          <td>Product breadth</td>
+          <td><code>src/utils/moduleRoutes.js</code> defines 19 top-level routable surfaces</td>
+          <td>Shows meaningful module breadth beyond a single-feature app</td>
+        </tr>
+        <tr>
+          <td>Build proof</td>
+          <td><code>build/</code> contains 107 generated files and <code>build_output.txt</code> states ready to deploy</td>
+          <td>There is an actual production build artifact, not just source code</td>
+        </tr>
+        <tr>
+          <td>Testing footprint</td>
+          <td>124 automated specs: 45 frontend, 71 backend, 8 Cypress E2E</td>
+          <td>Signals engineering depth and repeatability</td>
+        </tr>
+        <tr>
+          <td>Backend surface</td>
+          <td>136 route files and 183 model files</td>
+          <td>Indicates broad backend and data-model coverage</td>
+        </tr>
+        <tr>
+          <td>Investor visuals</td>
+          <td>12 preview screenshots under <code>docs/investor-screenshots/</code></td>
+          <td>Improves packaging readiness for investor review</td>
+        </tr>
+        <tr>
+          <td>Monetization</td>
+          <td>Pricing, subscriptions, UPI/cards/wallet support, 15% commission, 7-day settlement cycle</td>
+          <td>Shows built-in commercial logic rather than a pure demo</td>
+        </tr>
+        <tr>
+          <td>Operational depth</td>
+          <td>Phase 13 analytics and reporting marked production-ready with 45+ endpoints</td>
+          <td>Shows operations, finance, and reporting maturity</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Valuation Method</h2>
+    <section class="triple-grid">
+      <div class="section-card">
+        <h3>1. Replacement Cost</h3>
+        <p>
+          A buyer is avoiding the cost and time of rebuilding a broad product surface that spans messaging, commerce, payments, analytics, admin, and cross-platform packaging.
+        </p>
+        <p><strong>Indicated value:</strong> $190K to $280K</p>
+      </div>
+      <div class="section-card">
+        <h3>2. Assembled Platform Premium</h3>
+        <p>
+          The repo shows assembled systems rather than isolated mockups: routing, monetization, reporting, admin controls, and investor-facing assets already exist in one product shell.
+        </p>
+        <p><strong>Indicated value:</strong> $60K to $120K</p>
+      </div>
+      <div class="section-card">
+        <h3>3. Readiness Discount</h3>
+        <p>
+          Missing live traction, full deployment proof, and a complete investor-grade team disclosure justify a discount versus a live operating business.
+        </p>
+        <p><strong>Discount:</strong> -$20K to -$40K</p>
+      </div>
+    </section>
+
+    <h2>Founder Profile</h2>
+    <section class="double-grid">
+      <div class="section-card">
+        <h3>Current Founder Detail</h3>
+        <ul>
+          <li>Dhanya Mohan</li>
+          <li>Founder</li>
+          <li>20 years of development experience</li>
+        </ul>
+      </div>
+      <div class="section-card">
+        <h3>What To Add Next</h3>
+        <ul>
+          <li>Short founder bio and domain background</li>
+          <li>Current operating role and ownership of execution</li>
+          <li>Any additional team or advisor names, if applicable</li>
+        </ul>
+      </div>
+    </section>
+
+    <h2>Main Investor Questions</h2>
+    <section class="double-grid">
+      <div class="section-card">
+        <h3>Already Proven</h3>
+        <ul>
+          <li>Broad software scope and integrated architecture</li>
+          <li>Multiple monetization rails and settlement logic</li>
+          <li>Production build artifact exists</li>
+          <li>Automated test footprint is meaningful</li>
+          <li>Admin and analytics capability is documented</li>
+        </ul>
+      </div>
+      <div class="section-card">
+        <h3>Still Missing</h3>
+        <ul>
+          <li>Demo credentials plus uptime or monitoring proof</li>
+          <li>MAU, GMV, or pilot metrics</li>
+          <li>Full leadership or team roster beyond the founder profile</li>
+          <li>Current QA pass summary</li>
+          <li>Live screenshots instead of preview-only assets</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="callout">
+      <p class="quote">
+        NilaHub is best presented today as a high-scope, pre-traction software platform rather than as a fully scaled operating business. That framing supports a credible current valuation while leaving clear upside for live deployment, traction, and team proof.
+      </p>
+    </div>
+
+    <h2>Fastest Ways To Increase Value</h2>
+    <table class="summary">
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>Action</th>
+          <th>Likely Impact</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Pair the live demo URL with seeded demo credentials and one uptime or hosting proof screenshot</td>
+          <td>Converts the current link into stronger deployment proof for diligence</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Replace preview screenshots with live product captures</td>
+          <td>Strengthens credibility immediately</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Expand the founder detail into a one-page leadership or team slide with names, roles, and time commitment</td>
+          <td>Reduces key-person and execution risk</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Add one traction sheet, even if early</td>
+          <td>Enables a shift from asset valuation toward company valuation</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>Add QA and deployment appendix</td>
+          <td>Answers technical diligence questions faster</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="footer-note">
+      Suggested companion files: <strong>INVESTOR_SCREENSHOT_APPENDIX.md</strong>,
+      <strong>INVESTOR_OUTREACH_READINESS_WORKSHEET.md</strong>, and the deck at
+      <strong>public/MalabarBazaar_Final_With_Closing.pptx</strong>.
+    </div>
+  </main>
+</body>
+</html>

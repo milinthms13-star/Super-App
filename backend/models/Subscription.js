@@ -8,9 +8,33 @@ const SubscriptionSchema = new mongoose.Schema(
       required: true,
       default: () => `sub-${Date.now()}`,
     },
+    // Plan subscription fields (Phase 5B)
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+    },
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SubscriptionPlan',
+    },
+    planTier: String,
+    planName: String,
+    billingCycle: {
+      type: String,
+      enum: ['monthly', 'annual'],
+    },
+    amount: Number,
+    renewalDate: Date,
+    startDate: Date,
+    paymentMethodId: mongoose.Schema.Types.ObjectId,
+    cancellationType: String,
+    cancellationReason: String,
+    cancellationDate: Date,
+
+    // Recurring product subscription fields (legacy)
     customerEmail: {
       type: String,
-      required: true,
       lowercase: true,
       trim: true,
       index: true,
@@ -22,7 +46,6 @@ const SubscriptionSchema = new mongoose.Schema(
         productName: String,
         quantity: {
           type: Number,
-          required: true,
           min: 1,
         },
         price: Number,
@@ -33,7 +56,6 @@ const SubscriptionSchema = new mongoose.Schema(
     frequency: {
       type: String,
       enum: ['Weekly', 'Bi-weekly', 'Monthly', 'Quarterly'],
-      required: true,
     },
     deliveryDay: {
       type: String,
@@ -44,8 +66,9 @@ const SubscriptionSchema = new mongoose.Schema(
     totalPrice: Number,
     status: {
       type: String,
-      enum: ['Active', 'Paused', 'Cancelled', 'Expired'],
-      default: 'Active',
+      enum: ['active', 'paused', 'cancelled', 'expired', 'Active', 'Paused', 'Cancelled', 'Expired'],
+      default: 'active',
+      index: true,
     },
     autoRenew: {
       type: Boolean,

@@ -1,0 +1,263 @@
+/* RouteSafety.css */
+.route-safety-container {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* Check Route Section */
+.check-route-section {
+  margin-bottom: 20px;
+}
+
+.check-safety-btn {
+  width: 100%;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.check-safety-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4);
+}
+
+.check-safety-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Safety Report */
+.safety-report {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 24px;
+}
+
+/* Safety Score */
+.safety-score {
+  padding: 16px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.safety-score.safe {
+  background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+  color: white;
+  border-bottom: none;
+}
+
+.safety-score.caution {
+  background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+  color: white;
+  border-bottom: none;
+}
+
+.score-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.score-icon {
+  font-size: 32px;
+}
+
+.score-info h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.score-info p {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+/* Risks Section */
+.risks-section {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.risks-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+}
+
+.risk-item {
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border-left: 4px solid;
+  background: #f8f8f8;
+}
+
+.risk-item.severity-low {
+  background: #E8F5E9;
+  border-left-color: #4CAF50;
+}
+
+.risk-item.severity-medium {
+  background: #FFF3E0;
+  border-left-color: #FF9800;
+}
+
+.risk-item.severity-high {
+  background: #FFEBEE;
+  border-left-color: #F44336;
+}
+
+.risk-item.severity-critical {
+  background: #FFEBEE;
+  border-left-color: #C62828;
+}
+
+.risk-type {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.risk-item p {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #333;
+}
+
+/* Recommendations Section */
+.recommendations-section {
+  padding: 16px;
+}
+
+.recommendations-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+}
+
+.recommendation-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #f8f8f8;
+  font-size: 13px;
+}
+
+.rec-type {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.recommendation-item p {
+  margin: 0;
+  color: #333;
+}
+
+/* Report Unsafe Section */
+.report-unsafe-section {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.report-unsafe-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #333;
+}
+
+.unsafe-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.unsafe-form input,
+.unsafe-form textarea,
+.unsafe-form select {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #f8f8f8;
+  color: #333;
+  transition: all 0.2s;
+}
+
+.unsafe-form input:focus,
+.unsafe-form textarea:focus,
+.unsafe-form select:focus {
+  outline: none;
+  border-color: #ff9800;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.1);
+}
+
+.unsafe-form textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.report-btn {
+  padding: 10px 14px;
+  background: #FF9800;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.report-btn:hover:not(:disabled) {
+  background: #F57C00;
+  transform: translateY(-1px);
+}
+
+.report-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .route-safety-container {
+    padding: 12px;
+  }
+
+  .score-header {
+    gap: 12px;
+  }
+
+  .score-icon {
+    font-size: 28px;
+  }
+
+  .score-info h3 {
+    font-size: 16px;
+  }
+}

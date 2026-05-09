@@ -4,6 +4,7 @@
  */
 
 const Subscription = require('../models/Subscription');
+const SubscriptionPlan = require('../models/SubscriptionPlan');
 const Payment = require('../models/Payment');
 const PaymentService = require('./PaymentService');
 const { v4: uuidv4 } = require('uuid');
@@ -355,6 +356,386 @@ class SubscriptionService {
       throw error;
     }
   }
+
+  // ============================================
+  // PLAN MANAGEMENT METHODS (Phase 5B)
+  // ============================================
+
+  /**
+   * Get all active plans
+   */
+  static async getAllPlans() {
+    try {
+      return await SubscriptionPlan.find({ isActive: true }).sort({ displayOrder: 1 });
+    } catch (error) {
+      logger.error('Error fetching all plans:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get plan by ID
+   */
+  static async getPlanById(planId) {
+    try {
+      const plan = await SubscriptionPlan.findById(planId);
+      if (!plan) throw new Error('Plan not found');
+      return plan;
+    } catch (error) {
+      logger.error('Error fetching plan by ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get plan by tier
+   */
+  static async getPlanByTier(tier) {
+    try {
+      const plan = await SubscriptionPlan.findOne({ planTier: tier, isActive: true });
+      if (!plan) throw new Error(`Plan with tier "${tier}" not found`);
+      return plan;
+    } catch (error) {
+      logger.error('Error fetching plan by tier:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get recommended plan
+   */
+  static async getRecommendedPlan() {
+    try {
+      const plan = await SubscriptionPlan.findOne({ 
+        planTier: 'gold', 
+        isActive: true 
+      });
+      return plan || (await SubscriptionPlan.findOne({ isActive: true }).sort({ activeSubscriptions: -1 }));
+    } catch (error) {
+      logger.error('Error fetching recommended plan:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get popular plans
+   */
+  static async getPopularPlans(limit = 5) {
+    try {
+      return await SubscriptionPlan.find({ isActive: true })
+        .sort({ activeSubscriptions: -1 })
+        .limit(limit);
+    } catch (error) {
+      logger.error('Error fetching popular plans:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Compare multiple plans
+   */
+  static async comparePlans(planIds) {
+    try {
+      const plans = await SubscriptionPlan.find({ _id: { $in: planIds } });
+      if (plans.length === 0) throw new Error('No plans found for comparison');
+      
+      return plans.map(plan => ({
+        id: plan._id,
+        name: plan.planName,
+        tier: plan.planTier,
+        monthlyPrice: plan.monthlyPrice,
+        annualPrice: plan.annualPrice,
+        features: plan.features,
+        limits: plan.limits,
+      }));
+    } catch (error) {
+      logger.error('Error comparing plans:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe user to plan
+   */
+  static async subscribeToPlan(userId, planId, billingCycle = 'monthly', paymentMethodId = null) {
+    try {
+      const plan = await SubscriptionPlan.findById(planId);
+      if (!plan) throw new Error('Plan not found');
+
+      // Cancel existing subscription if any
+      await Subscription.updateMany(
+        { userId, status: 'active', planTier: { $exists: true } },
+        { status: 'cancelled', cancellationDate: new Date() }
+      );
+
+      const amount = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+      const renewalDate = new Date();
+      renewalDate.setMonth(renewalDate.getMonth() + (billingCycle === 'annual' ? 12 : 1));
+
+      const subscription = new Subscription({
+        subscriptionId: `SUB_${uuidv4()}`,
+        userId,
+        planId: plan._id,
+        planTier: plan.planTier,
+        planName: plan.planName,
+        status: 'active',
+        billingCycle,
+        amount,
+        renewalDate,
+        startDate: new Date(),
+        autoRenew: true,
+        paymentMethodId,
+      });
+
+      await subscription.save();
+
+      // Update plan metrics
+      plan.activeSubscriptions = (plan.activeSubscriptions || 0) + 1;
+      await plan.save();
+
+      logger.info(`User ${userId} subscribed to plan ${plan.planName}`);
+      return subscription;
+    } catch (error) {
+      logger.error('Error subscribing to plan:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get active subscription for user
+   */
+  static async getActiveSubscription(userId) {
+    try {
+      return await Subscription.findOne({ 
+        userId, 
+        status: 'active',
+        planTier: { $exists: true }
+      }).populate('planId');
+    } catch (error) {
+      logger.error('Error fetching active subscription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get subscription history for user
+   */
+  static async getSubscriptionHistory(userId) {
+    try {
+      return await Subscription.find({ 
+        userId,
+        planTier: { $exists: true }
+      }).sort({ createdAt: -1 });
+    } catch (error) {
+      logger.error('Error fetching subscription history:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upgrade plan
+   */
+  static async upgradePlan(userId, newPlanId) {
+    try {
+      const currentSubscription = await this.getActiveSubscription(userId);
+      if (!currentSubscription) throw new Error('No active subscription found');
+
+      const newPlan = await this.getPlanById(newPlanId);
+      const currentPlan = await this.getPlanById(currentSubscription.planId);
+
+      if (newPlan.monthlyPrice <= currentPlan.monthlyPrice) {
+        throw new Error('New plan must have higher price than current plan');
+      }
+
+      // Cancel current subscription
+      currentSubscription.status = 'cancelled';
+      currentSubscription.cancellationType = 'upgrade';
+      await currentSubscription.save();
+
+      // Decrease old plan subscription count
+      currentPlan.activeSubscriptions = Math.max(0, (currentPlan.activeSubscriptions || 1) - 1);
+      await currentPlan.save();
+
+      // Create new subscription
+      const newSubscription = await this.subscribeToPlan(
+        userId,
+        newPlanId,
+        currentSubscription.billingCycle,
+        currentSubscription.paymentMethodId
+      );
+
+      logger.info(`User ${userId} upgraded from ${currentPlan.planName} to ${newPlan.planName}`);
+      return newSubscription;
+    } catch (error) {
+      logger.error('Error upgrading plan:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Downgrade plan
+   */
+  static async downgradePlan(userId, newPlanId) {
+    try {
+      const currentSubscription = await this.getActiveSubscription(userId);
+      if (!currentSubscription) throw new Error('No active subscription found');
+
+      const newPlan = await this.getPlanById(newPlanId);
+      const currentPlan = await this.getPlanById(currentSubscription.planId);
+
+      if (newPlan.monthlyPrice >= currentPlan.monthlyPrice) {
+        throw new Error('New plan must have lower price than current plan');
+      }
+
+      // Cancel current subscription
+      currentSubscription.status = 'cancelled';
+      currentSubscription.cancellationType = 'downgrade';
+      await currentSubscription.save();
+
+      // Decrease old plan subscription count
+      currentPlan.activeSubscriptions = Math.max(0, (currentPlan.activeSubscriptions || 1) - 1);
+      await currentPlan.save();
+
+      // Create new subscription
+      const newSubscription = await this.subscribeToPlan(
+        userId,
+        newPlanId,
+        currentSubscription.billingCycle,
+        currentSubscription.paymentMethodId
+      );
+
+      logger.info(`User ${userId} downgraded from ${currentPlan.planName} to ${newPlan.planName}`);
+      return newSubscription;
+    } catch (error) {
+      logger.error('Error downgrading plan:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel subscription
+   */
+  static async cancelSubscription(userId, reason = null) {
+    try {
+      const subscription = await this.getActiveSubscription(userId);
+      if (!subscription) throw new Error('No active subscription found');
+
+      const plan = await this.getPlanById(subscription.planId);
+
+      subscription.status = 'cancelled';
+      subscription.cancellationDate = new Date();
+      subscription.cancellationReason = reason;
+      await subscription.save();
+
+      // Decrease plan subscription count
+      plan.activeSubscriptions = Math.max(0, (plan.activeSubscriptions || 1) - 1);
+      await plan.save();
+
+      logger.info(`User ${userId} cancelled subscription: ${reason}`);
+      return subscription;
+    } catch (error) {
+      logger.error('Error cancelling subscription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate benefits for user's subscription
+   */
+  static async calculateBenefits(userId, orderAmount, ordersPerMonth = 1) {
+    try {
+      const subscription = await this.getActiveSubscription(userId);
+      if (!subscription) return { benefits: [], totalSavings: 0 };
+
+      const plan = await this.getPlanById(subscription.planId);
+      const benefits = [];
+      let totalSavings = 0;
+
+      // Order discount
+      if (plan.features.orderDiscount > 0) {
+        const discount = (orderAmount * plan.features.orderDiscount) / 100;
+        benefits.push({
+          name: 'Order Discount',
+          value: `${plan.features.orderDiscount}%`,
+          savings: discount,
+        });
+        totalSavings += discount;
+      }
+
+      // Free shipping
+      if (plan.features.freeShipping) {
+        const savedShipping = 50; // Estimate
+        benefits.push({
+          name: 'Free Shipping',
+          value: 'Unlimited',
+          savings: savedShipping,
+        });
+        totalSavings += savedShipping;
+      }
+
+      // Loyalty multiplier
+      if (plan.features.loyaltyPointsMultiplier > 1) {
+        const basePoints = orderAmount / 100;
+        const extraPoints = basePoints * (plan.features.loyaltyPointsMultiplier - 1);
+        benefits.push({
+          name: 'Loyalty Points',
+          value: `${plan.features.loyaltyPointsMultiplier}x`,
+          savings: extraPoints * 1, // Assuming 1 rupee = 1 point
+        });
+        totalSavings += extraPoints;
+      }
+
+      return { benefits, totalSavings };
+    } catch (error) {
+      logger.error('Error calculating benefits:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check order eligibility for subscription
+   */
+  static async checkOrderEligibility(userId, orderAmount) {
+    try {
+      const subscription = await this.getActiveSubscription(userId);
+      
+      if (!subscription) {
+        return {
+          eligible: true,
+          reason: 'Free user - no restrictions',
+          plan: null,
+        };
+      }
+
+      const plan = await this.getPlanById(subscription.planId);
+      
+      if (orderAmount < plan.limits.minOrderValue) {
+        return {
+          eligible: false,
+          reason: `Minimum order value is ₹${plan.limits.minOrderValue}`,
+          plan: plan.planName,
+        };
+      }
+
+      if (orderAmount > plan.limits.maxOrderValue) {
+        return {
+          eligible: false,
+          reason: `Maximum order value is ₹${plan.limits.maxOrderValue}`,
+          plan: plan.planName,
+        };
+      }
+
+      return {
+        eligible: true,
+        reason: 'Order is eligible',
+        plan: plan.planName,
+      };
+    } catch (error) {
+      logger.error('Error checking order eligibility:', error);
+      throw error;
+    }
+  }
+
 }
 
 module.exports = SubscriptionService;

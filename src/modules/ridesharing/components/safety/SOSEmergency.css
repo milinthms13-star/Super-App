@@ -1,0 +1,348 @@
+/* SOSEmergency.css */
+.sos-emergency-container {
+  padding: 20px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+/* Alert Form */
+.sos-alert-form {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  border-radius: 16px;
+  padding: 24px;
+  color: white;
+  box-shadow: 0 10px 40px rgba(255, 107, 107, 0.3);
+}
+
+.sos-alert-form h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.sos-subtitle {
+  margin: 0 0 20px 0;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+/* Incident Type Selection */
+.incident-types {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.incident-btn {
+  padding: 12px 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.incident-btn:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.incident-btn.active {
+  border-color: white;
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+/* Description Input */
+.description-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  margin-bottom: 16px;
+}
+
+.description-input::placeholder {
+  color: #999;
+}
+
+.description-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+/* Send SOS Button */
+.send-sos-btn {
+  width: 100%;
+  padding: 14px;
+  background: white;
+  color: #ff6b6b;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.send-sos-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.3);
+}
+
+.send-sos-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sos-note {
+  font-size: 12px;
+  margin-top: 12px;
+  opacity: 0.85;
+  text-align: center;
+}
+
+/* Active SOS Panel */
+.sos-active-panel {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  border-left: 5px solid #ff6b6b;
+}
+
+.sos-status {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.sos-status h2 {
+  margin: 0;
+  color: #ff6b6b;
+  font-size: 22px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.status-text {
+  margin: 8px 0 0 0;
+  color: #666;
+  font-size: 14px;
+}
+
+/* Active Incidents */
+.active-incidents {
+  margin-bottom: 24px;
+}
+
+.incident-card {
+  background: #f8f8f8;
+  border-left: 4px solid #ff6b6b;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.incident-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.incident-type {
+  background: #ffe5e5;
+  color: #ff6b6b;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.incident-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.incident-status.active {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.incident-status.responded {
+  background: #d1ecf1;
+  color: #0c5460;
+}
+
+.incident-description {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.incident-time {
+  margin: 0;
+  font-size: 12px;
+  color: #999;
+}
+
+/* Upload Section */
+.upload-section {
+  margin-bottom: 24px;
+}
+
+.upload-section h3 {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.upload-area {
+  position: relative;
+  border: 2px dashed #ddd;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-area:hover {
+  border-color: #ff6b6b;
+  background: #fff5f5;
+}
+
+.upload-area input[type='file'] {
+  display: none;
+}
+
+.upload-label {
+  display: block;
+  cursor: pointer;
+  color: #ff6b6b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.uploaded-files {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f0fff4;
+  border-radius: 8px;
+}
+
+.uploaded-files h4 {
+  margin: 0 0 8px 0;
+  color: #22863a;
+  font-size: 13px;
+}
+
+.file-item {
+  margin: 4px 0;
+  color: #22863a;
+  font-size: 13px;
+}
+
+/* Share Section */
+.share-section {
+  margin-bottom: 24px;
+}
+
+.share-section h3 {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.share-form {
+  display: flex;
+  gap: 8px;
+}
+
+.share-form input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.share-form input:focus {
+  outline: none;
+  border-color: #ff6b6b;
+  box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+}
+
+.share-btn {
+  padding: 10px 16px;
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.share-btn:hover {
+  background: #ff5252;
+}
+
+/* Close SOS Button */
+.close-sos-btn {
+  width: 100%;
+  padding: 12px;
+  background: #f0f0f0;
+  color: #666;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.close-sos-btn:hover {
+  background: #e0e0e0;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .sos-emergency-container {
+    padding: 12px;
+  }
+
+  .sos-alert-form {
+    padding: 16px;
+  }
+
+  .incident-types {
+    grid-template-columns: 1fr;
+  }
+
+  .share-form {
+    flex-direction: column;
+  }
+}

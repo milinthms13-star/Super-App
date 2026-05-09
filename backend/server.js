@@ -86,8 +86,25 @@ app.use('/api/localmarket', require('./routes/localmarket'));
 app.use('/api/messaging', require('./routes/messaging'));
 app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/checkout', require('./routes/checkoutRoutes')); // Phase 5D: Checkout & Payment
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/settlements', require('./routes/settlements'));
+app.use('/webhooks/payment', require('./routes/paymentWebhookRoutes')); // Phase 5D: Payment Gateway Webhooks
+
+// Phase 5E: Order Management & Fulfillment Routes (Order tracking, Returns, Fulfillment)
+app.use('/api/orders', require('./routes/orderManagementRoutes'));
+
+// Phase 5E: Admin Order Management Routes (Bulk operations, Return approvals, Dashboard analytics)
+app.use('/api/admin/orders', require('./routes/adminOrderManagementRoutes'));
+
+// Phase 5E: Notification & Preferences Routes (Email notifications, preferences, tracking)
+app.use('/api/notifications', require('./routes/orderNotificationRoutes'));
+
+// Phase 5E: Carrier Webhook Routes (Real-time tracking updates from courier partners)
+app.use('/webhooks/carrier', require('./routes/carrierWebhookRoutes'));
+
+// Phase 5E: Fulfillment Webhook Routes (Order fulfillment updates from third-party providers)
+app.use('/webhooks/fulfillment', require('./routes/fulfillmentWebhookRoutes'));
 
 // SOS Emergency Module Phase 1 Routes (OTP, Siren, Photos, Tracking, Retry)
 app.use('/api/sos', require('./routes/sosRoutes'));
@@ -132,6 +149,7 @@ app.use('/api/messaging/v4/data', require('./routes/dataManagementRoutes'));
 app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/abandonedcarts', require('./routes/abandonedcarts'));
 app.use('/api/products', require('./routes/products'));
+app.use('/api/products', require('./routes/productDiscoveryRoutes'));
 app.use('/api/referralprogram', require('./routes/referralprogram'));
 app.use('/api/reminders', require('./routes/reminders'));
 app.use('/api/matrimonial', require('./routes/matrimonial-kyc'));
@@ -191,6 +209,20 @@ app.use('/api/v1', require('./routes/phase14Routes'));
 app.use('/api/ridesharing', require('./routes/ridesharing'));
 app.use('/api/ridesharing/auth', require('./routes/rideSharingAuthRoutes'));
 app.use('/api/ridesharing/driver', require('./routes/driverKYCRoutes'));
+app.use('/api/ridesharing/phase2', require('./routes/rideSharingPhase2Routes'));
+app.use('/api/ridesharing/phase3', require('./routes/rideSharingPhase3Routes'));
+app.use('/api/ridesharing/phase4', require('./routes/rideSharingPhase4Routes'));
+app.use('/api/ridesharing/phase5', require('./routes/rideSharingPhase5Routes'));
+app.use('/api/ridesharing/phase6', require('./routes/rideSharingPhase6Routes'));
+app.use('/api/ridesharing/phase7', require('./routes/rideSharingPhase7Routes'));
+app.use('/api/ridesharing/phase8', require('./routes/rideSharingPhase8Routes'));
+app.use('/api/ridesharing/phase9', require('./routes/rideSharingPhase9Routes'));
+app.use('/api/ridesharing/phase10', require('./routes/rideSharingPhase10Routes'));
+app.use('/api/ridesharing/phase11', require('./routes/rideSharingPhase11Routes'));
+app.use('/api/ridesharing/phase12', require('./routes/rideSharingPhase12Routes'));
+app.use('/api/ridesharing/phase13', require('./routes/rideSharingPhase13Routes'));
+app.use('/api/ridesharing/phase14', require('./routes/rideSharingPhase14Routes'));
+app.use('/api/ridesharing/phase15', require('./routes/rideSharingPhase15Routes'));
 
 // RealEstate routes
 app.use('/api/realestate', require('./routes/realestate_fixed'));
@@ -207,6 +239,19 @@ app.use('/api/matrimonial', require('./routes/matrimonial'));
 app.use('/api/flashsales', require('./routes/flashsales'));
 app.use('/api/support', require('./routes/support'));
 
+// Phase 5A: Enhanced Authentication Routes (OTP, Social Login, Biometric, Sessions, Guest Checkout)
+app.use('/api/auth/otp', require('./routes/otpAuthRoutes'));
+app.use('/api/auth/social', require('./routes/socialAuthRoutes'));
+app.use('/api/auth/biometric', require('./routes/biometricAuthRoutes'));
+app.use('/api/auth/sessions', require('./routes/sessionManagementRoutes'));
+app.use('/api/checkout/guest', require('./routes/guestCheckoutRoutes'));
+
+// Phase 5B: User Management Routes (Profile, Addresses, Payment Methods, Preferences, Subscriptions)
+app.use('/api/user/profile', require('./routes/userProfileRoutes'));
+app.use('/api/user/addresses', require('./routes/addressRoutes'));
+app.use('/api/user/payment-methods', require('./routes/paymentMethodRoutes'));
+app.use('/api/user/preferences', require('./routes/preferencesRoutes'));
+app.use('/api/subscriptions', require('./routes/subscriptionRoutes'));
 
 // Initialize Elasticsearch index on startup
 require('./utils/elasticsearch').ensureIndex().catch(console.error);
@@ -275,6 +320,10 @@ const abuseReportingJob = require('./jobs/abuseReportingJob');
 const DiaryReminderScheduler = require('./services/diaryReminderScheduler');
 const { io } = require('./config/websocket');
 const diaryReminderScheduler = new DiaryReminderScheduler(io);
+
+// Initialize Order Tracking WebSocket (Phase 5E: Real-time order & shipment tracking)
+const OrderTrackingWebSocket = require('./websocket/orderTrackingWebSocket');
+new OrderTrackingWebSocket(io);
 
 // Initialize Missed Reminder Scheduler (Phase 1)
 const missedReminderScheduler = require('./services/missedReminderScheduler');

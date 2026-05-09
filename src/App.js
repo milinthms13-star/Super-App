@@ -51,6 +51,14 @@ const Diary = React.lazy(() =>
   import("./modules/personaldiary").then((module) => ({ default: module.Diary }))
 );
 
+// Phase 5B: User Management Components - Copy frontend components to src/components/user if using src/
+// const ProfileSetup = React.lazy(() => import("./components/user/ProfileSetup"));
+// const AddressBook = React.lazy(() => import("./components/user/AddressBook"));
+// const PaymentMethods = React.lazy(() => import("./components/user/PaymentMethods"));
+// const UserPreferences = React.lazy(() => import("./components/user/UserPreferences"));
+// const SubscriptionPlans = React.lazy(() => import("./components/user/SubscriptionPlans"));
+// const AccountSettings = React.lazy(() => import("./components/user/AccountSettings"));
+
 const SOCKET_BASE_URL = BACKEND_BASE_URL;
 const EMERGENCY_CALL_STORAGE_KEY = "malabarbazaar-emergency-call";
 
@@ -97,6 +105,67 @@ const EMPTY_APP_DATA = {
   enabledModules: [],
 };
 
+const PREVIEW_ENABLED_MODULES = [
+  "ecommerce",
+  "messaging",
+  "classifieds",
+  "realestate",
+  "fooddelivery",
+  "localmarket",
+  "ridesharing",
+  "matrimonial",
+  "socialmedia",
+  "reminderalert",
+  "sosalert",
+  "astrology",
+];
+
+const PREVIEW_BUSINESS_CATEGORIES = [
+  { id: "ecommerce", name: "GlobeMart", fee: 799, requiresFoodLicense: false },
+  { id: "messaging", name: "LinkUp", fee: 999, requiresFoodLicense: false },
+  { id: "fooddelivery", name: "Feastly", fee: 1999, requiresFoodLicense: true },
+  { id: "ridesharing", name: "SwiftRide", fee: 1499, requiresFoodLicense: false },
+  { id: "matrimonial", name: "SoulMatch", fee: 899, requiresFoodLicense: false },
+];
+
+const PREVIEW_GLOBEMART_CATEGORIES = [
+  {
+    id: "snacks",
+    name: "Kerala Snacks",
+    theme: "Regional favorites",
+    accentColor: "#0f4c81",
+    subcategories: ["Banana Chips", "Mixtures", "Pickles"],
+  },
+  {
+    id: "home-essentials",
+    name: "Home Essentials",
+    theme: "Everyday needs",
+    accentColor: "#b65d24",
+    subcategories: ["Cleaning", "Storage", "Kitchen"],
+  },
+];
+
+const PREVIEW_REGISTRATION_APPLICATIONS = [
+  {
+    id: "app-101",
+    applicantName: "Akhil Foods",
+    businessName: "Akhil Foods",
+    selectedBusinessCategories: ["fooddelivery"],
+    registrationFee: 1999,
+    status: "pending",
+    submittedAt: "2026-05-06T09:30:00.000Z",
+  },
+  {
+    id: "app-102",
+    applicantName: "Kochi Swift Cabs",
+    businessName: "Kochi Swift Cabs",
+    selectedBusinessCategories: ["ridesharing"],
+    registrationFee: 1499,
+    status: "approved",
+    submittedAt: "2026-05-05T13:15:00.000Z",
+  },
+];
+
 axios.defaults.withCredentials = true;
 
 function AppShell() {
@@ -129,6 +198,16 @@ function AppShell() {
   const [incomingSosAlert, setIncomingSosAlert] = useState(null);
   const [globeMartCategoryEndpointAvailable, setGlobeMartCategoryEndpointAvailable] =
     useState(true);
+  const investorPreviewMode = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const mode = params.get("investorPreview");
+    return mode === "public" || mode === "user" || mode === "admin" ? mode : "";
+  }, [location.search]);
+  const investorPreviewScreen = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("screen") || "";
+  }, [location.search]);
+  const investorPreviewEnabled = Boolean(investorPreviewMode);
   const isAdminUser =
     loggedInUser?.role === "admin" || loggedInUser?.registrationType === "admin";
   const toggleControlledModuleIds = useMemo(
@@ -246,6 +325,10 @@ function AppShell() {
   }, [customLinks]);
 
   useEffect(() => {
+    if (investorPreviewEnabled) {
+      return undefined;
+    }
+
     if (!isLoggedIn || !authToken) {
       setIncomingSosAlert(null);
       return undefined;
@@ -298,12 +381,57 @@ function AppShell() {
     return () => {
       socket.disconnect();
     };
-  }, [authToken, isLoggedIn]);
+  }, [authToken, investorPreviewEnabled, isLoggedIn]);
 
   useEffect(() => {
     let isActive = true;
 
     const bootstrapAuth = async () => {
+      if (investorPreviewEnabled) {
+        setBusinessCategories(PREVIEW_BUSINESS_CATEGORIES);
+        setGlobeMartCategories(PREVIEW_GLOBEMART_CATEGORIES);
+        setRegistrationApplications(PREVIEW_REGISTRATION_APPLICATIONS);
+        setRegisteredAccounts([]);
+        setEnabledModules(PREVIEW_ENABLED_MODULES);
+        setCustomLinks([]);
+        setAppDataError("");
+        setIncomingSosAlert(null);
+        setAuthToken("");
+
+        if (investorPreviewMode === "public") {
+          setIsLoggedIn(false);
+          setLoggedInUser(null);
+          setRegistrationType(investorPreviewScreen === "login" ? "login" : "");
+        } else {
+          const previewUser =
+            investorPreviewMode === "admin"
+              ? {
+                  name: "NilaHub Admin",
+                  email: "admin@nilahub.com",
+                  avatar: "A",
+                  registrationType: "admin",
+                  role: "admin",
+                  preferences: { language: "en" },
+                }
+              : {
+                  name: "Dhanya",
+                  email: "dhanya@nilahub.com",
+                  avatar: "D",
+                  registrationType: "user",
+                  role: "user",
+                  preferences: { language: "en" },
+                };
+
+          setRegistrationType("");
+          setLoggedInUser(previewUser);
+          setIsLoggedIn(true);
+        }
+
+        setLanguage("en");
+        setAuthChecked(true);
+        return;
+      }
+
       if (!authToken) {
         if (isActive) {
           setAuthChecked(true);
@@ -384,7 +512,14 @@ function AppShell() {
     return () => {
       isActive = false;
     };
-  }, [authToken, loadAdminAppData, loadPublicAppData]);
+  }, [
+    authToken,
+    investorPreviewEnabled,
+    investorPreviewMode,
+    investorPreviewScreen,
+    loadAdminAppData,
+    loadPublicAppData,
+  ]);
 
   const handleLoginSuccess = useCallback(
     async (user, _token, activeRole) => {
@@ -933,6 +1068,7 @@ function AppShell() {
               <Route path="cart" element={<CartPage />} />
               <Route path="orders" element={<OrdersPage />} />
               <Route path="returns" element={<ReturnsPage />} />
+              
               <Route path="messaging" element={<Messaging />} />
               <Route path="classifieds" element={<Classifieds />} />
               <Route path="realestate" element={<RealEstate />} />

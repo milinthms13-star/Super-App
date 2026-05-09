@@ -1,0 +1,274 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 4 /Kids [4 0 R 6 0 R 8 0 R 10 0 R] >>
+endobj
+3 0 obj
+<< /Length 2130 >>
+stream
+q 0.96 g 42 592 511 190 re f Q
+42 592 511 190 re S
+BT /F1 28 Tf 1 0 0 1 60 750 Tm (NilaHub - Investor Screenshot Appendix) Tj ET
+BT /F1 12 Tf 1 0 0 1 60 716 Tm (Standalone PDF appendix for investor outreach. This version is ready to hold) Tj ET
+BT /F1 12 Tf 1 0 0 1 60 700 Tm (product screenshots and already includes the visual capture plan, file) Tj ET
+BT /F1 12 Tf 1 0 0 1 60 684 Tm (names, and investor-facing captions.) Tj ET
+BT /F1 11 Tf 1 0 0 1 60 652 Tm (Prepared: May 9, 2026) Tj ET
+BT /F1 11 Tf 1 0 0 1 212 652 Tm (Status: Template ready, screenshots pending insertion) Tj ET
+BT /F1 18 Tf 1 0 0 1 60 607 Tm (Minimum Screenshot Set) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 572 Tm (01. Launch / Login - docs/investor-screenshots/01-launch-login.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 554 Tm (02. Main Dashboard - docs/investor-screenshots/02-dashboard.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 536 Tm (03. Messaging Chat Window - docs/investor-screenshots/03-messaging-chat.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 518 Tm (04. Admin Dashboard - docs/investor-screenshots/04-admin-dashboard.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 500 Tm (05. E-commerce Marketplace - docs/investor-screenshots/05-ecommerce-marketplace.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 482 Tm (06. Wallet / Payments - docs/investor-screenshots/06-wallet-payments.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 464 Tm (07. Ride Booking - docs/investor-screenshots/07-ridesharing-booking.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 446 Tm (08. Live Ride Tracking - docs/investor-screenshots/08-ridesharing-tracking.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 428 Tm (09. SOS / Safety - docs/investor-screenshots/09-sos-safety.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 410 Tm (10. Reminder Workspace - docs/investor-screenshots/10-reminder-workspace.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 392 Tm (11. Diary / AI Insights - docs/investor-screenshots/11-diary-ai.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 374 Tm (12. Mobile App Shell - docs/investor-screenshots/12-mobile-app-shell.png) Tj ET
+BT /F1 10 Tf 1 0 0 1 42 62 Tm (Use docs/investor-screenshots/ for the final PNG files. Re-run this script any time you want a refreshed PDF.) Tj ET
+endstream
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+5 0 obj
+<< /Length 3627 >>
+stream
+BT /F1 20 Tf 1 0 0 1 42 806 Tm (Screenshot Pages) Tj ET
+BT /F1 10 Tf 1 0 0 1 42 788 Tm (Replace each placeholder with the final screenshot file before investor distribution.) Tj ET
+42 446 246 310 re S
+q 0.95 g 54 608 222 92 re f Q
+54 608 222 92 re S
+BT /F1 15 Tf 1 0 0 1 56 730 Tm (1\) Launch / Login) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 712 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 655 Tm (docs/investor-screenshots/01-launch-login.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 591 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 576 Tm (Branded product entry point for NilaHub) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 563 Tm (across web and app surfaces.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 548 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 533 Tm (The product has a polished entry) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 520 Tm (experience and is not just a backend) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 507 Tm (prototype.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 492 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 477 Tm (src/components/Login.js,) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 465 Tm (src/components/LaunchPage.js) Tj ET
+306 446 246 310 re S
+q 0.95 g 318 608 222 92 re f Q
+318 608 222 92 re S
+BT /F1 15 Tf 1 0 0 1 320 730 Tm (2\) Main Dashboard) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 712 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 334 655 Tm (docs/investor-screenshots/02-dashboard.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 591 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 576 Tm (Unified dashboard connecting multiple) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 563 Tm (high-frequency consumer and service) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 550 Tm (modules.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 535 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 520 Tm (The super-app vision is visible in a) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 507 Tm (single operating shell.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 492 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 477 Tm (/dashboard, src/modules/Dashboard.js) Tj ET
+42 118 246 310 re S
+q 0.95 g 54 280 222 92 re f Q
+54 280 222 92 re S
+BT /F1 15 Tf 1 0 0 1 56 402 Tm (3\) Messaging Chat Window) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 384 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 327 Tm (docs/investor-screenshots/03-messaging-chat.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 263 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 248 Tm (Real-time messaging interface with chat) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 235 Tm (workflow, conversation history, and) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 222 Tm (engagement surface.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 207 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 192 Tm (Core daily-use behavior and a strong) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 179 Tm (engagement loop.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 164 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 149 Tm (/messaging, src/modules/messaging/Messaging.js) Tj ET
+306 118 246 310 re S
+q 0.95 g 318 280 222 92 re f Q
+318 280 222 92 re S
+BT /F1 15 Tf 1 0 0 1 320 402 Tm (4\) Admin Dashboard) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 384 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 334 327 Tm (docs/investor-screenshots/04-admin-dashboard.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 263 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 248 Tm (Admin dashboard for moderation,) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 235 Tm (monitoring, and operational control.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 220 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 205 Tm (The product includes an operations layer,) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 192 Tm (not just end-user screens.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 177 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 162 Tm (/admin-dashboard,) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 150 Tm (src/modules/admin/AdminDashboard.js) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 3768 >>
+stream
+BT /F1 20 Tf 1 0 0 1 42 806 Tm (Screenshot Pages) Tj ET
+BT /F1 10 Tf 1 0 0 1 42 788 Tm (Replace each placeholder with the final screenshot file before investor distribution.) Tj ET
+42 446 246 310 re S
+q 0.95 g 54 608 222 92 re f Q
+54 608 222 92 re S
+BT /F1 15 Tf 1 0 0 1 56 730 Tm (5\) E-commerce Marketplace) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 712 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 655 Tm (docs/investor-screenshots/05-ecommerce-marketplace.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 591 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 576 Tm (Marketplace browsing and product) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 563 Tm (discovery flow within the NilaHub) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 550 Tm (commerce layer.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 535 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 520 Tm (The platform supports) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 507 Tm (transaction-oriented commerce) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 494 Tm (experiences.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 479 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 464 Tm (/ecommerce, src/modules/ecommerce/Ecommerce.js) Tj ET
+306 446 246 310 re S
+q 0.95 g 318 608 222 92 re f Q
+318 608 222 92 re S
+BT /F1 15 Tf 1 0 0 1 320 730 Tm (6\) Wallet / Payments) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 712 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 334 655 Tm (docs/investor-screenshots/06-wallet-payments.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 591 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 576 Tm (Wallet and payment experience showing) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 563 Tm (monetization infrastructure and) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 550 Tm (transaction handling.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 535 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 520 Tm (There is a visible path to payments and) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 507 Tm (monetization.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 492 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 477 Tm (src/modules/ecommerce/Wallet.js,) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 465 Tm (src/modules/ridesharing/components/payment/Wallet.js) Tj ET
+42 118 246 310 re S
+q 0.95 g 54 280 222 92 re f Q
+54 280 222 92 re S
+BT /F1 15 Tf 1 0 0 1 56 402 Tm (7\) Ride Booking) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 384 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 327 Tm (docs/investor-screenshots/07-ridesharing-booking.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 263 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 248 Tm (Ride booking workflow with pickup, drop,) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 235 Tm (payment method, and service logic.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 220 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 205 Tm (The product extends beyond messaging into) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 192 Tm (service transactions.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 177 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 162 Tm (/ridesharing,) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 150 Tm (src/modules/ridesharing/RideSharing.js,) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 138 Tm (src/modules/ridesharing/components/RideBooking.js) Tj ET
+306 118 246 310 re S
+q 0.95 g 318 280 222 92 re f Q
+318 280 222 92 re S
+BT /F1 15 Tf 1 0 0 1 320 402 Tm (8\) Live Ride Tracking) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 384 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 334 327 Tm (docs/investor-screenshots/08-ridesharing-tracking.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 263 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 248 Tm (Live ride tracking interface with) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 235 Tm (map-based trip visibility.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 220 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 205 Tm (Real-time operational UX and higher) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 192 Tm (product sophistication.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 177 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 162 Tm (src/modules/ridesharing/components/tracking/LiveMap.js) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 3684 >>
+stream
+BT /F1 20 Tf 1 0 0 1 42 806 Tm (Screenshot Pages) Tj ET
+BT /F1 10 Tf 1 0 0 1 42 788 Tm (Replace each placeholder with the final screenshot file before investor distribution.) Tj ET
+42 446 246 310 re S
+q 0.95 g 54 608 222 92 re f Q
+54 608 222 92 re S
+BT /F1 15 Tf 1 0 0 1 56 730 Tm (9\) SOS / Safety) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 712 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 655 Tm (docs/investor-screenshots/09-sos-safety.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 591 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 576 Tm (Emergency safety workflow with SOS) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 563 Tm (escalation and trusted-contact support.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 548 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 533 Tm (Differentiated trust and safety) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 520 Tm (capabilities.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 505 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 490 Tm (/sosalert, src/modules/sos/SOSAlert.js,) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 478 Tm (src/modules/ridesharing/components/safety/SOSEmergency.js) Tj ET
+306 446 246 310 re S
+q 0.95 g 318 608 222 92 re f Q
+318 608 222 92 re S
+BT /F1 15 Tf 1 0 0 1 320 730 Tm (10\) Reminder Workspace) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 712 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 334 655 Tm (docs/investor-screenshots/10-reminder-workspace.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 591 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 576 Tm (Reminder and smart to-do workspace for) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 563 Tm (repeat engagement and utility retention.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 548 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 533 Tm (The product includes recurring-use) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 520 Tm (utility modules beyond one-time) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 507 Tm (transactions.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 492 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 477 Tm (/reminderalert,) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 465 Tm (src/modules/reminderalert/ReminderAlert.js) Tj ET
+42 118 246 310 re S
+q 0.95 g 54 280 222 92 re f Q
+54 280 222 92 re S
+BT /F1 15 Tf 1 0 0 1 56 402 Tm (11\) Diary / AI Insights) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 384 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 70 327 Tm (docs/investor-screenshots/11-diary-ai.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 263 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 248 Tm (Personal diary or AI insight workflow) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 235 Tm (showing assistant-enabled product depth.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 220 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 205 Tm (The platform includes AI-assisted or) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 192 Tm (high-retention personal utility features.) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 177 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 162 Tm (/diary, src/components/AIInsights.js,) Tj ET
+BT /F1 9 Tf 1 0 0 1 56 150 Tm (src/modules/personaldiary) Tj ET
+306 118 246 310 re S
+q 0.95 g 318 280 222 92 re f Q
+318 280 222 92 re S
+BT /F1 15 Tf 1 0 0 1 320 402 Tm (12\) Mobile App Shell) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 384 Tm (Placeholder) Tj ET
+BT /F1 10 Tf 1 0 0 1 334 327 Tm (docs/investor-screenshots/12-mobile-app-shell.png) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 263 Tm (Caption) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 248 Tm (Mobile app packaging view demonstrating) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 235 Tm (Android-ready distribution and app) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 222 Tm (portability.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 207 Tm (What This Proves) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 192 Tm (The platform is not limited to desktop) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 179 Tm (web.) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 164 Tm (Route / Anchor) Tj ET
+BT /F1 9 Tf 1 0 0 1 320 149 Tm (capacitor.config.json, android/) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000000161 00000 n 
+0000002343 00000 n 
+0000002469 00000 n 
+0000006148 00000 n 
+0000006274 00000 n 
+0000010094 00000 n 
+0000010220 00000 n 
+0000013956 00000 n 
+0000014083 00000 n 
+trailer
+<< /Size 12 /Root 11 0 R >>
+startxref
+14133
+%%EOF

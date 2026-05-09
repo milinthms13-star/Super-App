@@ -1,10 +1,32 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import axios from 'axios';
-import { useApp } from '../../contexts/AppContext';
 import { API_BASE_URL } from './constants';
 
+const getStoredAuthToken = () =>
+  localStorage.getItem('authToken') ||
+  localStorage.getItem('accessToken') ||
+  localStorage.getItem('token') ||
+  '';
+
+const buildAuthConfig = (extraConfig = {}) => {
+  const token = getStoredAuthToken();
+  const headers = {
+    ...(extraConfig.headers || {}),
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return {
+    ...extraConfig,
+    headers,
+  };
+};
+
+const getProfileId = (profile) => profile?._id || profile?.id || '';
+
 const KYCVerification = ({ onKYCComplete, currentProfile }) => {
-  const { currentUser } = useApp();
   const [kycStatus, setKycStatus] = useState('pending');
   const [documentType, setDocumentType] = useState('aadhaar');
   const [uploading, setUploading] = useState(false);
@@ -15,6 +37,7 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
   const canvasRef = useRef(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [selfieImage, setSelfieImage] = useState(null);
+  const profileId = getProfileId(currentProfile);
 
   const documentOptions = [
     { value: 'aadhaar', label: 'Aadhaar Card' },
@@ -27,6 +50,11 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
   const handleFileUpload = async (file) => {
     if (!file) return;
 
+    if (!profileId) {
+      setMessage('Save your matrimonial profile before starting KYC verification.');
+      return;
+    }
+
     setUploading(true);
     setMessage('');
 
@@ -34,27 +62,30 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
       const formData = new FormData();
       formData.append('document', file);
       formData.append('documentType', documentType);
+      formData.append('profileId', profileId);
 
       const response = await axios.post(
-        `${API_BASE_URL}/api/matrimonial/kyc/upload`,
+        `${API_BASE_URL}/matrimonial/kyc/upload`,
         formData,
-        {
+        buildAuthConfig({
           headers: {
             'Content-Type': 'multipart/form-data',
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
           },
-        }
+        })
       );
 
-      setMessage(`✓ ${documentType} uploaded successfully. Status: ${response.data.status}`);
-      setKycStatus(response.data.status);
-      setRiskScore(response.data.riskScore || 0);
-      
+      const nextStatus = response.data?.data?.status || response.data?.status || 'under_review';
+      const nextRiskScore = response.data?.data?.riskScore ?? response.data?.riskScore ?? 0;
+
+      setMessage(`${documentType} uploaded successfully. Status: ${nextStatus}`);
+      setKycStatus(nextStatus);
+      setRiskScore(nextRiskScore);
+
       if (onKYCComplete) {
-        onKYCComplete({ documentType, status: response.data.status });
+        onKYCComplete({ documentType, status: nextStatus });
       }
     } catch (error) {
-      setMessage(`✗ Upload failed: ${error.response?.data?.message || error.message}`);
+      setMessage(`Upload failed: ${error.response?.data?.message || error.message}`);
     } finally {
       setUploading(false);
     }
@@ -67,69 +98,83 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
       });
       cameraRef.current.srcObject = stream;
       setIsCameraActive(true);
-    } catch (error) {
-      setMessage('✗ Camera access denied. Please check browser permissions.');
+    } catch (_error) {
+      setMessage('Camera access denied. Please check browser permissions.');
     }
   };
 
   const captureSelfie = () => {
-    if (canvasRef.current && cameraRef.current) {
-      const context = canvasRef.current.getContext('2d');
-      context.drawImage(cameraRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-      const imageData = canvasRef.current.toDataURL('image/jpeg');
-      setSelfieImage(imageData);
-      
-      // Stop camera
-      if (cameraRef.current.srcObject) {
-        cameraRef.current.srcObject.getTracks().forEach(track => track.stop());
-      }
-      setIsCameraActive(false);
+    if (!canvasRef.current || !cameraRef.current) {
+      return;
     }
+
+    const context = canvasRef.current.getContext('2d');
+    context.drawImage(cameraRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+    const imageData = canvasRef.current.toDataURL('image/jpeg');
+    setSelfieImage(imageData);
+
+    if (cameraRef.current.srcObject) {
+      cameraRef.current.srcObject.getTracks().forEach((track) => track.stop());
+    }
+    setIsCameraActive(false);
   };
 
   const uploadSelfie = async () => {
     if (!selfieImage) return;
+
+    if (!profileId) {
+      setMessage('Save your matrimonial profile before uploading a selfie.');
+      return;
+    }
 
     setUploading(true);
     setMessage('');
 
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/matrimonial/kyc/selfie`,
-        { selfieImage },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
-        }
+        `${API_BASE_URL}/matrimonial/kyc/selfie`,
+        { selfieImage, profileId },
+        buildAuthConfig()
       );
 
-      setMessage(`✓ Selfie uploaded. Liveness Score: ${response.data.livenessScore}%`);
+      const livenessScore =
+        response.data?.data?.livenessScore ?? response.data?.livenessScore ?? 0;
+      const nextRiskScore = response.data?.data?.riskScore ?? response.data?.riskScore ?? 0;
+      const nextStatus = response.data?.data?.status || response.data?.status || 'under_review';
+
+      setMessage(`Selfie uploaded. Liveness Score: ${livenessScore}%`);
       setSelfieImage(null);
-      setRiskScore(response.data.riskScore || 0);
+      setKycStatus(nextStatus);
+      setRiskScore(nextRiskScore);
     } catch (error) {
-      setMessage(`✗ Selfie upload failed: ${error.response?.data?.message || error.message}`);
+      setMessage(`Selfie upload failed: ${error.response?.data?.message || error.message}`);
     } finally {
       setUploading(false);
     }
   };
 
   const checkKYCStatus = async () => {
+    if (!profileId) {
+      setMessage('Save your matrimonial profile before checking KYC status.');
+      return;
+    }
+
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/api/matrimonial/kyc/status`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
-        }
+        `${API_BASE_URL}/matrimonial/kyc/status`,
+        buildAuthConfig({
+          params: { profileId },
+        })
       );
 
-      setKycStatus(response.data.status);
-      setRiskScore(response.data.riskScore || 0);
-      setMessage(`Status: ${response.data.status}`);
+      const nextStatus = response.data?.data?.status || response.data?.status || 'pending';
+      const nextRiskScore = response.data?.data?.riskScore ?? response.data?.riskScore ?? 0;
+
+      setKycStatus(nextStatus);
+      setRiskScore(nextRiskScore);
+      setMessage(`Status: ${nextStatus}`);
     } catch (error) {
-      setMessage(`✗ Failed to fetch status: ${error.message}`);
+      setMessage(`Failed to fetch status: ${error.response?.data?.message || error.message}`);
     }
   };
 
@@ -141,7 +186,7 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
       </div>
 
       {message && (
-        <div className={`kyc-message ${message.startsWith('✓') ? 'success' : 'error'}`}>
+        <div className={`kyc-message ${message.startsWith('Failed') || message.startsWith('Upload failed') || message.startsWith('Selfie upload failed') || message.startsWith('Save') ? 'error' : 'success'}`}>
           {message}
         </div>
       )}
@@ -149,9 +194,9 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
       {riskScore > 0 && (
         <div className="risk-score-display">
           <span>Risk Score: {riskScore}/100</span>
-          {riskScore < 30 && <span className="risk-low">✓ Low Risk</span>}
-          {riskScore >= 30 && riskScore < 70 && <span className="risk-medium">⚠ Medium Risk</span>}
-          {riskScore >= 70 && <span className="risk-high">✗ High Risk</span>}
+          {riskScore < 30 && <span className="risk-low">Low Risk</span>}
+          {riskScore >= 30 && riskScore < 70 && <span className="risk-medium">Medium Risk</span>}
+          {riskScore >= 70 && <span className="risk-high">High Risk</span>}
         </div>
       )}
 
@@ -203,7 +248,7 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
             onClick={startCamera}
             disabled={uploading}
           >
-            📷 Start Camera
+            Start Camera
           </button>
         )}
 
@@ -227,7 +272,7 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
               className="btn btn-success"
               onClick={captureSelfie}
             >
-              📸 Capture Selfie
+              Capture Selfie
             </button>
           </>
         )}
@@ -241,7 +286,7 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
                 onClick={uploadSelfie}
                 disabled={uploading}
               >
-                {uploading ? 'Uploading...' : '✓ Upload Selfie'}
+                {uploading ? 'Uploading...' : 'Upload Selfie'}
               </button>
               <button
                 className="btn btn-outline"
@@ -250,7 +295,7 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
                   startCamera();
                 }}
               >
-                🔄 Retake
+                Retake
               </button>
             </div>
           </div>
@@ -275,7 +320,7 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
           <li>Prevents fraud and fake profiles</li>
           <li>Unlocks premium features</li>
           <li>Gets you a blue tick badge (if approved)</li>
-          <li>Your documents are encrypted and secure</li>
+          <li>Your documents are stored securely</li>
         </ul>
       </div>
     </div>
