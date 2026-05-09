@@ -17,10 +17,6 @@ import {
   FaStar,
   FaUser,
   FaBriefcase,
-  FaRocket,
-  FaBolt,
-  FaShieldAlt,
-  FaGlobe,
   FaCheckCircle,
 } from "react-icons/fa";
 
@@ -40,10 +36,6 @@ const iconMap = {
   FaStar,
   FaUser,
   FaBriefcase,
-  FaRocket,
-  FaBolt,
-  FaShieldAlt,
-  FaGlobe,
   FaCheckCircle,
 };
 
@@ -68,13 +60,6 @@ const moduleFallbacks = {
   },
 };
 
-const ecosystemStats = [
-  { icon: "FaRocket", value: "10+", label: "Integrated Services" },
-  { icon: "FaBolt", value: "Real-Time", label: "Infrastructure" },
-  { icon: "FaShieldAlt", value: "Secure", label: "Verified Platform" },
-  { icon: "FaGlobe", value: "Global", label: "Ecosystem Ready" },
-];
-
 const ecosystemRoles = [
   { icon: "FaUser", label: "Users" },
   { icon: "FaStore", label: "Vendors" },
@@ -87,6 +72,12 @@ const heroHighlights = [
   "One login for every core service",
   "Built for users, professionals, and businesses",
   "Simple start, powerful growth path",
+];
+
+const heroProofPoints = [
+  { value: "10+", label: "Services" },
+  { value: "Real-Time", label: "Platform" },
+  { value: "Trusted", label: "Experience" },
 ];
 
 const openExternalLink = (url) => {
@@ -202,6 +193,14 @@ const LaunchPage = ({
               </span>
             ))}
           </div>
+          <div className="hero-proof-strip" aria-label="Quick platform proof">
+            {heroProofPoints.map((point) => (
+              <div className="hero-proof-item" key={point.label}>
+                <span className="hero-proof-value">{point.value}</span>
+                <span className="hero-proof-label">{point.label}</span>
+              </div>
+            ))}
+          </div>
 
           <div className="registration-actions" aria-label="Registration options">
             <button
@@ -255,27 +254,11 @@ const LaunchPage = ({
                 <span className="coming-soon-badge">Coming Soon</span>
               ) : feature.type === "external" ? (
                 <span className="feature-card-link-badge">Open link</span>
-              ) : null}
+              ) : (
+                <span className="feature-card-cta">Explore</span>
+              )}
             </button>
           ))}
-        </div>
-      </section>
-
-      <section className="ecosystem-stats" aria-labelledby="stats-heading">
-        <div className="stats-container">
-          <h2 id="stats-heading" className="stats-title">
-            NilaHub Ecosystem at a Glance
-          </h2>
-          <p className="section-subtitle">A clear snapshot of scale, speed, and trust.</p>
-          <div className="stats-grid">
-            {ecosystemStats.map((stat) => (
-              <div className="stat-card" key={stat.label}>
-                <div className="stat-icon">{renderIcon(stat.icon, "stat-icon-svg")}</div>
-                <div className="stat-value">{stat.value}</div>
-                <div className="stat-label">{stat.label}</div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -357,23 +340,24 @@ const LaunchPage = ({
       <section className="launch-cta" aria-labelledby="cta-heading">
         <div className="cta-container">
           <p className="cta-kicker">Ready to Experience the NilaHub Ecosystem?</p>
-          <h2 id="cta-heading">Join Kerala&apos;s growing digital super platform.</h2>
+          <h2 id="cta-heading">Launch your journey across Kerala&apos;s growing digital super platform.</h2>
           <div className="cta-actions">
             <button
               type="button"
               className="cta-button cta-primary"
               onClick={() => onSelectRegistrationType("user")}
             >
-              Get Started
+              Launch Your Journey
             </button>
             <button
               type="button"
               className="cta-button cta-secondary"
               onClick={handleExploreServices}
             >
-              Explore Services
+              Explore the Ecosystem
             </button>
           </div>
+          <p className="cta-subnote">Built for everyday users, professionals, creators, and businesses.</p>
         </div>
       </section>
     </main>
