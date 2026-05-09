@@ -200,6 +200,32 @@ const verifyAdmin = (req, res, next) => {
   return next();
 };
 
+/**
+ * Authorization middleware - checks if user has required role(s)
+ * @param {string|string[]} requiredRoles - Role(s) required to access the endpoint
+ * @returns {Function} Express middleware
+ */
+const authorize = (requiredRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized - No user found' });
+    }
+
+    const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
+    const userRole = req.user.role || 'user';
+
+    if (!roles.includes(userRole)) {
+      return res.status(403).json({ 
+        error: 'Forbidden - Insufficient privileges',
+        required: roles,
+        userRole
+      });
+    }
+
+    return next();
+  };
+};
+
 // Export the middleware as both a callable function and a named-export bag.
 // This preserves compatibility with older route files that import auth in
 // different ways: `require('../middleware/auth')`, `{ authenticate }`,
@@ -208,6 +234,7 @@ authenticate.authenticate = authenticate;
 authenticate.authenticateToken = authenticate;
 authenticate.verifyToken = authenticate;
 authenticate.verifyAdmin = verifyAdmin;
+authenticate.authorize = authorize;
 authenticate.authMiddleware = authenticate;
 authenticate.getJwtSecret = getJwtSecret;
 authenticate.hasAdminPrivileges = hasAdminPrivileges;
@@ -217,6 +244,7 @@ module.exports.authenticate = authenticate;
 module.exports.authenticateToken = authenticate;
 module.exports.verifyToken = authenticate;
 module.exports.verifyAdmin = verifyAdmin;
+module.exports.authorize = authorize;
 module.exports.authMiddleware = authenticate;
 module.exports.getJwtSecret = getJwtSecret;
 module.exports.hasAdminPrivileges = hasAdminPrivileges;

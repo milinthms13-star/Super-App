@@ -8,7 +8,11 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/User');
 const OtpToken = require('../models/OtpToken');
 const { getRedisClient } = require('../config/redis');
-const { sendEmailViaGmail } = require('../config/gmail');
+const {
+  sendEmailViaGmail,
+  hasGmailClientConfig,
+  hasGmailDeliveryConfig,
+} = require('../config/gmail');
 const logger = require('../utils/logger');
 const { authenticate, getJwtSecret } = require('../middleware/auth');
 const devAuthStore = require('../utils/devAuthStore');
@@ -217,7 +221,7 @@ const hasRealEmailConfig = () => {
   const mode = getEmailMode();
 
   if (mode === 'gmail-api') {
-    return !!process.env.GMAIL_USER;
+    return hasGmailDeliveryConfig();
   }
 
   if (mode === 'ses') {
@@ -805,12 +809,20 @@ router.post('/logout', (_req, res) => {
 router.get('/authorize-gmail', async (req, res) => {
   try {
     const { getAuthUrl } = require('../config/gmail');
+
+    if (!hasGmailClientConfig()) {
+      return res.status(500).json({
+        success: false,
+        message: 'Gmail credentials are not configured. Set GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET or place credentials.json in backend/.',
+      });
+    }
+
     const authUrl = getAuthUrl();
     
     if (!authUrl) {
       return res.status(500).json({
         success: false,
-        message: 'Gmail credentials not configured. Download credentials.json from Google Cloud Console and place in backend folder.'
+        message: 'Failed to generate Gmail authorization URL.',
       });
     }
 

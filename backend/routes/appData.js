@@ -44,7 +44,7 @@ const devAuthStore = require('../utils/devAuthStore');
 const { deleteGridFSFile, uploadBufferToGridFS } = require('../utils/gridfs');
 const { ADMIN_EMAIL } = require('../config/constants');
 const { validatePhone } = require('../utils/validators');
-const { sendEmailViaGmail } = require('../config/gmail');
+const { sendEmailViaGmail, hasGmailDeliveryConfig } = require('../config/gmail');
 
 const router = express.Router();
 const upload = multer({
@@ -1140,7 +1140,7 @@ const useMemoryAuth = () => {
 
 const hasRealEmailConfig = () => {
   if (process.env.EMAIL_SERVICE === 'gmail-api') {
-    return !!process.env.GMAIL_USER;
+    return hasGmailDeliveryConfig();
   }
 
   if (process.env.EMAIL_SERVICE === 'ses') {
