@@ -203,6 +203,103 @@ const LaunchPage = ({
           ))}
         </div>
       </section>
+
+      {/* Ecosystem Statistics Section */}
+      <section className="ecosystem-stats" aria-labelledby="stats-heading">
+        <div className="stats-container">
+          <h2 id="stats-heading" className="stats-title">NilaHub Ecosystem at a Glance</h2>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-icon">🚀</div>
+              <div className="stat-value">10+</div>
+              <div className="stat-label">Integrated Services</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon">⚡</div>
+              <div className="stat-value">Real-Time</div>
+              <div className="stat-label">Infrastructure</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon">🔒</div>
+              <div className="stat-value">Secure</div>
+              <div className="stat-label">Verified Platform</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon">🌍</div>
+              <div className="stat-value">Global</div>
+              <div className="stat-label">Ecosystem Ready</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Ecosystem Flow Section */}
+      <section className="ecosystem-flow" aria-labelledby="flow-heading">
+        <div className="flow-container">
+          <h2 id="flow-heading" className="flow-title">How NilaHub Works</h2>
+          <p className="flow-subtitle">One platform connecting every role in your ecosystem</p>
+          <div className="flow-visualization">
+            <div className="flow-item">
+              <div className="flow-step">👤</div>
+              <div className="flow-text">Users</div>
+            </div>
+            <div className="flow-connector">→</div>
+            <div className="flow-item">
+              <div className="flow-step">🏪</div>
+              <div className="flow-text">Vendors</div>
+            </div>
+            <div className="flow-connector">→</div>
+            <div className="flow-item">
+              <div className="flow-step">🚗</div>
+              <div className="flow-text">Drivers</div>
+            </div>
+            <div className="flow-connector">→</div>
+            <div className="flow-item">
+              <div className="flow-step">✨</div>
+              <div className="flow-text">Creators</div>
+            </div>
+            <div className="flow-connector">→</div>
+            <div className="flow-item">
+              <div className="flow-step">💼</div>
+              <div className="flow-text">Businesses</div>
+            </div>
+          </div>
+          <p className="flow-conclusion">All connected. All earning. All growing together.</p>
+        </div>
+      </section>
+
+      {/* Trust Indicators Section */}
+      <section className="trust-indicators" aria-labelledby="trust-heading">
+        <div className="trust-container">
+          <h2 id="trust-heading" className="trust-title">Why Choose NilaHub</h2>
+          <div className="trust-grid">
+            <div className="trust-item">
+              <span className="trust-check">✓</span>
+              <span className="trust-text">Multi-Service Platform</span>
+            </div>
+            <div className="trust-item">
+              <span className="trust-check">✓</span>
+              <span className="trust-text">AI-Powered Features</span>
+            </div>
+            <div className="trust-item">
+              <span className="trust-check">✓</span>
+              <span className="trust-text">Secure Authentication</span>
+            </div>
+            <div className="trust-item">
+              <span className="trust-check">✓</span>
+              <span className="trust-text">Real-Time Infrastructure</span>
+            </div>
+            <div className="trust-item">
+              <span className="trust-check">✓</span>
+              <span className="trust-text">Verified Ecosystem</span>
+            </div>
+            <div className="trust-item">
+              <span className="trust-check">✓</span>
+              <span className="trust-text">Global Ready</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
   );
 };
