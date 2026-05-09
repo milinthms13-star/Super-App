@@ -17011,3 +17011,5 @@
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-10 02:10:00:100"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mCleaned up 0 expired messages\u001b[39m","timestamp":"2026-05-10 02:10:00:100"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-10 02:11:00:110"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-10 02:12:00:120"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-10 02:12:00:120"}
