@@ -250,7 +250,50 @@ const withTimeout = async (promise, timeoutMs, message) => {
   }
 };
 
+const getProviderSpecificEmailFailureMessage = (error, mode = getEmailMode()) => {
+  const errorCode = String(error?.name || error?.Code || error?.code || '').trim();
+  const errorMessage = String(error?.message || '');
+
+  if (mode === 'ses') {
+    if (
+      errorCode === 'MessageRejected' ||
+      /email address is not verified|address not verified|mailbox simulator|sandbox/i.test(errorMessage)
+    ) {
+      return (
+        'AWS SES rejected the email. Verify EMAIL_FROM in SES, and if the SES account is still in sandbox, ' +
+        'you can only send to verified recipient addresses.'
+      );
+    }
+
+    if (
+      ['AccessDeniedException', 'InvalidClientTokenId', 'SignatureDoesNotMatch', 'UnrecognizedClientException', 'AuthFailure'].includes(errorCode) ||
+      /security token|credential|access denied|signature/i.test(errorMessage)
+    ) {
+      return 'AWS SES credentials are invalid or missing send permissions. Check AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, and IAM SES access.';
+    }
+
+    if (errorCode === 'ThrottlingException' || /throttl|rate exceeded|too many requests/i.test(errorMessage)) {
+      return 'AWS SES rate limit reached. Please try again in a few minutes.';
+    }
+  }
+
+  if (
+    mode === 'smtp' &&
+    (/invalid login|username and password not accepted|auth/i.test(errorMessage) ||
+      ['EAUTH', 'EENVELOPE'].includes(errorCode))
+  ) {
+    return 'SMTP authentication failed. Check EMAIL_USER, EMAIL_PASS, and EMAIL_FROM. For Gmail, use an app password.';
+  }
+
+  return null;
+};
+
 const getEmailFailureMessage = (error, mode = getEmailMode(), smtpConfig = getSmtpConfig()) => {
+  const providerSpecificMessage = getProviderSpecificEmailFailureMessage(error, mode);
+  if (providerSpecificMessage) {
+    return providerSpecificMessage;
+  }
+
   if (isRenderSmtpPortRestricted(mode, smtpConfig)) {
     return (
       `SMTP email delivery on port ${smtpConfig.port} can fail on Render free web services. ` +

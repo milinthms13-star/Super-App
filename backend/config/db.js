@@ -35,14 +35,14 @@ const connectDB = async () => {
     return false;
   }
 
-  const uri = process.env.MONGODB_URI;
+  const uri = process.env.MONGODB_URI || process.env.DATABASE_URL;
   if (!uri) {
     if (process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production') {
-      logger.warn('Using development-only in-memory auth storage. MongoDB/GridFS is disabled because MONGODB_URI is not set.');
+      logger.warn('Using development-only in-memory auth storage. MongoDB/GridFS is disabled because neither MONGODB_URI nor DATABASE_URL is set.');
       return false;
     }
 
-    throw new Error('MONGODB_URI is required in .env');
+    throw new Error('MONGODB_URI or DATABASE_URL is required in .env');
   }
 
   try {

@@ -20,6 +20,44 @@ const isRenderSmtpPortRestricted = () => {
   );
 };
 
+const getProviderSpecificEmailFailureMessage = (error) => {
+  const errorCode = String(error?.name || error?.Code || error?.code || '').trim();
+  const errorMessage = String(error?.message || '');
+
+  if (emailConfig.provider === 'ses') {
+    if (
+      errorCode === 'MessageRejected' ||
+      /email address is not verified|address not verified|mailbox simulator|sandbox/i.test(errorMessage)
+    ) {
+      return (
+        'AWS SES rejected the email. Verify EMAIL_FROM in SES, and if the SES account is still in sandbox, ' +
+        'you can only send to verified recipient addresses.'
+      );
+    }
+
+    if (
+      ['AccessDeniedException', 'InvalidClientTokenId', 'SignatureDoesNotMatch', 'UnrecognizedClientException', 'AuthFailure'].includes(errorCode) ||
+      /security token|credential|access denied|signature/i.test(errorMessage)
+    ) {
+      return 'AWS SES credentials are invalid or missing send permissions. Check AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, and IAM SES access.';
+    }
+
+    if (errorCode === 'ThrottlingException' || /throttl|rate exceeded|too many requests/i.test(errorMessage)) {
+      return 'AWS SES rate limit reached. Please try again in a few minutes.';
+    }
+  }
+
+  if (
+    emailConfig.provider === 'smtp' &&
+    (/invalid login|username and password not accepted|auth/i.test(errorMessage) ||
+      ['EAUTH', 'EENVELOPE'].includes(errorCode))
+  ) {
+    return 'SMTP authentication failed. Check EMAIL_USER, EMAIL_PASS, and EMAIL_FROM. For Gmail, use an app password.';
+  }
+
+  return null;
+};
+
 /**
  * Initialize email transporter based on configuration
  */
@@ -207,9 +245,10 @@ const sendEmail = async (to, subject, htmlContent, textContent = '', reminderId 
       messageId: info.messageId || info.MessageId,
     };
   } catch (error) {
-    const errorMessage = isRenderSmtpPortRestricted()
-      ? `SMTP email delivery on port ${emailConfig.smtp.port} can fail on Render free web services. Switch EMAIL_SERVICE to ses or gmail-api.`
-      : error.message;
+    const errorMessage = getProviderSpecificEmailFailureMessage(error) ||
+      (isRenderSmtpPortRestricted()
+        ? `SMTP email delivery on port ${emailConfig.smtp.port} can fail on Render free web services. Switch EMAIL_SERVICE to ses or gmail-api.`
+        : error.message);
 
     logger.error('Email send failed', {
       error: errorMessage,

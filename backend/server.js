@@ -1,11 +1,12 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '../.env'), override: false });
 
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
-const path = require('path');
 
 const connectDB = require('./config/db');
 const { connectRedis, closeRedis } = require('./config/redis');
@@ -15,12 +16,30 @@ const errorHandler = require('./middleware/errorHandler');
 // Init app
 const app = express();
 const uploadsDirectory = path.join(__dirname, 'uploads');
+const configuredFrontendOrigins = String(process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOrigin = (origin, callback) => {
+  if (
+    !origin ||
+    configuredFrontendOrigins.length === 0 ||
+    configuredFrontendOrigins.includes('*') ||
+    configuredFrontendOrigins.includes(origin)
+  ) {
+    callback(null, true);
+    return;
+  }
+
+  callback(new Error(`CORS origin not allowed: ${origin}`));
+};
 
 // Middleware
 app.use(helmet());
 app.use(compression());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || true,
+  origin: corsOrigin,
   credentials: true
 }));
 app.use(morgan('combined'));
