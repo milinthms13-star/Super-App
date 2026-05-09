@@ -137,6 +137,15 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                             : t("navigation.businessAccess", "Business access")}
                       </span>
                     </div>
+                    <button 
+                      className="profile-btn"
+                      onClick={() => {
+                        navigate("/profile");
+                        setShowUserMenu(false);
+                      }}
+                    >
+                      {t("common.profile", "Profile")}
+                    </button>
                     <button className="logout-btn" onClick={onLogout}>
                       {t("common.logout", "Logout")}
                     </button>

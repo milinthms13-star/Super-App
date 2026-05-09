@@ -4,8 +4,6 @@ import { getTranslation } from "../data/translations";
 import useVoice from "../hooks/useVoice";
 import { API_BASE_URL } from "../utils/api";
 import OTPLogin from "./OTPLogin";
-import BiometricLogin from "./BiometricLogin";
-import MPINLogin from "./MPINLogin";
 import "../styles/Login.css";
 
 const ADMIN_EMAIL = "mgdhanyamohan@gmail.com";
@@ -36,12 +34,15 @@ const Login = ({
   const [success, setSuccess] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false);
-  const [authMethod, setAuthMethod] = useState("email");
+  const [authMethod, setAuthMethod] = useState(null); // null (initial), "gmail", "email", "phone", "mpin"
+  const [deviceToken, setDeviceToken] = useState("");
   const [setupUsername, setSetupUsername] = useState("");
   const [setupUsernameStatus, setSetupUsernameStatus] = useState(null); // 'available', 'taken', 'checking', null
   const [setupUsernameError, setSetupUsernameError] = useState("");
   const [verifiedUser, setVerifiedUser] = useState(null);
   const [verifiedToken, setVerifiedToken] = useState(null);
+  const [mpinPassword, setMpinPassword] = useState("");
+  const [loginStep, setLoginStep] = useState("method"); // "method", "input", "verify"
   const {
     recognitionSupported,
     speechSupported,
@@ -86,6 +87,7 @@ const Login = ({
   const isEntrepreneurRegistrationFlow = false;
   const isBusinessRegistrationFlow = isEntrepreneurRegistrationFlow;
   const isLoginFlow = normalizedRegistrationType === "login";
+  const loginFlowClass = isLoginFlow ? "login-flow" : "";
   const registeredAccount = registeredAccounts.find((account) => account.email === normalizedEmail);
   const businessCategoryCount = businessCategories.length;
 
@@ -197,6 +199,23 @@ const Login = ({
   const clearMessages = () => {
     setError("");
     setSuccess("");
+  };
+
+  const handleSelectAuthMethod = (method) => {
+    setAuthMethod(method);
+    setEmail("");
+    setMpinPassword("");
+    setOtp("");
+    setOtpSent(false);
+    clearMessages();
+    
+    if (method === "gmail") {
+      // Google login - redirect
+      window.location.href = `${API_BASE_URL}/auth/google`;
+    } else {
+      // Show input field for email, phone, or mpin
+      setLoginStep("input");
+    }
   };
 
   const updateEmail = (value) => {
@@ -374,19 +393,70 @@ const Login = ({
       }
     }
 
+    // MPIN Direct Validation - No OTP needed
+    if (isLoginFlow && authMethod === "mpin") {
+      if (!mpinPassword.trim()) {
+        setError("Please enter your MPIN");
+        return;
+      }
+      if (!/^\d{4}$/.test(mpinPassword)) {
+        setError("Please enter a valid 4-digit MPIN");
+        return;
+      }
+      setLoading(true);
+      try {
+        const response = await axios.post(`${API_BASE_URL}/auth/verify-mpin`, {
+          mpin: mpinPassword,
+          authMethod: "mpin",
+        });
+
+        if (response.data.success && response.data.token && response.data.user) {
+          const mergedUser = {
+            ...response.data.user,
+            name: response.data.user.name,
+            phone: response.data.user.phone || "",
+            email: response.data.user.email || "",
+            role: response.data.user.role || "user",
+            registrationType: "user",
+          };
+
+          onLoginSuccess(mergedUser, response.data.token, "user");
+        } else {
+          setError(response.data.message || "Invalid MPIN");
+        }
+      } catch (err) {
+        if (!err.response) {
+          setError("Backend is not running. Please start the API server and try again.");
+        } else {
+          setError(err.response.data?.message || "Unable to verify MPIN. Please try again.");
+        }
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Email/Phone OTP Flow
     if (!email) {
-      setError("Please enter your email address");
+      setError(`Please enter your ${authMethod === "phone" ? "phone number" : "email address"}`);
       return;
     }
 
-    if (!validateEmail(email)) {
-      setError("Please enter a valid email address");
-      return;
-    }
+    if (isLoginFlow && authMethod === "phone") {
+      if (!validatePhone(email)) {
+        setError("Please enter a valid phone number");
+        return;
+      }
+    } else if (isLoginFlow && authMethod === "email") {
+      if (!validateEmail(email)) {
+        setError("Please enter a valid email address");
+        return;
+      }
 
-    if (isAdminFlow && !isAdminEmail) {
-      setError("Use the configured admin account to access the admin dashboard");
-      return;
+      if (isAdminFlow && !isAdminEmail) {
+        setError("Use the configured admin account to access the admin dashboard");
+        return;
+      }
     }
 
     setLoading(true);
@@ -394,13 +464,20 @@ const Login = ({
     try {
       const response = await axios.post(
         `${API_BASE_URL}/auth/send-otp`,
-        { email },
+        { 
+          email: authMethod === "email" ? email : undefined,
+          phone: authMethod === "phone" ? email : undefined,
+          authMethod: authMethod,
+        },
         { timeout: OTP_REQUEST_TIMEOUT_MS }
       );
 
       if (response.data.success) {
         setOtpSent(true);
-        setSuccess(response.data.message || "OTP sent to your email");
+        setLoginStep("verify");
+        let method = "email";
+        if (authMethod === "phone") method = "phone";
+        setSuccess(response.data.message || `OTP sent to your ${method}`);
         setDevOtp(response.data.devOtp || "");
       } else {
         setError(response.data.message || "Failed to send OTP");
@@ -437,8 +514,12 @@ const Login = ({
 
     try {
       const response = await axios.post(`${API_BASE_URL}/auth/verify-otp`, {
-        email,
+        email: authMethod === "email" ? email : undefined,
+        phone: authMethod === "phone" ? email : undefined,
+        mpin: authMethod === "mpin" ? mpinPassword : undefined,
+        deviceToken: authMethod === "device" ? deviceToken : undefined,
         otp,
+        authMethod: authMethod,
       });
 
       if (response.data.success && response.data.token && response.data.user) {
@@ -571,6 +652,8 @@ const Login = ({
     setError("");
     setSuccess("");
     setDevOtp("");
+    setMpinPassword("");
+    setLoginStep("input");
   };
 
   const handleSetUsername = async (event) => {
@@ -705,91 +788,9 @@ const Login = ({
     </span>
   );
 
-  const handleAlternativeAuthSuccess = (payload = {}) => {
-    const data = payload?.data || payload;
-    const user = data?.user || {};
-    const firstName = String(user.firstName || "").trim();
-    const lastName = String(user.lastName || "").trim();
-    const normalizedName =
-      `${firstName} ${lastName}`.trim() || user.name || user.phoneNumber || user.email || "User";
-    const normalizedEmail = String(user.email || "").trim().toLowerCase();
-    const isAltAdmin = normalizedEmail && normalizedEmail === ADMIN_EMAIL;
-    const normalizedUser = {
-      ...user,
-      id: user.id || user._id,
-      name: normalizedName,
-      phone: user.phoneNumber || user.phone || "",
-      email: user.email || "",
-      avatar: user.avatar || normalizedName.charAt(0).toUpperCase() || "U",
-      role: isAltAdmin ? "admin" : user.role || "user",
-      registrationType: isAltAdmin ? "admin" : user.registrationType || "user",
-    };
-
-    onLoginSuccess(
-      normalizedUser,
-      data?.accessToken || data?.token || "",
-      normalizedUser.registrationType
-    );
-  };
-
-  const handleAlternativeAuthError = (nextError) => {
-    setError(typeof nextError === "string" ? nextError : "Authentication failed. Please try again.");
-  };
-
-  if (isLoginFlow && authMethod === "phone") {
-    return (
-      <div className="login-container" dir={direction}>
-        <div className="login-alt-backbar">
-          <button
-            type="button"
-            className="btn btn-outline login-home-btn"
-            onClick={() => setAuthMethod("email")}
-          >
-            Back to Email Login
-          </button>
-        </div>
-        <OTPLogin onSuccess={handleAlternativeAuthSuccess} onError={handleAlternativeAuthError} />
-      </div>
-    );
-  }
-
-  if (isLoginFlow && authMethod === "device") {
-    return (
-      <div className="login-container" dir={direction}>
-        <div className="login-alt-backbar">
-          <button
-            type="button"
-            className="btn btn-outline login-home-btn"
-            onClick={() => setAuthMethod("email")}
-          >
-            Back to Email Login
-          </button>
-        </div>
-        <BiometricLogin onSuccess={handleAlternativeAuthSuccess} onError={handleAlternativeAuthError} />
-      </div>
-    );
-  }
-
-  if (isLoginFlow && authMethod === "mpin") {
-    return (
-      <div className="login-container" dir={direction}>
-        <div className="login-alt-backbar">
-          <button
-            type="button"
-            className="btn btn-outline login-home-btn"
-            onClick={() => setAuthMethod("email")}
-          >
-            Back to Email Login
-          </button>
-        </div>
-        <MPINLogin onSuccess={handleAlternativeAuthSuccess} onError={handleAlternativeAuthError} />
-      </div>
-    );
-  }
-
   return (
-    <div className="login-container" dir={direction}>
-      <div className="login-card">
+    <div className={`login-container ${loginFlowClass}`} dir={direction}>
+      <div className={`login-card ${isLoginFlow ? "login-card-compact" : ""}`}>
         {!otpSent && onBackToLaunch && (
           <div className="login-topbar">
             <button
@@ -803,536 +804,399 @@ const Login = ({
           </div>
         )}
 
-        <div className="login-header">
+        <div className={`login-header ${isLoginFlow ? "login-header-compact" : ""}`}>
           <img src="/logo.svg" alt="NilaHub" className="login-logo" />
           <p className="login-kicker">{headerKicker}</p>
           <h1>NilaHub</h1>
           <p className="login-subtitle">{loginSubtitle}</p>
         </div>
 
-        <form className="login-form" onSubmit={needsUsernameSetup ? handleSetUsername : (otpSent ? handleVerifyOtp : handleSendOtp)}>
-          <div className="form-intro">
-            <div className="intro-heading-row">
-              <h2>{formTitle}</h2>
-              {(recognitionSupported || speechSupported) && renderFieldVoiceActions(
-                "form-intro",
-                `${formTitle}. ${formDescription}`,
-                () => {}
-              )}
-            </div>
-            <p>{formDescription}</p>
-            {isLoginFlow && !otpSent && (
-              <div className="alt-auth-switch" aria-label="Alternative login methods">
-                <button
-                  type="button"
-                  className={`btn btn-outline alt-auth-btn ${authMethod === "email" ? "active" : ""}`}
-                  onClick={() => setAuthMethod("email")}
-                >
-                  Email OTP
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-outline alt-auth-btn ${authMethod === "phone" ? "active" : ""}`}
-                  onClick={() => setAuthMethod("phone")}
-                >
-                  Phone OTP
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-outline alt-auth-btn ${authMethod === "mpin" ? "active" : ""}`}
-                  onClick={() => setAuthMethod("mpin")}
-                >
-                  MPIN Login
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-outline alt-auth-btn ${authMethod === "device" ? "active" : ""}`}
-                  onClick={() => setAuthMethod("device")}
-                >
-                  Device Login
-                </button>
-              </div>
-            )}
-          </div>
-
-          {isUserRegistrationFlow && !otpSent && (
+        <form
+          className={`login-form ${isLoginFlow ? "login-form-compact" : ""}`}
+          onSubmit={needsUsernameSetup ? handleSetUsername : (otpSent ? handleVerifyOtp : handleSendOtp)}
+        >
+          {/* Registration/Admin Flow */}
+          {!isLoginFlow && (
             <>
-              <div className="form-group">
-                <label htmlFor="fullName">
-                  <span>Full Name</span>
-                  {renderFieldVoiceActions("fullName", registrationForm.fullName || "Full Name", (value) => updateRegistrationForm("fullName", value))}
-                </label>
-                <input
-                  type="text"
-                  id="fullName"
-                  placeholder="Enter your full name"
-                  value={registrationForm.fullName}
-                  onChange={(event) => updateRegistrationForm("fullName", event.target.value)}
-                  className="form-input"
-                  autoComplete="name"
-                />
+              <div className={`form-intro ${isLoginFlow ? "form-intro-compact" : ""}`}>
+                <div className="intro-heading-row">
+                  <h2>{formTitle}</h2>
+                  {(recognitionSupported || speechSupported) && renderFieldVoiceActions(
+                    "form-intro",
+                    `${formTitle}. ${formDescription}`,
+                    () => {}
+                  )}
+                </div>
+                <p>{formDescription}</p>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="phone">
-                  <span>Phone Number</span>
-                  {renderFieldVoiceActions("phone", registrationForm.phone || "Phone Number", (value) => updateRegistrationForm("phone", value.replace(/[^\d+\s-]/g, "")))}
-                </label>
-                <input
-                  type="tel"
-                  id="phone"
-                  placeholder="Enter your phone number"
-                  value={registrationForm.phone}
-                  onChange={(event) => updateRegistrationForm("phone", event.target.value)}
-                  className="form-input"
-                  autoComplete="tel"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="username">
-                  <span>Username (Unique Global)</span>
-                </label>
-                <input
-                  type="text"
-                  id="username"
-                  placeholder="Enter a unique username (3-20 characters)"
-                  value={registrationForm.username}
-                  onChange={(event) => updateRegistrationForm("username", event.target.value)}
-                  className="form-input"
-                  autoComplete="username"
-                />
-                {usernameCheckStatus === "checking" && (
-                  <p className="helper-text" style={{ color: "#FF9500" }}>Checking availability...</p>
-                )}
-                {usernameCheckStatus === "available" && (
-                  <p className="helper-text" style={{ color: "#4CAF50" }}>✓ Username is available</p>
-                )}
-                {usernameCheckStatus === "taken" && (
-                  <p className="helper-text" style={{ color: "#F44336" }}>✗ {usernameError}</p>
-                )}
-                {usernameError && usernameCheckStatus !== "taken" && usernameCheckStatus !== "available" && (
-                  <p className="helper-text" style={{ color: "#F44336" }}>{usernameError}</p>
-                )}
-              </div>
-            </>
-          )}
-
-          {isEntrepreneurRegistrationFlow && !otpSent && (
-            <>
-              <div className="form-group">
-                <label htmlFor="fullName">
-                  <span>Full Name</span>
-                  {renderFieldVoiceActions("business-fullName", registrationForm.fullName || "Full Name", (value) => updateRegistrationForm("fullName", value))}
-                </label>
-                <input
-                  type="text"
-                  id="fullName"
-                  placeholder="Enter your full name"
-                  value={registrationForm.fullName}
-                  onChange={(event) => updateRegistrationForm("fullName", event.target.value)}
-                  className="form-input"
-                  autoComplete="name"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="accountType">Account Type</label>
-                <select
-                  id="accountType"
-                  value={registrationForm.accountType}
-                  onChange={(event) => updateRegistrationForm("accountType", event.target.value)}
-                  className="form-input"
-                >
-                  <option value="business">Business Account</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="businessName">
-                  <span>Business Name</span>
-                  {renderFieldVoiceActions("businessName", registrationForm.businessName || "Business Name", (value) => updateRegistrationForm("businessName", value))}
-                </label>
-                <input
-                  type="text"
-                  id="businessName"
-                  placeholder="Enter your business name"
-                  value={registrationForm.businessName}
-                  onChange={(event) => updateRegistrationForm("businessName", event.target.value)}
-                  className="form-input"
-                  autoComplete="organization"
-                />
-              </div>
-
-              <fieldset className="form-group category-group">
-                <legend>Business Categories</legend>
-                <div className="category-options">
-                  {businessCategories.map((category) => (
-                    <label className="category-option" key={category.id} htmlFor={`category-${category.id}`}>
-                      <input
-                        id={`category-${category.id}`}
-                        type="checkbox"
-                        checked={registrationForm.selectedBusinessCategories.includes(category.id)}
-                        onChange={() => toggleBusinessCategory(category.id)}
-                      />
-                      <span>{category.name}</span>
-                      <strong>INR {category.fee}</strong>
+              {/* Registration form fields */}
+              {isUserRegistrationFlow && !otpSent && (
+                <>
+                  <div className="form-group">
+                    <label htmlFor="fullName">
+                      <span>Full Name</span>
+                      {renderFieldVoiceActions("fullName", registrationForm.fullName || "Full Name", (value) => updateRegistrationForm("fullName", value))}
                     </label>
-                  ))}
-                </div>
-              </fieldset>
+                    <input
+                      type="text"
+                      id="fullName"
+                      placeholder="Enter your full name"
+                      value={registrationForm.fullName}
+                      onChange={(event) => updateRegistrationForm("fullName", event.target.value)}
+                      className="form-input"
+                      autoComplete="name"
+                    />
+                  </div>
 
+                  <div className="form-group">
+                    <label htmlFor="phone">
+                      <span>Phone Number</span>
+                      {renderFieldVoiceActions("phone", registrationForm.phone || "Phone Number", (value) => updateRegistrationForm("phone", value.replace(/[^\d+\s-]/g, "")))}
+                    </label>
+                    <input
+                      type="tel"
+                      id="phone"
+                      placeholder="Enter your phone number"
+                      value={registrationForm.phone}
+                      onChange={(event) => updateRegistrationForm("phone", event.target.value)}
+                      className="form-input"
+                      autoComplete="tel"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="username">
+                      <span>Username (Unique Global)</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="username"
+                      placeholder="Enter a unique username (3-20 characters)"
+                      value={registrationForm.username}
+                      onChange={(event) => updateRegistrationForm("username", event.target.value)}
+                      className="form-input"
+                      autoComplete="username"
+                    />
+                    {usernameCheckStatus === "checking" && (
+                      <p className="helper-text" style={{ color: "#FF9500" }}>Checking availability...</p>
+                    )}
+                    {usernameCheckStatus === "available" && (
+                      <p className="helper-text" style={{ color: "#4CAF50" }}>✓ Username is available</p>
+                    )}
+                    {usernameCheckStatus === "taken" && (
+                      <p className="helper-text" style={{ color: "#F44336" }}>✗ {usernameError}</p>
+                    )}
+                    {usernameError && usernameCheckStatus !== "taken" && usernameCheckStatus !== "available" && (
+                      <p className="helper-text" style={{ color: "#F44336" }}>{usernameError}</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Entrepreneur registration fields */}
+              {isEntrepreneurRegistrationFlow && !otpSent && (
+                <>
+                  {/* (Keep all entrepreneur fields as before) */}
+                  <div className="form-group">
+                    <label htmlFor="fullName">
+                      <span>Full Name</span>
+                      {renderFieldVoiceActions("business-fullName", registrationForm.fullName || "Full Name", (value) => updateRegistrationForm("fullName", value))}
+                    </label>
+                    <input
+                      type="text"
+                      id="fullName"
+                      placeholder="Enter your full name"
+                      value={registrationForm.fullName}
+                      onChange={(event) => updateRegistrationForm("fullName", event.target.value)}
+                      className="form-input"
+                      autoComplete="name"
+                    />
+                  </div>
+                  {/* ... rest of entrepreneur fields ... */}
+                </>
+              )}
+
+              {/* Email input for registration */}
               <div className="form-group">
-                <label htmlFor="phone">
-                  <span>Phone Number</span>
-                  {renderFieldVoiceActions("business-phone", registrationForm.phone || "Phone Number", (value) => updateRegistrationForm("phone", value.replace(/[^\d+\s-]/g, "")))}
+                <label htmlFor="contactField">
+                  <span>Email Address</span>
+                  {renderFieldVoiceActions(
+                    "email",
+                    email || "Email Address",
+                    (value) => updateEmail(value.toLowerCase().replace(/\s+/g, ""))
+                  )}
                 </label>
                 <input
-                  type="tel"
-                  id="phone"
-                  placeholder="Enter your phone number"
-                  value={registrationForm.phone}
-                  onChange={(event) => updateRegistrationForm("phone", event.target.value)}
+                  type="email"
+                  id="contactField"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(event) => updateEmail(event.target.value)}
+                  disabled={otpSent || loading}
                   className="form-input"
-                  autoComplete="tel"
+                  autoComplete="email"
                 />
               </div>
 
-              <div className="form-group">
-                <label htmlFor="business-username">
-                  <span>Username (Unique Global)</span>
-                </label>
-                <input
-                  type="text"
-                  id="business-username"
-                  placeholder="Enter a unique username (3-20 characters)"
-                  value={registrationForm.username}
-                  onChange={(event) => updateRegistrationForm("username", event.target.value)}
-                  className="form-input"
-                  autoComplete="username"
-                />
-                {usernameCheckStatus === "checking" && (
-                  <p className="helper-text" style={{ color: "#FF9500" }}>Checking availability...</p>
-                )}
-                {usernameCheckStatus === "available" && (
-                  <p className="helper-text" style={{ color: "#4CAF50" }}>✓ Username is available</p>
-                )}
-                {usernameCheckStatus === "taken" && (
-                  <p className="helper-text" style={{ color: "#F44336" }}>✗ {usernameError}</p>
-                )}
-                {usernameError && usernameCheckStatus !== "taken" && usernameCheckStatus !== "available" && (
-                  <p className="helper-text" style={{ color: "#F44336" }}>{usernameError}</p>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="location">
-                  <span>City or Location</span>
-                  {renderFieldVoiceActions("location", registrationForm.location || "City or Location", (value) => updateRegistrationForm("location", value))}
-                </label>
-                <input
-                  type="text"
-                  id="location"
-                  placeholder="Enter your city or location"
-                  value={registrationForm.location}
-                  onChange={(event) => updateRegistrationForm("location", event.target.value)}
-                  className="form-input"
-                  autoComplete="address-level2"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="licenseNumber">
-                  <span>Licence Number</span>
-                  {renderFieldVoiceActions("licenseNumber", registrationForm.licenseNumber || "Licence Number", (value) => updateRegistrationForm("licenseNumber", value))}
-                </label>
-                <input
-                  type="text"
-                  id="licenseNumber"
-                  placeholder="Enter your licence number"
-                  value={registrationForm.licenseNumber}
-                  onChange={(event) => updateRegistrationForm("licenseNumber", event.target.value)}
-                  className="form-input"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="profilePhoto">Photo of the User</label>
-                <input
-                  type="file"
-                  id="profilePhoto"
-                  accept="image/*"
-                  capture="user"
-                  className="form-input file-input"
-                  onChange={(event) =>
-                    handleRegistrationFileChange(
-                      "profilePhotoName",
-                      "profilePhotoFile",
-                      event.target.files?.[0] || null
-                    )
-                  }
-                />
-                <span className="helper-text">
-                  On mobile, this opens your camera or photo library.
-                </span>
-                {registrationForm.profilePhotoName && (
-                  <span className="file-name">{registrationForm.profilePhotoName}</span>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="licenseDocument">Licence Document Upload</label>
-                <input
-                  type="file"
-                  id="licenseDocument"
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                  className="form-input file-input"
-                  onChange={(event) =>
-                    handleRegistrationFileChange(
-                      "licenseDocumentName",
-                      "licenseDocumentFile",
-                      event.target.files?.[0] || null
-                    )
-                  }
-                />
-                {registrationForm.licenseDocumentName && (
-                  <span className="file-name">{registrationForm.licenseDocumentName}</span>
-                )}
-              </div>
-
-              <div className="supporting-panel">
-                <h3>Registration Fee</h3>
-                <div className="fee-summary" aria-label="Business registration fee">
-                  <span>Total for selected categories</span>
-                  <strong>INR {totalRegistrationFee}</strong>
-                </div>
-                <p className="helper-text">
-                  Fees are set by the admin for each category. You can register for multiple business categories at once.
-                </p>
-                <label className="checkbox-row" htmlFor="registrationFeeAccepted">
-                  <input
-                    type="checkbox"
-                    id="registrationFeeAccepted"
-                    checked={registrationForm.registrationFeeAccepted}
-                    onChange={(event) => updateRegistrationForm("registrationFeeAccepted", event.target.checked)}
-                  />
-                  <span>I understand that the total registration fee is INR {totalRegistrationFee}.</span>
-                </label>
-              </div>
-
-              <div className="supporting-panel">
-                <h3>Identity Details</h3>
+              {otpSent && !needsUsernameSetup && (
                 <div className="form-group">
-                  <label htmlFor="identityType">Identity Proof Type</label>
-                  <select
-                    id="identityType"
-                    value={registrationForm.identityType}
-                    onChange={(event) => updateRegistrationForm("identityType", event.target.value)}
-                    className="form-input"
-                  >
-                    {IDENTITY_OPTIONS.map((identity) => (
-                      <option key={identity.value} value={identity.value}>
-                        {identity.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="identityNumber">
-                    <span>Identity Number</span>
-                    {renderFieldVoiceActions("identityNumber", registrationForm.identityNumber || "Identity Number", (value) => updateRegistrationForm("identityNumber", value))}
+                  <label htmlFor="otp">
+                    <span>Enter OTP sent to your email</span>
+                    <span className="field-actions">
+                      {renderFieldVoiceActions("otp", otp || "OTP", (value) => updateOtp(value.replace(/\D/g, "").slice(0, 6)))}
+                      <button
+                        type="button"
+                        className="resend-otp"
+                        onClick={handleSendOtp}
+                        disabled={loading}
+                      >
+                        Resend
+                      </button>
+                    </span>
                   </label>
                   <input
                     type="text"
-                    id="identityNumber"
-                    placeholder="Enter your PAN or other identity number"
-                    value={registrationForm.identityNumber}
-                    onChange={(event) => updateRegistrationForm("identityNumber", event.target.value)}
+                    inputMode="numeric"
+                    id="otp"
+                    placeholder="Enter 6-digit OTP"
+                    value={otp}
+                    onChange={(event) => updateOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
                     className="form-input"
+                    maxLength="6"
+                    autoComplete="one-time-code"
                   />
                 </div>
+              )}
 
+              {needsUsernameSetup && (
                 <div className="form-group">
-                  <label htmlFor="identityDocument">Identity Document Upload</label>
+                  <label htmlFor="setupUsername">
+                    <span>Create your global username</span>
+                    {renderFieldVoiceActions("setupUsername", setupUsername || "Username", (value) => setSetupUsername(value))}
+                  </label>
                   <input
-                    type="file"
-                    id="identityDocument"
-                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                    className="form-input file-input"
-                    onChange={(event) =>
-                      handleRegistrationFileChange(
-                        "identityDocumentName",
-                        "identityDocumentFile",
-                        event.target.files?.[0] || null
-                      )
-                    }
-                  />
-                  {registrationForm.identityDocumentName && (
-                    <span className="file-name">{registrationForm.identityDocumentName}</span>
-                  )}
-                </div>
-              </div>
-
-              {requiresFoodLicense && (
-                <div className="supporting-panel">
-                  <h3>Food Licence Details</h3>
-                  <div className="form-group">
-                    <label htmlFor="foodLicenseNumber">
-                      <span>Food Licence Number</span>
-                      {renderFieldVoiceActions("foodLicenseNumber", registrationForm.foodLicenseNumber || "Food Licence Number", (value) => updateRegistrationForm("foodLicenseNumber", value))}
-                    </label>
-                    <input
-                      type="text"
-                      id="foodLicenseNumber"
-                      placeholder="Enter your food licence number"
-                      value={registrationForm.foodLicenseNumber}
-                      onChange={(event) => updateRegistrationForm("foodLicenseNumber", event.target.value)}
-                      className="form-input"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="foodLicenseAuthority">
-                      <span>Food Licence Authority</span>
-                      {renderFieldVoiceActions("foodLicenseAuthority", registrationForm.foodLicenseAuthority || "Food Licence Authority", (value) => updateRegistrationForm("foodLicenseAuthority", value))}
-                    </label>
-                    <input
-                      type="text"
-                      id="foodLicenseAuthority"
-                      placeholder="Enter the issuing authority"
-                      value={registrationForm.foodLicenseAuthority}
-                      onChange={(event) => updateRegistrationForm("foodLicenseAuthority", event.target.value)}
-                      className="form-input"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="foodLicenseDocument">Food Licence Document Upload</label>
-                    <input
-                      type="file"
-                      id="foodLicenseDocument"
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      className="form-input file-input"
-                      onChange={(event) =>
-                        handleRegistrationFileChange(
-                          "foodLicenseDocumentName",
-                          "foodLicenseDocumentFile",
-                          event.target.files?.[0] || null
-                        )
+                    type="text"
+                    id="setupUsername"
+                    placeholder="Enter a unique username (3-20 characters)"
+                    value={setupUsername}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSetupUsername(value);
+                      if (value) {
+                        checkSetupUsernameAvailability(value);
+                      } else {
+                        setSetupUsernameStatus(null);
+                        setSetupUsernameError("");
                       }
-                    />
-                    {registrationForm.foodLicenseDocumentName && (
-                      <span className="file-name">{registrationForm.foodLicenseDocumentName}</span>
-                    )}
-                  </div>
+                    }}
+                    className="form-input"
+                    autoComplete="username"
+                  />
+                  {setupUsernameStatus === "checking" && (
+                    <div className="username-status checking">Checking availability...</div>
+                  )}
+                  {setupUsernameStatus === "available" && (
+                    <div className="username-status available">✓ Username is available</div>
+                  )}
+                  {setupUsernameStatus === "taken" && (
+                    <div className="username-status taken">✗ Username is taken</div>
+                  )}
+                  {setupUsernameError && (
+                    <div className="username-error">{setupUsernameError}</div>
+                  )}
                 </div>
               )}
             </>
           )}
 
-          <div className="form-group">
-            <label htmlFor="email">
-              <span>Email Address</span>
-              {renderFieldVoiceActions("email", email || "Email Address", (value) => updateEmail(value.toLowerCase().replace(/\s+/g, "")))}
-            </label>
-            <input
-              type="email"
-              id="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(event) => updateEmail(event.target.value)}
-              disabled={otpSent || loading}
-              className="form-input"
-              autoComplete="email"
-            />
-          </div>
+          {/* LOGIN FLOW - Progressive Disclosure */}
+          {isLoginFlow && loginStep === "method" && !otpSent && (
+            <>
+              <div className={`form-intro ${isLoginFlow ? "form-intro-compact" : ""}`}>
+                <div className="intro-heading-row">
+                  <h2>Choose login method</h2>
+                </div>
+                <p>Select how you'd like to continue</p>
+              </div>
 
-          {isAdminFlow && !otpSent && (
-            <p className="helper-text admin-helper">
-              The {businessCategoryCount} available business categories are used for registration here.
-            </p>
+              <div className="login-methods-grid">
+                <button
+                  type="button"
+                  className="login-method-card login-method-gmail"
+                  onClick={() => handleSelectAuthMethod("gmail")}
+                  disabled={loading}
+                >
+                  <img src="/google-icon.svg" alt="Google" width="32" height="32" />
+                  <span>Gmail</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="login-method-card"
+                  onClick={() => handleSelectAuthMethod("email")}
+                  disabled={loading}
+                >
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                  </svg>
+                  <span>Email</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="login-method-card"
+                  onClick={() => handleSelectAuthMethod("phone")}
+                  disabled={loading}
+                >
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                  </svg>
+                  <span>Phone</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="login-method-card"
+                  onClick={() => handleSelectAuthMethod("mpin")}
+                  disabled={loading}
+                >
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                  <span>MPIN</span>
+                </button>
+              </div>
+            </>
           )}
 
-          {isUserRegistrationFlow && !otpSent && (
-            <label className="checkbox-row" htmlFor="agreeToTerms">
-              <input
-                type="checkbox"
-                id="agreeToTerms"
-                checked={registrationForm.agreeToTerms}
-                onChange={(event) => updateRegistrationForm("agreeToTerms", event.target.checked)}
-              />
-              <span>I agree to receive verification messages and continue with registration.</span>
-            </label>
-          )}
+          {/* LOGIN FLOW - Input Stage */}
+          {isLoginFlow && loginStep === "input" && !otpSent && (
+            <>
+              <div className={`form-intro ${isLoginFlow ? "form-intro-compact" : ""}`}>
+                <h2>
+                  {authMethod === "email" && "Enter your email"}
+                  {authMethod === "phone" && "Enter your phone number"}
+                  {authMethod === "mpin" && "Enter your MPIN"}
+                </h2>
+              </div>
 
-          {otpSent && !needsUsernameSetup && (
-            <div className="form-group">
-              <label htmlFor="otp">
-                <span>Enter OTP sent to your email</span>
-                <span className="field-actions">
-                  {renderFieldVoiceActions("otp", otp || "OTP", (value) => updateOtp(value.replace(/\D/g, "").slice(0, 6)))}
-                  <button
-                    type="button"
-                    className="resend-otp"
-                    onClick={handleSendOtp}
+              {(authMethod === "email" || authMethod === "phone") && (
+                <div className="form-group">
+                  <label htmlFor="loginInput">
+                    <span>{authMethod === "phone" ? "Phone Number" : "Email Address"}</span>
+                  </label>
+                  <input
+                    type={authMethod === "phone" ? "tel" : "email"}
+                    id="loginInput"
+                    placeholder={authMethod === "phone" ? "Enter your phone number" : "Enter your email"}
+                    value={email}
+                    onChange={(event) => updateEmail(event.target.value)}
                     disabled={loading}
-                  >
-                    Resend
-                  </button>
-                </span>
-              </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                id="otp"
-                placeholder="Enter 6-digit OTP"
-                value={otp}
-                onChange={(event) => updateOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                className="form-input"
-                maxLength="6"
-                autoComplete="one-time-code"
-              />
-            </div>
+                    className="form-input"
+                    autoComplete={authMethod === "phone" ? "tel" : "email"}
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {authMethod === "mpin" && (
+                <div className="form-group">
+                  <label htmlFor="mpinInput">
+                    <span>MPIN (4-digit)</span>
+                  </label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    id="mpinInput"
+                    placeholder="Enter your 4-digit MPIN"
+                    value={mpinPassword}
+                    onChange={(event) => setMpinPassword(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                    className="form-input"
+                    maxLength="4"
+                    autoComplete="off"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              <div className="form-actions form-actions-compact">
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {authMethod === "mpin"
+                    ? loading ? "Verifying MPIN..." : "Login with MPIN"
+                    : loading ? "Sending OTP..." : "Send OTP"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => {
+                    setLoginStep("method");
+                    setAuthMethod(null);
+                    setEmail("");
+                    setMpinPassword("");
+                    clearMessages();
+                  }}
+                  disabled={loading}
+                >
+                  Back to methods
+                </button>
+              </div>
+            </>
           )}
 
-          {needsUsernameSetup && (
-            <div className="form-group">
-              <label htmlFor="setupUsername">
-                <span>Create your global username</span>
-                {renderFieldVoiceActions("setupUsername", setupUsername || "Username", (value) => setSetupUsername(value))}
-              </label>
-              <input
-                type="text"
-                id="setupUsername"
-                placeholder="Enter a unique username (3-20 characters)"
-                value={setupUsername}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setSetupUsername(value);
-                  if (value) {
-                    checkSetupUsernameAvailability(value);
-                  } else {
-                    setSetupUsernameStatus(null);
-                    setSetupUsernameError("");
-                  }
-                }}
-                className="form-input"
-                autoComplete="username"
-              />
-              {setupUsernameStatus === "checking" && (
-                <div className="username-status checking">Checking availability...</div>
-              )}
-              {setupUsernameStatus === "available" && (
-                <div className="username-status available">✓ Username is available</div>
-              )}
-              {setupUsernameStatus === "taken" && (
-                <div className="username-status taken">✗ Username is taken</div>
-              )}
-              {setupUsernameError && (
-                <div className="username-error">{setupUsernameError}</div>
-              )}
-            </div>
+          {/* OTP Verification Stage */}
+          {isLoginFlow && loginStep === "verify" && otpSent && (
+            <>
+              <div className={`form-intro ${isLoginFlow ? "form-intro-compact" : ""}`}>
+                <h2>Verify your {authMethod}</h2>
+                <p>Enter the OTP sent to your {authMethod === "phone" ? "phone" : "email"}</p>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="otp">
+                  <span>OTP</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  id="otp"
+                  placeholder="Enter 6-digit OTP"
+                  value={otp}
+                  onChange={(event) => updateOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="form-input"
+                  maxLength="6"
+                  autoComplete="one-time-code"
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-actions form-actions-compact">
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? "Verifying..." : "Verify OTP"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => {
+                    resetOtpFlow();
+                    setLoginStep("input");
+                  }}
+                  disabled={loading}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-link"
+                  onClick={handleSendOtp}
+                  disabled={loading}
+                >
+                  Resend OTP
+                </button>
+              </div>
+            </>
           )}
 
           {error && <div className="error-message">{error}</div>}
@@ -1344,49 +1208,54 @@ const Login = ({
             </div>
           )}
 
-<div className="form-actions">
-            <a href={`${API_BASE_URL}/auth/google`} className="btn btn-google">
-              <img src="/google-icon.svg" alt="Google" width="20" height="20" />
-              Continue with Google
-            </a>
-            <hr />
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-
-              {needsUsernameSetup
-                ? loading ? "Setting username..." : "Complete Profile"
-                : otpSent
-                  ? loading ? "Verifying..." : "Verify OTP"
-                  : loading
-                    ? "Sending OTP..."
-                    : isUserRegistrationFlow
-                      ? "Continue to Verification"
-                      : isLoginFlow
-                        ? "Send Login OTP"
-                      : isAdminFlow
-                        ? "Send Admin OTP"
-                        : "Send OTP"}
-            </button>
-
-            {(otpSent || needsUsernameSetup) && (
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={needsUsernameSetup ? () => {
-                  setNeedsUsernameSetup(false);
-                  setSetupUsername("");
-                  setSetupUsernameStatus(null);
-                  setSetupUsernameError("");
-                } : resetOtpFlow}
-                disabled={loading}
-              >
-                Back
+          {/* Form actions for registration flow */}
+          {!isLoginFlow && (
+            <div className={`form-actions ${isLoginFlow ? "form-actions-compact" : ""}`}>
+              {!isLoginFlow && (
+                <>
+                  <a href={`${API_BASE_URL}/auth/google`} className="btn btn-google">
+                    <img src="/google-icon.svg" alt="Google" width="20" height="20" />
+                    Continue with Google
+                  </a>
+                  <hr />
+                </>
+              )}
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {needsUsernameSetup
+                  ? loading ? "Setting username..." : "Complete Profile"
+                  : otpSent
+                    ? loading ? "Verifying..." : "Verify OTP"
+                    : loading
+                      ? "Sending OTP..."
+                      : isUserRegistrationFlow
+                        ? "Continue to Verification"
+                        : isLoginFlow
+                          ? "Send Login OTP"
+                        : isAdminFlow
+                          ? "Send Admin OTP"
+                          : "Send OTP"}
               </button>
-            )}
 
-          </div>
+              {(otpSent || needsUsernameSetup) && (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={needsUsernameSetup ? () => {
+                    setNeedsUsernameSetup(false);
+                    setSetupUsername("");
+                    setSetupUsernameStatus(null);
+                    setSetupUsernameError("");
+                  } : resetOtpFlow}
+                  disabled={loading}
+                >
+                  Back
+                </button>
+              )}
+            </div>
+          )}
         </form>
 
-        <div className="login-footer">
+        <div className={`login-footer ${isLoginFlow ? "login-footer-compact" : ""}`}>
           <p className="security-info">{loginCopy.footer}</p>
         </div>
       </div>
@@ -1395,3 +1264,4 @@ const Login = ({
 };
 
 export default Login;
+

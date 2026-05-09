@@ -50,14 +50,7 @@ const Support = React.lazy(() => import("./modules/support/Support"));
 const Diary = React.lazy(() =>
   import("./modules/personaldiary").then((module) => ({ default: module.Diary }))
 );
-
-// Phase 5B: User Management Components - Copy frontend components to src/components/user if using src/
-// const ProfileSetup = React.lazy(() => import("./components/user/ProfileSetup"));
-// const AddressBook = React.lazy(() => import("./components/user/AddressBook"));
-// const PaymentMethods = React.lazy(() => import("./components/user/PaymentMethods"));
-// const UserPreferences = React.lazy(() => import("./components/user/UserPreferences"));
-// const SubscriptionPlans = React.lazy(() => import("./components/user/SubscriptionPlans"));
-// const AccountSettings = React.lazy(() => import("./components/user/AccountSettings"));
+const UserProfile = React.lazy(() => import("./components/UserProfile"));
 
 const SOCKET_BASE_URL = BACKEND_BASE_URL;
 const EMERGENCY_CALL_STORAGE_KEY = "malabarbazaar-emergency-call";
@@ -1101,6 +1094,15 @@ function AppShell() {
               <Route path="sosalert" element={<SOSAlert />} />
               <Route path="astrology" element={<AstrologyHome />} />
               <Route path="support" element={<Support />} />
+              <Route 
+                path="profile" 
+                element={
+                  <UserProfile 
+                    loggedInUser={loggedInUser}
+                    onProfileUpdate={handleProfileUpdate}
+                  />
+                } 
+              />
               <Route path="*" element={<Navigate to={defaultAuthenticatedPath} replace />} />
             </Route>
           </Routes>

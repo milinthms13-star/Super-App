@@ -213,6 +213,23 @@
   font-size: 0.9rem;
 }
 
+.profile-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  color: #0f4c81;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 600;
+  transition: all 0.3s;
+  font-family: inherit;
+}
+
+.profile-btn:hover {
+  background: #eff6fc;
+}
+
 .logout-btn {
   width: 100%;
   padding: 0.75rem 1rem;
