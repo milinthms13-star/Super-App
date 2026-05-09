@@ -4,13 +4,17 @@
 For top-tier investor outreach, the main missing items are no longer feature documents. The remaining gap is proof of execution: real product proof, live deployment proof, early traction proof, and team credibility proof.
 
 ## What The Repo Already Proves
-- A production web build artifact already exists in `build/` with 107 generated files.
+- A production web build artifact already exists in `build/` with 106 generated files.
 - `build_output.txt` confirms: "The build folder is ready to be deployed."
-- The codebase has a meaningful automated testing footprint: 124 test files total.
+- The codebase has a meaningful automated testing footprint: 125 visible test files total.
 - Test split currently visible from the repo:
-  - 45 frontend test files
+  - 46 frontend test files
   - 71 backend test files
   - 8 Cypress end-to-end files
+- A current frontend test run also exists from May 9, 2026:
+  - 46 suites total
+  - 38 passed
+  - 8 failed
 - Cross-platform packaging is present:
   - Web build via `package.json`
   - Electron packaging via `electron.js` and `electron:build`
@@ -25,7 +29,7 @@ These are useful engineering signals, but they are not enough on their own for t
 
 | Area | Current status from repo | What you need to add before outreach | Minimum acceptable version | Strong version |
 |---|---|---|---|---|
-| Actual screenshots | No investor screenshot pack found | Real product screenshots from current build | 8-12 screenshots across key flows | Annotated web + mobile screenshots plus short demo video |
+| Actual screenshots | Investor screenshot pack is present in `docs/investor-screenshots/` with 12 assets | Replace any placeholder captures with the latest live-build screenshots | 8-12 screenshots across key flows | Annotated web + mobile screenshots plus short demo video |
 | Live demo URL | Public demo URL now provided: `https://mysuperapp-ekr4.onrender.com/` | Add working login flow or demo credentials | Staging URL + demo credentials | Production or polished staging URL on your domain with seeded data |
 | Deployment proof | Live URL exists, but hosting proof and monitoring evidence are still missing | Hosting proof and release proof | Hosting dashboard screenshot + release timestamp | CI/CD screenshot, monitoring dashboard, uptime/error snapshot |
 | Testing metrics | Repo shows test footprint but not investor-ready results summary | One-page QA proof sheet | Build pass status, test counts, smoke-test checklist | Test pass summary, load-test result, bug backlog trend, uptime/error stats |
@@ -131,8 +135,8 @@ At this stage, the largest remaining gap is not product scope but proof of execu
 
 ## Practical Next Step
 Use this worksheet as the collection layer, then update the existing investor docs:
-- `INVESTOR_VALUATION_REPORT_DRAFT.md`
+- `INVESTOR_VALUATION_REPORT_FINAL.md`
 - `INVESTOR_VALUATION_REPORT_INVESTOR-GRADE_ADDENDUM.md`
-- `PROJECT_VALUATION_REPORT.md`
+- `docs/investor_documents_package.md`
 
 Once these inputs are filled, the investor package will look materially stronger than adding more implementation summaries.

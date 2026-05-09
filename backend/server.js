@@ -99,6 +99,10 @@ app.use('/api/admin/orders', require('./routes/adminOrderManagementRoutes'));
 
 // Phase 5E: Notification & Preferences Routes (Email notifications, preferences, tracking)
 app.use('/api/notifications', require('./routes/orderNotificationRoutes'));
+app.use('/api/multi-notifications', require('./routes/multiChannelNotificationRoutes')); // Multi-channel notifications (email, SMS, WhatsApp, push)
+
+// Tax & GST Calculation Routes
+app.use('/api/tax', require('./routes/taxCalculationRoutes')); // Tax calculation, GST invoices, IGST/SGST/CGST
 
 // Phase 5E: Carrier Webhook Routes (Real-time tracking updates from courier partners)
 app.use('/webhooks/carrier', require('./routes/carrierWebhookRoutes'));
@@ -150,6 +154,8 @@ app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/abandonedcarts', require('./routes/abandonedcarts'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/products', require('./routes/productDiscoveryRoutes'));
+app.use('/api/filters', require('./routes/advancedFiltersRoutes')); // Advanced filtering with aggregations
+app.use('/api/product-specs', require('./routes/productSpecificationsRoutes')); // Product specifications & comparison
 app.use('/api/referralprogram', require('./routes/referralprogram'));
 app.use('/api/reminders', require('./routes/reminders'));
 app.use('/api/matrimonial', require('./routes/matrimonial-kyc'));
@@ -173,6 +179,41 @@ app.use('/api/recently-viewed', require('./routes/recentlyviewed')); // Track br
 app.use('/api/addresses', require('./routes/addresses')); // Address management for checkout
 app.use('/api/payment-methods', require('./routes/paymentmethods')); // Saved payment methods
 app.use('/api/search-history', require('./routes/searchhistory')); // Search history & analytics
+
+// PHASE 2: AI & Personalization Routes
+app.use('/api/recommendations', require('./routes/recommendationsRoutes')); // ML-powered product recommendations
+app.use('/api/search', require('./routes/smartSearchRoutes')); // Advanced search with fuzzy matching & typo correction
+app.use('/api/personalization', require('./routes/personalizationRoutes')); // AI-powered personalization & homepage
+app.use('/api/payments', require('./routes/advancedPaymentRoutes')); // UPI, BNPL, EMI payment options
+app.use('/api/delivery', require('./routes/deliveryRoutes')); // Live tracking, slots, same-day delivery
+
+// PHASE 3: E-commerce Intelligence Layer Routes (AI Chat, Price Monitoring, Loyalty, Fraud Detection, Analytics)
+app.use('/api/ecommerce/ai-chat', require('./routes/aichatRoutes')); // AI-powered customer support & product Q&A
+app.use('/api/ecommerce/pricing', require('./routes/priceMonitoringRoutes')); // Price tracking, watchlists, dynamic pricing
+app.use('/api/ecommerce/loyalty', require('./routes/loyaltyPointsRoutes')); // Points, tiers, referrals, rewards
+app.use('/api/ecommerce/fraud', require('./routes/fraudDetectionRoutes')); // Fraud analysis & prevention
+app.use('/api/ecommerce/analytics', require('./routes/ecommerceAnalyticsRoutes')); // Business intelligence & dashboards
+
+// PHASE 4: Advanced Marketplace Features Routes (Vendor Management, Recommendations, Search, B2B)
+app.use('/api/ecommerce/vendors', require('./routes/vendorManagementRoutes')); // Vendor onboarding, profiles, metrics, settlements
+app.use('/api/ecommerce/recommendations', require('./routes/advancedRecommendationRoutes')); // Personalized, collaborative, trending, seasonal recommendations
+app.use('/api/ecommerce/search', require('./routes/marketplaceSearchRoutes')); // Advanced search, autocomplete, facets, trending
+app.use('/api/ecommerce/b2b', require('./routes/b2bRoutes')); // Corporate accounts, bulk orders, invoicing, credit management
+
+// PHASE 5: Advanced Features Routes (Admin Dashboard, Rating/Reviews, Disputes, Analytics, Notifications)
+app.use('/api/ecommerce/admin-dashboard', require('./routes/adminDashboardRoutes')); // Admin oversight, metrics, vendor/order/user management
+app.use('/api/ecommerce/reviews', require('./routes/ratingReviewRoutes')); // Product & vendor reviews, moderation, spam detection
+app.use('/api/ecommerce/disputes', require('./routes/disputeResolutionRoutes')); // Buyer-seller disputes, escalation, resolution
+app.use('/api/ecommerce/analytics', require('./routes/advancedAnalyticsRoutes')); // Custom reports, trends, forecasting, cohort analysis
+app.use('/api/ecommerce/notifications', require('./routes/notificationRoutes')); // Multi-channel notifications (email, SMS, push, in-app)
+
+// PHASE 6: All Advanced Features (Social, Performance, Security, AI/ML, Mobile, API)
+app.use('/api/ecommerce/social', require('./routes/socialCommerceRoutes')); // Wishlists, social sharing, influencer partnerships
+app.use('/api/ecommerce/performance', require('./routes/performanceOptimizationRoutes')); // Caching, CDN, query optimization, lazy loading
+app.use('/api/ecommerce/security', require('./routes/advancedSecurityRoutes')); // 2FA, rate limiting, security audits, compliance
+app.use('/api/ecommerce/ai-ml', require('./routes/aimlRoutes')); // Predictive pricing, demand forecasting, churn prediction
+app.use('/api/ecommerce/mobile', require('./routes/mobileSDKRoutes')); // Mobile SDK, push notifications, offline sync
+app.use('/api/ecommerce/api', require('./routes/apiWebhooksRoutes')); // Webhooks, OpenAPI docs, marketplace integrations
 
 // FoodDelivery routes
 app.use('/api/fooddelivery', require('./routes/fooddelivery'));

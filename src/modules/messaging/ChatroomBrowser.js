@@ -19,11 +19,7 @@ const ChatroomBrowser = ({
   const [myRooms, setMyRooms] = useState(new Set());
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    loadMyRooms();
-  }, []);
-
-  const loadMyRooms = async () => {
+  const loadMyRooms = useCallback(async () => {
     try {
       const response = await apiCall('/messaging/chatrooms/my-rooms', 'GET');
       if (response?.chatrooms) {
@@ -33,7 +29,11 @@ const ChatroomBrowser = ({
     } catch (loadError) {
       console.error('Error loading my rooms:', loadError);
     }
-  };
+  }, [apiCall]);
+
+  useEffect(() => {
+    loadMyRooms();
+  }, [loadMyRooms]);
 
   const loadChatrooms = useCallback(async (pageNum = 1) => {
     try {

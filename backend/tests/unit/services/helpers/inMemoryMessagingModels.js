@@ -17,7 +17,31 @@ const counters = {
 };
 
 function clone(value) {
-  return value === undefined ? value : structuredClone(value);
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  if (typeof globalThis.structuredClone === 'function') {
+    return globalThis.structuredClone(value);
+  }
+
+  if (value instanceof Date) {
+    return new Date(value.getTime());
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => clone(item));
+  }
+
+  if (typeof value === 'object') {
+    const result = {};
+    Object.keys(value).forEach((key) => {
+      result[key] = clone(value[key]);
+    });
+    return result;
+  }
+
+  return value;
 }
 
 function normalizeId(value) {

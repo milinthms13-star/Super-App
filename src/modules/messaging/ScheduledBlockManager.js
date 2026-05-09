@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { getEntityId } from './utils';
 
@@ -20,11 +20,7 @@ const ScheduledBlockManager = ({ contact, onClose, onBlockAdded }) => {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const contactId = getEntityId(contact.contactUserId || contact);
 
-  useEffect(() => {
-    loadScheduledBlocks();
-  }, []);
-
-  const loadScheduledBlocks = async () => {
+  const loadScheduledBlocks = useCallback(async () => {
     try {
       setLoading(true);
       const response = await apiCall(
@@ -40,7 +36,11 @@ const ScheduledBlockManager = ({ contact, onClose, onBlockAdded }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiCall, contactId]);
+
+  useEffect(() => {
+    loadScheduledBlocks();
+  }, [loadScheduledBlocks]);
 
   const toggleDay = (day) => {
     setSelectedDays((prev) =>

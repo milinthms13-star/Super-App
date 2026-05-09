@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const MessageReaction = require('../models/MessageReaction');
 const Message = require('../models/Message');
 const logger = require('../utils/logger');
@@ -145,7 +146,11 @@ class MessageReactionService {
 
       // Cache for 5 minutes
       this.reactionCache.set(messageId, summary);
-      setTimeout(() => this.reactionCache.delete(messageId), 5 * 60 * 1000);
+      const cacheExpiryTimer = setTimeout(
+        () => this.reactionCache.delete(messageId),
+        5 * 60 * 1000
+      );
+      cacheExpiryTimer.unref?.();
 
       return summary;
     } catch (error) {
@@ -274,7 +279,13 @@ class MessageReactionService {
   async getPopularReactions(messageIds) {
     try {
       const popular = await MessageReaction.aggregate([
-        { $match: { messageId: { $in: messageIds.map((id) => mongoose.Types.ObjectId(id)) } } },
+        {
+          $match: {
+            messageId: {
+              $in: messageIds.map((id) => new mongoose.Types.ObjectId(id)),
+            },
+          },
+        },
         { $group: { _id: '$emoji', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 },
@@ -295,7 +306,7 @@ class MessageReactionService {
   async getUserReactionStats(userId) {
     try {
       const stats = await MessageReaction.aggregate([
-        { $match: { userId: mongoose.Types.ObjectId(userId) } },
+        { $match: { userId: new mongoose.Types.ObjectId(userId) } },
         {
           $group: {
             _id: null,

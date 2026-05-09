@@ -17,12 +17,7 @@ const GroupCreation = ({
   const [error, setError] = useState('');
   const [userBlockedList, setUserBlockedList] = useState(new Set());
 
-  // Load blocked contacts
-  useEffect(() => {
-    loadBlockedContacts();
-  }, []);
-
-  const loadBlockedContacts = async () => {
+  const loadBlockedContacts = useCallback(async () => {
     try {
       const response = await apiCall('/messaging/contacts?showBlocked=true', 'GET');
       if (response?.contacts) {
@@ -34,7 +29,12 @@ const GroupCreation = ({
     } catch (error) {
       console.error('Error loading blocked contacts:', error);
     }
-  };
+  }, [apiCall]);
+
+  // Load blocked contacts
+  useEffect(() => {
+    loadBlockedContacts();
+  }, [loadBlockedContacts]);
 
   const searchUsers = useCallback(
     async (query) => {

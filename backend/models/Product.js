@@ -243,6 +243,69 @@ const ProductSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    // PHASE 1 GAP FEATURES
+    brand: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    specifications: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    specsUpdatedAt: {
+      type: Date,
+      default: null,
+    },
+    warranty: {
+      type: {
+        type: String,
+        enum: ['No warranty', 'Manufacturer warranty', 'Extended warranty'],
+      },
+      period: String, // e.g., "1 year", "2 years"
+      coverage: [String], // e.g., ["Manufacturing defects", "Parts replacement"]
+      default: null,
+    },
+    returnPolicy: {
+      returnable: Boolean,
+      returnPeriodDays: Number,
+      conditions: [String],
+      default: null,
+    },
+    isDigital: {
+      type: Boolean,
+      default: false,
+    },
+    estimatedDeliveryDays: {
+      type: Number,
+      default: 5,
+    },
+    freeShipping: {
+      type: Boolean,
+      default: false,
+    },
+    salesCount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    gstRate: {
+      type: String,
+      enum: ['0%', '5%', '12%', '18%', '28%'],
+      default: '18%',
+    },
+    hsnCode: {
+      type: String,
+      default: '9999',
+    },
+    isBusiness: {
+      type: Boolean,
+      default: false,
+    },
+    buyerGSTIN: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -16,21 +16,6 @@ describe('Message Reaction Service', () => {
   const testUserId2 = new mongoose.Types.ObjectId();
   const testReactionId = new mongoose.Types.ObjectId();
 
-  const createMockQuery = (resolvedValue) => ({
-    select: jest.fn().mockReturnThis(),
-    populate: jest.fn().mockReturnThis(),
-    lean: jest.fn().mockReturnThis(),
-    sort: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockReturnThis(),
-    skip: jest.fn().mockReturnThis(),
-    exec: jest.fn().mockResolvedValue(resolvedValue),
-  });
-
-  const createSaveableObject = (data) => ({
-    ...data,
-    save: jest.fn().mockResolvedValue({ ...data, status: 'saved' }),
-  });
-
   beforeEach(() => {
     jest.clearAllMocks();
     messageReactionService.clearCache();
@@ -274,20 +259,37 @@ describe('Message Reaction Service', () => {
 
   describe('getPopularReactions', () => {
     it('should return list of popular reactions', async () => {
-      // Mock the internal implementation to avoid aggregate calls
       const result = await messageReactionService.getPopularReactions([
         testMessageId.toString(),
-      ]).catch(() => []);
+      ]);
 
-      expect(Array.isArray(result) || result === undefined).toBe(true);
+      expect(Array.isArray(result)).toBe(true);
+      expect(MessageReaction.aggregate).toHaveBeenCalledTimes(1);
+
+      const pipeline = MessageReaction.aggregate.mock.calls[0][0];
+      expect(pipeline[0].$match.messageId.$in[0]).toBeInstanceOf(
+        mongoose.Types.ObjectId
+      );
     });
   });
 
   describe('getUserReactionStats', () => {
     it('should return user reaction statistics', async () => {
-      // These tests call aggregate which requires mongoose
-      // For now, just verify the methods exist
-      expect(typeof messageReactionService.getUserReactionStats).toBe('function');
+      const result = await messageReactionService.getUserReactionStats(
+        testUserId.toString()
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          totalReactions: 1,
+          uniqueEmojisCount: 1,
+        })
+      );
+
+      const pipeline = MessageReaction.aggregate.mock.calls[0][0];
+      expect(pipeline[0].$match.userId).toBeInstanceOf(
+        mongoose.Types.ObjectId
+      );
     });
   });
 

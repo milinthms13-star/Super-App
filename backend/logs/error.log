@@ -3613,3 +3613,207 @@
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting queue stats: Operation `abuse_reports.countDocuments()` buffering timed out after 10000ms\u001b[39m","stack":"MongooseError: Operation `abuse_reports.countDocuments()` buffering timed out after 10000ms\n    at Timeout.<anonymous> (C:\\Users\\Dhanya\\malabarbazaar\\backend\\node_modules\\mongoose\\lib\\drivers\\node-mongodb-native\\collection.js:187:23)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)","timestamp":"2026-05-08 02:55:41:5541"}
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting queue stats: Operation `abuse_reports.countDocuments()` buffering timed out after 10000ms\u001b[39m","stack":"MongooseError: Operation `abuse_reports.countDocuments()` buffering timed out after 10000ms\n    at Timeout.<anonymous> (C:\\Users\\Dhanya\\malabarbazaar\\backend\\node_modules\\mongoose\\lib\\drivers\\node-mongodb-native\\collection.js:187:23)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)","timestamp":"2026-05-08 02:55:51:5551"}
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting queue stats: Operation `abuse_reports.countDocuments()` buffering timed out after 10000ms\u001b[39m","stack":"MongooseError: Operation `abuse_reports.countDocuments()` buffering timed out after 10000ms\n    at Timeout.<anonymous> (C:\\Users\\Dhanya\\malabarbazaar\\backend\\node_modules\\mongoose\\lib\\drivers\\node-mongodb-native\\collection.js:187:23)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)","timestamp":"2026-05-08 02:56:01:561"}
+{"error":{"kind":"ObjectId","message":"Cast to ObjectId failed for value \"chat1\" (type string) at path \"chatId\" for model \"Message\"","name":"CastError","path":"chatId","reason":{},"stringValue":"\"chat1\"","value":"chat1","valueType":"string"},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting sentiment analysis\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{"kind":"ObjectId","message":"Cast to ObjectId failed for value \"chat1\" (type string) at path \"chatId\" for model \"Message\"","name":"CastError","path":"chatId","reason":{},"stringValue":"\"chat1\"","value":"chat1","valueType":"string"},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting sentiment analysis\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{"kind":"ObjectId","message":"Cast to ObjectId failed for value \"chat1\" (type string) at path \"chatId\" for model \"Message\"","name":"CastError","path":"chatId","reason":{},"stringValue":"\"chat1\"","value":"chat1","valueType":"string"},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting sentiment analysis\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{"kind":"ObjectId","message":"Cast to ObjectId failed for value \"chat1\" (type string) at path \"chatId\" for model \"Message\"","name":"CastError","path":"chatId","reason":{},"stringValue":"\"chat1\"","value":"chat1","valueType":"string"},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting sentiment analysis\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{"kind":"ObjectId","message":"Cast to ObjectId failed for value \"chat1\" (type string) at path \"chatId\" for model \"Message\"","name":"CastError","path":"chatId","reason":{},"stringValue":"\"chat1\"","value":"chat1","valueType":"string"},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting sentiment analysis\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting engagement metrics\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting engagement metrics\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting engagement metrics\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting engagement metrics\u001b[39m","timestamp":"2026-05-09 17:52:53:5253"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread stats\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread stats\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread stats\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread stats\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cb8","timestamp":"2026-05-09 17:52:55:5255"}
+{"chatId":"69ff271f5f7941920cbd4cb7","error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting popular threads\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"chatId":"69ff271f5f7941920cbd4cb7","error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting popular threads\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"chatId":"69ff271f5f7941920cbd4cb7","error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting popular threads\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cb6","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cbc","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff271f5f7941920cbd4cbd","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff271f5f7941920cbd4cba","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff271f5f7941920cbd4cb4","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1","chat2","chat3"],"userId":"user1"},"timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":[],"userId":"user1"},"timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward stats\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward stats\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward stats\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting most forwarded\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting most forwarded\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting most forwarded\u001b[39m","timestamp":"2026-05-09 17:52:55:5255"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError checking if forwarded\u001b[39m","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError checking if forwarded\u001b[39m","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg1","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg2","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg3","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg1","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"invalid","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg3","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg1","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error removing reaction'\u001b[39m","messageId":"69ff27216725aa1a4e5edbf7","timestamp":"2026-05-09 17:52:57:5257","userId":"69ff27216725aa1a4e5edbf8"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg2","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["restrictedChat"],"userId":"user1"},"timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"restrictedMsg","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["nonexistent"],"userId":"user1"},"timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:52:56:5256"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting popular reactions'\u001b[39m","timestamp":"2026-05-09 17:52:57:5257"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff27228ebf4411933cf11b","timestamp":"2026-05-09 17:52:58:5258","userId":"69ff27228ebf4411933cf11f"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff27228ebf4411933cf11b","timestamp":"2026-05-09 17:52:58:5258","userId":"69ff27228ebf4411933cf11c"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting message version'\u001b[39m","messageId":"69ff27228ebf4411933cf11b","timestamp":"2026-05-09 17:52:58:5258"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error rolling back message'\u001b[39m","messageId":"69ff27228ebf4411933cf11b","timestamp":"2026-05-09 17:52:58:5258"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting read receipt\u001b[39m","timestamp":"2026-05-09 17:52:59:5259"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1","chat2","chat3"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":[],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward stats\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward stats\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward stats\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting most forwarded\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting most forwarded\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting most forwarded\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError checking if forwarded\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError checking if forwarded\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg1","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg2","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg3","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg1","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"invalid","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg3","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg1","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"msg2","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["restrictedChat"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"restrictedMsg","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting forward chain\u001b[39m","timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["nonexistent"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:57:31:5731"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread stats\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread stats\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread stats\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread stats\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6ea","timestamp":"2026-05-09 17:57:32:5732"}
+{"chatId":"69ff2834f4c4f1e99f43e6e9","error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting popular threads\u001b[39m","timestamp":"2026-05-09 17:57:32:5732"}
+{"chatId":"69ff2834f4c4f1e99f43e6e9","error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting popular threads\u001b[39m","timestamp":"2026-05-09 17:57:32:5732"}
+{"chatId":"69ff2834f4c4f1e99f43e6e9","error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting popular threads\u001b[39m","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6e8","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6ee","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6ef","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2834f4c4f1e99f43e6ec","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2834f4c4f1e99f43e6e6","timestamp":"2026-05-09 17:57:32:5732"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:58:19:5819"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":[],"userId":"user1"},"timestamp":"2026-05-09 17:58:19:5819"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"invalid","timestamp":"2026-05-09 17:58:19:5819"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","timestamp":"2026-05-09 17:58:20:5820"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff2864aaebc2123e72c5cb","timestamp":"2026-05-09 17:58:20:5820"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2864aaebc2123e72c5d1","timestamp":"2026-05-09 17:58:20:5820"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2864aaebc2123e72c5c9","timestamp":"2026-05-09 17:58:20:5820"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff2864aaebc2123e72c5d2","timestamp":"2026-05-09 17:58:20:5820"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 17:59:59:5959"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":[],"userId":"user1"},"timestamp":"2026-05-09 17:59:59:5959"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"invalid","timestamp":"2026-05-09 17:59:59:5959"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","timestamp":"2026-05-09 17:59:59:5959"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff28c7cff43f6c17f586f2","timestamp":"2026-05-09 17:59:59:5959"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff28c7cff43f6c17f586f8","timestamp":"2026-05-09 17:59:59:5959"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff28c7cff43f6c17f586f0","timestamp":"2026-05-09 17:59:59:5959"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff28c7cff43f6c17f586f9","timestamp":"2026-05-09 17:59:59:5959"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error removing reaction'\u001b[39m","messageId":"69ff28c9def748f28a34de26","timestamp":"2026-05-09 18:00:01:01","userId":"69ff28c9def748f28a34de27"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting popular reactions'\u001b[39m","timestamp":"2026-05-09 18:00:01:01"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff28ca1c7d09265188ccce","timestamp":"2026-05-09 18:00:02:02","userId":"69ff28ca1c7d09265188ccd2"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff28ca1c7d09265188ccce","timestamp":"2026-05-09 18:00:02:02","userId":"69ff28ca1c7d09265188cccf"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting message version'\u001b[39m","messageId":"69ff28ca1c7d09265188ccce","timestamp":"2026-05-09 18:00:02:02"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error rolling back message'\u001b[39m","messageId":"69ff28ca1c7d09265188ccce","timestamp":"2026-05-09 18:00:02:02"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting read receipt\u001b[39m","timestamp":"2026-05-09 18:00:03:03"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error removing reaction'\u001b[39m","messageId":"69ff2a910fee5344dbbfcb00","timestamp":"2026-05-09 18:07:37:737","userId":"69ff2a910fee5344dbbfcb01"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting popular reactions'\u001b[39m","timestamp":"2026-05-09 18:07:37:737"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff2a93d80bb76d969bbe44","timestamp":"2026-05-09 18:07:39:739","userId":"69ff2a93d80bb76d969bbe48"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff2a93d80bb76d969bbe44","timestamp":"2026-05-09 18:07:39:739","userId":"69ff2a93d80bb76d969bbe45"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting message version'\u001b[39m","messageId":"69ff2a93d80bb76d969bbe44","timestamp":"2026-05-09 18:07:39:739"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error rolling back message'\u001b[39m","messageId":"69ff2a93d80bb76d969bbe44","timestamp":"2026-05-09 18:07:39:739"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting read receipt\u001b[39m","timestamp":"2026-05-09 18:07:39:739"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","timestamp":"2026-05-09 18:07:40:740"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error removing reaction'\u001b[39m","messageId":"69ff2aaf1a1f6454dd317fec","timestamp":"2026-05-09 18:08:07:87","userId":"69ff2aaf1a1f6454dd317fed"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting popular reactions'\u001b[39m","timestamp":"2026-05-09 18:08:07:87"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff2ab06df952d847680d60","timestamp":"2026-05-09 18:08:08:88","userId":"69ff2ab06df952d847680d64"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff2ab06df952d847680d60","timestamp":"2026-05-09 18:08:08:88","userId":"69ff2ab06df952d847680d61"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting message version'\u001b[39m","messageId":"69ff2ab06df952d847680d60","timestamp":"2026-05-09 18:08:08:88"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error rolling back message'\u001b[39m","messageId":"69ff2ab06df952d847680d60","timestamp":"2026-05-09 18:08:08:88"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","timestamp":"2026-05-09 18:08:09:89"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff2ab1f27a3937ab168e36","timestamp":"2026-05-09 18:08:09:89"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2ab1f27a3937ab168e3c","timestamp":"2026-05-09 18:08:09:89"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2ab1f27a3937ab168e34","timestamp":"2026-05-09 18:08:09:89"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff2ab1f27a3937ab168e3d","timestamp":"2026-05-09 18:08:09:89"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting read receipt\u001b[39m","timestamp":"2026-05-09 18:08:10:810"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 18:08:11:811"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":[],"userId":"user1"},"timestamp":"2026-05-09 18:08:11:811"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"invalid","timestamp":"2026-05-09 18:08:11:811"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error removing reaction'\u001b[39m","messageId":"69ff2b961a7fee20c8cc82eb","timestamp":"2026-05-09 18:11:58:1158","userId":"69ff2b961a7fee20c8cc82ec"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting read receipt\u001b[39m","timestamp":"2026-05-09 18:11:59:1159"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error removing reaction'\u001b[39m","messageId":"69ff2ba6de4b9f5304ac26ba","timestamp":"2026-05-09 18:12:14:1214","userId":"69ff2ba6de4b9f5304ac26bb"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff2ba80d13fa9a8c02b229","timestamp":"2026-05-09 18:12:16:1216","userId":"69ff2ba80d13fa9a8c02b22d"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error editing message'\u001b[39m","messageId":"69ff2ba80d13fa9a8c02b229","timestamp":"2026-05-09 18:12:16:1216","userId":"69ff2ba80d13fa9a8c02b22a"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error getting message version'\u001b[39m","messageId":"69ff2ba80d13fa9a8c02b229","timestamp":"2026-05-09 18:12:16:1216"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error rolling back message'\u001b[39m","messageId":"69ff2ba80d13fa9a8c02b229","timestamp":"2026-05-09 18:12:16:1216"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","timestamp":"2026-05-09 18:12:17:1217"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError deleting thread\u001b[39m","messageId":"69ff2ba976911e57d24d81f2","timestamp":"2026-05-09 18:12:17:1217"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting thread\u001b[39m","messageId":"69ff2ba976911e57d24d81f8","timestamp":"2026-05-09 18:12:17:1217"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError creating reply\u001b[39m","parentMessageId":"69ff2ba976911e57d24d81f0","timestamp":"2026-05-09 18:12:17:1217"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting conversation chain\u001b[39m","messageId":"69ff2ba976911e57d24d81f9","timestamp":"2026-05-09 18:12:17:1217"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting read receipt\u001b[39m","timestamp":"2026-05-09 18:12:18:1218"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"targetChatIds":["chat1"],"userId":"user1"},"timestamp":"2026-05-09 18:12:18:1218"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":{"messageId":"msg123","targetChatIds":[],"userId":"user1"},"timestamp":"2026-05-09 18:12:18:1218"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError forwarding message\u001b[39m","messageId":"invalid","timestamp":"2026-05-09 18:12:18:1218"}
+{"error":{},"level":"\u001b[31m'error'\u001b[39m","message":"\u001b[31m'Error removing reaction'\u001b[39m","messageId":"69ff2bd464f02b4534cea04e","timestamp":"2026-05-09 18:13:00:130","userId":"69ff2bd464f02b4534cea04f"}
+{"error":{},"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mError getting read receipt\u001b[39m","timestamp":"2026-05-09 18:13:01:131"}

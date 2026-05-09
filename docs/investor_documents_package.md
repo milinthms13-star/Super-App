@@ -10,13 +10,13 @@
 ---
 
 ## 1) Investor Valuation Report
-(Use the current file you already have: `INVESTOR_VALUATION_REPORT_DRAFT.md`)
+(Use the current file you already have: `INVESTOR_VALUATION_REPORT_FINAL.md`)
 
 ### Source (existing)
-- `INVESTOR_VALUATION_REPORT_DRAFT.md`
+- `INVESTOR_VALUATION_REPORT_FINAL.md`
 
 ### Suggested export steps
-1. Open `INVESTOR_VALUATION_REPORT_DRAFT.md` in your editor
+1. Open `INVESTOR_VALUATION_REPORT_FINAL.md` in your editor
 2. Export as **PDF**
 3. Export as **DOCX** (Word will preserve headings/bullets)
 
@@ -151,7 +151,7 @@ Phase 3: Regional scaling + hyperlocal partnerships
 Phase 4: National ecosystem expansion + AI maturity
 
 ### Slide 15 — Funding Ask
-Raise: **₹3 Crore – ₹10 Crore**  
+Raise: **Rs. 75 lakh – Rs. 1.5 crore**  
 Use of funds:
 - UI polish and onboarding optimization
 - Deployment stabilization + infrastructure scaling
@@ -162,9 +162,9 @@ Use of funds:
 
 ### Slide 16 — Valuation Positioning (investment narrative)
 Estimated valuation band (technical/IP platform framing):
-- Technical/IP asset value: **₹200 Cr – ₹600 Cr** (evidence-based framing)
-- Replacement cost framing: **₹150 Cr – ₹350 Cr+**
-(Final valuation depends on traction: users, retention, revenue, and KPIs.)
+- Current evidence-backed platform value: **Rs. 2.4 crore – Rs. 4.0 crore**
+- Recommended investor discussion anchor: **Rs. 3.5 crore**
+- Stretch only after traction: **above Rs. 5 crore** with live users, revenue, and cleaner QA proof
 
 ### Slide 17 — Why NilaHub Can Win
 Key strategic advantages:
@@ -289,7 +289,7 @@ NilaHub is a modular platform built on:
 - Performance/caching improvements and scale readiness
 
 ### Funding ask
-- ₹3 Crore – ₹10 Crore
+- Rs. 75 lakh – Rs. 1.5 crore
 - Allocation: product, infra, AI scaling, security/compliance, beta users, marketing, onboarding
 
 ---

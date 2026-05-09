@@ -9,7 +9,7 @@
 ## 1) Screenshots / UI (Investor-ready)
 
 ### Current repo status
-- **No screenshot pack / image assets found in the repo documentation artifacts** (no PNG/JPG/SVG screenshot files referenced alongside the valuation drafts).
+- **Investor screenshot pack is present** in `docs/investor-screenshots/` with **12 screenshot assets** already prepared.
 
 ### Evidence we can map from code (for screenshot-to-section correspondence)
 - **AI assistant UI entry point (for screenshot capture):** `src/components/AIInsights.js`
@@ -63,7 +63,8 @@
 - Contains structured delivery status and deployment checklist patterns.
 
 ### Current gap (must be filled for investor credibility)
-- **No definitive live URL(s)** (e.g., `https://app.yourdomain.com`) found/confirmed in the documentation artifacts reviewed in this pass.
+- Repo materials reference a public demo URL: **https://mysuperapp-ekr4.onrender.com/**
+- What is still missing is **investor-grade proof around uptime, credentials, seeded data, and monitoring**
 
 ### What to include in the investor document
 - Live demo links:

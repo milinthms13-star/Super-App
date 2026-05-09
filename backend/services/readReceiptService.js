@@ -126,7 +126,11 @@ class ReadReceiptService {
 
       // Cache for 2 minutes
       this.receiptCache.set(messageId, receipt);
-      setTimeout(() => this.receiptCache.delete(messageId), 2 * 60 * 1000);
+      const cacheExpiryTimer = setTimeout(
+        () => this.receiptCache.delete(messageId),
+        2 * 60 * 1000
+      );
+      cacheExpiryTimer.unref?.();
 
       return receipt;
     } catch (error) {
@@ -177,7 +181,7 @@ class ReadReceiptService {
       const stats = await Message.aggregate([
         {
           $match: {
-            chatId: mongoose.Types.ObjectId(chatId),
+            chatId: new mongoose.Types.ObjectId(chatId),
             createdAt: { $gte: startDate },
             isDeleted: { $ne: true },
           },

@@ -1,16 +1,6 @@
 const assert = require('assert');
 const mongoose = require('mongoose');
 
-// Properly mock mongoose Query chains
-const createMockQuery = (data) => {
-  return {
-    select: jest.fn().mockReturnThis(),
-    populate: jest.fn().mockReturnThis(),
-    lean: jest.fn().mockResolvedValue(data),
-    exec: jest.fn().mockResolvedValue(data)
-  };
-};
-
 // Mock Message model with proper query chains
 const MockMessage = {
   findById: jest.fn((id) => {
@@ -37,7 +27,8 @@ const MockMessage = {
       select: jest.fn().mockResolvedValue({})
     };
   }),
-  updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 })
+  updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+  aggregate: jest.fn().mockResolvedValue([])
 };
 
 // Mock ReadReceipt model
@@ -51,7 +42,6 @@ jest.mock('../../../models/Message', () => MockMessage);
 
 const readReceiptService = require('../../../services/readReceiptService');
 const Message = require('../../../models/Message');
-const ReadReceipt = require('../../../models/ReadReceipt');
 
 describe('ReadReceiptService', () => {
   let userId, messageId, chatId;
@@ -64,6 +54,7 @@ describe('ReadReceiptService', () => {
     userId = new mongoose.Types.ObjectId();
     messageId = new mongoose.Types.ObjectId();
     chatId = new mongoose.Types.ObjectId();
+    Message.aggregate.mockResolvedValue([]);
   });
 
   describe('markAsRead', () => {
@@ -209,6 +200,30 @@ describe('ReadReceiptService', () => {
       readReceiptService.clearCache();
       // If it doesn't throw, cache clearing works
       assert(true);
+    });
+  });
+
+  describe('getChatReadStats', () => {
+    it('should aggregate chat read statistics with an ObjectId match', async () => {
+      Message.aggregate.mockResolvedValueOnce([
+        {
+          totalMessages: 12,
+          totalReads: 27,
+          unreadCount: 3,
+          avgReadTime: 4500
+        }
+      ]);
+
+      const stats = await readReceiptService.getChatReadStats(chatId.toString(), {
+        daysBack: 14
+      });
+
+      assert.equal(stats.totalMessages, 12);
+      assert.equal(stats.totalReads, 27);
+      assert.equal(stats.unreadCount, 3);
+
+      const pipeline = Message.aggregate.mock.calls[0][0];
+      assert(pipeline[0].$match.chatId instanceof mongoose.Types.ObjectId);
     });
   });
 

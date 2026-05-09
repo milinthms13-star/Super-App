@@ -51,7 +51,7 @@ class ConversationAnalyticsService {
       const messageStats = await Message.aggregate([
         {
           $match: {
-            chatId: mongoose.Types.ObjectId(chatId),
+            chatId: new mongoose.Types.ObjectId(chatId),
             createdAt: { $gte: startDate },
             isDeleted: { $ne: true },
           },
@@ -76,7 +76,7 @@ class ConversationAnalyticsService {
       const participantActivity = await Message.aggregate([
         {
           $match: {
-            chatId: mongoose.Types.ObjectId(chatId),
+            chatId: new mongoose.Types.ObjectId(chatId),
             createdAt: { $gte: startDate },
             isDeleted: { $ne: true },
           },
@@ -103,7 +103,7 @@ class ConversationAnalyticsService {
       const activityTimeline = await Message.aggregate([
         {
           $match: {
-            chatId: mongoose.Types.ObjectId(chatId),
+            chatId: new mongoose.Types.ObjectId(chatId),
             createdAt: { $gte: startDate },
             isDeleted: { $ne: true },
           },
@@ -138,7 +138,11 @@ class ConversationAnalyticsService {
 
       // Cache
       this.analyticsCache.set(cacheKey, overview);
-      setTimeout(() => this.analyticsCache.delete(cacheKey), this.cacheTTL);
+      const cacheExpiryTimer = setTimeout(
+        () => this.analyticsCache.delete(cacheKey),
+        this.cacheTTL
+      );
+      cacheExpiryTimer.unref?.();
 
       logger.info(`Analytics retrieved for chat ${chatId}`);
       return overview;
@@ -157,12 +161,12 @@ class ConversationAnalyticsService {
   async getEngagementMetrics(chatId, userId = null) {
     try {
       const query = {
-        chatId: mongoose.Types.ObjectId(chatId),
+        chatId: new mongoose.Types.ObjectId(chatId),
         isDeleted: { $ne: true },
       };
 
       if (userId) {
-        query.senderId = mongoose.Types.ObjectId(userId);
+        query.senderId = new mongoose.Types.ObjectId(userId);
       }
 
       const engagement = await Message.aggregate([
@@ -250,7 +254,7 @@ class ConversationAnalyticsService {
       const trends = await Message.aggregate([
         {
           $match: {
-            chatId: mongoose.Types.ObjectId(chatId),
+            chatId: new mongoose.Types.ObjectId(chatId),
             createdAt: { $gte: startDate },
             isDeleted: { $ne: true },
           },
@@ -369,7 +373,7 @@ class ConversationAnalyticsService {
   async getMostActiveHours(chatId) {
     try {
       const hours = await Message.aggregate([
-        { $match: { chatId: mongoose.Types.ObjectId(chatId) } },
+        { $match: { chatId: new mongoose.Types.ObjectId(chatId) } },
         {
           $group: {
             _id: { $hour: '$createdAt' },

@@ -1,439 +1,275 @@
-const assert = require('assert');
+const mongoose = require('mongoose');
+
+jest.mock('../../../models/Message');
+jest.mock('../../../models/Chat');
+jest.mock('../../../models/User');
+jest.mock('../../../utils/logger', () => ({
+  info: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+}));
+
+const Message = require('../../../models/Message');
+const Chat = require('../../../models/Chat');
 const conversationAnalyticsService = require('../../../services/conversationAnalyticsService');
 
+const createQuery = (resolvedValue) => ({
+  select: jest.fn().mockReturnThis(),
+  populate: jest.fn().mockReturnThis(),
+  limit: jest.fn().mockReturnThis(),
+  lean: jest.fn().mockResolvedValue(resolvedValue),
+});
+
 describe('ConversationAnalyticsService', () => {
+  const chatId = new mongoose.Types.ObjectId().toString();
+  const userOneId = new mongoose.Types.ObjectId().toString();
+  const userTwoId = new mongoose.Types.ObjectId().toString();
+
   beforeEach(() => {
+    jest.clearAllMocks();
     conversationAnalyticsService.clearCache();
+
+    Chat.findById = jest.fn().mockReturnValue(
+      createQuery({
+        _id: chatId,
+        name: 'Messaging Analytics Chat',
+        participants: [{ userId: userOneId }, { userId: userTwoId }],
+        createdAt: new Date('2026-05-01T10:00:00Z'),
+      })
+    );
+
+    Message.aggregate = jest.fn();
+    Message.find = jest.fn();
+    Message.countDocuments = jest.fn();
+    Message.distinct = jest.fn();
   });
 
-  describe('getChatAnalytics', () => {
-    it('should get chat analytics dashboard', async () => {
-      const analytics = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      assert(typeof analytics === 'object');
-    });
-
-    it('should include message count', async () => {
-      const analytics = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      assert(
-        typeof analytics.messageCount === 'number' ||
-          analytics.messageCount !== undefined
-      );
-    });
-
-    it('should include participant count', async () => {
-      const analytics = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      assert(
-        typeof analytics.participantCount === 'number' ||
-          analytics.participantCount !== undefined
-      );
-    });
-
-    it('should support time range filtering', async () => {
-      const analytics = await conversationAnalyticsService.getChatAnalytics(
-        'chat1',
+  it('builds a conversation overview and caches the result', async () => {
+    Message.aggregate
+      .mockResolvedValueOnce([
         {
-          startDate: '2026-05-01',
-          endDate: '2026-05-07',
-        }
-      );
-      assert(typeof analytics === 'object');
+          totalMessages: 24,
+          totalWords: 180,
+          avgMessageLength: 18,
+          messagesWithMedia: 4,
+          messagesWithReactions: 6,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          _id: userOneId,
+          messageCount: 14,
+          avgResponseTime: 120000,
+          user: [{ _id: userOneId, username: 'alice' }],
+        },
+      ])
+      .mockResolvedValueOnce([
+        { _id: '2026-05-06', count: 10 },
+        { _id: '2026-05-07', count: 14 },
+      ]);
+
+    const firstResult = await conversationAnalyticsService.getConversationOverview(chatId, {
+      daysBack: 7,
     });
+    const secondResult = await conversationAnalyticsService.getConversationOverview(chatId, {
+      daysBack: 7,
+    });
+
+    expect(firstResult.chat.name).toBe('Messaging Analytics Chat');
+    expect(firstResult.chat.participantCount).toBe(2);
+    expect(firstResult.messageStats.totalMessages).toBe(24);
+    expect(firstResult.activityTimeline).toHaveLength(2);
+    expect(secondResult).toEqual(firstResult);
+    expect(Message.aggregate).toHaveBeenCalledTimes(3);
   });
 
-  describe('getSentimentAnalysis', () => {
-    it('should get sentiment analysis for chat', async () => {
-      const sentiment = await conversationAnalyticsService.getSentimentAnalysis(
-        'chat1'
-      );
-      assert(typeof sentiment === 'object');
-    });
+  it('returns engagement metrics from aggregate data', async () => {
+    Message.aggregate.mockResolvedValueOnce([
+      {
+        messageCount: 12,
+        totalReactions: 8,
+        avgReactions: 2,
+        repliesGenerated: 3,
+        forwards: 1,
+        engagement: 12,
+      },
+    ]);
 
-    it('should include positive percentage', async () => {
-      const sentiment = await conversationAnalyticsService.getSentimentAnalysis(
-        'chat1'
-      );
-      assert(
-        typeof sentiment.positive === 'number' ||
-          sentiment.positive !== undefined
-      );
-    });
+    const result = await conversationAnalyticsService.getEngagementMetrics(chatId, userOneId);
 
-    it('should include negative percentage', async () => {
-      const sentiment = await conversationAnalyticsService.getSentimentAnalysis(
-        'chat1'
-      );
-      assert(
-        typeof sentiment.negative === 'number' ||
-          sentiment.negative !== undefined
-      );
-    });
-
-    it('should include neutral percentage', async () => {
-      const sentiment = await conversationAnalyticsService.getSentimentAnalysis(
-        'chat1'
-      );
-      assert(
-        typeof sentiment.neutral === 'number' ||
-          sentiment.neutral !== undefined
-      );
-    });
-
-    it('should support time range filtering', async () => {
-      const sentiment = await conversationAnalyticsService.getSentimentAnalysis(
-        'chat1',
-        { days: 7 }
-      );
-      assert(typeof sentiment === 'object');
-    });
+    expect(result.messageCount).toBe(12);
+    expect(result.totalReactions).toBe(8);
+    expect(result.engagement).toBe(12);
   });
 
-  describe('getEngagementMetrics', () => {
-    it('should get engagement metrics for chat', async () => {
-      const metrics = await conversationAnalyticsService.getEngagementMetrics(
-        'chat1'
-      );
-      assert(typeof metrics === 'object');
-    });
+  it('summarizes sentiment from message content', async () => {
+    Message.find.mockReturnValueOnce(
+      createQuery([
+        {
+          _id: new mongoose.Types.ObjectId().toString(),
+          content: 'This is great and wonderful',
+          senderId: userOneId,
+          createdAt: new Date('2026-05-06T09:00:00Z'),
+        },
+        {
+          _id: new mongoose.Types.ObjectId().toString(),
+          content: 'This is awful and bad',
+          senderId: userTwoId,
+          createdAt: new Date('2026-05-06T09:05:00Z'),
+        },
+        {
+          _id: new mongoose.Types.ObjectId().toString(),
+          content: 'Checking in with the team',
+          senderId: userOneId,
+          createdAt: new Date('2026-05-06T09:10:00Z'),
+        },
+      ])
+    );
 
-    it('should include message response time', async () => {
-      const metrics = await conversationAnalyticsService.getEngagementMetrics(
-        'chat1'
-      );
-      assert(metrics.avgResponseTime !== undefined || metrics.avgResponseTime === undefined);
-    });
+    const result = await conversationAnalyticsService.getSentimentAnalysis(chatId, { limit: 10 });
 
-    it('should include active users', async () => {
-      const metrics = await conversationAnalyticsService.getEngagementMetrics(
-        'chat1'
-      );
-      assert(
-        typeof metrics.activeUsers === 'number' ||
-          metrics.activeUsers !== undefined
-      );
-    });
-
-    it('should include engagement score', async () => {
-      const metrics = await conversationAnalyticsService.getEngagementMetrics(
-        'chat1'
-      );
-      assert(
-        typeof metrics.engagementScore === 'number' ||
-          metrics.engagementScore !== undefined
-      );
-    });
+    expect(result.sentiments).toHaveLength(3);
+    expect(result.summary.positive).toBe(1);
+    expect(result.summary.negative).toBe(1);
+    expect(result.summary.neutral).toBe(1);
   });
 
-  describe('getParticipantStats', () => {
-    it('should get participant activity statistics', async () => {
-      const stats = await conversationAnalyticsService.getParticipantStats(
-        'chat1'
-      );
-      assert(Array.isArray(stats) || typeof stats === 'object');
+  it('maps trend analysis periods into response objects', async () => {
+    Message.aggregate.mockResolvedValueOnce([
+      {
+        _id: '2026-05-01',
+        messageCount: 6,
+        uniqueParticipants: [userOneId, userTwoId],
+        engagementScore: 9,
+      },
+      {
+        _id: '2026-05-02',
+        messageCount: 4,
+        uniqueParticipants: [userOneId],
+        engagementScore: 4,
+      },
+    ]);
+
+    const result = await conversationAnalyticsService.getTrendAnalysis(chatId, {
+      daysBack: 14,
+      interval: 'day',
     });
 
-    it('should include message count per participant', async () => {
-      const stats = await conversationAnalyticsService.getParticipantStats(
-        'chat1'
-      );
-      if (Array.isArray(stats) && stats.length > 0) {
-        assert(
-          stats[0].messageCount !== undefined ||
-            stats[0].messages !== undefined
-        );
-      }
-    });
-
-    it('should sort by activity', async () => {
-      const stats = await conversationAnalyticsService.getParticipantStats(
-        'chat1'
-      );
-      if (Array.isArray(stats) && stats.length > 1) {
-        assert(
-          stats[0].messageCount >= stats[1].messageCount ||
-            stats[0].messages >= stats[1].messages
-        );
-      }
-    });
-
-    it('should support limit parameter', async () => {
-      const stats = await conversationAnalyticsService.getParticipantStats(
-        'chat1',
-        { limit: 10 }
-      );
-      assert(stats.length <= 10 || typeof stats === 'object');
-    });
+    expect(result).toEqual([
+      {
+        period: '2026-05-01',
+        messageCount: 6,
+        participants: 2,
+        engagementScore: 9,
+      },
+      {
+        period: '2026-05-02',
+        messageCount: 4,
+        participants: 1,
+        engagementScore: 4,
+      },
+    ]);
   });
 
-  describe('getMessageVolumeTrends', () => {
-    it('should get message volume trends', async () => {
-      const trends = await conversationAnalyticsService.getMessageVolumeTrends(
-        'chat1'
-      );
-      assert(Array.isArray(trends) || typeof trends === 'object');
-    });
+  it('calculates conversation health from message volume, participation, and engagement', async () => {
+    Message.countDocuments.mockResolvedValueOnce(120);
+    Message.distinct.mockResolvedValueOnce([userOneId, userTwoId]);
+    Message.aggregate.mockResolvedValueOnce([
+      {
+        messageCount: 120,
+        totalReactions: 20,
+        engagement: 36,
+      },
+    ]);
 
-    it('should include timestamps', async () => {
-      const trends = await conversationAnalyticsService.getMessageVolumeTrends(
-        'chat1'
-      );
-      if (Array.isArray(trends) && trends.length > 0) {
-        assert(trends[0].timestamp !== undefined);
-      }
-    });
+    const result = await conversationAnalyticsService.getConversationHealth(chatId);
 
-    it('should include message counts', async () => {
-      const trends = await conversationAnalyticsService.getMessageVolumeTrends(
-        'chat1'
-      );
-      if (Array.isArray(trends) && trends.length > 0) {
-        assert(trends[0].count !== undefined || trends[0].volume !== undefined);
-      }
-    });
-
-    it('should support different intervals', async () => {
-      const trendsHourly = await conversationAnalyticsService.getMessageVolumeTrends(
-        'chat1',
-        { interval: 'hourly' }
-      );
-      const trendsDaily = await conversationAnalyticsService.getMessageVolumeTrends(
-        'chat1',
-        { interval: 'daily' }
-      );
-      assert(Array.isArray(trendsHourly) && Array.isArray(trendsDaily));
-    });
+    expect(typeof result.healthScore).toBe('number');
+    expect(result.healthScore).toBeGreaterThanOrEqual(0);
+    expect(result.healthScore).toBeLessThanOrEqual(100);
+    expect(result.metrics).toBeDefined();
+    expect(result.status).toMatch(/excellent|good|needs_attention/);
   });
 
-  describe('getPeakTimes', () => {
-    it('should get peak conversation times', async () => {
-      const peakTimes = await conversationAnalyticsService.getPeakTimes('chat1');
-      assert(Array.isArray(peakTimes) || typeof peakTimes === 'object');
+  it('generates a composed analytics report from the sub-analyses', async () => {
+    jest
+      .spyOn(conversationAnalyticsService, 'getConversationOverview')
+      .mockResolvedValueOnce({ chat: { id: chatId }, messageStats: { totalMessages: 20 } });
+    jest
+      .spyOn(conversationAnalyticsService, 'getEngagementMetrics')
+      .mockResolvedValueOnce({ engagement: 11 });
+    jest
+      .spyOn(conversationAnalyticsService, 'getSentimentAnalysis')
+      .mockResolvedValueOnce({ summary: { positive: 2, neutral: 1, negative: 0 } });
+    jest
+      .spyOn(conversationAnalyticsService, 'getTrendAnalysis')
+      .mockResolvedValueOnce([{ period: '2026-05-01', messageCount: 20, participants: 2, engagementScore: 11 }]);
+    jest
+      .spyOn(conversationAnalyticsService, 'getConversationHealth')
+      .mockResolvedValueOnce({ healthScore: 78, status: 'excellent', metrics: {} });
+
+    const report = await conversationAnalyticsService.generateAnalyticsReport(chatId, {
+      daysBack: 30,
     });
 
-    it('should include time and activity level', async () => {
-      const peakTimes = await conversationAnalyticsService.getPeakTimes('chat1');
-      if (Array.isArray(peakTimes) && peakTimes.length > 0) {
-        assert(peakTimes[0].time !== undefined || peakTimes[0].hour !== undefined);
-      }
-    });
-
-    it('should rank by activity', async () => {
-      const peakTimes = await conversationAnalyticsService.getPeakTimes('chat1');
-      if (Array.isArray(peakTimes) && peakTimes.length > 1) {
-        assert(
-          peakTimes[0].activity >= peakTimes[1].activity ||
-            peakTimes[0].messages >= peakTimes[1].messages
-        );
-      }
-    });
-
-    it('should support day filtering', async () => {
-      const peakTimes = await conversationAnalyticsService.getPeakTimes('chat1', {
-        day: 'Monday',
-      });
-      assert(Array.isArray(peakTimes) || typeof peakTimes === 'object');
-    });
+    expect(report.chatId).toBe(chatId);
+    expect(report.overview.messageStats.totalMessages).toBe(20);
+    expect(report.engagement.engagement).toBe(11);
+    expect(report.sentiment.positive).toBe(2);
+    expect(report.trends).toHaveLength(1);
+    expect(report.health.healthScore).toBe(78);
   });
 
-  describe('extractTopics', () => {
-    it('should extract topics from chat', async () => {
-      const topics = await conversationAnalyticsService.extractTopics('chat1');
-      assert(Array.isArray(topics) || typeof topics === 'object');
-    });
+  it('returns active hours ranked by message count', async () => {
+    Message.aggregate.mockResolvedValueOnce([
+      { _id: 9, count: 18 },
+      { _id: 14, count: 9 },
+    ]);
 
-    it('should include topic names', async () => {
-      const topics = await conversationAnalyticsService.extractTopics('chat1');
-      if (Array.isArray(topics) && topics.length > 0) {
-        assert(
-          topics[0].name !== undefined || topics[0].topic !== undefined
-        );
-      }
-    });
+    const result = await conversationAnalyticsService.getMostActiveHours(chatId);
 
-    it('should include topic frequency', async () => {
-      const topics = await conversationAnalyticsService.extractTopics('chat1');
-      if (Array.isArray(topics) && topics.length > 0) {
-        assert(
-          topics[0].frequency !== undefined ||
-            topics[0].count !== undefined ||
-            topics[0].relevance !== undefined
-        );
-      }
-    });
-
-    it('should support limit parameter', async () => {
-      const topics = await conversationAnalyticsService.extractTopics('chat1', {
-        limit: 10,
-      });
-      assert(topics.length <= 10 || typeof topics === 'object');
-    });
-
-    it('should handle multi-word topics', async () => {
-      const topics = await conversationAnalyticsService.extractTopics('chat1');
-      if (Array.isArray(topics)) {
-        assert(topics.length >= 0);
-      }
-    });
+    expect(result).toEqual([
+      { hour: 9, messageCount: 18 },
+      { hour: 14, messageCount: 9 },
+    ]);
   });
 
-  describe('getCollaborationScore', () => {
-    it('should get collaboration score for chat', async () => {
-      const score = await conversationAnalyticsService.getCollaborationScore(
-        'chat1'
-      );
-      assert(typeof score === 'number' || typeof score === 'object');
-    });
+  it('extracts conversation topics from repeated keywords', async () => {
+    Message.find.mockReturnValueOnce(
+      createQuery([
+        { content: 'Payment gateway failure and payment retry needed' },
+        { content: 'Retry the payment flow before checkout closes' },
+        { content: 'Gateway dashboard shows payment pending' },
+      ])
+    );
 
-    it('should return score between 0-100', async () => {
-      const score = await conversationAnalyticsService.getCollaborationScore(
-        'chat1'
-      );
-      if (typeof score === 'number') {
-        assert(score >= 0 && score <= 100);
-      }
-    });
+    const result = await conversationAnalyticsService.getConversationTopics(chatId, 5);
 
-    it('should factor in participation diversity', async () => {
-      const score = await conversationAnalyticsService.getCollaborationScore(
-        'chat1'
-      );
-      assert(score !== undefined);
-    });
-
-    it('should factor in response engagement', async () => {
-      const score = await conversationAnalyticsService.getCollaborationScore(
-        'chat1'
-      );
-      assert(score !== undefined);
-    });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]).toHaveProperty('keyword');
+    expect(result[0]).toHaveProperty('frequency');
   });
 
-  describe('Cache Behavior', () => {
-    it('should cache analytics results', async () => {
-      const result1 = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      const result2 = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      assert.deepEqual(result1, result2);
-    });
+  it('clears cached overview entries when requested', async () => {
+    Message.aggregate
+      .mockResolvedValueOnce([
+        {
+          totalMessages: 5,
+          totalWords: 20,
+          avgMessageLength: 4,
+          messagesWithMedia: 0,
+          messagesWithReactions: 0,
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
 
-    it('should clear cache periodically', async () => {
-      const result1 = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      conversationAnalyticsService.clearCache();
-      const result2 = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      // Cache may have been refreshed
-      assert(true);
-    });
-  });
+    await conversationAnalyticsService.getConversationOverview(chatId, { daysBack: 3 });
+    expect(conversationAnalyticsService.analyticsCache.size).toBe(1);
 
-  describe('Error Handling', () => {
-    it('should handle missing chat', async () => {
-      try {
-        await conversationAnalyticsService.getChatAnalytics('nonexistent');
-        assert(true);
-      } catch (error) {
-        assert(error);
-      }
-    });
+    conversationAnalyticsService.clearCache();
 
-    it('should handle empty chats', async () => {
-      try {
-        const analytics = await conversationAnalyticsService.getChatAnalytics(
-          'emptyChatId'
-        );
-        assert(analytics !== undefined);
-      } catch (error) {
-        assert(error);
-      }
-    });
-
-    it('should handle invalid date ranges', async () => {
-      try {
-        await conversationAnalyticsService.getChatAnalytics('chat1', {
-          startDate: '2026-05-07',
-          endDate: '2026-05-01',
-        });
-        assert(true);
-      } catch (error) {
-        assert(error);
-      }
-    });
-
-    it('should handle database query errors gracefully', async () => {
-      try {
-        const analytics = await conversationAnalyticsService.getChatAnalytics(
-          'chat1'
-        );
-        assert(analytics !== undefined);
-      } catch (error) {
-        assert(error);
-      }
-    });
-  });
-
-  describe('Performance', () => {
-    it('should compute analytics within acceptable time', async () => {
-      const start = Date.now();
-      await conversationAnalyticsService.getChatAnalytics('chat1');
-      const duration = Date.now() - start;
-      assert(duration < 5000);
-    });
-
-    it('should handle large chats efficiently', async () => {
-      const start = Date.now();
-      await conversationAnalyticsService.getChatAnalytics('largeChat');
-      const duration = Date.now() - start;
-      assert(duration < 10000);
-    });
-
-    it('should batch compute multiple chats efficiently', async () => {
-      const chatIds = ['chat1', 'chat2', 'chat3', 'chat4', 'chat5'];
-      const start = Date.now();
-      const results = await Promise.all(
-        chatIds.map((id) => conversationAnalyticsService.getChatAnalytics(id))
-      );
-      const duration = Date.now() - start;
-      assert(results.length === 5);
-      assert(duration < 15000);
-    });
-  });
-
-  describe('Data Consistency', () => {
-    it('should maintain consistency across queries', async () => {
-      const analytics = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      const sentiment = await conversationAnalyticsService.getSentimentAnalysis(
-        'chat1'
-      );
-      // Sentiment percentages should add up to ~100
-      if (sentiment.positive && sentiment.negative && sentiment.neutral) {
-        const total = sentiment.positive + sentiment.negative + sentiment.neutral;
-        assert(Math.abs(total - 100) < 5 || total > 0);
-      }
-    });
-
-    it('should update analytics when messages change', async () => {
-      const analyticsB1 = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      // Simulate message addition
-      const analyticsB2 = await conversationAnalyticsService.getChatAnalytics(
-        'chat1'
-      );
-      // Results may differ after cache clear
-      assert(analyticsB1 !== undefined && analyticsB2 !== undefined);
-    });
+    expect(conversationAnalyticsService.analyticsCache.size).toBe(0);
   });
 });
