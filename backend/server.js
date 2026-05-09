@@ -184,8 +184,8 @@ app.use('/api/wishlistshare', require('./routes/wishlistshare'));
 // NEW: User Profile & Personalization Features
 app.use('/api/wishlist', require('./routes/wishlist')); // Core wishlist management
 safeUse('/api/recently-viewed', './routes/recentlyviewed'); // Track browsing history
-app.use('/api/addresses', require('./routes/addresses')); // Address management for checkout
-app.use('/api/payment-methods', require('./routes/paymentmethods')); // Saved payment methods
+safeUse('/api/addresses', './routes/addresses'); // Address management for checkout
+safeUse('/api/payment-methods', './routes/paymentmethods'); // Saved payment methods
 app.use('/api/search-history', require('./routes/searchhistory')); // Search history & analytics
 
 // PHASE 2: AI & Personalization Routes
@@ -309,11 +309,11 @@ safeUse('/api/auth/sessions', './routes/sessionManagementRoutes');
 safeUse('/api/checkout/guest', './routes/guestCheckoutRoutes');
 
 // Phase 5B: User Management Routes (Profile, Addresses, Payment Methods, Preferences, Subscriptions)
-app.use('/api/user/profile', require('./routes/userProfileRoutes'));
-app.use('/api/user/addresses', require('./routes/addressRoutes'));
-app.use('/api/user/payment-methods', require('./routes/paymentMethodRoutes'));
-app.use('/api/user/preferences', require('./routes/preferencesRoutes'));
-app.use('/api/subscriptions', require('./routes/subscriptionRoutes'));
+safeUse('/api/user/profile', './routes/userProfileRoutes');
+safeUse('/api/user/addresses', './routes/addressRoutes');
+safeUse('/api/user/payment-methods', './routes/paymentMethodRoutes');
+safeUse('/api/user/preferences', './routes/preferencesRoutes');
+safeUse('/api/subscriptions', './routes/subscriptionRoutes');
 
 // Initialize Elasticsearch index on startup
 require('./utils/elasticsearch').ensureIndex().catch(console.error);
@@ -381,11 +381,12 @@ const abuseReportingJob = require('./jobs/abuseReportingJob');
 // Initialize Diary Reminder Scheduler
 const DiaryReminderScheduler = require('./services/diaryReminderScheduler');
 const { io } = require('./config/websocket');
-const diaryReminderScheduler = new DiaryReminderScheduler(io);
+const websocketIo = io();
+const diaryReminderScheduler = new DiaryReminderScheduler(websocketIo);
 
 // Initialize Order Tracking WebSocket (Phase 5E: Real-time order & shipment tracking)
 const OrderTrackingWebSocket = require('./websocket/orderTrackingWebSocket');
-new OrderTrackingWebSocket(io);
+new OrderTrackingWebSocket(websocketIo);
 
 // Initialize Missed Reminder Scheduler (Phase 1)
 const missedReminderScheduler = require('./services/missedReminderScheduler');
