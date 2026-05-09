@@ -15,6 +15,13 @@ import {
   FaExclamationTriangle,
   FaBook,
   FaStar,
+  FaUser,
+  FaBriefcase,
+  FaRocket,
+  FaBolt,
+  FaShieldAlt,
+  FaGlobe,
+  FaCheckCircle,
 } from "react-icons/fa";
 
 const iconMap = {
@@ -31,6 +38,13 @@ const iconMap = {
   FaExclamationTriangle,
   FaBook,
   FaStar,
+  FaUser,
+  FaBriefcase,
+  FaRocket,
+  FaBolt,
+  FaShieldAlt,
+  FaGlobe,
+  FaCheckCircle,
 };
 
 const moduleFallbacks = {
@@ -53,6 +67,27 @@ const moduleFallbacks = {
     isComingSoon: false,
   },
 };
+
+const ecosystemStats = [
+  { icon: "FaRocket", value: "10+", label: "Integrated Services" },
+  { icon: "FaBolt", value: "Real-Time", label: "Infrastructure" },
+  { icon: "FaShieldAlt", value: "Secure", label: "Verified Platform" },
+  { icon: "FaGlobe", value: "Global", label: "Ecosystem Ready" },
+];
+
+const ecosystemRoles = [
+  { icon: "FaUser", label: "Users" },
+  { icon: "FaStore", label: "Vendors" },
+  { icon: "FaCar", label: "Drivers" },
+  { icon: "FaStar", label: "Creators" },
+  { icon: "FaBriefcase", label: "Businesses" },
+];
+
+const heroHighlights = [
+  "One login for every core service",
+  "Built for users, professionals, and businesses",
+  "Simple start, powerful growth path",
+];
 
 const openExternalLink = (url) => {
   window.open(url, "_blank", "noopener,noreferrer");
@@ -83,14 +118,16 @@ const LaunchPage = ({
     AstroNila: "astrology",
   };
 
-  const filteredFeatures = launch.features.filter(
-    ([name]) => enabledModules.includes(moduleMapping[name])
+  const filteredFeatures = launch.features.filter(([name]) =>
+    enabledModules.includes(moduleMapping[name])
   );
   const visibleModuleIds = new Set(
     filteredFeatures.map(([name]) => moduleMapping[name]).filter(Boolean)
   );
   const missingEnabledFeatures = Object.entries(moduleFallbacks)
-    .filter(([moduleId]) => enabledModules.includes(moduleId) && !visibleModuleIds.has(moduleId))
+    .filter(
+      ([moduleId]) => enabledModules.includes(moduleId) && !visibleModuleIds.has(moduleId)
+    )
     .map(([moduleId, feature]) => ({
       key: moduleId,
       title: feature.title,
@@ -100,6 +137,7 @@ const LaunchPage = ({
       type: "module",
       moduleId,
     }));
+
   const featureCards = [
     ...filteredFeatures.map(([title, description, icon, isComingSoon]) => ({
       key: title,
@@ -120,9 +158,16 @@ const LaunchPage = ({
     })),
   ];
 
-  const renderIcon = (iconName) => {
+  const renderIcon = (iconName, className = "feature-icon") => {
     const IconComponent = iconMap[iconName];
-    return IconComponent ? <IconComponent className="feature-icon" /> : null;
+    return IconComponent ? <IconComponent className={className} /> : null;
+  };
+
+  const handleExploreServices = () => {
+    document.getElementById("features-section")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   };
 
   return (
@@ -149,6 +194,14 @@ const LaunchPage = ({
           <h1>{launch.title}</h1>
           <p className="launch-tagline">{launch.tagline}</p>
           <p className="launch-intro">{launch.intro}</p>
+          <div className="hero-highlights" aria-label="Platform highlights">
+            {heroHighlights.map((item) => (
+              <span key={item} className="hero-highlight-pill">
+                <FaCheckCircle className="hero-highlight-icon" aria-hidden="true" />
+                {item}
+              </span>
+            ))}
+          </div>
 
           <div className="registration-actions" aria-label="Registration options">
             <button
@@ -171,10 +224,11 @@ const LaunchPage = ({
         </div>
       </section>
 
-      <section className="launch-features" aria-labelledby="features-heading">
+      <section className="launch-features" id="features-section" aria-labelledby="features-heading">
         <div className="launch-section-heading">
           <p>{launch.featuresLabel}</p>
           <h2 id="features-heading">{launch.featuresTitle}</h2>
+          <span className="section-subtitle">Choose any module to enter directly.</span>
         </div>
 
         <div className="feature-grid">
@@ -187,7 +241,10 @@ const LaunchPage = ({
                 !feature.isComingSoon &&
                 (feature.type === "external"
                   ? openExternalLink(feature.url)
-                  : onSelectRegistrationType("login", feature.moduleId || moduleMapping[feature.title]))
+                  : onSelectRegistrationType(
+                      "login",
+                      feature.moduleId || moduleMapping[feature.title]
+                    ))
               }
               disabled={feature.isComingSoon}
             >
@@ -204,99 +261,118 @@ const LaunchPage = ({
         </div>
       </section>
 
-      {/* Ecosystem Statistics Section */}
       <section className="ecosystem-stats" aria-labelledby="stats-heading">
         <div className="stats-container">
-          <h2 id="stats-heading" className="stats-title">NilaHub Ecosystem at a Glance</h2>
+          <h2 id="stats-heading" className="stats-title">
+            NilaHub Ecosystem at a Glance
+          </h2>
+          <p className="section-subtitle">A clear snapshot of scale, speed, and trust.</p>
           <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-icon">🚀</div>
-              <div className="stat-value">10+</div>
-              <div className="stat-label">Integrated Services</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">⚡</div>
-              <div className="stat-value">Real-Time</div>
-              <div className="stat-label">Infrastructure</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">🔒</div>
-              <div className="stat-value">Secure</div>
-              <div className="stat-label">Verified Platform</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon">🌍</div>
-              <div className="stat-value">Global</div>
-              <div className="stat-label">Ecosystem Ready</div>
-            </div>
+            {ecosystemStats.map((stat) => (
+              <div className="stat-card" key={stat.label}>
+                <div className="stat-icon">{renderIcon(stat.icon, "stat-icon-svg")}</div>
+                <div className="stat-value">{stat.value}</div>
+                <div className="stat-label">{stat.label}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Ecosystem Flow Section */}
       <section className="ecosystem-flow" aria-labelledby="flow-heading">
         <div className="flow-container">
-          <h2 id="flow-heading" className="flow-title">How NilaHub Works</h2>
+          <h2 id="flow-heading" className="flow-title">
+            How NilaHub Works
+          </h2>
           <p className="flow-subtitle">One platform connecting every role in your ecosystem</p>
           <div className="flow-visualization">
-            <div className="flow-item">
-              <div className="flow-step">👤</div>
-              <div className="flow-text">Users</div>
-            </div>
-            <div className="flow-connector">→</div>
-            <div className="flow-item">
-              <div className="flow-step">🏪</div>
-              <div className="flow-text">Vendors</div>
-            </div>
-            <div className="flow-connector">→</div>
-            <div className="flow-item">
-              <div className="flow-step">🚗</div>
-              <div className="flow-text">Drivers</div>
-            </div>
-            <div className="flow-connector">→</div>
-            <div className="flow-item">
-              <div className="flow-step">✨</div>
-              <div className="flow-text">Creators</div>
-            </div>
-            <div className="flow-connector">→</div>
-            <div className="flow-item">
-              <div className="flow-step">💼</div>
-              <div className="flow-text">Businesses</div>
+            <div className="flow-track">
+              {ecosystemRoles.map((role, index) => (
+                <React.Fragment key={role.label}>
+                  <div className="flow-item">
+                    <div className="flow-step">{renderIcon(role.icon, "flow-step-icon")}</div>
+                    <div className="flow-text">{role.label}</div>
+                  </div>
+                  {index < ecosystemRoles.length - 1 ? (
+                    <div className="flow-connector" aria-hidden="true">
+                      <span className="flow-line" />
+                      <span className="flow-arrow" />
+                    </div>
+                  ) : null}
+                </React.Fragment>
+              ))}
             </div>
           </div>
           <p className="flow-conclusion">All connected. All earning. All growing together.</p>
         </div>
       </section>
 
-      {/* Trust Indicators Section */}
       <section className="trust-indicators" aria-labelledby="trust-heading">
         <div className="trust-container">
-          <h2 id="trust-heading" className="trust-title">Why Choose NilaHub</h2>
+          <h2 id="trust-heading" className="trust-title">
+            Why Choose NilaHub
+          </h2>
+          <p className="section-subtitle">Designed to feel simple for users and strong for growth.</p>
           <div className="trust-grid">
             <div className="trust-item">
-              <span className="trust-check">✓</span>
+              <span className="trust-check">
+                <FaCheckCircle aria-hidden="true" />
+              </span>
               <span className="trust-text">Multi-Service Platform</span>
             </div>
             <div className="trust-item">
-              <span className="trust-check">✓</span>
+              <span className="trust-check">
+                <FaCheckCircle aria-hidden="true" />
+              </span>
               <span className="trust-text">AI-Powered Features</span>
             </div>
             <div className="trust-item">
-              <span className="trust-check">✓</span>
+              <span className="trust-check">
+                <FaCheckCircle aria-hidden="true" />
+              </span>
               <span className="trust-text">Secure Authentication</span>
             </div>
             <div className="trust-item">
-              <span className="trust-check">✓</span>
+              <span className="trust-check">
+                <FaCheckCircle aria-hidden="true" />
+              </span>
               <span className="trust-text">Real-Time Infrastructure</span>
             </div>
             <div className="trust-item">
-              <span className="trust-check">✓</span>
+              <span className="trust-check">
+                <FaCheckCircle aria-hidden="true" />
+              </span>
               <span className="trust-text">Verified Ecosystem</span>
             </div>
             <div className="trust-item">
-              <span className="trust-check">✓</span>
+              <span className="trust-check">
+                <FaCheckCircle aria-hidden="true" />
+              </span>
               <span className="trust-text">Global Ready</span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="launch-cta" aria-labelledby="cta-heading">
+        <div className="cta-container">
+          <p className="cta-kicker">Ready to Experience the NilaHub Ecosystem?</p>
+          <h2 id="cta-heading">Join Kerala&apos;s growing digital super platform.</h2>
+          <div className="cta-actions">
+            <button
+              type="button"
+              className="cta-button cta-primary"
+              onClick={() => onSelectRegistrationType("user")}
+            >
+              Get Started
+            </button>
+            <button
+              type="button"
+              className="cta-button cta-secondary"
+              onClick={handleExploreServices}
+            >
+              Explore Services
+            </button>
           </div>
         </div>
       </section>

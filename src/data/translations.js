@@ -19,7 +19,7 @@ const translations = {
     launch: {
       brand: "NilaHub",
       title: "Your Personal Super Ecosystem",
-      tagline: "Shop • Ride • Connect • Earn • Grow",
+      tagline: "Shop | Ride | Connect | Earn | Grow",
       intro:
         "One Platform. Endless Possibilities.",
       languageLabel: "Language",
@@ -30,7 +30,7 @@ const translations = {
       entrepreneur: "Register as an Entrepreneur",
       entrepreneurHelp: "Sell, list, promote, and grow beyond borders.",
       featuresLabel: "Features",
-      featuresTitle: "Endless possibilities for every global need",
+      featuresTitle: "Choose a service and get started in seconds",
       features: [
         ["GlobeMart", "Shop global products, daily needs, and fashion worldwide.", "FaShoppingCart", false],
         ["LinkUp", "Connect with customers, sellers, and communities instantly.", "FaComments", false],
