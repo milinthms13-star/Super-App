@@ -52,6 +52,14 @@
   margin-bottom: 1rem;
 }
 
+.login-alt-backbar {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto 0.75rem;
+  display: flex;
+  justify-content: flex-start;
+}
+
 .login-home-btn {
   min-width: 96px;
 }
@@ -111,6 +119,24 @@
   color: #666;
   font-size: 0.95rem;
   line-height: 1.5;
+}
+
+.alt-auth-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.alt-auth-btn {
+  padding: 0.45rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.alt-auth-btn.active {
+  border-color: #FFD700;
+  color: #0a1428;
+  background: #fff8d7;
 }
 
 .form-group {

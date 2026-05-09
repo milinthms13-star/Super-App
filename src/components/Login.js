@@ -3,6 +3,9 @@ import axios from "axios";
 import { getTranslation } from "../data/translations";
 import useVoice from "../hooks/useVoice";
 import { API_BASE_URL } from "../utils/api";
+import OTPLogin from "./OTPLogin";
+import BiometricLogin from "./BiometricLogin";
+import MPINLogin from "./MPINLogin";
 import "../styles/Login.css";
 
 const ADMIN_EMAIL = "mgdhanyamohan@gmail.com";
@@ -33,6 +36,7 @@ const Login = ({
   const [success, setSuccess] = useState("");
   const [devOtp, setDevOtp] = useState("");
   const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false);
+  const [authMethod, setAuthMethod] = useState("email");
   const [setupUsername, setSetupUsername] = useState("");
   const [setupUsernameStatus, setSetupUsernameStatus] = useState(null); // 'available', 'taken', 'checking', null
   const [setupUsernameError, setSetupUsernameError] = useState("");
@@ -381,7 +385,7 @@ const Login = ({
     }
 
     if (isAdminFlow && !isAdminEmail) {
-      setError(`Use ${ADMIN_EMAIL} to access the admin dashboard`);
+      setError("Use the configured admin account to access the admin dashboard");
       return;
     }
 
@@ -643,7 +647,7 @@ const Login = ({
   const loginSubtitle = normalizedRegistrationType === "admin"
       ? "Verify the admin email to manage category fees and registrations"
     : normalizedRegistrationType === "login"
-        ? `Continue with your verified email. ${ADMIN_EMAIL} signs in as admin automatically.`
+        ? "Continue with your verified email."
         : loginCopy.userSubtitle;
   const headerKicker = normalizedRegistrationType === "login"
     ? loginCopy.welcomeBack
@@ -660,9 +664,9 @@ const Login = ({
     : isUserRegistrationFlow
       ? "Enter your name, verify your email, and create your user account."
     : isAdminFlow
-      ? `Use ${ADMIN_EMAIL} to sign in and manage admin-controlled category fees.`
+      ? "Use the admin account to sign in and manage admin-controlled category fees."
       : isLoginFlow
-        ? `Sign in using email OTP. ${ADMIN_EMAIL} will enter with admin access.`
+        ? "Sign in using email OTP."
         : "Enter your email and confirm the one-time password to continue.";
 
   const handleVoiceFill = (fieldKey, updateValue) => {
@@ -701,6 +705,88 @@ const Login = ({
     </span>
   );
 
+  const handleAlternativeAuthSuccess = (payload = {}) => {
+    const data = payload?.data || payload;
+    const user = data?.user || {};
+    const firstName = String(user.firstName || "").trim();
+    const lastName = String(user.lastName || "").trim();
+    const normalizedName =
+      `${firstName} ${lastName}`.trim() || user.name || user.phoneNumber || user.email || "User";
+    const normalizedEmail = String(user.email || "").trim().toLowerCase();
+    const isAltAdmin = normalizedEmail && normalizedEmail === ADMIN_EMAIL;
+    const normalizedUser = {
+      ...user,
+      id: user.id || user._id,
+      name: normalizedName,
+      phone: user.phoneNumber || user.phone || "",
+      email: user.email || "",
+      avatar: user.avatar || normalizedName.charAt(0).toUpperCase() || "U",
+      role: isAltAdmin ? "admin" : user.role || "user",
+      registrationType: isAltAdmin ? "admin" : user.registrationType || "user",
+    };
+
+    onLoginSuccess(
+      normalizedUser,
+      data?.accessToken || data?.token || "",
+      normalizedUser.registrationType
+    );
+  };
+
+  const handleAlternativeAuthError = (nextError) => {
+    setError(typeof nextError === "string" ? nextError : "Authentication failed. Please try again.");
+  };
+
+  if (isLoginFlow && authMethod === "phone") {
+    return (
+      <div className="login-container" dir={direction}>
+        <div className="login-alt-backbar">
+          <button
+            type="button"
+            className="btn btn-outline login-home-btn"
+            onClick={() => setAuthMethod("email")}
+          >
+            Back to Email Login
+          </button>
+        </div>
+        <OTPLogin onSuccess={handleAlternativeAuthSuccess} onError={handleAlternativeAuthError} />
+      </div>
+    );
+  }
+
+  if (isLoginFlow && authMethod === "device") {
+    return (
+      <div className="login-container" dir={direction}>
+        <div className="login-alt-backbar">
+          <button
+            type="button"
+            className="btn btn-outline login-home-btn"
+            onClick={() => setAuthMethod("email")}
+          >
+            Back to Email Login
+          </button>
+        </div>
+        <BiometricLogin onSuccess={handleAlternativeAuthSuccess} onError={handleAlternativeAuthError} />
+      </div>
+    );
+  }
+
+  if (isLoginFlow && authMethod === "mpin") {
+    return (
+      <div className="login-container" dir={direction}>
+        <div className="login-alt-backbar">
+          <button
+            type="button"
+            className="btn btn-outline login-home-btn"
+            onClick={() => setAuthMethod("email")}
+          >
+            Back to Email Login
+          </button>
+        </div>
+        <MPINLogin onSuccess={handleAlternativeAuthSuccess} onError={handleAlternativeAuthError} />
+      </div>
+    );
+  }
+
   return (
     <div className="login-container" dir={direction}>
       <div className="login-card">
@@ -735,6 +821,38 @@ const Login = ({
               )}
             </div>
             <p>{formDescription}</p>
+            {isLoginFlow && !otpSent && (
+              <div className="alt-auth-switch" aria-label="Alternative login methods">
+                <button
+                  type="button"
+                  className={`btn btn-outline alt-auth-btn ${authMethod === "email" ? "active" : ""}`}
+                  onClick={() => setAuthMethod("email")}
+                >
+                  Email OTP
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-outline alt-auth-btn ${authMethod === "phone" ? "active" : ""}`}
+                  onClick={() => setAuthMethod("phone")}
+                >
+                  Phone OTP
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-outline alt-auth-btn ${authMethod === "mpin" ? "active" : ""}`}
+                  onClick={() => setAuthMethod("mpin")}
+                >
+                  MPIN Login
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-outline alt-auth-btn ${authMethod === "device" ? "active" : ""}`}
+                  onClick={() => setAuthMethod("device")}
+                >
+                  Device Login
+                </button>
+              </div>
+            )}
           </div>
 
           {isUserRegistrationFlow && !otpSent && (
@@ -1132,7 +1250,7 @@ const Login = ({
 
           {isAdminFlow && !otpSent && (
             <p className="helper-text admin-helper">
-              The {businessCategoryCount} available business categories are used for registration here. Admin access is included with <strong>{ADMIN_EMAIL}</strong>.
+              The {businessCategoryCount} available business categories are used for registration here.
             </p>
           )}
 

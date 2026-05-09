@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const Joi = require('joi');
 const multer = require('multer');
 const passport = require('passport');
@@ -384,6 +385,20 @@ const otpSchema = Joi.object({
   otp: Joi.string().pattern(/^\d{6}$/).required(),
 });
 
+const mpinSchema = Joi.object({
+  mpin: Joi.string().pattern(/^\d{4,6}$/).required(),
+});
+
+const mpinLoginSchema = Joi.object({
+  identifier: Joi.string().trim().required(),
+  mpin: Joi.string().pattern(/^\d{4,6}$/).required(),
+});
+
+const mpinChangeSchema = Joi.object({
+  currentMpin: Joi.string().pattern(/^\d{4,6}$/).required(),
+  newMpin: Joi.string().pattern(/^\d{4,6}$/).required(),
+});
+
 // Utility functions
 const hashOtp = (code) => {
   return crypto.createHash('sha256').update(code).digest('hex');
@@ -462,6 +477,8 @@ const serializeUser = (user) => {
       language: user.preferences?.language || 'en',
       soulmatchOnboardingSeen: Boolean(user.preferences?.soulmatchOnboardingSeen),
     },
+    mpinEnabled: Boolean(user.mpinEnabled),
+    isPhoneVerified: Boolean(user.isPhoneVerified),
   };
 };
 
@@ -578,6 +595,31 @@ const generateUniqueUsername = async (email) => {
   }
   
   return finalUsername;
+};
+
+const normalizePhone = (value = '') => String(value || '').replace(/\D/g, '');
+
+const findUserForMpinLogin = async (identifier = '') => {
+  const normalizedIdentifier = String(identifier || '').trim().toLowerCase();
+  const normalizedPhone = normalizePhone(identifier);
+  const localPhone = normalizedPhone.length > 10 ? normalizedPhone.slice(-10) : normalizedPhone;
+
+  const filters = [];
+  if (normalizedIdentifier.includes('@')) {
+    filters.push({ email: normalizedIdentifier });
+  }
+  if (normalizedPhone.length >= 10) {
+    filters.push({ phone: normalizedPhone });
+    if (localPhone !== normalizedPhone) {
+      filters.push({ phone: localPhone });
+    }
+  }
+
+  if (filters.length === 0) {
+    return null;
+  }
+
+  return User.findOne({ $or: filters }).select('+mpinHash');
 };
 
 // Send OTP endpoint
@@ -835,6 +877,169 @@ router.post('/verify-otp', async (req, res) => {
       success: false,
       message: 'Unable to verify OTP',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+router.get('/mpin/status', authenticate, async (req, res) => {
+  return res.json({
+    success: true,
+    mpinEnabled: Boolean(req.user?.mpinEnabled),
+  });
+});
+
+router.post('/mpin/setup', authenticate, async (req, res) => {
+  try {
+    const { error, value } = mpinSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.details[0].message,
+      });
+    }
+
+    const mpinHash = await bcrypt.hash(value.mpin, 10);
+    const now = new Date();
+
+    const nextUser = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        mpinHash,
+        mpinEnabled: true,
+        mpinFailedAttempts: 0,
+        mpinBlockedUntil: null,
+        mpinUpdatedAt: now,
+      },
+      { new: true, runValidators: true }
+    );
+
+    return res.json({
+      success: true,
+      message: 'MPIN is set successfully.',
+      user: serializeUser(nextUser),
+    });
+  } catch (error) {
+    logger.error('mpin setup error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to set MPIN.',
+    });
+  }
+});
+
+router.post('/mpin/change', authenticate, async (req, res) => {
+  try {
+    const { error, value } = mpinChangeSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.details[0].message,
+      });
+    }
+
+    const user = await User.findById(req.user._id).select('+mpinHash');
+    if (!user || !user.mpinEnabled || !user.mpinHash) {
+      return res.status(400).json({
+        success: false,
+        message: 'MPIN is not enabled for this account.',
+      });
+    }
+
+    const isCurrentMpinValid = await bcrypt.compare(value.currentMpin, user.mpinHash);
+    if (!isCurrentMpinValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current MPIN is incorrect.',
+      });
+    }
+
+    user.mpinHash = await bcrypt.hash(value.newMpin, 10);
+    user.mpinFailedAttempts = 0;
+    user.mpinBlockedUntil = null;
+    user.mpinUpdatedAt = new Date();
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: 'MPIN updated successfully.',
+      user: serializeUser(user),
+    });
+  } catch (error) {
+    logger.error('mpin change error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to change MPIN.',
+    });
+  }
+});
+
+router.post('/mpin/login', async (req, res) => {
+  try {
+    const { error, value } = mpinLoginSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.details[0].message,
+      });
+    }
+
+    const user = await findUserForMpinLogin(value.identifier);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Account not found.',
+      });
+    }
+
+    if (!user.mpinEnabled || !user.mpinHash) {
+      return res.status(400).json({
+        success: false,
+        message: 'MPIN is not enabled. Login with OTP once and set MPIN.',
+      });
+    }
+
+    if (user.mpinBlockedUntil && user.mpinBlockedUntil > new Date()) {
+      return res.status(429).json({
+        success: false,
+        message: `MPIN is temporarily blocked until ${user.mpinBlockedUntil.toISOString()}.`,
+      });
+    }
+
+    const isMpinValid = await bcrypt.compare(value.mpin, user.mpinHash);
+    if (!isMpinValid) {
+      const nextFailedAttempts = Number(user.mpinFailedAttempts || 0) + 1;
+      const shouldBlock = nextFailedAttempts >= 5;
+      user.mpinFailedAttempts = nextFailedAttempts;
+      user.mpinBlockedUntil = shouldBlock ? new Date(Date.now() + 15 * 60 * 1000) : null;
+      await user.save();
+
+      return res.status(400).json({
+        success: false,
+        message: shouldBlock
+          ? 'Too many invalid MPIN attempts. MPIN is blocked for 15 minutes.'
+          : 'Invalid MPIN.',
+      });
+    }
+
+    user.mpinFailedAttempts = 0;
+    user.mpinBlockedUntil = null;
+    user.authMethod = 'mpin';
+    await user.save();
+
+    const token = createAuthToken(user);
+    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
+
+    return res.json({
+      success: true,
+      message: 'MPIN login successful.',
+      token,
+      user: serializeUser(user),
+    });
+  } catch (error) {
+    logger.error('mpin login error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to login with MPIN.',
     });
   }
 });

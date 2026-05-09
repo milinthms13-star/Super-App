@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../utils/api';
 import './BiometricLogin.css';
 
 const BiometricLogin = ({ onSuccess, onError, isEnrolling = false }) => {
@@ -30,7 +31,7 @@ const BiometricLogin = ({ onSuccess, onError, isEnrolling = false }) => {
     try {
       // Check for WebAuthn support
       if (window.PublicKeyCredential) {
-        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
         setIsBiometricAvailable(available);
       } else if (window.cordova) {
         // React Native check for biometric availability
@@ -45,13 +46,24 @@ const BiometricLogin = ({ onSuccess, onError, isEnrolling = false }) => {
     setLoading(true);
 
     try {
-      const response = await axios.get('/api/auth/biometric/devices', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+      const accessToken = localStorage.getItem('accessToken');
+      const response = await axios.get(`${API_BASE_URL}/auth/biometric/devices`, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
       });
 
       setDevices(response.data.data || []);
     } catch (err) {
-      setError('Failed to load devices');
+      const localDeviceId = localStorage.getItem('deviceId');
+      if (localDeviceId) {
+        setDevices([{
+          deviceId: localDeviceId,
+          deviceName: getDeviceName(),
+          biometricMethods: [{ type: 'fingerprint' }],
+        }]);
+        setError('');
+      } else {
+        setError('No registered biometric device found. Login once and register device.');
+      }
     } finally {
       setLoading(false);
     }
@@ -68,7 +80,7 @@ const BiometricLogin = ({ onSuccess, onError, isEnrolling = false }) => {
         deviceType: getDeviceType()
       };
 
-      await axios.post('/api/auth/biometric/register', { deviceInfo }, {
+      await axios.post(`${API_BASE_URL}/auth/biometric/register`, { deviceInfo }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
 
@@ -105,7 +117,7 @@ const BiometricLogin = ({ onSuccess, onError, isEnrolling = false }) => {
       // Hash the biometric data
       const templateHash = await hashBiometricData(biometricData);
 
-      const response = await axios.post('/api/auth/biometric/enroll', {
+      await axios.post(`${API_BASE_URL}/auth/biometric/enroll`, {
         deviceId,
         biometricType,
         biometricData: templateHash
@@ -146,7 +158,7 @@ const BiometricLogin = ({ onSuccess, onError, isEnrolling = false }) => {
 
       setStep('verifying');
 
-      const response = await axios.post('/api/auth/biometric/verify', {
+      const response = await axios.post(`${API_BASE_URL}/auth/biometric/verify`, {
         deviceId,
         biometricType
       });

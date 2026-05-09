@@ -322,6 +322,30 @@ function AppShell() {
   }, [authToken]);
 
   useEffect(() => {
+    const query = new URLSearchParams(location.search);
+    const socialProvider = String(query.get("social") || "").trim().toLowerCase();
+    const redirectedToken = String(query.get("token") || "").trim();
+
+    if (!redirectedToken || socialProvider !== "google") {
+      return;
+    }
+
+    storeAuthToken(redirectedToken);
+    setAuthToken(redirectedToken);
+    axios.defaults.headers.common.Authorization = `Bearer ${redirectedToken}`;
+    query.delete("social");
+    query.delete("token");
+    const nextQuery = query.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextQuery ? `?${nextQuery}` : "",
+      },
+      { replace: true }
+    );
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
     localStorage.setItem(CUSTOM_LINKS_STORAGE_KEY, JSON.stringify(customLinks));
   }, [customLinks]);
 

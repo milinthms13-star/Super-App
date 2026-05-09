@@ -44,6 +44,40 @@ const UserSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    phoneVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+    authMethod: {
+      type: String,
+      default: 'email_otp',
+      trim: true,
+    },
+    mpinHash: {
+      type: String,
+      default: '',
+      select: false,
+    },
+    mpinEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    mpinFailedAttempts: {
+      type: Number,
+      default: 0,
+    },
+    mpinBlockedUntil: {
+      type: Date,
+      default: null,
+    },
+    mpinUpdatedAt: {
+      type: Date,
+      default: null,
+    },
     age: {
       type: Number,
       default: null,

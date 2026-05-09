@@ -10,15 +10,21 @@
 const express = require('express');
 const router = express.Router();
 const OTPAuthService = require('../services/OTPAuthService');
-const { validatePhone } = require('../middlewares/validation');
 
 /**
  * POST /auth/otp/request-code
  * Request OTP via SMS or WhatsApp
  */
-router.post('/request-code', validatePhone, async (req, res) => {
+router.post('/request-code', async (req, res) => {
   try {
     const { phoneNumber, medium = 'sms', deviceInfo = {} } = req.body;
+
+    if (!/^[6-9]\d{9}$/.test(String(phoneNumber || '').trim())) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid Indian phone number',
+      });
+    }
 
     const result = await OTPAuthService.requestOTP(phoneNumber, medium, deviceInfo);
 

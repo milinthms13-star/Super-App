@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from '../utils/api';
 import './OTPLogin.css';
 
 const OTPLogin = ({ onSuccess, onError }) => {
@@ -57,7 +58,7 @@ const OTPLogin = ({ onSuccess, onError }) => {
     setLoading(true);
 
     try {
-      const response = await axios.post('/api/auth/otp/request-code', {
+      const response = await axios.post(`${API_BASE_URL}/auth/otp/request-code`, {
         phoneNumber,
         medium,
         deviceInfo: {
@@ -90,7 +91,7 @@ const OTPLogin = ({ onSuccess, onError }) => {
     setError('');
 
     try {
-      const response = await axios.post('/api/auth/otp/resend-code', {
+      const response = await axios.post(`${API_BASE_URL}/auth/otp/resend-code`, {
         sessionId,
         medium
       });
@@ -144,7 +145,7 @@ const OTPLogin = ({ onSuccess, onError }) => {
     setStep('verifying');
 
     try {
-      const response = await axios.post('/api/auth/otp/verify-code-login', {
+      const response = await axios.post(`${API_BASE_URL}/auth/otp/verify-code-login`, {
         sessionId,
         otpCode,
         deviceInfo: {
@@ -170,7 +171,7 @@ const OTPLogin = ({ onSuccess, onError }) => {
   const handleCancel = async () => {
     if (sessionId && step === 'otp') {
       try {
-        await axios.delete('/api/auth/otp/cancel', { data: { sessionId } });
+        await axios.delete(`${API_BASE_URL}/auth/otp/cancel`, { data: { sessionId } });
       } catch (err) {
         console.error('Failed to cancel session:', err);
       }

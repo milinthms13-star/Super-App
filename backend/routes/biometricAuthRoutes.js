@@ -12,16 +12,16 @@
 const express = require('express');
 const router = express.Router();
 const BiometricAuthService = require('../services/BiometricAuthService');
-const { verifyToken } = require('../middlewares/auth');
+const { authenticate } = require('../middleware/auth');
 
 /**
  * POST /auth/biometric/register
  * Register device for biometric authentication
  */
-router.post('/register', verifyToken, async (req, res) => {
+router.post('/register', authenticate, async (req, res) => {
   try {
     const { deviceInfo } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user._id;
 
     if (!deviceInfo || !deviceInfo.deviceId) {
       return res.status(400).json({
@@ -51,10 +51,10 @@ router.post('/register', verifyToken, async (req, res) => {
  * POST /auth/biometric/enroll
  * Enroll biometric on device
  */
-router.post('/enroll', verifyToken, async (req, res) => {
+router.post('/enroll', authenticate, async (req, res) => {
   try {
     const { deviceId, biometricType, biometricData } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user._id;
 
     if (!deviceId || !biometricType || !biometricData) {
       return res.status(400).json({
@@ -129,9 +129,9 @@ router.post('/verify', async (req, res) => {
  * GET /auth/biometric/devices
  * Get user's registered biometric devices
  */
-router.get('/devices', verifyToken, async (req, res) => {
+router.get('/devices', authenticate, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user._id;
 
     const devices = await BiometricAuthService.getUserBiometricDevices(userId);
 
@@ -151,11 +151,11 @@ router.get('/devices', verifyToken, async (req, res) => {
  * DELETE /auth/biometric/remove/:biometricType
  * Remove biometric method from device
  */
-router.delete('/remove/:biometricType', verifyToken, async (req, res) => {
+router.delete('/remove/:biometricType', authenticate, async (req, res) => {
   try {
     const { biometricType } = req.params;
     const { deviceId } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user._id;
 
     if (!deviceId) {
       return res.status(400).json({
@@ -186,10 +186,10 @@ router.delete('/remove/:biometricType', verifyToken, async (req, res) => {
  * POST /auth/biometric/trust
  * Mark device as trusted
  */
-router.post('/trust', verifyToken, async (req, res) => {
+router.post('/trust', authenticate, async (req, res) => {
   try {
     const { deviceId } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user._id;
 
     if (!deviceId) {
       return res.status(400).json({
@@ -219,10 +219,10 @@ router.post('/trust', verifyToken, async (req, res) => {
  * DELETE /auth/biometric/deactivate
  * Deactivate biometric device
  */
-router.delete('/deactivate', verifyToken, async (req, res) => {
+router.delete('/deactivate', authenticate, async (req, res) => {
   try {
     const { deviceId } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user._id;
 
     if (!deviceId) {
       return res.status(400).json({

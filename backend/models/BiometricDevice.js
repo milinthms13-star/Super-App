@@ -22,7 +22,7 @@ const BiometricDeviceSchema = new mongoose.Schema({
   deviceName: String, // "iPhone 14 Pro"
   deviceType: {
     type: String,
-    enum: ['ios', 'android'],
+    enum: ['ios', 'android', 'web', 'desktop'],
     required: true
   },
   osVersion: String,

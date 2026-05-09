@@ -7,6 +7,7 @@ const BiometricDevice = require('../models/BiometricDevice');
 const User = require('../models/User');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const { getJwtSecret } = require('../middleware/auth');
 
 class BiometricAuthService {
   static instance;
@@ -40,7 +41,11 @@ class BiometricAuthService {
       }
 
       // Create new biometric device
-      device = await BiometricDevice.registerDevice(userId, deviceInfo.deviceId, deviceInfo);
+      const normalizedDeviceInfo = {
+        ...deviceInfo,
+        deviceType: this.normalizeDeviceType(deviceInfo.deviceType),
+      };
+      device = await BiometricDevice.registerDevice(userId, deviceInfo.deviceId, normalizedDeviceInfo);
 
       return {
         success: true,
@@ -121,8 +126,11 @@ class BiometricAuthService {
         user: {
           id: user._id,
           email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName
+          name: user.name || user.email,
+          phone: user.phone || '',
+          role: user.role || 'user',
+          registrationType: user.registrationType || 'user',
+          mpinEnabled: Boolean(user.mpinEnabled),
         },
         ...tokens,
         deviceTrusted: device.isTrustedDevice
@@ -271,21 +279,29 @@ class BiometricAuthService {
   generateTokens(user, authMethod = 'biometric') {
     const accessToken = jwt.sign(
       {
-        userId: user._id,
+        sub: user._id.toString(),
         email: user.email,
         authMethod
       },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
+      getJwtSecret(),
+      {
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+        issuer: 'malabarbazaar-api',
+        audience: 'malabarbazaar-web',
+      }
     );
 
     const refreshToken = jwt.sign(
       {
-        userId: user._id,
+        sub: user._id.toString(),
         authMethod
       },
-      process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
-      { expiresIn: '30d' }
+      getJwtSecret(),
+      {
+        expiresIn: '30d',
+        issuer: 'malabarbazaar-api',
+        audience: 'malabarbazaar-web',
+      }
     );
 
     return {
@@ -293,6 +309,20 @@ class BiometricAuthService {
       refreshToken,
       expiresIn: 86400
     };
+  }
+
+  normalizeDeviceType(deviceType = '') {
+    const normalized = String(deviceType || '').trim().toLowerCase();
+    if (normalized === 'ios' || normalized === 'iphone' || normalized === 'ipad') {
+      return 'ios';
+    }
+    if (normalized === 'android') {
+      return 'android';
+    }
+    if (normalized === 'desktop') {
+      return 'desktop';
+    }
+    return 'web';
   }
 
   /**
