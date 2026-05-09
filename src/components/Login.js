@@ -3,18 +3,10 @@ import axios from "axios";
 import { getTranslation } from "../data/translations";
 import useVoice from "../hooks/useVoice";
 import { API_BASE_URL } from "../utils/api";
-import OTPLogin from "./OTPLogin";
+
 import "../styles/Login.css";
 
 const ADMIN_EMAIL = "mgdhanyamohan@gmail.com";
-const IDENTITY_OPTIONS = [
-  { value: "pan", label: "PAN Card" },
-  { value: "aadhaar", label: "Aadhaar Card" },
-  { value: "passport", label: "Passport" },
-  { value: "driving-licence", label: "Driving Licence" },
-  { value: "voter-id", label: "Voter ID" },
-  { value: "other", label: "Other Identity Proof" },
-];
 const OTP_REQUEST_TIMEOUT_MS = 45000;
 
 const Login = ({
