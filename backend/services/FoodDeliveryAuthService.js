@@ -5,26 +5,15 @@
 
 const jwt = require('jsonwebtoken');
 const twilio = require('twilio');
-const nodemailer = require('nodemailer');
 const FoodDeliveryUser = require('../models/FoodDeliveryUser');
 const { generateReferralCode } = require('../utils/helpers');
+const { sendEmail } = require('../utils/sendEmail');
 
 // Initialize Twilio client
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
-
-// Email transporter
-const emailTransporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
 
 class FoodDeliveryAuthService {
   /**
@@ -352,16 +341,22 @@ class FoodDeliveryAuthService {
 
       const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
-      await emailTransporter.sendMail({
-        to: email,
-        subject: 'Verify your FoodDelivery account',
-        html: `
+      const result = await sendEmail(
+        email,
+        'Verify your FoodDelivery account',
+        `
           <h2>Email Verification</h2>
           <p>Please click the link below to verify your email address:</p>
           <a href="${verificationLink}">${verificationLink}</a>
           <p>This link expires in 24 hours.</p>
         `,
-      });
+        '',
+        `fooddelivery-verify:${userId}`
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Email service not configured');
+      }
 
       return {
         success: true,
@@ -419,17 +414,23 @@ class FoodDeliveryAuthService {
 
       const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
 
-      await emailTransporter.sendMail({
-        to: email,
-        subject: 'FoodDelivery Password Reset',
-        html: `
+      const result = await sendEmail(
+        email,
+        'FoodDelivery Password Reset',
+        `
           <h2>Password Reset Request</h2>
           <p>Click the link below to reset your password:</p>
           <a href="${resetLink}">${resetLink}</a>
           <p>This link expires in 1 hour.</p>
           <p>If you didn't request this, please ignore this email.</p>
         `,
-      });
+        '',
+        `fooddelivery-password-reset:${user._id}`
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Email service not configured');
+      }
 
       return {
         success: true,

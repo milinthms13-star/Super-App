@@ -4,10 +4,21 @@
  */
 
 const nodemailer = require('nodemailer');
+const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 const emailConfig = require('../config/email');
 const logger = require('./logger');
 
 let transporter = null;
+
+const RENDER_RESTRICTED_SMTP_PORTS = new Set([25, 465, 587]);
+
+const isRenderSmtpPortRestricted = () => {
+  return (
+    String(process.env.RENDER || '').toLowerCase() === 'true' &&
+    emailConfig.provider === 'smtp' &&
+    RENDER_RESTRICTED_SMTP_PORTS.has(Number(emailConfig.smtp.port))
+  );
+};
 
 /**
  * Initialize email transporter based on configuration
@@ -21,21 +32,21 @@ const initializeTransporter = () => {
     const provider = emailConfig.provider;
 
     switch (provider) {
-      case 'gmail': {
-        if (!emailConfig.gmail.user || !emailConfig.gmail.appPassword) {
-          logger.warn('Gmail not configured - email delivery will be skipped');
+      case 'ses': {
+        if (!emailConfig.ses.accessKeyId || !emailConfig.ses.secretAccessKey || !emailConfig.ses.fromEmail) {
+          logger.warn('AWS SES not configured - email delivery will be skipped');
           return null;
         }
 
-        transporter = nodemailer.createTransport({
-          service: 'gmail',
-          auth: {
-            user: emailConfig.gmail.user,
-            pass: emailConfig.gmail.appPassword,
+        transporter = new SESClient({
+          region: emailConfig.ses.region,
+          credentials: {
+            accessKeyId: emailConfig.ses.accessKeyId,
+            secretAccessKey: emailConfig.ses.secretAccessKey,
           },
         });
 
-        logger.info('Email transporter initialized with Gmail');
+        logger.info(`Email transporter initialized with AWS SES (${emailConfig.ses.region})`);
         break;
       }
 
@@ -70,6 +81,10 @@ const initializeTransporter = () => {
           port: emailConfig.smtp.port,
           secure: emailConfig.smtp.secure,
           auth: emailConfig.smtp.auth,
+          connectionTimeout: 4000,
+          greetingTimeout: 4000,
+          socketTimeout: 8000,
+          dnsTimeout: 4000,
         });
 
         logger.info(`Email transporter initialized with SMTP (${emailConfig.smtp.host}:${emailConfig.smtp.port})`);
@@ -91,10 +106,10 @@ const getSenderEmail = () => {
   const provider = emailConfig.provider;
 
   switch (provider) {
-    case 'gmail':
-      return emailConfig.gmail.user;
     case 'sendgrid':
       return emailConfig.sendgrid.fromEmail;
+    case 'ses':
+      return emailConfig.ses.fromEmail;
     case 'smtp':
     default:
       return emailConfig.smtp.from;
@@ -110,9 +125,10 @@ const getSenderName = () => {
   switch (provider) {
     case 'sendgrid':
       return emailConfig.sendgrid.fromName;
+    case 'ses':
+      return emailConfig.ses.fromName;
     case 'smtp':
       return emailConfig.smtp.fromName;
-    case 'gmail':
     default:
       return emailConfig.fromName;
   }
@@ -160,10 +176,27 @@ const sendEmail = async (to, subject, htmlContent, textContent = '', reminderId 
       replyTo: emailConfig.replyTo,
     };
 
-    const info = await emailTransporter.sendMail(mailOptions);
+    let info;
+
+    if (emailConfig.provider === 'ses') {
+      info = await emailTransporter.send(new SendEmailCommand({
+        Source: getSenderEmail(),
+        Destination: { ToAddresses: [to] },
+        ReplyToAddresses: emailConfig.replyTo ? [emailConfig.replyTo] : undefined,
+        Message: {
+          Subject: { Data: subject },
+          Body: {
+            Html: { Data: htmlContent },
+            Text: { Data: textContent || stripHtml(htmlContent) },
+          },
+        },
+      }));
+    } else {
+      info = await emailTransporter.sendMail(mailOptions);
+    }
 
     logger.info('Email sent successfully', {
-      messageId: info.messageId,
+      messageId: info.messageId || info.MessageId,
       to: to,
       reminderId: reminderId,
     });
@@ -171,11 +204,15 @@ const sendEmail = async (to, subject, htmlContent, textContent = '', reminderId 
     return {
       success: true,
       status: 'sent',
-      messageId: info.messageId,
+      messageId: info.messageId || info.MessageId,
     };
   } catch (error) {
+    const errorMessage = isRenderSmtpPortRestricted()
+      ? `SMTP email delivery on port ${emailConfig.smtp.port} can fail on Render free web services. Switch EMAIL_SERVICE to ses or gmail-api.`
+      : error.message;
+
     logger.error('Email send failed', {
-      error: error.message,
+      error: errorMessage,
       to: to,
       reminderId: reminderId,
     });
@@ -183,7 +220,7 @@ const sendEmail = async (to, subject, htmlContent, textContent = '', reminderId 
     return {
       success: false,
       status: 'failed',
-      error: error.message,
+      error: errorMessage,
     };
   }
 };

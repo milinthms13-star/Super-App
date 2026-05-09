@@ -64,11 +64,24 @@ MONGODB_URI=mongodb://localhost:27017/malabarbazaar
 
 #### Email Services
 
-**Gmail:**
+**Gmail SMTP:**
 ```env
-EMAIL_SERVICE=Gmail
+EMAIL_SERVICE=smtp
 EMAIL_USER=your-email@gmail.com
 EMAIL_PASS=your-app-password
+EMAIL_FROM=your-email@gmail.com
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_SECURE=false
+```
+
+**Gmail API:**
+```env
+EMAIL_SERVICE=gmail-api
+GMAIL_USER=your-email@gmail.com
+GMAIL_CLIENT_ID=your-client-id
+GMAIL_CLIENT_SECRET=your-client-secret
+GMAIL_REFRESH_TOKEN=your-refresh-token
 EMAIL_FROM=your-email@gmail.com
 ```
 
@@ -78,7 +91,7 @@ EMAIL_SERVICE=ses
 AWS_ACCESS_KEY_ID=your-key
 AWS_SECRET_ACCESS_KEY=your-secret
 AWS_REGION=us-east-1
-EMAIL_FROM=noreply@yourdomain.com
+EMAIL_FROM=verified-sender@yourdomain.com
 ```
 
 **SendGrid:**

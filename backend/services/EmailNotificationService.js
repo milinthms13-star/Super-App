@@ -4,25 +4,20 @@
  * Handles transactional emails, templates, and delivery logging
  */
 
-const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
+const {
+  sendEmail: sendEmailMessage,
+  isConfigured: isEmailConfigured,
+} = require('../utils/sendEmail');
 
 class EmailNotificationService {
   static instance;
 
   constructor() {
-    // Configure email transporter (SMTP or service provider)
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: process.env.SMTP_PORT || 587,
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
-
-    this.fromEmail = process.env.NOTIFICATION_FROM_EMAIL || 'noreply@malabarbazaar.com';
+    this.fromEmail =
+      process.env.NOTIFICATION_FROM_EMAIL ||
+      process.env.EMAIL_FROM ||
+      'noreply@malabarbazaar.com';
     this.supportEmail = process.env.SUPPORT_EMAIL || 'support@malabarbazaar.com';
     this.baseUrl = process.env.FRONTEND_URL || 'https://malabarbazaar.com';
   }
@@ -387,17 +382,13 @@ class EmailNotificationService {
    */
   async sendEmail({ to, subject, html, text }) {
     try {
-      const mailOptions = {
-        from: this.fromEmail,
-        to,
-        subject,
-        html,
-        text,
-      };
+      const result = await sendEmailMessage(to, subject, html, text || '', `order-notification:${subject}`);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to send notification email');
+      }
 
-      const info = await this.transporter.sendMail(mailOptions);
-      logger.info(`Email sent successfully to ${to}: ${info.messageId}`);
-      return info;
+      logger.info(`Email sent successfully to ${to}: ${result.messageId}`);
+      return result;
     } catch (error) {
       logger.error(`Failed to send email to ${to}: ${error.message}`);
       throw error;
@@ -409,9 +400,13 @@ class EmailNotificationService {
    */
   async verifyConnection() {
     try {
-      await this.transporter.verify();
-      logger.info('Email configuration verified successfully');
-      return true;
+      const configured = isEmailConfigured();
+      if (configured) {
+        logger.info('Email configuration verified successfully');
+      } else {
+        logger.warn('Email configuration is incomplete');
+      }
+      return configured;
     } catch (error) {
       logger.error(`Email configuration error: ${error.message}`);
       return false;
