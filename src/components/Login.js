@@ -14,6 +14,7 @@ const IDENTITY_OPTIONS = [
   { value: "voter-id", label: "Voter ID" },
   { value: "other", label: "Other Identity Proof" },
 ];
+const OTP_REQUEST_TIMEOUT_MS = 45000;
 
 const Login = ({
   language = "en",
@@ -395,7 +396,7 @@ const Login = ({
       const response = await axios.post(
         `${API_BASE_URL}/auth/send-otp`,
         { email },
-        { timeout: 15000 }
+        { timeout: OTP_REQUEST_TIMEOUT_MS }
       );
 
       if (response.data.success) {
@@ -407,7 +408,7 @@ const Login = ({
       }
     } catch (err) {
       if (err.code === "ECONNABORTED") {
-        setError("OTP request timed out. Please check backend email configuration and try again.");
+        setError("OTP request timed out while contacting the backend. Please try again in a moment.");
       } else if (!err.response) {
         setError("Backend is not running. Please start the API server and try again.");
       } else {

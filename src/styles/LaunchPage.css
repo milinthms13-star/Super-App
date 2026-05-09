@@ -16,8 +16,10 @@
   min-height: 0;
   padding: 1.25rem;
   background:
+    radial-gradient(circle at 84% 24%, rgba(244, 203, 92, 0.38), transparent 14rem),
+    radial-gradient(circle at 18% 18%, rgba(34, 112, 96, 0.24), transparent 18rem),
     linear-gradient(90deg, rgba(7, 35, 32, 0.86), rgba(7, 35, 32, 0.42) 58%, rgba(7, 35, 32, 0.7)),
-    url("https://images.unsplash.com/photo-1720456900307-a071c79e4c5e?ixid=M3w3ODgxNDh8MHwxfHNlYXJjaHwzfHxrZXJhbGEtaG91c2Vib2F0fGVufDB8fHx8MTc2MDA4MjcxNHww&ixlib=rb-4.1.0&fit=crop&w=1800&q=85");
+    linear-gradient(135deg, #113b37 0%, #0a2424 42%, #154f47 100%);
   background-size: cover;
   background-position: center;
 }

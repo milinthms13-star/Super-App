@@ -1138,12 +1138,56 @@ const useMemoryAuth = () => {
   return process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production';
 };
 
+const getEmailMode = () => {
+  const rawMode = String(process.env.EMAIL_SERVICE || process.env.EMAIL_PROVIDER || 'smtp')
+    .trim()
+    .toLowerCase();
+
+  if (rawMode === 'gmail' || rawMode === 'sendgrid') {
+    return 'smtp';
+  }
+
+  return rawMode;
+};
+
+const EMAIL_OPERATION_TIMEOUT_MS = Number(process.env.EMAIL_OPERATION_TIMEOUT_MS) || 8000;
+const RENDER_RESTRICTED_SMTP_PORTS = new Set([25, 465, 587]);
+
+const isRenderEnvironment = () => String(process.env.RENDER || '').toLowerCase() === 'true';
+
+const isRenderSmtpPortRestricted = () => {
+  return (
+    isRenderEnvironment() &&
+    getEmailMode() === 'smtp' &&
+    RENDER_RESTRICTED_SMTP_PORTS.has(Number(process.env.EMAIL_PORT) || 587)
+  );
+};
+
+const withTimeout = async (promise, timeoutMs, message) => {
+  let timerId;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timerId = setTimeout(() => {
+          const timeoutError = new Error(message || 'Operation timed out');
+          timeoutError.code = 'ETIMEDOUT';
+          reject(timeoutError);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timerId);
+  }
+};
+
 const hasRealEmailConfig = () => {
-  if (process.env.EMAIL_SERVICE === 'gmail-api') {
+  if (getEmailMode() === 'gmail-api') {
     return hasGmailDeliveryConfig();
   }
 
-  if (process.env.EMAIL_SERVICE === 'ses') {
+  if (getEmailMode() === 'ses') {
     return !!(
       process.env.AWS_ACCESS_KEY_ID &&
       process.env.AWS_SECRET_ACCESS_KEY &&
@@ -1160,12 +1204,12 @@ const hasRealEmailConfig = () => {
 };
 
 const getEmailService = () => {
-  if (process.env.EMAIL_SERVICE === 'gmail-api') {
+  if (getEmailMode() === 'gmail-api') {
     return 'gmail-api';
   }
 
-  if (process.env.EMAIL_SERVICE === 'ses') {
-    const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
+  if (getEmailMode() === 'ses') {
+    const { SESClient } = require('@aws-sdk/client-ses');
     const sesClient = new SESClient({
       region: process.env.AWS_REGION || 'us-east-1',
       credentials: {
@@ -1185,6 +1229,10 @@ const getEmailService = () => {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
+    connectionTimeout: 4000,
+    greetingTimeout: 4000,
+    socketTimeout: 8000,
+    dnsTimeout: 4000,
   });
 };
 
@@ -1206,34 +1254,55 @@ const sendRegistrationReviewEmail = async ({ to, applicantName, businessName, st
     </div>
   `;
 
-  if (process.env.EMAIL_SERVICE === 'gmail-api') {
-    await sendEmailViaGmail(to, subject, htmlContent);
+  if (getEmailMode() === 'gmail-api') {
+    await withTimeout(
+      sendEmailViaGmail(to, subject, htmlContent),
+      EMAIL_OPERATION_TIMEOUT_MS,
+      'Gmail API request timed out'
+    );
     return true;
   }
 
-  if (process.env.EMAIL_SERVICE === 'ses') {
+  if (getEmailMode() === 'ses') {
+    const { SendEmailCommand } = require('@aws-sdk/client-ses');
     const ses = getEmailService();
-    await ses.sendEmail({
-      Source: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-      Destination: { ToAddresses: [to] },
-      Message: {
-        Subject: { Data: subject },
-        Body: {
-          Html: { Data: htmlContent },
+    await withTimeout(
+      ses.send(new SendEmailCommand({
+        Source: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+        Destination: { ToAddresses: [to] },
+        Message: {
+          Subject: { Data: subject },
+          Body: {
+            Html: { Data: htmlContent },
+          },
         },
-      },
-    }).promise();
+      })),
+      EMAIL_OPERATION_TIMEOUT_MS,
+      'SES email request timed out'
+    );
     return true;
   }
 
   const transporter = getEmailService();
   const fromAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER;
-  await transporter.sendMail({
-    from: `NilaHub <${fromAddress}>`,
-    to,
-    subject,
-    html: htmlContent,
-  });
+  try {
+    await withTimeout(
+      transporter.sendMail({
+        from: `NilaHub <${fromAddress}>`,
+        to,
+        subject,
+        html: htmlContent,
+      }),
+      EMAIL_OPERATION_TIMEOUT_MS,
+      'SMTP email request timed out'
+    );
+  } catch (error) {
+    if (isRenderSmtpPortRestricted()) {
+      error.message =
+        'SMTP email delivery can fail on Render free web services. Switch EMAIL_SERVICE to gmail-api or ses, or upgrade the Render web service.';
+    }
+    throw error;
+  }
   return true;
 };
 

@@ -217,6 +217,54 @@ const getSmtpConfig = () => {
   };
 };
 
+const EMAIL_OPERATION_TIMEOUT_MS = Number(process.env.EMAIL_OPERATION_TIMEOUT_MS) || 8000;
+const RENDER_RESTRICTED_SMTP_PORTS = new Set([25, 465, 587]);
+
+const isRenderEnvironment = () => String(process.env.RENDER || '').toLowerCase() === 'true';
+
+const isRenderSmtpPortRestricted = (mode = getEmailMode(), smtpConfig = getSmtpConfig()) => {
+  return (
+    isRenderEnvironment() &&
+    mode === 'smtp' &&
+    RENDER_RESTRICTED_SMTP_PORTS.has(Number(smtpConfig.port))
+  );
+};
+
+const withTimeout = async (promise, timeoutMs, message) => {
+  let timerId;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timerId = setTimeout(() => {
+          const timeoutError = new Error(message || 'Operation timed out');
+          timeoutError.code = 'ETIMEDOUT';
+          timeoutError.isOperationalTimeout = true;
+          reject(timeoutError);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timerId);
+  }
+};
+
+const getEmailFailureMessage = (error, mode = getEmailMode(), smtpConfig = getSmtpConfig()) => {
+  if (isRenderSmtpPortRestricted(mode, smtpConfig)) {
+    return (
+      `SMTP email delivery on port ${smtpConfig.port} can fail on Render free web services. ` +
+      'Switch EMAIL_SERVICE to gmail-api or ses, or upgrade the Render web service.'
+    );
+  }
+
+  if (error?.code === 'ETIMEDOUT' || error?.isOperationalTimeout) {
+    return 'Email delivery timed out. Please try again, or switch to a non-SMTP email provider.';
+  }
+
+  return 'Failed to send email. Please try again later.';
+};
+
 const hasRealEmailConfig = () => {
   const mode = getEmailMode();
 
@@ -269,10 +317,10 @@ const getEmailService = () => {
       user: smtpConfig.user,
       pass: smtpConfig.pass,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-    dnsTimeout: 10000,
+    connectionTimeout: 4000,
+    greetingTimeout: 4000,
+    socketTimeout: 8000,
+    dnsTimeout: 4000,
   });
 };
 
@@ -582,31 +630,43 @@ router.post('/send-otp', async (req, res) => {
       }
 
       if (emailMode === 'gmail-api') {
-        await sendEmailViaGmail(email, 'Your NilaHub OTP', htmlContent);
+        await withTimeout(
+          sendEmailViaGmail(email, 'Your NilaHub OTP', htmlContent),
+          EMAIL_OPERATION_TIMEOUT_MS,
+          'Gmail API request timed out'
+        );
       } else if (emailMode === 'ses') {
         const { SendEmailCommand } = require('@aws-sdk/client-ses');
         const ses = getEmailService();
-        await ses.send(new SendEmailCommand({
-          Source: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-          Destination: { ToAddresses: [email] },
-          Message: {
-            Subject: { Data: 'Your NilaHub OTP' },
-            Body: {
-              Html: {
-                Data: htmlContent,
+        await withTimeout(
+          ses.send(new SendEmailCommand({
+            Source: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+            Destination: { ToAddresses: [email] },
+            Message: {
+              Subject: { Data: 'Your NilaHub OTP' },
+              Body: {
+                Html: {
+                  Data: htmlContent,
+                },
               },
             },
-          },
-        }));
+          })),
+          EMAIL_OPERATION_TIMEOUT_MS,
+          'SES email request timed out'
+        );
       } else {
         const transporter = getEmailService();
         const fromAddress = smtpConfig.from;
-        await transporter.sendMail({
-          from: `NilaHub <${fromAddress}>`,
-          to: email,
-          subject: 'Your NilaHub OTP',
-          html: htmlContent,
-        });
+        await withTimeout(
+          transporter.sendMail({
+            from: `NilaHub <${fromAddress}>`,
+            to: email,
+            subject: 'Your NilaHub OTP',
+            html: htmlContent,
+          }),
+          EMAIL_OPERATION_TIMEOUT_MS,
+          'SMTP email request timed out'
+        );
       }
 
       // Update rate limiting
@@ -626,9 +686,12 @@ router.post('/send-otp', async (req, res) => {
         `(host=${smtpConfig.host}, port=${smtpConfig.port}, secure=${smtpConfig.secure}): ` +
         `${emailError.code || 'NO_CODE'} ${emailError.message}`
       );
-      return res.status(500).json({
+      const failureMessage = getEmailFailureMessage(emailError, getEmailMode(), smtpConfig);
+      const statusCode = failureMessage.includes('Render free web services') ? 503 : 500;
+
+      return res.status(statusCode).json({
         success: false,
-        message: 'Failed to send email. Please try again later.',
+        message: failureMessage,
       });
     }
 
