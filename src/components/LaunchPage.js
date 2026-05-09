@@ -94,6 +94,7 @@ const LaunchPage = ({
           <img src="/logo.svg" alt="NilaHub" className="launch-logo" />
           <p className="launch-eyebrow">{launch.brand}</p>
           <h1>{launch.title}</h1>
+          <p className="launch-tagline">{launch.tagline}</p>
           <p className="launch-intro">{launch.intro}</p>
 
           <div className="registration-actions" aria-label="Registration options">

@@ -18,9 +18,10 @@ const translations = {
     },
     launch: {
       brand: "NilaHub",
-      title: "Kerala's Super App",
+      title: "Your Personal Super Ecosystem",
+      tagline: "Shop • Ride • Connect • Earn • Grow",
       intro:
-        "Kerala's Super App, a unified platform to discover opportunities, offer services, and grow your income. Whether you're a real estate professional, driver, cook, service provider, or entrepreneur, manage multiple roles seamlessly from one place and reach customers across the globe.",
+        "One Platform. Endless Possibilities.",
       languageLabel: "Language",
       login: "Login",
       loginHelp: "Access your NilaHub account with verified email.",
@@ -29,7 +30,7 @@ const translations = {
       entrepreneur: "Register as an Entrepreneur",
       entrepreneurHelp: "Sell, list, promote, and grow beyond borders.",
       featuresLabel: "Features",
-      featuresTitle: "Kerala's super app for every global need",
+      featuresTitle: "Endless possibilities for every global need",
       features: [
         ["GlobeMart", "Shop products, daily needs, fashion, electronics, and marketplace deals worldwide."],
         ["LinkUp", "Message customers, sellers, service providers, and global communities in one place."],
