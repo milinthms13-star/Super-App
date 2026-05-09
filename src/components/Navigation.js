@@ -48,7 +48,10 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     ALWAYS_VISIBLE_MODULE_IDS.has(moduleId) || enabledModuleIds.has(moduleId);
 
   const modules = isAdmin
-    ? [{ id: "admin-dashboard", label: t("modules.admin", "Admin Dashboard") }]
+    ? [
+        { id: "admin-dashboard", label: t("modules.admin", "Admin Dashboard") },
+        ...allBusinessModules,
+      ]
     : allBusinessModules.filter(
         (module) =>
           isModuleVisible(module.id) &&

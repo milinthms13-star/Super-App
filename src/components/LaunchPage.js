@@ -113,14 +113,6 @@ const LaunchPage = ({
               <span>{launch.user}</span>
               <small>{launch.userHelp}</small>
             </button>
-            <button
-              type="button"
-              className="registration-option secondary-option"
-              onClick={() => onSelectRegistrationType("entrepreneur")}
-            >
-              <span>{launch.entrepreneur}</span>
-              <small>{launch.entrepreneurHelp}</small>
-            </button>
           </div>
         </div>
       </section>

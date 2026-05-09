@@ -32,7 +32,6 @@ const Login = ({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [devOtp, setDevOtp] = useState("");
-  const [loginRole, setLoginRole] = useState("user");
   const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false);
   const [setupUsername, setSetupUsername] = useState("");
   const [setupUsernameStatus, setSetupUsernameStatus] = useState(null); // 'available', 'taken', 'checking', null
@@ -75,13 +74,14 @@ const Login = ({
   });
   const [usernameCheckStatus, setUsernameCheckStatus] = useState(null); // 'available', 'taken', 'checking', null
   const [usernameError, setUsernameError] = useState("");
+  const normalizedRegistrationType = registrationType === "entrepreneur" ? "user" : registrationType;
   const normalizedEmail = email.trim().toLowerCase();
   const isAdminEmail = normalizedEmail === ADMIN_EMAIL;
-  const isAdminFlow = registrationType === "admin" || (registrationType === "entrepreneur" && isAdminEmail);
-  const isUserRegistrationFlow = registrationType === "user";
-  const isEntrepreneurRegistrationFlow = registrationType === "entrepreneur" && !isAdminFlow;
+  const isAdminFlow = normalizedRegistrationType === "admin";
+  const isUserRegistrationFlow = normalizedRegistrationType === "user";
+  const isEntrepreneurRegistrationFlow = false;
   const isBusinessRegistrationFlow = isEntrepreneurRegistrationFlow;
-  const isLoginFlow = registrationType === "login";
+  const isLoginFlow = normalizedRegistrationType === "login";
   const registeredAccount = registeredAccounts.find((account) => account.email === normalizedEmail);
   const businessCategoryCount = businessCategories.length;
 
@@ -197,11 +197,6 @@ const Login = ({
 
   const updateEmail = (value) => {
     setEmail(value);
-    clearMessages();
-  };
-
-  const updateLoginRole = (role) => {
-    setLoginRole(role);
     clearMessages();
   };
 
@@ -529,7 +524,7 @@ const Login = ({
               registrationType: "user",
             });
           }
-        } else if (isAdminFlow || (isLoginFlow && isAdminEmail && loginRole === "entrepreneur")) {
+        } else if (isAdminFlow || (isLoginFlow && isAdminEmail)) {
           mergedUser = {
             ...response.data.user,
             name: "NilaHub Admin",
@@ -542,15 +537,15 @@ const Login = ({
           mergedUser = {
             ...response.data.user,
             name: registeredAccount?.name || response.data.user.name,
-            role: loginRole === "entrepreneur" ? "business" : "user",
-            registrationType: loginRole,
+            role: response.data.user.role || "user",
+            registrationType: "user",
           };
         }
 
         onLoginSuccess(
           mergedUser,
           response.data.token,
-          mergedUser.registrationType === "admin" ? "admin" : isLoginFlow ? loginRole : mergedUser.registrationType
+          mergedUser.registrationType === "admin" ? "admin" : "user"
         );
       } else {
         setError(response.data.message || "Failed to verify OTP");
@@ -608,18 +603,22 @@ const Login = ({
       );
 
       if (response.data.success) {
+        const isSetupAdmin =
+          String(verifiedUser?.email || email || "")
+            .trim()
+            .toLowerCase() === ADMIN_EMAIL;
         const mergedUser = {
           ...verifiedUser,
           username: response.data.user.username,
           name: registeredAccount?.name || response.data.user.name,
-          role: loginRole === "entrepreneur" ? "business" : "user",
-          registrationType: loginRole,
+          role: isSetupAdmin ? "admin" : response.data.user.role || "user",
+          registrationType: isSetupAdmin ? "admin" : "user",
         };
 
         onLoginSuccess(
           mergedUser,
           verifiedToken,
-          loginRole
+          isSetupAdmin ? "admin" : "user"
         );
       } else {
         setSetupUsernameError(response.data.message || "Failed to set username");
@@ -636,23 +635,17 @@ const Login = ({
   };
 
   const { login: loginCopy, direction } = getTranslation(language);
-  const registrationLabel = registrationType === "entrepreneur"
-    ? isAdminFlow ? "Admin" : loginCopy.entrepreneur
-    : registrationType === "admin"
+  const registrationLabel = normalizedRegistrationType === "admin"
       ? "Admin"
-      : registrationType === "login"
+      : normalizedRegistrationType === "login"
         ? loginCopy.login
         : loginCopy.user;
-  const loginSubtitle = registrationType === "entrepreneur"
-    ? isAdminFlow
+  const loginSubtitle = normalizedRegistrationType === "admin"
       ? "Verify the admin email to manage category fees and registrations"
-      : `Choose from the ${businessCategoryCount} available business categories and verify your email to continue.`
-    : registrationType === "admin"
-      ? "Verify the admin email to manage category fees and registrations"
-    : registrationType === "login"
-        ? "Choose whether you want to log in as a user or entrepreneur."
+    : normalizedRegistrationType === "login"
+        ? `Continue with your verified email. ${ADMIN_EMAIL} signs in as admin automatically.`
         : loginCopy.userSubtitle;
-  const headerKicker = registrationType === "login"
+  const headerKicker = normalizedRegistrationType === "login"
     ? loginCopy.welcomeBack
     : `${loginCopy.registerAs} ${registrationLabel}`;
   const formTitle = isBusinessRegistrationFlow
@@ -669,7 +662,7 @@ const Login = ({
     : isAdminFlow
       ? `Use ${ADMIN_EMAIL} to sign in and manage admin-controlled category fees.`
       : isLoginFlow
-        ? "Only roles you have already registered for can be used during login."
+        ? `Sign in using email OTP. ${ADMIN_EMAIL} will enter with admin access.`
         : "Enter your email and confirm the one-time password to continue.";
 
   const handleVoiceFill = (fieldKey, updateValue) => {
@@ -743,34 +736,6 @@ const Login = ({
             </div>
             <p>{formDescription}</p>
           </div>
-
-          {isLoginFlow && !otpSent && (
-            <fieldset className="form-group category-group">
-              <legend>Login As</legend>
-              <div className="category-options">
-                <label className="category-option" htmlFor="login-role-user">
-                  <input
-                    id="login-role-user"
-                    type="radio"
-                    name="loginRole"
-                    checked={loginRole === "user"}
-                    onChange={() => updateLoginRole("user")}
-                  />
-                  <span>User</span>
-                </label>
-                <label className="category-option" htmlFor="login-role-entrepreneur">
-                  <input
-                    id="login-role-entrepreneur"
-                    type="radio"
-                    name="loginRole"
-                    checked={loginRole === "entrepreneur"}
-                    onChange={() => updateLoginRole("entrepreneur")}
-                  />
-                  <span>Entrepreneur</span>
-                </label>
-              </div>
-            </fieldset>
-          )}
 
           {isUserRegistrationFlow && !otpSent && (
             <>
@@ -1165,13 +1130,13 @@ const Login = ({
             />
           </div>
 
-          {(registrationType === "entrepreneur" || isAdminFlow) && !otpSent && (
+          {isAdminFlow && !otpSent && (
             <p className="helper-text admin-helper">
               The {businessCategoryCount} available business categories are used for registration here. Admin access is included with <strong>{ADMIN_EMAIL}</strong>.
             </p>
           )}
 
-          {(isUserRegistrationFlow || isEntrepreneurRegistrationFlow) && !otpSent && (
+          {isUserRegistrationFlow && !otpSent && (
             <label className="checkbox-row" htmlFor="agreeToTerms">
               <input
                 type="checkbox"
@@ -1275,7 +1240,7 @@ const Login = ({
                   ? loading ? "Verifying..." : "Verify OTP"
                   : loading
                     ? "Sending OTP..."
-                    : isUserRegistrationFlow || isEntrepreneurRegistrationFlow
+                    : isUserRegistrationFlow
                       ? "Continue to Verification"
                       : isLoginFlow
                         ? "Send Login OTP"

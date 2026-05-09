@@ -288,7 +288,7 @@ test("renders the launch screen when the backend reports no active session", asy
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /login/i })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /register as a user/i })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /register as an entrepreneur/i })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /register as an entrepreneur/i })).not.toBeInTheDocument();
 });
 
 test("shows saved custom links on the launch page next to enabled categories", async () => {
@@ -327,7 +327,7 @@ test("shows Local Market and AstroNila on the launch page when they are enabled"
   expect(screen.queryByRole("button", { name: /feastly/i })).not.toBeInTheDocument();
 });
 
-test("shows login as user or entrepreneur options", async () => {
+test("shows simplified email login without role categorization", async () => {
   mockAxiosForApp();
 
   render(<App />);
@@ -337,57 +337,37 @@ test("shows login as user or entrepreneur options", async () => {
   expect(
     screen.getByRole("heading", { level: 2, name: /verify your email/i })
   ).toBeInTheDocument();
-  expect(screen.getByRole("group", { name: /login as/i })).toBeInTheDocument();
-  expect(screen.getByLabelText(/^user$/i)).toBeInTheDocument();
-  expect(screen.getByLabelText(/^entrepreneur$/i)).toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: /login as/i })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: /send login otp/i })).toBeInTheDocument();
 });
 
-test("allows the admin email to use entrepreneur login without prior registration", async () => {
+test("allows the admin email to login without role selection", async () => {
   mockAxiosForApp();
 
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: /login/i }));
 
-  fireEvent.click(screen.getByLabelText(/^entrepreneur$/i));
   fireEvent.change(screen.getByLabelText(/email address/i), {
     target: { value: "mgdhanyamohan@gmail.com" },
   });
   fireEvent.click(screen.getByRole("button", { name: /send login otp/i }));
 
-  expect(screen.queryByText(/not registered as a entrepreneur/i)).not.toBeInTheDocument();
+  expect(screen.getByText(/otp sent to your email/i)).toBeInTheDocument();
 });
 
-test("opens the business registration form with fee and food-license handling", async () => {
+test("opens the user registration form", async () => {
   mockAxiosForApp();
 
   render(<App />);
 
-  fireEvent.click(
-    await screen.findByRole("button", { name: /register as an entrepreneur/i })
-  );
+  fireEvent.click(await screen.findByRole("button", { name: /register as a user/i }));
 
   expect(
-    screen.getByRole("heading", { level: 2, name: /create your business account/i })
+    screen.getByRole("heading", { level: 2, name: /create your user account/i })
   ).toBeInTheDocument();
   expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
-  expect(screen.getByLabelText(/account type/i)).toHaveValue("business");
-  expect(screen.getByRole("group", { name: /business categories/i })).toBeInTheDocument();
-  expect(screen.getByText(/^inr 0$/i)).toBeInTheDocument();
-
-  fireEvent.click(screen.getByLabelText(/globemart/i));
-  fireEvent.click(screen.getByLabelText(/linkup/i));
-
-  expect(screen.getByText(/^inr 1798$/i)).toBeInTheDocument();
-  expect(
-    screen.getByLabelText(/i understand that the total registration fee is inr 1798/i)
-  ).toBeInTheDocument();
-
-  fireEvent.click(screen.getByLabelText(/feastly/i));
-
-  expect(
-    screen.getByRole("heading", { level: 3, name: /food licence details/i })
-  ).toBeInTheDocument();
+  expect(screen.getByLabelText(/phone number/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/username \(unique global\)/i)).toBeInTheDocument();
 });
 
 test("logout returns an authenticated user to the launch page", async () => {

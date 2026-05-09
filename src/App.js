@@ -61,6 +61,7 @@ const Diary = React.lazy(() =>
 
 const SOCKET_BASE_URL = BACKEND_BASE_URL;
 const EMERGENCY_CALL_STORAGE_KEY = "malabarbazaar-emergency-call";
+const ADMIN_EMAIL = "mgdhanyamohan@gmail.com";
 
 const buildPendingEmergencyCall = (alert = {}) => {
   const emergencyCall = alert?.emergencyCall || {};
@@ -466,18 +467,19 @@ function AppShell() {
           return;
         }
 
-        const restoredRegistrationType = authResponse.data.user.registrationType || "user";
+        const normalizedEmail = String(authResponse.data.user.email || "")
+          .trim()
+          .toLowerCase();
+        const hasAdminAccess =
+          normalizedEmail === ADMIN_EMAIL ||
+          authResponse.data.user.registrationType === "admin" ||
+          authResponse.data.user.role === "admin";
 
         const nextUser = {
           ...authResponse.data.user,
-          registrationType: restoredRegistrationType,
-          role:
-            restoredRegistrationType === "admin"
-              ? "admin"
-              : restoredRegistrationType === "user"
-                ? "user"
-                : "business",
-          avatar: restoredRegistrationType === "admin" ? "A" : authResponse.data.user.avatar,
+          registrationType: hasAdminAccess ? "admin" : "user",
+          role: hasAdminAccess ? "admin" : authResponse.data.user.role || "user",
+          avatar: hasAdminAccess ? "A" : authResponse.data.user.avatar,
         };
 
         setLanguage(nextUser.preferences?.language || "en");
@@ -485,7 +487,7 @@ function AppShell() {
         setIsLoggedIn(true);
         setAuthChecked(true);
 
-        if (restoredRegistrationType === "admin") {
+        if (hasAdminAccess) {
           void loadAdminAppData();
         }
       } catch (authError) {
@@ -523,7 +525,15 @@ function AppShell() {
 
   const handleLoginSuccess = useCallback(
     async (user, _token, activeRole) => {
-      const resolvedRegistrationType = activeRole || registrationType || user.registrationType || "user";
+      const normalizedEmail = String(user?.email || "")
+        .trim()
+        .toLowerCase();
+      const hasAdminAccess =
+        normalizedEmail === ADMIN_EMAIL ||
+        activeRole === "admin" ||
+        user.registrationType === "admin" ||
+        user.role === "admin";
+      const resolvedRegistrationType = hasAdminAccess ? "admin" : "user";
       const nextAuthToken = _token || authToken;
 
       if (nextAuthToken) {
@@ -535,12 +545,7 @@ function AppShell() {
       let nextUser = {
         ...user,
         registrationType: resolvedRegistrationType,
-        role:
-          resolvedRegistrationType === "admin"
-            ? "admin"
-            : resolvedRegistrationType === "user"
-              ? "user"
-              : user.role || "business",
+        role: resolvedRegistrationType === "admin" ? "admin" : user.role || "user",
         avatar: resolvedRegistrationType === "admin" ? "A" : user.avatar,
       };
 
@@ -553,27 +558,9 @@ function AppShell() {
         syncAppDataFromResponse(nextAppData);
         setAppDataError("");
 
-        if (resolvedRegistrationType === "entrepreneur") {
-          const matchedAccount = (nextAppData.registeredAccounts || []).find(
-            (account) => account.email === nextUser.email?.trim().toLowerCase()
-          );
-
-          if (matchedAccount) {
-            nextUser = {
-              ...nextUser,
-              ...matchedAccount,
-            };
-          }
-        }
-
         const profileResponse = await axios.patch(`${API_BASE_URL}/auth/me`, {
           registrationType: resolvedRegistrationType,
-          role:
-            resolvedRegistrationType === "admin"
-              ? "admin"
-              : resolvedRegistrationType === "user"
-                ? "user"
-                : "business",
+          role: resolvedRegistrationType === "admin" ? "admin" : nextUser.role || "user",
           phone: nextUser.phone || "",
           location: nextUser.location || "",
           businessName: nextUser.businessName || "",
@@ -627,7 +614,6 @@ function AppShell() {
       location.pathname,
       navigate,
       pendingModule,
-      registrationType,
       syncAppDataFromResponse,
       toggleControlledModuleIds,
     ]
@@ -1031,14 +1017,10 @@ function AppShell() {
               <Route
                 path="dashboard"
                 element={
-                  isAdminUser ? (
-                    <Navigate to={MODULE_PATHS["admin-dashboard"]} replace />
-                  ) : (
-                    <Dashboard
-                      enabledModules={enabledModules}
-                      customLinks={customLinks}
-                    />
-                  )
+                  <Dashboard
+                    enabledModules={enabledModules}
+                    customLinks={customLinks}
+                  />
                 }
               />
               <Route
