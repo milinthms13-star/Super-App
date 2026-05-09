@@ -1,6 +1,44 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
+const WarrantySchema = new mongoose.Schema(
+  {
+    type: {
+      type: String,
+      enum: ['No warranty', 'Manufacturer warranty', 'Extended warranty'],
+    },
+    period: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    coverage: {
+      type: [String],
+      default: [],
+    },
+  },
+  { _id: false }
+);
+
+const ReturnPolicySchema = new mongoose.Schema(
+  {
+    returnable: {
+      type: Boolean,
+      default: false,
+    },
+    returnPeriodDays: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    conditions: {
+      type: [String],
+      default: [],
+    },
+  },
+  { _id: false }
+);
+
 const ProductSchema = new mongoose.Schema(
   {
     name: {
@@ -258,18 +296,11 @@ const ProductSchema = new mongoose.Schema(
       default: null,
     },
     warranty: {
-      type: {
-        type: String,
-        enum: ['No warranty', 'Manufacturer warranty', 'Extended warranty'],
-      },
-      period: String, // e.g., "1 year", "2 years"
-      coverage: [String], // e.g., ["Manufacturing defects", "Parts replacement"]
+      type: WarrantySchema,
       default: null,
     },
     returnPolicy: {
-      returnable: Boolean,
-      returnPeriodDays: Number,
-      conditions: [String],
+      type: ReturnPolicySchema,
       default: null,
     },
     isDigital: {

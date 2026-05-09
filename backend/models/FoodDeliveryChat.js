@@ -198,8 +198,10 @@ const ChatSchema = new mongoose.Schema({
     },
   ],
 
+}, {
+  collection: 'fooddeliverychats',
   timestamps: true,
-}, { collection: 'fooddeliverychats' });
+});
 
 // Index for efficient queries
 ChatSchema.index({ orderId: 1, 'messages.timestamp': -1 });

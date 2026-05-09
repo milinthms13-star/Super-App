@@ -109,8 +109,8 @@ const UserSessionSchema = new mongoose.Schema({
 // Indexes for performance
 UserSessionSchema.index({ userId: 1, isActive: 1, loginTime: -1 });
 UserSessionSchema.index({ userId: 1, lastActivityTime: -1 });
-UserSessionSchema.index({ deviceInfo.deviceId: 1 });
-UserSessionSchema.index({ userId: 1, deviceInfo.deviceType: 1 });
+UserSessionSchema.index({ 'deviceInfo.deviceId': 1 });
+UserSessionSchema.index({ userId: 1, 'deviceInfo.deviceType': 1 });
 UserSessionSchema.index({ userId: 1, isTrustedDevice: 1 });
 
 // Static methods

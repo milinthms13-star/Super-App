@@ -172,14 +172,14 @@ paymentLinkSchema.index({ linkedInvoiceId: 1 });
 
 // Methods
 paymentLinkSchema.methods.isActive = function () {
-  return this.status === 'active' && !this.isExpired && this.expiryDate > new Date();
+  return this.status === 'active' && !this.isExpired && !this.hasExpired();
 };
 
 paymentLinkSchema.methods.isUsed = function () {
   return this.status === 'used';
 };
 
-paymentLinkSchema.methods.isExpired = function () {
+paymentLinkSchema.methods.hasExpired = function () {
   return this.expiryDate < new Date();
 };
 

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { ADMIN_EMAIL } = require('../config/constants');
 const logger = require('../utils/logger');
 const devAuthStore = require('../utils/devAuthStore');
 
@@ -99,6 +100,21 @@ const buildTestUserFromPayload = (payload = {}) => {
   };
 };
 
+const hasAdminPrivileges = (user = {}) => {
+  const normalizedEmail = String(user.email || '')
+    .trim()
+    .toLowerCase();
+  const roles = Array.isArray(user.roles) ? user.roles : [];
+
+  return (
+    user.isAdmin === true ||
+    user.role === 'admin' ||
+    user.registrationType === 'admin' ||
+    roles.includes('admin') ||
+    normalizedEmail === ADMIN_EMAIL
+  );
+};
+
 const authenticate = async (req, res, next) => {
   try {
     if (resolveExistingAuthContext(req)) {
@@ -164,17 +180,43 @@ const authenticate = async (req, res, next) => {
   }
 };
 
+const verifyAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required',
+    });
+  }
+
+  if (!hasAdminPrivileges(req.user)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin access required',
+    });
+  }
+
+  req.user.isAdmin = true;
+  req.isAdmin = true;
+  return next();
+};
+
 // Export the middleware as both a callable function and a named-export bag.
 // This preserves compatibility with older route files that import auth in
 // different ways: `require('../middleware/auth')`, `{ authenticate }`,
 // `{ authenticateToken }`, or `{ authMiddleware }`.
 authenticate.authenticate = authenticate;
 authenticate.authenticateToken = authenticate;
+authenticate.verifyToken = authenticate;
+authenticate.verifyAdmin = verifyAdmin;
 authenticate.authMiddleware = authenticate;
 authenticate.getJwtSecret = getJwtSecret;
+authenticate.hasAdminPrivileges = hasAdminPrivileges;
 
 module.exports = authenticate;
 module.exports.authenticate = authenticate;
 module.exports.authenticateToken = authenticate;
+module.exports.verifyToken = authenticate;
+module.exports.verifyAdmin = verifyAdmin;
 module.exports.authMiddleware = authenticate;
 module.exports.getJwtSecret = getJwtSecret;
+module.exports.hasAdminPrivileges = hasAdminPrivileges;

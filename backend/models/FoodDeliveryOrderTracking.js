@@ -160,8 +160,10 @@ const OrderTrackingSchema = new mongoose.Schema({
     notes: String,
   },
 
+}, {
+  collection: 'fooddeliveryordertracking',
   timestamps: true,
-}, { collection: 'fooddeliveryordertracking' });
+});
 
 // Index for real-time queries
 OrderTrackingSchema.index({ orderId: 1, 'currentLocation.timestamp': -1 });

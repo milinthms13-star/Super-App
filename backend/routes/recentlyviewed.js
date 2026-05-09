@@ -195,7 +195,7 @@ router.get('/patterns', auth, async (req, res) => {
       return res.json({
         success: true,
         data: {
-          browsePat terns: [],
+          browsingPatterns: [],
           recommendedCategories: [],
         },
       });

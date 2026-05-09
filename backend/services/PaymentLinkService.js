@@ -60,7 +60,7 @@ class PaymentLinkService {
         throw new Error('Payment link not found');
       }
 
-      if (link.isExpired()) {
+      if (link.hasExpired()) {
         link.isExpired = true;
         link.status = 'expired';
         await link.save();

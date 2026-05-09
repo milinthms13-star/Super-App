@@ -6,7 +6,7 @@
 const Invoice = require('../models/Invoice');
 const { v4: uuidv4 } = require('uuid');
 const PDFDocument = require('pdfkit');
-const logger = require('./logger');
+const logger = require('../utils/logger');
 
 class InvoiceService {
   /**
