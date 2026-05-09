@@ -1,15 +1,56 @@
 import React from "react";
 import { getTranslation, languageOptions } from "../data/translations";
 import "../styles/LaunchPage.css";
+import {
+  FaShoppingCart,
+  FaComments,
+  FaTag,
+  FaHome,
+  FaUtensils,
+  FaStore,
+  FaCar,
+  FaHeart,
+  FaFire,
+  FaBell,
+  FaExclamationTriangle,
+  FaBook,
+  FaStar,
+} from "react-icons/fa";
+
+const iconMap = {
+  FaShoppingCart,
+  FaComments,
+  FaTag,
+  FaHome,
+  FaUtensils,
+  FaStore,
+  FaCar,
+  FaHeart,
+  FaFire,
+  FaBell,
+  FaExclamationTriangle,
+  FaBook,
+  FaStar,
+};
 
 const moduleFallbacks = {
   localmarket: {
     title: "Local Market",
-    description: "Discover local vendors, fresh produce, handmade goods, and neighborhood services.",
+    description: "Shop from local vendors and fresh producers.",
+    icon: "FaStore",
+    isComingSoon: false,
+  },
+  mydiary: {
+    title: "MyDiary",
+    description: "Personal diary, journaling, and memory storage.",
+    icon: "FaBook",
+    isComingSoon: true,
   },
   astrology: {
     title: "AstroNila",
-    description: "Daily horoscope, Vedic insights, and personalized astrology readings for all zodiac signs.",
+    description: "Daily horoscope and personalized astrology readings.",
+    icon: "FaStar",
+    isComingSoon: false,
   },
 };
 
@@ -38,10 +79,13 @@ const LaunchPage = ({
     VibeHub: "socialmedia",
     "ReminderAlert - Todo List": "reminderalert",
     "SOS Safety Center": "sosalert",
-    "AstroNila": "astrology",
+    MyDiary: "mydiary",
+    AstroNila: "astrology",
   };
 
-  const filteredFeatures = launch.features.filter(([name]) => enabledModules.includes(moduleMapping[name]));
+  const filteredFeatures = launch.features.filter(
+    ([name]) => enabledModules.includes(moduleMapping[name])
+  );
   const visibleModuleIds = new Set(
     filteredFeatures.map(([name]) => moduleMapping[name]).filter(Boolean)
   );
@@ -51,14 +95,18 @@ const LaunchPage = ({
       key: moduleId,
       title: feature.title,
       description: feature.description,
+      icon: feature.icon,
+      isComingSoon: feature.isComingSoon,
       type: "module",
       moduleId,
     }));
   const featureCards = [
-    ...filteredFeatures.map(([title, description]) => ({
+    ...filteredFeatures.map(([title, description, icon, isComingSoon]) => ({
       key: title,
       title,
       description,
+      icon,
+      isComingSoon,
       type: "module",
       moduleId: moduleMapping[title],
     })),
@@ -71,6 +119,11 @@ const LaunchPage = ({
       url: link.url,
     })),
   ];
+
+  const renderIcon = (iconName) => {
+    const IconComponent = iconMap[iconName];
+    return IconComponent ? <IconComponent className="feature-icon" /> : null;
+  };
 
   return (
     <main className="launch-page" dir={direction}>
@@ -128,17 +181,22 @@ const LaunchPage = ({
           {featureCards.map((feature) => (
             <button
               type="button"
-              className="feature-card"
+              className={`feature-card ${feature.isComingSoon ? "coming-soon" : ""}`}
               key={feature.key}
               onClick={() =>
-                feature.type === "external"
+                !feature.isComingSoon &&
+                (feature.type === "external"
                   ? openExternalLink(feature.url)
-                  : onSelectRegistrationType("login", feature.moduleId || moduleMapping[feature.title])
+                  : onSelectRegistrationType("login", feature.moduleId || moduleMapping[feature.title]))
               }
+              disabled={feature.isComingSoon}
             >
+              {feature.icon && renderIcon(feature.icon)}
               <h3>{feature.title}</h3>
               <p>{feature.description}</p>
-              {feature.type === "external" ? (
+              {feature.isComingSoon ? (
+                <span className="coming-soon-badge">Coming Soon</span>
+              ) : feature.type === "external" ? (
                 <span className="feature-card-link-badge">Open link</span>
               ) : null}
             </button>
