@@ -10,7 +10,9 @@
     "test:watch": "jest --watch",
     "seed:phase6": "node seeds/phase6Indexes.js",
     "seed:phase7": "node seeds/phase7Indexes.js",
-    "seed:phase8": "node seeds/phase8Indexes.js"
+    "seed:phase8": "node seeds/phase8Indexes.js",
+    "auth:gmail": "node scripts/gmail-auth.js",
+    "gmail:token": "node scripts/get-gmail-refresh-token.js"
   },
   "keywords": [
     "super-app",
