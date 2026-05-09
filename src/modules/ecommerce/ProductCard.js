@@ -10,7 +10,7 @@ import {
 } from "../../utils/ecommerceHelpers";
 import { sanitizeText } from "../../utils/xssProtection";
 
-const ProductCard = ({ product, onOpenQuickView }) => {
+const ProductCard = ({ product, onOpenQuickView = null }) => {
   const { cart, addToCart, addToFavorites, removeFavorite, favorites, currentUser } = useApp();
   const [isAdded, setIsAdded] = useState(false);
   const [stockMessage, setStockMessage] = useState("");
@@ -343,10 +343,6 @@ ProductCard.propTypes = {
     }),
   }).isRequired,
   onOpenQuickView: PropTypes.func,
-};
-
-ProductCard.defaultProps = {
-  onOpenQuickView: null,
 };
 
 export default ProductCard;

@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import axios from "axios";
 import { API_BASE_URL } from "../utils/api";
 import { showServiceWorkerNotification } from "../pwaConfig";
+import { getDefaultRefillCadenceDays } from "../utils/ecommerceDiscovery";
 
 const AppContext = createContext();
 const STOREFRONT_STORAGE_KEY = "malabarbazaar-storefront";
@@ -279,7 +280,15 @@ const canUseBrowserStorage = () => typeof window !== "undefined" && typeof windo
 
 const readPersistedStorefront = () => {
   if (!canUseBrowserStorage()) {
-    return { cart: [], favorites: [], savedAddresses: [] };
+    return {
+      cart: [],
+      favorites: [],
+      savedAddresses: [],
+      ecommerceRecentlyViewed: [],
+      ecommerceSavedSearches: [],
+      ecommerceSearchHistory: [],
+      ecommerceRefillReminders: [],
+    };
   }
 
   try {
@@ -289,9 +298,29 @@ const readPersistedStorefront = () => {
       cart: Array.isArray(parsedValue?.cart) ? parsedValue.cart : [],
       favorites: Array.isArray(parsedValue?.favorites) ? parsedValue.favorites : [],
       savedAddresses: Array.isArray(parsedValue?.savedAddresses) ? parsedValue.savedAddresses : [],
+      ecommerceRecentlyViewed: Array.isArray(parsedValue?.ecommerceRecentlyViewed)
+        ? parsedValue.ecommerceRecentlyViewed
+        : [],
+      ecommerceSavedSearches: Array.isArray(parsedValue?.ecommerceSavedSearches)
+        ? parsedValue.ecommerceSavedSearches
+        : [],
+      ecommerceSearchHistory: Array.isArray(parsedValue?.ecommerceSearchHistory)
+        ? parsedValue.ecommerceSearchHistory
+        : [],
+      ecommerceRefillReminders: Array.isArray(parsedValue?.ecommerceRefillReminders)
+        ? parsedValue.ecommerceRefillReminders
+        : [],
     };
   } catch (error) {
-    return { cart: [], favorites: [], savedAddresses: [] };
+    return {
+      cart: [],
+      favorites: [],
+      savedAddresses: [],
+      ecommerceRecentlyViewed: [],
+      ecommerceSavedSearches: [],
+      ecommerceSearchHistory: [],
+      ecommerceRefillReminders: [],
+    };
   }
 };
 
@@ -306,6 +335,18 @@ const persistStorefrontSnapshot = (snapshot) => {
       cart: Array.isArray(snapshot?.cart) ? snapshot.cart : [],
       favorites: Array.isArray(snapshot?.favorites) ? snapshot.favorites : [],
       savedAddresses: Array.isArray(snapshot?.savedAddresses) ? snapshot.savedAddresses : [],
+      ecommerceRecentlyViewed: Array.isArray(snapshot?.ecommerceRecentlyViewed)
+        ? snapshot.ecommerceRecentlyViewed
+        : [],
+      ecommerceSavedSearches: Array.isArray(snapshot?.ecommerceSavedSearches)
+        ? snapshot.ecommerceSavedSearches
+        : [],
+      ecommerceSearchHistory: Array.isArray(snapshot?.ecommerceSearchHistory)
+        ? snapshot.ecommerceSearchHistory
+        : [],
+      ecommerceRefillReminders: Array.isArray(snapshot?.ecommerceRefillReminders)
+        ? snapshot.ecommerceRefillReminders
+        : [],
       updatedAt: new Date().toISOString(),
     })
   );
@@ -357,6 +398,18 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
   const [cart, setCart] = useState(() => persistedStorefrontState.cart || []);
   const [favorites, setFavorites] = useState(() => persistedStorefrontState.favorites || []);
   const [savedAddresses, setSavedAddresses] = useState(() => persistedStorefrontState.savedAddresses || []);
+  const [ecommerceRecentlyViewed, setEcommerceRecentlyViewed] = useState(
+    () => persistedStorefrontState.ecommerceRecentlyViewed || []
+  );
+  const [ecommerceSavedSearches, setEcommerceSavedSearches] = useState(
+    () => persistedStorefrontState.ecommerceSavedSearches || []
+  );
+  const [ecommerceSearchHistory, setEcommerceSearchHistory] = useState(
+    () => persistedStorefrontState.ecommerceSearchHistory || []
+  );
+  const [ecommerceRefillReminders, setEcommerceRefillReminders] = useState(
+    () => persistedStorefrontState.ecommerceRefillReminders || []
+  );
   const [orders, setOrders] = useState([]);
   const [sellerOrders, setSellerOrders] = useState([]);
   const [moduleData, setModuleData] = useState(EMPTY_MODULE_DATA);
@@ -403,12 +456,40 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     setCart(Array.isArray(loggedInUser?.cart) ? loggedInUser.cart : persistedState.cart || []);
     setFavorites(Array.isArray(loggedInUser?.favorites) ? loggedInUser.favorites : persistedState.favorites || []);
     setSavedAddresses(Array.isArray(loggedInUser?.savedAddresses) ? loggedInUser.savedAddresses : persistedState.savedAddresses || []);
+    setEcommerceRecentlyViewed(
+      Array.isArray(loggedInUser?.ecommerceRecentlyViewed)
+        ? loggedInUser.ecommerceRecentlyViewed
+        : persistedState.ecommerceRecentlyViewed || []
+    );
+    setEcommerceSavedSearches(
+      Array.isArray(loggedInUser?.ecommerceSavedSearches)
+        ? loggedInUser.ecommerceSavedSearches
+        : persistedState.ecommerceSavedSearches || []
+    );
+    setEcommerceSearchHistory(
+      Array.isArray(loggedInUser?.ecommerceSearchHistory)
+        ? loggedInUser.ecommerceSearchHistory
+        : persistedState.ecommerceSearchHistory || []
+    );
+    setEcommerceRefillReminders(
+      Array.isArray(loggedInUser?.ecommerceRefillReminders)
+        ? loggedInUser.ecommerceRefillReminders
+        : persistedState.ecommerceRefillReminders || []
+    );
     storefrontHydratedRef.current = true;
   }, [loggedInUser]);
 
   useEffect(() => {
     if (!storefrontHydratedRef.current || !currentUserId) {
-      persistStorefrontSnapshot({ cart, favorites, savedAddresses });
+      persistStorefrontSnapshot({
+        cart,
+        favorites,
+        savedAddresses,
+        ecommerceRecentlyViewed,
+        ecommerceSavedSearches,
+        ecommerceSearchHistory,
+        ecommerceRefillReminders,
+      });
       syncStorefrontToServiceWorker(cart);
       return;
     }
@@ -419,12 +500,24 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
           cart,
           favorites,
           savedAddresses,
+          ecommerceRecentlyViewed,
+          ecommerceSavedSearches,
+          ecommerceSearchHistory,
+          ecommerceRefillReminders,
         });
       } catch (error) {
         // Keep the UI responsive even if persistence fails temporarily.
       }
 
-      persistStorefrontSnapshot({ cart, favorites, savedAddresses });
+      persistStorefrontSnapshot({
+        cart,
+        favorites,
+        savedAddresses,
+        ecommerceRecentlyViewed,
+        ecommerceSavedSearches,
+        ecommerceSearchHistory,
+        ecommerceRefillReminders,
+      });
       syncStorefrontToServiceWorker(cart);
     };
 
@@ -443,7 +536,16 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         storefrontPersistTimeoutRef.current = null;
       }
     };
-  }, [cart, currentUserId, favorites, savedAddresses]);
+  }, [
+    cart,
+    currentUserId,
+    ecommerceRecentlyViewed,
+    ecommerceSavedSearches,
+    ecommerceSearchHistory,
+    ecommerceRefillReminders,
+    favorites,
+    savedAddresses,
+  ]);
 
   useEffect(() => () => {
     if (storefrontPersistTimeoutRef.current) {
@@ -778,6 +880,103 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     );
   };
 
+  const trackRecentlyViewedProduct = useCallback((product) => {
+    if (!product?.id) {
+      return;
+    }
+
+    setEcommerceRecentlyViewed((currentProducts) => {
+      const nextProducts = [product, ...currentProducts.filter((entry) => entry.id !== product.id)];
+      return nextProducts.slice(0, 8);
+    });
+  }, []);
+
+  const recordEcommerceSearch = useCallback((query) => {
+    const normalizedQuery = String(query || "").trim();
+    if (!normalizedQuery) {
+      return;
+    }
+
+    setEcommerceSearchHistory((currentHistory) => {
+      const nextHistory = [
+        normalizedQuery,
+        ...currentHistory.filter((entry) => entry !== normalizedQuery),
+      ];
+
+      return nextHistory.slice(0, 10);
+    });
+  }, []);
+
+  const saveEcommerceSearch = useCallback((searchRecord = {}) => {
+    const trimmedQuery = String(searchRecord.query || "").trim();
+    if (!trimmedQuery) {
+      return null;
+    }
+
+    const savedSearch = {
+      id: searchRecord.id || `search-${Date.now()}`,
+      label: String(searchRecord.label || trimmedQuery).trim() || trimmedQuery,
+      query: trimmedQuery,
+      filters: searchRecord.filters || {},
+      createdAt: searchRecord.createdAt || new Date().toISOString(),
+      lastUsedAt: new Date().toISOString(),
+    };
+
+    setEcommerceSavedSearches((currentSearches) => {
+      const dedupedSearches = currentSearches.filter(
+        (entry) => entry.id !== savedSearch.id && entry.query !== savedSearch.query
+      );
+      return [savedSearch, ...dedupedSearches].slice(0, 8);
+    });
+    recordEcommerceSearch(trimmedQuery);
+
+    return savedSearch;
+  }, [recordEcommerceSearch]);
+
+  const removeEcommerceSavedSearch = useCallback((searchId) => {
+    setEcommerceSavedSearches((currentSearches) =>
+      currentSearches.filter((entry) => entry.id !== searchId)
+    );
+  }, []);
+
+  const scheduleEcommerceRefillReminder = useCallback((product, cadenceDays = null) => {
+    if (!product?.id) {
+      return null;
+    }
+
+    const normalizedCadence = Number(cadenceDays) > 0
+      ? Number(cadenceDays)
+      : getDefaultRefillCadenceDays(product);
+    const dueAt = new Date();
+    dueAt.setDate(dueAt.getDate() + normalizedCadence);
+
+    const reminder = {
+      id: `refill-${product.id}-${Date.now()}`,
+      productId: product.id,
+      productName: product.name || "Product",
+      businessName: product.businessName || "",
+      category: product.category || "",
+      cadenceDays: normalizedCadence,
+      dueAt: dueAt.toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setEcommerceRefillReminders((currentReminders) => {
+      const filteredReminders = currentReminders.filter(
+        (entry) => entry.productId !== reminder.productId
+      );
+      return [reminder, ...filteredReminders].slice(0, 12);
+    });
+
+    return reminder;
+  }, []);
+
+  const dismissEcommerceRefillReminder = useCallback((reminderId) => {
+    setEcommerceRefillReminders((currentReminders) =>
+      currentReminders.filter((entry) => entry.id !== reminderId)
+    );
+  }, []);
+
   const notifyStorefrontEvent = useCallback(async ({ title = "", body = "", tag = "", url = "/" } = {}) => {
     try {
       await showServiceWorkerNotification({
@@ -790,6 +989,38 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
       // Notifications are optional; do not block commerce flows on them.
     }
   }, []);
+
+  const refillNotificationRegistryRef = useRef(new Set());
+
+  useEffect(() => {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      return;
+    }
+
+    ecommerceRefillReminders.forEach((reminder) => {
+      const dueAt = new Date(reminder.dueAt);
+      if (Number.isNaN(dueAt.getTime())) {
+        return;
+      }
+
+      const remainingMs = dueAt.getTime() - Date.now();
+      const notificationKey = `${reminder.id}:${reminder.dueAt}`;
+
+      if (
+        remainingMs > 0 &&
+        remainingMs <= 24 * 60 * 60 * 1000 &&
+        !refillNotificationRegistryRef.current.has(notificationKey)
+      ) {
+        refillNotificationRegistryRef.current.add(notificationKey);
+        notifyStorefrontEvent({
+          title: "Refill reminder due soon",
+          body: `${reminder.productName} is scheduled for refill within the next 24 hours.`,
+          tag: `refill-${reminder.id}`,
+          url: "/ecommerce",
+        });
+      }
+    });
+  }, [ecommerceRefillReminders, notifyStorefrontEvent]);
 
   const createClassifiedListing = async (listingData) => {
     const response = await axios.post(`${API_BASE_URL}/app-data/classifieds/listings`, listingData, {
@@ -1712,6 +1943,10 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         cart,
         favorites,
         savedAddresses,
+        ecommerceRecentlyViewed,
+        ecommerceSavedSearches,
+        ecommerceSearchHistory,
+        ecommerceRefillReminders,
         orders,
         sellerOrders,
         ecommerceProducts: approvedProducts,
@@ -1733,6 +1968,12 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         updateCartQuantity,
         addToFavorites,
         removeFavorite,
+        trackRecentlyViewedProduct,
+        recordEcommerceSearch,
+        saveEcommerceSearch,
+        removeEcommerceSavedSearch,
+        scheduleEcommerceRefillReminder,
+        dismissEcommerceRefillReminder,
         createClassifiedListing,
         sendClassifiedMessage,
         reportClassifiedListing,

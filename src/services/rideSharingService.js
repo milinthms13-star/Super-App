@@ -10,9 +10,19 @@ const getAuthHeaders = () => ({
 
 export default {
   bookRide: async (pickup, dropoff, rideType) => {
-    const { data } = await axios.post(`${API_BASE_URL}/rides`, { pickup, dropoff, rideType }, getAuthHeaders());
+    // frontend passes pickup/dropoff as strings in current UI; backend expects pickup.address + lat/lng
+    // minimal: store pickup/dropoff as {address} to satisfy backend validations.
+    const pickupPayload = typeof pickup === 'string' ? { address: pickup, lat: 0, lng: 0 } : pickup;
+    const dropoffPayload = typeof dropoff === 'string' ? { address: dropoff, lat: 0, lng: 0 } : dropoff;
+
+    const { data } = await axios.post(`${API_BASE_URL}/rides`, {
+      pickup: pickupPayload,
+      dropoff: dropoffPayload,
+      rideType,
+    }, getAuthHeaders());
     return data.data;
   },
+
 
   getNearbyDrivers: async (lat, lng, radius = 5) => {
     const params = new URLSearchParams({ lat, lng, radius });

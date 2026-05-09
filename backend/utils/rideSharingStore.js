@@ -28,9 +28,34 @@ const createRideRequest = (rideData) => {
 
 const getRideRequests = (status) => RideRequest.find(status ? { status } : {});
 
+const assignDriverToRide = async (rideId, driverId) => {
+  return RideRequest.findByIdAndUpdate(
+    rideId,
+    {
+      driverId,
+      status: 'driver_assigned',
+      updatedAt: new Date(),
+    },
+    { new: true }
+  );
+};
+
+const completeRide = async (rideId) => {
+  return RideRequest.findByIdAndUpdate(
+    rideId,
+    {
+      status: 'completed',
+      paymentStatus: 'paid',
+      updatedAt: new Date(),
+    },
+    { new: true }
+  );
+};
+
 const updateDriverLocation = (driverId, lat, lng) => {
   return Driver.findByIdAndUpdate(driverId, { currentLat: lat, currentLng: lng }, { new: true });
 };
+
 
 module.exports = {
   initializeDevData,

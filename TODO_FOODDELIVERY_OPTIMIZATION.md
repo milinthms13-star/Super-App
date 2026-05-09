@@ -6,6 +6,55 @@
 
 ---
 
+## Competitor Benchmark Addendum
+
+Use this section for Swiggy/Zomato/Uber Eats style comparison and investor-demo conversations. The phase plan below is still useful as a delivery roadmap, but this addendum is the cleaner current-state benchmark.
+
+Items marked `[x]` are covered at least at MVP level today. They are not always full competitor-parity implementations.
+
+### First Release / Investor Demo MVP
+
+- [x] User login
+- [x] Restaurant listing
+- [x] Search and filter
+- [x] Cart and checkout
+- [x] Coupons
+- [x] Live order tracking
+- [x] Delivery partner app
+- [x] Restaurant panel
+- [x] Admin dashboard
+- [x] Online payment and COD baseline
+- [x] Notifications baseline
+
+### Highest-Value Parity Gaps
+
+- [ ] Guest checkout
+- [ ] Food-level search beyond restaurant search
+- [ ] Map-based live tracking in customer UI
+- [ ] Call delivery partner
+- [ ] Chat with delivery partner
+- [ ] SMS notifications for major delivery events
+- [ ] External gateway execution and reconciliation for UPI/card/net banking
+- [ ] Distance-based delivery fee
+- [ ] Geo-fencing and surge pricing
+- [ ] Rider earnings dashboard and payout reporting
+- [ ] Restaurant inventory management and sales analytics
+- [ ] Community reviews with images and videos
+- [ ] OTP verification at delivery confirmation
+- [ ] Fraud detection and anomaly workflows
+
+### Best Features To Beat Competitors
+
+- [ ] Timer-based cooking workflow
+- [x] AI delivery estimation baseline
+- [x] Unified super app wallet baseline
+- [ ] Community reviews with images and videos
+- [ ] Hyperlocal marketplace basket across food, grocery, and pharmacy
+- [ ] Smart combo recommendation / "People also ordered"
+- [x] Emergency SOS for riders
+
+---
+
 ## Phase 1: Core Authentication & User Setup ✅ COMPLETE
 
 ### 1.1 User Authentication System ✅ IMPLEMENTED

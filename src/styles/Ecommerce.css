@@ -409,6 +409,136 @@
   margin-bottom: 2rem;
 }
 
+.shopper-intelligence {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.shopper-memory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.shopper-intelligence-card {
+  padding: 1.35rem;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 252, 0.96));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 20px 40px rgba(10, 18, 40, 0.08);
+}
+
+.smart-search-actions,
+.quick-view-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.voice-live {
+  border-color: rgba(217, 70, 239, 0.28);
+  background: rgba(250, 245, 255, 0.95);
+}
+
+.shopper-support-copy,
+.shopper-empty-copy,
+.shopper-ai-summary,
+.shopper-assistant-message {
+  margin: 0 0 0.9rem;
+  color: #516074;
+  line-height: 1.6;
+}
+
+.shopper-ai-summary {
+  color: #0f4c81;
+  font-weight: 700;
+}
+
+.shopper-assistant-message {
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  background: rgba(255, 247, 214, 0.85);
+  border: 1px solid rgba(255, 215, 0, 0.32);
+  color: #6d5500;
+}
+
+.shopper-mini-grid,
+.shopper-pill-list,
+.shopper-reminder-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.shopper-mini-card,
+.shopper-pill-card,
+.shopper-reminder-card {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 0.95rem 1rem;
+  text-align: left;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.shopper-mini-card {
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.shopper-mini-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(15, 76, 129, 0.2);
+}
+
+.shopper-mini-card strong,
+.shopper-reminder-card strong {
+  display: block;
+  color: #102a43;
+  margin-bottom: 0.3rem;
+}
+
+.shopper-mini-card span,
+.shopper-mini-card small,
+.shopper-reminder-card p {
+  display: block;
+  color: #64748b;
+}
+
+.shopper-pill-card,
+.shopper-reminder-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.shopper-pill-action,
+.shopper-pill-remove {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.shopper-pill-action {
+  color: #102a43;
+  font-weight: 700;
+  text-align: left;
+}
+
+.shopper-pill-remove {
+  color: #7f1d1d;
+  font-weight: 700;
+}
+
+.shopper-subheading {
+  margin: 1rem 0 0.75rem;
+  color: #102a43;
+  font-size: 0.95rem;
+}
+
 .marketplace-heading,
 .shopper-heading {
   display: flex;

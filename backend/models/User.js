@@ -183,6 +183,22 @@ const UserSchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+    ecommerceSavedSearches: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+    ecommerceRecentlyViewed: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+    ecommerceSearchHistory: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+    ecommerceRefillReminders: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
     classifiedsSavedSearches: {
       type: [mongoose.Schema.Types.Mixed],
       default: [],

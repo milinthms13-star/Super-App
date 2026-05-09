@@ -149,6 +149,13 @@ app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/wishlistshare', require('./routes/wishlistshare'));
 
+// NEW: User Profile & Personalization Features
+app.use('/api/wishlist', require('./routes/wishlist')); // Core wishlist management
+app.use('/api/recently-viewed', require('./routes/recentlyviewed')); // Track browsing history
+app.use('/api/addresses', require('./routes/addresses')); // Address management for checkout
+app.use('/api/payment-methods', require('./routes/paymentmethods')); // Saved payment methods
+app.use('/api/search-history', require('./routes/searchhistory')); // Search history & analytics
+
 // FoodDelivery routes
 app.use('/api/fooddelivery', require('./routes/fooddelivery'));
 
@@ -162,8 +169,28 @@ app.use('/api/v1', require('./routes/phase7Routes'));
 // (Menu Variants, Scheduled Delivery, Loyalty/Referral, AI Recommendations, Advanced Analytics)
 app.use('/', require('./routes/phase8Routes'));
 
+// Phase 9: Advanced Order Management Routes
+app.use('/api/v1', require('./routes/phase9Routes'));
+
+// Phase 10: Security & Compliance Routes
+app.use('/api/v1', require('./routes/phase10Routes'));
+
+// Phase 11: Payment Processing Routes
+app.use('/api/v1', require('./routes/phase11Routes'));
+
+// Phase 12: Advanced Payment Features Routes (Subscriptions, Payment Links, Invoices, Settlements, Commissions)
+app.use('/api/v1', require('./routes/phase12Routes'));
+
+// Phase 13: Analytics & Reporting Routes (Dashboards, Reports, Reconciliation, Aging Analysis)
+app.use('/api/v1', require('./routes/phase13Routes'));
+
+// Phase 14: Advanced Features & Optimization Routes (Predictive Analytics, Search, Segmentation, Recommendations, Optimization)
+app.use('/api/v1', require('./routes/phase14Routes'));
+
 // RideSharing routes
 app.use('/api/ridesharing', require('./routes/ridesharing'));
+app.use('/api/ridesharing/auth', require('./routes/rideSharingAuthRoutes'));
+app.use('/api/ridesharing/driver', require('./routes/driverKYCRoutes'));
 
 // RealEstate routes
 app.use('/api/realestate', require('./routes/realestate_fixed'));

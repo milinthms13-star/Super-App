@@ -460,69 +460,70 @@ const { currentUser, mockData } = useApp();
     setNotifications((current) => [message, ...current].slice(0, 6));
   };
 
-  const handleBookRide = () => {
+  const handleBookRide = async () => {
     if (!selectedRide || !bookingForm.pickup.trim() || !bookingForm.dropoff.trim()) {
       setStatusMessage("Add pickup, drop, and ride type before confirming the booking.");
       return;
     }
 
-    const newTrip = {
-      id: `ride-${Date.now()}`,
-      rideType: selectedRide.type,
-      pickup: bookingForm.pickup.trim(),
-      dropoff: bookingForm.dropoff.trim(),
-      paymentMethod: bookingForm.paymentMethod,
-      status: "Ride requested",
-      totalFare: fareBreakdown.total,
-      distanceKm: fareBreakdown.distanceKm,
-      driver: assignedDriver,
-      eta: selectedRide.eta,
-      routeLabel: `${bookingForm.pickup.trim()} -> ${bookingForm.dropoff.trim()}`,
-    };
+    try {
+      setStatusMessage("Booking ride...");
+      const ride = await rideSharingService.bookRide(
+        bookingForm.pickup.trim(),
+        bookingForm.dropoff.trim(),
+        selectedRide.type
+      );
 
-    setActiveTrip(newTrip);
-    setPendingRatingTripId("");
-    setStatusMessage(`${selectedRide.type} booked successfully. Driver matching has started.`);
-    pushNotification(`Ride booked from ${newTrip.pickup} to ${newTrip.dropoff}.`);
+      // Backend returns RideRequest; adapt to current UI shape minimally
+      const newTrip = {
+        id: ride._id || ride.id,
+        rideType: selectedRide.type,
+        pickup: bookingForm.pickup.trim(),
+        dropoff: bookingForm.dropoff.trim(),
+        paymentMethod: bookingForm.paymentMethod,
+        status: "Ride requested",
+        totalFare: ride.estimatedFare || fareBreakdown.total,
+        distanceKm: fareBreakdown.distanceKm,
+        driver: assignedDriver,
+        eta: selectedRide.eta,
+        routeLabel: `${bookingForm.pickup.trim()} -> ${bookingForm.dropoff.trim()}`,
+      };
+
+      setActiveTrip(newTrip);
+      setPendingRatingTripId("");
+      setStatusMessage(`${selectedRide.type} booked. Waiting for driver assignment.`);
+      pushNotification(`Ride booked from ${newTrip.pickup} to ${newTrip.dropoff}.`);
+    } catch (err) {
+      setStatusMessage(err?.response?.data?.message || err.message || 'Failed to book ride');
+    }
   };
 
-  const handleAdvanceTripStatus = () => {
-    if (!activeTrip) {
-      return;
-    }
+  const handleAdvanceTripStatus = async () => {
+    // MVP: replace simulation with a real backend completion call.
+    if (!activeTrip) return;
 
-    const currentIndex = RIDE_STATUS_FLOW.indexOf(activeTrip.status);
-    if (currentIndex >= RIDE_STATUS_FLOW.length - 1) {
-      setStatusMessage("This trip is already completed.");
-      return;
-    }
+    try {
+      setStatusMessage("Completing trip...");
+      await rideSharingService.completeRide(activeTrip.id);
 
-    const nextStatus = RIDE_STATUS_FLOW[Math.min(currentIndex + 1, RIDE_STATUS_FLOW.length - 1)];
+      setStatusMessage("Trip completed.");
+      setPendingRatingTripId(activeTrip.id);
 
-    const nextTrip = {
-      ...activeTrip,
-      status: nextStatus,
-    };
-
-    setActiveTrip(nextTrip);
-    setStatusMessage(`Trip updated to "${nextStatus}".`);
-    pushNotification(`${nextTrip.driver?.name || "Driver"} updated the ride to ${nextStatus}.`);
-
-    if (nextStatus === "Trip completed") {
       setTripHistory((current) => [
         {
-          id: nextTrip.id,
-          route: `${nextTrip.pickup} to ${nextTrip.dropoff}`,
-          fare: nextTrip.totalFare,
-          paymentMethod: nextTrip.paymentMethod,
-          status: nextStatus,
+          id: activeTrip.id,
+          route: `${activeTrip.pickup} to ${activeTrip.dropoff}`,
+          fare: activeTrip.totalFare,
+          paymentMethod: activeTrip.paymentMethod,
+          status: "Trip completed",
           riderRating: 0,
         },
         ...current,
       ]);
-      setPendingRatingTripId(nextTrip.id);
+
       setActiveTrip(null);
-      return;
+    } catch (err) {
+      setStatusMessage(err?.response?.data?.message || err.message || "Failed to complete ride");
     }
   };
 

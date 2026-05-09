@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useApp } from "../../contexts/AppContext";
+import useVoice from "../../hooks/useVoice";
 import ProductCard from "./ProductCard";
 import SellerAnalytics from "./SellerAnalytics";
 import { resolveProductImageSrc } from "./productImage";
@@ -14,6 +15,12 @@ import {
   getNextStatus,
   formatCurrency,
 } from "../../utils/ecommerceHelpers";
+import {
+  buildDiscoverySuggestions,
+  buildPersonalizedRecommendations,
+  buildProductShareMessage,
+  deriveSmartSearchPlan,
+} from "../../utils/ecommerceDiscovery";
 import { API_BASE_URL } from "../../utils/api";
 import {
   getNotificationPermission,
@@ -207,10 +214,17 @@ const buildProductFormState = (product) => ({
   image: product?.image || "",
 });
 
-const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) => {
+const Ecommerce = ({ globeMartCategories = [], onOpenOrders = null, onOpenReturns = null }) => {
   const {
     currentUser,
+    language,
+    cart,
+    orders,
     favorites,
+    ecommerceRecentlyViewed,
+    ecommerceSavedSearches,
+    ecommerceSearchHistory,
+    ecommerceRefillReminders,
     mockData,
     managedProducts,
     sellerOrders,
@@ -229,7 +243,14 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
     syncSellerOrderStatus,
     updateItemReturnRequestStatus,
     addToCart,
+    trackRecentlyViewedProduct,
+    recordEcommerceSearch,
+    saveEcommerceSearch,
+    removeEcommerceSavedSearch,
+    scheduleEcommerceRefillReminder,
+    dismissEcommerceRefillReminder,
     fetchActiveFlashSales,
+    trackProductMetric,
     loadMoreMarketplaceProducts,
     loadMoreManagedProducts,
     loadMoreSellerOrders,
@@ -250,6 +271,8 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
     getNotificationPermission()
   );
   const [liveNow, setLiveNow] = useState(() => Date.now());
+  const [searchAssistantMessage, setSearchAssistantMessage] = useState("");
+  const [quickActionMessage, setQuickActionMessage] = useState("");
   const [sellerListingQuery, setSellerListingQuery] = useState("");
   const [sellerListingStatusFilter, setSellerListingStatusFilter] = useState("all");
   const [sellerListingCategoryFilter, setSellerListingCategoryFilter] = useState("All");
@@ -276,6 +299,7 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
   const sellerListingsSectionRef = useRef(null);
   const quickViewPanelRef = useRef(null);
   const flashNotificationRegistryRef = useRef(new Set());
+  const { recognitionSupported, listeningKey, startListening, stopListening } = useVoice(language);
   const isEntrepreneur =
     currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
   const currentBusinessName = currentUser?.businessName?.trim() || currentUser?.name || "Your Business";
@@ -384,6 +408,43 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
 
     return ["All", ...new Set([...configuredCategories, ...catalogCategories])];
   }, [categoryRecords, visibleProducts]);
+
+  const smartSearchPlan = useMemo(
+    () => deriveSmartSearchPlan(marketplaceSearch, productCategories.filter((category) => category !== "All")),
+    [marketplaceSearch, productCategories]
+  );
+
+  const personalizedRecommendations = useMemo(
+    () =>
+      buildPersonalizedRecommendations({
+        products: visibleProducts,
+        favorites: visibleFavorites,
+        cart,
+        orders,
+        recentlyViewed: ecommerceRecentlyViewed,
+      }),
+    [cart, ecommerceRecentlyViewed, orders, visibleFavorites, visibleProducts]
+  );
+
+  const discoverySuggestions = useMemo(
+    () =>
+      buildDiscoverySuggestions({
+        products: visibleProducts,
+        searchHistory: ecommerceSearchHistory,
+        favorites: visibleFavorites,
+        recentlyViewed: ecommerceRecentlyViewed,
+      }),
+    [ecommerceRecentlyViewed, ecommerceSearchHistory, visibleFavorites, visibleProducts]
+  );
+
+  const upcomingRefillReminders = useMemo(
+    () =>
+      [...(ecommerceRefillReminders || [])]
+        .filter((reminder) => reminder?.dueAt)
+        .sort((left, right) => new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime())
+        .slice(0, 4),
+    [ecommerceRefillReminders]
+  );
 
   const sellerOptions = useMemo(
     () => [
@@ -585,6 +646,167 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
         return products;
     }
   }, [filteredProducts, marketplaceSort]);
+
+  const applyMarketplaceSearchState = (nextState = {}) => {
+    setMarketplaceSearch(nextState.searchText ?? "");
+    setSelectedCategory(nextState.category || "All");
+    setSelectedSubcategory(nextState.subcategory || "All");
+    setSelectedSeller(nextState.seller || "All Businesses");
+    setMarketplaceMinPrice(nextState.minPrice || "");
+    setMarketplaceMaxPrice(nextState.maxPrice || "");
+    setMarketplaceMinRating(nextState.minRating || "0");
+    setMarketplaceInStockOnly(Boolean(nextState.inStockOnly));
+    setMarketplaceSort(nextState.sort || "relevance");
+  };
+
+  const handleApplySmartSearch = (plan = smartSearchPlan) => {
+    if (!plan?.searchText && !plan?.canApply) {
+      setSearchAssistantMessage("Add a product need first so smart search can help refine it.");
+      return;
+    }
+
+    setMarketplaceView("products");
+    applyMarketplaceSearchState({
+      searchText: plan.searchText,
+      category: plan.category,
+      maxPrice: plan.maxPrice,
+      minRating: plan.minRating,
+      inStockOnly: plan.inStockOnly,
+      sort: plan.sort,
+    });
+    recordEcommerceSearch(plan.searchText || marketplaceSearch);
+    setSearchAssistantMessage(
+      plan.summary
+        ? `Smart search applied: ${plan.summary}.`
+        : "Smart search kept your text query and refreshed the catalog."
+    );
+  };
+
+  const handleSaveCurrentSearch = () => {
+    if (
+      !marketplaceSearch.trim() &&
+      selectedCategory === "All" &&
+      selectedSubcategory === "All" &&
+      selectedSeller === "All Businesses" &&
+      !marketplaceMinPrice &&
+      !marketplaceMaxPrice &&
+      marketplaceMinRating === "0" &&
+      !marketplaceInStockOnly
+    ) {
+      setSearchAssistantMessage("Choose a search or filter first, then save it for one-tap reuse.");
+      return;
+    }
+
+    const savedSearch = saveEcommerceSearch({
+      label: marketplaceSearch.trim() || `${selectedCategory} search`,
+      query: marketplaceSearch.trim() || selectedCategory,
+      filters: {
+        category: selectedCategory,
+        subcategory: selectedSubcategory,
+        seller: selectedSeller,
+        minPrice: marketplaceMinPrice,
+        maxPrice: marketplaceMaxPrice,
+        minRating: marketplaceMinRating,
+        inStockOnly: marketplaceInStockOnly,
+        sort: marketplaceSort,
+      },
+    });
+
+    if (savedSearch) {
+      setSearchAssistantMessage(`Saved "${savedSearch.label}" to your GlobeMart shortcuts.`);
+    }
+  };
+
+  const handleApplySavedSearch = (savedSearch) => {
+    setMarketplaceView("products");
+    applyMarketplaceSearchState({
+      searchText: savedSearch?.query || "",
+      category:
+        savedSearch?.filters?.category && savedSearch.filters.category !== "All"
+          ? savedSearch.filters.category
+          : "All",
+      subcategory:
+        savedSearch?.filters?.subcategory && savedSearch.filters.subcategory !== "All"
+          ? savedSearch.filters.subcategory
+          : "All",
+      seller:
+        savedSearch?.filters?.seller && savedSearch.filters.seller !== "All Businesses"
+          ? savedSearch.filters.seller
+          : "All Businesses",
+      minPrice: savedSearch?.filters?.minPrice || "",
+      maxPrice: savedSearch?.filters?.maxPrice || "",
+      minRating: savedSearch?.filters?.minRating || "0",
+      inStockOnly: Boolean(savedSearch?.filters?.inStockOnly),
+      sort: savedSearch?.filters?.sort || "relevance",
+    });
+    recordEcommerceSearch(savedSearch?.query || "");
+    setSearchAssistantMessage(`Loaded saved search: ${savedSearch?.label || savedSearch?.query}.`);
+  };
+
+  const handleSuggestionClick = (suggestion) => {
+    setMarketplaceView("products");
+    applyMarketplaceSearchState({
+      searchText: suggestion?.query || "",
+      category: suggestion?.filters?.category || "All",
+      minPrice: suggestion?.filters?.minPrice || "",
+      maxPrice: suggestion?.filters?.maxPrice || "",
+      minRating: suggestion?.filters?.minRating || "0",
+      inStockOnly: Boolean(suggestion?.filters?.inStockOnly),
+      sort: suggestion?.filters?.sort || "relevance",
+    });
+    recordEcommerceSearch(suggestion?.query || suggestion?.label || "");
+    setSearchAssistantMessage(`Applied suggestion: ${suggestion?.label || "Marketplace shortcut"}.`);
+  };
+
+  const handleVoiceSearch = () => {
+    if (listeningKey === "marketplace-search") {
+      stopListening();
+      setSearchAssistantMessage("Voice search stopped.");
+      return;
+    }
+
+    const started = startListening("marketplace-search", (transcript) => {
+      setMarketplaceSearch(transcript);
+      recordEcommerceSearch(transcript);
+      setSearchAssistantMessage(`Voice search heard: "${transcript}".`);
+    });
+
+    if (!started) {
+      setSearchAssistantMessage("Voice search is not available on this device right now.");
+    }
+  };
+
+  const handleOpenQuickView = (product) => {
+    setQuickActionMessage("");
+    setQuickViewProduct(product);
+    trackRecentlyViewedProduct(product);
+    trackProductMetric(product.id, "click");
+  };
+
+  const handleCopyProductForChat = async (product) => {
+    const shareMessage = buildProductShareMessage(product);
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareMessage);
+        setQuickActionMessage("Product summary copied. You can paste it directly into NilaHub chat.");
+        return;
+      }
+    } catch (error) {
+      // Fall through to inline fallback copy.
+    }
+
+    setQuickActionMessage(shareMessage);
+  };
+
+  const handleScheduleRefill = (product) => {
+    const reminder = scheduleEcommerceRefillReminder(product);
+    if (reminder) {
+      setQuickActionMessage(
+        `Refill reminder set for ${formatDisplayDate(reminder.dueAt)}.`
+      );
+    }
+  };
 
   const businessProducts = managedProducts.filter(
     (product) => product.sellerEmail === currentUser?.email
@@ -1547,6 +1769,218 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
         </section>
       )}
 
+      {!isEntrepreneur && (
+        <section className="shopper-intelligence">
+          <div className="shopper-memory-grid">
+            <article className="shopper-intelligence-card">
+              <div className="section-heading shopper-heading">
+                <div>
+                  <h3>AI Shopping Assistant</h3>
+                  <p>
+                    Search in English or Malayalam, save recurring searches, and let the marketplace
+                    turn natural shopping intent into filters.
+                  </p>
+                </div>
+              </div>
+              <div className="smart-search-actions">
+                <button
+                  type="button"
+                  className={`btn btn-outline ${listeningKey === "marketplace-search" ? "voice-live" : ""}`}
+                  onClick={handleVoiceSearch}
+                >
+                  {listeningKey === "marketplace-search"
+                    ? "Stop Listening"
+                    : recognitionSupported
+                      ? "Voice Search"
+                      : "Voice Unavailable"}
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => handleApplySmartSearch()}>
+                  Apply Smart Search
+                </button>
+                <button type="button" className="btn btn-outline" onClick={handleSaveCurrentSearch}>
+                  Save Search
+                </button>
+              </div>
+              <p className="shopper-support-copy">
+                Try: "snacks under 300", "top rated chargers", "local groceries", or
+                "chips under 250".
+              </p>
+              {smartSearchPlan.summary && (
+                <p className="shopper-ai-summary">
+                  AI interpretation: {smartSearchPlan.summary}
+                </p>
+              )}
+              {searchAssistantMessage && (
+                <p className="shopper-assistant-message">{searchAssistantMessage}</p>
+              )}
+              <div className="category-filters">
+                {discoverySuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.id}
+                    type="button"
+                    className="filter-btn"
+                    onClick={() => handleSuggestionClick(suggestion)}
+                  >
+                    {suggestion.label}
+                  </button>
+                ))}
+              </div>
+            </article>
+
+            <article className="shopper-intelligence-card">
+              <div className="section-heading shopper-heading">
+                <div>
+                  <h3>For You</h3>
+                  <p>Recommendations based on favorites, cart activity, and recently viewed products.</p>
+                </div>
+              </div>
+              {personalizedRecommendations.length === 0 ? (
+                <p className="shopper-empty-copy">
+                  Browse or favorite a few products and NilaHub will start curating this section.
+                </p>
+              ) : (
+                <div className="shopper-mini-grid">
+                  {personalizedRecommendations.map((product) => (
+                    <button
+                      key={`recommendation-${product.id}`}
+                      type="button"
+                      className="shopper-mini-card"
+                      onClick={() => handleOpenQuickView(product)}
+                    >
+                      <strong>{sanitizeText(product.name)}</strong>
+                      <span>{sanitizeText(product.businessName) || "Marketplace seller"}</span>
+                      <span>INR {formatCurrency(product.price)}</span>
+                      <small>{sanitizeText(product.recommendationReason)}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </article>
+          </div>
+
+          <div className="shopper-memory-grid">
+            <article className="shopper-intelligence-card">
+              <div className="section-heading shopper-heading">
+                <div>
+                  <h3>Saved Searches</h3>
+                  <p>Keep your regular GlobeMart searches ready for one tap.</p>
+                </div>
+              </div>
+              {ecommerceSavedSearches.length === 0 ? (
+                <p className="shopper-empty-copy">Save a search after refining products you buy often.</p>
+              ) : (
+                <div className="shopper-pill-list">
+                  {ecommerceSavedSearches.slice(0, 4).map((savedSearch) => (
+                    <div key={savedSearch.id} className="shopper-pill-card">
+                      <button
+                        type="button"
+                        className="shopper-pill-action"
+                        onClick={() => handleApplySavedSearch(savedSearch)}
+                      >
+                        {savedSearch.label}
+                      </button>
+                      <button
+                        type="button"
+                        className="shopper-pill-remove"
+                        onClick={() => removeEcommerceSavedSearch(savedSearch.id)}
+                        aria-label={`Remove ${savedSearch.label}`}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {ecommerceSearchHistory.length > 0 && (
+                <>
+                  <h4 className="shopper-subheading">Recent search history</h4>
+                  <div className="category-filters">
+                    {ecommerceSearchHistory.slice(0, 4).map((historyEntry) => {
+                      const query = String(historyEntry?.query || historyEntry || "").trim();
+                      if (!query) {
+                        return null;
+                      }
+
+                      return (
+                        <button
+                          key={query}
+                          type="button"
+                          className="filter-btn"
+                          onClick={() => handleSuggestionClick({ id: query, label: query, query, filters: {} })}
+                        >
+                          {query}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </article>
+
+            <article className="shopper-intelligence-card">
+              <div className="section-heading shopper-heading">
+                <div>
+                  <h3>Recently Viewed</h3>
+                  <p>Jump back into products you explored across the marketplace.</p>
+                </div>
+              </div>
+              {ecommerceRecentlyViewed.length === 0 ? (
+                <p className="shopper-empty-copy">Open product quick view to start building your browsing trail.</p>
+              ) : (
+                <div className="shopper-mini-grid">
+                  {ecommerceRecentlyViewed.slice(0, 4).map((product) => (
+                    <button
+                      key={`recent-${product.id}`}
+                      type="button"
+                      className="shopper-mini-card"
+                      onClick={() => handleOpenQuickView(product)}
+                    >
+                      <strong>{sanitizeText(product.name)}</strong>
+                      <span>{sanitizeText(product.category) || "Category"}</span>
+                      <span>INR {formatCurrency(product.price)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </article>
+
+            <article className="shopper-intelligence-card">
+              <div className="section-heading shopper-heading">
+                <div>
+                  <h3>Refill Reminders</h3>
+                  <p>Groceries and repeat-purchase products stay visible before you run out.</p>
+                </div>
+              </div>
+              {upcomingRefillReminders.length === 0 ? (
+                <p className="shopper-empty-copy">
+                  Use product quick view to create your first refill reminder.
+                </p>
+              ) : (
+                <div className="shopper-reminder-list">
+                  {upcomingRefillReminders.map((reminder) => (
+                    <div key={reminder.id} className="shopper-reminder-card">
+                      <div>
+                        <strong>{sanitizeText(reminder.productName)}</strong>
+                        <p>
+                          Due {formatDisplayDate(reminder.dueAt)} every {reminder.cadenceDays} day(s)
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => dismissEcommerceRefillReminder(reminder.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+          </div>
+        </section>
+      )}
+
       <div className="filter-section">
         <div className="section-heading marketplace-heading">
           <div>
@@ -1585,7 +2019,12 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
                   type="search"
                   value={marketplaceSearch}
                   onChange={(event) => setMarketplaceSearch(event.target.value)}
-                  placeholder="Search by product, category, description, or business"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      recordEcommerceSearch(marketplaceSearch);
+                    }
+                  }}
+                  placeholder="Search by product, category, business, or natural shopping intent"
                   className={esSearchResults.loading ? "loading" : ""}
                 />
                 {esSearchResults.loading && <span className="search-spinner">🔍</span>}
@@ -2509,7 +2948,7 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
                   <ProductCard
                     key={product.id}
                     product={product}
-                    onOpenQuickView={() => setQuickViewProduct(product)}
+                    onOpenQuickView={() => handleOpenQuickView(product)}
                   />
                 ))}
               </div>
@@ -2636,6 +3075,25 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders, onOpenReturns }) =>
                     Add to Cart
                   </button>
                 </div>
+                <div className="quick-view-secondary-actions">
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => handleCopyProductForChat(quickViewProduct)}
+                  >
+                    Copy for Chat
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => handleScheduleRefill(quickViewProduct)}
+                  >
+                    Set Refill Reminder
+                  </button>
+                </div>
+                {quickActionMessage && (
+                  <p className="shopper-assistant-message">{quickActionMessage}</p>
+                )}
               </div>
             </div>
           </div>
@@ -2661,12 +3119,6 @@ Ecommerce.propTypes = {
   ),
   onOpenOrders: PropTypes.func,
   onOpenReturns: PropTypes.func,
-};
-
-Ecommerce.defaultProps = {
-  globeMartCategories: [],
-  onOpenOrders: null,
-  onOpenReturns: null,
 };
 
 export default Ecommerce;

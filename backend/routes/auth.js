@@ -349,6 +349,18 @@ const serializeUser = (user) => {
       : [],
     cart: Array.isArray(user.cart) ? user.cart : [],
     favorites: Array.isArray(user.favorites) ? user.favorites : [],
+    ecommerceSavedSearches: Array.isArray(user.ecommerceSavedSearches)
+      ? user.ecommerceSavedSearches
+      : [],
+    ecommerceRecentlyViewed: Array.isArray(user.ecommerceRecentlyViewed)
+      ? user.ecommerceRecentlyViewed
+      : [],
+    ecommerceSearchHistory: Array.isArray(user.ecommerceSearchHistory)
+      ? user.ecommerceSearchHistory
+      : [],
+    ecommerceRefillReminders: Array.isArray(user.ecommerceRefillReminders)
+      ? user.ecommerceRefillReminders
+      : [],
     savedAddresses: Array.isArray(user.savedAddresses) ? user.savedAddresses : [],
     preferences: {
       language: user.preferences?.language || 'en',
@@ -395,6 +407,10 @@ const patchUserSchema = Joi.object({
   selectedCategoryDetails: Joi.array().items(Joi.object()).optional(),
   cart: Joi.array().items(Joi.object()).optional(),
   favorites: Joi.array().items(Joi.object()).optional(),
+  ecommerceSavedSearches: Joi.array().items(Joi.object()).optional(),
+  ecommerceRecentlyViewed: Joi.array().items(Joi.object()).optional(),
+  ecommerceSearchHistory: Joi.array().items(Joi.alternatives().try(Joi.string(), Joi.object())).optional(),
+  ecommerceRefillReminders: Joi.array().items(Joi.object()).optional(),
   savedAddresses: Joi.array().items(Joi.object()).optional(),
   preferences: Joi.object({
     language: Joi.string().trim().max(10).default('en'),
