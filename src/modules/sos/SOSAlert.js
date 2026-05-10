@@ -212,6 +212,7 @@ const SOSAlert = () => {
     otpSent: false,
     otpCode: "",
     otpVerified: false,
+    otpContactId: "",
   });
   const [statusMessage, setStatusMessage] = useState("");
   const [locationError, setLocationError] = useState(null);
@@ -497,10 +498,16 @@ const SOSAlert = () => {
     try {
       const response = await apiCall("/sos/send-contact-otp", "POST", {
         phone: contactForm.phone,
+        name: contactForm.name,
+        channel: "whatsapp",
       });
 
       if (response?.success) {
-        setContactForm((prev) => ({ ...prev, otpSent: true }));
+        setContactForm((prev) => ({
+          ...prev,
+          otpSent: true,
+          otpContactId: response.contactId || "",
+        }));
         setStatusMessage("OTP sent to phone. Enter code below.");
         setOtpError("");
       }
@@ -518,7 +525,7 @@ const SOSAlert = () => {
 
     try {
       const response = await apiCall("/sos/verify-contact-otp", "POST", {
-        phone: contactForm.phone,
+        contactId: contactForm.otpContactId,
         otp: contactForm.otpCode,
       });
 
@@ -598,6 +605,7 @@ const SOSAlert = () => {
           otpSent: false,
           otpCode: "",
           otpVerified: false,
+          otpContactId: "",
         });
         setStatusMessage(`${contactForm.name} verified and saved to your SOS safety circle.`);
         loadData();

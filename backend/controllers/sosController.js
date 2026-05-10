@@ -8,7 +8,7 @@ const SpamReport = require('../models/SpamReport');
 const VideoRecording = require('../models/VideoRecording');
 const ContactGroup = require('../models/ContactGroup');
 const logger = require('../utils/logger');
-const { sendSMS } = require('../services/smsService');
+const { sendSMS, sendWhatsApp } = require('../services/smsService');
 const { uploadPhotoToS3 } = require('../services/s3Service');
 const { saveAudioFile, validateAudio } = require('../services/audioProcessingService');
 const { detectSpam } = require('../services/spamDetectionService');
@@ -66,15 +66,19 @@ exports.sendContactOTP = async (req, res) => {
       });
     }
 
-    // Send OTP via SMS
-    const smsResult = await sendSMS(phone, `Your NilaHub SOS verification code is: ${otp}. Valid for 5 minutes.`);
+    // Send OTP via requested channel
+    const channel = String(req.body.channel || 'sms').toLowerCase();
+    const otpMessage = `Your NilaHub SOS verification code is: ${otp}. Valid for 5 minutes.`;
+    const deliveryResult = channel === 'whatsapp'
+      ? await sendWhatsApp(phone, otpMessage)
+      : await sendSMS(phone, otpMessage);
 
-    if (!smsResult.success) {
-      logger.error(`SMS send failed for ${phone}: ${smsResult.error}`);
+    if (!deliveryResult.success) {
+      logger.error(`OTP send failed for ${phone} via ${channel}: ${deliveryResult.error}`);
       return res.status(503).json({
         success: false,
         message: 'Failed to send OTP. Please try again.',
-        error: 'SMS_SERVICE_UNAVAILABLE',
+        error: `${channel.toUpperCase()}_SERVICE_UNAVAILABLE`,
       });
     }
 

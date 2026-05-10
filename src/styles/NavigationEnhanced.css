@@ -852,3 +852,49 @@
     min-width: 260px;
   }
 }
+
+/* Reduced Header Clutter */
+.navbar {
+  padding: 0.65rem 0 0.55rem;
+}
+
+.nav-container {
+  gap: 0.65rem;
+}
+
+.nav-top-row {
+  gap: 0.8rem;
+}
+
+.nav-right {
+  gap: 0.55rem;
+  flex-wrap: nowrap;
+}
+
+.nav-link,
+.nav-more-btn,
+.sos-alert-button,
+.user-profile,
+.profile-btn,
+.logout-btn {
+  min-height: 40px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.nav-link,
+.nav-more-btn {
+  box-shadow: none;
+}
+
+.nav-link-active {
+  animation: none;
+}
+
+.user-profile {
+  padding: 0.35rem 0.6rem;
+}
+
+.sos-alert-button {
+  box-shadow: none;
+}

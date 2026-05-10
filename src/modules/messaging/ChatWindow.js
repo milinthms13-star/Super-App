@@ -62,6 +62,7 @@ const ChatWindow = ({
   const [isLiveLocationSharing, setIsLiveLocationSharing] = useState(false);
   const [liveLocationEndsAt, setLiveLocationEndsAt] = useState('');
   const [showBackgroundPanel, setShowBackgroundPanel] = useState(false);
+  const [showHeaderActionsMenu, setShowHeaderActionsMenu] = useState(false);
   const [backgroundError, setBackgroundError] = useState('');
   const [backgroundPreference, setBackgroundPreference] = useState({
     type: 'none',
@@ -81,6 +82,7 @@ const ChatWindow = ({
   const voiceRecordingStartedAtRef = useRef(0);
   const previousMessageSnapshotRef = useRef({ count: 0, lastId: '' });
   const emojiButtonRef = useRef(null);
+  const headerActionsMenuRef = useRef(null);
   const currentUserId = getEntityId(currentUser);
   const resolvedCurrentUserId = getEntityId(
     chat?.participants?.find((participant) => isSameEntity(participant, currentUser))
@@ -240,6 +242,7 @@ const ChatWindow = ({
 
   useEffect(() => {
     setShowLocationPanel(false);
+    setShowHeaderActionsMenu(false);
     setLocationError('');
     setIsLiveLocationSharing(false);
     setLiveLocationEndsAt('');
@@ -253,6 +256,23 @@ const ChatWindow = ({
       liveLocationTimeoutRef.current = null;
     }
   }, [chat?._id]);
+
+  useEffect(() => {
+    if (!showHeaderActionsMenu) {
+      return undefined;
+    }
+
+    const handleOutsideClick = (event) => {
+      if (headerActionsMenuRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setShowHeaderActionsMenu(false);
+    };
+
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, [showHeaderActionsMenu]);
 
   const getOtherParticipants = () =>
     chat?.participants?.filter((participant) => !isSameEntity(participant, currentUser)) || [];
@@ -920,9 +940,9 @@ const ChatWindow = ({
             <p className="chat-status">{getChatInfo()}</p>
           </div>
         </div>
-        <div className="chat-header-actions">
+        <div className="chat-header-actions" ref={headerActionsMenuRef}>
           <button
-            className={`btn-icon ${showSearch ? 'active' : ''}`}
+            className={`btn-icon btn-icon-secondary ${showSearch ? 'active' : ''}`}
             title="Search messages"
             onClick={() => setShowSearch((current) => !current)}
             type="button"
@@ -930,7 +950,23 @@ const ChatWindow = ({
             Search
           </button>
           <button
-            className={`btn-icon ${isChatCleared ? 'active' : ''}`}
+            className="btn-icon btn-icon-secondary"
+            title="Voice Call"
+            onClick={() => onStartCall('audio')}
+            type="button"
+          >
+            Audio
+          </button>
+          <button
+            className="btn-icon btn-icon-secondary"
+            title="Video Call"
+            onClick={() => onStartCall('video')}
+            type="button"
+          >
+            Video
+          </button>
+          <button
+            className={`btn-icon btn-icon-secondary ${isChatCleared ? 'active' : ''}`}
             title={isChatCleared ? 'Show cleared messages again' : 'Clear this chat from your view'}
             onClick={isChatCleared ? onRestoreClearedChat : onClearChat}
             type="button"
@@ -938,43 +974,83 @@ const ChatWindow = ({
             {isChatCleared ? 'Restore' : 'Clear'}
           </button>
           <button
-            className="btn-icon"
-            title="Delete all messages in this chat"
-            onClick={onDeleteAllMessages}
-            type="button"
-          >
-            Delete All
-          </button>
-          <button
-            className="btn-icon"
+            className="btn-icon btn-icon-secondary"
             title="Export chat transcript"
             onClick={onExportChat}
             type="button"
           >
             Export
           </button>
-          <button className="btn-icon" title="Voice Call" onClick={() => onStartCall('audio')} type="button">
-            Audio
-          </button>
-          <button className="btn-icon" title="Video Call" onClick={() => onStartCall('video')} type="button">
-            Video
-          </button>
           <button
-            className={`btn-icon ${encryptionEnabled ? 'active' : ''}`}
-            title={`${encryptionEnabled ? 'Disable' : 'Enable'} end-to-end encryption`}
-            onClick={onToggleEncryption}
+            className={`btn-icon btn-icon-secondary ${showHeaderActionsMenu ? 'active' : ''}`}
+            title="More chat actions"
+            onClick={(event) => {
+              event.stopPropagation();
+              setShowHeaderActionsMenu((current) => !current);
+            }}
             type="button"
           >
-            Encrypt
+            Tools
           </button>
-          <button
-            className={`btn-icon ${showBackgroundPanel ? 'active' : ''}`}
-            title="Chat background settings"
-            onClick={() => setShowBackgroundPanel((current) => !current)}
-            type="button"
-          >
-            Background
-          </button>
+
+          {showHeaderActionsMenu && (
+            <div className="chat-header-actions-menu">
+              <button
+                className="chat-header-actions-item"
+                onClick={() => {
+                  if (isChatCleared) {
+                    onRestoreClearedChat?.();
+                  } else {
+                    onClearChat?.();
+                  }
+                  setShowHeaderActionsMenu(false);
+                }}
+                type="button"
+              >
+                {isChatCleared ? 'Restore Chat' : 'Clear Chat'}
+              </button>
+              <button
+                className="chat-header-actions-item"
+                onClick={() => {
+                  onExportChat?.();
+                  setShowHeaderActionsMenu(false);
+                }}
+                type="button"
+              >
+                Export Chat
+              </button>
+              <button
+                className={`chat-header-actions-item ${encryptionEnabled ? 'active' : ''}`}
+                onClick={() => {
+                  onToggleEncryption?.();
+                  setShowHeaderActionsMenu(false);
+                }}
+                type="button"
+              >
+                {encryptionEnabled ? 'Disable Encryption' : 'Enable Encryption'}
+              </button>
+              <button
+                className={`chat-header-actions-item ${showBackgroundPanel ? 'active' : ''}`}
+                onClick={() => {
+                  setShowBackgroundPanel((current) => !current);
+                  setShowHeaderActionsMenu(false);
+                }}
+                type="button"
+              >
+                {showBackgroundPanel ? 'Hide Background Panel' : 'Background Settings'}
+              </button>
+              <button
+                className="chat-header-actions-item danger"
+                onClick={() => {
+                  onDeleteAllMessages?.();
+                  setShowHeaderActionsMenu(false);
+                }}
+                type="button"
+              >
+                Delete All Messages
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1269,7 +1345,7 @@ const ChatWindow = ({
                     )}
                     {!message.isDeleted && !message.isPending && isOwnMessage && (
                       <button
-                        className="message-inline-action danger"
+                        className="message-inline-action message-overflow-action danger"
                         onClick={() => handleRecallMessage(message)}
                         type="button"
                         title="Recall message"
@@ -1288,24 +1364,15 @@ const ChatWindow = ({
                       </button>
                     )}
                     {!message.isDeleted && (
-                      <>
-                        <button
-                          className="message-react-trigger"
-                          onClick={(event) => handleAddReaction(message, event)}
-                          type="button"
-                          title="Add reaction"
-                        >
-                          +
-                        </button>
-                        <button
-                          className="message-inline-action"
-                          onClick={(event) => handleActionButtonClick(event, message, isOwnMessage)}
-                          type="button"
-                          title="More actions"
-                        >
-                          More
-                        </button>
-                      </>
+                      <button
+                        className="message-inline-action message-overflow-action"
+                        onClick={(event) => handleActionButtonClick(event, message, isOwnMessage)}
+                        type="button"
+                        title="More actions"
+                        aria-label="More actions"
+                      >
+                        ⋯
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1398,18 +1465,23 @@ const ChatWindow = ({
         <div className="message-actions">
           <button
             ref={emojiButtonRef}
-            className="btn-action"
+            className="btn-action btn-action-secondary"
             title="Emoji picker"
             onClick={toggleComposerEmojiPicker}
             type="button"
           >
             Emoji
           </button>
-          <button className="btn-action" title="Attach file" onClick={onOpenFileUpload} type="button">
+          <button
+            className="btn-action btn-action-secondary"
+            title="Attach file"
+            onClick={onOpenFileUpload}
+            type="button"
+          >
             File
           </button>
           <button
-            className={`btn-action ${showLocationPanel ? 'active' : ''}`}
+            className={`btn-action btn-action-secondary ${showLocationPanel ? 'active' : ''}`}
             title="Share location"
             onClick={() => setShowLocationPanel((current) => !current)}
             type="button"
@@ -1417,7 +1489,7 @@ const ChatWindow = ({
             Location
           </button>
           <button
-            className={`btn-action ${isRecordingVoice ? 'voice-recording' : ''}`}
+            className={`btn-action btn-action-secondary ${isRecordingVoice ? 'voice-recording' : ''}`}
             title={isRecordingVoice ? 'Stop and send voice note' : 'Record voice note'}
             onClick={handleVoiceButtonClick}
             disabled={sendingVoiceMessage}
@@ -1426,7 +1498,7 @@ const ChatWindow = ({
             {sendingVoiceMessage ? 'Sending...' : isRecordingVoice ? 'Stop Voice' : 'Voice'}
           </button>
           <button
-            className="btn-send"
+            className="btn-send btn-action-primary"
             onClick={handleSendMessage}
             disabled={!messageInput.trim()}
             title="Send message"
@@ -1477,7 +1549,7 @@ const ChatWindow = ({
               {locationMode === 'current' ? (
                 <button
                   type="button"
-                  className="location-primary-btn"
+                  className="location-primary-btn btn-action-primary"
                   onClick={handleShareCurrentLocation}
                 >
                   Share Current Location
@@ -1489,7 +1561,7 @@ const ChatWindow = ({
                   </span>
                   <button
                     type="button"
-                    className="location-stop-btn"
+                    className="location-stop-btn btn-action-danger"
                     onClick={() => stopLiveLocationSharing({ notifyChat: true })}
                   >
                     Stop Live Sharing
@@ -1498,7 +1570,7 @@ const ChatWindow = ({
               ) : (
                 <button
                   type="button"
-                  className="location-primary-btn"
+                  className="location-primary-btn btn-action-primary"
                   onClick={handleStartLiveLocation}
                 >
                   Start Live Sharing

@@ -189,10 +189,34 @@ exports.sendBulkSMS = async (phoneNumbers, message) => {
  */
 exports.sendWhatsApp = async (phoneNumber, message) => {
   try {
-    // TODO: Implement WhatsApp integration
-    // For now, fall back to SMS
-    logger.warn('WhatsApp integration not yet implemented, using SMS instead');
-    return exports.sendSMS(phoneNumber, message);
+    const twilio = require('twilio');
+    const client = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+
+    if (!process.env.TWILIO_WHATSAPP_NUMBER) {
+      logger.warn('TWILIO_WHATSAPP_NUMBER is not configured; falling back to SMS');
+      return exports.sendSMS(phoneNumber, message);
+    }
+
+    let formattedPhone = String(phoneNumber || '').trim();
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = formattedPhone.length === 10 ? `+91${formattedPhone}` : `+${formattedPhone}`;
+    }
+
+    const result = await client.messages.create({
+      body: message,
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+      to: `whatsapp:${formattedPhone}`,
+    });
+
+    logger.info(`WhatsApp message sent to ${formattedPhone}: ${result.sid}`);
+    return {
+      success: true,
+      messageId: result.sid,
+      message: 'WhatsApp sent successfully',
+    };
   } catch (error) {
     logger.error(`sendWhatsApp error: ${error.message}`);
     return {

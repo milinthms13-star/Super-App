@@ -212,17 +212,6 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
             <GlobalSearch />
 
             <div className="nav-right">
-              <div className="notifications-badge">
-                <button 
-                  type="button"
-                  className="notification-bell"
-                  title="Notifications"
-                >
-                  🔔
-                </button>
-                <span className="badge-dot">●</span>
-              </div>
-
               {showSosButton && (
                 <button
                   type="button"
@@ -389,4 +378,3 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 };
 
 export default Navigation;
-
