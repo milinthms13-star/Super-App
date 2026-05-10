@@ -156,6 +156,13 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 
     return Object.entries(categorized).filter(([_, catData]) => catData.modules.length > 0);
   };
+  const categorizedMoreModules = getCategorizedModules();
+  const uncategorizedMoreModules = getMoreNavModules().filter(
+    (module) =>
+      !Object.values(MODULE_CATEGORIES).some((category) =>
+        category.modules.includes(module.id)
+      )
+  );
 
   const handleSOSButtonClick = () => {
     if (!showSosButton) {
@@ -196,6 +203,17 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                 </button>
                 <span className="badge-dot">●</span>
               </div>
+
+              {showSosButton && (
+                <button
+                  type="button"
+                  className="sos-alert-button"
+                  onClick={handleSOSButtonClick}
+                  title="Emergency SOS - triggers immediate help"
+                >
+                  SOS
+                </button>
+              )}
               
               <div className="user-profile" onClick={() => setShowUserMenu(!showUserMenu)}>
                 <span className="user-avatar">
@@ -227,16 +245,6 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                             : t("navigation.businessAccess", "Business access")}
                       </span>
                     </div>
-                    {showSosButton && (
-                      <button
-                        type="button"
-                        className="sos-menu-item"
-                        onClick={handleSOSButtonClick}
-                        title="Emergency SOS - triggers immediate help"
-                      >
-                        🆘 SOS Emergency
-                      </button>
-                    )}
                     <button 
                       className="profile-btn"
                       onClick={() => {
@@ -285,7 +293,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 
                   {showMoreMenu && (
                     <div className="nav-categories-dropdown">
-                      {getCategorizedModules().map(([catKey, catData]) => (
+                      {categorizedMoreModules.map(([catKey, catData]) => (
                         <div key={catKey} className="nav-categories-group">
                           <div className="nav-category-header">
                             <span className="nav-category-header-icon">{catData.icon}</span>
@@ -308,6 +316,26 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                           ))}
                         </div>
                       ))}
+                      {categorizedMoreModules.length === 0 &&
+                        uncategorizedMoreModules.map((module) => (
+                          <button
+                            key={module.id}
+                            type="button"
+                            className={`nav-category-link ${
+                              currentModule === module.id ? "active" : ""
+                            }`}
+                            onClick={() => handleModuleClick(module.id)}
+                          >
+                            <span className="nav-category-icon">{module.icon || "•"}</span>
+                            <span>{module.label}</span>
+                          </button>
+                        ))}
+                      {categorizedMoreModules.length === 0 &&
+                        uncategorizedMoreModules.length === 0 && (
+                          <div className="nav-empty-state">
+                            No additional modules enabled
+                          </div>
+                        )}
                     </div>
                   )}
                 </div>

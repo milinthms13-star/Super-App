@@ -1,49 +1,103 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo } from "react";
+import { useApp } from "../contexts/AppContext";
 import "../styles/EngagementScore.css";
 
-const EngagementScore = ({ currentUser }) => {
-  const [engagementData, setEngagementData] = useState({
-    overallScore: 78,
-    level: "Power User",
-    levelIcon: "⭐",
-    thisWeek: 45,
-    thisMonth: 156,
-    metrics: [
-      { label: "Purchases", value: 12, icon: "🛍️", trend: "+3 this week" },
-      { label: "Messages Sent", value: 89, icon: "💬", trend: "+22 this week" },
-      { label: "Rides Booked", value: 8, icon: "🚗", trend: "+2 this week" },
-      { label: "Orders Placed", value: 5, icon: "🍽️", trend: "+1 this week" },
-    ],
-    achievements: [
-      { id: 1, name: "Early Bird", icon: "🌅", description: "First 5 bookings" },
-      { id: 2, name: "Social Butterfly", icon: "🦋", description: "100+ messages" },
-      { id: 3, name: "Foodie", icon: "👨‍🍳", description: "10 food orders" },
-      { id: 4, name: "Explorer", icon: "🗺️", description: "15 rides taken" },
-    ],
-  });
+const getScoreColor = (score) => {
+  if (score >= 80) return "#00B894";
+  if (score >= 60) return "#FFD700";
+  if (score >= 40) return "#FFA500";
+  return "#FF6B6B";
+};
 
-  const getScoreColor = (score) => {
-    if (score >= 80) return "#00B894";
-    if (score >= 60) return "#FFD700";
-    if (score >= 40) return "#FFA500";
-    return "#FF6B6B";
-  };
+const getLevelName = (score) => {
+  if (score >= 90) return "Legendary User";
+  if (score >= 80) return "Power User";
+  if (score >= 70) return "Active User";
+  if (score >= 50) return "Regular User";
+  if (score > 0) return "Getting Started";
+  return "New User";
+};
 
-  const getLevelName = (score) => {
-    if (score >= 90) return "Legendary User";
-    if (score >= 80) return "Power User";
-    if (score >= 70) return "Active User";
-    if (score >= 50) return "Regular User";
-    return "New User";
-  };
+const EngagementScore = () => {
+  const { orders, cart, mockData } = useApp();
+
+  const engagementData = useMemo(() => {
+    const metrics = [
+      {
+        label: "Cart Items",
+        value: Number((cart || []).reduce((total, item) => total + Number(item.quantity || 1), 0)),
+        icon: "C",
+      },
+      {
+        label: "Orders",
+        value: Number(Array.isArray(orders) ? orders.length : 0),
+        icon: "O",
+      },
+      {
+        label: "Messages",
+        value: Number(Array.isArray(mockData?.conversations) ? mockData.conversations.length : 0),
+        icon: "M",
+      },
+      {
+        label: "Social Posts",
+        value: Number(Array.isArray(mockData?.socialMediaPosts) ? mockData.socialMediaPosts.length : 0),
+        icon: "S",
+      },
+    ];
+
+    const totalActions = metrics.reduce((sum, metric) => sum + Number(metric.value || 0), 0);
+    const overallScore = Math.max(0, Math.min(100, totalActions * 5));
+
+    const achievements = [
+      {
+        id: 1,
+        name: "Starter",
+        icon: "1",
+        description: `Total actions: ${totalActions}`,
+      },
+      {
+        id: 2,
+        name: "Shop",
+        icon: "2",
+        description: `Orders: ${metrics[1].value}`,
+      },
+      {
+        id: 3,
+        name: "Connect",
+        icon: "3",
+        description: `Messages: ${metrics[2].value}`,
+      },
+      {
+        id: 4,
+        name: "Share",
+        icon: "4",
+        description: `Posts: ${metrics[3].value}`,
+      },
+    ];
+
+    return {
+      overallScore,
+      level: getLevelName(overallScore),
+      levelIcon: overallScore >= 80 ? "*" : overallScore >= 40 ? "+" : "-",
+      thisWeek: totalActions,
+      thisMonth: totalActions,
+      metrics: metrics.map((metric) => ({
+        ...metric,
+        trend: `Current: ${Number(metric.value || 0)}`,
+      })),
+      achievements,
+      totalActions,
+    };
+  }, [cart, mockData, orders]);
+
+  const actionsToNextLevel = Math.max(0, Math.ceil((100 - engagementData.overallScore) / 5));
 
   return (
     <div className="engagement-score">
-      {/* Score Card */}
       <div className="score-card">
         <div className="score-header">
           <h3 className="score-title">Your Engagement</h3>
-          <p className="score-period">This Month</p>
+          <p className="score-period">Live Data</p>
         </div>
 
         <div className="score-display">
@@ -54,7 +108,7 @@ const EngagementScore = ({ currentUser }) => {
             }}
           >
             <div className="score-inner">
-              <div className="score-number">{engagementData.overallScore}</div>
+              <div className="score-number">{Number(engagementData.overallScore || 0)}</div>
               <div className="score-label">Score</div>
             </div>
           </div>
@@ -62,42 +116,38 @@ const EngagementScore = ({ currentUser }) => {
           <div className="score-info">
             <div className="level-badge">
               <span className="level-icon">{engagementData.levelIcon}</span>
-              <span className="level-name">{getLevelName(engagementData.overallScore)}</span>
+              <span className="level-name">{engagementData.level}</span>
             </div>
-            <p className="score-description">
-              You're in the top 15% of active users this month
-            </p>
+            <p className="score-description">Score is calculated from real tracked dashboard activity.</p>
             <div className="activity-stats">
               <div className="stat">
                 <span className="stat-label">This Week:</span>
-                <span className="stat-value">{engagementData.thisWeek} actions</span>
+                <span className="stat-value">{Number(engagementData.thisWeek || 0)} actions</span>
               </div>
               <div className="stat">
                 <span className="stat-label">This Month:</span>
-                <span className="stat-value">{engagementData.thisMonth} actions</span>
+                <span className="stat-value">{Number(engagementData.thisMonth || 0)} actions</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Metrics Grid */}
       <div className="metrics-grid">
         {engagementData.metrics.map((metric) => (
           <div key={metric.label} className="metric-card">
             <div className="metric-icon">{metric.icon}</div>
             <div className="metric-content">
               <p className="metric-label">{metric.label}</p>
-              <p className="metric-value">{metric.value}</p>
+              <p className="metric-value">{Number(metric.value || 0)}</p>
               <p className="metric-trend">{metric.trend}</p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Achievements */}
       <div className="achievements-section">
-        <h4 className="achievements-title">🏆 Achievements</h4>
+        <h4 className="achievements-title">Achievements</h4>
         <div className="achievements-grid">
           {engagementData.achievements.map((achievement) => (
             <div key={achievement.id} className="achievement-badge">
@@ -111,11 +161,10 @@ const EngagementScore = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* Next Level Progress */}
       <div className="next-level">
         <p className="next-level-text">
-          <span className="next-level-icon">🚀</span>
-          {Math.ceil((100 - engagementData.overallScore) / 5)} more actions to reach Legendary status
+          <span className="next-level-icon">^</span>
+          {Number(actionsToNextLevel || 0)} more actions to reach 100 score
         </p>
       </div>
     </div>

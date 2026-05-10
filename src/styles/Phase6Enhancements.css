@@ -12,7 +12,7 @@
 
 .modules-grid .module-card {
   animation: staggerFadeIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  opacity: 0;
+  opacity: 1;
 }
 
 .modules-grid .module-card:nth-child(1) { animation-delay: 0.05s; }
@@ -67,7 +67,7 @@
 
 .activity-timeline .activity-item {
   animation: staggerFadeIn 0.5s ease-out forwards;
-  opacity: 0;
+  opacity: 1;
 }
 
 .activity-timeline .activity-item:nth-child(1) { animation-delay: 0.05s; }
@@ -98,7 +98,7 @@
 
 .recommendations-carousel .recommendation-card {
   animation: staggerScaleIn 0.6s ease-out forwards;
-  opacity: 0;
+  opacity: 1;
 }
 
 .recommendations-carousel .recommendation-card:nth-child(1) { animation-delay: 0.05s; }
@@ -142,7 +142,7 @@
 
 .metric-card {
   animation: staggerFadeIn 0.5s ease-out forwards;
-  opacity: 0;
+  opacity: 1;
 }
 
 .metrics-grid .metric-card:nth-child(1) { animation-delay: 0.1s; }
@@ -152,7 +152,7 @@
 
 .achievement-badge {
   animation: staggerScaleIn 0.5s ease-out forwards;
-  opacity: 0;
+  opacity: 1;
 }
 
 .achievements-grid .achievement-badge:nth-child(1) { animation-delay: 0.05s; }
@@ -249,7 +249,7 @@
 
 .quick-actions-grid > button {
   animation: staggerSlideInLeft 0.5s ease-out forwards;
-  opacity: 0;
+  opacity: 1;
 }
 
 .quick-actions-grid > button:nth-child(1) { animation-delay: 0.05s; }
@@ -305,7 +305,7 @@
 
 .stats-section .stat-card {
   animation: staggerFadeIn 0.5s ease-out forwards;
-  opacity: 0;
+  opacity: 1;
 }
 
 .stats-section .stat-card:nth-child(1) { animation-delay: 0.05s; }

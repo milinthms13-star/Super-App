@@ -321,6 +321,12 @@
   transform: scale(1.2) rotate(5deg);
 }
 
+.nav-empty-state {
+  padding: 0.9rem 1.1rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.9rem;
+}
+
 .nav-categories-divider {
   height: 1px;
   background: rgba(255, 215, 0, 0.1);

@@ -149,9 +149,12 @@ const ProductCard = ({ product, onOpenQuickView = null }) => {
             onError={handleImageError}
           />
         ) : (
-          <span className="product-emoji" role="img" aria-label={sanitizeText(product.name)}>
-            {sanitizeText(product.name)?.slice(0, 1)?.toUpperCase() || "P"}
-          </span>
+          <img
+            className="product-media-image"
+            src="https://via.placeholder.com/300x200/FFD700/000000?text=Product+Image"
+            alt={sanitizeText(product.name) || "Product"}
+            loading="lazy"
+          />
         )}
         <button
           type="button"
@@ -183,6 +186,35 @@ const ProductCard = ({ product, onOpenQuickView = null }) => {
         )}
 
         {product.description && <p className="product-description">{sanitizeText(product.description)}</p>}
+
+        {/* Trust Signals */}
+        <div className="product-trust-signals">
+          {product.verifiedSeller && (
+            <span className="trust-signal verified-seller">
+              ✓ Verified Seller
+            </span>
+          )}
+          {product.fastDelivery && (
+            <span className="trust-signal fast-delivery">
+              🚚 Fast Delivery
+            </span>
+          )}
+          {product.securePayment && (
+            <span className="trust-signal secure-payment">
+              🔒 Secure Payment
+            </span>
+          )}
+          {product.returnEligible && (
+            <span className="trust-signal return-eligible">
+              ↩️ Return Eligible
+            </span>
+          )}
+          {product.trustedBy && (
+            <span className="trust-signal trusted-by">
+              👥 Trusted by {product.trustedBy} users
+            </span>
+          )}
+        </div>
 
         <div className="product-detail-stack">
           {batchMeta.length > 0 && (

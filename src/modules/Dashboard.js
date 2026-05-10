@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import DashboardWebSocketClient from "../websocket/dashboardWebSocketClient";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
@@ -350,6 +350,28 @@ const openExternalLink = (url = "") => {
   window.open(url, "_blank", "noopener,noreferrer");
 };
 
+const normalizeEnabledModuleIds = (modules) => {
+  if (!Array.isArray(modules)) {
+    return [];
+  }
+
+  return modules
+    .map((moduleEntry) => {
+      if (typeof moduleEntry === "string") {
+        return moduleEntry.trim().toLowerCase();
+      }
+
+      if (moduleEntry && typeof moduleEntry === "object") {
+        return String(moduleEntry.id || moduleEntry.moduleId || moduleEntry.module || "")
+          .trim()
+          .toLowerCase();
+      }
+
+      return "";
+    })
+    .filter(Boolean);
+};
+
 const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) => {
     // Real-time analytics state
     const [dashboardAnalytics, setDashboardAnalytics] = useState(null);
@@ -414,6 +436,14 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
   const sellerReturnedListings = sellerListings.filter((product) => isReturnedForReview(product));
   const visibleSellerListings = sellerListings.filter((product) => !isReturnedForReview(product));
   const sellerFulfillmentPendingCount = sellerOrderStats.openFulfillmentCount || 0;
+  const normalizedEnabledModuleIds = useMemo(
+    () => normalizeEnabledModuleIds(enabledModules),
+    [enabledModules]
+  );
+  const hasRecognizedEnabledModules = normalizedEnabledModuleIds.some((enabledModuleId) =>
+    MODULE_CONFIG.some((module) => module.id === enabledModuleId)
+  );
+
   const handleModuleNavigation = (moduleId) => {
     if (typeof onModuleChange === "function") {
       onModuleChange(moduleId);
@@ -448,11 +478,12 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       description: t(module.descriptionKey, module.fallbackDescription),
     }))
     .filter((module) => {
-      // Fallback: if enabledModules is empty, show all modules
-      const enabledModulesList = Array.isArray(enabledModules) && enabledModules.length > 0 
-        ? enabledModules 
-        : MODULE_CONFIG.map(m => m.id);
-      return enabledModulesList.includes(module.id);
+      // Show all modules when enabled list is absent or has no recognized IDs.
+      if (!hasRecognizedEnabledModules) {
+        return true;
+      }
+
+      return normalizedEnabledModuleIds.includes(module.id);
     })
     .filter((module) => !isSeller || subscribedCategoryIds.includes(module.id));
   const visibleCards = [
@@ -500,7 +531,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
           <>
             {!isSeller && (
               <>
-                <EnhancedHeroSection currentUser={currentUser} isSeller={isSeller} />
+                <EnhancedHeroSection
+                  currentUser={currentUser}
+                  isSeller={isSeller}
+                  enabledModules={enabledModules}
+                />
                 <EcosystemVisualization />
                 <ScrollAnimationObserver>
                   <PersonalizedActivityFeed currentUser={currentUser} />
@@ -659,6 +694,15 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
             <div className="recent-orders seller-empty-dashboard">
               <h2>No Subscribed Categories</h2>
               <p>Your seller account does not have any active subscribed categories visible right now.</p>
+            </div>
+          )}
+          {!isSeller && visibleCards.length === 0 && (
+            <div className="recent-orders seller-empty-dashboard">
+              <h2>No Enabled Services Found</h2>
+              <p>
+                No service modules are currently visible. If modules are enabled in admin, refresh once
+                or re-open the dashboard.
+              </p>
             </div>
           )}
         </div>

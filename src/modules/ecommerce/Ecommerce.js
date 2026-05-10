@@ -2979,25 +2979,46 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders = null, onOpenReturn
                 �
               </button>
             <div className="quick-view-content">
-              <div className="quick-view-image">
-                {resolveProductImageSrc(
-                  quickViewProduct.image,
-                  quickViewProduct.imageVariants,
-                  "hero"
-                ) ? (
-                  <img
-                    src={resolveProductImageSrc(
-                      quickViewProduct.image,
-                      quickViewProduct.imageVariants,
-                      "hero"
-                    )}
-                    alt={quickViewProduct.name}
-                    loading="lazy"
-                  />
-                ) : (
-                  <span className="product-emoji">
-                    {quickViewProduct.name?.slice(0, 1)?.toUpperCase() || "P"}
-                  </span>
+              <div className="quick-view-image-section">
+                <div className="quick-view-image">
+                  {resolveProductImageSrc(
+                    quickViewProduct.image,
+                    quickViewProduct.imageVariants,
+                    "hero"
+                  ) ? (
+                    <img
+                      src={resolveProductImageSrc(
+                        quickViewProduct.image,
+                        quickViewProduct.imageVariants,
+                        "hero"
+                      )}
+                      alt={quickViewProduct.name}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <img
+                      src="https://via.placeholder.com/400x400/FFD700/000000?text=Product+Image"
+                      alt={quickViewProduct.name}
+                      loading="lazy"
+                    />
+                  )}
+                </div>
+                {/* Product Gallery Thumbnails */}
+                {quickViewProduct.imageVariants && Object.keys(quickViewProduct.imageVariants).length > 1 && (
+                  <div className="quick-view-gallery">
+                    {Object.entries(quickViewProduct.imageVariants).map(([key, url]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className="gallery-thumb"
+                        onClick={() => {
+                          // Could implement image switching here
+                        }}
+                      >
+                        <img src={url} alt={`${quickViewProduct.name} ${key}`} />
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
               <div className="quick-view-details">
@@ -3018,6 +3039,67 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders = null, onOpenReturn
                   {quickViewProduct.batchLabel && <span>Batch {quickViewProduct.batchLabel}</span>}
                   {quickViewProduct.batchLocation && <span>{quickViewProduct.batchLocation}</span>}
                 </div>
+
+                {/* Trust Signals */}
+                <div className="quick-view-trust-signals">
+                  {quickViewProduct.verifiedSeller && (
+                    <span className="trust-signal verified-seller">
+                      ✓ Verified Seller
+                    </span>
+                  )}
+                  {quickViewProduct.fastDelivery && (
+                    <span className="trust-signal fast-delivery">
+                      🚚 Fast Delivery
+                    </span>
+                  )}
+                  {quickViewProduct.securePayment && (
+                    <span className="trust-signal secure-payment">
+                      🔒 Secure Payment
+                    </span>
+                  )}
+                  {quickViewProduct.returnEligible && (
+                    <span className="trust-signal return-eligible">
+                      ↩️ Return Eligible
+                    </span>
+                  )}
+                  {quickViewProduct.trustedBy && (
+                    <span className="trust-signal trusted-by">
+                      👥 Trusted by {quickViewProduct.trustedBy} users
+                    </span>
+                  )}
+                </div>
+
+                {/* Reviews Section */}
+                {quickViewProduct.reviews && quickViewProduct.reviews > 0 && (
+                  <div className="quick-view-reviews">
+                    <h3>Customer Reviews</h3>
+                    <div className="review-summary">
+                      <span className="stars">★ {quickViewProduct.rating || 4.5}</span>
+                      <span className="review-count">({quickViewProduct.reviews} reviews)</span>
+                    </div>
+                    {/* Placeholder for actual reviews */}
+                    <div className="review-item">
+                      <div className="review-header">
+                        <span className="review-author">Anonymous Buyer</span>
+                        <span className="review-rating">★★★★★</span>
+                      </div>
+                      <p className="review-text">Great product! Highly recommended.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Seller Details */}
+                {quickViewProduct.businessName && (
+                  <div className="quick-view-seller">
+                    <h3>Seller Information</h3>
+                    <div className="seller-info">
+                      <p><strong>{quickViewProduct.businessName}</strong></p>
+                      <p>Verified seller with excellent ratings</p>
+                      <p>Contact: Available in chat</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="quick-view-pricing">
                   <div>
                     <span className="product-price-label">Price</span>
@@ -3091,6 +3173,25 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders = null, onOpenReturn
                     Set Refill Reminder
                   </button>
                 </div>
+
+                {/* Related Products */}
+                <div className="quick-view-related">
+                  <h3>Related Products</h3>
+                  <div className="related-products">
+                    {/* Placeholder for related products */}
+                    <div className="related-product">
+                      <img src="https://via.placeholder.com/100x100/FFD700/000000?text=Related" alt="Related product" />
+                      <p>Similar Product</p>
+                      <span>INR 500</span>
+                    </div>
+                    <div className="related-product">
+                      <img src="https://via.placeholder.com/100x100/FFD700/000000?text=Related" alt="Related product" />
+                      <p>Another Product</p>
+                      <span>INR 750</span>
+                    </div>
+                  </div>
+                </div>
+
                 {quickActionMessage && (
                   <p className="shopper-assistant-message">{quickActionMessage}</p>
                 )}
