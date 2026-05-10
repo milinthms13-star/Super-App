@@ -68,6 +68,14 @@
   overflow: hidden;
 }
 
+.video-container-both-sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px;
+  align-items: stretch;
+}
+
 .remote-video,
 .screen-video {
   width: 100%;
@@ -86,6 +94,19 @@
   object-fit: cover;
   background: #0f172a;
   border: 2px solid rgba(255, 255, 255, 0.16);
+}
+
+.video-container-both-sides .remote-video,
+.video-container-both-sides .local-video {
+  min-height: 320px;
+  height: 100%;
+  border-radius: 14px;
+}
+
+.local-video-both-sides {
+  position: static;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .audio-call-container {
@@ -180,5 +201,13 @@
     height: 88px;
     right: 12px;
     bottom: 12px;
+  }
+
+  .video-container-both-sides {
+    grid-template-columns: 1fr;
+  }
+
+  .local-video-both-sides {
+    height: 220px;
   }
 }

@@ -370,9 +370,9 @@ const initializeWebSocket = (server, options = {}) => {
     });
 
     /**
-     * Relay WebRTC offers, answers, and ICE candidates between call participants.
+     * Relay WebRTC offers, answers, ICE candidates, and shared call UI state.
      * @event call:signal
-     * @param {object} data - {callId, targetUserId?, description?, candidate?}
+     * @param {object} data - {callId, targetUserId?, description?, candidate?, backgroundMode?}
      */
     socket.on('call:signal', async (data = {}) => {
       try {
@@ -389,8 +389,15 @@ const initializeWebSocket = (server, options = {}) => {
         const { call } = relayTarget;
         const hasDescription = Boolean(data.description?.type && data.description?.sdp);
         const hasCandidate = Boolean(data.candidate);
+        const normalizedBackgroundMode =
+          data.backgroundMode?.layout === 'both-sides'
+            ? { layout: 'both-sides' }
+            : data.backgroundMode?.layout === 'one-side'
+              ? { layout: 'one-side' }
+              : undefined;
+        const hasBackgroundMode = Boolean(normalizedBackgroundMode);
 
-        if (!hasDescription && !hasCandidate) {
+        if (!hasDescription && !hasCandidate && !hasBackgroundMode) {
           return;
         }
 
@@ -413,6 +420,7 @@ const initializeWebSocket = (server, options = {}) => {
           fromUserId: socket.userId,
           description: hasDescription ? data.description : undefined,
           candidate: hasCandidate ? data.candidate : undefined,
+          backgroundMode: hasBackgroundMode ? normalizedBackgroundMode : undefined,
           timestamp: new Date(),
         });
       } catch (error) {

@@ -50,6 +50,12 @@ const ChatWindow = ({
   const [replyingToMessage, setReplyingToMessage] = useState(null);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [voiceError, setVoiceError] = useState('');
+  const [showLocationPanel, setShowLocationPanel] = useState(false);
+  const [locationMode, setLocationMode] = useState('current');
+  const [locationDurationMinutes, setLocationDurationMinutes] = useState(60);
+  const [locationError, setLocationError] = useState('');
+  const [isLiveLocationSharing, setIsLiveLocationSharing] = useState(false);
+  const [liveLocationEndsAt, setLiveLocationEndsAt] = useState('');
   const [showBackgroundPanel, setShowBackgroundPanel] = useState(false);
   const [backgroundError, setBackgroundError] = useState('');
   const [backgroundPreference, setBackgroundPreference] = useState({
@@ -61,6 +67,8 @@ const ChatWindow = ({
   const messageContainerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
+  const liveLocationIntervalRef = useRef(null);
+  const liveLocationTimeoutRef = useRef(null);
   const liveBackgroundVideoRef = useRef(null);
   const liveBackgroundStreamRef = useRef(null);
   const uploadedVideoUrlRef = useRef('');
@@ -124,6 +132,15 @@ const ChatWindow = ({
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
+    }
+
+    if (liveLocationIntervalRef.current) {
+      window.clearInterval(liveLocationIntervalRef.current);
+      liveLocationIntervalRef.current = null;
+    }
+    if (liveLocationTimeoutRef.current) {
+      window.clearTimeout(liveLocationTimeoutRef.current);
+      liveLocationTimeoutRef.current = null;
     }
   }, []);
 
@@ -214,6 +231,22 @@ const ChatWindow = ({
     },
     []
   );
+
+  useEffect(() => {
+    setShowLocationPanel(false);
+    setLocationError('');
+    setIsLiveLocationSharing(false);
+    setLiveLocationEndsAt('');
+
+    if (liveLocationIntervalRef.current) {
+      window.clearInterval(liveLocationIntervalRef.current);
+      liveLocationIntervalRef.current = null;
+    }
+    if (liveLocationTimeoutRef.current) {
+      window.clearTimeout(liveLocationTimeoutRef.current);
+      liveLocationTimeoutRef.current = null;
+    }
+  }, [chat?._id]);
 
   const getOtherParticipants = () =>
     chat?.participants?.filter((participant) => !isSameEntity(participant, currentUser)) || [];
@@ -366,6 +399,134 @@ const ChatWindow = ({
       replyingToMessage?._id || null
     );
     setReplyingToMessage(null);
+  };
+
+  const formatLiveLocationTimeRemaining = () => {
+    if (!liveLocationEndsAt) {
+      return '';
+    }
+
+    const remainingMs = new Date(liveLocationEndsAt).getTime() - Date.now();
+    if (remainingMs <= 0) {
+      return 'Ending now';
+    }
+
+    const remainingMinutes = Math.ceil(remainingMs / 60000);
+    if (remainingMinutes < 60) {
+      return `${remainingMinutes}m left`;
+    }
+
+    const hours = Math.floor(remainingMinutes / 60);
+    const minutes = remainingMinutes % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m left` : `${hours}h left`;
+  };
+
+  const stopLiveLocationSharing = async ({ notifyChat = false } = {}) => {
+    if (liveLocationIntervalRef.current) {
+      window.clearInterval(liveLocationIntervalRef.current);
+      liveLocationIntervalRef.current = null;
+    }
+    if (liveLocationTimeoutRef.current) {
+      window.clearTimeout(liveLocationTimeoutRef.current);
+      liveLocationTimeoutRef.current = null;
+    }
+
+    setIsLiveLocationSharing(false);
+    setLiveLocationEndsAt('');
+
+    if (notifyChat) {
+      await onSendMessage('📍 Live location sharing ended.', 'location');
+    }
+  };
+
+  const getCurrentPosition = () =>
+    new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported on this device.'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 30000,
+      });
+    });
+
+  const sendLocationMessage = async ({ isLive = false, isFinal = false } = {}) => {
+    const position = await getCurrentPosition();
+    const { latitude, longitude } = position.coords;
+    const mapUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
+    const locationLabel = isFinal
+      ? '📍 Final live location update'
+      : isLive
+        ? '📍 Live location update'
+        : '📍 Current location';
+    const expiresLine = isLive && liveLocationEndsAt
+      ? `Live until ${new Date(liveLocationEndsAt).toLocaleString()}`
+      : '';
+    const contentLines = [
+      `${locationLabel}: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+      mapUrl,
+      expiresLine,
+    ].filter(Boolean);
+
+    await onSendMessage(contentLines.join('\n'), 'location');
+  };
+
+  const handleShareCurrentLocation = async () => {
+    try {
+      setLocationError('');
+      await sendLocationMessage({ isLive: false });
+      setShowLocationPanel(false);
+    } catch (error) {
+      setLocationError(error.message || 'Unable to fetch current location.');
+    }
+  };
+
+  const handleStartLiveLocation = async () => {
+    const duration = Number(locationDurationMinutes || 0);
+    if (!duration || duration < 1 || duration > 1440) {
+      setLocationError('Please choose a valid duration up to 24 hours.');
+      return;
+    }
+
+    try {
+      setLocationError('');
+      await stopLiveLocationSharing();
+
+      const endsAt = new Date(Date.now() + duration * 60000).toISOString();
+      setLiveLocationEndsAt(endsAt);
+      setIsLiveLocationSharing(true);
+
+      await onSendMessage(
+        `📍 Live location sharing started for ${duration} minutes.`,
+        'location'
+      );
+      await sendLocationMessage({ isLive: true });
+
+      liveLocationIntervalRef.current = window.setInterval(async () => {
+        try {
+          await sendLocationMessage({ isLive: true });
+        } catch (error) {
+          setLocationError('Location update failed. Live sharing stopped.');
+          await stopLiveLocationSharing({ notifyChat: true });
+        }
+      }, 60000);
+
+      liveLocationTimeoutRef.current = window.setTimeout(async () => {
+        try {
+          await sendLocationMessage({ isLive: true, isFinal: true });
+          await onSendMessage('📍 Live location sharing ended automatically.', 'location');
+        } catch (error) {
+          // Ignore send failures during forced stop.
+        }
+        await stopLiveLocationSharing();
+      }, duration * 60000);
+    } catch (error) {
+      setLocationError(error.message || 'Unable to start live location sharing.');
+      await stopLiveLocationSharing();
+    }
   };
 
   const handleInputChange = (event) => {
@@ -945,6 +1106,29 @@ const ChatWindow = ({
                             <span className="message-sticker-label">{message.content || 'Sticker'}</span>
                           </div>
                         )}
+                        {message.messageType === 'location' && (
+                          <div className="message-location-card">
+                            <span className="message-location-title">Location shared</span>
+                            <pre className="message-location-text">{message.content}</pre>
+                            {(() => {
+                              const urlMatch = String(message.content || '').match(/https?:\/\/\S+/i);
+                              if (!urlMatch) {
+                                return null;
+                              }
+
+                              return (
+                                <a
+                                  href={urlMatch[0]}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="message-location-link"
+                                >
+                                  Open in Maps
+                                </a>
+                              );
+                            })()}
+                          </div>
+                        )}
                         {message.messageType === 'video' && (
                           <div className="message-media">
                             <video src={message.media?.url} controls />
@@ -1151,6 +1335,14 @@ const ChatWindow = ({
             File
           </button>
           <button
+            className={`btn-action ${showLocationPanel ? 'active' : ''}`}
+            title="Share location"
+            onClick={() => setShowLocationPanel((current) => !current)}
+            type="button"
+          >
+            Location
+          </button>
+          <button
             className={`btn-action ${isRecordingVoice ? 'voice-recording' : ''}`}
             title={isRecordingVoice ? 'Stop and send voice note' : 'Record voice note'}
             onClick={handleVoiceButtonClick}
@@ -1169,6 +1361,81 @@ const ChatWindow = ({
             Send
           </button>
         </div>
+        {showLocationPanel && (
+          <div className="location-share-panel">
+            <div className="location-share-row">
+              <button
+                type="button"
+                className={`location-share-chip ${locationMode === 'current' ? 'active' : ''}`}
+                onClick={() => setLocationMode('current')}
+              >
+                Current
+              </button>
+              <button
+                type="button"
+                className={`location-share-chip ${locationMode === 'live' ? 'active' : ''}`}
+                onClick={() => setLocationMode('live')}
+              >
+                Live
+              </button>
+            </div>
+            {locationMode === 'live' && (
+              <div className="location-share-row">
+                <label htmlFor="location-duration">Duration</label>
+                <select
+                  id="location-duration"
+                  className="location-duration-select"
+                  value={locationDurationMinutes}
+                  onChange={(event) => setLocationDurationMinutes(Number(event.target.value))}
+                  disabled={isLiveLocationSharing}
+                >
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                  <option value={60}>1 hour</option>
+                  <option value={180}>3 hours</option>
+                  <option value={360}>6 hours</option>
+                  <option value={720}>12 hours</option>
+                  <option value={1440}>24 hours</option>
+                </select>
+              </div>
+            )}
+            <div className="location-share-row">
+              {locationMode === 'current' ? (
+                <button
+                  type="button"
+                  className="location-primary-btn"
+                  onClick={handleShareCurrentLocation}
+                >
+                  Share Current Location
+                </button>
+              ) : isLiveLocationSharing ? (
+                <>
+                  <span className="location-live-status">
+                    Live sharing active ({formatLiveLocationTimeRemaining()})
+                  </span>
+                  <button
+                    type="button"
+                    className="location-stop-btn"
+                    onClick={() => stopLiveLocationSharing({ notifyChat: true })}
+                  >
+                    Stop Live Sharing
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="location-primary-btn"
+                  onClick={handleStartLiveLocation}
+                >
+                  Start Live Sharing
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {locationError && (
+          <div className="location-share-error">{locationError}</div>
+        )}
         {(isRecordingVoice || voiceError) && (
           <div className={`voice-note-status ${voiceError ? 'error' : ''}`}>
             {voiceError || 'Recording voice note... tap "Stop Voice" to send.'}

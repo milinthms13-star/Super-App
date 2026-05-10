@@ -15,6 +15,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(call.callType === 'video');
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [sharedBackgroundMode, setSharedBackgroundMode] = useState('one-side');
   const [callDuration, setCallDuration] = useState(0);
   const [callStatus, setCallStatus] = useState(call.status || 'initiating');
 
@@ -31,6 +32,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
   const remotePeerReadyRef = useRef(false);
   const readySignalSentRef = useRef(false);
   const offerSentRef = useRef(false);
+  const sharedBackgroundModeRef = useRef('one-side');
 
   const currentUserId = getEntityId(call.currentUserId || currentUser);
   const callId = getEntityId(call._id || call.callId);
@@ -52,10 +54,12 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
     setIsMuted(false);
     setIsVideoEnabled(call.callType === 'video');
     setIsScreenSharing(false);
+    setSharedBackgroundMode('one-side');
     pendingIceCandidatesRef.current = [];
     remotePeerReadyRef.current = false;
     readySignalSentRef.current = false;
     offerSentRef.current = false;
+    sharedBackgroundModeRef.current = 'one-side';
   }, [call.callType, callId]);
 
   const serializeDescription = (description) => {
@@ -193,6 +197,27 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
       });
     },
     [callId, otherParticipantId, socket]
+  );
+
+  const applySharedBackgroundMode = useCallback(
+    (layout, { broadcast = false } = {}) => {
+      const nextLayout = layout === 'both-sides' ? 'both-sides' : 'one-side';
+      if (sharedBackgroundModeRef.current === nextLayout) {
+        return;
+      }
+
+      sharedBackgroundModeRef.current = nextLayout;
+      setSharedBackgroundMode(nextLayout);
+
+      if (broadcast) {
+        emitSignal({
+          backgroundMode: {
+            layout: nextLayout,
+          },
+        });
+      }
+    },
+    [emitSignal]
   );
 
   const flushPendingIceCandidates = useCallback(async (peerConnection) => {
@@ -363,6 +388,14 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
         return;
       }
 
+      if (payload.backgroundMode?.layout) {
+        applySharedBackgroundMode(payload.backgroundMode.layout);
+      }
+
+      if (!payload.description && !payload.candidate) {
+        return;
+      }
+
       try {
         const peerConnection = await ensurePeerConnection();
 
@@ -409,6 +442,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
     };
   }, [
     callId,
+    applySharedBackgroundMode,
     emitSignal,
     ensurePeerConnection,
     flushPendingIceCandidates,
@@ -434,6 +468,11 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
         }
 
         emitReadySignal();
+        emitSignal({
+          backgroundMode: {
+            layout: sharedBackgroundModeRef.current,
+          },
+        });
         startDurationTimer();
 
         if (isCaller && remotePeerReadyRef.current) {
@@ -591,9 +630,23 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
 
         <div className="call-content">
           {call.callType === 'video' && (
-            <div className="video-container">
+            <div
+              className={`video-container ${
+                sharedBackgroundMode === 'both-sides'
+                  ? 'video-container-both-sides'
+                  : 'video-container-one-side'
+              }`}
+            >
               <video ref={remoteVideoRef} className="remote-video" autoPlay playsInline />
-              <video ref={localVideoRef} className="local-video" autoPlay playsInline muted />
+              <video
+                ref={localVideoRef}
+                className={`local-video ${
+                  sharedBackgroundMode === 'both-sides' ? 'local-video-both-sides' : ''
+                }`}
+                autoPlay
+                playsInline
+                muted
+              />
               {isScreenSharing && (
                 <video ref={screenVideoRef} className="screen-video" autoPlay playsInline muted />
               )}
@@ -668,6 +721,26 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
                     type="button"
                   >
                     {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+                  </button>
+
+                  <button
+                    className={`btn-call-control ${
+                      sharedBackgroundMode === 'one-side' ? 'active' : ''
+                    }`}
+                    onClick={() => applySharedBackgroundMode('one-side', { broadcast: true })}
+                    type="button"
+                  >
+                    One Side
+                  </button>
+
+                  <button
+                    className={`btn-call-control ${
+                      sharedBackgroundMode === 'both-sides' ? 'active' : ''
+                    }`}
+                    onClick={() => applySharedBackgroundMode('both-sides', { broadcast: true })}
+                    type="button"
+                  >
+                    Both Sides
                   </button>
                 </>
               )}

@@ -131,3 +131,41 @@ test('plays the remote media stream during accepted audio calls', async () => {
   expect(remoteAudio.srcObject).toBe(remoteStream);
   expect(playSpy).toHaveBeenCalled();
 });
+
+test('applies shared both-sides video layout received through call:signal', async () => {
+  const videoCall = {
+    ...baseCall,
+    callType: 'video',
+  };
+
+  const { container } = render(
+    <CallWindow
+      call={videoCall}
+      socket={socketMock}
+      onEndCall={jest.fn()}
+      onAcceptCall={jest.fn()}
+      onDeclineCall={jest.fn()}
+    />
+  );
+
+  const videoContainer = () => container.querySelector('.video-container');
+  expect(videoContainer()).not.toBeNull();
+  expect(videoContainer()?.className).toContain('video-container-one-side');
+
+  const callSignalSubscription = socketMock.on.mock.calls.find(
+    ([eventName]) => eventName === 'call:signal'
+  );
+  expect(callSignalSubscription).toBeDefined();
+
+  const handleCallSignal = callSignalSubscription[1];
+
+  act(() => {
+    handleCallSignal({
+      callId: videoCall._id,
+      fromUserId: videoCall.recipientId,
+      backgroundMode: { layout: 'both-sides' },
+    });
+  });
+
+  expect(videoContainer()?.className).toContain('video-container-both-sides');
+});

@@ -5374,3 +5374,118 @@
   font-weight: 600;
 }
 
+/* ==================== Location Sharing ==================== */
+.location-share-panel {
+  margin-top: 0.55rem;
+  border: 1px solid rgba(14, 165, 233, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.location-share-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.location-share-chip {
+  border: 1px solid rgba(125, 211, 252, 0.36);
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  background: #f8fcff;
+  color: #0c4a6e;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.location-share-chip.active {
+  background: linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.location-duration-select {
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.location-primary-btn,
+.location-stop-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.42rem 0.82rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.location-primary-btn {
+  color: #ffffff;
+  background: linear-gradient(135deg, #0284c7 0%, #0891b2 100%);
+}
+
+.location-stop-btn {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.location-live-status {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #0f766e;
+}
+
+.location-share-error {
+  margin-top: 0.45rem;
+  color: #b91c1c;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.message-location-card {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.34rem;
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 0.55rem 0.62rem;
+  min-width: 180px;
+}
+
+.message-location-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+.message-location-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.78rem;
+  color: #334155;
+}
+
+.message-location-link {
+  align-self: flex-start;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0284c7;
+  text-decoration: none;
+}
+
+.message-location-link:hover {
+  text-decoration: underline;
+}
+

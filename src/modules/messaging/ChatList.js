@@ -83,6 +83,8 @@ const ChatList = ({
     switch (lastMessage.messageType) {
       case 'sticker':
         return `🏷️ Sticker: ${lastMessage.content || 'Shared'}`;
+      case 'location':
+        return '📍 Location shared';
       case 'voice':
         return '🎙️ Voice note';
       case 'audio':
