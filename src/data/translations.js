@@ -72,7 +72,7 @@ const translations = {
       loginSubtitle: "Continue to your account with verified email",
       userSubtitle: "Join Kerala's first super app with verified email",
       chooseAnother: "Choose another option",
-      footer: "Your login is verified by a server-issued OTP.",
+      footer: "Protected with secure OTP verification.",
     },
     common: {
       home: "Home",
@@ -207,7 +207,7 @@ const translations = {
       loginSubtitle: "വെരിഫൈ ചെയ്ത ഇമെയിൽ ഉപയോഗിച്ച് അക്കൗണ്ടിലേക്ക് തുടരൂ",
       userSubtitle: "വെരിഫൈ ചെയ്ത ഇമെയിലോടെ കേരളത്തിന്റെ ആദ്യ സൂപ്പർ ആപ്പിൽ ചേരൂ",
       chooseAnother: "മറ്റൊരു ഓപ്ഷൻ തിരഞ്ഞെടുക്കുക",
-      footer: "സർവർ നൽകുന്ന OTP ഉപയോഗിച്ച് നിങ്ങളുടെ ലോഗിൻ വെരിഫൈ ചെയ്യുന്നു.",
+      footer: "സുരക്ഷിത OTP സ്ഥിരീകരണത്തിലൂടെ സംരക്ഷിതം.",
     },
   },
   hi: {
@@ -264,7 +264,7 @@ const translations = {
       loginSubtitle: "Verified email के साथ अपने account में continue करें",
       userSubtitle: "Verified email के साथ Kerala के first super app से जुड़ें",
       chooseAnother: "दूसरा option चुनें",
-      footer: "आपका login server-issued OTP से verify होता है.",
+      footer: "सुरक्षित OTP सत्यापन द्वारा सुरक्षित।",
     },
   },
   ar: {
@@ -321,7 +321,7 @@ const translations = {
       loginSubtitle: "تابع إلى حسابك ببريد إلكتروني موثق",
       userSubtitle: "انضم إلى أول تطبيق خارق في كيرالا ببريد موثق",
       chooseAnother: "اختر خيارا آخر",
-      footer: "يتم توثيق تسجيل الدخول عبر رمز OTP صادر من الخادم.",
+      footer: "محمي برمز التحقق الآمن OTP.",
     },
   },
 };

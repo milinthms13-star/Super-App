@@ -35,6 +35,7 @@ const Login = ({
   const [verifiedToken, setVerifiedToken] = useState(null);
   const [mpinPassword, setMpinPassword] = useState("");
   const [loginStep, setLoginStep] = useState("method"); // "method", "input", "verify"
+  const [voiceAssistantActive, setVoiceAssistantActive] = useState(false);
   const {
     recognitionSupported,
     speechSupported,
@@ -722,7 +723,7 @@ const Login = ({
   const loginSubtitle = normalizedRegistrationType === "admin"
       ? "Verify the admin email to manage category fees and registrations"
     : normalizedRegistrationType === "login"
-        ? "Continue with your verified email."
+        ? "Continue securely with your preferred method"
         : loginCopy.userSubtitle;
   const headerKicker = normalizedRegistrationType === "login"
     ? loginCopy.welcomeBack
@@ -753,33 +754,6 @@ const Login = ({
     startListening(fieldKey, updateValue);
   };
 
-  const renderFieldVoiceActions = (fieldKey, speakText, onVoiceResult) => (
-    <span className="field-actions">
-      {recognitionSupported && (
-        <button
-          type="button"
-          className={`voice-btn ${listeningKey === fieldKey ? "active" : ""}`}
-          onClick={() => handleVoiceFill(fieldKey, onVoiceResult)}
-          aria-label={listeningKey === fieldKey ? "Stop voice input" : "Start voice input"}
-          title={listeningKey === fieldKey ? "Stop voice input" : "Start voice input"}
-        >
-          {listeningKey === fieldKey ? "Stop Mic" : "Mic"}
-        </button>
-      )}
-      {speechSupported && (
-        <button
-          type="button"
-          className={`voice-btn ${speaking ? "active" : ""}`}
-          onClick={() => (speaking ? stopSpeaking() : speak(speakText))}
-          aria-label={speaking ? "Stop voice playback" : "Read aloud"}
-          title={speaking ? "Stop voice playback" : "Read aloud"}
-        >
-          {speaking ? "Stop Audio" : "Speak"}
-        </button>
-      )}
-    </span>
-  );
-
   return (
     <div className={`login-container ${loginFlowClass}`} dir={direction}>
       <div className={`login-card ${isLoginFlow ? "login-card-compact" : ""}`}>
@@ -787,11 +761,14 @@ const Login = ({
           <div className="login-topbar">
             <button
               type="button"
-              className="btn btn-outline login-home-btn"
+              className="back-link"
               onClick={onBackToLaunch}
               disabled={loading}
             >
-              Home
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              Back
             </button>
           </div>
         )}
@@ -810,25 +787,24 @@ const Login = ({
           {/* Registration/Admin Flow */}
           {!isLoginFlow && (
             <>
-              <div className={`form-intro ${isLoginFlow ? "form-intro-compact" : ""}`}>
-                <div className="intro-heading-row">
-                  <h2>{formTitle}</h2>
-                  {(recognitionSupported || speechSupported) && renderFieldVoiceActions(
-                    "form-intro",
-                    `${formTitle}. ${formDescription}`,
-                    () => {}
-                  )}
+              {/* Google Auth Section (moved to top) */}
+              {!otpSent && !needsUsernameSetup && (
+                <div className="form-google-section">
+                  <a href={`${API_BASE_URL}/auth/google`} className="btn btn-google">
+                    <img src="/google-icon.svg" alt="Google" width="20" height="20" />
+                    Continue with Google
+                  </a>
+                  <div className="form-divider">OR</div>
                 </div>
-                <p>{formDescription}</p>
-              </div>
+              )}
 
+              <div className="form-manual-section">
               {/* Registration form fields */}
               {isUserRegistrationFlow && !otpSent && (
                 <>
                   <div className="form-group">
                     <label htmlFor="fullName">
                       <span>Full Name</span>
-                      {renderFieldVoiceActions("fullName", registrationForm.fullName || "Full Name", (value) => updateRegistrationForm("fullName", value))}
                     </label>
                     <input
                       type="text"
@@ -844,7 +820,6 @@ const Login = ({
                   <div className="form-group">
                     <label htmlFor="phone">
                       <span>Phone Number</span>
-                      {renderFieldVoiceActions("phone", registrationForm.phone || "Phone Number", (value) => updateRegistrationForm("phone", value.replace(/[^\d+\s-]/g, "")))}
                     </label>
                     <input
                       type="tel"
@@ -859,7 +834,7 @@ const Login = ({
 
                   <div className="form-group">
                     <label htmlFor="username">
-                      <span>Username (Unique Global)</span>
+                      <span>Choose your NilaHub ID</span>
                     </label>
                     <input
                       type="text"
@@ -893,7 +868,6 @@ const Login = ({
                   <div className="form-group">
                     <label htmlFor="fullName">
                       <span>Full Name</span>
-                      {renderFieldVoiceActions("business-fullName", registrationForm.fullName || "Full Name", (value) => updateRegistrationForm("fullName", value))}
                     </label>
                     <input
                       type="text"
@@ -913,11 +887,6 @@ const Login = ({
               <div className="form-group">
                 <label htmlFor="contactField">
                   <span>Email Address</span>
-                  {renderFieldVoiceActions(
-                    "email",
-                    email || "Email Address",
-                    (value) => updateEmail(value.toLowerCase().replace(/\s+/g, ""))
-                  )}
                 </label>
                 <input
                   type="email"
@@ -935,17 +904,14 @@ const Login = ({
                 <div className="form-group">
                   <label htmlFor="otp">
                     <span>Enter OTP sent to your email</span>
-                    <span className="field-actions">
-                      {renderFieldVoiceActions("otp", otp || "OTP", (value) => updateOtp(value.replace(/\D/g, "").slice(0, 6)))}
-                      <button
-                        type="button"
-                        className="resend-otp"
-                        onClick={handleSendOtp}
-                        disabled={loading}
-                      >
-                        Resend
-                      </button>
-                    </span>
+                    <button
+                      type="button"
+                      className="resend-otp"
+                      onClick={handleSendOtp}
+                      disabled={loading}
+                    >
+                      Resend
+                    </button>
                   </label>
                   <input
                     type="text"
@@ -965,7 +931,6 @@ const Login = ({
                 <div className="form-group">
                   <label htmlFor="setupUsername">
                     <span>Create your global username</span>
-                    {renderFieldVoiceActions("setupUsername", setupUsername || "Username", (value) => setSetupUsername(value))}
                   </label>
                   <input
                     type="text"
@@ -999,6 +964,7 @@ const Login = ({
                   )}
                 </div>
               )}
+              </div>
             </>
           )}
 
@@ -1006,16 +972,15 @@ const Login = ({
           {isLoginFlow && loginStep === "method" && !otpSent && (
             <>
               <div className={`form-intro ${isLoginFlow ? "form-intro-compact" : ""}`}>
-                <div className="intro-heading-row">
+                <div className="intro-heading-row centered">
                   <h2>Choose login method</h2>
                 </div>
-                <p>Select how you'd like to continue</p>
               </div>
 
               <div className="login-methods-grid">
                 <button
                   type="button"
-                  className="login-method-card login-method-gmail"
+                  className={`login-method-card login-method-gmail ${authMethod === "gmail" ? "selected" : ""}`}
                   onClick={() => handleSelectAuthMethod("gmail")}
                   disabled={loading}
                 >
@@ -1025,7 +990,7 @@ const Login = ({
 
                 <button
                   type="button"
-                  className="login-method-card"
+                  className={`login-method-card ${authMethod === "email" ? "selected" : ""}`}
                   onClick={() => handleSelectAuthMethod("email")}
                   disabled={loading}
                 >
@@ -1038,7 +1003,7 @@ const Login = ({
 
                 <button
                   type="button"
-                  className="login-method-card"
+                  className={`login-method-card ${authMethod === "phone" ? "selected" : ""}`}
                   onClick={() => handleSelectAuthMethod("phone")}
                   disabled={loading}
                 >
@@ -1050,16 +1015,40 @@ const Login = ({
 
                 <button
                   type="button"
-                  className="login-method-card"
+                  className={`login-method-card ${authMethod === "mpin" ? "selected" : ""}`}
                   onClick={() => handleSelectAuthMethod("mpin")}
                   disabled={loading}
                 >
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    <path d="M12 1a5 5 0 0 0-5 5v6a5 5 0 0 0 10 0V6a5 5 0 0 0-5-5zm0 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zm0 4a1 1 0 0 1 1 1v3a1 1 0 0 1-2 0v-3a1 1 0 0 1 1-1z"/>
                   </svg>
                   <span>MPIN</span>
                 </button>
+              </div>
+
+              <div className="trust-indicators">
+                <div className="trust-indicator">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-.997-15h2v9h-2v-9zm.5-5a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/>
+                  </svg>
+                  Secure authentication
+                </div>
+                <div className="trust-indicator">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M10 15.172l9.192-9.193 1.415 1.414L10 18 .393 8.393 1.808 6.979z"/>
+                  </svg>
+                  OTP verified
+                </div>
+                <div className="trust-indicator">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 11h2v2H3v-2zm4-7h2v9H7V4zm4-2h2v11h-2V2zm4 3h2v8h-2V5zm4-2h2v10h-2V3z"/>
+                  </svg>
+                  Encrypted access
+                </div>
+              </div>
+              
+              <div className="product-proof-line">
+                Trusted access for users, vendors, creators, and businesses.
               </div>
             </>
           )}
@@ -1203,15 +1192,6 @@ const Login = ({
           {/* Form actions for registration flow */}
           {!isLoginFlow && (
             <div className={`form-actions ${isLoginFlow ? "form-actions-compact" : ""}`}>
-              {!isLoginFlow && (
-                <>
-                  <a href={`${API_BASE_URL}/auth/google`} className="btn btn-google">
-                    <img src="/google-icon.svg" alt="Google" width="20" height="20" />
-                    Continue with Google
-                  </a>
-                  <hr />
-                </>
-              )}
               <button type="submit" className="btn btn-primary" disabled={loading}>
                 {needsUsernameSetup
                   ? loading ? "Setting username..." : "Complete Profile"
@@ -1251,6 +1231,20 @@ const Login = ({
           <p className="security-info">{loginCopy.footer}</p>
         </div>
       </div>
+
+      {/* Global Voice Assistant Button */}
+      {(recognitionSupported || speechSupported) && !isLoginFlow && (
+        <button
+          type="button"
+          className={`voice-assistant-btn ${voiceAssistantActive ? "active" : ""}`}
+          onClick={() => setVoiceAssistantActive(!voiceAssistantActive)}
+          aria-label={voiceAssistantActive ? "Stop voice assistant" : "Start voice assistant"}
+          title={voiceAssistantActive ? "Stop voice assistant" : "Start voice assistant"}
+          data-tooltip="Voice Assisted Registration"
+        >
+          🎤
+        </button>
+      )}
     </div>
   );
 };

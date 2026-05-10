@@ -1634,4 +1634,75 @@ router.post('/contact-means', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/auth/complete-gmail-registration
+ * Complete registration for new Gmail users
+ * Allows collecting additional user details (phone, username, etc.)
+ */
+router.post('/complete-gmail-registration', authenticate, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { phone, username, location, fullName } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update user registration details
+    if (phone) user.phoneNumber = phone;
+    if (fullName) {
+      const [firstName, ...lastNameParts] = fullName.split(' ');
+      user.firstName = firstName;
+      user.lastName = lastNameParts.join(' ');
+    }
+    if (location) user.location = location;
+    
+    // Set username if provided and not already set
+    if (username && !user.username) {
+      user.username = username;
+    }
+
+    // Mark registration as complete
+    user.registrationCompleted = true;
+    user.registrationCompletedAt = new Date();
+
+    await user.save();
+
+    logger.info(`Gmail user registration completed for ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Registration details saved successfully',
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber,
+        username: user.username,
+        location: user.location
+      }
+    });
+  } catch (error) {
+    logger.error('Error completing Gmail registration:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to complete registration',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 module.exports = router;
