@@ -876,51 +876,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
               </div>
             </div>
 
-            <section className="dashboard-intelligence-section" aria-label="Live intelligence insights">
-              <div className="intelligence-card intelligence-card-chart">
-                <div className="intelligence-card-header">
-                  <h3>Live Conversion Trend</h3>
-                  <span className="live-pill">Realtime</span>
-                </div>
-                <div className="mini-trend-chart">
-                  {trendSeries.map((value, index) => (
-                    <span
-                      key={`trend-${index}`}
-                      className="trend-bar"
-                      style={{ height: `${value}%` }}
-                      title={`Trend value ${value}`}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="intelligence-card intelligence-card-activity">
-                <div className="intelligence-card-header">
-                  <h3>Nearby Activity</h3>
-                  <span className="activity-pill" />
-                </div>
-                <div className="nearby-activity-list">
-                  {nearbyActivity.map((item) => (
-                    <div key={item.id} className="nearby-activity-item">
-                      <p>{item.title}</p>
-                      <span>{item.detail}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="intelligence-card intelligence-card-ai">
-                <div className="intelligence-card-header">
-                  <h3>AI Suggestions</h3>
-                </div>
-                <ul className="ai-suggestion-list">
-                  {aiSuggestions.map((suggestion, index) => (
-                    <li key={`ai-suggestion-${index}`}>{suggestion}</li>
-                  ))}
-                </ul>
-              </div>
-            </section>
-
             <div className="recent-orders recent-orders-compact" ref={recentOrdersRef}>
               <h2>{t("dashboard.recentOrders", "Recent Orders")}</h2>
             {orders.length > 0 ? (
