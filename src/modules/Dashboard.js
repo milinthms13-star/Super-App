@@ -593,8 +593,87 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         </div>
 
         {!isSeller && (
-          <div className="recent-orders recent-orders-compact" ref={recentOrdersRef}>
-            <h2>{t("dashboard.recentOrders", "Recent Orders")}</h2>
+          <>
+            <div className="notifications-section">
+              <h2>{t("dashboard.notifications", "Quick Updates")}</h2>
+              <div className="notification-cards">
+                {cartItemCount > 0 && (
+                  <div className="notification-card notification-card-cart">
+                    <div className="notification-badge">
+                      <Icon type="cart" className="notification-icon" />
+                    </div>
+                    <div className="notification-content">
+                      <p className="notification-label">Items in Cart</p>
+                      <p className="notification-value">{cartItemCount} items</p>
+                    </div>
+                    <button 
+                      type="button"
+                      className="notification-action"
+                      onClick={() => handleModuleNavigation("ecommerce")}
+                    >
+                      →
+                    </button>
+                  </div>
+                )}
+                <div className="notification-card notification-card-orders">
+                  <div className="notification-badge">
+                    <Icon type="orders" className="notification-icon" />
+                  </div>
+                  <div className="notification-content">
+                    <p className="notification-label">Active Orders</p>
+                    <p className="notification-value">{undeliveredOrdersCount || 0} pending</p>
+                  </div>
+                  <button 
+                    type="button"
+                    className="notification-action"
+                    onClick={handleOrdersCardClick}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="quick-actions-section">
+              <h3>{t("dashboard.quickActions", "Quick Actions")}</h3>
+              <div className="quick-actions-grid">
+                <button 
+                  type="button"
+                  className="quick-action-btn quick-action-shop"
+                  onClick={() => handleModuleNavigation("ecommerce")}
+                >
+                  <span className="qa-icon">🛍️</span>
+                  <span className="qa-label">Shop</span>
+                </button>
+                <button 
+                  type="button"
+                  className="quick-action-btn quick-action-messages"
+                  onClick={() => handleModuleNavigation("messaging")}
+                >
+                  <span className="qa-icon">💬</span>
+                  <span className="qa-label">Messages</span>
+                </button>
+                <button 
+                  type="button"
+                  className="quick-action-btn quick-action-browse"
+                  onClick={() => handleModuleNavigation("classifieds")}
+                >
+                  <span className="qa-icon">🔍</span>
+                  <span className="qa-label">Browse</span>
+                </button>
+                <button 
+                  type="button"
+                  className="quick-action-btn quick-action-food"
+                  onClick={() => handleModuleNavigation("fooddelivery")}
+                >
+                  <span className="qa-icon">🍽️</span>
+                  <span className="qa-label">Food</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="recent-orders recent-orders-compact" ref={recentOrdersRef}>
+              <h2>{t("dashboard.recentOrders", "Recent Orders")}</h2>
             {orders.length > 0 ? (
                 <div className="orders-list">
                   {orders.map((order) => (
@@ -635,6 +714,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
               Open Returns & Refunds
             </button>
           </div>
+          </>
         )}
       </div>
 
