@@ -78,7 +78,7 @@
   display: flex;
   gap: 0.75rem;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   scrollbar-width: none;
   padding: 0.2rem 0.05rem 0.45rem;
   max-width: 100%;
