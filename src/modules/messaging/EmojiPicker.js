@@ -111,6 +111,25 @@ const EmojiPicker = ({ onSelectEmoji, onSelectSticker, onClose, position }) => {
   };
 
   const visibleStickers = getVisibleStickers();
+  const fallbackStickers = [
+    ...sortedStickerPool.filter((sticker) => sticker.trending),
+    ...recentStickerIds
+      .map((stickerId) => STICKERS.find((sticker) => sticker.id === stickerId))
+      .filter(Boolean),
+    ...favoriteStickerIds
+      .map((stickerId) => STICKERS.find((sticker) => sticker.id === stickerId))
+      .filter(Boolean),
+  ].reduce((accumulator, sticker) => {
+    if (!sticker) {
+      return accumulator;
+    }
+
+    if (!accumulator.some((entry) => entry.id === sticker.id)) {
+      accumulator.push(sticker);
+    }
+
+    return accumulator;
+  }, []).slice(0, 6);
 
   const toggleFavoriteSticker = (stickerId) => {
     const nextFavoriteStickerIds = favoriteStickerIds.includes(stickerId)
@@ -145,7 +164,16 @@ const EmojiPicker = ({ onSelectEmoji, onSelectSticker, onClose, position }) => {
     <div
       className="emoji-picker linkup-emoji-picker"
       ref={pickerRef}
-      style={position ? { top: `${position.y}px`, left: `${position.x}px` } : {}}
+      style={
+        position
+          ? {
+              top: `${position.y}px`,
+              left: `${position.x}px`,
+              right: 'auto',
+              bottom: 'auto',
+            }
+          : {}
+      }
     >
       <div className="picker-tabs">
         <button
@@ -254,7 +282,27 @@ const EmojiPicker = ({ onSelectEmoji, onSelectSticker, onClose, position }) => {
                 </div>
               ))
             ) : (
-              <div className="sticker-empty-state">No stickers found for this filter.</div>
+              <div className="sticker-empty-state">
+                <p>No exact sticker match. Try trending or recent favorites below.</p>
+                <div className="sticker-empty-fallback-grid">
+                  {fallbackStickers.length > 0 ? (
+                    fallbackStickers.map((sticker) => (
+                      <button
+                        key={sticker.id}
+                        type="button"
+                        className="sticker-card sticker-card-fallback"
+                        onClick={() => handleStickerSelect(sticker)}
+                        title={sticker.name}
+                      >
+                        <img src={sticker.url} alt={sticker.name} className="sticker-image" loading="lazy" />
+                        <span className="sticker-name">{sticker.name}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <span className="sticker-empty-fallback-copy">No recent stickers yet. Explore categories above.</span>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>

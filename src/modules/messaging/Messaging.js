@@ -642,6 +642,76 @@ const Messaging = () => {
       });
   }, [chats, currentUser]);
 
+  const onlineContactsPreview = useMemo(() => {
+    const contactRecords = contacts
+      .map((contact) => contact?.contactUserId || contact)
+      .filter(Boolean)
+      .map((user) => ({
+        id: getEntityId(user),
+        name: user?.name || user?.username || 'Contact',
+        online: Boolean(user?.online),
+      }))
+      .filter((entry) => entry.id && entry.online);
+
+    const chatParticipants = chats
+      .map((chat) => getOtherParticipant(chat, currentUser))
+      .filter(Boolean)
+      .map((participant) => ({
+        id: getEntityId(participant),
+        name: participant?.name || participant?.username || 'Contact',
+        online: Boolean(participant?.online),
+      }))
+      .filter((entry) => entry.id && entry.online);
+
+    const deduped = [...contactRecords, ...chatParticipants].reduce((acc, entry) => {
+      if (!acc.some((item) => item.id === entry.id)) {
+        acc.push(entry);
+      }
+      return acc;
+    }, []);
+
+    return deduped.slice(0, 6);
+  }, [chats, contacts, currentUser]);
+
+  const suggestedConversationCards = useMemo(
+    () =>
+      recentConversationCards
+        .filter((card) => card.unreadCount > 0 || card.online)
+        .slice(0, 4),
+    [recentConversationCards]
+  );
+
+  const recentSharedItems = useMemo(() => {
+    const toTime = (chat) => new Date(chat?.lastMessageAt || chat?.updatedAt || 0).getTime();
+    return [...chats]
+      .filter((chat) => ['image', 'video', 'file', 'voice', 'audio'].includes(chat?.lastMessage?.messageType))
+      .sort((first, second) => toTime(second) - toTime(first))
+      .slice(0, 5)
+      .map((chat) => {
+        const otherParticipant = getOtherParticipant(chat, currentUser);
+        return {
+          id: getEntityId(chat),
+          title:
+            chat?.type === 'group'
+              ? chat?.groupName || 'Group chat'
+              : otherParticipant?.name || 'Direct chat',
+          type: chat?.lastMessage?.messageType || 'file',
+          time: formatActivityTime(chat?.lastMessageAt || chat?.updatedAt),
+        };
+      });
+  }, [chats, currentUser]);
+
+  const aiAssistantHints = useMemo(
+    () => [
+      `Summarize ${Math.max(chats.length, 1)} active conversation${chats.length === 1 ? '' : 's'}`,
+      unreadChatsCount > 0
+        ? `Draft quick replies for ${unreadChatsCount} unread message${unreadChatsCount === 1 ? '' : 's'}`
+        : 'Generate a polished first message for a new chat',
+      'Translate mixed-language replies instantly',
+    ],
+    [chats.length, unreadChatsCount]
+  );
+
   const retryQueuedMessage = useCallback(async (queuedMessage, { manual = false } = {}) => {
     if (!queuedMessage?.clientMessageId || !queuedMessage?.chatId) {
       return null;
@@ -2722,15 +2792,10 @@ const Messaging = () => {
                 onDeleteAllMessages={handleDeleteAllMessages}
                 onRetryMessage={handleRetryMessage}
                 onExportChat={handleExportChat}
+                showAISuggestions={showAISuggestions}
+                latestMessageId={latestMessageId}
+                onSelectAISuggestion={handleAISuggestionSelect}
               />
-
-              {showAISuggestions && selectedChat?._id && latestMessageId && (
-                <AISmartReplies
-                  chatId={selectedChat._id}
-                  messageId={latestMessageId}
-                  onSelectReply={handleAISuggestionSelect}
-                />
-              )}
 
               {showFileUpload && (
                 <FileUpload
@@ -2757,18 +2822,24 @@ const Messaging = () => {
                   <h2>LinkUp Conversations</h2>
                   <p>Select a chat to start messaging.</p>
                 </div>
+                <div className="messaging-status-pills" aria-label="Platform status">
+                  <span className="messaging-status-pill">Encrypted</span>
+                  <span className="messaging-status-pill">{isOnline ? 'Online' : 'Offline'}</span>
+                  <span className="messaging-status-pill">{isNetworkOnline ? 'Synced' : 'Sync paused'}</span>
+                  <span className="messaging-status-pill">Realtime</span>
+                </div>
 
                 <div className="messaging-empty-metrics">
                   <div className="messaging-empty-metric">
-                    <span className="metric-label">Active chats</span>
+                    <span className="metric-label">💬 Active Chats</span>
                     <strong>{chats.length}</strong>
                   </div>
                   <div className="messaging-empty-metric">
-                    <span className="metric-label">Unread</span>
+                    <span className="metric-label">🔔 Unread</span>
                     <strong>{unreadChatsCount}</strong>
                   </div>
                   <div className="messaging-empty-metric">
-                    <span className="metric-label">Online now</span>
+                    <span className="metric-label">🟢 Online Now</span>
                     <strong>{activeNowCount}</strong>
                   </div>
                 </div>
@@ -2822,6 +2893,84 @@ const Messaging = () => {
                     </div>
                   </div>
                 )}
+
+                <div className="messaging-empty-insights-grid">
+                  <section className="messaging-insight-card">
+                    <h4>Online users</h4>
+                    {onlineContactsPreview.length > 0 ? (
+                      <div className="messaging-online-user-list">
+                        {onlineContactsPreview.map((entry) => (
+                          <span key={entry.id} className="messaging-online-user-chip">
+                            <span className="messaging-online-dot"></span>
+                            {entry.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="messaging-insight-empty">No contacts are online yet.</p>
+                    )}
+                  </section>
+
+                  <section className="messaging-insight-card">
+                    <h4>Suggested conversations</h4>
+                    {suggestedConversationCards.length > 0 ? (
+                      <div className="messaging-insight-list">
+                        {suggestedConversationCards.map((card) => (
+                          <button
+                            key={card.id}
+                            type="button"
+                            className="messaging-inline-link"
+                            onClick={() => {
+                              const targetChat = chats.find((chat) => chat._id === card.id);
+                              if (targetChat) {
+                                handleSelectChat(targetChat);
+                              }
+                            }}
+                          >
+                            <strong>{card.title}</strong>
+                            <span>{card.online ? 'Online' : card.time}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="messaging-insight-empty">We will suggest active chats here.</p>
+                    )}
+                  </section>
+
+                  <section className="messaging-insight-card">
+                    <h4>Recent media & files</h4>
+                    {recentSharedItems.length > 0 ? (
+                      <ul className="messaging-insight-bullets">
+                        {recentSharedItems.map((item) => (
+                          <li key={`${item.id}-${item.type}`}>
+                            <span>{item.title}</span>
+                            <em>{item.type}</em>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="messaging-insight-empty">Recent shared files will appear here.</p>
+                    )}
+                  </section>
+
+                  <section className="messaging-insight-card">
+                    <h4>AI suggestions</h4>
+                    <ul className="messaging-insight-bullets">
+                      {aiAssistantHints.map((hint) => (
+                        <li key={hint}>{hint}</li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  <section className="messaging-insight-card messaging-insight-card-wide">
+                    <h4>Secure messaging highlights</h4>
+                    <ul className="messaging-insight-bullets">
+                      <li>End-to-end encrypted transport for live chats and calls</li>
+                      <li>Delivery syncing across devices with retry-aware queueing</li>
+                      <li>Realtime presence, typing indicators, and unread badges</li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </div>
           )}

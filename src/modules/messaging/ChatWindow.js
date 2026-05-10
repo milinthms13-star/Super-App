@@ -5,6 +5,7 @@ import MessageContextMenu from './MessageContextMenu';
 import EmojiPicker from './EmojiPicker';
 import ReadReceipts from './ReadReceipts';
 import MessagePagination from './MessagePagination';
+import AISmartReplies from './AISmartReplies';
 import { getAvatarLabel, getEntityId, isSameEntity } from './utils';
 
 const ChatWindow = ({
@@ -12,6 +13,9 @@ const ChatWindow = ({
   messages,
   onSendMessage,
   onTyping,
+  showAISuggestions,
+  latestMessageId,
+  onSelectAISuggestion,
   typingUsers,
   encryptionEnabled,
   onToggleEncryption,
@@ -44,6 +48,7 @@ const ChatWindow = ({
   const [showSearch, setShowSearch] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiPickerPosition, setEmojiPickerPosition] = useState(null);
   const [selectedMessageForReaction, setSelectedMessageForReaction] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
@@ -75,6 +80,7 @@ const ChatWindow = ({
   const voiceChunksRef = useRef([]);
   const voiceRecordingStartedAtRef = useRef(0);
   const previousMessageSnapshotRef = useRef({ count: 0, lastId: '' });
+  const emojiButtonRef = useRef(null);
   const currentUserId = getEntityId(currentUser);
   const resolvedCurrentUserId = getEntityId(
     chat?.participants?.find((participant) => isSameEntity(participant, currentUser))
@@ -755,6 +761,16 @@ const ChatWindow = ({
       event.stopPropagation();
     }
 
+    const targetRect = event?.currentTarget?.getBoundingClientRect?.();
+    if (targetRect) {
+      setEmojiPickerPosition({
+        x: Math.max(12, Math.min(targetRect.left, window.innerWidth - 420)),
+        y: Math.max(12, Math.min(targetRect.bottom + 8, window.innerHeight - 520)),
+      });
+    } else {
+      setEmojiPickerPosition(null);
+    }
+
     setSelectedMessageForReaction(message);
     setShowEmojiPicker(true);
   };
@@ -764,11 +780,41 @@ const ChatWindow = ({
       await onAddReaction(selectedMessageForReaction._id, emoji);
       setSelectedMessageForReaction(null);
       setShowEmojiPicker(false);
+      setEmojiPickerPosition(null);
       return;
     }
 
     setMessageInput((currentValue) => `${currentValue}${emoji}`);
     setShowEmojiPicker(false);
+    setEmojiPickerPosition(null);
+  };
+
+  const toggleComposerEmojiPicker = () => {
+    if (showEmojiPicker && !selectedMessageForReaction) {
+      setShowEmojiPicker(false);
+      setEmojiPickerPosition(null);
+      return;
+    }
+
+    setSelectedMessageForReaction(null);
+
+    const targetRect = emojiButtonRef.current?.getBoundingClientRect?.();
+    if (!targetRect) {
+      setEmojiPickerPosition(null);
+      setShowEmojiPicker(true);
+      return;
+    }
+
+    const pickerWidth = Math.min(420, window.innerWidth - 24);
+    const estimatedPickerHeight = 520;
+    const left = Math.max(12, Math.min(targetRect.left, window.innerWidth - pickerWidth - 12));
+    const top = Math.max(12, targetRect.top - estimatedPickerHeight - 12);
+
+    setEmojiPickerPosition({
+      x: left,
+      y: top,
+    });
+    setShowEmojiPicker(true);
   };
 
   const handleSearchSelect = (message) => {
@@ -1256,9 +1302,12 @@ const ChatWindow = ({
 
         {typingUsers.size > 0 && (
           <div className="typing-indicator">
-            <span className="typing-text">
-              {Array.from(typingUsers).length === 1 ? 'Someone is typing...' : 'People are typing...'}
+            <span className="typing-label-live">
+              {Array.from(typingUsers).length === 1 ? 'Someone typing' : 'People typing'}
             </span>
+            <span className="typing-dot-live"></span>
+            <span className="typing-dot-live"></span>
+            <span className="typing-dot-live"></span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -1287,9 +1336,11 @@ const ChatWindow = ({
         <EmojiPicker
           onSelectEmoji={handleEmojiSelect}
           onSelectSticker={handleStickerSelect}
+          position={emojiPickerPosition}
           onClose={() => {
             setShowEmojiPicker(false);
             setSelectedMessageForReaction(null);
+            setEmojiPickerPosition(null);
           }}
         />
       )}
@@ -1311,6 +1362,17 @@ const ChatWindow = ({
           </div>
         )}
 
+        {showAISuggestions && chat?._id && latestMessageId && (
+          <div className="smart-replies-inline-row">
+            <span className="smart-replies-label">AI replies</span>
+            <AISmartReplies
+              chatId={chat?._id}
+              messageId={latestMessageId}
+              onSelectReply={onSelectAISuggestion}
+            />
+          </div>
+        )}
+
         <textarea
           value={messageInput}
           onChange={handleInputChange}
@@ -1321,12 +1383,10 @@ const ChatWindow = ({
         />
         <div className="message-actions">
           <button
+            ref={emojiButtonRef}
             className="btn-action"
             title="Emoji picker"
-            onClick={() => {
-              setSelectedMessageForReaction(null);
-              setShowEmojiPicker((current) => !current);
-            }}
+            onClick={toggleComposerEmojiPicker}
             type="button"
           >
             Emoji

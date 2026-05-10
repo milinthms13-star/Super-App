@@ -185,7 +185,7 @@ const ChatList = ({
           <p className="chat-list-subtitle">Private chats, voice notes, and quick replies</p>
         </div>
         <button className="btn-new-chat" onClick={onNewChat} title="Start new chat" type="button">
-          New Chat
+          ➕ New Chat
         </button>
       </div>
 
@@ -212,7 +212,7 @@ const ChatList = ({
                 onClick={() => onSelectChat(chat)}
               >
                 <div className="chat-avatar-container">
-                  <span className="chat-avatar">{getChatAvatar(chat)}</span>
+                  <span className={`chat-avatar ${isOnline ? 'online-glow' : ''}`}>{getChatAvatar(chat)}</span>
                   {isOnline && <span className="online-indicator"></span>}
                 </div>
                 <div className="chat-item-info">
@@ -220,6 +220,7 @@ const ChatList = ({
                     <h4 className="chat-title">{getChatTitle(chat)}</h4>
                     {chat?.type === 'group' && <span className="chat-type-badge">Group</span>}
                     {chat?.isPinned && <span className="chat-type-badge pinned">Pinned</span>}
+                    {chat?.typing && <span className="chat-typing-inline">typing...</span>}
                   </div>
                   <p className="chat-preview">{getChatPreview(chat)}</p>
                   <p className={`chat-presence ${isOnline ? 'online' : ''}`}>

@@ -62,17 +62,16 @@ const AISmartReplies = ({ chatId, messageId, onSelectReply }) => {
 
   if (loading) {
     return (
-      <div className="ai-suggestions-loading">
-        <div className="loading-spinner"></div>
-        <p>Generating smart replies...</p>
+      <div className="ai-smart-replies ai-smart-replies-status">
+        Generating smart replies...
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="ai-suggestions-error">
-        <p>{error}</p>
+      <div className="ai-smart-replies ai-smart-replies-status error">
+        {error}
       </div>
     );
   }
@@ -82,29 +81,17 @@ const AISmartReplies = ({ chatId, messageId, onSelectReply }) => {
   }
 
   return (
-    <div className="ai-smart-replies">
-      <div className="suggestions-header">
-        <span className="header-text">Smart Replies</span>
-      </div>
-      <div className="suggestions-list">
-        {suggestions.map((suggestion) => (
-          <div
-            key={suggestion.id}
-            className={`suggestion-item ${selectedSuggestion === suggestion.id ? 'selected' : ''}`}
-            onClick={() => handleSelectSuggestion(suggestion)}
-          >
-            <div className="suggestion-content">
-              <p className="suggestion-text">{suggestion.text}</p>
-              <div className="suggestion-meta">
-                <span className="tone-badge">{suggestion.tone}</span>
-              </div>
-            </div>
-            <button className="btn-use-suggestion" type="button">
-              Use
-            </button>
-          </div>
-        ))}
-      </div>
+    <div className="ai-smart-replies" role="list" aria-label="AI smart reply suggestions">
+      {suggestions.map((suggestion) => (
+        <button
+          key={suggestion.id}
+          type="button"
+          className={`suggestion-chip ${selectedSuggestion === suggestion.id ? 'selected' : ''}`}
+          onClick={() => handleSelectSuggestion(suggestion)}
+        >
+          <span>{suggestion.text}</span>
+        </button>
+      ))}
     </div>
   );
 };

@@ -447,11 +447,16 @@ const ReminderAlert = () => {
       <section className="reminderalert-hero">
         <div className="reminderalert-hero-copy">
           <p className="reminderalert-eyebrow">Reminder workspace</p>
-          <h1>Smart To-Do & Reminder System</h1>
+          <h1>Smart Reminders That Never Let You Miss What Matters</h1>
           <p className="reminderalert-intro">
-            Plan follow-ups, automate nudges, and share critical reminders with people you trust,
-            all from one cleaner workspace.
+            Create tasks, set alerts, share reminders with trusted contacts, and get notified on time.
           </p>
+          <div className="reminderalert-premium-features">
+            <div className="reminderalert-premium-feature">SMS/Call reminder escalation</div>
+            <div className="reminderalert-premium-feature">Trusted contact backup reminder</div>
+            <div className="reminderalert-premium-feature">Voice note reminder</div>
+            <div className="reminderalert-premium-feature">Smart repeat reminders</div>
+          </div>
           <div className="reminderalert-hero-actions">
             <button
               type="button"
@@ -499,6 +504,20 @@ const ReminderAlert = () => {
           </p>
         </aside>
       </section>
+      <button
+        type="button"
+        className="reminderalert-floating-add-btn"
+        onClick={() => {
+          if (showAddForm) {
+            closeEditor();
+          } else {
+            openCreateForm();
+          }
+        }}
+        aria-label={showAddForm ? 'Close reminder editor' : 'Add reminder'}
+      >
+        {showAddForm ? 'Close editor' : '+ Add reminder'}
+      </button>
 
       {/* Statistics */}
       <ReminderStats stats={stats} reminders={reminders} />
