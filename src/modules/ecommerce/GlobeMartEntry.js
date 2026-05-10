@@ -290,6 +290,40 @@ const GlobeMartEntry = ({
     setEntryMode("seller-registration");
   };
 
+  const renderEntryModeSelection = () => (
+    <section className="globemart-entry-shell" aria-label="GlobeMart entry choice">
+      <div className="globemart-entry-card globemart-entry-card-wide">
+        <h2>Choose your GlobeMart path</h2>
+        <p>Select how you'd like to use GlobeMart today.</p>
+        <div className="globemart-entry-choice-grid">
+          <div className="globemart-entry-choice-card">
+            <strong>Buyer access</strong>
+            <p>Browse stores, place orders, and manage your deliveries.</p>
+            <button type="button" className="btn btn-primary" onClick={openBuyerPage}>
+              Continue as Buyer
+            </button>
+          </div>
+          <div className="globemart-entry-choice-card">
+            <strong>Seller access</strong>
+            <p>List products, manage your shop, and onboard as a GlobeMart seller.</p>
+            <button type="button" className="btn btn-secondary" onClick={openSellerFlow}>
+              Continue as Seller
+            </button>
+            {sellerRegistration?.registeredAt ? (
+              <p className="globemart-entry-note">
+                Seller onboarding completed on {new Date(sellerRegistration.registeredAt).toLocaleDateString("en-IN")} ({sellerRegistration.sellerStatus}).
+              </p>
+            ) : !isNativeSeller ? (
+              <p className="globemart-entry-note">
+                New seller? You will be guided through seller registration after choosing Seller.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
   const updateField = (section, field, value) => {
     setFormState((current) => ({
       ...current,
@@ -762,28 +796,7 @@ const GlobeMartEntry = ({
     );
   }
 
-  return (
-    <section className="globemart-entry-shell" aria-label="GlobeMart role selection">
-      <div className="globemart-entry-card">
-        <h2>Choose Your GlobeMart Experience</h2>
-        <p>Select how you want to continue.</p>
-        <div className="globemart-entry-actions">
-          <button type="button" className="btn btn-primary" onClick={openBuyerPage}>
-            Continue as Buyer
-          </button>
-          <button type="button" className="btn btn-outline" onClick={openSellerFlow}>
-            Continue as Seller
-          </button>
-        </div>
-        {!isNativeSeller && sellerRegistration?.registeredAt ? (
-          <p className="globemart-entry-note">
-            Seller onboarding completed on{" "}
-            {new Date(sellerRegistration.registeredAt).toLocaleDateString("en-IN")} ({sellerRegistration.sellerStatus}).
-          </p>
-        ) : null}
-      </div>
-    </section>
-  );
+  return renderEntryModeSelection();
 };
 
 GlobeMartEntry.propTypes = {

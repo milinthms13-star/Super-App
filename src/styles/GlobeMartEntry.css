@@ -30,6 +30,39 @@
   margin-top: 1.25rem;
 }
 
+.globemart-entry-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.globemart-entry-choice-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: 16px;
+  border: 1px solid #d1d7e3;
+  background: #ffffff;
+}
+
+.globemart-entry-choice-card strong {
+  display: block;
+  font-size: 1.05rem;
+  color: #1f2a44;
+}
+
+.globemart-entry-choice-card p {
+  margin: 0;
+  color: #475569;
+}
+
+@media (max-width: 900px) {
+  .globemart-entry-choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .globemart-registration-form {
   display: grid;
   gap: 1rem;
