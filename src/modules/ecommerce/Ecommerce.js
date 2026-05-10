@@ -295,6 +295,12 @@ const Ecommerce = ({
   const [sellerOrderMessages, setSellerOrderMessages] = useState({});
   const [sellerOrderPending, setSellerOrderPending] = useState({});
   const [sellerReturnPending, setSellerReturnPending] = useState({});
+  const [showShopperTools, setShowShopperTools] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return window.innerWidth > 768;
+  });
   const formPanelRef = useRef(null);
   const productNameInputRef = useRef(null);
   const productImageInputRef = useRef(null);
@@ -302,6 +308,7 @@ const Ecommerce = ({
   const sellerAnalyticsSectionRef = useRef(null);
   const returnedProductsSectionRef = useRef(null);
   const sellerListingsSectionRef = useRef(null);
+  const shopperProductsSectionRef = useRef(null);
   const quickViewPanelRef = useRef(null);
   const flashNotificationRegistryRef = useRef(new Set());
   const { recognitionSupported, listeningKey, startListening, stopListening } = useVoice(language);
@@ -1019,6 +1026,11 @@ const Ecommerce = ({
     });
   };
 
+  const handleJumpToProducts = () => {
+    setMarketplaceView("products");
+    scrollToSection(shopperProductsSectionRef);
+  };
+
   const resetForm = () => {
     setProductForm(DEFAULT_PRODUCT_FORM);
     setEditingProductId("");
@@ -1425,7 +1437,7 @@ const Ecommerce = ({
   };
 
   return (
-    <div className="ecommerce-container">
+    <div className={`ecommerce-container ${isEntrepreneur ? "seller-mode" : "buyer-mode"}`}>
       <div className="ecommerce-header">
         <h1>GlobeMart</h1>
         <p>
@@ -1451,6 +1463,28 @@ const Ecommerce = ({
         <div className="products-notice">
           Product approval is separate from inventory. Create the catalog item first, then add stock batches with dispatch location, pricing, and optional expiry details.
         </div>
+      )}
+      {!isEntrepreneur && (
+        <section className="buyer-quick-access" aria-label="Buyer quick actions">
+          <div className="buyer-quick-copy">
+            <h2>Start shopping faster</h2>
+            <p>Jump directly to product cards and open advanced shopping tools only when needed.</p>
+          </div>
+          <div className="buyer-quick-actions">
+            <button type="button" className="btn btn-primary" onClick={handleJumpToProducts}>
+              Jump to Products
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => setShowShopperTools((currentValue) => !currentValue)}
+              aria-expanded={showShopperTools}
+              aria-controls="shopper-tools-panel"
+            >
+              {showShopperTools ? "Hide Shopping Tools" : "Show Shopping Tools"}
+            </button>
+          </div>
+        </section>
       )}
 
       {isEntrepreneur && (
@@ -1776,8 +1810,8 @@ const Ecommerce = ({
         </section>
       )}
 
-      {!isEntrepreneur && (
-        <section className="shopper-intelligence">
+      {!isEntrepreneur && showShopperTools && (
+        <section className="shopper-intelligence" id="shopper-tools-panel">
           <div className="shopper-memory-grid">
             <article className="shopper-intelligence-card">
               <div className="section-heading shopper-heading">
@@ -2897,7 +2931,7 @@ const Ecommerce = ({
       )}
 
       {!isEntrepreneur && (
-        <section>
+        <section ref={shopperProductsSectionRef}>
           <div className="section-heading shopper-heading">
             <div>
               <h3>{marketplaceView === "favorites" ? "Favorite Products" : "Approved Products"}</h3>

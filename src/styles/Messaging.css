@@ -338,10 +338,42 @@
 @media (max-width: 768px) {
   .messaging-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
 
   .messaging-sidebar {
-    display: none;
+    display: flex;
+    height: auto;
+    max-height: 36vh;
+    min-height: 240px;
+    overflow-y: auto;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .sidebar-header {
+    flex: 0 0 auto;
+  }
+
+  .sidebar-tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    flex: 1 1 50%;
+    min-width: 140px;
+    white-space: nowrap;
+  }
+
+  .sidebar-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .chat-area {
+    min-height: calc(100vh - 36vh - 48px);
   }
 
   .chat-header {

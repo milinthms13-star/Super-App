@@ -96,6 +96,64 @@
   border: 1px solid rgba(255, 215, 0, 0.35);
 }
 
+.ecommerce-container.buyer-mode {
+  padding-top: 1.25rem;
+}
+
+.ecommerce-container.buyer-mode .ecommerce-header {
+  margin-bottom: 1.2rem;
+  padding: 2.25rem 1.9rem;
+  border-radius: 22px;
+}
+
+.ecommerce-container.buyer-mode .ecommerce-header h1 {
+  font-size: clamp(2.1rem, 4vw, 3rem);
+}
+
+.ecommerce-container.buyer-mode .ecommerce-header p {
+  margin-top: 0.7rem;
+  line-height: 1.55;
+}
+
+.buyer-quick-access {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: #f8fbff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.buyer-quick-copy h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.buyer-quick-copy p {
+  margin: 0.3rem 0 0;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.buyer-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.buyer-mode .filter-section {
+  margin-bottom: 1.35rem;
+}
+
+.buyer-mode .shopper-intelligence {
+  margin-bottom: 1.35rem;
+}
+
 .section-heading {
   margin-bottom: 1rem;
 }
@@ -1466,6 +1524,56 @@
 
   .product-image {
     min-height: 200px;
+  }
+
+  .ecommerce-container.buyer-mode .ecommerce-header {
+    margin-bottom: 0.9rem;
+    padding: 1.4rem 1rem;
+  }
+
+  .buyer-quick-access {
+    margin-bottom: 0.9rem;
+    padding: 0.75rem 0.8rem;
+    border-radius: 14px;
+  }
+
+  .buyer-quick-copy h2 {
+    font-size: 0.98rem;
+  }
+
+  .buyer-quick-copy p {
+    font-size: 0.84rem;
+    line-height: 1.35;
+  }
+
+  .buyer-quick-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .buyer-quick-actions .btn {
+    width: 100%;
+  }
+
+  .buyer-mode .filter-section {
+    padding: 1rem;
+    border-radius: 16px;
+  }
+
+  .shopper-intelligence-card {
+    padding: 1rem;
+    border-radius: 18px;
+  }
+
+  .marketplace-filter-card {
+    padding: 0.9rem;
+    border-radius: 16px;
+  }
+
+  .filter-btn {
+    padding: 0.65rem 0.95rem;
+    font-size: 0.86rem;
   }
 }
 
