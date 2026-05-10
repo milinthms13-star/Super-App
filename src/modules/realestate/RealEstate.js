@@ -54,7 +54,7 @@ const REAL_ESTATE_SEED_PROPERTIES = [
     locality: "Kakkanad",
     type: "Flat",
     intent: "sale",
-    image: "Skyline tower",
+    image: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=400&h=300&fit=crop",
     bedrooms: 3,
     bathrooms: 3,
     furnishing: "Semi Furnished",
@@ -102,7 +102,7 @@ const REAL_ESTATE_SEED_PROPERTIES = [
     locality: "Beypore",
     type: "Villa",
     intent: "sale",
-    image: "Luxury villa",
+    image: "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&h=300&fit=crop",
     bedrooms: 4,
     bathrooms: 4,
     furnishing: "Furnished",
@@ -146,7 +146,7 @@ const REAL_ESTATE_SEED_PROPERTIES = [
     locality: "Technopark Phase 1",
     type: "Studio",
     intent: "rent",
-    image: "Rental studio",
+    image: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400&h=300&fit=crop",
     bedrooms: 1,
     bathrooms: 1,
     furnishing: "Furnished",
@@ -189,7 +189,7 @@ const REAL_ESTATE_SEED_PROPERTIES = [
     locality: "MG Road",
     type: "Commercial",
     intent: "sale",
-    image: "Commercial space",
+    image: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&h=300&fit=crop",
     bedrooms: 0,
     bathrooms: 2,
     furnishing: "Unfurnished",
@@ -229,7 +229,7 @@ const REAL_ESTATE_SEED_PROPERTIES = [
     locality: "Taliparamba",
     type: "Land",
     intent: "sale",
-    image: "Residential plots",
+    image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400&h=300&fit=crop",
     bedrooms: 0,
     bathrooms: 0,
     furnishing: "Unfurnished",
@@ -269,7 +269,7 @@ const REAL_ESTATE_SEED_PROPERTIES = [
     locality: "Edappally",
     type: "Flat",
     intent: "project",
-    image: "Project launch",
+    image: "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=400&h=300&fit=crop",
     bedrooms: 3,
     bathrooms: 2,
     furnishing: "Semi Furnished",
@@ -544,6 +544,7 @@ const RealEstate = () => {
   const [furnishingFilter, setFurnishingFilter] = useState("Any");
   const [locationFilter, setLocationFilter] = useState("All");
   const [budgetFilter, setBudgetFilter] = useState("All");
+  const [verifiedFilter, setVerifiedFilter] = useState("All");
   const [sortBy, setSortBy] = useState("featured");
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
@@ -620,6 +621,11 @@ const RealEstate = () => {
         (budgetFilter === "50L - 1Cr" && property.priceValue > 50 && property.priceValue <= 100) ||
         (budgetFilter === "1Cr - 2Cr" && property.priceValue > 100 && property.priceValue <= 200) ||
         (budgetFilter === "2Cr+" && property.priceValue > 200);
+      const matchesVerified =
+        verifiedFilter === "All" ||
+        (verifiedFilter === "Verified only" && property.verified) ||
+        (verifiedFilter === "Owner only" && property.listedBy === "Owner") ||
+        (verifiedFilter === "Agent only" && property.listedBy === "Agent");
 
       return (
         matchesSearch &&
@@ -628,7 +634,8 @@ const RealEstate = () => {
         matchesBedrooms &&
         matchesFurnishing &&
         matchesLocation &&
-        matchesBudget
+        matchesBudget &&
+        matchesVerified
       );
     });
 
@@ -660,6 +667,7 @@ const RealEstate = () => {
     searchText,
     sortBy,
     typeFilter,
+    verifiedFilter,
   ]);
 
   useEffect(() => {
@@ -1233,6 +1241,16 @@ const RealEstate = () => {
                   <option value="popularity">Popularity</option>
                 </select>
               </label>
+
+              <label className="realestate-field">
+                <span>Listing type</span>
+                <select value={verifiedFilter} onChange={(event) => setVerifiedFilter(event.target.value)}>
+                  <option value="All">All listings</option>
+                  <option value="Verified only">Verified only</option>
+                  <option value="Owner only">Owner only</option>
+                  <option value="Agent only">Agent only</option>
+                </select>
+              </label>
             </div>
           </article>
 
@@ -1262,6 +1280,7 @@ const RealEstate = () => {
                     }}
                     role="button"
                     tabIndex={0}
+                    style={{ '--property-image': `url(${property.image})` }}
                   >
                     <div className="realestate-property-topline">
                       <span className={`realestate-badge ${property.verified ? "verified" : "pending"}`}>
@@ -1433,20 +1452,28 @@ const RealEstate = () => {
             <section className="realestate-surface-card">
               <div className="realestate-section-heading">
                 <h2>Monetization</h2>
-                <p>Free listing limits, premium placement, and broker subscriptions built into the product.</p>
+                <p>Premium plans for enhanced visibility and lead generation.</p>
               </div>
               <div className="realestate-plan-list">
-                <div>
+                <div className="realestate-plan-card starter">
                   <strong>Starter</strong>
-                  <span>1 free listing, standard search visibility</span>
+                  <span>₹499/month - 1 free listing, standard search visibility</span>
+                  <button type="button" className="realestate-plan-button">Upgrade</button>
                 </div>
-                <div>
+                <div className="realestate-plan-card featured">
                   <strong>Featured</strong>
-                  <span>Homepage placement, 2x lead boost, image priority</span>
+                  <span>₹1,499/month - Homepage placement, 2x lead boost, image priority</span>
+                  <button type="button" className="realestate-plan-button">Upgrade</button>
                 </div>
-                <div>
+                <div className="realestate-plan-card agent-pro">
                   <strong>Agent Pro</strong>
-                  <span>Unlimited listings, lead CRM, analytics, branded profile</span>
+                  <span>₹2,999/month - Unlimited listings, lead CRM, analytics, branded profile</span>
+                  <button type="button" className="realestate-plan-button">Upgrade</button>
+                </div>
+                <div className="realestate-plan-card builder-pro">
+                  <strong>Builder Pro</strong>
+                  <span>₹4,999/month - Project marketing, inventory management, bulk leads</span>
+                  <button type="button" className="realestate-plan-button">Upgrade</button>
                 </div>
               </div>
             </section>
@@ -1670,9 +1697,9 @@ const RealEstate = () => {
                   </div>
                 </div>
 
-                <div className="realestate-detail-media">
-                  <strong>{selectedProperty.image}</strong>
-                  <span>{selectedProperty.hasVideoTour ? "Images and video tour available" : "Images and gallery available"}</span>
+                <div className="realestate-detail-media" style={{ '--property-image': `url(${selectedProperty.image})` }}>
+                  <strong>{selectedProperty.hasVideoTour ? "Images and video tour available" : "Images and gallery available"}</strong>
+                  <span>{selectedProperty.mediaCount} media assets</span>
                 </div>
 
                 <div className="realestate-detail-price-row">
@@ -1706,6 +1733,21 @@ const RealEstate = () => {
                   <span>{selectedProperty.rating.toFixed(1)} / 5 from {selectedProperty.reviewCount} reviews</span>
                 </div>
 
+                <div className="realestate-trust-badges">
+                  <span className="realestate-trust-badge kyc">
+                    <strong>KYC Verified Owner</strong>
+                  </span>
+                  <span className="realestate-trust-badge rera">
+                    <strong>RERA Verified</strong>
+                  </span>
+                  <span className="realestate-trust-badge docs">
+                    <strong>Document Checked</strong>
+                  </span>
+                  <span className="realestate-trust-badge guarantee">
+                    <strong>No Fake Listing Guarantee</strong>
+                  </span>
+                </div>
+
                 <div className="realestate-action-stack">
                   <button type="button" className="realestate-primary-button" onClick={handleEnquirySubmit}>
                     Send enquiry
@@ -1716,6 +1758,34 @@ const RealEstate = () => {
                     onClick={() => setStatusMessage(`Call request shared with ${selectedProperty.sellerName}.`)}
                   >
                     Call owner / agent
+                  </button>
+                  <button
+                    type="button"
+                    className="realestate-secondary-button"
+                    onClick={() => setStatusMessage(`WhatsApp contact initiated with ${selectedProperty.sellerName}.`)}
+                  >
+                    WhatsApp contact
+                  </button>
+                  <button
+                    type="button"
+                    className="realestate-secondary-button"
+                    onClick={() => setStatusMessage(`Property link copied to clipboard for sharing.`)}
+                  >
+                    Share property
+                  </button>
+                  <button
+                    type="button"
+                    className="realestate-secondary-button"
+                    onClick={() => setStatusMessage(`Brochure download started for ${selectedProperty.title}.`)}
+                  >
+                    Download brochure
+                  </button>
+                  <button
+                    type="button"
+                    className="realestate-secondary-button"
+                    onClick={() => setStatusMessage(`EMI calculator opened for ${selectedProperty.priceLabel}.`)}
+                  >
+                    Loan EMI estimate
                   </button>
                   <button
                     type="button"

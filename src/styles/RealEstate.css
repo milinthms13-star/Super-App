@@ -149,8 +149,9 @@
 .realestate-hero-panel {
   border-radius: 20px;
   padding: 1.35rem;
-  background: rgba(23, 48, 66, 0.92);
+  background: rgba(23, 48, 66, 0.95);
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .realestate-hero-panel h2 {
@@ -349,6 +350,44 @@
   align-items: flex-start;
   padding: 1.1rem;
   margin: 0.9rem 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.realestate-property-media::before,
+.realestate-detail-media::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: var(--property-image);
+  background-size: cover;
+  background-position: center;
+  z-index: 1;
+}
+
+.realestate-property-media::after,
+.realestate-detail-media::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(13, 122, 105, 0.1), rgba(201, 138, 46, 0.1));
+  z-index: 2;
+}
+
+.realestate-property-media strong,
+.realestate-detail-media strong,
+.realestate-property-media span,
+.realestate-detail-media span {
+  position: relative;
+  z-index: 3;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .realestate-property-media strong,
@@ -393,16 +432,13 @@
 }
 
 .realestate-lead-list,
-.realestate-plan-list,
-.realestate-review-list,
-.realestate-similar-list,
-.realestate-message-list {
+.realestate-plan-list {
   display: grid;
-  gap: 0.75rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
 }
 
 .realestate-lead-item,
-.realestate-plan-list div,
 .realestate-review-item,
 .realestate-similar-item,
 .realestate-message-item,
@@ -415,7 +451,6 @@
 }
 
 .realestate-lead-item strong,
-.realestate-plan-list strong,
 .realestate-review-item strong,
 .realestate-contact-card strong,
 .realestate-map-card strong,
@@ -424,13 +459,83 @@
   display: block;
 }
 
-.realestate-lead-item span,
-.realestate-plan-list span,
-.realestate-message-item span,
-.realestate-similar-item span {
+.realestate-contact-card span {
   display: block;
   color: var(--realestate-muted);
+  font-size: 0.9rem;
   margin-top: 0.25rem;
+}
+
+.realestate-trust-badges {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.realestate-trust-badge {
+  padding: 0.75rem;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.realestate-trust-badge.kyc {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+}
+
+.realestate-trust-badge.rera {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+}
+
+.realestate-trust-badge.docs {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+}
+
+.realestate-trust-badge.guarantee {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+}
+
+.realestate-plan-card {
+  border: 1px solid var(--realestate-border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  background: var(--realestate-surface);
+  text-align: center;
+}
+
+.realestate-plan-card strong {
+  display: block;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.realestate-plan-card span {
+  display: block;
+  color: var(--realestate-muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.realestate-plan-button {
+  background: var(--realestate-primary);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.realestate-plan-button:hover {
+  transform: translateY(-1px);
 }
 
 .realestate-right-column {

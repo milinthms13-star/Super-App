@@ -30,7 +30,7 @@ import "./App.css";
 
 const Dashboard = React.lazy(() => import("./modules/Dashboard"));
 const AdminDashboard = React.lazy(() => import("./modules/admin/AdminDashboard"));
-const GlobeMartEntry = React.lazy(() => import("./modules/ecommerce/GlobeMartEntry"));
+const Ecommerce = React.lazy(() => import("./modules/ecommerce/Ecommerce"));
 const CartPage = React.lazy(() => import("./modules/ecommerce/CartPage"));
 const OrdersPage = React.lazy(() => import("./modules/ecommerce/OrdersPage"));
 const ReturnsPage = React.lazy(() => import("./modules/ecommerce/ReturnsPage"));
@@ -1076,8 +1076,9 @@ function AppShell() {
               <Route
                 path="ecommerce"
                 element={
-                  <GlobeMartEntry
+                  <Ecommerce
                     globeMartCategories={globeMartCategories}
+                    businessCategories={businessCategories}
                     loggedInUser={loggedInUser}
                   />
                 }

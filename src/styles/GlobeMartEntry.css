@@ -51,6 +51,12 @@
   color: #1f2a44;
 }
 
+.plan-section-caption {
+  margin: 0;
+  color: #60708f;
+  font-size: 0.88rem;
+}
+
 .globemart-plan-options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -151,4 +157,247 @@
   margin-top: 1rem;
   color: #2f7d4c;
   font-weight: 600;
+}
+
+.globemart-entry-card-wide {
+  width: min(1100px, 100%);
+}
+
+.globemart-layer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.globemart-layer-card {
+  padding: 0.8rem;
+  border-radius: 12px;
+  border: 1px solid #d8deea;
+  background: #f8fafc;
+}
+
+.globemart-layer-card h4 {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #1f2a44;
+}
+
+.globemart-layer-card p {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+}
+
+.globemart-layer-card.active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+
+.globemart-layer-card.done {
+  border-color: #16a34a;
+  background: #edfdf1;
+}
+
+.globemart-wizard-progress {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.globemart-progress-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  color: #1f2a44;
+}
+
+.globemart-progress-header span {
+  color: #5f6f8b;
+}
+
+.globemart-progress-track {
+  width: 100%;
+  height: 9px;
+  border-radius: 999px;
+  background: #dbe4f4;
+  overflow: hidden;
+}
+
+.globemart-progress-track span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb 0%, #22c55e 100%);
+}
+
+.globemart-step-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.globemart-step-pill {
+  border: 1px solid #ccd5e5;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.globemart-step-pill.active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+  color: #312e81;
+}
+
+.globemart-step-pill.done {
+  border-color: #16a34a;
+  background: #edfdf1;
+  color: #166534;
+}
+
+.globemart-step-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.globemart-field-wide {
+  grid-column: 1 / -1;
+}
+
+.globemart-step-stack {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.globemart-step-note {
+  margin: 0;
+  color: #546584;
+  font-size: 0.92rem;
+}
+
+.globemart-checkbox-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.globemart-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border: 1px solid #d6deed;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 0.65rem;
+  font-weight: 500;
+  color: #31425f;
+}
+
+.globemart-check input {
+  margin-top: 0.2rem;
+}
+
+.globemart-status-strip {
+  border: 1px solid #d4dded;
+  border-radius: 12px;
+  background: #f7fbff;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.globemart-status-strip strong {
+  color: #1f2a44;
+}
+
+.globemart-status-strip div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.globemart-status-strip span {
+  background: #e9efff;
+  color: #2a3f74;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.globemart-billing-cycles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.globemart-billing-cycle {
+  border: 1px solid #cfd8e8;
+  border-radius: 12px;
+  background: #fff;
+  padding: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.globemart-billing-cycle.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.globemart-billing-cycle strong {
+  color: #1e3a8a;
+}
+
+.globemart-billing-cycle span {
+  color: #596c8f;
+  font-size: 0.82rem;
+}
+
+.globemart-payment-card {
+  border: 1px solid #d6deed;
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: #f8fafc;
+}
+
+.globemart-payment-card h4 {
+  margin: 0;
+  color: #1f2a44;
+}
+
+.globemart-payment-card p {
+  margin: 0.5rem 0 0;
+}
+
+.globemart-registration-form input,
+.globemart-registration-form select,
+.globemart-registration-form textarea {
+  border: 1px solid #c8d2e7;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+  width: 100%;
+  font-family: inherit;
+}
+
+.globemart-registration-form textarea {
+  resize: vertical;
+}
+
+@media (max-width: 900px) {
+  .globemart-layer-grid,
+  .globemart-plan-options,
+  .globemart-billing-cycles {
+    grid-template-columns: 1fr;
+  }
+
+  .globemart-step-grid {
+    grid-template-columns: 1fr;
+  }
 }
