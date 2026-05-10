@@ -447,7 +447,13 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       name: t(module.nameKey, module.fallbackName),
       description: t(module.descriptionKey, module.fallbackDescription),
     }))
-    .filter((module) => enabledModules.includes(module.id))
+    .filter((module) => {
+      // Fallback: if enabledModules is empty, show all modules
+      const enabledModulesList = Array.isArray(enabledModules) && enabledModules.length > 0 
+        ? enabledModules 
+        : MODULE_CONFIG.map(m => m.id);
+      return enabledModulesList.includes(module.id);
+    })
     .filter((module) => !isSeller || subscribedCategoryIds.includes(module.id));
   const visibleCards = [
     ...filteredModules.map((module) => ({ ...module, cardType: "module" })),
