@@ -1,0 +1,343 @@
+/* ============================================================
+   PRODUCTION-READY ANIMATIONS & POLISH
+   ============================================================ */
+
+/* Loading Spinner Animation */
+@keyframes spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinnerTrack {
+  0% {
+    stroke-dashoffset: 565.48;
+  }
+  50% {
+    stroke-dashoffset: 141.37;
+    transform: rotate(135deg);
+  }
+  100% {
+    stroke-dashoffset: 565.48;
+    transform: rotate(450deg);
+  }
+}
+
+/* Form Step Transitions */
+@keyframes stepSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes stepSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+/* Success Checkmark Animation */
+@keyframes successCheckmark {
+  0% {
+    stroke-dashoffset: 50;
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Error Shake Animation */
+@keyframes errorShake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
+}
+
+/* Field Focus Glow */
+@keyframes fieldFocusGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 215, 0, 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0);
+  }
+}
+
+/* Loading Button State */
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  animation: buttonDisabledPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes buttonDisabledPulse {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* Loading Spinner in Button */
+.btn.loading::after {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spinner 0.8s linear infinite;
+}
+
+/* Success State for Form */
+.form-group.success .form-input {
+  border-color: #4CAF50;
+  background: rgba(76, 175, 80, 0.02);
+}
+
+.form-group.success .form-input::after {
+  content: '✓';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #4CAF50;
+  font-weight: bold;
+}
+
+/* Error State for Form */
+.form-group.error .form-input {
+  border-color: #F44336;
+  background: rgba(244, 67, 54, 0.02);
+  animation: errorShake 0.4s ease-in-out;
+}
+
+/* Checking State for Form */
+.form-group.checking .form-input {
+  border-color: #FF9500;
+}
+
+/* Validation Message Animations */
+.form-input ~ .helper-text,
+.form-input ~ .username-status {
+  animation: stepSlideIn 0.3s ease-out;
+}
+
+/* ============================================================
+   RESPONSIVE DESIGN - MOBILE FIRST
+   ============================================================ */
+
+/* Tablet Optimization (768px and up) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .login-card {
+    max-width: 500px;
+    padding: 1.8rem 1.4rem;
+  }
+  
+  .login-header {
+    margin-bottom: 1rem;
+  }
+  
+  .login-logo {
+    height: 65px;
+  }
+  
+  .btn {
+    min-height: 52px;
+    font-size: 1rem;
+  }
+  
+  .form-input {
+    font-size: 1rem;
+    padding: 0.8rem 1.1rem;
+  }
+}
+
+/* Desktop Optimization (1025px and up) */
+@media (min-width: 1025px) {
+  .login-card {
+    max-width: 500px;
+  }
+  
+  .login-container {
+    align-items: center;
+  }
+}
+
+/* Large Desktop (1600px+) */
+@media (min-width: 1600px) {
+  .login-card {
+    max-width: 540px;
+  }
+  
+  .login-header h1 {
+    font-size: 2.2rem;
+  }
+}
+
+/* Extra Small Devices (320px) */
+@media (max-width: 374px) {
+  .login-card {
+    padding: 1.2rem 0.95rem;
+    border-radius: 6px;
+  }
+  
+  .login-header {
+    margin-bottom: 0.8rem;
+  }
+  
+  .login-logo {
+    height: 48px;
+  }
+  
+  .login-header h1 {
+    font-size: 1.6rem;
+  }
+  
+  .login-subtitle {
+    font-size: 0.8rem;
+  }
+  
+  .btn,
+  .form-input {
+    font-size: 16px; /* Prevent auto-zoom on iOS */
+  }
+  
+  .form-group {
+    gap: 0.3rem;
+  }
+  
+  .form-group label {
+    font-size: 0.82rem;
+  }
+}
+
+/* Small Devices (375-480px) */
+@media (min-width: 375px) and (max-width: 480px) {
+  .login-card {
+    max-width: 100%;
+    padding: 1.4rem 1.1rem;
+  }
+  
+  .form-input,
+  .btn {
+    font-size: 16px;
+  }
+}
+
+/* Medium Mobile (481-640px) */
+@media (min-width: 481px) and (max-width: 767px) {
+  .login-card {
+    max-width: 100%;
+    padding: 1.6rem 1.2rem;
+  }
+  
+  .login-header h1 {
+    font-size: 1.9rem;
+  }
+  
+  .btn {
+    min-height: 48px;
+  }
+}
+
+/* Touch Device Optimization */
+@media (hover: none) and (pointer: coarse) {
+  .btn,
+  .form-input {
+    min-height: 44px; /* iOS tap target minimum */
+  }
+  
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+}
+
+/* Landscape Mode */
+@media (max-height: 500px) and (orientation: landscape) {
+  .login-header {
+    margin-bottom: 0.6rem;
+  }
+  
+  .login-logo {
+    height: 45px;
+  }
+  
+  .form-group {
+    gap: 0.25rem;
+  }
+  
+  .btn {
+    min-height: 44px;
+    padding: 0.6rem 1.2rem;
+  }
+}
+
+/* Reduced Motion - Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .login-card {
+    background: rgba(20, 20, 20, 0.94);
+    color: #f0f0f0;
+  }
+  
+  .form-input {
+    background: rgba(30, 30, 30, 0.8);
+    border-color: #444;
+    color: #f0f0f0;
+  }
+  
+  .form-input::placeholder {
+    color: #888;
+  }
+}
+
+/* High Contrast Support */
+@media (prefers-contrast: more) {
+  .form-input {
+    border-width: 2px;
+  }
+  
+  .btn {
+    font-weight: 800;
+  }
+}

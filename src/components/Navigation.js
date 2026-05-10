@@ -119,7 +119,13 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                 </button>
               ) : null}
               <div className="user-profile" onClick={() => setShowUserMenu(!showUserMenu)}>
-                <span className="user-avatar">{displayUser.avatar}</span>
+                <span className="user-avatar">
+                  {displayUser.photoURL ? (
+                    <img src={displayUser.photoURL} alt={displayUser.name} className="avatar-image" />
+                  ) : (
+                    displayUser.avatar || displayUser.name?.[0]?.toUpperCase() || 'U'
+                  )}
+                </span>
                 <span className="user-name">{displayUser.name || displayUser.email}</span>
                 <span className="dropdown-icon">v</span>
 

@@ -453,11 +453,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                 </>
               ) : (
                 <>
-                  <h1>{t("dashboard.welcomeTitle", "Welcome to NilaHub!")}</h1>
+                  <h1>{t("dashboard.welcomeTitle", `Welcome back, ${currentUser?.name?.split(' ')[0] || 'there'}!`)}</h1>
                   <p>
                     {t(
                       "dashboard.welcomeDescription",
-                      "Kerala's first super app for global shopping, messaging, listings, homes, food, rides, matches, and social life"
+                      "Your NilaHub ecosystem is ready. Access shopping, messaging, listings, homes, food, rides, matches, and more—all in one place."
                     )}
                   </p>
                 </>
