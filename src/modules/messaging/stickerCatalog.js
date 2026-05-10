@@ -1,6 +1,17 @@
 const encodeSvg = (svgMarkup) =>
   `data:image/svg+xml;utf8,${encodeURIComponent(svgMarkup)}`;
 
+const escapeXml = (value) =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+const normalizeStickerCopy = (value, fallback = '') =>
+  String(value || fallback).trim().slice(0, 32);
+
 const makeSticker = ({
   id,
   label,
@@ -12,7 +23,8 @@ const makeSticker = ({
   trending = false,
 }) => {
   const [fromColor, toColor] = palette;
-  const stickerText = text || label;
+  const stickerName = normalizeStickerCopy(label, 'Sticker');
+  const stickerText = normalizeStickerCopy(text, stickerName) || 'Sticker';
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">
   <defs>
@@ -25,13 +37,13 @@ const makeSticker = ({
   <rect x="24" y="24" rx="42" ry="42" width="272" height="272" fill="rgba(255,255,255,0.08)" />
   <text x="160" y="172" text-anchor="middle" dominant-baseline="middle"
     font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#ffffff">
-    ${stickerText}
+    ${escapeXml(stickerText)}
   </text>
 </svg>`;
 
   return {
     id,
-    name: label,
+    name: stickerName,
     text: stickerText,
     category,
     type: 'image',
@@ -41,6 +53,8 @@ const makeSticker = ({
     tags,
   };
 };
+
+export const createSticker = (stickerDefinition) => makeSticker(stickerDefinition);
 
 export const STICKER_CATEGORIES = [
   { id: 'reactions', label: 'Reactions', icon: '💥' },
@@ -307,4 +321,3 @@ export const STICKERS = [
 
 export const getStickerById = (stickerId) =>
   STICKERS.find((sticker) => sticker.id === stickerId) || null;
-

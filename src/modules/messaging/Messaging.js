@@ -290,8 +290,8 @@ const Messaging = () => {
     return getEntityId(selectedChatParticipant) || currentUserId;
   }, [currentUser, currentUserId, selectedChat]);
   const selectedChatClearedAt = useMemo(
-    () => getChatClearTimestamp(selectedChat?._id, clearedChats),
-    [clearedChats, selectedChat]
+    () => getChatClearTimestamp(selectedChat?._id || selectedChatroom?._id, clearedChats),
+    [clearedChats, selectedChat, selectedChatroom]
   );
   const latestMessageId = useMemo(() => {
     const latestReplyableMessage = [...messages]
@@ -611,15 +611,6 @@ const Messaging = () => {
     [chats]
   );
 
-  const activeNowCount = useMemo(
-    () =>
-      chats.reduce((count, chat) => {
-        const otherParticipant = getOtherParticipant(chat, currentUser);
-        return count + (otherParticipant?.online ? 1 : 0);
-      }, 0),
-    [chats, currentUser]
-  );
-
   const recentConversationCards = useMemo(() => {
     const toTime = (chat) => new Date(chat?.lastMessageAt || chat?.updatedAt || 0).getTime();
     return [...chats]
@@ -672,6 +663,11 @@ const Messaging = () => {
 
     return deduped.slice(0, 6);
   }, [chats, contacts, currentUser]);
+
+  const activeNowCount = useMemo(
+    () => onlineContactsPreview.length + (isOnline ? 1 : 0),
+    [isOnline, onlineContactsPreview.length]
+  );
 
   const suggestedConversationCards = useMemo(
     () =>
@@ -1691,7 +1687,8 @@ const Messaging = () => {
   }, [loadMessages, selectedChat]);
 
   const handleClearChat = useCallback(async () => {
-    if (!selectedChat?._id) {
+    const activeChat = selectedChat || selectedChatroom;
+    if (!activeChat?._id) {
       return;
     }
 
@@ -1702,7 +1699,7 @@ const Messaging = () => {
       return;
     }
 
-    const chatId = getEntityId(selectedChat._id);
+    const chatId = getEntityId(activeChat._id);
     const clearedAt = new Date().toISOString();
     const nextClearedChats = {
       ...clearedChatsRef.current,
@@ -1715,25 +1712,26 @@ const Messaging = () => {
     setFocusedMessageId('');
 
     try {
-      await apiCall(`/messaging/chats/${selectedChat._id}/mark-read`, 'PUT');
+      await apiCall(`/messaging/chats/${activeChat._id}/mark-read`, 'PUT');
     } catch (error) {
       console.error('Error marking cleared chat as read:', error);
     }
-  }, [apiCall, selectedChat]);
+  }, [apiCall, selectedChat, selectedChatroom]);
 
   const handleRestoreClearedChat = useCallback(async () => {
-    if (!selectedChat?._id) {
+    const activeChat = selectedChat || selectedChatroom;
+    if (!activeChat?._id) {
       return;
     }
 
-    const chatId = getEntityId(selectedChat._id);
+    const chatId = getEntityId(activeChat._id);
     const nextClearedChats = { ...clearedChatsRef.current };
     delete nextClearedChats[chatId];
 
     clearedChatsRef.current = nextClearedChats;
     setClearedChats(nextClearedChats);
-    await loadMessages(selectedChat._id);
-  }, [loadMessages, selectedChat]);
+    await loadMessages(activeChat._id);
+  }, [loadMessages, selectedChat, selectedChatroom]);
 
   const handleCreateDirectChat = async (userId) => {
     try {
@@ -2026,13 +2024,14 @@ const Messaging = () => {
   };
 
   const handleDeleteAllMessages = async () => {
-    if (!selectedChat?._id) {
+    const activeChat = selectedChat || selectedChatroom;
+    if (!activeChat?._id) {
       return;
     }
 
-    const chatTitle = selectedChat.isGroupChat
-      ? selectedChat.groupName
-      : getOtherParticipant(selectedChat, currentUser)?.name || 'this chat';
+    const chatTitle = activeChat.isGroupChat
+      ? activeChat.groupName
+      : getOtherParticipant(activeChat, currentUser)?.name || 'this chat';
 
     const confirmed = window.confirm(
       `Are you sure you want to delete all messages in "${chatTitle}"? This action cannot be undone.`
@@ -2073,12 +2072,13 @@ const Messaging = () => {
   };
 
   const handleExportChat = async () => {
-    if (!selectedChat?._id || typeof window === 'undefined') {
+    const activeChat = selectedChat || selectedChatroom;
+    if (!activeChat?._id || typeof window === 'undefined') {
       return;
     }
 
     try {
-      const response = await apiCall(`/messaging/chats/${selectedChat._id}/export`, 'GET');
+      const response = await apiCall(`/messaging/chats/${activeChat._id}/export`, 'GET');
       const exportPayload = response?.chatExport;
 
       if (!exportPayload) {
@@ -2575,7 +2575,11 @@ const Messaging = () => {
                   onShowOlderMessages={handleShowOlderMessages}
                   onShowLatestOnly={handleShowLatestOnly}
                   onRetryMessage={handleRetryMessage}
-                  onExportChat={() => {}}
+                  onClearChat={handleClearChat}
+                  onRestoreClearedChat={handleRestoreClearedChat}
+                  isChatCleared={Boolean(selectedChatClearedAt)}
+                  onDeleteAllMessages={handleDeleteAllMessages}
+                  onExportChat={handleExportChat}
                 />
                 <div className="chatroom-panel-sidebar">
                   <ChatroomPanel

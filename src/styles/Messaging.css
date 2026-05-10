@@ -5127,6 +5127,83 @@
   padding: 0.55rem 0.7rem 0.8rem;
 }
 
+.sticker-creator-section {
+  margin-bottom: 0.55rem;
+}
+
+.sticker-creator-toggle {
+  width: 100%;
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 10px;
+  padding: 0.48rem 0.68rem;
+  background: rgba(240, 249, 255, 0.92);
+  color: #0c4a6e;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sticker-creator-toggle.active {
+  border-color: rgba(3, 105, 161, 0.45);
+  background: rgba(224, 242, 254, 0.96);
+}
+
+.sticker-creator-form {
+  margin-top: 0.5rem;
+  padding: 0.55rem;
+  border: 1px solid rgba(14, 165, 233, 0.16);
+  border-radius: 12px;
+  background: #f8fcff;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.sticker-creator-input {
+  width: 100%;
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+}
+
+.sticker-palette-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.sticker-palette-chip {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+}
+
+.sticker-palette-chip.active {
+  border-color: #0f172a;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 4px rgba(14, 165, 233, 0.35);
+}
+
+.sticker-creator-preview {
+  width: 96px;
+}
+
+.sticker-creator-error {
+  margin: 0;
+  font-size: 0.76rem;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.sticker-creator-save-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  background: linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .sticker-search-input {
   width: 100%;
   border: 1px solid rgba(14, 165, 233, 0.2);
@@ -5224,6 +5301,21 @@
 .sticker-fav-btn.active {
   color: #d97706;
   background: #fffbeb;
+}
+
+.sticker-delete-btn {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  border: none;
+  border-radius: 999px;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #b91c1c;
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .sticker-empty-state {
