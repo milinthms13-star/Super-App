@@ -1,0 +1,487 @@
+/* Enhanced Hero Section - Premium Ecosystem Visualization */
+.enhanced-hero-section {
+  position: relative;
+  background: linear-gradient(135deg, #1a2332 0%, #0a1428 100%);
+  border-radius: 24px;
+  padding: 3rem 3rem;
+  margin-bottom: 3rem;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 215, 0, 0.15);
+}
+
+.enhanced-hero-section.early-morning {
+  background: linear-gradient(135deg, #0a1428 0%, #1a1a3a 100%);
+}
+
+/* Animated Background */
+.hero-gradient-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 30%, rgba(255, 215, 0, 0.08) 50%, transparent 70%);
+  animation: shimmer-bg 4s infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer-bg {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.hero-content-wrapper {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 2rem;
+}
+
+/* Greeting Section */
+.hero-greeting {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+}
+
+.greeting-text {
+  flex: 1;
+}
+
+.greeting-main {
+  margin: 0;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  letter-spacing: -0.02em;
+}
+
+.greeting-emoji {
+  font-size: 2.8rem;
+  animation: wave 2s ease-in-out infinite;
+}
+
+@keyframes wave {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  10% {
+    transform: rotate(20deg);
+  }
+  20% {
+    transform: rotate(-5deg);
+  }
+  30% {
+    transform: rotate(20deg);
+  }
+  40% {
+    transform: rotate(0deg);
+  }
+}
+
+.user-name {
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+}
+
+.greeting-subtitle {
+  margin: 0.5rem 0 0 0;
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 400;
+}
+
+/* Weather Card */
+.weather-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 16px;
+  padding: 1.2rem 1.5rem;
+  flex-shrink: 0;
+}
+
+.weather-icon {
+  font-size: 2.5rem;
+}
+
+.weather-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.weather-temp {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: white;
+}
+
+.weather-condition {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Live Metrics Banner */
+.live-metrics-banner {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  border-radius: 16px;
+  padding: 1.5rem;
+  overflow: hidden;
+}
+
+.metrics-scroll {
+  display: flex;
+  gap: 2rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scrollbar-width: none;
+}
+
+.metrics-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.metric-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 12px;
+  flex-shrink: 0;
+  min-width: 200px;
+  transition: all 0.3s ease;
+}
+
+.metric-item:hover {
+  background: rgba(255, 215, 0, 0.15);
+  border-color: #FFD700;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(255, 215, 0, 0.15);
+}
+
+.metric-icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+}
+
+.metric-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.metric-label {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-value {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #FFD700;
+}
+
+/* Ecosystem Promise */
+.hero-ecosystem-promise {
+  display: grid;
+  gap: 1rem;
+}
+
+.promise-main {
+  margin: 0;
+  font-size: 1.5rem;
+  color: white;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.highlight {
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+}
+
+.promise-sub {
+  margin: 0;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.trust-badge {
+  background: rgba(76, 205, 196, 0.2);
+  border: 1px solid rgba(78, 205, 196, 0.5);
+  color: #4ECDC4;
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Floating Badges */
+.hero-badges {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.badge {
+  padding: 0.6rem 1.2rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: white;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: float 3s ease-in-out infinite;
+}
+
+.badge:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.badge:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.badge:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+.badge:nth-child(4) {
+  animation-delay: 0.9s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.badge-unified {
+  border-color: rgba(78, 205, 196, 0.4);
+  background: rgba(78, 205, 196, 0.1);
+}
+
+.badge-wallet {
+  border-color: rgba(255, 215, 0, 0.4);
+  background: rgba(255, 215, 0, 0.1);
+}
+
+.badge-messaging {
+  border-color: rgba(100, 200, 255, 0.4);
+  background: rgba(100, 200, 255, 0.1);
+}
+
+.badge-ai {
+  border-color: rgba(255, 107, 107, 0.4);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .enhanced-hero-section {
+    padding: 2.5rem 2rem;
+  }
+
+  .greeting-main {
+    font-size: 2rem;
+  }
+
+  .hero-greeting {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .weather-card {
+    align-self: flex-start;
+  }
+
+  .metrics-scroll {
+    gap: 1rem;
+  }
+
+  .metric-item {
+    min-width: 160px;
+    padding: 0.9rem 1.2rem;
+  }
+
+  .hero-badges {
+    gap: 0.75rem;
+    right: 1.5rem;
+    bottom: 1.5rem;
+  }
+
+  .badge {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .enhanced-hero-section {
+    padding: 1.5rem 1.25rem;
+    margin-bottom: 2rem;
+    border-radius: 16px;
+  }
+
+  .greeting-main {
+    font-size: 1.6rem;
+  }
+
+  .greeting-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .weather-card {
+    padding: 1rem;
+  }
+
+  .weather-icon {
+    font-size: 2rem;
+  }
+
+  .weather-temp {
+    font-size: 1.2rem;
+  }
+
+  .live-metrics-banner {
+    padding: 1rem;
+  }
+
+  .metric-item {
+    min-width: 140px;
+    padding: 0.8rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .metric-icon {
+    font-size: 1.5rem;
+  }
+
+  .metric-label {
+    font-size: 0.7rem;
+  }
+
+  .metric-value {
+    font-size: 1.2rem;
+  }
+
+  .promise-main {
+    font-size: 1.2rem;
+  }
+
+  .promise-sub {
+    font-size: 0.9rem;
+    flex-wrap: wrap;
+  }
+
+  .hero-badges {
+    position: relative;
+    bottom: auto;
+    right: auto;
+    margin-top: 1.5rem;
+    justify-content: flex-start;
+  }
+
+  .badge {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .enhanced-hero-section {
+    padding: 1.25rem 1rem;
+    gap: 1.5rem;
+  }
+
+  .greeting-main {
+    font-size: 1.3rem;
+  }
+
+  .greeting-emoji {
+    font-size: 1.5rem;
+  }
+
+  .greeting-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .weather-card {
+    width: 100%;
+  }
+
+  .metrics-scroll {
+    gap: 0.75rem;
+  }
+
+  .metric-item {
+    min-width: 120px;
+    padding: 0.7rem 0.9rem;
+  }
+
+  .promise-main {
+    font-size: 1rem;
+  }
+
+  .promise-sub {
+    font-size: 0.8rem;
+  }
+
+  .trust-badge {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.7rem;
+  }
+
+  .hero-badges {
+    gap: 0.5rem;
+  }
+
+  .badge {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.65rem;
+  }
+}

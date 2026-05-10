@@ -5,6 +5,8 @@ import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
 import { formatCurrency } from "../utils/ecommerceHelpers";
 import { getPathForModule } from "../utils/moduleRoutes";
+import EnhancedHeroSection from "../components/EnhancedHeroSection";
+import EcosystemVisualization from "../components/EcosystemVisualization";
 import "../styles/Dashboard.css";
 
 const normalizeOrderStatus = (status) => {
@@ -192,6 +194,9 @@ const MODULE_CONFIG = [
     icon: "ecommerce",
     descriptionKey: "dashboard.moduleDescriptions.ecommerce",
     fallbackDescription: "Global marketplace for products, daily needs, fashion, and electronics",
+    stats: "2.1M+ Products",
+    gradient: "linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%)",
+    emoji: "🛍️",
   },
   {
     id: "messaging",
@@ -200,6 +205,9 @@ const MODULE_CONFIG = [
     icon: "messaging",
     descriptionKey: "dashboard.moduleDescriptions.messaging",
     fallbackDescription: "Real-time messaging for customers, sellers, and service providers",
+    stats: "340K+ Chats",
+    gradient: "linear-gradient(135deg, #4ECDC4 0%, #44A5C2 100%)",
+    emoji: "💬",
   },
   {
     id: "classifieds",
@@ -208,6 +216,9 @@ const MODULE_CONFIG = [
     icon: "classifieds",
     descriptionKey: "dashboard.moduleDescriptions.classifieds",
     fallbackDescription: "Trusted listings for buying, selling, and discovering deals",
+    stats: "850K+ Listings",
+    gradient: "linear-gradient(135deg, #F39C12 0%, #E67E22 100%)",
+    emoji: "📋",
   },
   {
     id: "realestate",
@@ -216,6 +227,9 @@ const MODULE_CONFIG = [
     icon: "realestate",
     descriptionKey: "dashboard.moduleDescriptions.realestate",
     fallbackDescription: "Explore homes, rentals, land, and commercial spaces",
+    stats: "185K+ Properties",
+    gradient: "linear-gradient(135deg, #9B59B6 0%, #8E44AD 100%)",
+    emoji: "🏠",
   },
   {
     id: "fooddelivery",
@@ -224,6 +238,9 @@ const MODULE_CONFIG = [
     icon: "fooddelivery",
     descriptionKey: "dashboard.moduleDescriptions.fooddelivery",
     fallbackDescription: "Restaurant discovery and food delivery made simple",
+    stats: "156K Deliveries",
+    gradient: "linear-gradient(135deg, #FF5252 0%, #FF6B5B 100%)",
+    emoji: "🍽️",
   },
   {
     id: "localmarket",
@@ -232,6 +249,9 @@ const MODULE_CONFIG = [
     icon: "localmarket",
     descriptionKey: "dashboard.moduleDescriptions.localmarket",
     fallbackDescription: "Local vendors, fresh produce, handmade goods, and neighborhood services",
+    stats: "50K+ Vendors",
+    gradient: "linear-gradient(135deg, #00B894 0%, #00A86B 100%)",
+    emoji: "🏪",
   },
   {
     id: "ridesharing",
@@ -240,6 +260,9 @@ const MODULE_CONFIG = [
     icon: "ridesharing",
     descriptionKey: "dashboard.moduleDescriptions.ridesharing",
     fallbackDescription: "Reliable ride booking and shared transport options",
+    stats: "24.3K Rides/Day",
+    gradient: "linear-gradient(135deg, #3498DB 0%, #2980B9 100%)",
+    emoji: "🚗",
   },
   {
     id: "matrimonial",
@@ -248,6 +271,9 @@ const MODULE_CONFIG = [
     icon: "matrimonial",
     descriptionKey: "dashboard.moduleDescriptions.matrimonial",
     fallbackDescription: "Find your perfect life partner with verified profiles",
+    stats: "500K+ Matches",
+    gradient: "linear-gradient(135deg, #FF69B4 0%, #FF1493 100%)",
+    emoji: "💕",
   },
   {
     id: "socialmedia",
@@ -256,6 +282,9 @@ const MODULE_CONFIG = [
     icon: "socialmedia",
     descriptionKey: "dashboard.moduleDescriptions.socialmedia",
     fallbackDescription: "Social space to connect, share, and grow across borders",
+    stats: "2M+ Members",
+    gradient: "linear-gradient(135deg, #667EEA 0%, #764BA2 100%)",
+    emoji: "👥",
   },
   {
     id: "reminderalert",
@@ -264,6 +293,9 @@ const MODULE_CONFIG = [
     icon: "reminderalert",
     descriptionKey: "dashboard.moduleDescriptions.reminderalert",
     fallbackDescription: "Smart task planning with alarms, SMS reminders, and automated call alerts",
+    stats: "100K+ Tasks",
+    gradient: "linear-gradient(135deg, #FFA500 0%, #FF8C00 100%)",
+    emoji: "✓",
   },
   {
     id: "quicklinks",
@@ -272,6 +304,9 @@ const MODULE_CONFIG = [
     icon: "quicklinks",
     descriptionKey: "dashboard.moduleDescriptions.quicklinks",
     fallbackDescription: "Save and manage shortcuts to your favorite websites and services",
+    stats: "10K+ Links",
+    gradient: "linear-gradient(135deg, #1ABC9C 0%, #16A085 100%)",
+    emoji: "🔗",
   },
   {
     id: "sosalert",
@@ -280,6 +315,9 @@ const MODULE_CONFIG = [
     icon: "sosalert",
     descriptionKey: "dashboard.moduleDescriptions.sosalert",
     fallbackDescription: "Emergency alerts with live location sharing, escalation, and trusted contact tracking",
+    stats: "24/7 Safety",
+    gradient: "linear-gradient(135deg, #E74C3C 0%, #C0392B 100%)",
+    emoji: "🚨",
   },
   {
     id: "astrology",
@@ -288,6 +326,9 @@ const MODULE_CONFIG = [
     icon: "astrology",
     descriptionKey: "dashboard.moduleDescriptions.astrology",
     fallbackDescription: "Daily horoscope, Vedic insights, and personalized astrology readings for all zodiac signs",
+    stats: "75K+ Readings",
+    gradient: "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)",
+    emoji: "✨",
   },
 ];
 
@@ -441,118 +482,120 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
           </div>
         ) : (
           <>
-            <div className={`welcome-section ${isSeller ? "seller-welcome-section" : ""}`}>
-              <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
-              {isSeller ? (
-                <>
-                  <h1>{businessName} Seller Dashboard</h1>
-                  <p>
-                    Manage your subscribed NilaHub business categories, monitor seller orders,
-                    and jump directly into the services your business registered for.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h1>{t("dashboard.welcomeTitle", `Welcome back, ${currentUser?.name?.split(' ')[0] || 'there'}!`)}</h1>
-                  <p>
-                    {t(
-                      "dashboard.welcomeDescription",
-                      "Your NilaHub ecosystem is ready. Access shopping, messaging, listings, homes, food, rides, matches, and more—all in one place."
-                    )}
-                  </p>
-                </>
-              )}
-            </div>
+            {!isSeller && (
+              <>
+                <EnhancedHeroSection currentUser={currentUser} isSeller={isSeller} />
+                <EcosystemVisualization />
+              </>
+            )}
 
-            <div className="stats-section">
-              {isSeller ? (
-            <>
-              <div className="stat-card">
-                <span className="stat-icon"><Icon type="ecommerce" className="stat-icon-svg" /></span>
-                <div className="stat-content">
-                  <h3>{subscribedCategoryIds.length}</h3>
-                  <p>Subscribed Categories</p>
+            {isSeller && (
+              <div className={`welcome-section seller-welcome-section`}>
+                <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
+                <h1>{businessName} Seller Dashboard</h1>
+                <p>
+                  Manage your subscribed NilaHub business categories, monitor seller orders,
+                  and jump directly into the services your business registered for.
+                </p>
+              </div>
+            )}
+
+            {isSeller && (
+              <div className="stats-section">
+                <div className="stat-card">
+                  <span className="stat-icon"><Icon type="ecommerce" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{subscribedCategoryIds.length}</h3>
+                    <p>Subscribed Categories</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={handleOrdersCardClick}
+                >
+                  <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{sellerOrdersPagination.totalItems || 0}</h3>
+                    <p>Seller Orders</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={handleOrdersCardClick}
+                >
+                  <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{sellerFulfillmentPendingCount}</h3>
+                    <p>Open Fulfillments</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={handleListingsCardClick}
+                >
+                  <span className="stat-icon"><Icon type="classifieds" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{sellerListingCount}</h3>
+                    <p>My Listings</p>
+                  </div>
+                </button>
+                <div className="stat-card">
+                  <span className="stat-icon"><Icon type="user" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{businessName}</h3>
+                    <p>Seller Account</p>
+                  </div>
                 </div>
               </div>
-              <button
-                type="button"
-                className="stat-card stat-card-button"
-              onClick={handleOrdersCardClick}
-            >
-              <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
-              <div className="stat-content">
-                <h3>{sellerOrdersPagination.totalItems || 0}</h3>
-                <p>Seller Orders</p>
+            )}
+
+            {!isSeller && (
+              <div className="stats-section">
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={() => handleModuleNavigation("cart")}
+                >
+                  <span className="stat-icon"><Icon type="cart" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{cartItemCount}</h3>
+                    <p>{t("dashboard.itemsInCart", "Items in Cart")}</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={handleOrdersCardClick}
+                >
+                  <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{ordersPagination.totalItems || 0}</h3>
+                    <p>{t("dashboard.ordersPlaced", "Orders Placed")}</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={handleOrdersCardClick}
+                >
+                  <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{undeliveredOrdersCount}</h3>
+                    <p>Orders Not Delivered</p>
+                  </div>
+                </button>
+                <div className="stat-card">
+                  <span className="stat-icon"><Icon type="user" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{currentUser.name}</h3>
+                    <p>{t("dashboard.loggedIn", "Logged In")}</p>
+                  </div>
+                </div>
               </div>
-            </button>
-            <button
-              type="button"
-              className="stat-card stat-card-button"
-              onClick={handleOrdersCardClick}
-            >
-              <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
-              <div className="stat-content">
-                <h3>{sellerFulfillmentPendingCount}</h3>
-                <p>Open Fulfillments</p>
-              </div>
-            </button>
-            <button
-              type="button"
-              className="stat-card stat-card-button"
-              onClick={handleListingsCardClick}
-            >
-              <span className="stat-icon"><Icon type="classifieds" className="stat-icon-svg" /></span>
-              <div className="stat-content">
-                <h3>{sellerListingCount}</h3>
-                <p>My Listings</p>
-              </div>
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="stat-card stat-card-button"
-              onClick={() => handleModuleNavigation("cart")}
-            >
-              <span className="stat-icon"><Icon type="cart" className="stat-icon-svg" /></span>
-              <div className="stat-content">
-                <h3>{cartItemCount}</h3>
-                <p>{t("dashboard.itemsInCart", "Items in Cart")}</p>
-              </div>
-            </button>
-            <button
-              type="button"
-              className="stat-card stat-card-button"
-              onClick={handleOrdersCardClick}
-            >
-              <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
-              <div className="stat-content">
-                <h3>{ordersPagination.totalItems || 0}</h3>
-                <p>{t("dashboard.ordersPlaced", "Orders Placed")}</p>
-              </div>
-            </button>
-            <button
-              type="button"
-              className="stat-card stat-card-button"
-              onClick={handleOrdersCardClick}
-            >
-              <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
-              <div className="stat-content">
-                <h3>{undeliveredOrdersCount}</h3>
-                <p>Orders Not Delivered</p>
-              </div>
-            </button>
-          </>
-        )}
-        <div className="stat-card">
-          <span className="stat-icon"><Icon type="user" className="stat-icon-svg" /></span>
-          <div className="stat-content">
-            <h3>{isSeller ? businessName : currentUser.name}</h3>
-            <p>{isSeller ? "Seller Account" : t("dashboard.loggedIn", "Logged In")}</p>
-          </div>
-        </div>
-      </div>
+            )}
 
       <div className={!isSeller ? "dashboard-main-grid" : ""}>
         <div className="modules-section">
@@ -568,7 +611,10 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                     ? openExternalLink(module.url)
                     : handleModuleNavigation(module.id)
                 }
+                style={{ background: module.gradient }}
               >
+                <div className="module-hero-overlay" />
+                <div className="module-stats-badge">{module.stats}</div>
                 <div className="module-icon">
                   <Icon type={module.icon} className="module-icon-svg" />
                 </div>

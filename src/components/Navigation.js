@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
 import { getPathForModule, getProtectedModuleFromPathname } from "../utils/moduleRoutes";
+import GlobalSearch from "./GlobalSearch";
 import "../styles/Navigation.css";
 
 const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks"]);
@@ -98,26 +99,20 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
               <span>NilaHub</span>
             </div>
 
+            <GlobalSearch />
+
             <div className="nav-right">
-              {!isAdmin && !isSeller && (
-                <button
+              <div className="notifications-badge">
+                <button 
                   type="button"
-                  className={`cart-icon cart-button ${currentModule === "cart" ? "cart-button-active" : ""}`}
-                  onClick={() => handleModuleClick("cart")}
+                  className="notification-bell"
+                  title="Notifications"
                 >
-                  {t("navigation.cart", "Cart")} {cartItemCount}
+                  🔔
                 </button>
-              )}
-              {showSosButton ? (
-                <button
-                  type="button"
-                  className="sos-alert-button"
-                  onClick={handleSOSButtonClick}
-                  title="Open SOS Safety Center and trigger the emergency workflow"
-                >
-                  SOS
-                </button>
-              ) : null}
+                <span className="badge-dot">●</span>
+              </div>
+              
               <div className="user-profile" onClick={() => setShowUserMenu(!showUserMenu)}>
                 <span className="user-avatar">
                   {displayUser.photoURL ? (
@@ -143,11 +138,33 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                             : t("navigation.businessAccess", "Business access")}
                       </span>
                     </div>
+                    {showSosButton && (
+                      <button
+                        type="button"
+                        className="sos-menu-item"
+                        onClick={handleSOSButtonClick}
+                        title="Emergency SOS - triggers immediate help"
+                      >
+                        🆘 SOS Emergency
+                      </button>
+                    )}
                     <button 
                       className="profile-btn"
                       onClick={() => {
                         navigate("/profile");
                         setShowUserMenu(false);
+                      }}
+                    >
+                      {t("common.profile", "Profile")}
+                    </button>
+                    <button className="logout-btn" onClick={onLogout}>
+                      {t("common.logout", "Logout")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
                       }}
                     >
                       {t("common.profile", "Profile")}
