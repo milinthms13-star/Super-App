@@ -1,30 +1,36 @@
 import React, { useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
+import axios from "axios";
 import Ecommerce from "./Ecommerce";
+import { API_BASE_URL } from "../../utils/api";
 import "../../styles/GlobeMartEntry.css";
 
-const SELLER_REGISTRATION_STORAGE_PREFIX = "malabarbazaar:globemart:seller-registration:v1";
-
-const getSellerRegistrationStorageKey = (email = "") =>
-  `${SELLER_REGISTRATION_STORAGE_PREFIX}:${String(email || "guest").trim().toLowerCase()}`;
-
-const readSellerRegistration = (email = "") => {
-  try {
-    const rawValue = localStorage.getItem(getSellerRegistrationStorageKey(email));
-    if (!rawValue) {
-      return null;
-    }
-
-    const parsed = JSON.parse(rawValue);
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
-    return parsed;
-  } catch (error) {
-    return null;
-  }
-};
+const SELLER_ONBOARDING_PLANS = [
+  {
+    id: "basic",
+    name: "Basic Seller",
+    registrationFee: 499,
+    monthlyFee: 0,
+    transactionFee: "12%",
+    description: "Entry-level seller tier with no monthly commitment.",
+  },
+  {
+    id: "growth",
+    name: "Growth Seller",
+    registrationFee: 999,
+    monthlyFee: 999,
+    transactionFee: "8%",
+    description: "Best for growing sellers with lower commission.",
+  },
+  {
+    id: "pro",
+    name: "Pro Seller",
+    registrationFee: 4999,
+    monthlyFee: 4999,
+    transactionFee: "4%",
+    description: "Premium seller tier with priority support and analytics.",
+  },
+];
 
 const GlobeMartEntry = ({ globeMartCategories = [], loggedInUser = null }) => {
   const normalizedEmail = useMemo(
@@ -34,9 +40,8 @@ const GlobeMartEntry = ({ globeMartCategories = [], loggedInUser = null }) => {
   const isNativeSeller =
     loggedInUser?.registrationType === "entrepreneur" || loggedInUser?.role === "business";
   const [entryMode, setEntryMode] = useState("");
-  const [sellerRegistration, setSellerRegistration] = useState(() =>
-    readSellerRegistration(normalizedEmail)
-  );
+  const [sellerRegistration, setSellerRegistration] = useState(null);
+  const [selectedPlanId, setSelectedPlanId] = useState(SELLER_ONBOARDING_PLANS[0].id);
   const [registrationForm, setRegistrationForm] = useState({
     businessName: loggedInUser?.businessName || "",
     sellerName: loggedInUser?.name || "",
@@ -45,9 +50,12 @@ const GlobeMartEntry = ({ globeMartCategories = [], loggedInUser = null }) => {
   });
   const [registrationError, setRegistrationError] = useState("");
 
+  const selectedPlan =
+    SELLER_ONBOARDING_PLANS.find((plan) => plan.id === selectedPlanId) ||
+    SELLER_ONBOARDING_PLANS[0];
+
   useEffect(() => {
     setEntryMode("");
-    setSellerRegistration(readSellerRegistration(normalizedEmail));
     setRegistrationError("");
   }, [normalizedEmail]);
 
@@ -83,40 +91,66 @@ const GlobeMartEntry = ({ globeMartCategories = [], loggedInUser = null }) => {
     }));
   };
 
-  const handleSellerRegistration = (event) => {
+  const handleSellerRegistration = async (event) => {
     event.preventDefault();
 
     const businessName = String(registrationForm.businessName || "").trim();
     const sellerName = String(registrationForm.sellerName || "").trim();
     const phone = String(registrationForm.phone || "").trim();
     const city = String(registrationForm.city || "").trim();
+    const selectedPlan = SELLER_ONBOARDING_PLANS.find((plan) => plan.id === selectedPlanId);
 
     if (!businessName || !sellerName || !phone) {
       setRegistrationError("Business name, seller name, and phone are required.");
       return;
     }
 
-    const savedRegistration = {
-      businessName,
-      sellerName,
-      phone,
-      city,
-      registeredAt: new Date().toISOString(),
-    };
-
-    try {
-      localStorage.setItem(
-        getSellerRegistrationStorageKey(normalizedEmail),
-        JSON.stringify(savedRegistration)
-      );
-    } catch (error) {
-      setRegistrationError("Seller registration could not be saved. Please try again.");
+    if (!selectedPlan) {
+      setRegistrationError("Please choose a seller plan to continue.");
       return;
     }
 
-    setSellerRegistration(savedRegistration);
-    setRegistrationError("");
-    setEntryMode("seller");
+    if (!normalizedEmail) {
+      setRegistrationError("Seller email is required to complete registration.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('applicantName', sellerName);
+    formData.append('businessName', businessName);
+    formData.append('email', normalizedEmail);
+    formData.append('registrationType', 'entrepreneur');
+    formData.append('phone', phone);
+    formData.append('location', city);
+    formData.append('registrationFee', String(selectedPlan.registrationFee));
+    formData.append('monthlyFee', String(selectedPlan.monthlyFee));
+    formData.append('transactionFee', selectedPlan.transactionFee);
+    formData.append('planId', selectedPlan.id);
+    formData.append('planName', selectedPlan.name);
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/app-data/registration-applications`,
+        formData
+      );
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || 'Seller registration could not be saved.');
+      }
+
+      setSellerRegistration({
+        registeredAt: new Date().toISOString(),
+        selectedPlan,
+      });
+      setRegistrationError("");
+      setEntryMode("seller");
+    } catch (error) {
+      setRegistrationError(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Seller registration could not be saved. Please try again."
+      );
+    }
   };
 
   if (entryMode === "buyer") {
@@ -134,6 +168,48 @@ const GlobeMartEntry = ({ globeMartCategories = [], loggedInUser = null }) => {
           <h2>GlobeMart Seller Registration</h2>
           <p>Complete this one-time registration to open your seller workspace.</p>
           <form className="globemart-registration-form" onSubmit={handleSellerRegistration}>
+            <div className="globemart-plan-section">
+              <p className="plan-section-title">Select your seller plan</p>
+              <div className="globemart-plan-options">
+                {SELLER_ONBOARDING_PLANS.map((plan) => (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    className={`globemart-plan-card ${selectedPlanId === plan.id ? 'selected' : ''}`}
+                    onClick={() => setSelectedPlanId(plan.id)}
+                  >
+                    <div className="plan-card-header">
+                      <strong>{plan.name}</strong>
+                      <span className="plan-amount">₹{plan.registrationFee}</span>
+                    </div>
+                    <p className="plan-description">{plan.description}</p>
+                    <div className="plan-meta">
+                      <span>{plan.monthlyFee === 0 ? 'Free monthly' : `₹${plan.monthlyFee}/mo`}</span>
+                      <span>{plan.transactionFee} transaction fee</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="globemart-plan-summary">
+                <div>
+                  <span>Selected plan</span>
+                  <strong>{selectedPlan.name}</strong>
+                </div>
+                <div>
+                  <span>Registration fee</span>
+                  <strong>₹{selectedPlan.registrationFee}</strong>
+                </div>
+                <div>
+                  <span>Monthly fee</span>
+                  <strong>{selectedPlan.monthlyFee === 0 ? 'Free' : `₹${selectedPlan.monthlyFee}/month`}</strong>
+                </div>
+                <div>
+                  <span>Transaction fee</span>
+                  <strong>{selectedPlan.transactionFee}</strong>
+                </div>
+              </div>
+            </div>
+
             <label>
               <span>Business Name</span>
               <input

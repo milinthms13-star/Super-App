@@ -79,8 +79,8 @@
 .nav-menu {
   display: flex;
   gap: 0.75rem;
-  overflow-x: auto;
-  overflow-y: visible;
+  /* Keep overflow visible so the More dropdown is not clipped. */
+  overflow: visible;
   scrollbar-width: none;
   padding: 0.2rem 0.05rem 0.45rem;
   max-width: 100%;
@@ -726,7 +726,8 @@
 /* Responsive */
 @media (max-width: 1200px) {
   .nav-menu {
-    overflow-x: visible;
+    overflow-x: auto;
+    overflow-y: visible;
     flex-wrap: nowrap;
     max-width: calc(100% - 120px);
   }

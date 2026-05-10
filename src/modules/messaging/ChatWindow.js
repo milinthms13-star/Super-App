@@ -270,9 +270,16 @@ const ChatWindow = ({
       setShowHeaderActionsMenu(false);
     };
 
-    window.addEventListener('click', handleOutsideClick);
-    return () => window.removeEventListener('click', handleOutsideClick);
+    window.addEventListener('mousedown', handleOutsideClick);
+    return () => window.removeEventListener('mousedown', handleOutsideClick);
   }, [showHeaderActionsMenu]);
+
+  const runHeaderMenuAction = (event, action) => {
+    event.preventDefault();
+    event.stopPropagation();
+    action?.();
+    setShowHeaderActionsMenu(false);
+  };
 
   const getOtherParticipants = () =>
     chat?.participants?.filter((participant) => !isSameEntity(participant, currentUser)) || [];
@@ -994,57 +1001,51 @@ const ChatWindow = ({
           </button>
 
           {showHeaderActionsMenu && (
-            <div className="chat-header-actions-menu">
+            <div
+              className="chat-header-actions-menu"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
               <button
                 className="chat-header-actions-item"
-                onClick={() => {
-                  if (isChatCleared) {
-                    onRestoreClearedChat?.();
-                  } else {
-                    onClearChat?.();
-                  }
-                  setShowHeaderActionsMenu(false);
-                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => runHeaderMenuAction(
+                  event,
+                  isChatCleared ? onRestoreClearedChat : onClearChat
+                )}
                 type="button"
               >
                 {isChatCleared ? 'Restore Chat' : 'Clear Chat'}
               </button>
               <button
                 className="chat-header-actions-item"
-                onClick={() => {
-                  onExportChat?.();
-                  setShowHeaderActionsMenu(false);
-                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => runHeaderMenuAction(event, onExportChat)}
                 type="button"
               >
                 Export Chat
               </button>
               <button
                 className={`chat-header-actions-item ${encryptionEnabled ? 'active' : ''}`}
-                onClick={() => {
-                  onToggleEncryption?.();
-                  setShowHeaderActionsMenu(false);
-                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => runHeaderMenuAction(event, onToggleEncryption)}
                 type="button"
               >
                 {encryptionEnabled ? 'Disable Encryption' : 'Enable Encryption'}
               </button>
               <button
                 className={`chat-header-actions-item ${showBackgroundPanel ? 'active' : ''}`}
-                onClick={() => {
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => runHeaderMenuAction(event, () => {
                   setShowBackgroundPanel((current) => !current);
-                  setShowHeaderActionsMenu(false);
-                }}
+                })}
                 type="button"
               >
                 {showBackgroundPanel ? 'Hide Background Panel' : 'Background Settings'}
               </button>
               <button
                 className="chat-header-actions-item danger"
-                onClick={() => {
-                  onDeleteAllMessages?.();
-                  setShowHeaderActionsMenu(false);
-                }}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => runHeaderMenuAction(event, onDeleteAllMessages)}
                 type="button"
               >
                 Delete All Messages
@@ -1467,35 +1468,39 @@ const ChatWindow = ({
             ref={emojiButtonRef}
             className="btn-action btn-action-secondary"
             title="Emoji picker"
+            aria-label="Emoji picker"
             onClick={toggleComposerEmojiPicker}
             type="button"
           >
-            Emoji
+            😀
           </button>
           <button
             className="btn-action btn-action-secondary"
             title="Attach file"
+            aria-label="Attach file"
             onClick={onOpenFileUpload}
             type="button"
           >
-            File
+            📎
           </button>
           <button
             className={`btn-action btn-action-secondary ${showLocationPanel ? 'active' : ''}`}
             title="Share location"
+            aria-label="Share location"
             onClick={() => setShowLocationPanel((current) => !current)}
             type="button"
           >
-            Location
+            📍
           </button>
           <button
             className={`btn-action btn-action-secondary ${isRecordingVoice ? 'voice-recording' : ''}`}
             title={isRecordingVoice ? 'Stop and send voice note' : 'Record voice note'}
+            aria-label={isRecordingVoice ? 'Stop voice note' : 'Record voice note'}
             onClick={handleVoiceButtonClick}
             disabled={sendingVoiceMessage}
             type="button"
           >
-            {sendingVoiceMessage ? 'Sending...' : isRecordingVoice ? 'Stop Voice' : 'Voice'}
+            🎙️
           </button>
           <button
             className="btn-send btn-action-primary"
@@ -1504,7 +1509,7 @@ const ChatWindow = ({
             title="Send message"
             type="button"
           >
-            Send
+            ➤
           </button>
         </div>
         {showLocationPanel && (

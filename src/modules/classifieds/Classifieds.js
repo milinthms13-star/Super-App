@@ -150,6 +150,39 @@ const formatPrice = (value) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
 
+const getSellerInitials = (sellerName = "") => {
+  const initials = String(sellerName)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((token) => token[0]?.toUpperCase())
+    .join("");
+  return initials || "NA";
+};
+
+const getRelativeTimeLabel = (postedDate) => {
+  const postedTimestamp = new Date(postedDate).getTime();
+  if (!postedTimestamp || Number.isNaN(postedTimestamp)) {
+    return "Recently listed";
+  }
+
+  const elapsedMs = Date.now() - postedTimestamp;
+  const elapsedMinutes = Math.max(1, Math.floor(elapsedMs / 60000));
+
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes}m ago`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `${elapsedHours}h ago`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays}d ago`;
+};
+
 const getSellerIdentity = (listing = {}) => ({
   sellerName: String(listing?.seller || "").trim().toLowerCase(),
   sellerEmail: String(listing?.sellerEmail || "")
@@ -760,6 +793,44 @@ const Classifieds = () => {
         })),
     [listings]
   );
+  const trendingListings = useMemo(
+    () =>
+      [...filteredListings]
+        .sort(
+          (first, second) =>
+            second.views + second.chats * 2 + second.favorites - (first.views + first.chats * 2 + first.favorites)
+        )
+        .slice(0, 5),
+    [filteredListings]
+  );
+  const trendingCategories = useMemo(
+    () =>
+      Object.values(
+        filteredListings.reduce((accumulator, listing) => {
+          const key = String(listing.category || "General");
+          if (!accumulator[key]) {
+            accumulator[key] = { id: key, label: key, count: 0 };
+          }
+          accumulator[key].count += 1;
+          return accumulator;
+        }, {})
+      )
+        .sort((first, second) => second.count - first.count)
+        .slice(0, 5),
+    [filteredListings]
+  );
+  const suggestedSearches = useMemo(() => {
+    const suggestions = [];
+    trendingCategories.forEach((category) => {
+      suggestions.push(`${category.label} near me`);
+    });
+    trendingListings.forEach((listing) => {
+      suggestions.push(listing.title);
+      suggestions.push(`${listing.category} in ${listing.location}`);
+    });
+
+    return Array.from(new Set(suggestions.filter(Boolean))).slice(0, 8);
+  }, [trendingCategories, trendingListings]);
 
   const dashboardStats = useMemo(
     () => ({
@@ -998,7 +1069,7 @@ const Classifieds = () => {
           onClick={() => setNotificationCenterOpen(true)}
           title="Open notifications"
         >
-          🔔 Notifications
+          Notifications
         </button>
 
         {getBaseRole(currentUser) === 'seller' && (
@@ -1008,14 +1079,14 @@ const Classifieds = () => {
               onClick={() => setBulkActionsOpen(true)}
               title="Bulk manage listings"
             >
-              📋 Manage Listings
+              Manage Listings
             </button>
             <button
               className="toolbar-btn reporting-btn"
               onClick={() => setReportingOpen(true)}
               title="View analytics"
             >
-              📊 Analytics
+              Analytics
             </button>
 
             {/* Priority Set #4 Seller Tools */}
@@ -1024,7 +1095,7 @@ const Classifieds = () => {
               onClick={() => setTemplatesOpen(true)}
               title="Manage listing templates"
             >
-              📚 Templates
+              Templates
             </button>
             <button
               className="toolbar-btn schedule-btn"
@@ -1037,14 +1108,14 @@ const Classifieds = () => {
               }}
               title="Schedule listing post"
             >
-              📅 Schedule
+              Schedule
             </button>
             <button
               className="toolbar-btn import-btn"
               onClick={() => setBulkImportOpen(true)}
               title="Bulk import listings"
             >
-              📂 Import
+              Import
             </button>
             <button
               className="toolbar-btn duplicate-btn"
@@ -1058,7 +1129,7 @@ const Classifieds = () => {
               }}
               title="Quick duplicate listing"
             >
-              📋 Duplicate
+              Duplicate
             </button>
           </>
         )}
@@ -1068,7 +1139,7 @@ const Classifieds = () => {
           onClick={() => setShowCategoryForms(true)}
           title="Add category details"
         >
-          📝 Category Details
+          Category Details
         </button>
       </div>
 
@@ -1167,7 +1238,7 @@ const Classifieds = () => {
                         title={`Load ${search.name}`}
                       >
                         {search.name}
-                        {search.newMatchCount ? ` • ${search.newMatchCount} new` : ""}
+                        {search.newMatchCount ? ` - ${search.newMatchCount} new` : ""}
                       </button>
                       <button
                         type="button"
@@ -1200,7 +1271,7 @@ const Classifieds = () => {
                         {search.previewListings
                           .slice(0, 2)
                           .map((listing) => listing.title)
-                          .join(" • ")}
+                          .join(" - ")}
                       </span>
                     ) : null}
                     <button
@@ -1215,6 +1286,54 @@ const Classifieds = () => {
               </div>
             </article>
           )}
+
+          <article className="classifieds-surface-card classifieds-market-signal-card">
+            <div className="classifieds-section-heading">
+              <h2>Marketplace pulse</h2>
+              <p>Visibility into active demand, trending categories, and search behavior.</p>
+            </div>
+            <div className="classifieds-market-signal-grid">
+              <div className="classifieds-market-signal-block">
+                <strong>Trending categories</strong>
+                <div className="classifieds-chip-cloud">
+                  {trendingCategories.length > 0 ? (
+                    trendingCategories.map((category) => (
+                      <button
+                        key={category.id}
+                        type="button"
+                        className="classifieds-inline-button"
+                        onClick={() => setCategoryFilter([category.label])}
+                      >
+                        {category.label} ({category.count})
+                      </button>
+                    ))
+                  ) : (
+                    <span className="classifieds-muted-copy">No trending categories yet.</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="classifieds-market-signal-block">
+                <strong>Suggested searches</strong>
+                <div className="classifieds-chip-cloud">
+                  {suggestedSearches.length > 0 ? (
+                    suggestedSearches.map((query) => (
+                      <button
+                        key={query}
+                        type="button"
+                        className="classifieds-inline-button"
+                        onClick={() => setSearchText(query)}
+                      >
+                        {query}
+                      </button>
+                    ))
+                  ) : (
+                    <span className="classifieds-muted-copy">Try a location or category keyword.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </article>
 
           <section className="classifieds-highlights-grid">
             <article className="classifieds-surface-card">
@@ -1251,7 +1370,8 @@ const Classifieds = () => {
                     onClick={() => setSelectedListingId(listing.id)}
                   >
                     <strong>{listing.title}</strong>
-                    <span>{listing.posted}</span>
+                    <span>{getRelativeTimeLabel(listing.posted)} in {listing.location}</span>
+                    <span>{formatCompactNumber(listing.views)} views - {listing.chats} chats</span>
                   </button>
                 ))}
               </div>
@@ -1272,7 +1392,7 @@ const Classifieds = () => {
                       onClick={() => setSelectedListingId(listing.id)}
                     >
                       <strong>{listing.title}</strong>
-                      <span>{listing.location} • Viewed recently</span>
+                      <span>{listing.location} - Viewed recently</span>
                     </button>
                   ))
                 ) : (
@@ -1322,7 +1442,25 @@ const Classifieds = () => {
             </div>
 
             <div className="classifieds-listings-grid">
-              {paginatedListings.map((listing) => {
+              {paginatedListings.length === 0 ? (
+                <div className="classifieds-empty-state classifieds-listings-empty">
+                  <strong>No listings match the current filters.</strong>
+                  <span>Try a suggested search or remove one filter to reveal more inventory.</span>
+                  <div className="classifieds-chip-cloud">
+                    {suggestedSearches.slice(0, 4).map((query) => (
+                      <button
+                        key={`empty-${query}`}
+                        type="button"
+                        className="classifieds-inline-button"
+                        onClick={() => setSearchText(query)}
+                      >
+                        {query}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                paginatedListings.map((listing) => {
                 const favoriteId = `classifieds-${listing.id}`;
                 const isSaved = favoriteIds.has(favoriteId);
                 const isSelected = selectedListings.has(listing.id);
@@ -1346,7 +1484,12 @@ const Classifieds = () => {
                       </div>
                     )}
                     <div className="classifieds-listing-media">
-                      <span>{listing.image}</span>
+                      <div className="classifieds-listing-media-top">
+                        <span className="classifieds-media-pill">{listing.category}</span>
+                        {listing.isOnline ? <span className="classifieds-media-pill live">Live</span> : null}
+                      </div>
+                      <strong className="classifieds-listing-media-title">{listing.title}</strong>
+                      <span className="classifieds-listing-media-location">{listing.location}</span>
                     </div>
                     <div className="classifieds-listing-body">
                       <div className="classifieds-listing-badges">
@@ -1358,11 +1501,24 @@ const Classifieds = () => {
                       </div>
                       <h3>{listing.title}</h3>
                       <strong>{formatPrice(listing.price)}</strong>
-                      <p>{listing.category} • {listing.condition} • {listing.location}</p>
+                      <p>{listing.category} - {listing.condition} - {listing.location}</p>
+                      <div className="classifieds-seller-row">
+                        <span className="classifieds-seller-avatar">{getSellerInitials(listing.seller)}</span>
+                        <span className="classifieds-seller-name">{listing.seller}</span>
+                        {listing.verified ? <span className="classifieds-seller-verified">Verified</span> : null}
+                      </div>
                       <div className="classifieds-card-meta">
-                        <span>{listing.seller}</span>
+                        <span>{formatCompactNumber(listing.views)} views</span>
                         <span>{listing.chats} chats</span>
-                        <span>{listing.posted}</span>
+                        <span>{formatCompactNumber(listing.favorites)} saves</span>
+                        <span>{getRelativeTimeLabel(listing.posted)}</span>
+                      </div>
+                      <div className="classifieds-chip-cloud muted">
+                        {(Array.isArray(listing.tags) ? listing.tags : [])
+                          .slice(0, 3)
+                          .map((tag) => (
+                            <span key={`${listing.id}-${tag}`}>{tag}</span>
+                          ))}
                       </div>
                     </div>
                     <button
@@ -1377,7 +1533,8 @@ const Classifieds = () => {
                     </button>
                   </article>
                 );
-              })}
+                })
+              )}
             </div>
 
             {totalPages > 1 && (
@@ -1388,7 +1545,7 @@ const Classifieds = () => {
                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
                 >
-                  ← Previous
+                  Previous
                 </button>
                 <div className="classifieds-pagination-info">
                   <span>
@@ -1401,7 +1558,7 @@ const Classifieds = () => {
                   onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
                 >
-                  Next →
+                  Next
                 </button>
               </div>
             )}
@@ -1525,7 +1682,7 @@ const Classifieds = () => {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <div className="classifieds-upload-content">
-                      <span className="classifieds-upload-icon">📁</span>
+                      <span className="classifieds-upload-icon">Upload</span>
                       <p>Drag and drop images here or click to select</p>
                       <span className="classifieds-upload-hint">Supports JPG, PNG, GIF (Max 5MB each)</span>
                     </div>
@@ -1552,7 +1709,7 @@ const Classifieds = () => {
                               className="classifieds-image-remove"
                               onClick={() => removeImage(img.id)}
                             >
-                              ✕
+                              X
                             </button>
                           </div>
                         ))}
@@ -1651,7 +1808,7 @@ const Classifieds = () => {
                       </span>
                     </div>
                     <h2>{selectedListing.title}</h2>
-                    <p>{selectedListing.location} • {selectedListing.locality}</p>
+                    <p>{selectedListing.location} - {selectedListing.locality}</p>
                   </div>
                   <button
                     type="button"
@@ -1684,14 +1841,14 @@ const Classifieds = () => {
 
                 <div className="classifieds-detail-price">
                   <strong>{formatPrice(selectedListing.price)}</strong>
-                  <span>{selectedListing.category} • {selectedListing.condition}</span>
+                  <span>{selectedListing.category} - {selectedListing.condition}</span>
                 </div>
 
                 <div className="price-history-section">
                   <PriceHistory 
                     priceHistory={selectedListing.priceHistory}
                     currentPrice={selectedListing.price}
-                    currency="₹"
+                    currency="INR"
                   />
                 </div>
 
@@ -1740,7 +1897,7 @@ const Classifieds = () => {
                         {selectedListing.averageRating || 4.8}
                       </span>
                       <span className="classifieds-rating-stars">
-                        {'⭐'.repeat(Math.round(selectedListing.averageRating || 4.8))}
+                        {'*'.repeat(Math.round(selectedListing.averageRating || 4.8))}
                       </span>
                       <span className="classifieds-review-count">
                         ({selectedListing.totalReviews || 0} reviews)
@@ -1768,7 +1925,7 @@ const Classifieds = () => {
                               }`}
                               onClick={() => setReviewRating(star)}
                             >
-                              ⭐
+                              *
                             </button>
                           ))}
                         </div>
@@ -1917,21 +2074,21 @@ const Classifieds = () => {
                       setChatOpen(true);
                     }}
                   >
-                    💬 Chat with Seller
+                    Chat with Seller
                   </button>
                   <button
                     type="button"
                     className="classifieds-secondary-button"
                     onClick={() => addToast(`Call request shared with ${selectedListing.seller}.`, 'info')}
                   >
-                    📞 Call Seller
+                    Call Seller
                   </button>
                   <button
                     type="button"
                     className="classifieds-secondary-button"
                     onClick={() => addToast(`Price alerts enabled for ${selectedListing.title}.`, 'success')}
                   >
-                    🔔 Price Alert
+                    Price Alert
                   </button>
                 </div>
 
@@ -2024,7 +2181,7 @@ const Classifieds = () => {
                           onClick={() => setSelectedListingId(lead.id)}
                         >
                           <strong>{lead.title}</strong>
-                          <span>{lead.location} • {lead.chats} chats</span>
+                          <span>{lead.location} - {lead.chats} chats</span>
                         </button>
                       ))}
                     </div>
@@ -2181,7 +2338,7 @@ const Classifieds = () => {
         <div className="category-forms-modal">
           <div className="modal-backdrop" onClick={() => setShowCategoryForms(false)} />
           <div className="modal-content">
-            <button className="modal-close" onClick={() => setShowCategoryForms(false)}>✕</button>
+            <button className="modal-close" onClick={() => setShowCategoryForms(false)}>X</button>
             <CategoryForms
               selectedCategory={listingForm.category || 'electronics'}
               formData={categoryFormData}

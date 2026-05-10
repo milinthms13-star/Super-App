@@ -2646,6 +2646,7 @@
 
 .message-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   align-items: center;
 }
@@ -2655,14 +2656,15 @@
   border: 1px solid rgba(148, 163, 184, 0.25);
   font-size: 1rem;
   cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 50%;
+  padding: 0.65rem;
+  border-radius: 9999px;
   transition: background 0.2s ease, transform 0.2s ease;
-  width: 36px;
-  height: 36px;
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
 }
 
 .btn-action:hover {
@@ -2685,8 +2687,9 @@
   color: white;
   border: none;
   font-size: 1.1rem;
-  width: 38px;
-  height: 38px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
   border-radius: 50%;
   cursor: pointer;
   transition: transform 0.2s ease;
@@ -6014,11 +6017,15 @@
 /* ==================== LinkUp UI Polish Pass ==================== */
 .chat-window-header {
   padding: 1.1rem 1.35rem;
+  position: relative;
+  z-index: 6;
+  overflow: visible;
 }
 
 .chat-header-actions {
   position: relative;
   gap: 0.48rem;
+  z-index: 7;
 }
 
 .btn-icon,
@@ -6053,7 +6060,8 @@
   border: 1px solid rgba(148, 163, 184, 0.24);
   background: #ffffff;
   box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
-  z-index: 20;
+  z-index: 2000;
+  pointer-events: auto;
 }
 
 .chat-header-actions-item {

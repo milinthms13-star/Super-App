@@ -94,6 +94,10 @@ const applicationSchema = Joi.object({
   location: Joi.string().allow('').trim().default(''),
   selectedBusinessCategories: Joi.array().items(Joi.object()).default([]),
   registrationFee: Joi.number().min(0).default(0),
+  monthlyFee: Joi.number().min(0).default(0),
+  transactionFee: Joi.string().allow('').trim().default(''),
+  planId: Joi.string().allow('').trim().default(''),
+  planName: Joi.string().allow('').trim().default(''),
   licenseNumber: Joi.string().allow('').trim().default(''),
   identityType: Joi.string().allow('').trim().default(''),
   identityNumber: Joi.string().allow('').trim().default(''),
@@ -1130,6 +1134,7 @@ const normalizeApplicationBody = (body = {}) => ({
   ...body,
   selectedBusinessCategories: parseJsonField(body.selectedBusinessCategories, []),
   registrationFee: Number(body.registrationFee || 0),
+  monthlyFee: Number(body.monthlyFee || 0),
   foodLicenseRequired:
     body.foodLicenseRequired === true || String(body.foodLicenseRequired).toLowerCase() === 'true',
 });

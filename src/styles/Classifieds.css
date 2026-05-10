@@ -243,6 +243,11 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
+.classifieds-listing-card:hover {
+  border-color: rgba(204, 107, 44, 0.34);
+  box-shadow: 0 20px 36px rgba(20, 33, 61, 0.14);
+}
+
 .classifieds-listing-card.selected {
   border-color: rgba(204, 107, 44, 0.45);
   box-shadow: 0 18px 30px rgba(204, 107, 44, 0.12);
@@ -250,18 +255,54 @@
 
 .classifieds-listing-media,
 .classifieds-detail-media {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  align-content: space-between;
   min-height: 150px;
   border-radius: 20px;
   background:
     linear-gradient(135deg, rgba(20, 33, 61, 0.95), rgba(38, 69, 123, 0.92)),
     linear-gradient(135deg, rgba(204, 107, 44, 0.2), transparent);
   color: #fff3e8;
-  text-align: center;
+  text-align: left;
   font-weight: 700;
   padding: 1rem;
+}
+
+.classifieds-listing-media-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.classifieds-media-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.28rem 0.58rem;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.classifieds-media-pill.live {
+  background: rgba(16, 185, 129, 0.24);
+  border-color: rgba(16, 185, 129, 0.44);
+}
+
+.classifieds-listing-media-title {
+  display: block;
+  font-size: 1.02rem;
+  line-height: 1.35;
+}
+
+.classifieds-listing-media-location {
+  display: block;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
 .classifieds-detail-media {
@@ -357,6 +398,43 @@
   gap: 0.55rem 0.8rem;
   margin-top: 0.65rem;
   font-size: 0.88rem;
+}
+
+.classifieds-seller-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.5rem;
+}
+
+.classifieds-seller-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(204, 107, 44, 0.18);
+  color: #8a3f1a;
+  font-size: 0.72rem;
+  font-weight: 800;
+  border: 1px solid rgba(204, 107, 44, 0.28);
+}
+
+.classifieds-seller-name {
+  font-weight: 700;
+  color: var(--classifieds-ink);
+}
+
+.classifieds-seller-verified {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  background: var(--classifieds-success-soft);
+  color: var(--classifieds-success);
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .classifieds-mini-list {
@@ -838,6 +916,45 @@
   line-height: 1.7;
 }
 
+.classifieds-listings-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed rgba(20, 33, 61, 0.22);
+  border-radius: 18px;
+  background: #fbfdff;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.classifieds-listings-empty strong {
+  color: var(--classifieds-ink);
+}
+
+.classifieds-market-signal-card {
+  border: 1px solid rgba(20, 33, 61, 0.1);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.classifieds-market-signal-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.classifieds-market-signal-block {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.classifieds-market-signal-block strong {
+  color: var(--classifieds-ink);
+  font-size: 0.92rem;
+}
+
+.classifieds-muted-copy {
+  color: var(--classifieds-muted);
+  font-size: 0.9rem;
+}
+
 @media (max-width: 1200px) {
   .classifieds-layout,
   .classifieds-hero {
@@ -855,7 +972,8 @@
   .classifieds-ops-grid,
   .classifieds-filter-grid,
   .classifieds-form-grid,
-  .classifieds-inline-actions {
+  .classifieds-inline-actions,
+  .classifieds-market-signal-grid {
     grid-template-columns: 1fr;
   }
 
