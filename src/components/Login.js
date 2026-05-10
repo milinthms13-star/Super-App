@@ -25,6 +25,7 @@ const Login = ({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [devOtp, setDevOtp] = useState("");
+  const [registrationOtpChannel, setRegistrationOtpChannel] = useState("email");
   const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false);
   const [authMethod, setAuthMethod] = useState(null); // null (initial), "gmail", "email", "phone", "mpin"
   const [deviceToken, setDeviceToken] = useState("");
@@ -74,6 +75,7 @@ const Login = ({
   const [usernameError, setUsernameError] = useState("");
   const normalizedRegistrationType = registrationType === "entrepreneur" ? "user" : registrationType;
   const normalizedEmail = email.trim().toLowerCase();
+  const normalizedPhoneInput = String(email || "").replace(/\D/g, "");
   const isAdminEmail = normalizedEmail === ADMIN_EMAIL;
   const isAdminFlow = normalizedRegistrationType === "admin";
   const isUserRegistrationFlow = normalizedRegistrationType === "user";
@@ -81,7 +83,22 @@ const Login = ({
   const isBusinessRegistrationFlow = isEntrepreneurRegistrationFlow;
   const isLoginFlow = normalizedRegistrationType === "login";
   const loginFlowClass = isLoginFlow ? "login-flow" : "";
-  const registeredAccount = registeredAccounts.find((account) => account.email === normalizedEmail);
+  const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
+  const registeredAccountByEmail = registeredAccounts.find(
+    (account) => String(account.email || "").trim().toLowerCase() === normalizedEmail
+  );
+  const registeredAccountByPhone = registeredAccounts.find((account) => {
+    const accountPhone = normalizePhone(account.phone);
+    if (!accountPhone || normalizedPhoneInput.length < 10) {
+      return false;
+    }
+    return (
+      accountPhone === normalizedPhoneInput ||
+      accountPhone.endsWith(normalizedPhoneInput) ||
+      normalizedPhoneInput.endsWith(accountPhone)
+    );
+  });
+  const registeredAccount = registeredAccountByEmail || registeredAccountByPhone;
   const businessCategoryCount = businessCategories.length;
 
   const selectedCategoryRecords = useMemo(
@@ -203,8 +220,8 @@ const Login = ({
     clearMessages();
     
     if (method === "gmail") {
-      // Google login - redirect
-      window.location.href = `${API_BASE_URL}/auth/google`;
+      const authIntent = isLoginFlow ? "login" : "register";
+      window.location.href = `${API_BASE_URL}/auth/google?authIntent=${authIntent}`;
     } else {
       // Show input field for email, phone, or mpin
       setLoginStep("input");
@@ -283,6 +300,11 @@ const Login = ({
 
       if (!registrationForm.agreeToTerms) {
         setError("Please accept the terms to continue");
+        return;
+      }
+
+      if (!email.trim() || !validateEmail(email.trim().toLowerCase())) {
+        setError("Please enter a valid email for account registration");
         return;
       }
     }
@@ -429,19 +451,32 @@ const Login = ({
       return;
     }
 
+    const effectiveAuthMethod = isLoginFlow
+      ? authMethod
+      : registrationOtpChannel === "sms"
+        ? "phone"
+        : "email";
+    const otpEmail = isLoginFlow ? (effectiveAuthMethod === "email" ? email : "") : email;
+    const otpPhone = isLoginFlow
+      ? (effectiveAuthMethod === "phone" ? email : "")
+      : registrationForm.phone;
+    const authIntent = isLoginFlow ? "login" : "register";
+
     // Email/Phone OTP Flow
-    if (!email) {
-      setError(`Please enter your ${authMethod === "phone" ? "phone number" : "email address"}`);
+    if (effectiveAuthMethod !== "mpin" && !otpEmail && !otpPhone) {
+      setError(
+        `Please enter your ${effectiveAuthMethod === "phone" ? "phone number" : "email address"}`
+      );
       return;
     }
 
-    if (isLoginFlow && authMethod === "phone") {
-      if (!validatePhone(email)) {
+    if (isLoginFlow && effectiveAuthMethod === "phone") {
+      if (!validatePhone(otpPhone)) {
         setError("Please enter a valid phone number");
         return;
       }
-    } else if (isLoginFlow && authMethod === "email") {
-      if (!validateEmail(email)) {
+    } else if (isLoginFlow && effectiveAuthMethod === "email") {
+      if (!validateEmail(otpEmail)) {
         setError("Please enter a valid email address");
         return;
       }
@@ -452,15 +487,29 @@ const Login = ({
       }
     }
 
+    if (!isLoginFlow && effectiveAuthMethod === "phone" && !validatePhone(otpPhone)) {
+      setError("Please enter a valid phone number for SMS OTP");
+      return;
+    }
+
+    if (isLoginFlow && effectiveAuthMethod !== "mpin" && !registeredAccount && !isAdminEmail) {
+      setError("Account not found. Please register first before logging in.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const response = await axios.post(
         `${API_BASE_URL}/auth/send-otp`,
         { 
-          email: authMethod === "email" ? email : undefined,
-          phone: authMethod === "phone" ? email : undefined,
-          authMethod: authMethod,
+          email: otpEmail || undefined,
+          phone: otpPhone || undefined,
+          authMethod: effectiveAuthMethod,
+          authIntent,
+          registrationType: normalizedRegistrationType,
+          fullName: registrationForm.fullName?.trim() || undefined,
+          username: registrationForm.username?.trim()?.toLowerCase() || undefined,
         },
         { timeout: OTP_REQUEST_TIMEOUT_MS }
       );
@@ -468,8 +517,9 @@ const Login = ({
       if (response.data.success) {
         setOtpSent(true);
         setLoginStep("verify");
+        setAuthMethod(effectiveAuthMethod);
         let method = "email";
-        if (authMethod === "phone") method = "phone";
+        if (effectiveAuthMethod === "phone") method = "phone";
         setSuccess(response.data.message || `OTP sent to your ${method}`);
         setDevOtp(response.data.devOtp || "");
       } else {
@@ -506,13 +556,22 @@ const Login = ({
     setLoading(true);
 
     try {
+      const verifyEmail =
+        authMethod === "email" ? email : isLoginFlow ? undefined : email;
+      const verifyPhone =
+        authMethod === "phone"
+          ? (isLoginFlow ? email : registrationForm.phone)
+          : isLoginFlow
+            ? undefined
+            : registrationForm.phone;
       const response = await axios.post(`${API_BASE_URL}/auth/verify-otp`, {
-        email: authMethod === "email" ? email : undefined,
-        phone: authMethod === "phone" ? email : undefined,
+        email: verifyEmail,
+        phone: verifyPhone,
         mpin: authMethod === "mpin" ? mpinPassword : undefined,
         deviceToken: authMethod === "device" ? deviceToken : undefined,
         otp,
         authMethod: authMethod,
+        authIntent: isLoginFlow ? "login" : "register",
       });
 
       if (response.data.success && response.data.token && response.data.user) {
@@ -742,7 +801,7 @@ const Login = ({
     : isAdminFlow
       ? "Use the admin account to sign in and manage admin-controlled category fees."
       : isLoginFlow
-        ? "Sign in using email OTP."
+        ? "Sign in only with a registered account using OTP."
         : "Enter your email and confirm the one-time password to continue.";
 
   const handleVoiceFill = (fieldKey, updateValue) => {
@@ -790,7 +849,7 @@ const Login = ({
               {/* Google Auth Section (moved to top) */}
               {!otpSent && !needsUsernameSetup && (
                 <div className="form-google-section">
-                  <a href={`${API_BASE_URL}/auth/google`} className="btn btn-google">
+                  <a href={`${API_BASE_URL}/auth/google?authIntent=register`} className="btn btn-google">
                     <img src="/google-icon.svg" alt="Google" width="20" height="20" />
                     Continue with Google
                   </a>
@@ -883,10 +942,37 @@ const Login = ({
                 </>
               )}
 
+              {/* OTP channel for registration */}
+              {!otpSent && (
+                <div className="form-group">
+                  <label>
+                    <span>OTP Channel</span>
+                  </label>
+                  <div className="login-methods-grid">
+                    <button
+                      type="button"
+                      className={`login-method-card ${registrationOtpChannel === "email" ? "selected" : ""}`}
+                      onClick={() => setRegistrationOtpChannel("email")}
+                      disabled={loading}
+                    >
+                      <span>Email OTP</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`login-method-card ${registrationOtpChannel === "sms" ? "selected" : ""}`}
+                      onClick={() => setRegistrationOtpChannel("sms")}
+                      disabled={loading}
+                    >
+                      <span>SMS OTP</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Email input for registration */}
               <div className="form-group">
                 <label htmlFor="contactField">
-                  <span>Email Address</span>
+                  <span>Email Address (required)</span>
                 </label>
                 <input
                   type="email"
@@ -903,7 +989,9 @@ const Login = ({
               {otpSent && !needsUsernameSetup && (
                 <div className="form-group">
                   <label htmlFor="otp">
-                    <span>Enter OTP sent to your email</span>
+                    <span>
+                      Enter OTP sent to your {authMethod === "phone" ? "phone" : "email"}
+                    </span>
                     <button
                       type="button"
                       className="resend-otp"

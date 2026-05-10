@@ -1062,7 +1062,6 @@ const RealEstate = () => {
     <div className="realestate-shell">
       <section className="realestate-hero">
         <div className="realestate-hero-copy">
-          <span className="realestate-kicker">FRS - Real Estate Platform</span>
           <h1>HomeSphere turns property discovery into a verified marketplace for buying, renting, and selling.</h1>
           <p>
             Browse trusted listings, empower owners and brokers, and manage the full lead journey
@@ -1621,39 +1620,6 @@ const RealEstate = () => {
               </section>
             </article>
           ) : null}
-
-          <article className="realestate-operations-grid">
-            <section className="realestate-surface-card">
-              <div className="realestate-section-heading">
-                <h2>Platform architecture</h2>
-                <p>Core entities and integrations mapped directly from the FRS.</p>
-              </div>
-              <div className="realestate-chip-cloud">
-                {["Users", "Properties", "Property Images", "Leads", "Messages", "Subscriptions", "Reviews"].map(
-                  (item) => (
-                    <span key={item}>{item}</span>
-                  )
-                )}
-              </div>
-              <div className="realestate-chip-cloud integrations">
-                {["Google Maps API", "Razorpay", "Stripe", "SMS / OTP", "Push notifications"].map((item) => (
-                  <span key={item}>{item}</span>
-                ))}
-              </div>
-            </section>
-
-            <section className="realestate-surface-card">
-              <div className="realestate-section-heading">
-                <h2>Future roadmap</h2>
-                <p>AI recommendations, 360 tours, loan tools, legal help, and blockchain verification are queued for expansion.</p>
-              </div>
-              <blockquote className="realestate-pitch">
-                This platform transforms real estate into a digital-first marketplace, empowering
-                individuals, brokers, and developers to transact efficiently while ensuring trust
-                through verified listings and smart discovery.
-              </blockquote>
-            </section>
-          </article>
         </div>
 
         <aside className="realestate-right-column">

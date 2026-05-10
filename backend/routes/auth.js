@@ -14,6 +14,7 @@ const {
   hasGmailClientConfig,
   hasGmailDeliveryConfig,
 } = require('../config/gmail');
+const { sendSMS } = require('../services/smsService');
 const logger = require('../utils/logger');
 const { authenticate, getJwtSecret } = require('../middleware/auth');
 const devAuthStore = require('../utils/devAuthStore');
@@ -109,6 +110,9 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
     passReqToCallback: true
   }, async (req, accessToken, refreshToken, profile, done) => {
     try {
+      const authIntent = String(req?.query?.state || req?.query?.authIntent || 'login')
+        .trim()
+        .toLowerCase();
       // Find or create user
       let user = await User.findOne({ googleId: profile.id });
       if (!user) {
@@ -120,6 +124,11 @@ if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
           user.googleEmails = Array.from(new Set([...(user.googleEmails || []), email]));
           await user.save();
         } else {
+          if (authIntent === 'login') {
+            const authError = new Error('ACCOUNT_NOT_REGISTERED');
+            authError.code = 'ACCOUNT_NOT_REGISTERED';
+            return done(authError, null);
+          }
           // Create new user
           user = await User.create({
             email,
@@ -147,13 +156,22 @@ router.get('/google', (req, res, next) => {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     return res.status(500).json({ success: false, message: 'Google OAuth not configured' });
   }
-  passport.authenticate('google', { scope: ['profile', 'email'], session: false })(req, res, next);
+  const authIntent = String(req.query?.authIntent || 'login').trim().toLowerCase();
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    session: false,
+    state: authIntent === 'register' ? 'register' : 'login',
+  })(req, res, next);
 });
 
 // Google OAuth2 callback endpoint
 router.get('/google/callback', (req, res, next) => {
   passport.authenticate('google', { session: false }, (err, user) => {
     if (err || !user) {
+      if (err?.code === 'ACCOUNT_NOT_REGISTERED' || err?.message === 'ACCOUNT_NOT_REGISTERED') {
+        const redirectUrl = `${process.env.FRONTEND_URL || '/'}?social=google&error=not_registered`;
+        return res.redirect(redirectUrl);
+      }
       return res.status(401).json({ success: false, message: 'Google login failed', error: err && err.message });
     }
     // Issue JWT and set cookie
@@ -376,12 +394,21 @@ const AUTH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Validation schemas
 
-const emailSchema = Joi.object({
-  email: Joi.string().email().required().lowercase().trim(),
+const otpRequestSchema = Joi.object({
+  email: Joi.string().email().allow('').lowercase().trim().default(''),
+  phone: Joi.string().allow('').trim().default(''),
+  authMethod: Joi.string().valid('email', 'phone').default('email'),
+  authIntent: Joi.string().valid('login', 'register').default('login'),
+  registrationType: Joi.string().allow('').trim().default('user'),
+  fullName: Joi.string().allow('').trim().default(''),
+  username: Joi.string().allow('').trim().default(''),
 });
 
-const otpSchema = Joi.object({
-  email: Joi.string().email().required().lowercase().trim(),
+const otpVerifySchema = Joi.object({
+  email: Joi.string().email().allow('').lowercase().trim().default(''),
+  phone: Joi.string().allow('').trim().default(''),
+  authMethod: Joi.string().valid('email', 'phone').default('email'),
+  authIntent: Joi.string().valid('login', 'register').default('login'),
   otp: Joi.string().pattern(/^\d{6}$/).required(),
 });
 
@@ -599,6 +626,20 @@ const generateUniqueUsername = async (email) => {
 
 const normalizePhone = (value = '') => String(value || '').replace(/\D/g, '');
 
+const findUserByPhone = async (phone = '') => {
+  const normalizedPhone = normalizePhone(phone);
+  if (normalizedPhone.length < 10) {
+    return null;
+  }
+
+  const localPhone =
+    normalizedPhone.length > 10 ? normalizedPhone.slice(-10) : normalizedPhone;
+
+  return User.findOne({
+    $or: [{ phone: normalizedPhone }, { phone: localPhone }],
+  });
+};
+
 const findUserForMpinLogin = async (identifier = '') => {
   const normalizedIdentifier = String(identifier || '').trim().toLowerCase();
   const normalizedPhone = normalizePhone(identifier);
@@ -625,7 +666,7 @@ const findUserForMpinLogin = async (identifier = '') => {
 // Send OTP endpoint
 router.post('/send-otp', async (req, res) => {
   try {
-    const { error, value } = emailSchema.validate(req.body);
+    const { error, value } = otpRequestSchema.validate(req.body);
     if (error) {
       return res.status(400).json({
         success: false,
@@ -633,10 +674,42 @@ router.post('/send-otp', async (req, res) => {
       });
     }
 
-    const { email } = value;
+    const normalizedEmail = String(value.email || '').trim().toLowerCase();
+    const normalizedPhone = normalizePhone(value.phone || '');
+    const authMethod = value.authMethod === 'phone' ? 'phone' : 'email';
+    const authIntent = value.authIntent === 'register' ? 'register' : 'login';
+    const otpTarget = authMethod === 'phone' ? normalizedPhone : normalizedEmail;
+
+    if (authMethod === 'email' && !normalizedEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required for email OTP.',
+      });
+    }
+
+    if (authMethod === 'phone' && normalizedPhone.length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid phone number is required for SMS OTP.',
+      });
+    }
+
+    if (authIntent === 'register' && !normalizedEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required for signup.',
+      });
+    }
+
+    if (!otpTarget) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP target is missing.',
+      });
+    }
 
     // Check rate limiting in Redis
-    const cacheKey = getCacheKey(email, 'otp_attempts');
+    const cacheKey = getCacheKey(otpTarget, 'otp_attempts');
     const attempts = await getCache(cacheKey) || 0;
 
     if (attempts >= 5) { // Max 5 attempts per 15 minutes
@@ -653,39 +726,109 @@ router.post('/send-otp', async (req, res) => {
     let user;
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    if (useMemoryAuth()) {
-      await devAuthStore.invalidateOtpsByEmail(email);
-      await devAuthStore.createOtpToken({ email, otpHash, expiresAt });
-      user = await devAuthStore.upsertUserByEmail(email);
-    } else {
-      await OtpToken.updateMany({ email, used: false }, { used: true });
-      const otpToken = new OtpToken({ email, otpHash, expiresAt });
-      await otpToken.save();
+    const existingEmailUser = useMemoryAuth()
+      ? normalizedEmail
+        ? await devAuthStore.findUserByEmail(normalizedEmail)
+        : null
+      : normalizedEmail
+        ? await User.findOne({ email: normalizedEmail })
+        : null;
+    const existingPhoneUser = useMemoryAuth()
+      ? null
+      : authMethod === 'phone'
+        ? await findUserByPhone(normalizedPhone)
+        : null;
 
-      // Generate a unique username for the user at registration time
-      const username = await generateUniqueUsername(email);
-
-      user = await User.findOneAndUpdate(
-        { email },
-        {
-          email,
-          username,
-          name: email.split('@')[0],
-          avatar: 'User',
-          registrationType: 'user',
-          role: 'user',
-          roles: ['user'],
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+    if (authIntent === 'login') {
+      const loginUser = authMethod === 'phone' ? existingPhoneUser : existingEmailUser;
+      if (!loginUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'Account not found. Please register first.',
+        });
+      }
+      user = loginUser;
     }
 
-    // Send email
-    try {
-      if (useMemoryAuth() && !hasRealEmailConfig()) {
-        logger.warn(`Development OTP for ${email}: ${otpCode}`);
-        await setCache(cacheKey, attempts + 1, 900);
+    if (authIntent === 'register') {
+      if (existingEmailUser) {
+        return res.status(409).json({
+          success: false,
+          message: 'Account already registered. Please log in.',
+        });
+      }
 
+      if (existingPhoneUser && (!existingEmailUser || existingPhoneUser.email !== normalizedEmail)) {
+        return res.status(409).json({
+          success: false,
+          message: 'Phone number already linked to another account.',
+        });
+      }
+    }
+
+    if (useMemoryAuth()) {
+      await devAuthStore.invalidateOtpsByEmail(otpTarget);
+      await devAuthStore.createOtpToken({ email: otpTarget, otpHash, expiresAt });
+      user = authIntent === 'register'
+        ? await devAuthStore.upsertUserByEmail(normalizedEmail || otpTarget)
+        : await devAuthStore.findUserByEmail(normalizedEmail || otpTarget);
+    } else {
+      await OtpToken.updateMany({ email: otpTarget, used: false }, { used: true });
+      const otpToken = new OtpToken({ email: otpTarget, otpHash, expiresAt });
+      await otpToken.save();
+
+      if (authIntent === 'register') {
+        const username =
+          value.username && String(value.username).trim()
+            ? String(value.username).trim().toLowerCase()
+            : await generateUniqueUsername(normalizedEmail);
+        const fallbackName = normalizedEmail.includes('@')
+          ? normalizedEmail.split('@')[0]
+          : `user${normalizedPhone.slice(-4)}`;
+
+        user = await User.findOneAndUpdate(
+          { email: normalizedEmail },
+          {
+            email: normalizedEmail,
+            username,
+            name: String(value.fullName || '').trim() || fallbackName,
+            avatar: 'User',
+            phone: normalizedPhone || '',
+            registrationType: value.registrationType || 'user',
+            role: 'user',
+            roles: ['user'],
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } else {
+        user = authMethod === 'phone' ? existingPhoneUser : existingEmailUser;
+      }
+    }
+
+    // Send OTP
+    try {
+      if (authMethod === 'phone') {
+        const smsMessage = `Your NilaHub OTP is ${otpCode}. It is valid for 15 minutes.`;
+        const smsDeliveryResult = await sendSMS(normalizedPhone, smsMessage);
+        if (!smsDeliveryResult?.success) {
+          return res.status(500).json({
+            success: false,
+            message: smsDeliveryResult?.message || 'Failed to send SMS OTP.',
+          });
+        }
+
+        await setCache(cacheKey, attempts + 1, 900);
+        return res.json({
+          success: true,
+          message: 'OTP sent to your phone',
+          devOtp: smsDeliveryResult?.provider === 'simulation' ? otpCode : undefined,
+          user: serializeUser(user),
+        });
+      }
+
+      if (useMemoryAuth() && !hasRealEmailConfig()) {
+        logger.warn(`Development OTP for ${normalizedEmail}: ${otpCode}`);
+        await setCache(cacheKey, attempts + 1, 900);
         return res.json({
           success: true,
           message: 'Development OTP generated. Configure email for production delivery.',
@@ -717,7 +860,7 @@ router.post('/send-otp', async (req, res) => {
 
       if (emailMode === 'gmail-api') {
         await withTimeout(
-          sendEmailViaGmail(email, 'Your NilaHub OTP', htmlContent),
+          sendEmailViaGmail(normalizedEmail, 'Your NilaHub OTP', htmlContent),
           EMAIL_OPERATION_TIMEOUT_MS,
           'Gmail API request timed out'
         );
@@ -727,7 +870,7 @@ router.post('/send-otp', async (req, res) => {
         await withTimeout(
           ses.send(new SendEmailCommand({
             Source: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-            Destination: { ToAddresses: [email] },
+            Destination: { ToAddresses: [normalizedEmail] },
             Message: {
               Subject: { Data: 'Your NilaHub OTP' },
               Body: {
@@ -746,7 +889,7 @@ router.post('/send-otp', async (req, res) => {
         await withTimeout(
           transporter.sendMail({
             from: `NilaHub <${fromAddress}>`,
-            to: email,
+            to: normalizedEmail,
             subject: 'Your NilaHub OTP',
             html: htmlContent,
           }),
@@ -758,7 +901,7 @@ router.post('/send-otp', async (req, res) => {
       // Update rate limiting
       await setCache(cacheKey, attempts + 1, 900); // 15 minutes
 
-      logger.info(`OTP sent successfully to ${email}`);
+      logger.info(`OTP sent successfully to ${normalizedEmail}`);
       return res.json({
         success: true,
         message: 'OTP sent to your email',
@@ -768,7 +911,7 @@ router.post('/send-otp', async (req, res) => {
     } catch (emailError) {
       const smtpConfig = getSmtpConfig();
       logger.error(
-        `OTP email send failed via ${getEmailMode()} for ${email} ` +
+        `OTP email send failed via ${getEmailMode()} for ${normalizedEmail} ` +
         `(host=${smtpConfig.host}, port=${smtpConfig.port}, secure=${smtpConfig.secure}): ` +
         `${emailError.code || 'NO_CODE'} ${emailError.message}`
       );
@@ -794,7 +937,7 @@ router.post('/send-otp', async (req, res) => {
 // Verify OTP endpoint
 router.post('/verify-otp', async (req, res) => {
   try {
-    const { error, value } = otpSchema.validate(req.body);
+    const { error, value } = otpVerifySchema.validate(req.body);
     if (error) {
       return res.status(400).json({
         success: false,
@@ -802,13 +945,25 @@ router.post('/verify-otp', async (req, res) => {
       });
     }
 
-    const { email, otp } = value;
+    const normalizedEmail = String(value.email || '').trim().toLowerCase();
+    const normalizedPhone = normalizePhone(value.phone || '');
+    const authMethod = value.authMethod === 'phone' ? 'phone' : 'email';
+    const authIntent = value.authIntent === 'register' ? 'register' : 'login';
+    const otp = value.otp;
+    const otpTarget = authMethod === 'phone' ? normalizedPhone : normalizedEmail;
+
+    if (!otpTarget) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP target is missing.',
+      });
+    }
 
     // Find valid OTP token
     const otpToken = useMemoryAuth()
-      ? await devAuthStore.findLatestValidOtp(email)
+      ? await devAuthStore.findLatestValidOtp(otpTarget)
       : await OtpToken.findOne({
-        email,
+        email: otpTarget,
         used: false,
         expiresAt: { $gt: new Date() },
       }).sort({ createdAt: -1 });
@@ -822,7 +977,7 @@ router.post('/verify-otp', async (req, res) => {
 
     // Verify OTP
     if (hashOtp(otp) !== otpToken.otpHash) {
-      const failedKey = getCacheKey(email, 'otp_verify_failures');
+      const failedKey = getCacheKey(otpTarget, 'otp_verify_failures');
       const failedAttempts = await getCache(failedKey) || 0;
       await setCache(failedKey, failedAttempts + 1, 900);
 
@@ -842,9 +997,34 @@ router.post('/verify-otp', async (req, res) => {
     await otpToken.save();
 
     // Get user
-    const user = useMemoryAuth()
-      ? await devAuthStore.findUserByEmail(email)
-      : await User.findOne({ email });
+    let user = null;
+    if (useMemoryAuth()) {
+      user = await devAuthStore.findUserByEmail(normalizedEmail || otpTarget);
+    } else if (authMethod === 'phone') {
+      user = await findUserByPhone(normalizedPhone);
+      if (!user && normalizedEmail) {
+        user = await User.findOne({ email: normalizedEmail });
+      }
+    } else {
+      user = await User.findOne({ email: normalizedEmail });
+    }
+
+    if (!user) {
+      if (authIntent === 'register' && !useMemoryAuth() && normalizedEmail) {
+        const username = await generateUniqueUsername(normalizedEmail);
+        user = await User.create({
+          email: normalizedEmail,
+          username,
+          name: normalizedEmail.split('@')[0],
+          avatar: 'User',
+          phone: normalizedPhone || '',
+          registrationType: 'user',
+          role: 'user',
+          roles: ['user'],
+        });
+      }
+    }
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -856,13 +1036,13 @@ router.post('/verify-otp', async (req, res) => {
     const needsUsernameSetup = !user.username;
 
     // Clear rate limiting on successful verification
-    await setCache(getCacheKey(email, 'otp_attempts'), 0, 900);
-    await setCache(getCacheKey(email, 'otp_verify_failures'), 0, 900);
+    await setCache(getCacheKey(otpTarget, 'otp_attempts'), 0, 900);
+    await setCache(getCacheKey(otpTarget, 'otp_verify_failures'), 0, 900);
 
     const token = createAuthToken(user);
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
 
-    logger.info(`OTP verified successfully for ${email}`);
+    logger.info(`OTP verified successfully for ${otpTarget}`);
     return res.json({
       success: true,
       message: 'OTP verified successfully',

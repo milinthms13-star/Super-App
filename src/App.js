@@ -330,6 +330,22 @@ function AppShell() {
     const query = new URLSearchParams(location.search);
     const socialProvider = String(query.get("social") || "").trim().toLowerCase();
     const redirectedToken = String(query.get("token") || "").trim();
+    const socialError = String(query.get("error") || "").trim().toLowerCase();
+
+    if (socialProvider === "google" && socialError === "not_registered") {
+      setAppDataError("Google login is allowed only for registered users. Please register first.");
+      query.delete("social");
+      query.delete("error");
+      const nextQuery = query.toString();
+      navigate(
+        {
+          pathname: location.pathname,
+          search: nextQuery ? `?${nextQuery}` : "",
+        },
+        { replace: true }
+      );
+      return;
+    }
 
     if (!redirectedToken || socialProvider !== "google") {
       return;
