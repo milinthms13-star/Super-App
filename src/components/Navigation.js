@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "ridesharing", "realestate", "maps"],
+    modules: ["fooddelivery", "ridesharing", "realestate", "maps", "diary"],
   },
   utilities: {
     label: "Utilities",

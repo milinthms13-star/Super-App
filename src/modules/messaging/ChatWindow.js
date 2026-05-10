@@ -1157,16 +1157,30 @@ const ChatWindow = ({
                             <span className="message-location-title">Location shared</span>
                             <pre className="message-location-text">{message.content}</pre>
                             {(() => {
-                              const urlMatch = String(message.content || '').match(/https?:\/\/\S+/i);
-                              if (!urlMatch) {
+                              const contentText = String(message.content || '');
+                              const urlMatch = contentText.match(/https?:\/\/\S+/i);
+                              let locationUrl = urlMatch ? urlMatch[0] : null;
+
+                              if (!locationUrl) {
+                                const coordMatch = contentText.match(/([-+]?\d{1,3}\.\d+)[,\s]+([-+]?\d{1,3}\.\d+)/);
+                                if (coordMatch) {
+                                  const latitude = parseFloat(coordMatch[1]);
+                                  const longitude = parseFloat(coordMatch[2]);
+                                  if (!Number.isNaN(latitude) && !Number.isNaN(longitude)) {
+                                    locationUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
+                                  }
+                                }
+                              }
+
+                              if (!locationUrl) {
                                 return null;
                               }
 
                               return (
                                 <a
-                                  href={urlMatch[0]}
+                                  href={locationUrl}
                                   target="_blank"
-                                  rel="noreferrer"
+                                  rel="noopener noreferrer"
                                   className="message-location-link"
                                 >
                                   Open in Maps

@@ -298,6 +298,17 @@ const MODULE_CONFIG = [
     emoji: "👥",
   },
   {
+    id: "diary",
+    nameKey: "modules.diary",
+    fallbackName: "My Diary",
+    icon: "diary",
+    descriptionKey: "dashboard.moduleDescriptions.diary",
+    fallbackDescription: "Personal journaling, memories, and secure note keeping",
+    stats: "24K+ Entries",
+    gradient: "linear-gradient(135deg, #8B5CF6 0%, #4F46E5 100%)",
+    emoji: "📔",
+  },
+  {
     id: "reminderalert",
     nameKey: "modules.reminderalert",
     fallbackName: "ReminderAlert - Todo List",
