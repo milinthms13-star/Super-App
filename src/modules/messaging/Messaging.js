@@ -4,7 +4,6 @@ import { getStoredAuthToken } from '../../utils/auth';
 import '../../styles/Messaging.css';
 import '../../styles/GroupCreation.css';
 import '../../styles/Chatrooms.css';
-import { initializeDemoChats, getDemoChatMessages } from './ChatListEnhanced';
 import ChatList from './ChatList';
 import ChatWindow from './ChatWindow';
 import ContactsList from './ContactsList';
@@ -190,6 +189,38 @@ const normalizeRealtimeNotification = (notification = {}) => {
     createdAt,
     isRead: Boolean(notification.isRead),
   };
+};
+
+const formatActivityTime = (value) => {
+  if (!value) {
+    return '';
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '';
+  }
+
+  const now = new Date();
+  const deltaMs = now.getTime() - parsedDate.getTime();
+  const deltaMins = Math.floor(deltaMs / 60000);
+  const deltaHours = Math.floor(deltaMs / 3600000);
+  const deltaDays = Math.floor(deltaMs / 86400000);
+
+  if (deltaMins < 1) {
+    return 'just now';
+  }
+  if (deltaMins < 60) {
+    return `${deltaMins}m ago`;
+  }
+  if (deltaHours < 24) {
+    return `${deltaHours}h ago`;
+  }
+  if (deltaDays < 7) {
+    return `${deltaDays}d ago`;
+  }
+
+  return parsedDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
 const Messaging = () => {
@@ -459,18 +490,10 @@ const Messaging = () => {
     try {
       setLoading(true);
       const response = await apiCall('/messaging/chats', 'GET');
-      if (response?.chats) {
-        setChats(response.chats);
-      } else {
-        // If no chats from backend, initialize with demo data to prevent empty state
-        const demoChats = initializeDemoChats([]);
-        setChats(demoChats);
-      }
+      setChats(Array.isArray(response?.chats) ? response.chats : []);
     } catch (error) {
       console.error('Error loading chats:', error);
-      // On error, also initialize demo data so users see content
-      const demoChats = initializeDemoChats([]);
-      setChats(demoChats);
+      setChats([]);
     } finally {
       setLoading(false);
     }
@@ -579,13 +602,45 @@ const Messaging = () => {
       });
     } catch (error) {
       console.error('Error loading messages:', error);
-      // Fallback to demo messages if chat has demo data
-      const demoMessages = getDemoChatMessages(chatId);
-      if (demoMessages && demoMessages.length > 0) {
-        setMessages(demoMessages);
-      }
+      setMessages([]);
     }
   }, [apiCall, mergeChatOutboxIntoMessages, persistOutbox]);
+
+  const unreadChatsCount = useMemo(
+    () => chats.reduce((count, chat) => count + Number(chat?.unreadCount || 0), 0),
+    [chats]
+  );
+
+  const activeNowCount = useMemo(
+    () =>
+      chats.reduce((count, chat) => {
+        const otherParticipant = getOtherParticipant(chat, currentUser);
+        return count + (otherParticipant?.online ? 1 : 0);
+      }, 0),
+    [chats, currentUser]
+  );
+
+  const recentConversationCards = useMemo(() => {
+    const toTime = (chat) => new Date(chat?.lastMessageAt || chat?.updatedAt || 0).getTime();
+    return [...chats]
+      .sort((first, second) => toTime(second) - toTime(first))
+      .slice(0, 4)
+      .map((chat) => {
+        const otherParticipant = getOtherParticipant(chat, currentUser);
+        return {
+          id: chat._id,
+          title: chat?.type === 'group'
+            ? chat.groupName || 'Group chat'
+            : otherParticipant?.name || 'Direct chat',
+          preview:
+            chat?.lastMessage?.content ||
+            (chat?.lastMessage?.messageType ? `${chat.lastMessage.messageType} message` : 'No messages yet'),
+          time: formatActivityTime(chat?.lastMessageAt || chat?.updatedAt),
+          unreadCount: Number(chat?.unreadCount || 0),
+          online: Boolean(otherParticipant?.online),
+        };
+      });
+  }, [chats, currentUser]);
 
   const retryQueuedMessage = useCallback(async (queuedMessage, { manual = false } = {}) => {
     if (!queuedMessage?.clientMessageId || !queuedMessage?.chatId) {
@@ -1742,6 +1797,10 @@ const Messaging = () => {
           type: fileData.mimeType,
           url: fileData.s3Url,
           size: fileData.fileSize,
+          stickerId: fileData.stickerId || null,
+          animated: Boolean(fileData.animated),
+          category: fileData.category || '',
+          tags: Array.isArray(fileData.tags) ? fileData.tags : [],
         };
       }
 
@@ -1820,6 +1879,10 @@ const Messaging = () => {
                 type: fileData.mimeType,
                 url: fileData.s3Url,
                 size: fileData.fileSize,
+                stickerId: fileData.stickerId || null,
+                animated: Boolean(fileData.animated),
+                category: fileData.category || '',
+                tags: Array.isArray(fileData.tags) ? fileData.tags : [],
               }
             : null,
         replyTo: normalizedReplyTo,
@@ -2454,8 +2517,43 @@ const Messaging = () => {
                 </div>
               </div>
             ) : (
-              <div className="messaging-empty-state">
-                <p>Select a chatroom or create one to start chatting</p>
+              <div className="messaging-empty-state messaging-empty-state-rich">
+                <div className="messaging-empty-shell">
+                  <div className="messaging-empty-hero">
+                    <h2>Chatrooms Workspace</h2>
+                    <p>Select a chatroom or create one to start chatting.</p>
+                  </div>
+                  <div className="messaging-empty-actions">
+                    <button
+                      type="button"
+                      className="messaging-empty-action-btn primary"
+                      onClick={handleOpenChatroomCreation}
+                    >
+                      Create Chatroom
+                    </button>
+                    <button
+                      type="button"
+                      className="messaging-empty-action-btn"
+                      onClick={handleOpenChatroomBrowser}
+                    >
+                      Browse Public Rooms
+                    </button>
+                  </div>
+                  <div className="messaging-empty-metrics">
+                    <div className="messaging-empty-metric">
+                      <span className="metric-label">My rooms</span>
+                      <strong>{chatrooms.length}</strong>
+                    </div>
+                    <div className="messaging-empty-metric">
+                      <span className="metric-label">Public rooms</span>
+                      <strong>{chatrooms.filter((room) => !room?.isPrivate).length}</strong>
+                    </div>
+                    <div className="messaging-empty-metric">
+                      <span className="metric-label">Private rooms</span>
+                      <strong>{chatrooms.filter((room) => room?.isPrivate).length}</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
             )
           ) : showNewChat ? (
@@ -2653,8 +2751,78 @@ const Messaging = () => {
               )}
             </>
           ) : (
-            <div className="messaging-empty-state">
-              <p>Select a chat to start messaging</p>
+            <div className="messaging-empty-state messaging-empty-state-rich">
+              <div className="messaging-empty-shell">
+                <div className="messaging-empty-hero">
+                  <h2>LinkUp Conversations</h2>
+                  <p>Select a chat to start messaging.</p>
+                </div>
+
+                <div className="messaging-empty-metrics">
+                  <div className="messaging-empty-metric">
+                    <span className="metric-label">Active chats</span>
+                    <strong>{chats.length}</strong>
+                  </div>
+                  <div className="messaging-empty-metric">
+                    <span className="metric-label">Unread</span>
+                    <strong>{unreadChatsCount}</strong>
+                  </div>
+                  <div className="messaging-empty-metric">
+                    <span className="metric-label">Online now</span>
+                    <strong>{activeNowCount}</strong>
+                  </div>
+                </div>
+
+                <div className="messaging-empty-actions">
+                  <button
+                    type="button"
+                    className="messaging-empty-action-btn primary"
+                    onClick={() => setShowNewChat(true)}
+                  >
+                    Start Secure Conversation
+                  </button>
+                  <button
+                    type="button"
+                    className="messaging-empty-action-btn"
+                    onClick={() => setActiveTab('chatrooms')}
+                  >
+                    Explore Rooms
+                  </button>
+                </div>
+
+                {recentConversationCards.length > 0 && (
+                  <div className="messaging-empty-recent">
+                    <h3>Recent conversations</h3>
+                    <div className="messaging-empty-recent-list">
+                      {recentConversationCards.map((card) => (
+                        <button
+                          key={card.id}
+                          type="button"
+                          className="messaging-empty-recent-card"
+                          onClick={() => {
+                            const targetChat = chats.find((chat) => chat._id === card.id);
+                            if (targetChat) {
+                              handleSelectChat(targetChat);
+                            }
+                          }}
+                        >
+                          <span className={`recent-presence-dot ${card.online ? 'online' : ''}`}></span>
+                          <div className="recent-copy">
+                            <strong>{card.title}</strong>
+                            <p>{card.preview}</p>
+                          </div>
+                          <div className="recent-meta">
+                            {card.unreadCount > 0 && (
+                              <span className="recent-unread-count">{card.unreadCount}</span>
+                            )}
+                            <span>{card.time}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

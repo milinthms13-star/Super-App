@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import MessageSearch from './MessageSearch';
 import MessageContextMenu from './MessageContextMenu';
 import EmojiPicker from './EmojiPicker';
 import ReadReceipts from './ReadReceipts';
 import MessagePagination from './MessagePagination';
-import EnhancedEmptyState from './EnhancedEmptyState';
 import { getAvatarLabel, getEntityId, isSameEntity } from './utils';
 
 const ChatWindow = ({
@@ -51,10 +50,20 @@ const ChatWindow = ({
   const [replyingToMessage, setReplyingToMessage] = useState(null);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [voiceError, setVoiceError] = useState('');
+  const [showBackgroundPanel, setShowBackgroundPanel] = useState(false);
+  const [backgroundError, setBackgroundError] = useState('');
+  const [backgroundPreference, setBackgroundPreference] = useState({
+    type: 'none',
+    value: '',
+    layout: 'one-side',
+  });
   const messagesEndRef = useRef(null);
   const messageContainerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
+  const liveBackgroundVideoRef = useRef(null);
+  const liveBackgroundStreamRef = useRef(null);
+  const uploadedVideoUrlRef = useRef('');
   const voiceChunksRef = useRef([]);
   const voiceRecordingStartedAtRef = useRef(0);
   const previousMessageSnapshotRef = useRef({ count: 0, lastId: '' });
@@ -62,6 +71,10 @@ const ChatWindow = ({
   const resolvedCurrentUserId = getEntityId(
     chat?.participants?.find((participant) => isSameEntity(participant, currentUser))
   ) || currentUserId;
+  const backgroundStorageKey = useMemo(
+    () => `malabarbazaar-chat-background-${currentUserId || 'guest'}-${chat?._id || 'none'}`,
+    [currentUserId, chat?._id]
+  );
 
   useEffect(() => {
     const latestMessageId = getEntityId(messages[messages.length - 1]);
@@ -114,6 +127,94 @@ const ChatWindow = ({
     }
   }, []);
 
+  useEffect(() => {
+    if (!chat?._id) {
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      setBackgroundPreference({ type: 'none', value: '', layout: 'one-side' });
+      return;
+    }
+
+    try {
+      const rawPreference = window.localStorage.getItem(backgroundStorageKey);
+      if (!rawPreference) {
+        setBackgroundPreference({ type: 'none', value: '', layout: 'one-side' });
+        return;
+      }
+
+      const parsedPreference = JSON.parse(rawPreference);
+      setBackgroundPreference({
+        type: parsedPreference?.type || 'none',
+        value: parsedPreference?.value || '',
+        layout: parsedPreference?.layout === 'both-sides' ? 'both-sides' : 'one-side',
+      });
+    } catch (error) {
+      setBackgroundPreference({ type: 'none', value: '', layout: 'one-side' });
+    }
+  }, [backgroundStorageKey, chat?._id]);
+
+  useEffect(() => {
+    const ensureLiveVideoStream = async () => {
+      if (backgroundPreference.type !== 'live') {
+        if (liveBackgroundStreamRef.current) {
+          liveBackgroundStreamRef.current.getTracks().forEach((track) => track.stop());
+          liveBackgroundStreamRef.current = null;
+        }
+
+        if (liveBackgroundVideoRef.current) {
+          liveBackgroundVideoRef.current.srcObject = null;
+        }
+        return;
+      }
+
+      if (liveBackgroundStreamRef.current && liveBackgroundVideoRef.current) {
+        liveBackgroundVideoRef.current.srcObject = liveBackgroundStreamRef.current;
+        return;
+      }
+
+      try {
+        setBackgroundError('');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+
+        stream.getAudioTracks().forEach((track) => track.stop());
+        liveBackgroundStreamRef.current = stream;
+
+        if (liveBackgroundVideoRef.current) {
+          liveBackgroundVideoRef.current.srcObject = stream;
+        }
+      } catch (error) {
+        setBackgroundError('Unable to access camera for live background.');
+        setBackgroundPreference((currentPreference) => ({
+          ...currentPreference,
+          type: 'none',
+          value: '',
+        }));
+      }
+    };
+
+    ensureLiveVideoStream();
+  }, [backgroundPreference.type]);
+
+  useEffect(
+    () => () => {
+      if (liveBackgroundStreamRef.current) {
+        liveBackgroundStreamRef.current.getTracks().forEach((track) => track.stop());
+        liveBackgroundStreamRef.current = null;
+      }
+
+      if (uploadedVideoUrlRef.current) {
+        URL.revokeObjectURL(uploadedVideoUrlRef.current);
+        uploadedVideoUrlRef.current = '';
+      }
+    },
+    []
+  );
+
   const getOtherParticipants = () =>
     chat?.participants?.filter((participant) => !isSameEntity(participant, currentUser)) || [];
 
@@ -147,6 +248,89 @@ const ChatWindow = ({
     );
   };
 
+  const saveBackgroundPreference = (nextPreference) => {
+    setBackgroundPreference(nextPreference);
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const persistablePreference =
+        nextPreference.type === 'video' && String(nextPreference.value || '').startsWith('blob:')
+          ? { ...nextPreference, type: 'none', value: '' }
+          : nextPreference;
+      window.localStorage.setItem(backgroundStorageKey, JSON.stringify(persistablePreference));
+    } catch (error) {
+      // Ignore persistence failures.
+    }
+  };
+
+  const updateBackgroundPreference = (partialPreference) => {
+    const nextPreference = {
+      ...backgroundPreference,
+      ...partialPreference,
+    };
+
+    if (
+      backgroundPreference.type === 'video'
+      && String(backgroundPreference.value || '').startsWith('blob:')
+      && nextPreference.type !== 'video'
+      && uploadedVideoUrlRef.current
+    ) {
+      URL.revokeObjectURL(uploadedVideoUrlRef.current);
+      uploadedVideoUrlRef.current = '';
+    }
+
+    saveBackgroundPreference(nextPreference);
+  };
+
+  const handleBackgroundFileSelect = async (event) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) {
+      return;
+    }
+
+    if (selectedFile.type.startsWith('image/')) {
+      const fileReader = new FileReader();
+      fileReader.onload = () => {
+        const dataUrl = String(fileReader.result || '');
+        if (!dataUrl) {
+          setBackgroundError('Unable to read selected image.');
+          return;
+        }
+
+        updateBackgroundPreference({
+          type: 'image',
+          value: dataUrl,
+        });
+        setBackgroundError('');
+      };
+      fileReader.onerror = () => {
+        setBackgroundError('Unable to read selected image.');
+      };
+      fileReader.readAsDataURL(selectedFile);
+      return;
+    }
+
+    if (selectedFile.type.startsWith('video/')) {
+      if (uploadedVideoUrlRef.current) {
+        URL.revokeObjectURL(uploadedVideoUrlRef.current);
+      }
+
+      const objectUrl = URL.createObjectURL(selectedFile);
+      uploadedVideoUrlRef.current = objectUrl;
+      updateBackgroundPreference({
+        type: 'video',
+        value: objectUrl,
+      });
+      setBackgroundError('');
+      return;
+    }
+
+    setBackgroundError('Only image or video files are supported for chat backgrounds.');
+  };
+
   const handleSendMessage = () => {
     if (!messageInput.trim()) {
       return;
@@ -163,6 +347,25 @@ const ChatWindow = ({
     if (onTyping) {
       onTyping(false);
     }
+  };
+
+  const handleStickerSelect = async (sticker) => {
+    await onSendMessage(
+      sticker.name,
+      'sticker',
+      {
+        fileName: sticker.name,
+        mimeType: 'image/svg+xml',
+        s3Url: sticker.url,
+        fileSize: 0,
+        stickerId: sticker.id,
+        animated: Boolean(sticker.animated),
+        category: sticker.category,
+        tags: sticker.tags || [],
+      },
+      replyingToMessage?._id || null
+    );
+    setReplyingToMessage(null);
   };
 
   const handleInputChange = (event) => {
@@ -449,25 +652,59 @@ const ChatWindow = ({
     );
   };
 
+  const chatWindowBackgroundStyle = {};
+  if (backgroundPreference.type === 'image' && backgroundPreference.value) {
+    chatWindowBackgroundStyle.backgroundImage = `url("${backgroundPreference.value}")`;
+    chatWindowBackgroundStyle.backgroundSize = 'cover';
+    chatWindowBackgroundStyle.backgroundPosition = 'center';
+  }
+
+  const isVideoBackgroundActive =
+    (backgroundPreference.type === 'video' || backgroundPreference.type === 'live')
+    && Boolean(backgroundPreference.value || backgroundPreference.type === 'live');
+
   if (!chat) {
     return (
       <div className="chat-window empty-chat">
-        <EnhancedEmptyState 
-          onSelectAction={(action) => {
-            // Quick action handler - can navigate or trigger actions
-            console.log('Quick action selected:', action);
-          }}
-          onStartNewChat={(contact) => {
-            // When user clicks suggested contact, create new chat
-            console.log('Starting new chat with:', contact);
-          }}
-        />
+        <div className="chat-window-empty-shell">
+          <h2>No conversation selected</h2>
+          <p>Choose a chat from the sidebar to begin messaging.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="chat-window">
+    <div
+      className={`chat-window ${
+        backgroundPreference.layout === 'both-sides' ? 'chat-window-bg-both-sides' : 'chat-window-bg-one-side'
+      } ${backgroundPreference.type !== 'none' ? 'chat-window-with-custom-bg' : ''}`}
+      style={chatWindowBackgroundStyle}
+    >
+      {isVideoBackgroundActive && (
+        <div className="chat-window-video-bg-layer" aria-hidden="true">
+          {backgroundPreference.type === 'video' ? (
+            <video
+              className="chat-window-video-bg"
+              src={backgroundPreference.value}
+              autoPlay
+              loop
+              muted
+              playsInline
+            />
+          ) : (
+            <video
+              ref={liveBackgroundVideoRef}
+              className="chat-window-video-bg"
+              autoPlay
+              muted
+              playsInline
+            />
+          )}
+        </div>
+      )}
+      {backgroundPreference.type !== 'none' && <div className="chat-window-bg-overlay" aria-hidden="true"></div>}
+
       <div className="chat-window-header">
         <div className="chat-header-profile">
           <span className="chat-header-avatar">{getChatAvatar()}</span>
@@ -523,8 +760,85 @@ const ChatWindow = ({
           >
             Encrypt
           </button>
+          <button
+            className={`btn-icon ${showBackgroundPanel ? 'active' : ''}`}
+            title="Chat background settings"
+            onClick={() => setShowBackgroundPanel((current) => !current)}
+            type="button"
+          >
+            Background
+          </button>
         </div>
       </div>
+
+      {showBackgroundPanel && (
+        <div className="chat-background-panel">
+          <div className="chat-background-panel-header">
+            <h4>Chat Background</h4>
+            <button
+              type="button"
+              className="chat-background-close-btn"
+              onClick={() => setShowBackgroundPanel(false)}
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="chat-background-actions">
+            <button
+              type="button"
+              className={`chat-background-chip ${backgroundPreference.type === 'none' ? 'active' : ''}`}
+              onClick={() => updateBackgroundPreference({ type: 'none', value: '' })}
+            >
+              None
+            </button>
+            <button
+              type="button"
+              className={`chat-background-chip ${backgroundPreference.type === 'live' ? 'active' : ''}`}
+              onClick={() => updateBackgroundPreference({ type: 'live', value: '' })}
+            >
+              Live Video (Muted)
+            </button>
+            <label className="chat-background-upload-chip">
+              Upload Image/Video
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={handleBackgroundFileSelect}
+              />
+            </label>
+          </div>
+
+          <div className="chat-background-layout-row">
+            <span>Apply layout:</span>
+            <button
+              type="button"
+              className={`chat-background-layout-btn ${
+                backgroundPreference.layout === 'one-side' ? 'active' : ''
+              }`}
+              onClick={() => updateBackgroundPreference({ layout: 'one-side' })}
+            >
+              One Side
+            </button>
+            <button
+              type="button"
+              className={`chat-background-layout-btn ${
+                backgroundPreference.layout === 'both-sides' ? 'active' : ''
+              }`}
+              onClick={() => updateBackgroundPreference({ layout: 'both-sides' })}
+            >
+              Both Sides
+            </button>
+          </div>
+
+          {backgroundError && <p className="chat-background-error">{backgroundError}</p>}
+          {backgroundPreference.type === 'live' && (
+            <p className="chat-background-note">
+              Live background uses camera video only. Audio remains off.
+            </p>
+          )}
+        </div>
+      )}
 
       {showSearch && (
         <MessageSearch
@@ -618,6 +932,17 @@ const ChatWindow = ({
                         {message.messageType === 'image' && (
                           <div className="message-media">
                             <img src={message.media?.url} alt="" />
+                          </div>
+                        )}
+                        {message.messageType === 'sticker' && (
+                          <div className="message-sticker">
+                            <img
+                              src={message.media?.url}
+                              alt={message.content || 'Sticker'}
+                              className="message-sticker-image"
+                              loading="lazy"
+                            />
+                            <span className="message-sticker-label">{message.content || 'Sticker'}</span>
                           </div>
                         )}
                         {message.messageType === 'video' && (
@@ -777,6 +1102,7 @@ const ChatWindow = ({
       {showEmojiPicker && (
         <EmojiPicker
           onSelectEmoji={handleEmojiSelect}
+          onSelectSticker={handleStickerSelect}
           onClose={() => {
             setShowEmojiPicker(false);
             setSelectedMessageForReaction(null);

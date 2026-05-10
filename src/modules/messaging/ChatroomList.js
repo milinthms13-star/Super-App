@@ -28,6 +28,44 @@ const ChatroomList = ({
     setFilteredChatrooms(filtered);
   }, [chatrooms, searchQuery]);
 
+  const formatChatroomActivity = (room) => {
+    if (!room?.lastMessageAt && !room?.updatedAt) {
+      return 'No recent activity';
+    }
+
+    const timestamp = room?.lastMessageAt || room?.updatedAt;
+    const parsedDate = new Date(timestamp);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return 'Recently active';
+    }
+
+    const now = new Date();
+    const deltaMinutes = Math.floor((now.getTime() - parsedDate.getTime()) / 60000);
+
+    if (deltaMinutes < 1) {
+      return 'Active now';
+    }
+    if (deltaMinutes < 60) {
+      return `Active ${deltaMinutes}m ago`;
+    }
+    if (deltaMinutes < 24 * 60) {
+      return `Active ${Math.floor(deltaMinutes / 60)}h ago`;
+    }
+
+    return `Active ${parsedDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+  };
+
+  const getRoomTone = (room) => {
+    const memberCount = Number(room?.memberCount || 0);
+    if (memberCount >= 100) {
+      return 'trending';
+    }
+    if (room?.isPrivate) {
+      return 'private';
+    }
+    return 'public';
+  };
+
   return (
     <div className="chatroom-list-container">
       <div className="chatroom-list-header">
@@ -73,18 +111,31 @@ const ChatroomList = ({
               key={room._id}
               className={`chatroom-item ${
                 selectedChatroom?._id === room._id ? 'active' : ''
-              }`}
+              } ${getRoomTone(room)}`}
               onClick={() => onSelectChatroom(room)}
             >
               <div className="chatroom-item-avatar">
                 {getAvatarLabel(room.name, room.name, '', room.icon, 'C')}
               </div>
               <div className="chatroom-item-info">
-                <h4 className="chatroom-item-name">
-                  {room.name}
-                  {room.isPrivate && <span className="private-badge">(Private)</span>}
-                </h4>
-                <p className="chatroom-item-members">{room.memberCount} members</p>
+                <div className="chatroom-item-heading">
+                  <h4 className="chatroom-item-name">{room.name}</h4>
+                  <div className="chatroom-badges">
+                    <span className={`chatroom-badge ${room.isPrivate ? 'private' : 'public'}`}>
+                      {room.isPrivate ? 'Private' : 'Public'}
+                    </span>
+                    {Number(room?.memberCount || 0) >= 100 && (
+                      <span className="chatroom-badge trending">Trending</span>
+                    )}
+                  </div>
+                </div>
+                <p className="chatroom-item-members">
+                  {Number(room?.memberCount || 0)} members
+                </p>
+                {room?.description && (
+                  <p className="chatroom-description-preview">{room.description}</p>
+                )}
+                <p className="chatroom-activity">{formatChatroomActivity(room)}</p>
               </div>
             </div>
           ))
