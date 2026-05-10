@@ -63,6 +63,30 @@ describe('SOS Module Phase 1 Tests', () => {
       contactId = res.body.contactId;
     });
 
+    it('should send OTP via LinkUp when the phone belongs to a platform user', async () => {
+      const recipient = await User.create({
+        name: 'LinkUp Contact',
+        email: `linkup-${Date.now()}@example.com`,
+        username: `linkupuser${Date.now()}`,
+        phone: '8100000001',
+        password: 'Pass@123456',
+      });
+
+      const res = await request(app)
+        .post('/api/sos/send-contact-otp')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          phone: recipient.phone,
+          name: 'LinkUp Contact',
+          channel: 'linkup',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toContain('OTP sent');
+      expect(res.body.contactId).toBeDefined();
+    });
+
     it('should fail without phone number', async () => {
       const res = await request(app)
         .post('/api/sos/send-contact-otp')

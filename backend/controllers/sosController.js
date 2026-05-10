@@ -14,12 +14,63 @@ const { saveAudioFile, validateAudio } = require('../services/audioProcessingSer
 const { detectSpam } = require('../services/spamDetectionService');
 const VideoTranscodingService = require('../services/videoTranscodingService');
 const ContactGroupService = require('../services/contactGroupService');
+const Chat = require('../models/Chat');
+const Message = require('../models/Message');
+const ChatNotification = require('../models/ChatNotification');
 
 /**
  * ENDPOINT 1: Send OTP to contact phone number
  * POST /sos/send-contact-otp
  * Body: { contactId?, phone, name }
  */
+const createOrGetDirectChat = async (userId, otherUserId) => {
+  let chat = await Chat.findOne({
+    type: 'direct',
+    participants: { $all: [userId, otherUserId] },
+  });
+
+  if (!chat) {
+    chat = await Chat.create({
+      type: 'direct',
+      participants: [userId, otherUserId],
+      lastMessageAt: new Date(),
+    });
+  }
+
+  return chat;
+};
+
+const sendLinkUpMessage = async ({ senderId, recipientId, content }) => {
+  const chat = await createOrGetDirectChat(senderId, recipientId);
+
+  const message = await Message.create({
+    chatId: chat._id,
+    senderId,
+    messageType: 'text',
+    content,
+    deliveryStatus: [
+      { userId: senderId, status: 'seen', seenAt: new Date() },
+      { userId: recipientId, status: 'sent', deliveredAt: new Date() },
+    ],
+  });
+
+  chat.lastMessage = message._id;
+  chat.lastMessageAt = new Date();
+  await chat.save();
+
+  await ChatNotification.create({
+    userId: recipientId,
+    messageId: message._id,
+    chatId: chat._id,
+    senderId,
+    notificationType: 'message',
+    title: 'LinkUp message received',
+    body: content.substring(0, 120),
+  });
+
+  return message;
+};
+
 exports.sendContactOTP = async (req, res) => {
   try {
     const { phone, name, contactId } = req.body;
@@ -69,9 +120,28 @@ exports.sendContactOTP = async (req, res) => {
     // Send OTP via requested channel
     const channel = String(req.body.channel || 'sms').toLowerCase();
     const otpMessage = `Your NilaHub SOS verification code is: ${otp}. Valid for 5 minutes.`;
-    const deliveryResult = channel === 'whatsapp'
-      ? await sendWhatsApp(phone, otpMessage)
-      : await sendSMS(phone, otpMessage);
+    let deliveryResult = { success: true };
+
+    if (channel === 'linkup') {
+      const recipient = await User.findOne({ phone: phone.trim() });
+      if (!recipient) {
+        return res.status(404).json({
+          success: false,
+          message: 'LinkUp user not found for this phone number',
+          error: 'LINKUP_USER_NOT_FOUND',
+        });
+      }
+
+      await sendLinkUpMessage({
+        senderId: userId,
+        recipientId: recipient._id,
+        content: otpMessage,
+      });
+    } else if (channel === 'whatsapp') {
+      deliveryResult = await sendWhatsApp(phone, otpMessage);
+    } else {
+      deliveryResult = await sendSMS(phone, otpMessage);
+    }
 
     if (!deliveryResult.success) {
       logger.error(`OTP send failed for ${phone} via ${channel}: ${deliveryResult.error}`);
@@ -391,7 +461,9 @@ exports.sendSOSAlert = async (req, res) => {
     for (const contact of verifiedContacts) {
       for (const channel of channels) {
         try {
-          if (channel === 'SMS' || channel === 'WhatsApp') {
+          const channelLower = String(channel || '').toLowerCase();
+
+          if (channelLower === 'sms' || channelLower === 'whatsapp' || channelLower === 'linkup') {
             // Create tracking link first
             const token = crypto.randomBytes(16).toString('hex');
             const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -405,10 +477,38 @@ exports.sendSOSAlert = async (req, res) => {
             });
 
             const trackingURL = `${process.env.FRONTEND_URL || 'https://app.nilahub.com'}/sos/tracking/${token}`;
-
             const message = `🚨 EMERGENCY ALERT: ${reason}\n\n📍 Location: ${latitude}, ${longitude}\nℹ️ Accuracy: ${accuracy}m\n\n🔗 Track live: ${trackingURL}\n\n(Valid for 24 hours)`;
 
-            await sendSMS(contact.phone, message);
+            if (channelLower === 'linkup') {
+              const recipient = await User.findOne({ phone: contact.phone.trim() });
+              if (!recipient) {
+                alerts.push({
+                  contactId: contact._id,
+                  phone: contact.phone,
+                  channel,
+                  status: 'failed',
+                  error: 'LINKUP_USER_NOT_FOUND',
+                  timestamp: new Date(),
+                });
+                incident.retryLog.push({
+                  timestamp: new Date(),
+                  action: 'ALERT_LINKUP',
+                  status: 'failed',
+                  error: 'LinkUp user not found',
+                  nextRetry: new Date(Date.now() + 30000),
+                });
+                continue;
+              }
+              await sendLinkUpMessage({
+                senderId: userId,
+                recipientId: recipient._id,
+                content: message,
+              });
+            } else if (channelLower === 'whatsapp') {
+              await sendWhatsApp(contact.phone, message);
+            } else {
+              await sendSMS(contact.phone, message);
+            }
 
             alerts.push({
               contactId: contact._id,

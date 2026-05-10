@@ -5,7 +5,8 @@ import PhotoCapture from "./PhotoCapture";
 import "../../styles/SOSAlert.css";
 
 const QUICK_REASONS = ["Medical", "Unsafe situation", "Travel check-in", "Vehicle breakdown"];
-const DELIVERY_CHANNELS = ["SMS", "WhatsApp", "Call"];
+const DELIVERY_CHANNELS = ["SMS", "WhatsApp", "Call", "LinkUp"];
+const OTP_CHANNELS = ["WhatsApp", "SMS", "LinkUp"];
 const MAX_TRUSTED_CONTACTS = 5;
 const TRIGGER_COUNTDOWN_SECONDS = 5;
 const LOCATION_OPTIONS = {
@@ -209,6 +210,7 @@ const SOSAlert = () => {
     phone: "",
     priority: "Backup",
     notifyBy: ["SMS", "Call"],
+    otpChannel: "WhatsApp",
     otpSent: false,
     otpCode: "",
     otpVerified: false,
@@ -499,7 +501,7 @@ const SOSAlert = () => {
       const response = await apiCall("/sos/send-contact-otp", "POST", {
         phone: contactForm.phone,
         name: contactForm.name,
-        channel: "whatsapp",
+        channel: contactForm.otpChannel.toLowerCase(),
       });
 
       if (response?.success) {
@@ -512,7 +514,8 @@ const SOSAlert = () => {
         setOtpError("");
       }
     } catch (error) {
-      setOtpError("Failed to send OTP. Try again.");
+      const message = error?.response?.data?.message || error?.message || "Failed to send OTP. Try again.";
+      setOtpError(message);
     }
   };
 
@@ -602,6 +605,7 @@ const SOSAlert = () => {
           phone: "",
           priority: "Backup",
           notifyBy: ["SMS", "Call"],
+          otpChannel: "WhatsApp",
           otpSent: false,
           otpCode: "",
           otpVerified: false,
@@ -1231,13 +1235,28 @@ const SOSAlert = () => {
               {/* Phase 1: OTP Verification UI */}
               {!contactForm.otpSent ? (
                 <div className="sos-otp-section">
+                  <label htmlFor="otpChannel" className="sos-otp-channel-label">
+                    OTP delivery channel
+                  </label>
+                  <select
+                    id="otpChannel"
+                    name="otpChannel"
+                    value={contactForm.otpChannel}
+                    onChange={handleFormChange}
+                  >
+                    {OTP_CHANNELS.map((channel) => (
+                      <option key={channel} value={channel}>
+                        {channel}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     className="sos-otp-button"
                     onClick={handleSendOTP}
                     disabled={!contactForm.phone.trim()}
                   >
-                    � WhatsApp OTP
+                    Send {contactForm.otpChannel} OTP
                   </button>
                 </div>
               ) : !contactForm.otpVerified ? (

@@ -1,0 +1,63 @@
+.globemart-entry-shell {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.globemart-entry-card {
+  width: min(640px, 100%);
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #ffffff 0%, #f6f7fb 100%);
+  border: 1px solid #dde3f0;
+  box-shadow: 0 10px 28px rgba(31, 42, 68, 0.08);
+}
+
+.globemart-entry-card h2 {
+  margin: 0;
+  color: #1f2a44;
+}
+
+.globemart-entry-card p {
+  margin: 0.75rem 0 0;
+  color: #4c5b7a;
+}
+
+.globemart-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.globemart-registration-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.globemart-registration-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: #223154;
+  font-weight: 600;
+}
+
+.globemart-registration-form input {
+  border: 1px solid #c8d2e7;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+}
+
+.globemart-entry-error {
+  margin: 0;
+  color: #c23d31;
+  font-weight: 600;
+}
+
+.globemart-entry-note {
+  margin-top: 1rem;
+  color: #2f7d4c;
+  font-weight: 600;
+}

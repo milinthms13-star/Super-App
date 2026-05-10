@@ -214,7 +214,12 @@ const buildProductFormState = (product) => ({
   image: product?.image || "",
 });
 
-const Ecommerce = ({ globeMartCategories = [], onOpenOrders = null, onOpenReturns = null }) => {
+const Ecommerce = ({
+  globeMartCategories = [],
+  onOpenOrders = null,
+  onOpenReturns = null,
+  entryMode = "",
+}) => {
   const {
     currentUser,
     language,
@@ -300,8 +305,10 @@ const Ecommerce = ({ globeMartCategories = [], onOpenOrders = null, onOpenReturn
   const quickViewPanelRef = useRef(null);
   const flashNotificationRegistryRef = useRef(new Set());
   const { recognitionSupported, listeningKey, startListening, stopListening } = useVoice(language);
-  const isEntrepreneur =
+  const isNativeEntrepreneur =
     currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
+  const isEntrepreneur =
+    entryMode === "seller" ? true : entryMode === "buyer" ? false : isNativeEntrepreneur;
   const currentBusinessName = currentUser?.businessName?.trim() || currentUser?.name || "Your Business";
 
   // Handle keyboard navigation for quick view modal
@@ -3220,6 +3227,7 @@ Ecommerce.propTypes = {
   ),
   onOpenOrders: PropTypes.func,
   onOpenReturns: PropTypes.func,
+  entryMode: PropTypes.oneOf(["", "buyer", "seller"]),
 };
 
 export default Ecommerce;

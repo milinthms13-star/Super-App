@@ -498,6 +498,7 @@ test("seller product form uses GlobeMart categories from admin app data", async 
   ).toBeInTheDocument();
 
   fireEvent.click(screen.getAllByRole("button", { name: /globemart/i }).slice(-1)[0]);
+  fireEvent.click(await screen.findByRole("button", { name: /continue as seller/i }));
 
   expect(
     await screen.findByRole("heading", { level: 2, name: /create product for approval/i })
