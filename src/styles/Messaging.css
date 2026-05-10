@@ -1,10 +1,19 @@
-/* Messaging Styles *//* Messaging Container */
+/**
+ * Messaging Styles - LinkUp Module
+ * Enhanced with demo data, real-time indicators, and rich UX
+ * Import LinkUp-specific styles for cyan theme and animations
+ */
+
+@import './LinkUpModulePolish.css';
+@import './LinkUpEmptyStateAndActivity.css';
+
+/* Messaging Container */
 .messaging-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
   max-height: 100vh;
-  background: #f5f5f5;
+  background: linear-gradient(135deg, #f5f8fa 0%, #f0fafb 100%);
 }
 
 .messaging-layout {
@@ -1104,6 +1113,7 @@
   cursor: pointer;
   transition: background 0.3s;
   align-items: center;
+  position: relative;
 }
 
 .chat-item:hover {
@@ -1116,9 +1126,35 @@
   padding-left: calc(0.75rem - 4px);
 }
 
+.chat-avatar-container {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .chat-avatar {
   font-size: 2rem;
-  flex-shrink: 0;
+}
+
+/* Online status indicator */
+.online-indicator {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  background: #4caf50;
+  border: 2px solid white;
+  border-radius: 50%;
+  animation: onlinePulse 2s infinite;
+}
+
+@keyframes onlinePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.3);
+  }
 }
 
 .chat-item-info {
@@ -1143,6 +1179,45 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1em;
+}
+
+/* Typing indicator in preview */
+.typing-indicator-preview {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.typing-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00bcd4;
+  display: inline-block;
+  animation: typingBounce 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
 }
 
 .unread-badge {

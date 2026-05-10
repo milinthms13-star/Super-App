@@ -56,6 +56,17 @@ const ChatList = ({
   };
 
   const getChatPreview = (chat) => {
+    // Show typing indicator if user is typing
+    if (chat.typing) {
+      return (
+        <span className="typing-indicator-preview">
+          <span className="typing-dot"></span>
+          <span className="typing-dot"></span>
+          <span className="typing-dot"></span>
+        </span>
+      );
+    }
+
     const lastMessage = chat.lastMessage;
     const clearedAt = getChatClearTimestamp(chat?._id, clearedChats);
     const lastVisibleCandidate = lastMessage || { createdAt: chat?.lastMessageAt };
@@ -70,15 +81,15 @@ const ChatList = ({
 
     switch (lastMessage.messageType) {
       case 'voice':
-        return 'Voice note';
+        return '🎙️ Voice note';
       case 'audio':
-        return 'Audio message';
+        return '🎵 Audio message';
       case 'image':
-        return 'Photo shared';
+        return '📷 Photo shared';
       case 'video':
-        return 'Video shared';
+        return '🎬 Video shared';
       case 'file':
-        return lastMessage.content || 'File shared';
+        return lastMessage.content || '📄 File shared';
       default:
         return lastMessage.content?.substring(0, 50) || 'No messages yet';
     }
@@ -122,23 +133,35 @@ const ChatList = ({
 
       <div className="chats-list">
         {filteredChats.length > 0 ? (
-          filteredChats.map((chat) => (
-            <div
-              key={chat._id}
-              className={`chat-item ${selectedChat?._id === chat._id ? 'active' : ''}`}
-              onClick={() => onSelectChat(chat)}
-            >
-              <span className="chat-avatar">{getChatAvatar(chat)}</span>
-              <div className="chat-item-info">
-                <h4 className="chat-title">{getChatTitle(chat)}</h4>
-                <p className="chat-preview">{getChatPreview(chat)}</p>
+          filteredChats.map((chat) => {
+            const otherUser = getOtherUser(chat);
+            const isOnline = otherUser?.online === true;
+            
+            return (
+              <div
+                key={chat._id}
+                className={`chat-item ${selectedChat?._id === chat._id ? 'active' : ''}`}
+                onClick={() => onSelectChat(chat)}
+              >
+                <div className="chat-avatar-container">
+                  <span className="chat-avatar">{getChatAvatar(chat)}</span>
+                  {isOnline && <span className="online-indicator"></span>}
+                </div>
+                <div className="chat-item-info">
+                  <h4 className="chat-title">{getChatTitle(chat)}</h4>
+                  <p className="chat-preview">{getChatPreview(chat)}</p>
+                </div>
+                <div className="chat-item-meta">
+                  {chat.unreadCount > 0 && (
+                    <span className="unread-badge" title={`${chat.unreadCount} unread message${chat.unreadCount > 1 ? 's' : ''}`}>
+                      {chat.unreadCount}
+                    </span>
+                  )}
+                  <span className="chat-time">{getChatTime(chat)}</span>
+                </div>
               </div>
-              <div className="chat-item-meta">
-                {chat.unreadCount > 0 && <span className="unread-badge">{chat.unreadCount}</span>}
-                <span className="chat-time">{getChatTime(chat)}</span>
-              </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="empty-chats">
             <p>No conversations yet</p>

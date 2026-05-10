@@ -5,6 +5,7 @@ import MessageContextMenu from './MessageContextMenu';
 import EmojiPicker from './EmojiPicker';
 import ReadReceipts from './ReadReceipts';
 import MessagePagination from './MessagePagination';
+import EnhancedEmptyState from './EnhancedEmptyState';
 import { getAvatarLabel, getEntityId, isSameEntity } from './utils';
 
 const ChatWindow = ({
@@ -451,9 +452,16 @@ const ChatWindow = ({
   if (!chat) {
     return (
       <div className="chat-window empty-chat">
-        <div className="empty-state">
-          <p>Select a chat to start messaging</p>
-        </div>
+        <EnhancedEmptyState 
+          onSelectAction={(action) => {
+            // Quick action handler - can navigate or trigger actions
+            console.log('Quick action selected:', action);
+          }}
+          onStartNewChat={(contact) => {
+            // When user clicks suggested contact, create new chat
+            console.log('Starting new chat with:', contact);
+          }}
+        />
       </div>
     );
   }
