@@ -8,6 +8,11 @@ import "../styles/NavigationEnhanced.css";
 import "../styles/PlatformPolish.css";
 
 const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks"]);
+const USER_IMAGE_KEYS = ["photoURL", "avatar", "photo", "profileImage", "picture"];
+
+const isImageLikeUrl = (value) =>
+  typeof value === "string" &&
+  /^(https?:\/\/|data:image\/|blob:)/i.test(value.trim());
 
 // Module categories for organized navigation
 const MODULE_CATEGORIES = {
@@ -42,8 +47,20 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
 
   const displayUser = loggedInUser || currentUser;
+  const profileImageSrc =
+    USER_IMAGE_KEYS.map((key) => displayUser?.[key]).find(isImageLikeUrl) || "";
+  const displayName =
+    displayUser?.name ||
+    displayUser?.username ||
+    displayUser?.email ||
+    "User";
+  const avatarFallback =
+    displayUser?.avatar && !isImageLikeUrl(displayUser.avatar)
+      ? displayUser.avatar
+      : displayName?.[0]?.toUpperCase() || "U";
   const isAdmin = displayUser?.role === "admin" || displayUser?.registrationType === "admin";
   const isSeller =
     displayUser?.registrationType === "entrepreneur" || displayUser?.role === "business";
@@ -101,6 +118,10 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    setAvatarLoadError(false);
+  }, [profileImageSrc]);
 
   const handleModuleClick = (moduleId) => {
     navigate(getPathForModule(moduleId, getPathForModule(defaultHomeModule)));
@@ -178,13 +199,18 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
               
               <div className="user-profile" onClick={() => setShowUserMenu(!showUserMenu)}>
                 <span className="user-avatar">
-                  {displayUser.photoURL ? (
-                    <img src={displayUser.photoURL} alt={displayUser.name} className="avatar-image" />
+                  {profileImageSrc && !avatarLoadError ? (
+                    <img
+                      src={profileImageSrc}
+                      alt={displayName}
+                      className="avatar-image"
+                      onError={() => setAvatarLoadError(true)}
+                    />
                   ) : (
-                    displayUser.avatar || displayUser.name?.[0]?.toUpperCase() || 'U'
+                    avatarFallback
                   )}
                 </span>
-                <span className="user-name">{displayUser.name || displayUser.email}</span>
+                <span className="user-name">{displayName}</span>
                 <span className="dropdown-icon">v</span>
 
                 {showUserMenu && (
