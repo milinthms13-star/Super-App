@@ -11,6 +11,7 @@ export const MODULE_PATHS = {
   fooddelivery: "/fooddelivery",
   localmarket: "/localmarket",
   ridesharing: "/ridesharing",
+  maps: "/maps",
   matrimonial: "/matrimonial",
   socialmedia: "/socialmedia",
   reminderalert: "/reminderalert",
@@ -21,12 +22,27 @@ export const MODULE_PATHS = {
   support: "/support",
 };
 
+const MODULE_ID_ALIASES = {
+  quicklink: "quicklinks",
+  "quick-links": "quicklinks",
+  mydiary: "diary",
+  personaldiary: "diary",
+  map: "maps",
+};
+
+export const normalizeModuleId = (moduleId = "") => {
+  const normalizedId = String(moduleId || "").trim().toLowerCase();
+  return MODULE_ID_ALIASES[normalizedId] || normalizedId;
+};
+
 export const ROUTABLE_MODULES = new Set(Object.keys(MODULE_PATHS));
 
 export const getProtectedModuleFromPathname = (pathname = "") =>
-  String(pathname)
+  normalizeModuleId(
+    String(pathname)
     .split("/")
-    .filter(Boolean)[0] || "";
+    .filter(Boolean)[0] || ""
+  );
 
 export const getPathForModule = (moduleId = "", fallbackPath = MODULE_PATHS.dashboard) =>
-  MODULE_PATHS[moduleId] || fallbackPath;
+  MODULE_PATHS[normalizeModuleId(moduleId)] || fallbackPath;

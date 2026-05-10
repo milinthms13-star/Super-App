@@ -460,6 +460,14 @@ const SOSAlert = () => {
     { label: "Readiness", value: `${readinessScore}%` },
   ];
 
+  const readinessIndicators = [
+    { label: "Police nearby", value: "3 min estimate", tone: "alert" },
+    { label: "Nearest hospital", value: "0.9 km", tone: "safe" },
+    { label: "Shake trigger", value: "Enabled", tone: "active" },
+    { label: "Auto evidence", value: capturedPhotos.length ? `${capturedPhotos.length} photos` : "Armed", tone: "active" },
+    { label: "Fake escape", value: "Call & distraction ready", tone: "neutral" },
+  ];
+
   const handleFormChange = (event) => {
     const { name, value, type, checked } = event.target;
 
@@ -974,20 +982,19 @@ const SOSAlert = () => {
 
       <section className="sos-hero">
         <div className="sos-hero-copy">
-          <p className="sos-eyebrow">Personal safety workspace</p>
-          <h1>SOS Safety Center</h1>
+          <p className="sos-eyebrow">SafeCircle Emergency Hub</p>
+          <h1>Rapid help when every second counts</h1>
           <p className="sos-intro">
-            Trigger an SOS alert, share your live location, notify trusted contacts, and track the
-            response from one working emergency screen.
+            Arm trusted contacts, silent mode, live tracking, and auto escalation in one lean emergency workspace.
           </p>
         </div>
 
         <div className="sos-hero-card">
-          <span className="sos-hero-label">Ready now</span>
+          <span className="sos-hero-label">Mission status</span>
           <strong>
             {alertState.active
               ? `${alertState.mode} from ${activeLocation}`
-              : "Standby mode with trusted contacts and alert preferences armed."}
+              : "Standby ready. Your circle and response systems are armed."}
           </strong>
           <p>
             {alertState.active
@@ -1005,6 +1012,36 @@ const SOSAlert = () => {
           </article>
         ))}
       </section>
+
+      <section className="sos-quick-grid" aria-label="Emergency readiness indicators">
+        {readinessIndicators.map((item) => (
+          <article className={`sos-quick-card sos-quick-${item.tone}`} key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </article>
+        ))}
+      </section>
+
+      {countdownState.active && !alertState.active && (
+        <div className="sos-countdown-modal" role="dialog" aria-modal="true">
+          <div className="sos-countdown-dialog">
+            <span className="sos-modal-eyebrow">Emergency countdown active</span>
+            <strong>Dispatching SOS in {countdownState.secondsRemaining}s</strong>
+            <p>
+              Live location will be shared and your safety circle notified unless cancelled.
+            </p>
+            <div className="sos-countdown-actions">
+              <button
+                type="button"
+                className="sos-text-action danger"
+                onClick={handleCancelCountdown}
+              >
+                Cancel Alert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
 {apiError ? (
   <div className="sos-status-banner error">
@@ -1065,7 +1102,7 @@ const SOSAlert = () => {
                     onClick={handleTriggerSOS}
                     disabled={!contacts.length}
                   >
-                    Send SOS Alert
+                    🚨 Send SOS Alert
                   </button>
                 )}
                 <div className="sos-checklist-note">
@@ -1192,7 +1229,7 @@ const SOSAlert = () => {
                     onClick={handleSendOTP}
                     disabled={!contactForm.phone.trim()}
                   >
-                    📱 Send OTP
+                    � WhatsApp OTP
                   </button>
                 </div>
               ) : !contactForm.otpVerified ? (

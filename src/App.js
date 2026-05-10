@@ -22,6 +22,7 @@ import {
   getPathForModule,
   getProtectedModuleFromPathname,
   MODULE_PATHS,
+  normalizeModuleId,
   ROUTABLE_MODULES,
 } from "./utils/moduleRoutes";
 import { API_BASE_URL, BACKEND_BASE_URL } from "./utils/api";
@@ -113,6 +114,15 @@ const PREVIEW_ENABLED_MODULES = [
   "sosalert",
   "astrology",
 ];
+
+const normalizeEnabledModules = (moduleIds = []) =>
+  Array.from(
+    new Set(
+      (Array.isArray(moduleIds) ? moduleIds : [])
+        .map((moduleId) => normalizeModuleId(moduleId))
+        .filter(Boolean)
+    )
+  );
 
 const PREVIEW_BUSINESS_CATEGORIES = [
   { id: "ecommerce", name: "GlobeMart", fee: 799, requiresFoodLicense: false },
@@ -207,7 +217,9 @@ function AppShell() {
   const toggleControlledModuleIds = useMemo(
     () =>
       new Set(
-        businessCategories.map((category) => category?.id).filter(Boolean)
+        businessCategories
+          .map((category) => normalizeModuleId(category?.id))
+          .filter(Boolean)
       ),
     [businessCategories]
   );
@@ -259,7 +271,7 @@ function AppShell() {
       Array.isArray(data.registrationApplications) ? data.registrationApplications : []
     );
     setRegisteredAccounts(Array.isArray(data.registeredAccounts) ? data.registeredAccounts : []);
-    setEnabledModules(Array.isArray(data.enabledModules) ? data.enabledModules : []);
+    setEnabledModules(normalizeEnabledModules(data.enabledModules));
   }, []);
 
   const fetchPublicAppData = useCallback(async () => {
@@ -410,7 +422,7 @@ function AppShell() {
         setGlobeMartCategories(PREVIEW_GLOBEMART_CATEGORIES);
         setRegistrationApplications(PREVIEW_REGISTRATION_APPLICATIONS);
         setRegisteredAccounts([]);
-        setEnabledModules(PREVIEW_ENABLED_MODULES);
+        setEnabledModules(normalizeEnabledModules(PREVIEW_ENABLED_MODULES));
         setCustomLinks([]);
         setAppDataError("");
         setIncomingSosAlert(null);
@@ -609,11 +621,12 @@ function AppShell() {
           ? MODULE_PATHS["admin-dashboard"]
           : MODULE_PATHS.dashboard;
 
+      const normalizedPendingModule = normalizeModuleId(pendingModule);
       const nextModule =
         resolvedRegistrationType === "admin"
           ? "admin-dashboard"
-          : pendingModule && enabledModules.includes(pendingModule)
-            ? pendingModule
+          : normalizedPendingModule && enabledModules.includes(normalizedPendingModule)
+            ? normalizedPendingModule
             : currentPathIsProtected &&
                 (!toggleControlledModuleIds.has(currentRouteModule) ||
                   enabledModules.includes(currentRouteModule))
@@ -825,7 +838,7 @@ function AppShell() {
       throw new Error("Module update failed.");
     }
 
-    setEnabledModules(response.data.data?.enabledModules || []);
+    setEnabledModules(normalizeEnabledModules(response.data.data?.enabledModules));
   }, []);
 
   const handleReviewRegistration = useCallback(async (applicationId, action, reason) => {
@@ -1075,6 +1088,7 @@ function AppShell() {
               <Route path="localmarket" element={<LocalMarket />} />
               <Route path="ridesharing" element={<RideSharing />} />
               <Route path="ridesharing/driver-map" element={<DriverMap />} />
+              <Route path="maps" element={<DriverMap />} />
               <Route
                 path="matrimonial"
                 element={<Matrimonial onProfileUpdate={handleProfileUpdate} />}

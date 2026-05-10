@@ -7,8 +7,20 @@ import GlobalSearch from "./GlobalSearch";
 import "../styles/NavigationEnhanced.css";
 import "../styles/PlatformPolish.css";
 
-const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks"]);
+const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks", "maps", "support"]);
 const USER_IMAGE_KEYS = ["photoURL", "avatar", "photo", "profileImage", "picture"];
+const MODULE_ID_ALIASES = {
+  quicklink: "quicklinks",
+  "quick-links": "quicklinks",
+  mydiary: "diary",
+  personaldiary: "diary",
+  map: "maps",
+};
+
+const normalizeModuleId = (moduleId) => {
+  const normalizedId = String(moduleId || "").trim().toLowerCase();
+  return MODULE_ID_ALIASES[normalizedId] || normalizedId;
+};
 
 const isImageLikeUrl = (value) =>
   typeof value === "string" &&
@@ -29,12 +41,12 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "ridesharing", "realestate"],
+    modules: ["fooddelivery", "ridesharing", "realestate", "maps"],
   },
   utilities: {
     label: "Utilities",
     icon: "⚙️",
-    modules: ["diary", "reminderalert", "quicklinks", "astrology", "sosalert"],
+    modules: ["diary", "reminderalert", "quicklinks", "astrology", "sosalert", "support"],
   },
 };
 
@@ -67,9 +79,13 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const defaultHomeModule = isAdmin ? "admin-dashboard" : "dashboard";
   const currentModule = getProtectedModuleFromPathname(location.pathname) || defaultHomeModule;
   const subscribedCategoryIds = (displayUser?.selectedBusinessCategories || [])
-    .map((category) => category?.id)
+    .map((category) => normalizeModuleId(category?.id))
     .filter(Boolean);
-  const enabledModuleIds = new Set(Array.isArray(enabledModules) ? enabledModules : []);
+  const enabledModuleIds = new Set(
+    (Array.isArray(enabledModules) ? enabledModules : [])
+      .map((moduleId) => normalizeModuleId(moduleId))
+      .filter(Boolean)
+  );
   const cartItemCount = cart.reduce((total, item) => total + Number(item.quantity || 1), 0);
 
   const allBusinessModules = [
@@ -81,6 +97,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly"), icon: "🍽️" },
     { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
+    { id: "maps", label: t("modules.maps", "Maps"), icon: "🗺️", sellerVisible: true },
     { id: "matrimonial", label: t("modules.matrimonial", "SoulMatch"), icon: "💕" },
     { id: "socialmedia", label: t("modules.socialmedia", "VibeHub"), icon: "🌐" },
     { id: "diary", label: t("modules.diary", "My Diary"), icon: "📔" },
@@ -88,6 +105,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "quicklinks", label: t("modules.quicklinks", "Quick Links"), icon: "🔗" },
     { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center"), icon: "🆘" },
     { id: "astrology", label: t("modules.astrology", "AstroNila"), icon: "✨" },
+    { id: "support", label: t("modules.support", "Support"), icon: "🛟", sellerVisible: true },
   ];
   const isModuleVisible = (moduleId) =>
     ALWAYS_VISIBLE_MODULE_IDS.has(moduleId) || enabledModuleIds.has(moduleId);
@@ -102,6 +120,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
           isModuleVisible(module.id) &&
           (!isSeller ||
             module.id === "dashboard" ||
+            ALWAYS_VISIBLE_MODULE_IDS.has(module.id) ||
             module.sellerVisible === true ||
             subscribedCategoryIds.includes(module.id))
       );
@@ -370,3 +389,4 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 };
 
 export default Navigation;
+
