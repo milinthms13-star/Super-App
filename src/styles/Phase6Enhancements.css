@@ -1,0 +1,371 @@
+/* ============================================
+   PHASE 6 ENHANCEMENT CSS
+   Advanced Animations, Micro-interactions & Polish
+   ============================================ */
+
+/* Import advanced animations */
+@import url("./AdvancedAnimations.css");
+
+/* ============================================
+   ENHANCED MODULE CARDS WITH STAGGER
+   ============================================ */
+
+.modules-grid .module-card {
+  animation: staggerFadeIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 0;
+}
+
+.modules-grid .module-card:nth-child(1) { animation-delay: 0.05s; }
+.modules-grid .module-card:nth-child(2) { animation-delay: 0.1s; }
+.modules-grid .module-card:nth-child(3) { animation-delay: 0.15s; }
+.modules-grid .module-card:nth-child(4) { animation-delay: 0.2s; }
+.modules-grid .module-card:nth-child(5) { animation-delay: 0.25s; }
+.modules-grid .module-card:nth-child(6) { animation-delay: 0.3s; }
+.modules-grid .module-card:nth-child(7) { animation-delay: 0.35s; }
+.modules-grid .module-card:nth-child(8) { animation-delay: 0.4s; }
+.modules-grid .module-card:nth-child(n+9) { animation-delay: 0.45s; }
+
+.module-card {
+  position: relative;
+}
+
+.module-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255, 215, 0, 0.2) 0%, transparent 60%);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  border-radius: inherit;
+}
+
+.module-card:hover::before {
+  opacity: 1;
+}
+
+/* Enhanced hover with micro-interaction */
+.module-card:hover {
+  animation: cardHoverEnhanced 0.4s ease-out forwards;
+}
+
+@keyframes cardHoverEnhanced {
+  0% {
+    transform: translateY(-14px) scale(1.04);
+  }
+  50% {
+    transform: translateY(-16px) scale(1.05);
+  }
+  100% {
+    transform: translateY(-14px) scale(1.04);
+  }
+}
+
+/* ============================================
+   ENHANCED ACTIVITY FEED STAGGER
+   ============================================ */
+
+.activity-timeline .activity-item {
+  animation: staggerFadeIn 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.activity-timeline .activity-item:nth-child(1) { animation-delay: 0.05s; }
+.activity-timeline .activity-item:nth-child(2) { animation-delay: 0.1s; }
+.activity-timeline .activity-item:nth-child(3) { animation-delay: 0.15s; }
+.activity-timeline .activity-item:nth-child(4) { animation-delay: 0.2s; }
+.activity-timeline .activity-item:nth-child(5) { animation-delay: 0.25s; }
+.activity-timeline .activity-item:nth-child(6) { animation-delay: 0.3s; }
+
+.activity-node {
+  animation: nodePulsePlus 2.2s ease-in-out infinite !important;
+}
+
+@keyframes nodePulsePlus {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 0 currentColor;
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 10px rgba(0, 0, 0, 0.05);
+    filter: brightness(1.1);
+  }
+}
+
+/* ============================================
+   ENHANCED RECOMMENDATIONS STAGGER
+   ============================================ */
+
+.recommendations-carousel .recommendation-card {
+  animation: staggerScaleIn 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.recommendations-carousel .recommendation-card:nth-child(1) { animation-delay: 0.05s; }
+.recommendations-carousel .recommendation-card:nth-child(2) { animation-delay: 0.1s; }
+.recommendations-carousel .recommendation-card:nth-child(3) { animation-delay: 0.15s; }
+.recommendations-carousel .recommendation-card:nth-child(4) { animation-delay: 0.2s; }
+.recommendations-carousel .recommendation-card:nth-child(n+5) { animation-delay: 0.25s; }
+
+/* Glow effect on hover */
+.recommendation-card:hover {
+  animation: recommendationGlow 0.6s ease-in-out;
+}
+
+@keyframes recommendationGlow {
+  0%, 100% {
+    filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.12));
+  }
+  50% {
+    filter: drop-shadow(0 12px 32px rgba(0, 0, 0, 0.18));
+  }
+}
+
+/* ============================================
+   ENHANCED ENGAGEMENT SCORE
+   ============================================ */
+
+.score-circle {
+  animation: scoreCircleReveal 1s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+@keyframes scoreCircleReveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-180deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.metric-card {
+  animation: staggerFadeIn 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.metrics-grid .metric-card:nth-child(1) { animation-delay: 0.1s; }
+.metrics-grid .metric-card:nth-child(2) { animation-delay: 0.15s; }
+.metrics-grid .metric-card:nth-child(3) { animation-delay: 0.2s; }
+.metrics-grid .metric-card:nth-child(4) { animation-delay: 0.25s; }
+
+.achievement-badge {
+  animation: staggerScaleIn 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.achievements-grid .achievement-badge:nth-child(1) { animation-delay: 0.05s; }
+.achievements-grid .achievement-badge:nth-child(2) { animation-delay: 0.1s; }
+.achievements-grid .achievement-badge:nth-child(3) { animation-delay: 0.15s; }
+.achievements-grid .achievement-badge:nth-child(4) { animation-delay: 0.2s; }
+
+.achievement-badge:hover {
+  animation: achievementBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+@keyframes achievementBounce {
+  0% { transform: scale(1.08) rotateZ(5deg); }
+  50% { transform: scale(1.15) rotateZ(8deg); }
+  100% { transform: scale(1.08) rotateZ(5deg); }
+}
+
+/* ============================================
+   ENHANCED HERO SECTION
+   ============================================ */
+
+.enhanced-hero-section {
+  animation: heroSlideUp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes heroSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-stats-banner {
+  animation: bannerFlow 0.8s ease-out forwards;
+}
+
+@keyframes bannerFlow {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ============================================
+   ECOSYSTEM VISUALIZATION ENHANCEMENTS
+   ============================================ */
+
+.ecosystem-node {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ecosystem-node:hover {
+  animation: nodeHoverEnhance 0.4s ease-out forwards;
+}
+
+@keyframes nodeHoverEnhance {
+  0% {
+    filter: brightness(1) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
+  }
+  50% {
+    filter: brightness(1.15) drop-shadow(0 8px 20px rgba(255, 215, 0, 0.3));
+  }
+  100% {
+    filter: brightness(1.1) drop-shadow(0 6px 16px rgba(255, 215, 0, 0.25));
+  }
+}
+
+.ecosystem-connection {
+  animation: connectionPulse 3s ease-in-out infinite;
+}
+
+@keyframes connectionPulse {
+  0%, 100% {
+    stroke-width: 3px;
+    opacity: 0.8;
+  }
+  50% {
+    stroke-width: 4px;
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   QUICK ACTIONS ENHANCEMENT
+   ============================================ */
+
+.quick-actions-grid > button {
+  animation: staggerSlideInLeft 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.quick-actions-grid > button:nth-child(1) { animation-delay: 0.05s; }
+.quick-actions-grid > button:nth-child(2) { animation-delay: 0.1s; }
+.quick-actions-grid > button:nth-child(3) { animation-delay: 0.15s; }
+.quick-actions-grid > button:nth-child(4) { animation-delay: 0.2s; }
+
+@keyframes staggerSlideInLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.quick-action-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-action-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.quick-action-btn:hover::before {
+  opacity: 1;
+  animation: rippleOut 0.6s ease-out;
+}
+
+@keyframes rippleOut {
+  0% {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   STATS SECTION ENHANCEMENT
+   ============================================ */
+
+.stats-section .stat-card {
+  animation: staggerFadeIn 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.stats-section .stat-card:nth-child(1) { animation-delay: 0.05s; }
+.stats-section .stat-card:nth-child(2) { animation-delay: 0.1s; }
+.stats-section .stat-card:nth-child(3) { animation-delay: 0.15s; }
+.stats-section .stat-card:nth-child(4) { animation-delay: 0.2s; }
+.stats-section .stat-card:nth-child(5) { animation-delay: 0.25s; }
+
+/* ============================================
+   SMOOTH SCROLL BEHAVIOR
+   ============================================ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ============================================
+   NOTIFICATION CARD ENHANCEMENTS
+   ============================================ */
+
+.notification-card {
+  animation: slideInFromTop 0.5s ease-out;
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification-card:nth-child(1) { animation-delay: 0.1s; }
+.notification-card:nth-child(2) { animation-delay: 0.15s; }
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .modules-grid .module-card {
+    animation-delay: calc(var(--index, 0) * 0.05s) !important;
+  }
+
+  .activity-timeline .activity-item {
+    animation-duration: 0.4s;
+  }
+
+  .recommendation-card {
+    animation-duration: 0.5s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

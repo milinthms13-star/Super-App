@@ -1,0 +1,507 @@
+/* ============================================
+   PHASE 6B - POLISH REFINEMENTS
+   Visual refinement, spacing, and typography tweaks
+   ============================================ */
+
+/* ============================================
+   ENHANCED TYPOGRAPHY
+   ============================================ */
+
+/* Smooth font rendering */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Heading hierarchy refinement */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.3px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* Improved readability */
+p, span, a {
+  letter-spacing: 0.2px;
+  line-height: 1.6;
+}
+
+/* ============================================
+   COLOR REFINEMENTS
+   ============================================ */
+
+/* Enhanced gold gradient for highlights */
+.gold-accent {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%);
+  background-size: 300% 300%;
+  animation: gradientShift 8s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Teal accent (secondary) */
+.teal-accent {
+  color: #4ECDC4;
+  text-shadow: 0 2px 8px rgba(78, 205, 196, 0.2);
+}
+
+/* Refined shadows */
+.shadow-sm {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.shadow-md {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.shadow-lg {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.shadow-xl {
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+}
+
+/* ============================================
+   SPACING REFINEMENTS
+   ============================================ */
+
+/* Improved spacing consistency */
+.section-spacing {
+  margin-bottom: 2.5rem;
+}
+
+@media (max-width: 768px) {
+  .section-spacing {
+    margin-bottom: 1.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .section-spacing {
+    margin-bottom: 1.5rem;
+  }
+}
+
+/* Vertical rhythm */
+.rhythm-xs { margin: 0.5rem; }
+.rhythm-sm { margin: 1rem; }
+.rhythm-md { margin: 1.5rem; }
+.rhythm-lg { margin: 2rem; }
+.rhythm-xl { margin: 2.5rem; }
+
+/* ============================================
+   COMPONENT POLISH
+   ============================================ */
+
+/* Card refinement */
+.card-polish {
+  border-radius: 16px;
+  padding: 1.8rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Button polish */
+.button-polish {
+  border-radius: 12px;
+  padding: 0.8rem 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.button-polish:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.button-polish:active {
+  transform: translateY(0);
+}
+
+/* Badge refinement */
+.badge-polish {
+  display: inline-block;
+  padding: 0.4rem 1rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   TEXT ENHANCEMENTS
+   ============================================ */
+
+/* Smooth text transitions */
+.text-transition {
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+/* Enhanced text shadows for better readability on images */
+.text-shadow-sm {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.text-shadow-md {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.text-shadow-lg {
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Gradient text */
+.text-gradient {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
+}
+
+/* ============================================
+   BORDER REFINEMENTS
+   ============================================ */
+
+/* Smooth borders */
+.border-smooth {
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  transition: border-color 0.3s ease;
+}
+
+.border-smooth:hover {
+  border-color: rgba(255, 215, 0, 0.4);
+}
+
+/* Accent border */
+.border-accent {
+  border-left: 4px solid #FFD700;
+  padding-left: 1rem;
+}
+
+/* ============================================
+   COMPONENT-SPECIFIC POLISH
+   ============================================ */
+
+/* Module card polish */
+.module-card-polish {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.module-card-polish::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.module-card-polish:hover::before {
+  opacity: 1;
+}
+
+/* Activity card polish */
+.activity-card-polish {
+  position: relative;
+  border-radius: 14px;
+  padding: 1.2rem;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.activity-card-polish::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.05) 0%, transparent 100%);
+  opacity: 0;
+  border-radius: inherit;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.activity-card-polish:hover::after {
+  opacity: 1;
+}
+
+/* ============================================
+   ACCESSIBILITY POLISH
+   ============================================ */
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  body {
+    color: #000;
+    background: #fff;
+  }
+
+  .module-card, .card-polish {
+    border: 2px solid #000;
+  }
+}
+
+/* Focus visible enhancement */
+:focus-visible {
+  outline: 3px solid #FFD700;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip to content link */
+.skip-to-content {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #FFD700;
+  color: #1a2332;
+  padding: 0.8rem 1.6rem;
+  text-decoration: none;
+  z-index: 100;
+}
+
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* ============================================
+   ANIMATION POLISH
+   ============================================ */
+
+/* Smooth entrance for all animations */
+@keyframes smoothEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Smooth exit */
+@keyframes smoothExit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Refined scale animation */
+@keyframes refinedScale {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   IMAGE & MEDIA POLISH
+   ============================================ */
+
+/* Smooth image transitions */
+img {
+  transition: filter 0.3s ease, transform 0.3s ease;
+  border-radius: 12px;
+}
+
+img:hover {
+  filter: brightness(1.05) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
+}
+
+/* Avatar polish */
+.avatar {
+  border-radius: 50%;
+  border: 3px solid #FFD700;
+  transition: all 0.3s ease;
+}
+
+.avatar:hover {
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.4);
+  transform: scale(1.05);
+}
+
+/* ============================================
+   FORM ELEMENTS POLISH
+   ============================================ */
+
+input, textarea, select {
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  font-family: inherit;
+}
+
+input:hover, textarea:hover, select:hover {
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: #FFD700;
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.15);
+  outline: none;
+}
+
+/* Placeholder styling */
+input::placeholder, textarea::placeholder {
+  color: #999;
+  opacity: 1;
+}
+
+/* ============================================
+   SCROLL BEHAVIOR POLISH
+   ============================================ */
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 215, 0, 0.3);
+  border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 215, 0, 0.6);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-color: rgba(255, 215, 0, 0.3) rgba(0, 0, 0, 0.05);
+  scrollbar-width: thin;
+}
+
+/* ============================================
+   LAYERING & DEPTH POLISH
+   ============================================ */
+
+/* Refined z-index layering */
+.z-modal { z-index: 1000; }
+.z-tooltip { z-index: 900; }
+.z-dropdown { z-index: 800; }
+.z-sticky { z-index: 100; }
+.z-elevated { z-index: 10; }
+.z-base { z-index: 1; }
+
+/* ============================================
+   VISUAL HIERARCHY ENHANCEMENTS
+   ============================================ */
+
+/* Primary emphasis */
+.emphasis-primary {
+  font-weight: 700;
+  color: #FFD700;
+  font-size: 1.1em;
+}
+
+/* Secondary emphasis */
+.emphasis-secondary {
+  font-weight: 600;
+  color: #4ECDC4;
+}
+
+/* Subtle emphasis */
+.emphasis-subtle {
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+/* ============================================
+   RESPONSIVE POLISH REFINEMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  h1 { font-size: 1.8rem; }
+  h2 { font-size: 1.4rem; }
+  h3 { font-size: 1.2rem; }
+
+  .card-polish {
+    padding: 1.4rem;
+  }
+
+  .button-polish {
+    padding: 0.7rem 1.4rem;
+  }
+
+  .section-spacing {
+    margin-bottom: 1.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.1rem; }
+  h3 { font-size: 1rem; }
+
+  .card-polish {
+    padding: 1.2rem;
+    border-radius: 14px;
+  }
+
+  .button-polish {
+    padding: 0.6rem 1.2rem;
+    font-size: 0.9rem;
+  }
+
+  .section-spacing {
+    margin-bottom: 1.5rem;
+  }
+}
+
+/* ============================================
+   DARK MODE POLISH (if applicable)
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+  .card-polish {
+    background: rgba(40, 50, 60, 0.9);
+    border-color: rgba(255, 215, 0, 0.1);
+  }
+
+  input, textarea, select {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    border-color: rgba(255, 215, 0, 0.2);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: #aaa;
+  }
+}

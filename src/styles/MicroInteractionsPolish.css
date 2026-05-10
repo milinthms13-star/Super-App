@@ -1,0 +1,622 @@
+/* ============================================
+   PHASE 6B - MICRO-INTERACTIONS POLISH
+   Delightful feedback & interactive refinements
+   ============================================ */
+
+/* ============================================
+   BUTTON MICRO-INTERACTIONS
+   ============================================ */
+
+/* Base button interaction enhancement */
+button, .button-like, a[role="button"] {
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+button:focus-visible, .button-like:focus-visible, a[role="button"]:focus-visible {
+  outline-color: #FFD700;
+  outline-offset: 2px;
+}
+
+/* Press state - tactile feedback */
+button:active, .button-like:active {
+  transform: scale(0.98);
+}
+
+button:active::before, .button-like:active::before {
+  animation: buttonPressWave 0.4s ease-out;
+}
+
+@keyframes buttonPressWave {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* Hover lift effect */
+button:hover:not(:active), .button-like:hover:not(:active) {
+  transform: translateY(-2px);
+}
+
+/* ============================================
+   MODULE CARD MICRO-INTERACTIONS
+   ============================================ */
+
+.module-card {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.module-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 215, 0, 0.15) 0%, transparent 50%);
+  opacity: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  transition: opacity 0.3s ease;
+}
+
+.module-card:hover::after {
+  opacity: 1;
+}
+
+/* Icon rotation on hover */
+.module-card .module-icon {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.module-card:hover .module-icon {
+  transform: rotateX(10deg) scale(1.12);
+}
+
+/* Stats badge pop animation */
+.module-stats-badge {
+  animation: statsBadgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes statsBadgePop {
+  0% {
+    transform: scale(0.5) rotate(-180deg);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   FILTER BUTTON MICRO-INTERACTIONS
+   ============================================ */
+
+.filter-btn, .category-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.filter-btn::before, .category-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  pointer-events: none;
+}
+
+.filter-btn:hover::before, .category-btn:hover::before {
+  transform: translateX(100%);
+}
+
+.filter-btn.active, .category-btn.active {
+  animation: buttonPulseOnce 0.4s ease-out;
+}
+
+@keyframes buttonPulseOnce {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(255, 215, 0, 0);
+  }
+}
+
+/* ============================================
+   ACTIVITY FEED MICRO-INTERACTIONS
+   ============================================ */
+
+.activity-card {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+}
+
+.activity-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.activity-card:hover::before {
+  opacity: 1;
+}
+
+.activity-time {
+  transition: color 0.3s ease;
+}
+
+.activity-card:hover .activity-time {
+  color: #FFD700;
+  font-weight: 600;
+}
+
+/* Activity badge color transition */
+.activity-badge {
+  transition: all 0.3s ease;
+  display: inline-block;
+}
+
+.activity-card:hover .activity-badge {
+  transform: scale(1.05);
+  filter: brightness(1.2);
+}
+
+/* ============================================
+   RECOMMENDATION CARD MICRO-INTERACTIONS
+   ============================================ */
+
+.recommendation-card {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+}
+
+.recommendation-card .card-icon {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.recommendation-card:hover .card-icon {
+  transform: scale(1.15) rotate(8deg);
+}
+
+.recommendation-card .cta-arrow {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: inline-block;
+}
+
+.recommendation-card:hover .cta-arrow {
+  transform: translateX(6px) scale(1.2);
+  filter: brightness(1.3);
+}
+
+/* Card badge bounce */
+.card-badge {
+  animation: badgeBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes badgeBounce {
+  0% {
+    transform: scale(0) rotate(-90deg);
+  }
+  60% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   ENGAGEMENT SCORE MICRO-INTERACTIONS
+   ============================================ */
+
+.score-circle {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.score-circle:hover {
+  filter: drop-shadow(0 8px 24px rgba(255, 215, 0, 0.3));
+}
+
+.metric-card {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, transparent 100%);
+  opacity: 0;
+  border-radius: inherit;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.metric-card:hover::before {
+  opacity: 1;
+}
+
+.metric-icon {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.metric-card:hover .metric-icon {
+  transform: scale(1.2) rotate(-10deg);
+}
+
+/* Achievement badge interactions */
+.achievement-badge {
+  position: relative;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.achievement-badge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(from 0deg, rgba(255, 215, 0, 0.3) 0deg, transparent 90deg);
+  opacity: 0;
+  border-radius: inherit;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.achievement-badge:hover::before {
+  opacity: 1;
+  animation: spinOnce 0.6s ease-out;
+}
+
+@keyframes spinOnce {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.achievement-icon {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.achievement-badge:hover .achievement-icon {
+  transform: scale(1.25) rotateZ(15deg);
+  filter: drop-shadow(0 4px 12px rgba(255, 215, 0, 0.4));
+}
+
+/* ============================================
+   FOCUS STATE ENHANCEMENTS
+   ============================================ */
+
+/* Interactive elements focus states */
+.interactive-element:focus-within {
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.2);
+  transform: scale(1.01);
+}
+
+/* Input focus states */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.2);
+  border-color: #FFD700;
+}
+
+/* ============================================
+   LOADING STATE ANIMATIONS
+   ============================================ */
+
+@keyframes loadingPulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes loadingDots {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+.loading-shimmer {
+  animation: loadingPulse 1.5s ease-in-out infinite;
+}
+
+.loading-dots span {
+  animation: loadingDots 1.4s ease-in-out infinite;
+  display: inline-block;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loading-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ============================================
+   ICON ANIMATIONS
+   ============================================ */
+
+@keyframes iconSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes iconBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes iconFloat {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(-6px) translateX(2px); }
+  50% { transform: translateY(0) translateX(4px); }
+  75% { transform: translateY(-3px) translateX(2px); }
+}
+
+.icon-spin { animation: iconSpin 2s linear infinite; }
+.icon-bounce { animation: iconBounce 1.5s ease-in-out infinite; }
+.icon-float { animation: iconFloat 3s ease-in-out infinite; }
+
+/* ============================================
+   NOTIFICATION ANIMATIONS
+   ============================================ */
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+}
+
+.notification-card {
+  animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.notification-card.closing {
+  animation: slideOutRight 0.3s ease-in-out;
+}
+
+.notification-badge {
+  animation: badgePulseLooping 2s ease-in-out infinite;
+}
+
+@keyframes badgePulseLooping {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.1);
+    filter: brightness(1.15);
+  }
+}
+
+/* ============================================
+   TOOLTIP ANIMATIONS
+   ============================================ */
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tooltip, .achievement-tooltip {
+  animation: tooltipFadeIn 0.2s ease-out;
+}
+
+/* ============================================
+   TRANSITION SMOOTHING
+   ============================================ */
+
+/* Smooth all color transitions */
+* {
+  transition-property: background-color, border-color, color, filter, box-shadow;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+}
+
+/* Override for specific elements */
+.quick-action-btn, .module-card, .activity-card, .recommendation-card, .metric-card, .achievement-badge {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ============================================
+   STATE INDICATORS
+   ============================================ */
+
+/* Active state pulse */
+.is-active, .active-state {
+  animation: activeStatePulse 2s ease-in-out infinite;
+}
+
+@keyframes activeStatePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(0, 184, 148, 0.1);
+  }
+}
+
+/* Success state */
+.success-state {
+  animation: successPing 0.6s ease-out;
+}
+
+@keyframes successPing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.7);
+    transform: scale(1);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgba(0, 184, 148, 0);
+    transform: scale(1.05);
+  }
+}
+
+/* Error state */
+.error-state {
+  animation: errorShake 0.4s ease-in-out;
+}
+
+@keyframes errorShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+/* ============================================
+   SMOOTH TRANSITIONS FOR COMMON INTERACTIONS
+   ============================================ */
+
+/* Text color transitions */
+a, .link {
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+a:hover {
+  color: #FFD700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
+}
+
+/* Background transitions */
+.bg-interactive {
+  transition: background-color 0.3s ease, background 0.3s ease;
+}
+
+/* Shadow transitions */
+.shadow-interactive {
+  transition: box-shadow 0.3s ease;
+}
+
+/* ============================================
+   RESPONSIVE MICRO-INTERACTIONS
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Reduce animation durations on mobile */
+  button, .button-like, .module-card, .activity-card, .recommendation-card {
+    transition-duration: 0.2s;
+  }
+
+  /* Simplify hover effects */
+  .module-card:hover .module-icon {
+    transform: rotateX(5deg) scale(1.08);
+  }
+
+  .metric-card:hover .metric-icon {
+    transform: scale(1.1) rotate(-5deg);
+  }
+
+  .achievement-badge:hover .achievement-icon {
+    transform: scale(1.15) rotateZ(10deg);
+  }
+}
+
+@media (max-width: 480px) {
+  /* Further simplification for small screens */
+  button:active {
+    transform: scale(0.99);
+  }
+
+  .module-card:hover {
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Disable micro-animations for accessibility */
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================
+   HOVER STATE COMBINATIONS
+   ============================================ */
+
+/* Dark mode compatible */
+@media (prefers-color-scheme: dark) {
+  .module-card::after,
+  .activity-card::before,
+  .metric-card::before {
+    background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 215, 0, 0.1) 0%, transparent 50%);
+  }
+}
+
+/* ============================================
+   PERFORMANCE OPTIMIZATION
+   ============================================ */
+
+/* GPU acceleration hints */
+.performance-optimized {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Use performance-optimized class sparingly on high-interaction elements */
+.module-card,
+.activity-card,
+.recommendation-card,
+.metric-card,
+.achievement-badge {
+  will-change: transform;
+  backface-visibility: hidden;
+}

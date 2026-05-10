@@ -1,0 +1,498 @@
+/* ============================================
+   PHASE 6B - COMPONENT-SPECIFIC POLISH TWEAKS
+   Fine-tuning individual component interactions
+   ============================================ */
+
+/* ============================================
+   MODULE CARDS FINAL POLISH
+   ============================================ */
+
+.modules-grid .module-card {
+  position: relative;
+}
+
+/* Enhanced module card interaction layer */
+.module-card .module-hero-overlay {
+  transition: background-color 0.3s ease;
+}
+
+.module-card:hover .module-hero-overlay {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Module badge polish */
+.module-stats-badge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0.6rem 1rem;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  letter-spacing: 0.3px;
+}
+
+/* ============================================
+   ACTIVITY FEED POLISH
+   ============================================ */
+
+.activity-timeline {
+  position: relative;
+}
+
+/* Timeline connector polish */
+.timeline-connector {
+  background: linear-gradient(180deg, 
+    rgba(255, 215, 0, 0.4) 0%, 
+    rgba(255, 215, 0, 0.15) 50%,
+    transparent 100%);
+  transition: background 0.3s ease;
+}
+
+.activity-item:hover .timeline-connector {
+  background: linear-gradient(180deg, 
+    rgba(255, 215, 0, 0.6) 0%, 
+    rgba(255, 215, 0, 0.25) 50%,
+    transparent 100%);
+}
+
+/* Activity node polish */
+.activity-node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+}
+
+.activity-item:hover .activity-node {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  filter: brightness(1.1);
+}
+
+/* ============================================
+   RECOMMENDATIONS CAROUSEL POLISH
+   ============================================ */
+
+.recommendation-categories {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+/* Category button polish */
+.category-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.2rem;
+  border-radius: 16px;
+  border: 1.5px solid rgba(255, 215, 0, 0.2);
+  background: rgba(255, 215, 0, 0.08);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.category-btn:hover {
+  background: rgba(255, 215, 0, 0.12);
+  border-color: rgba(255, 215, 0, 0.4);
+}
+
+.category-btn.active {
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  border-color: #FFD700;
+  box-shadow: 0 6px 16px rgba(255, 215, 0, 0.35);
+  color: #1a2332;
+}
+
+/* Recommendation card content polish */
+.card-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  display: inline-block;
+}
+
+.card-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0 0 0.5rem 0;
+}
+
+.card-description {
+  font-size: 0.9rem;
+  opacity: 0.95;
+  line-height: 1.4;
+  margin: 0 0 1rem 0;
+}
+
+/* ============================================
+   ENGAGEMENT SCORE POLISH
+   ============================================ */
+
+.score-header {
+  margin-bottom: 1.5rem;
+}
+
+.score-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1a2332;
+  margin: 0 0 0.3rem 0;
+}
+
+.score-period {
+  font-size: 0.9rem;
+  color: #999;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Level badge polish */
+.level-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 250, 240, 0.05));
+  border-radius: 12px;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  margin-bottom: 0.75rem;
+}
+
+.level-icon {
+  font-size: 1.4rem;
+}
+
+.level-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a2332;
+}
+
+/* Metric card polish */
+.metric-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.metric-icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+}
+
+.metric-label {
+  font-size: 0.8rem;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.metric-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1a2332;
+  margin: 0.2rem 0 0 0;
+}
+
+.metric-trend {
+  font-size: 0.75rem;
+  color: #00B894;
+  font-weight: 600;
+  margin: 0.2rem 0 0 0;
+}
+
+/* ============================================
+   HERO SECTION POLISH
+   ============================================ */
+
+.enhanced-hero-section {
+  animation: heroSlideUp 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes heroSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Hero greeting polish */
+.hero-greeting {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a2332;
+  line-height: 1.3;
+  margin: 0 0 1rem 0;
+}
+
+.greeting-emoji {
+  font-size: 1.8rem;
+  margin-right: 0.5rem;
+  animation: greetingWave 1s ease-in-out;
+}
+
+@keyframes greetingWave {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(20deg); }
+  50% { transform: rotate(0deg); }
+  75% { transform: rotate(-10deg); }
+}
+
+/* ============================================
+   NOTIFICATION CARDS POLISH
+   ============================================ */
+
+.notification-cards {
+  display: grid;
+  gap: 1rem;
+}
+
+.notification-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.notification-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.6rem;
+}
+
+.notification-content {
+  flex: 1;
+}
+
+.notification-label {
+  font-size: 0.85rem;
+  color: #999;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin: 0;
+}
+
+.notification-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a2332;
+  margin: 0.2rem 0 0 0;
+}
+
+.notification-action {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 215, 0, 0.1);
+  color: #FFD700;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.notification-action:hover {
+  background: rgba(255, 215, 0, 0.2);
+  transform: translateX(4px);
+}
+
+/* ============================================
+   QUICK ACTIONS POLISH
+   ============================================ */
+
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+.quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.2rem;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.quick-action-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 215, 0, 0.3);
+  transform: translateY(-4px);
+}
+
+.qa-icon {
+  font-size: 1.8rem;
+  transition: transform 0.3s ease;
+}
+
+.quick-action-btn:hover .qa-icon {
+  transform: scale(1.2);
+}
+
+.qa-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1a2332;
+  text-align: center;
+}
+
+/* ============================================
+   STATS SECTION POLISH
+   ============================================ */
+
+.stats-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.2rem;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.stat-icon {
+  font-size: 2rem;
+  color: #FFD700;
+  flex-shrink: 0;
+}
+
+.stat-content h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1a2332;
+}
+
+.stat-content p {
+  margin: 0.2rem 0 0 0;
+  font-size: 0.85rem;
+  color: #999;
+  font-weight: 500;
+}
+
+/* ============================================
+   GLASS MORPHISM REFINEMENTS
+   ============================================ */
+
+.glassmorphic {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   RESPONSIVE COMPONENT POLISH
+   ============================================ */
+
+@media (max-width: 768px) {
+  .stats-section {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .notification-cards {
+    gap: 0.8rem;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .hero-greeting {
+    font-size: 1.3rem;
+  }
+
+  .module-stats-badge {
+    font-size: 0.75rem;
+    padding: 0.5rem 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-section {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.8rem;
+  }
+
+  .quick-action-btn {
+    padding: 1rem;
+    gap: 0.5rem;
+  }
+
+  .qa-icon {
+    font-size: 1.6rem;
+  }
+
+  .qa-label {
+    font-size: 0.75rem;
+  }
+
+  .notification-card {
+    gap: 0.8rem;
+    padding: 1rem;
+  }
+
+  .notification-badge {
+    width: 40px;
+    height: 40px;
+    font-size: 1.4rem;
+  }
+
+  .notification-action {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+  }
+}

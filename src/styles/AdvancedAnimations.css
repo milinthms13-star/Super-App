@@ -1,0 +1,469 @@
+/* ============================================
+   ADVANCED ANIMATION SYSTEM - PHASE 6
+   ============================================ */
+
+/* Global Scroll Animation */
+.scroll-animate {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.scroll-animate.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============================================
+   STAGGERED ANIMATIONS
+   ============================================ */
+
+@keyframes staggerFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes staggerScaleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes staggerSlideInLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes staggerSlideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Staggered Grid Animation */
+.staggered-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.staggered-grid > * {
+  animation: staggerFadeIn 0.6s ease-out forwards;
+}
+
+.staggered-grid > :nth-child(1) { animation-delay: 0.05s; }
+.staggered-grid > :nth-child(2) { animation-delay: 0.1s; }
+.staggered-grid > :nth-child(3) { animation-delay: 0.15s; }
+.staggered-grid > :nth-child(4) { animation-delay: 0.2s; }
+.staggered-grid > :nth-child(5) { animation-delay: 0.25s; }
+.staggered-grid > :nth-child(6) { animation-delay: 0.3s; }
+.staggered-grid > :nth-child(7) { animation-delay: 0.35s; }
+.staggered-grid > :nth-child(8) { animation-delay: 0.4s; }
+.staggered-grid > :nth-child(9) { animation-delay: 0.45s; }
+.staggered-grid > :nth-child(10) { animation-delay: 0.5s; }
+
+/* ============================================
+   PARALLAX & DEPTH EFFECTS
+   ============================================ */
+
+@keyframes parallaxFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes parallaxFloatDeep {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.parallax-float {
+  animation: parallaxFloat 4s ease-in-out infinite;
+}
+
+.parallax-float-deep {
+  animation: parallaxFloatDeep 5s ease-in-out infinite;
+}
+
+.parallax-layer-1 { --parallax-offset: 0.2; }
+.parallax-layer-2 { --parallax-offset: 0.4; }
+.parallax-layer-3 { --parallax-offset: 0.6; }
+.parallax-layer-4 { --parallax-offset: 0.8; }
+
+/* ============================================
+   MICRO-INTERACTIONS
+   ============================================ */
+
+@keyframes microPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes microGlow {
+  0%, 100% {
+    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 4px 20px rgba(255, 215, 0, 0.4);
+  }
+}
+
+@keyframes microTilt {
+  0% { transform: perspective(1000px) rotateX(0deg) rotateY(-5deg); }
+  50% { transform: perspective(1000px) rotateX(2deg) rotateY(0deg); }
+  100% { transform: perspective(1000px) rotateX(0deg) rotateY(5deg); }
+}
+
+.interactive-element {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.interactive-element:hover {
+  animation: microPulse 0.6s ease-in-out;
+}
+
+/* ============================================
+   SMOOTH TRANSITIONS
+   ============================================ */
+
+@keyframes smoothFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes smoothFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes smoothSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes smoothSlideDown {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+}
+
+@keyframes smoothScaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes smoothRotateIn {
+  from {
+    opacity: 0;
+    transform: rotate(-10deg) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+/* ============================================
+   LOADING & SHIMMER ENHANCEMENTS
+   ============================================ */
+
+@keyframes enhancedShimmer {
+  -100% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.shimmer-enhanced {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.2) 20%,
+    rgba(255, 255, 255, 0.5) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  background-size: 200% 100%;
+  animation: enhancedShimmer 2s infinite;
+}
+
+.gradient-shift {
+  background-size: 200% 200%;
+  animation: gradientShift 3s ease infinite;
+}
+
+/* ============================================
+   BUTTON & INTERACTIVE ANIMATIONS
+   ============================================ */
+
+@keyframes buttonPress {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes buttonRipple {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 215, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0);
+  }
+}
+
+.button-interactive {
+  position: relative;
+  overflow: hidden;
+}
+
+.button-interactive::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.button-interactive:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+.button-interactive:active {
+  animation: buttonPress 0.3s ease-out;
+}
+
+/* ============================================
+   CARD ANIMATIONS
+   ============================================ */
+
+@keyframes cardFlip {
+  0% {
+    transform: perspective(400px) rotateY(0);
+  }
+  100% {
+    transform: perspective(400px) rotateY(360deg);
+  }
+}
+
+@keyframes cardBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes cardGlow {
+  0%, 100% {
+    filter: drop-shadow(0 4px 12px rgba(255, 215, 0, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 8px 24px rgba(255, 215, 0, 0.6));
+  }
+}
+
+.card-hover-lift {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.card-hover-lift:hover {
+  transform: translateY(-16px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* ============================================
+   TEXT ANIMATIONS
+   ============================================ */
+
+@keyframes typewriter {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes blink {
+  0%, 49% {
+    border-right: 3px solid #FFD700;
+  }
+  50%, 100% {
+    border-right: 3px solid transparent;
+  }
+}
+
+@keyframes textGradientShift {
+  0% {
+    background-position: 0% center;
+  }
+  100% {
+    background-position: 100% center;
+  }
+}
+
+.text-gradient-animate {
+  background: linear-gradient(
+    90deg,
+    #FFD700,
+    #FFA500,
+    #FF8C00,
+    #FFD700
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: textGradientShift 3s linear infinite;
+}
+
+/* ============================================
+   COMPLEX ANIMATIONS
+   ============================================ */
+
+@keyframes orbitPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7),
+                0 0 0 20px rgba(255, 215, 0, 0.4),
+                0 0 0 40px rgba(255, 215, 0, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(255, 215, 0, 0.4),
+                0 0 0 40px rgba(255, 215, 0, 0),
+                0 0 0 60px rgba(255, 215, 0, 0);
+  }
+}
+
+@keyframes helix {
+  0% {
+    transform: rotateX(0deg) rotateY(0deg);
+  }
+  100% {
+    transform: rotateX(360deg) rotateY(360deg);
+  }
+}
+
+@keyframes waveEffect {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  25% {
+    transform: translateY(-4px);
+  }
+  75% {
+    transform: translateY(4px);
+  }
+}
+
+/* ============================================
+   RESPONSIVE ANIMATION SCALING
+   ============================================ */
+
+@media (max-width: 768px) {
+  .parallax-float {
+    animation: parallaxFloat 3s ease-in-out infinite;
+  }
+
+  .parallax-float-deep {
+    animation: parallaxFloatDeep 4s ease-in-out infinite;
+  }
+
+  .staggered-grid > * {
+    animation-delay: calc(var(--index, 0) * 0.05s) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

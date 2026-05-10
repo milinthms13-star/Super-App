@@ -165,18 +165,6 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
               </div>
             </div>
           </div>
-                      }}
-                    >
-                      {t("common.profile", "Profile")}
-                    </button>
-                    <button className="logout-btn" onClick={onLogout}>
-                      {t("common.logout", "Logout")}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
 
           <div className="nav-bottom-row">
             <button className="hamburger" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>

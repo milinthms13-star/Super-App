@@ -7,7 +7,16 @@ import { formatCurrency } from "../utils/ecommerceHelpers";
 import { getPathForModule } from "../utils/moduleRoutes";
 import EnhancedHeroSection from "../components/EnhancedHeroSection";
 import EcosystemVisualization from "../components/EcosystemVisualization";
+import PersonalizedActivityFeed from "../components/PersonalizedActivityFeed";
+import RecommendedServices from "../components/RecommendedServices";
+import EngagementScore from "../components/EngagementScore";
+import ScrollAnimationObserver from "../components/ScrollAnimationObserver";
 import "../styles/Dashboard.css";
+import "../styles/AdvancedAnimations.css";
+import "../styles/Phase6Enhancements.css";
+import "../styles/MicroInteractionsPolish.css";
+import "../styles/Phase6bPolishRefinements.css";
+import "../styles/Phase6bComponentPolish.css";
 
 const normalizeOrderStatus = (status) => {
   const normalizedStatus = String(status || "").trim().toLowerCase();
@@ -486,6 +495,15 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
               <>
                 <EnhancedHeroSection currentUser={currentUser} isSeller={isSeller} />
                 <EcosystemVisualization />
+                <ScrollAnimationObserver>
+                  <PersonalizedActivityFeed currentUser={currentUser} />
+                </ScrollAnimationObserver>
+                <ScrollAnimationObserver threshold={0.15}>
+                  <RecommendedServices currentUser={currentUser} />
+                </ScrollAnimationObserver>
+                <ScrollAnimationObserver threshold={0.2}>
+                  <EngagementScore currentUser={currentUser} />
+                </ScrollAnimationObserver>
               </>
             )}
 
