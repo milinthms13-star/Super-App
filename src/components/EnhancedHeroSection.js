@@ -4,7 +4,12 @@ import { useApp } from "../contexts/AppContext";
 import { getPathForModule } from "../utils/moduleRoutes";
 import "../styles/EnhancedHeroSection.css";
 
-const EnhancedHeroSection = ({ currentUser = {}, isSeller = false, enabledModules = [] }) => {
+const EnhancedHeroSection = ({
+  currentUser = {},
+  isSeller = false,
+  enabledModules = [],
+  onEnabledModulesClick = null,
+}) => {
   const navigate = useNavigate();
   const { cart, ordersPagination, orderStats, ecommerceProducts, mockData } = useApp();
   const [timeGreeting, setTimeGreeting] = useState("Good Morning");
@@ -57,6 +62,11 @@ const EnhancedHeroSection = ({ currentUser = {}, isSeller = false, enabledModule
   }, [cart, ecommerceProducts, enabledModules, mockData, orderStats, ordersPagination]);
 
   const handleMetricClick = (moduleId) => {
+    if (moduleId === "dashboard" && typeof onEnabledModulesClick === "function") {
+      onEnabledModulesClick();
+      return;
+    }
+
     navigate(getPathForModule(moduleId));
   };
 

@@ -410,6 +410,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
   const { t } = useI18n();
   const recentOrdersRef = useRef(null);
   const listingsRef = useRef(null);
+  const exploreServicesRef = useRef(null);
   const [isLoading, setIsLoading] = useState(process.env.NODE_ENV !== "test");
 
   useEffect(() => {
@@ -467,6 +468,13 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
 
   const handleListingsCardClick = () => {
     listingsRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const handleEnabledModulesClick = () => {
+    exploreServicesRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "start",
     });
@@ -535,6 +543,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   currentUser={currentUser}
                   isSeller={isSeller}
                   enabledModules={enabledModules}
+                  onEnabledModulesClick={handleEnabledModulesClick}
                 />
                 <EcosystemVisualization />
                 <ScrollAnimationObserver>
@@ -658,7 +667,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
             )}
 
       <div className={!isSeller ? "dashboard-main-grid" : ""}>
-        <div className="modules-section">
+        <div className="modules-section" ref={exploreServicesRef}>
           <h2 className="section-title-polished">{isSeller ? "My Business Categories" : t("dashboard.exploreServices", "Explore Our Services")}</h2>
           <div className="modules-grid">
             {visibleCards.map((module) => (
