@@ -4,9 +4,34 @@ import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
 import { getPathForModule, getProtectedModuleFromPathname } from "../utils/moduleRoutes";
 import GlobalSearch from "./GlobalSearch";
-import "../styles/Navigation.css";
+import "../styles/NavigationEnhanced.css";
+import "../styles/PlatformPolish.css";
 
 const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks"]);
+
+// Module categories for organized navigation
+const MODULE_CATEGORIES = {
+  commerce: {
+    label: "Commerce",
+    icon: "🛍️",
+    modules: ["ecommerce", "classifieds", "localmarket"],
+  },
+  social: {
+    label: "Social",
+    icon: "👥",
+    modules: ["messaging", "socialmedia", "matrimonial"],
+  },
+  services: {
+    label: "Services",
+    icon: "🚗",
+    modules: ["fooddelivery", "ridesharing", "realestate"],
+  },
+  utilities: {
+    label: "Utilities",
+    icon: "⚙️",
+    modules: ["diary", "reminderalert", "quicklinks", "astrology", "sosalert"],
+  },
+};
 
 const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const { currentUser, cart } = useApp();
@@ -15,6 +40,8 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const displayUser = loggedInUser || currentUser;
   const isAdmin = displayUser?.role === "admin" || displayUser?.registrationType === "admin";
@@ -29,21 +56,21 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const cartItemCount = cart.reduce((total, item) => total + Number(item.quantity || 1), 0);
 
   const allBusinessModules = [
-    { id: "dashboard", label: isSeller ? "Seller Dashboard" : t("modules.dashboard", "Dashboard") },
-    { id: "ecommerce", label: t("modules.ecommerce", "GlobeMart") },
-    { id: "messaging", label: t("modules.messaging", "LinkUp") },
-    { id: "classifieds", label: t("modules.classifieds", "TradePost") },
-    { id: "realestate", label: t("modules.realestate", "HomeSphere") },
-    { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly") },
-    { id: "localmarket", label: t("modules.localmarket", "Local Market") },
-    { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide") },
-    { id: "matrimonial", label: t("modules.matrimonial", "SoulMatch") },
-    { id: "socialmedia", label: t("modules.socialmedia", "VibeHub") },
-    { id: "diary", label: t("modules.diary", "My Diary") },
-    { id: "reminderalert", label: t("modules.reminderalert", "ReminderAlert - Todo List") },
-    { id: "quicklinks", label: t("modules.quicklinks", "Quick Links") },
-    { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center") },
-    { id: "astrology", label: t("modules.astrology", "AstroNila") },
+    { id: "dashboard", label: isSeller ? "Seller Dashboard" : t("modules.dashboard", "Dashboard"), icon: "📊" },
+    { id: "ecommerce", label: t("modules.ecommerce", "GlobeMart"), icon: "🛍️" },
+    { id: "messaging", label: t("modules.messaging", "LinkUp"), icon: "💬" },
+    { id: "classifieds", label: t("modules.classifieds", "TradePost"), icon: "📋" },
+    { id: "realestate", label: t("modules.realestate", "HomeSphere"), icon: "🏠" },
+    { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly"), icon: "🍽️" },
+    { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
+    { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
+    { id: "matrimonial", label: t("modules.matrimonial", "SoulMatch"), icon: "💕" },
+    { id: "socialmedia", label: t("modules.socialmedia", "VibeHub"), icon: "🌐" },
+    { id: "diary", label: t("modules.diary", "My Diary"), icon: "📔" },
+    { id: "reminderalert", label: t("modules.reminderalert", "ReminderAlert - Todo List"), icon: "⏰" },
+    { id: "quicklinks", label: t("modules.quicklinks", "Quick Links"), icon: "🔗" },
+    { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center"), icon: "🆘" },
+    { id: "astrology", label: t("modules.astrology", "AstroNila"), icon: "✨" },
   ];
   const isModuleVisible = (moduleId) =>
     ALWAYS_VISIBLE_MODULE_IDS.has(moduleId) || enabledModuleIds.has(moduleId);
@@ -66,11 +93,47 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   useEffect(() => {
     setIsSidebarOpen(false);
     setShowUserMenu(false);
+    setShowMoreMenu(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const handleModuleClick = (moduleId) => {
     navigate(getPathForModule(moduleId, getPathForModule(defaultHomeModule)));
     setIsSidebarOpen(false);
+    setShowMoreMenu(false);
+  };
+
+  // Get modules to show in primary nav (limit 5) and rest in "More" dropdown
+  const getPrimaryNavModules = () => {
+    const primaryCount = isMobile ? 3 : 5;
+    return modules.slice(0, primaryCount);
+  };
+
+  const getMoreNavModules = () => {
+    const primaryCount = isMobile ? 3 : 5;
+    return modules.slice(primaryCount);
+  };
+
+  const getCategorizedModules = () => {
+    const moreModules = getMoreNavModules();
+    const categorized = {};
+
+    Object.entries(MODULE_CATEGORIES).forEach(([catKey, catData]) => {
+      categorized[catKey] = {
+        label: catData.label,
+        icon: catData.icon,
+        modules: moreModules.filter((m) =>
+          catData.modules.includes(m.id)
+        ),
+      };
+    });
+
+    return Object.entries(categorized).filter(([_, catData]) => catData.modules.length > 0);
   };
 
   const handleSOSButtonClick = () => {
@@ -172,16 +235,57 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
             </button>
 
             <div className="nav-menu" aria-label="Primary navigation">
-              {modules.map((module) => (
+              {getPrimaryNavModules().map((module) => (
                 <button
                   key={module.id}
-                  className={`nav-link ${currentModule === module.id ? "nav-link-active" : ""}`}
+                  className={`nav-link polished ${currentModule === module.id ? "nav-link-active" : ""}`}
                   onClick={() => handleModuleClick(module.id)}
                   aria-current={currentModule === module.id ? "page" : undefined}
                 >
                   {module.label}
                 </button>
               ))}
+
+              {getMoreNavModules().length > 0 && (
+                <div className="nav-more-wrapper">
+                  <button
+                    className={`nav-more-btn polished ${showMoreMenu ? "active" : ""}`}
+                    onClick={() => setShowMoreMenu(!showMoreMenu)}
+                    title="View more modules"
+                  >
+                    <span>More</span>
+                    <span className="more-indicator">▼</span>
+                  </button>
+
+                  {showMoreMenu && (
+                    <div className="nav-categories-dropdown">
+                      {getCategorizedModules().map(([catKey, catData]) => (
+                        <div key={catKey} className="nav-categories-group">
+                          <div className="nav-category-header">
+                            <span className="nav-category-header-icon">{catData.icon}</span>
+                            {catData.label}
+                          </div>
+                          {catData.modules.map((module) => (
+                            <button
+                              key={module.id}
+                              type="button"
+                              className={`nav-category-link ${
+                                currentModule === module.id ? "active" : ""
+                              }`}
+                              onClick={() => handleModuleClick(module.id)}
+                            >
+                              <span className="nav-category-icon">
+                                {module.icon || "•"}
+                              </span>
+                              <span>{module.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

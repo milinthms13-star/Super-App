@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import useI18n from "../hooks/useI18n";
+import { getPathForModule } from "../utils/moduleRoutes";
 import "../styles/EnhancedHeroSection.css";
 
 const EnhancedHeroSection = ({ currentUser = {}, isSeller = false }) => {
+  const navigate = useNavigate();
   const { t } = useI18n();
   const [timeGreeting, setTimeGreeting] = useState("Good Morning");
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -28,6 +31,10 @@ const EnhancedHeroSection = ({ currentUser = {}, isSeller = false }) => {
 
   const firstName = currentUser?.name?.split(" ")[0] || "there";
   const isEarlyMorning = currentTime.getHours() < 6;
+
+  const handleMetricClick = (moduleId) => {
+    navigate(getPathForModule(moduleId));
+  };
 
   return (
     <div className={`enhanced-hero-section ${isEarlyMorning ? "early-morning" : ""}`}>
@@ -64,69 +71,109 @@ const EnhancedHeroSection = ({ currentUser = {}, isSeller = false }) => {
         {/* Live Metrics Banner */}
         <div className="live-metrics-banner">
           <div className="metrics-scroll">
-            <div className="metric-item">
+            <button
+              type="button"
+              className="metric-item metric-item-btn"
+              onClick={() => handleMetricClick("ecommerce")}
+              title="Explore all integrated platforms"
+            >
               <span className="metric-icon">🌐</span>
               <div className="metric-text">
                 <p className="metric-label">Integrated Platforms</p>
                 <p className="metric-value">12</p>
               </div>
-            </div>
+            </button>
 
-            <div className="metric-item">
+            <button
+              type="button"
+              className="metric-item metric-item-btn"
+              onClick={() => handleMetricClick("socialmedia")}
+              title="View active users"
+            >
               <span className="metric-icon">👥</span>
               <div className="metric-text">
                 <p className="metric-label">Active Users</p>
                 <p className="metric-value">850K+</p>
               </div>
-            </div>
+            </button>
 
-            <div className="metric-item">
+            <button
+              type="button"
+              className="metric-item metric-item-btn"
+              onClick={() => handleMetricClick("ecommerce")}
+              title="Browse products"
+            >
               <span className="metric-icon">🛍️</span>
               <div className="metric-text">
                 <p className="metric-label">Products Listed</p>
                 <p className="metric-value">2.1M+</p>
               </div>
-            </div>
+            </button>
 
-            <div className="metric-item">
+            <button
+              type="button"
+              className="metric-item metric-item-btn"
+              onClick={() => handleMetricClick("messaging")}
+              title="View messages"
+            >
               <span className="metric-icon">💬</span>
               <div className="metric-text">
                 <p className="metric-label">Active Chats</p>
                 <p className="metric-value">340K+</p>
               </div>
-            </div>
+            </button>
 
-            <div className="metric-item">
+            <button
+              type="button"
+              className="metric-item metric-item-btn"
+              onClick={() => handleMetricClick("ridesharing")}
+              title="Book a ride"
+            >
               <span className="metric-icon">🚗</span>
               <div className="metric-text">
                 <p className="metric-label">Rides Today</p>
                 <p className="metric-value">24.3K</p>
               </div>
-            </div>
+            </button>
 
-            <div className="metric-item">
+            <button
+              type="button"
+              className="metric-item metric-item-btn"
+              onClick={() => handleMetricClick("realestate")}
+              title="Explore properties"
+            >
               <span className="metric-icon">🏠</span>
               <div className="metric-text">
                 <p className="metric-label">Properties Listed</p>
                 <p className="metric-value">185K+</p>
               </div>
-            </div>
+            </button>
 
-            <div className="metric-item">
+            <button
+              type="button"
+              className="metric-item metric-item-btn"
+              onClick={() => handleMetricClick("fooddelivery")}
+              title="Order food"
+            >
               <span className="metric-icon">🍽️</span>
               <div className="metric-text">
                 <p className="metric-label">Deliveries Today</p>
                 <p className="metric-value">156K</p>
               </div>
-            </div>
+            </button>
 
-            <div className="metric-item">
+            <button
+              type="button"
+              className="metric-item metric-item-btn"
+              onClick={() => handleMetricClick("ecommerce")}
+              title="View transactions"
+            >
               <span className="metric-icon">💰</span>
               <div className="metric-text">
                 <p className="metric-label">Transactions</p>
                 <p className="metric-value">45M+</p>
               </div>
-            </div>
+            </button>
           </div>
         </div>
 

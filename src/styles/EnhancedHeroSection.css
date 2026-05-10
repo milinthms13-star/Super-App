@@ -181,6 +181,34 @@
   box-shadow: 0 8px 20px rgba(255, 215, 0, 0.15);
 }
 
+.metric-item-btn {
+  background: rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+  min-width: 200px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.metric-item-btn:hover {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: #FFD700;
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(255, 215, 0, 0.25);
+}
+
+.metric-item-btn:active {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(255, 215, 0, 0.15);
+}
+
 .metric-icon {
   font-size: 1.8rem;
   flex-shrink: 0;

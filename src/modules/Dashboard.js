@@ -11,12 +11,13 @@ import PersonalizedActivityFeed from "../components/PersonalizedActivityFeed";
 import RecommendedServices from "../components/RecommendedServices";
 import EngagementScore from "../components/EngagementScore";
 import ScrollAnimationObserver from "../components/ScrollAnimationObserver";
-import "../styles/Dashboard.css";
+import "../styles/DashboardEnhanced.css";
 import "../styles/AdvancedAnimations.css";
 import "../styles/Phase6Enhancements.css";
 import "../styles/MicroInteractionsPolish.css";
 import "../styles/Phase6bPolishRefinements.css";
 import "../styles/Phase6bComponentPolish.css";
+import "../styles/PlatformPolish.css";
 
 const normalizeOrderStatus = (status) => {
   const normalizedStatus = String(status || "").trim().toLowerCase();
@@ -617,12 +618,12 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
 
       <div className={!isSeller ? "dashboard-main-grid" : ""}>
         <div className="modules-section">
-          <h2>{isSeller ? "My Business Categories" : t("dashboard.exploreServices", "Explore Our Services")}</h2>
+          <h2 className="section-title-polished">{isSeller ? "My Business Categories" : t("dashboard.exploreServices", "Explore Our Services")}</h2>
           <div className="modules-grid">
             {visibleCards.map((module) => (
               <button
                 type="button"
-                className={`module-card ${isSeller ? "seller-module-card" : ""}`}
+                className={`module-card polished micro-glow ${isSeller ? "seller-module-card" : ""}`}
                 key={module.id}
                 onClick={() =>
                   module.cardType === "external"

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
-import "../styles/GlobalSearch.css";
+import "../styles/GlobalSearchEnhanced.css";
 
 const GlobalSearch = () => {
   const navigate = useNavigate();
