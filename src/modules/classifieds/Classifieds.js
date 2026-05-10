@@ -294,6 +294,7 @@ const Classifieds = () => {
   const [scheduledListings, setScheduledListings] = useState([]);
   const fileInputRef = useRef(null);
   const trackedViewIdsRef = useRef(new Set());
+  const baseRole = getBaseRole(currentUser);
 
   const handleSaveSearch = async () => {
     const searchName = prompt("Enter a name for this saved search:");
@@ -843,6 +844,13 @@ const Classifieds = () => {
     }),
     [classifiedFavorites.length, listings, reportRecords.length]
   );
+  const isBuyerView = activeRole === "buyer";
+  const showRoleSwitcher = baseRole !== "buyer";
+  const showMarketplaceSignals = trendingCategories.length > 0 || suggestedSearches.length > 0;
+  const showFeaturedPanel = featuredListings.length > 0;
+  const showRecentPanel = recentListings.length > 0;
+  const showRecentlyViewedPanel = recentlyViewedListings.length > 0;
+  const showHighlightsSection = showFeaturedPanel || showRecentPanel || showRecentlyViewedPanel;
 
   useEffect(() => {
     if (!selectedListing?.id) {
@@ -1031,35 +1039,39 @@ const Classifieds = () => {
   };
 
   return (
-    <div className="classifieds-page">
+    <div className={`classifieds-page ${isBuyerView ? "buyer-mode" : ""}`}>
       <section className="classifieds-hero">
         <div>
           <p className="classifieds-eyebrow">TradePost classifieds</p>
           <h1>Local buying, selling, discovery, and direct buyer-seller conversations in one flow.</h1>
-          <p className="classifieds-hero-copy">
-            This classified marketplace is now backed by persisted module data, so ads, messages,
-            moderation activity, and reports survive refreshes and stay stored in the backend.
-          </p>
+          {!isBuyerView && (
+            <p className="classifieds-hero-copy">
+              This classified marketplace is now backed by persisted module data, so ads, messages,
+              moderation activity, and reports survive refreshes and stay stored in the backend.
+            </p>
+          )}
         </div>
 
-        <div className="classifieds-stats-grid">
-          <article className="classifieds-stat-card">
-            <strong>{dashboardStats.liveListings}</strong>
-            <span>Live ads</span>
-          </article>
-          <article className="classifieds-stat-card">
-            <strong>{dashboardStats.verifiedListings}</strong>
-            <span>Verified listings</span>
-          </article>
-          <article className="classifieds-stat-card">
-            <strong>{dashboardStats.chatEngagement}</strong>
-            <span>Chat interactions</span>
-          </article>
-          <article className="classifieds-stat-card">
-            <strong>{dashboardStats.reports}</strong>
-            <span>Stored reports</span>
-          </article>
-        </div>
+        {!isBuyerView && (
+          <div className="classifieds-stats-grid">
+            <article className="classifieds-stat-card">
+              <strong>{dashboardStats.liveListings}</strong>
+              <span>Live ads</span>
+            </article>
+            <article className="classifieds-stat-card">
+              <strong>{dashboardStats.verifiedListings}</strong>
+              <span>Verified listings</span>
+            </article>
+            <article className="classifieds-stat-card">
+              <strong>{dashboardStats.chatEngagement}</strong>
+              <span>Chat interactions</span>
+            </article>
+            <article className="classifieds-stat-card">
+              <strong>{dashboardStats.reports}</strong>
+              <span>Stored reports</span>
+            </article>
+          </div>
+        )}
       </section>
 
       {/* Toolbar for Priority Set #3 Features */}
@@ -1072,7 +1084,17 @@ const Classifieds = () => {
           Notifications
         </button>
 
-        {getBaseRole(currentUser) === 'seller' && (
+        {isBuyerView && (
+          <button
+            className="toolbar-btn post-ad-btn"
+            onClick={() => setActiveRole("seller")}
+            title="Create a new ad"
+          >
+            Post Ad
+          </button>
+        )}
+
+        {baseRole === 'seller' && (
           <>
             <button
               className="toolbar-btn bulk-actions-btn"
@@ -1134,28 +1156,32 @@ const Classifieds = () => {
           </>
         )}
 
-        <button
-          className="toolbar-btn category-forms-btn"
-          onClick={() => setShowCategoryForms(true)}
-          title="Add category details"
-        >
-          Category Details
-        </button>
+        {!isBuyerView && (
+          <button
+            className="toolbar-btn category-forms-btn"
+            onClick={() => setShowCategoryForms(true)}
+            title="Add category details"
+          >
+            Category Details
+          </button>
+        )}
       </div>
 
-      <section className="classifieds-role-strip">
-        {ROLE_MODES.map((mode) => (
-          <button
-            key={mode.id}
-            type="button"
-            className={`classifieds-role-card ${activeRole === mode.id ? "active" : ""}`}
-            onClick={() => setActiveRole(mode.id)}
-          >
-            <strong>{mode.title}</strong>
-            <span>{mode.description}</span>
-          </button>
-        ))}
-      </section>
+      {showRoleSwitcher && (
+        <section className="classifieds-role-strip">
+          {ROLE_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              className={`classifieds-role-card ${activeRole === mode.id ? "active" : ""}`}
+              onClick={() => setActiveRole(mode.id)}
+            >
+              <strong>{mode.title}</strong>
+              <span>{mode.description}</span>
+            </button>
+          ))}
+        </section>
+      )}
 
       {statusMessage ? <div className="classifieds-status-banner">{statusMessage}</div> : null}
 
@@ -1164,7 +1190,9 @@ const Classifieds = () => {
           <article className="classifieds-surface-card classifieds-filter-card">
             <div className="classifieds-section-heading">
               <h2>Search and filters</h2>
-              <p>Keyword discovery, location-first browsing, category filters, and sorting built for fast ad hunting.</p>
+              {!isBuyerView && (
+                <p>Keyword discovery, location-first browsing, category filters, and sorting built for fast ad hunting.</p>
+              )}
             </div>
 
             <div className="classifieds-filter-grid">
@@ -1287,123 +1315,122 @@ const Classifieds = () => {
             </article>
           )}
 
-          <article className="classifieds-surface-card classifieds-market-signal-card">
-            <div className="classifieds-section-heading">
-              <h2>Marketplace pulse</h2>
-              <p>Visibility into active demand, trending categories, and search behavior.</p>
-            </div>
-            <div className="classifieds-market-signal-grid">
-              <div className="classifieds-market-signal-block">
-                <strong>Trending categories</strong>
-                <div className="classifieds-chip-cloud">
-                  {trendingCategories.length > 0 ? (
-                    trendingCategories.map((category) => (
-                      <button
-                        key={category.id}
-                        type="button"
-                        className="classifieds-inline-button"
-                        onClick={() => setCategoryFilter([category.label])}
-                      >
-                        {category.label} ({category.count})
-                      </button>
-                    ))
-                  ) : (
-                    <span className="classifieds-muted-copy">No trending categories yet.</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="classifieds-market-signal-block">
-                <strong>Suggested searches</strong>
-                <div className="classifieds-chip-cloud">
-                  {suggestedSearches.length > 0 ? (
-                    suggestedSearches.map((query) => (
-                      <button
-                        key={query}
-                        type="button"
-                        className="classifieds-inline-button"
-                        onClick={() => setSearchText(query)}
-                      >
-                        {query}
-                      </button>
-                    ))
-                  ) : (
-                    <span className="classifieds-muted-copy">Try a location or category keyword.</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <section className="classifieds-highlights-grid">
-            <article className="classifieds-surface-card">
+          {showMarketplaceSignals && (
+            <article className="classifieds-surface-card classifieds-market-signal-card">
               <div className="classifieds-section-heading">
-                <h2>Featured ads</h2>
-                <p>Premium placements for urgent or revenue-generating listings.</p>
+                <h2>Marketplace pulse</h2>
+                <p>Visibility into active demand, trending categories, and search behavior.</p>
               </div>
-              <div className="classifieds-mini-list">
-                {featuredListings.map((listing) => (
-                  <button
-                    key={listing.id}
-                    type="button"
-                    className="classifieds-mini-item"
-                    onClick={() => setSelectedListingId(listing.id)}
-                  >
-                    <strong>{listing.title}</strong>
-                    <span>{formatPrice(listing.price)} in {listing.location}</span>
-                  </button>
-                ))}
-              </div>
-            </article>
+              <div className="classifieds-market-signal-grid">
+                {trendingCategories.length > 0 && (
+                  <div className="classifieds-market-signal-block">
+                    <strong>Trending categories</strong>
+                    <div className="classifieds-chip-cloud">
+                      {trendingCategories.map((category) => (
+                        <button
+                          key={category.id}
+                          type="button"
+                          className="classifieds-inline-button"
+                          onClick={() => setCategoryFilter([category.label])}
+                        >
+                          {category.label} ({category.count})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-            <article className="classifieds-surface-card">
-              <div className="classifieds-section-heading">
-                <h2>Recently posted</h2>
-                <p>Latest ads from buyers, sellers, recruiters, and local service providers.</p>
-              </div>
-              <div className="classifieds-mini-list">
-                {recentListings.map((listing) => (
-                  <button
-                    key={listing.id}
-                    type="button"
-                    className="classifieds-mini-item"
-                    onClick={() => setSelectedListingId(listing.id)}
-                  >
-                    <strong>{listing.title}</strong>
-                    <span>{getRelativeTimeLabel(listing.posted)} in {listing.location}</span>
-                    <span>{formatCompactNumber(listing.views)} views - {listing.chats} chats</span>
-                  </button>
-                ))}
-              </div>
-            </article>
-
-            <article className="classifieds-surface-card">
-              <div className="classifieds-section-heading">
-                <h2>Recently viewed</h2>
-                <p>Pick up where you left off without searching again.</p>
-              </div>
-              <div className="classifieds-mini-list">
-                {recentlyViewedListings.length > 0 ? (
-                  recentlyViewedListings.slice(0, 4).map((listing) => (
-                    <button
-                      key={`${listing.id}-recent`}
-                      type="button"
-                      className="classifieds-mini-item"
-                      onClick={() => setSelectedListingId(listing.id)}
-                    >
-                      <strong>{listing.title}</strong>
-                      <span>{listing.location} - Viewed recently</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="classifieds-mini-item">
-                    <strong>No recent views yet</strong>
-                    <span>Open an ad to build your quick-return list.</span>
+                {suggestedSearches.length > 0 && (
+                  <div className="classifieds-market-signal-block">
+                    <strong>Suggested searches</strong>
+                    <div className="classifieds-chip-cloud">
+                      {suggestedSearches.map((query) => (
+                        <button
+                          key={query}
+                          type="button"
+                          className="classifieds-inline-button"
+                          onClick={() => setSearchText(query)}
+                        >
+                          {query}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
             </article>
-          </section>
+          )}
+
+          {showHighlightsSection && (
+            <section className="classifieds-highlights-grid">
+              {showFeaturedPanel && (
+                <article className="classifieds-surface-card">
+                  <div className="classifieds-section-heading">
+                    <h2>Featured ads</h2>
+                    <p>Premium placements for urgent or revenue-generating listings.</p>
+                  </div>
+                  <div className="classifieds-mini-list">
+                    {featuredListings.map((listing) => (
+                      <button
+                        key={listing.id}
+                        type="button"
+                        className="classifieds-mini-item"
+                        onClick={() => setSelectedListingId(listing.id)}
+                      >
+                        <strong>{listing.title}</strong>
+                        <span>{formatPrice(listing.price)} in {listing.location}</span>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              )}
+
+              {showRecentPanel && (
+                <article className="classifieds-surface-card">
+                  <div className="classifieds-section-heading">
+                    <h2>Recently posted</h2>
+                    <p>Latest ads from buyers, sellers, recruiters, and local service providers.</p>
+                  </div>
+                  <div className="classifieds-mini-list">
+                    {recentListings.map((listing) => (
+                      <button
+                        key={listing.id}
+                        type="button"
+                        className="classifieds-mini-item"
+                        onClick={() => setSelectedListingId(listing.id)}
+                      >
+                        <strong>{listing.title}</strong>
+                        <span>{getRelativeTimeLabel(listing.posted)} in {listing.location}</span>
+                        <span>{formatCompactNumber(listing.views)} views - {listing.chats} chats</span>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              )}
+
+              {showRecentlyViewedPanel && (
+                <article className="classifieds-surface-card">
+                  <div className="classifieds-section-heading">
+                    <h2>Recently viewed</h2>
+                    <p>Pick up where you left off without searching again.</p>
+                  </div>
+                  <div className="classifieds-mini-list">
+                    {recentlyViewedListings.slice(0, 4).map((listing) => (
+                      <button
+                        key={`${listing.id}-recent`}
+                        type="button"
+                        className="classifieds-mini-item"
+                        onClick={() => setSelectedListingId(listing.id)}
+                      >
+                        <strong>{listing.title}</strong>
+                        <span>{listing.location} - Viewed recently</span>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              )}
+            </section>
+          )}
 
           <article className="classifieds-surface-card">
             <div className="classifieds-section-heading">
@@ -1445,19 +1472,14 @@ const Classifieds = () => {
               {paginatedListings.length === 0 ? (
                 <div className="classifieds-empty-state classifieds-listings-empty">
                   <strong>No listings match the current filters.</strong>
-                  <span>Try a suggested search or remove one filter to reveal more inventory.</span>
-                  <div className="classifieds-chip-cloud">
-                    {suggestedSearches.slice(0, 4).map((query) => (
-                      <button
-                        key={`empty-${query}`}
-                        type="button"
-                        className="classifieds-inline-button"
-                        onClick={() => setSearchText(query)}
-                      >
-                        {query}
-                      </button>
-                    ))}
-                  </div>
+                  <span>Try broader filters or be the first to post in your locality.</span>
+                  <button
+                    type="button"
+                    className="classifieds-inline-button"
+                    onClick={() => setActiveRole("seller")}
+                  >
+                    Post your ad
+                  </button>
                 </div>
               ) : (
                 paginatedListings.map((listing) => {
@@ -2311,7 +2333,7 @@ const Classifieds = () => {
         </div>
       )}
 
-      {bulkActionsOpen && getBaseRole(currentUser) === 'seller' && (
+      {bulkActionsOpen && baseRole === 'seller' && (
         <BulkActions
           listings={listings}
           userListings={sellerListings}
@@ -2321,7 +2343,7 @@ const Classifieds = () => {
         />
       )}
 
-      {reportingOpen && getBaseRole(currentUser) === 'seller' && (
+      {reportingOpen && baseRole === 'seller' && (
         <AdvancedReporting
           listings={sellerListings}
           analyticsData={{}}
