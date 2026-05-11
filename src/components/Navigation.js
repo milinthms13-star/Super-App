@@ -7,7 +7,7 @@ import GlobalSearch from "./GlobalSearch";
 import "../styles/NavigationEnhanced.css";
 import "../styles/PlatformPolish.css";
 
-const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks", "maps", "support", "finance", "freelancer"]);
+const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks", "maps", "support", "finance", "freelancer", "billpay"]);
 const USER_IMAGE_KEYS = ["photoURL", "avatar", "photo", "profileImage", "picture"];
 const MODULE_ID_ALIASES = {
   quicklink: "quicklinks",
@@ -46,7 +46,7 @@ const MODULE_CATEGORIES = {
   utilities: {
     label: "Utilities",
     icon: "⚙️",
-    modules: ["diary", "reminderalert", "quicklinks", "astrology", "sosalert", "support"],
+    modules: ["billpay", "diary", "reminderalert", "quicklinks", "astrology", "sosalert", "support"],
   },
 };
 
@@ -96,6 +96,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "realestate", label: t("modules.realestate", "HomeSphere"), icon: "🏠" },
     { id: "finance", label: t("modules.finance", "Nila Finance Hub"), icon: "💰", sellerVisible: true },
     { id: "freelancer", label: t("modules.freelancer", "NilaWorks"), icon: "W", sellerVisible: true },
+    { id: "billpay", label: t("modules.billpay", "Nila Utility Hub"), icon: "B", sellerVisible: true },
     { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly"), icon: "🍽️" },
     { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
@@ -380,5 +381,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 };
 
 export default Navigation;
+
+
 
 

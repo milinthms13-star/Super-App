@@ -125,6 +125,14 @@ const Icon = ({ type, className = "" }) => {
           <path d="M4 10h16" />
         </svg>
       );
+    case "billpay":
+      return (
+        <svg {...common}>
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+          <path d="M8 9h8M8 13h5" />
+          <path d="M16 4v4h4" />
+        </svg>
+      );
     case "fooddelivery":
       return (
         <svg {...common}>
@@ -278,6 +286,17 @@ const MODULE_CONFIG = [
     stats: "120K+ Service Requests",
     gradient: "linear-gradient(135deg, #0A2342 0%, #164E63 55%, #1D4ED8 100%)",
     emoji: "W",
+  },
+  {
+    id: "billpay",
+    nameKey: "modules.billpay",
+    fallbackName: "Nila Utility Hub",
+    icon: "billpay",
+    descriptionKey: "dashboard.moduleDescriptions.billpay",
+    fallbackDescription: "Utility bill fetch and pay, reminders, saved billers, and receipt vault with BBPS sandbox architecture",
+    stats: "210K+ Utility Events",
+    gradient: "linear-gradient(135deg, #0B2545 0%, #134E4A 55%, #1D4ED8 100%)",
+    emoji: "B",
   },
   {
     id: "fooddelivery",
@@ -603,6 +622,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       return (
         module.id === "finance" ||
         module.id === "freelancer" ||
+        module.id === "billpay" ||
         normalizedEnabledModuleIds.includes(module.id)
       );
     })
@@ -611,6 +631,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         !isSeller ||
         module.id === "finance" ||
         module.id === "freelancer" ||
+        module.id === "billpay" ||
         subscribedCategoryIds.includes(module.id)
     );
   const visibleCards = [

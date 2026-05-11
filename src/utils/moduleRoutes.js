@@ -10,6 +10,7 @@ export const MODULE_PATHS = {
   realestate: "/realestate",
   finance: "/finance",
   freelancer: "/freelancer",
+  billpay: "/billpay",
   fooddelivery: "/fooddelivery",
   localmarket: "/localmarket",
   ridesharing: "/ridesharing",
@@ -37,6 +38,11 @@ const MODULE_ID_ALIASES = {
   worklink: "freelancer",
   nilaworks: "freelancer",
   proconnect: "freelancer",
+  utility: "billpay",
+  utilities: "billpay",
+  bbps: "billpay",
+  billpayment: "billpay",
+  utilityhub: "billpay",
 };
 
 export const normalizeModuleId = (moduleId = "") => {

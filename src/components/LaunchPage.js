@@ -40,6 +40,12 @@ const iconMap = {
 };
 
 const moduleFallbacks = {
+  billpay: {
+    title: "Nila Utility Hub",
+    description: "BBPS sandbox bill fetch/pay, reminders, saved billers, and receipt vault.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   freelancer: {
     title: "NilaWorks",
     description: "Digital freelancers, local services, instant hiring, and verified professionals.",
@@ -112,6 +118,7 @@ const LaunchPage = ({
     HomeSphere: "realestate",
     "Nila Finance Hub": "finance",
     NilaWorks: "freelancer",
+    "Nila Utility Hub": "billpay",
     Feastly: "fooddelivery",
     "Local Market": "localmarket",
     SwiftRide: "ridesharing",

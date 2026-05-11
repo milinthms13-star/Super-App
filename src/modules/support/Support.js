@@ -124,6 +124,7 @@ const Support = () => {
               <option value="realestate">HomeSphere</option>
               <option value="finance">Nila Finance Hub</option>
               <option value="freelancer">NilaWorks</option>
+              <option value="billpay">Nila Utility Hub</option>
               <option value="fooddelivery">Feastly</option>
               <option value="localmarket">Local Market</option>
               <option value="ridesharing">SwiftRide</option>
