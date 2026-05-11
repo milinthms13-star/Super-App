@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import MessageSearch from './MessageSearch';
 import MessageContextMenu from './MessageContextMenu';
@@ -42,6 +42,7 @@ const ChatWindow = ({
   onDeleteAllMessages,
   onRetryMessage,
   onExportChat,
+  familyAccessPolicy = null,
 }) => {
   const { currentUser } = useApp();
   const [messageInput, setMessageInput] = useState('');
@@ -83,6 +84,7 @@ const ChatWindow = ({
   const previousMessageSnapshotRef = useRef({ count: 0, lastId: '' });
   const emojiButtonRef = useRef(null);
   const headerActionsMenuRef = useRef(null);
+  const autoLocationStartedForChatRef = useRef(new Set());
   const currentUserId = getEntityId(currentUser);
   const resolvedCurrentUserId = getEntityId(
     chat?.participants?.find((participant) => isSameEntity(participant, currentUser))
@@ -90,6 +92,12 @@ const ChatWindow = ({
   const backgroundStorageKey = useMemo(
     () => `malabarbazaar-chat-background-${currentUserId || 'guest'}-${chat?._id || 'none'}`,
     [currentUserId, chat?._id]
+  );
+  const familyAutoLocationEnabled = Boolean(
+    familyAccessPolicy?.isFamilyContact && familyAccessPolicy?.location?.active
+  );
+  const familyAutoCameraEnabled = Boolean(
+    familyAccessPolicy?.isFamilyContact && familyAccessPolicy?.camera?.active
   );
 
   useEffect(() => {
@@ -454,7 +462,7 @@ const ChatWindow = ({
     return minutes > 0 ? `${hours}h ${minutes}m left` : `${hours}h left`;
   };
 
-  const stopLiveLocationSharing = async ({ notifyChat = false } = {}) => {
+  const stopLiveLocationSharing = useCallback(async ({ notifyChat = false } = {}) => {
     if (liveLocationIntervalRef.current) {
       window.clearInterval(liveLocationIntervalRef.current);
       liveLocationIntervalRef.current = null;
@@ -470,7 +478,7 @@ const ChatWindow = ({
     if (notifyChat) {
       await onSendMessage('📍 Live location sharing ended.', 'location');
     }
-  };
+  }, [onSendMessage]);
 
   const getCurrentPosition = () =>
     new Promise((resolve, reject) => {
@@ -517,13 +525,7 @@ const ChatWindow = ({
     }
   };
 
-  const handleStartLiveLocation = async () => {
-    const duration = Number(locationDurationMinutes || 0);
-    if (!duration || duration < 1 || duration > 1440) {
-      setLocationError('Please choose a valid duration up to 24 hours.');
-      return;
-    }
-
+  const startLiveLocationWithDuration = async (duration) => {
     try {
       setLocationError('');
       await stopLiveLocationSharing();
@@ -561,6 +563,52 @@ const ChatWindow = ({
       await stopLiveLocationSharing();
     }
   };
+
+  const resolveAutoLocationDurationMinutes = () => {
+    const temporaryExpiry = familyAccessPolicy?.location?.expiresAt;
+    const mode = String(familyAccessPolicy?.location?.mode || '').toLowerCase();
+
+    if (mode === 'temporary' && temporaryExpiry) {
+      const remainingMs = new Date(temporaryExpiry).getTime() - Date.now();
+      if (remainingMs > 0) {
+        const remainingMinutes = Math.ceil(remainingMs / 60000);
+        return Math.min(Math.max(remainingMinutes, 1), 1440);
+      }
+    }
+
+    return 60;
+  };
+
+  const handleStartLiveLocation = async () => {
+    const duration = Number(locationDurationMinutes || 0);
+    if (!duration || duration < 1 || duration > 1440) {
+      setLocationError('Please choose a valid duration up to 24 hours.');
+      return;
+    }
+
+    await startLiveLocationWithDuration(duration);
+  };
+
+  useEffect(() => {
+    const chatId = getEntityId(chat?._id || chat);
+    if (!chatId || chat?.type !== 'direct') {
+      return;
+    }
+
+    if (!familyAutoLocationEnabled || isLiveLocationSharing) {
+      return;
+    }
+
+    if (autoLocationStartedForChatRef.current.has(chatId)) {
+      return;
+    }
+
+    autoLocationStartedForChatRef.current.add(chatId);
+    const autoDuration = resolveAutoLocationDurationMinutes();
+    setLocationMode('live');
+    setLocationDurationMinutes(autoDuration);
+    void startLiveLocationWithDuration(autoDuration);
+  }, [chat, familyAutoLocationEnabled, isLiveLocationSharing]);
 
   const handleInputChange = (event) => {
     const nextValue = event.target.value;
@@ -945,6 +993,13 @@ const ChatWindow = ({
           <div className="chat-header-info">
             <h3>{getChatTitle()}</h3>
             <p className="chat-status">{getChatInfo()}</p>
+            {(familyAutoLocationEnabled || familyAutoCameraEnabled) && (
+              <p className="chat-status">
+                Family auto-access: {familyAutoLocationEnabled ? 'Location' : ''}
+                {familyAutoLocationEnabled && familyAutoCameraEnabled ? ' + ' : ''}
+                {familyAutoCameraEnabled ? 'Camera call auto-accept' : ''}
+              </p>
+            )}
           </div>
         </div>
         <div className="chat-header-actions" ref={headerActionsMenuRef}>

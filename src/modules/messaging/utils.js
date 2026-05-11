@@ -247,3 +247,131 @@ export const inferMessageTypeFromMimeType = (mimeType = "", { preferVoice = fals
 
   return "file";
 };
+
+const WEEKDAY_INDEX = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
+
+const normalizePermissionMode = (value) => {
+  const mode = String(value || "none").trim().toLowerCase();
+  return mode || "none";
+};
+
+const parseTimeToMinutes = (value, fallbackMinutes) => {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return fallbackMinutes;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+    return fallbackMinutes;
+  }
+
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return fallbackMinutes;
+  }
+
+  return hours * 60 + minutes;
+};
+
+const getLocalizedTimeParts = (referenceDate, timezone = "Asia/Kolkata") => {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(referenceDate);
+    const weekday = String(parts.find((part) => part.type === "weekday")?.value || "")
+      .slice(0, 3)
+      .toLowerCase();
+    const hours = Number(parts.find((part) => part.type === "hour")?.value || "0");
+    const minutes = Number(parts.find((part) => part.type === "minute")?.value || "0");
+
+    return {
+      weekdayIndex: Number.isInteger(WEEKDAY_INDEX[weekday]) ? WEEKDAY_INDEX[weekday] : referenceDate.getDay(),
+      minutesOfDay: (Number.isInteger(hours) ? hours : 0) * 60 + (Number.isInteger(minutes) ? minutes : 0),
+    };
+  } catch (error) {
+    return {
+      weekdayIndex: referenceDate.getDay(),
+      minutesOfDay: referenceDate.getHours() * 60 + referenceDate.getMinutes(),
+    };
+  }
+};
+
+const isWithinTimeWindow = (minutesOfDay, startMinutes, endMinutes) => {
+  if (startMinutes === endMinutes) {
+    return true;
+  }
+
+  if (startMinutes < endMinutes) {
+    return minutesOfDay >= startMinutes && minutesOfDay <= endMinutes;
+  }
+
+  return minutesOfDay >= startMinutes || minutesOfDay <= endMinutes;
+};
+
+export const isFamilyPermissionActive = (permission = {}, referenceDate = new Date()) => {
+  const mode = normalizePermissionMode(permission?.mode);
+
+  if (mode === "none") {
+    return false;
+  }
+
+  if (mode === "permanent") {
+    return true;
+  }
+
+  if (mode === "temporary") {
+    const expiryTime = new Date(permission?.expiresAt).getTime();
+    return Number.isFinite(expiryTime) && expiryTime > referenceDate.getTime();
+  }
+
+  if (mode === "time_restricted") {
+    const restrictions = permission?.timeRestrictions || {};
+    const timezone = restrictions?.timezone || "Asia/Kolkata";
+    const daysOfWeek = Array.isArray(restrictions?.daysOfWeek)
+      ? restrictions.daysOfWeek
+        .map((day) => Number(day))
+        .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+      : [0, 1, 2, 3, 4, 5, 6];
+
+    if (!daysOfWeek.length) {
+      return false;
+    }
+
+    const { weekdayIndex, minutesOfDay } = getLocalizedTimeParts(referenceDate, timezone);
+    if (!daysOfWeek.includes(weekdayIndex)) {
+      return false;
+    }
+
+    const startMinutes = parseTimeToMinutes(restrictions?.startTime, 0);
+    const endMinutes = parseTimeToMinutes(restrictions?.endTime, 23 * 60 + 59);
+    return isWithinTimeWindow(minutesOfDay, startMinutes, endMinutes);
+  }
+
+  return false;
+};
+
+export const getFamilyPermissionSnapshot = (permission = {}, referenceDate = new Date()) => {
+  const mode = normalizePermissionMode(permission?.mode);
+
+  return {
+    mode,
+    expiresAt: permission?.expiresAt || "",
+    note: permission?.note || "",
+    timeRestrictions: permission?.timeRestrictions || {},
+    active: isFamilyPermissionActive(permission, referenceDate),
+  };
+};

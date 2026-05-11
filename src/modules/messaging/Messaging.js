@@ -30,10 +30,12 @@ import {
 } from '../../pwaConfig';
 import {
   filterMessagesByClearTimestamp,
+  getFamilyPermissionSnapshot,
   getAvatarLabel,
   getChatClearTimestamp,
   getEntityId,
   inferMessageTypeFromMimeType,
+  isFamilyPermissionActive,
   isSameEntity,
   loadClearedChats,
   loadMessagingOutbox,
@@ -281,6 +283,7 @@ const Messaging = () => {
   const socketRef = useRef(null);
   const activeCallRef = useRef(null);
   const incomingCallRef = useRef(null);
+  const autoAcceptedCallIdsRef = useRef(new Set());
   const clearedChatsRef = useRef(loadClearedChats());
   const outboxRef = useRef([]);
   const isFlushingOutboxRef = useRef(false);
@@ -309,6 +312,40 @@ const Messaging = () => {
 
     return latestReplyableMessage?._id || '';
   }, [currentUser, messages]);
+
+  const selectedChatFamilyAccessPolicy = useMemo(() => {
+    if (!selectedChat || selectedChat.type !== 'direct') {
+      return null;
+    }
+
+    const otherParticipant = getOtherParticipant(selectedChat, currentUser);
+    const otherParticipantId = getEntityId(otherParticipant);
+    if (!otherParticipantId) {
+      return null;
+    }
+
+    const matchingContact = contacts.find((contact) => (
+      getEntityId(contact?.contactUserId || contact) === otherParticipantId
+    ));
+    const isFamilyContact = String(matchingContact?.category || '').trim().toLowerCase() === 'family';
+
+    if (!isFamilyContact) {
+      return null;
+    }
+
+    return {
+      contactId: getEntityId(matchingContact),
+      contactName:
+        matchingContact?.displayName ||
+        matchingContact?.contactUserId?.name ||
+        matchingContact?.contactUserId?.username ||
+        otherParticipant?.name ||
+        'Family contact',
+      isFamilyContact: true,
+      location: getFamilyPermissionSnapshot(matchingContact?.familyAccess?.location),
+      camera: getFamilyPermissionSnapshot(matchingContact?.familyAccess?.camera),
+    };
+  }, [contacts, currentUser, selectedChat]);
 
   const persistOutbox = useCallback((nextQueue) => {
     outboxRef.current = Array.isArray(nextQueue) ? nextQueue : [];
@@ -2218,7 +2255,7 @@ const Messaging = () => {
     }
   };
 
-  const handleAcceptCall = async () => {
+  const handleAcceptCall = useCallback(async () => {
     if (!incomingCall?._id) {
       return;
     }
@@ -2235,7 +2272,40 @@ const Messaging = () => {
     } catch (error) {
       console.error('Error accepting call:', error);
     }
-  };
+  }, [apiCall, incomingCall, resolvedCurrentUserId]);
+
+  useEffect(() => {
+    const incomingCallId = getEntityId(incomingCall?._id || incomingCall?.callId);
+    if (!incomingCallId || autoAcceptedCallIdsRef.current.has(incomingCallId)) {
+      return;
+    }
+
+    if (incomingCall?.callType !== 'video') {
+      return;
+    }
+
+    const callerId = getEntityId(
+      incomingCall?.caller ||
+      incomingCall?.initiator ||
+      incomingCall?.initiatorId
+    );
+    if (!callerId) {
+      return;
+    }
+
+    const matchingContact = contacts.find(
+      (contact) => getEntityId(contact?.contactUserId || contact) === callerId
+    );
+    const isFamilyContact = String(matchingContact?.category || '').trim().toLowerCase() === 'family';
+    const hasActiveCameraPermission = isFamilyPermissionActive(matchingContact?.familyAccess?.camera);
+
+    if (!isFamilyContact || !hasActiveCameraPermission) {
+      return;
+    }
+
+    autoAcceptedCallIdsRef.current.add(incomingCallId);
+    handleAcceptCall();
+  }, [contacts, handleAcceptCall, incomingCall]);
 
   const handleDeclineCall = async () => {
     if (!incomingCall?._id) {
@@ -2611,6 +2681,7 @@ const Messaging = () => {
                   isChatCleared={Boolean(selectedChatClearedAt)}
                   onDeleteAllMessages={handleDeleteAllMessages}
                   onExportChat={handleExportChat}
+                  familyAccessPolicy={null}
                 />
                 <div className="chatroom-panel-sidebar">
                   <ChatroomPanel
@@ -2830,6 +2901,7 @@ const Messaging = () => {
                 showAISuggestions={showAISuggestions}
                 latestMessageId={latestMessageId}
                 onSelectAISuggestion={handleAISuggestionSelect}
+                familyAccessPolicy={selectedChatFamilyAccessPolicy}
               />
 
               {showFileUpload && (

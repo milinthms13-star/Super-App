@@ -1,5 +1,7 @@
 import {
+  getFamilyPermissionSnapshot,
   getMessagingOutboxStorageKey,
+  isFamilyPermissionActive,
   loadMessagingOutbox,
   mergeOutboxEntriesIntoMessages,
   saveMessagingOutbox,
@@ -58,6 +60,62 @@ describe('messaging utils', () => {
       isFailed: true,
       errorMessage: 'Offline',
       content: 'Queued retry',
+    }));
+  });
+
+  test('treats temporary family permission as active until expiry', () => {
+    const active = isFamilyPermissionActive(
+      { mode: 'temporary', expiresAt: '2026-05-20T12:00:00.000Z' },
+      new Date('2026-05-20T11:45:00.000Z')
+    );
+    const expired = isFamilyPermissionActive(
+      { mode: 'temporary', expiresAt: '2026-05-20T12:00:00.000Z' },
+      new Date('2026-05-20T12:05:00.000Z')
+    );
+
+    expect(active).toBe(true);
+    expect(expired).toBe(false);
+  });
+
+  test('evaluates time-restricted family permission using timezone and day', () => {
+    const permission = {
+      mode: 'time_restricted',
+      timeRestrictions: {
+        timezone: 'Asia/Kolkata',
+        startTime: '09:00',
+        endTime: '18:00',
+        daysOfWeek: [1], // Monday
+      },
+    };
+
+    const mondayDuringWindow = isFamilyPermissionActive(
+      permission,
+      new Date('2026-05-11T07:00:00.000Z') // Monday 12:30 IST
+    );
+    const mondayOutsideWindow = isFamilyPermissionActive(
+      permission,
+      new Date('2026-05-11T02:00:00.000Z') // Monday 07:30 IST
+    );
+    const tuesdayDuringClockWindow = isFamilyPermissionActive(
+      permission,
+      new Date('2026-05-12T07:00:00.000Z') // Tuesday 12:30 IST
+    );
+
+    expect(mondayDuringWindow).toBe(true);
+    expect(mondayOutsideWindow).toBe(false);
+    expect(tuesdayDuringClockWindow).toBe(false);
+  });
+
+  test('returns a normalized family permission snapshot', () => {
+    const snapshot = getFamilyPermissionSnapshot(
+      { mode: 'PERMANENT', note: 'Parent approved' },
+      new Date('2026-05-11T07:00:00.000Z')
+    );
+
+    expect(snapshot).toEqual(expect.objectContaining({
+      mode: 'permanent',
+      note: 'Parent approved',
+      active: true,
     }));
   });
 });
