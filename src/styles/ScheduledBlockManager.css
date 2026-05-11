@@ -2,34 +2,37 @@
 .scheduled-block-manager {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: white;
+  width: min(760px, 100%);
+  max-height: 90vh;
+  background: #fff;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35);
 }
 
-.block-manager-header {
+.scheduled-block-manager .block-manager-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 16px;
   border-bottom: 1px solid #e8e8e8;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  color: #fff;
 }
 
-.block-manager-header h3 {
+.scheduled-block-manager .block-manager-header h3 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
 }
 
-.btn-close {
+.scheduled-block-manager .btn-close {
   background: none;
   border: none;
-  color: white;
+  color: #fff;
   font-size: 24px;
+  line-height: 1;
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -41,11 +44,11 @@
   transition: background-color 0.2s;
 }
 
-.btn-close:hover {
+.scheduled-block-manager .btn-close:hover {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
-.block-manager-content {
+.scheduled-block-manager .block-manager-content {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
@@ -54,8 +57,8 @@
   gap: 24px;
 }
 
-.error-message,
-.success-message {
+.scheduled-block-manager .error-message,
+.scheduled-block-manager .success-message {
   padding: 12px;
   border-radius: 6px;
   font-size: 14px;
@@ -63,44 +66,44 @@
   border-left: 3px solid;
 }
 
-.error-message {
+.scheduled-block-manager .error-message {
   background-color: #fee;
   color: #c33;
   border-color: #c33;
 }
 
-.success-message {
+.scheduled-block-manager .success-message {
   background-color: #efe;
   color: #3c3;
   border-color: #3c3;
 }
 
-.add-block-section,
-.active-blocks-section {
+.scheduled-block-manager .add-block-section,
+.scheduled-block-manager .active-blocks-section {
   border: 1px solid #e8e8e8;
   border-radius: 8px;
   padding: 16px;
 }
 
-.add-block-section h4,
-.active-blocks-section h4 {
-  margin: 0 0 16px 0;
+.scheduled-block-manager .add-block-section h4,
+.scheduled-block-manager .active-blocks-section h4 {
+  margin: 0 0 16px;
   font-size: 16px;
   font-weight: 600;
   color: #333;
 }
 
-.block-type-selection {
+.scheduled-block-manager .block-type-selection {
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
 }
 
-.type-btn {
+.scheduled-block-manager .type-btn {
   flex: 1;
   padding: 10px 14px;
   border: 2px solid #ddd;
-  background: white;
+  background: #fff;
   border-radius: 6px;
   font-size: 14px;
   font-weight: 600;
@@ -109,90 +112,91 @@
   color: #666;
 }
 
-.type-btn:hover {
+.scheduled-block-manager .type-btn:hover {
   border-color: #667eea;
   color: #667eea;
 }
 
-.type-btn.active {
+.scheduled-block-manager .type-btn.active {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  color: #fff;
   border-color: transparent;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
 }
 
-.add-block-form {
+.scheduled-block-manager .add-block-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.form-group {
+.scheduled-block-manager .form-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.form-group label {
+.scheduled-block-manager .form-group label {
   font-size: 13px;
   font-weight: 600;
   color: #333;
 }
 
-.form-group input {
+.scheduled-block-manager .form-group input {
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 14px;
   font-family: inherit;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.form-group input:focus {
+.scheduled-block-manager .form-group input:focus {
   outline: none;
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.form-group input:disabled {
+.scheduled-block-manager .form-group input:disabled {
   background-color: #f5f5f5;
   color: #999;
   cursor: not-allowed;
 }
 
-.time-inputs {
+.scheduled-block-manager .time-inputs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.time-input-group {
+.scheduled-block-manager .time-input-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.time-input-group label {
+.scheduled-block-manager .time-input-group label {
   font-size: 12px;
   font-weight: 600;
   color: #666;
 }
 
-.time-input-group input {
+.scheduled-block-manager .time-input-group input {
   padding: 8px 10px;
   font-size: 13px;
 }
 
-.days-selector {
+.scheduled-block-manager .days-selector {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
   gap: 8px;
 }
 
-.day-btn {
+.scheduled-block-manager .day-btn {
   padding: 8px;
   border: 2px solid #ddd;
-  background: white;
+  background: #fff;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
@@ -201,26 +205,26 @@
   color: #666;
 }
 
-.day-btn:hover:not(:disabled) {
+.scheduled-block-manager .day-btn:hover:not(:disabled) {
   border-color: #667eea;
   color: #667eea;
 }
 
-.day-btn.active {
+.scheduled-block-manager .day-btn.active {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  color: #fff;
   border-color: transparent;
 }
 
-.day-btn:disabled {
+.scheduled-block-manager .day-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.btn-add-block {
+.scheduled-block-manager .btn-add-block {
   padding: 12px 16px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  color: #fff;
   border: none;
   border-radius: 6px;
   font-size: 14px;
@@ -229,17 +233,17 @@
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.btn-add-block:hover:not(:disabled) {
+.scheduled-block-manager .btn-add-block:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
-.btn-add-block:disabled {
+.scheduled-block-manager .btn-add-block:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.no-blocks {
+.scheduled-block-manager .no-blocks {
   text-align: center;
   color: #999;
   font-size: 14px;
@@ -247,13 +251,13 @@
   margin: 0;
 }
 
-.blocks-list {
+.scheduled-block-manager .blocks-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.block-item {
+.scheduled-block-manager .block-item {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -265,67 +269,67 @@
   transition: all 0.2s;
 }
 
-.block-item.inactive {
+.scheduled-block-manager .block-item.inactive {
   opacity: 0.6;
   background: #f5f5f5;
 }
 
-.block-item:hover {
+.scheduled-block-manager .block-item:hover {
   border-color: #667eea;
   box-shadow: 0 2px 6px rgba(102, 126, 234, 0.1);
 }
 
-.block-info {
+.scheduled-block-manager .block-info {
   display: flex;
   gap: 12px;
   flex: 1;
 }
 
-.block-type-badge {
+.scheduled-block-manager .block-type-badge {
   font-size: 20px;
   flex-shrink: 0;
 }
 
-.block-details {
+.scheduled-block-manager .block-details {
   display: flex;
   flex-direction: column;
   gap: 4px;
   flex: 1;
 }
 
-.block-details p {
+.scheduled-block-manager .block-details p {
   margin: 0;
   font-size: 13px;
   color: #333;
 }
 
-.block-description {
+.scheduled-block-manager .block-description {
   font-weight: 600;
   color: #333;
 }
 
-.block-reason {
+.scheduled-block-manager .block-reason {
   color: #666;
   font-size: 12px;
 }
 
-.block-expiry {
+.scheduled-block-manager .block-expiry {
   color: #f39c12;
   font-size: 12px;
   font-weight: 500;
 }
 
-.block-actions {
+.scheduled-block-manager .block-actions {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
 }
 
-.btn-toggle,
-.btn-delete {
+.scheduled-block-manager .btn-toggle,
+.scheduled-block-manager .btn-delete {
   padding: 8px 10px;
   border: 1px solid #ddd;
-  background: white;
+  background: #fff;
   border-radius: 4px;
   font-size: 14px;
   cursor: pointer;
@@ -337,64 +341,64 @@
   justify-content: center;
 }
 
-.btn-toggle:hover:not(:disabled) {
+.scheduled-block-manager .btn-toggle:hover:not(:disabled) {
   border-color: #667eea;
   background: #f0f4ff;
   color: #667eea;
 }
 
-.btn-toggle.enabled {
+.scheduled-block-manager .btn-toggle.enabled {
   color: #3c3;
   border-color: #3c3;
 }
 
-.btn-toggle.disabled {
+.scheduled-block-manager .btn-toggle.disabled {
   color: #999;
   border-color: #ddd;
 }
 
-.btn-delete:hover:not(:disabled) {
+.scheduled-block-manager .btn-delete:hover:not(:disabled) {
   border-color: #ff6b6b;
   background: #ffe0e0;
   color: #ff6b6b;
 }
 
-.btn-toggle:disabled,
-.btn-delete:disabled {
+.scheduled-block-manager .btn-toggle:disabled,
+.scheduled-block-manager .btn-delete:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .block-manager-content {
+  .scheduled-block-manager .block-manager-content {
     padding: 16px;
     gap: 16px;
   }
 
-  .add-block-section,
-  .active-blocks-section {
+  .scheduled-block-manager .add-block-section,
+  .scheduled-block-manager .active-blocks-section {
     padding: 12px;
   }
 
-  .time-inputs {
+  .scheduled-block-manager .time-inputs {
     grid-template-columns: 1fr;
   }
 
-  .days-selector {
+  .scheduled-block-manager .days-selector {
     grid-template-columns: repeat(4, 1fr);
   }
 
-  .block-item {
+  .scheduled-block-manager .block-item {
     flex-direction: column;
   }
 
-  .block-actions {
+  .scheduled-block-manager .block-actions {
     width: 100%;
   }
 
-  .btn-toggle,
-  .btn-delete {
+  .scheduled-block-manager .btn-toggle,
+  .scheduled-block-manager .btn-delete {
     flex: 1;
   }
 }

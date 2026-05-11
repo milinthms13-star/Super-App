@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { getEntityId } from './utils';
+import '../../styles/ScheduledBlockManager.css';
 
 const ScheduledBlockManager = ({ contact, onClose, onBlockAdded }) => {
   const { apiCall } = useApp();
@@ -167,7 +168,7 @@ const ScheduledBlockManager = ({ contact, onClose, onBlockAdded }) => {
       <div className="block-manager-header">
         <h3>Schedule Block for {contact.displayName || contact.contactUserId?.name}</h3>
         <button className="btn-close" onClick={onClose} type="button">
-          ✕
+          &times;
         </button>
       </div>
 
@@ -352,3 +353,4 @@ const ScheduledBlockManager = ({ contact, onClose, onBlockAdded }) => {
 };
 
 export default ScheduledBlockManager;
+
