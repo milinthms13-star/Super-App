@@ -40,6 +40,12 @@ const iconMap = {
 };
 
 const moduleFallbacks = {
+  freelancer: {
+    title: "NilaWorks",
+    description: "Digital freelancers, local services, instant hiring, and verified professionals.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   finance: {
     title: "Nila Finance Hub",
     description: "Loan guidance, EMI tools, institution compare, and finance support.",
@@ -105,6 +111,7 @@ const LaunchPage = ({
     TradePost: "classifieds",
     HomeSphere: "realestate",
     "Nila Finance Hub": "finance",
+    NilaWorks: "freelancer",
     Feastly: "fooddelivery",
     "Local Market": "localmarket",
     SwiftRide: "ridesharing",

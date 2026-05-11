@@ -123,6 +123,7 @@ const Support = () => {
               <option value="classifieds">TradePost</option>
               <option value="realestate">HomeSphere</option>
               <option value="finance">Nila Finance Hub</option>
+              <option value="freelancer">NilaWorks</option>
               <option value="fooddelivery">Feastly</option>
               <option value="localmarket">Local Market</option>
               <option value="ridesharing">SwiftRide</option>

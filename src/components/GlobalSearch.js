@@ -14,6 +14,7 @@ const GlobalSearch = () => {
     { id: "people", label: "People & Vendors", icon: "U", module: "messaging" },
     { id: "homes", label: "Homes & Properties", icon: "H", module: "realestate" },
     { id: "loans", label: "Loans & Finance", icon: "F", module: "finance" },
+    { id: "freelancers", label: "Freelancers & Local Services", icon: "W", module: "freelancer" },
     { id: "rides", label: "Rides", icon: "R", module: "ridesharing" },
     { id: "food", label: "Food & Restaurants", icon: "D", module: "fooddelivery" },
     { id: "jobs", label: "Jobs & Services", icon: "J", module: "classifieds" },
@@ -43,7 +44,7 @@ const GlobalSearch = () => {
     });
 
     if (query.length > 0) {
-      ["products", "people", "homes", "loans", "rides"].forEach((cat) => {
+      ["products", "people", "homes", "loans", "freelancers", "rides"].forEach((cat) => {
         const categoryData = searchCategories.find((entry) => entry.id === cat);
         if (categoryData) {
           mockResults.push({

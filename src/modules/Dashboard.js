@@ -117,6 +117,14 @@ const Icon = ({ type, className = "" }) => {
           <path d="M16.5 6.5c0-1.4-1.8-2.5-4-2.5s-4 1.1-4 2.5 1.8 2.5 4 2.5 4 1.1 4 2.5-1.8 2.5-4 2.5-4-1.1-4-2.5" />
         </svg>
       );
+    case "freelancer":
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="16" height="14" rx="2" />
+          <path d="M9 5V3h6v2" />
+          <path d="M4 10h16" />
+        </svg>
+      );
     case "fooddelivery":
       return (
         <svg {...common}>
@@ -259,6 +267,17 @@ const MODULE_CONFIG = [
     stats: "85K+ Finance Leads",
     gradient: "linear-gradient(135deg, #0F766E 0%, #115E59 45%, #1D4ED8 100%)",
     emoji: "💰",
+  },
+  {
+    id: "freelancer",
+    nameKey: "modules.freelancer",
+    fallbackName: "NilaWorks",
+    icon: "freelancer",
+    descriptionKey: "dashboard.moduleDescriptions.freelancer",
+    fallbackDescription: "Digital freelancers, local service booking, instant hiring, and verified professional ecosystem",
+    stats: "120K+ Service Requests",
+    gradient: "linear-gradient(135deg, #0A2342 0%, #164E63 55%, #1D4ED8 100%)",
+    emoji: "W",
   },
   {
     id: "fooddelivery",
@@ -581,11 +600,18 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         return true;
       }
 
-      return module.id === "finance" || normalizedEnabledModuleIds.includes(module.id);
+      return (
+        module.id === "finance" ||
+        module.id === "freelancer" ||
+        normalizedEnabledModuleIds.includes(module.id)
+      );
     })
     .filter(
       (module) =>
-        !isSeller || module.id === "finance" || subscribedCategoryIds.includes(module.id)
+        !isSeller ||
+        module.id === "finance" ||
+        module.id === "freelancer" ||
+        subscribedCategoryIds.includes(module.id)
     );
   const visibleCards = [
     ...filteredModules.map((module) => ({ ...module, cardType: "module" })),

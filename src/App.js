@@ -39,6 +39,9 @@ const Messaging = React.lazy(() => import("./modules/messaging/Messaging"));
 const Classifieds = React.lazy(() => import("./modules/classifieds/Classifieds"));
 const RealEstate = React.lazy(() => import("./modules/realestate/RealEstate"));
 const FinanceHub = React.lazy(() => import("./modules/finance/FinanceHub"));
+const FreelancerMarketplace = React.lazy(() =>
+  import("./modules/freelancer/FreelancerMarketplace")
+);
 const FoodDelivery = React.lazy(() => import("./modules/fooddelivery/FoodDelivery"));
 const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket"));
 const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
@@ -108,6 +111,7 @@ const PREVIEW_ENABLED_MODULES = [
   "classifieds",
   "realestate",
   "finance",
+  "freelancer",
   "fooddelivery",
   "localmarket",
   "ridesharing",
@@ -131,6 +135,7 @@ const PREVIEW_BUSINESS_CATEGORIES = [
   { id: "ecommerce", name: "GlobeMart", fee: 799, requiresFoodLicense: false },
   { id: "messaging", name: "LinkUp", fee: 999, requiresFoodLicense: false },
   { id: "finance", name: "Nila Finance Hub", fee: 1599, requiresFoodLicense: false },
+  { id: "freelancer", name: "NilaWorks", fee: 1399, requiresFoodLicense: false },
   { id: "fooddelivery", name: "Feastly", fee: 1999, requiresFoodLicense: true },
   { id: "ridesharing", name: "SwiftRide", fee: 1499, requiresFoodLicense: false },
   { id: "matrimonial", name: "SoulMatch", fee: 899, requiresFoodLicense: false },
@@ -1111,6 +1116,7 @@ function AppShell() {
               <Route path="classifieds" element={<Classifieds />} />
               <Route path="realestate" element={<RealEstate />} />
               <Route path="finance" element={<FinanceHub />} />
+              <Route path="freelancer" element={<FreelancerMarketplace />} />
               <Route path="fooddelivery" element={<FoodDelivery />} />
               <Route path="localmarket" element={<LocalMarket />} />
               <Route path="ridesharing" element={<RideSharing />} />

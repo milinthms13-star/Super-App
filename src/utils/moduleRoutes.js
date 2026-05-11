@@ -9,6 +9,7 @@ export const MODULE_PATHS = {
   classifieds: "/classifieds",
   realestate: "/realestate",
   finance: "/finance",
+  freelancer: "/freelancer",
   fooddelivery: "/fooddelivery",
   localmarket: "/localmarket",
   ridesharing: "/ridesharing",
@@ -31,6 +32,11 @@ const MODULE_ID_ALIASES = {
   map: "maps",
   loans: "finance",
   financehub: "finance",
+  freelancers: "freelancer",
+  skillhub: "freelancer",
+  worklink: "freelancer",
+  nilaworks: "freelancer",
+  proconnect: "freelancer",
 };
 
 export const normalizeModuleId = (moduleId = "") => {
