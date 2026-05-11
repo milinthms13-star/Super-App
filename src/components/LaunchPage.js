@@ -70,6 +70,12 @@ const moduleFallbacks = {
     icon: "FaStore",
     isComingSoon: false,
   },
+  hyperlocal: {
+    title: "Nila Hyperlocal Delivery",
+    description: "Grocery, pharmacy, food, and local pickup/drop with fast delivery workflows.",
+    icon: "FaUtensils",
+    isComingSoon: false,
+  },
   mydiary: {
     title: "MyDiary",
     description: "Personal diary, journaling, and memory storage.",
@@ -127,6 +133,7 @@ const LaunchPage = ({
     "Nila Utility Hub": "billpay",
     "Nila Skill Hub": "skilllearning",
     Feastly: "fooddelivery",
+    "Nila Hyperlocal Delivery": "hyperlocal",
     "Local Market": "localmarket",
     SwiftRide: "ridesharing",
     SoulMatch: "matrimonial",

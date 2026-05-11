@@ -149,6 +149,14 @@ const Icon = ({ type, className = "" }) => {
           <path d="M17 4c1.7 2 1.7 6 0 8" />
         </svg>
       );
+    case "hyperlocal":
+      return (
+        <svg {...common}>
+          <rect x="4" y="6" width="16" height="13" rx="2" />
+          <path d="M8 6V4h8v2" />
+          <path d="M9 11h6M9 15h4" />
+        </svg>
+      );
     case "ridesharing":
       return (
         <svg {...common}>
@@ -327,6 +335,17 @@ const MODULE_CONFIG = [
     stats: "156K Deliveries",
     gradient: "linear-gradient(135deg, #FF5252 0%, #FF6B5B 100%)",
     emoji: "🍽️",
+  },
+  {
+    id: "hyperlocal",
+    nameKey: "modules.hyperlocal",
+    fallbackName: "Nila Hyperlocal Delivery",
+    icon: "hyperlocal",
+    descriptionKey: "dashboard.moduleDescriptions.hyperlocal",
+    fallbackDescription: "Hyperlocal delivery for grocery, pharmacy, food, and parcel pickup/drop with live tracking.",
+    stats: "95K+ Local Deliveries",
+    gradient: "linear-gradient(135deg, #0F766E 0%, #0EA5A7 48%, #1D4ED8 100%)",
+    emoji: "HD",
   },
   {
     id: "localmarket",
@@ -643,6 +662,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "freelancer" ||
         module.id === "billpay" ||
         module.id === "skilllearning" ||
+        module.id === "hyperlocal" ||
         normalizedEnabledModuleIds.includes(module.id)
       );
     })
@@ -653,6 +673,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "freelancer" ||
         module.id === "billpay" ||
         module.id === "skilllearning" ||
+        module.id === "hyperlocal" ||
         subscribedCategoryIds.includes(module.id)
     );
   const visibleCards = [

@@ -7,7 +7,7 @@ import GlobalSearch from "./GlobalSearch";
 import "../styles/NavigationEnhanced.css";
 import "../styles/PlatformPolish.css";
 
-const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks", "maps", "support", "finance", "freelancer", "billpay", "skilllearning"]);
+const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks", "maps", "support", "finance", "freelancer", "billpay", "skilllearning", "hyperlocal"]);
 const USER_IMAGE_KEYS = ["photoURL", "avatar", "photo", "profileImage", "picture"];
 const MODULE_ID_ALIASES = {
   quicklink: "quicklinks",
@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
+    modules: ["fooddelivery", "hyperlocal", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
   },
   utilities: {
     label: "Utilities",
@@ -99,6 +99,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "billpay", label: t("modules.billpay", "Nila Utility Hub"), icon: "B", sellerVisible: true },
     { id: "skilllearning", label: t("modules.skilllearning", "Nila Skill Hub"), icon: "K", sellerVisible: true },
     { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly"), icon: "🍽️" },
+    { id: "hyperlocal", label: t("modules.hyperlocal", "Nila Hyperlocal Delivery"), icon: "HD", sellerVisible: true },
     { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
     { id: "maps", label: t("modules.maps", "Maps"), icon: "🗺️", sellerVisible: true },

@@ -1,0 +1,202 @@
+.hyperlocal-page {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.hyperlocal-hero,
+.hyperlocal-panel,
+.hyperlocal-card {
+  background: linear-gradient(145deg, #f8fcff, #edf7ff);
+  border: 1px solid #c8def0;
+  border-radius: 16px;
+}
+
+.hyperlocal-hero {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.hyperlocal-kicker {
+  margin: 0;
+  color: #0b5e8e;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.hyperlocal-hero h1 {
+  margin: 0.15rem 0 0.35rem;
+  color: #0d2742;
+  font-size: clamp(1.35rem, 2.6vw, 2rem);
+}
+
+.hyperlocal-subtitle {
+  margin: 0;
+  color: #355169;
+}
+
+.hyperlocal-hero-tools {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.hyperlocal-hero-tools input,
+.hyperlocal-form input,
+.hyperlocal-form select,
+.hyperlocal-form textarea {
+  width: 100%;
+  border: 1px solid #bad4e8;
+  border-radius: 12px;
+  background: #fff;
+  padding: 0.7rem 0.8rem;
+  color: #163047;
+}
+
+.hyperlocal-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hyperlocal-chip-row button,
+.hyperlocal-chip-row span {
+  border-radius: 999px;
+  border: 1px solid #b5d5e8;
+  background: #fff;
+  color: #1c3d57;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.86rem;
+}
+
+.hyperlocal-chip-row button.active {
+  background: linear-gradient(135deg, #1677b0, #20b4b8);
+  border-color: transparent;
+  color: #fff;
+}
+
+.hyperlocal-section {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.hyperlocal-section-header h2,
+.hyperlocal-panel h2,
+.hyperlocal-panel h3 {
+  margin: 0;
+  color: #0f2d47;
+}
+
+.hyperlocal-section-header p {
+  margin: 0.2rem 0 0;
+  color: #49647c;
+}
+
+.hyperlocal-card-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.hyperlocal-card {
+  padding: 0.9rem;
+}
+
+.hyperlocal-card h3 {
+  margin: 0 0 0.2rem;
+  color: #10324d;
+}
+
+.hyperlocal-card p {
+  margin: 0.25rem 0;
+  color: #47637b;
+  font-size: 0.92rem;
+}
+
+.hyperlocal-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.hyperlocal-inline-actions button,
+.hyperlocal-form button,
+.hyperlocal-list button {
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1570a8, #1cb5b8);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.55rem 0.8rem;
+}
+
+.hyperlocal-dual-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.hyperlocal-panel {
+  padding: 1rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.hyperlocal-form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.hyperlocal-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #20425e;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.hyperlocal-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hyperlocal-checkbox input {
+  width: auto;
+}
+
+.hyperlocal-status {
+  margin: 0;
+  border-radius: 12px;
+  background: #e6f7ec;
+  border: 1px solid #b8e4c6;
+  color: #1d6b3d;
+  padding: 0.65rem 0.75rem;
+  font-weight: 600;
+}
+
+.hyperlocal-list {
+  margin: 0;
+  padding-left: 1.05rem;
+  color: #304d65;
+}
+
+.hyperlocal-list li {
+  margin: 0.3rem 0;
+}
+
+@media (max-width: 640px) {
+  .hyperlocal-page {
+    padding: 0.75rem;
+  }
+
+  .hyperlocal-panel,
+  .hyperlocal-hero,
+  .hyperlocal-card {
+    border-radius: 14px;
+  }
+}
