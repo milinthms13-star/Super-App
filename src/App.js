@@ -56,6 +56,7 @@ const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket")
 const BusinessBuilder = React.lazy(() => import("./modules/businessbuilder/BusinessBuilder"));
 const NilaAIHub = React.lazy(() => import("./modules/nilaaihub/NilaAIHub"));
 const GulfServices = React.lazy(() => import("./modules/gulfservices/GulfServices"));
+const Healthcare = React.lazy(() => import("./modules/healthcare/Healthcare"));
 const Education = React.lazy(() => import("./modules/education/Education"));
 const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
 const DriverMap = React.lazy(() => import("./modules/maps/DriverMap"));
@@ -1143,6 +1144,7 @@ function AppShell() {
               <Route path="business-builder" element={<BusinessBuilder />} />
               <Route path="nila-ai-hub" element={<NilaAIHub />} />
               <Route path="gulf-services" element={<GulfServices />} />
+              <Route path="healthcare" element={<Healthcare />} />
               <Route path="education" element={<Education />} />
               <Route path="freelancer" element={<FreelancerMarketplace />} />
               <Route path="billpay" element={<BillPayHub />} />

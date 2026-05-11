@@ -76,6 +76,12 @@ const moduleFallbacks = {
     icon: "FaBriefcase",
     isComingSoon: false,
   },
+  healthcare: {
+    title: "NilaCare",
+    description: "Complete healthcare ecosystem with doctor consultations, lab bookings, pharmacy delivery, health records, and emergency services.",
+    icon: "FaHeartbeat",
+    isComingSoon: false,
+  },
   education: {
     title: "Education Ecosystem",
     description: "Online tuition, skill courses, student community, study abroad guidance, and scholarship finder.",
@@ -174,6 +180,7 @@ const LaunchPage = ({
     "Local Services Marketplace": "localservices",
     "Local Market": "localmarket",
     "Gulf Support Hub": "gulfservices",
+    NilaCare: "healthcare",
     "Nila AI Hub": "nilaaihub",
     SwiftRide: "ridesharing",
     SoulMatch: "matrimonial",

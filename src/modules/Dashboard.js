@@ -340,6 +340,17 @@ const MODULE_CONFIG = [
     emoji: "🌍",
   },
   {
+    id: "healthcare",
+    nameKey: "modules.healthcare",
+    fallbackName: "NilaCare",
+    icon: "healthcare",
+    descriptionKey: "dashboard.moduleDescriptions.healthcare",
+    fallbackDescription: "Complete healthcare ecosystem with doctor consultations, lab bookings, pharmacy delivery, health records, and emergency services.",
+    stats: "24/7 healthcare support",
+    gradient: "linear-gradient(135deg, #DC2626 0%, #EF4444 45%, #F87171 100%)",
+    emoji: "🏥",
+  },
+  {
     id: "education",
     nameKey: "modules.education",
     fallbackName: "Education Ecosystem",

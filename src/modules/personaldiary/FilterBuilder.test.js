@@ -4,20 +4,11 @@ import DiaryFilterBuilder from './FilterBuilder';
 
 global.fetch = jest.fn();
 
-const localStorageMock = {
-  getItem: jest.fn(() => 'mock-token'),
-  setItem: jest.fn(),
-  clear: jest.fn(),
-};
-
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-  writable: true,
-});
-
 describe('DiaryFilterBuilder', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.clear();
+    localStorage.setItem('token', 'mock-token');
   });
 
   const queueInitialFetches = ({

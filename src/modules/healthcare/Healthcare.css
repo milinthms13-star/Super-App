@@ -1,0 +1,297 @@
+.healthcare-shell {
+  --healthcare-ink: #0f172a;
+  --healthcare-muted: #64748b;
+  --healthcare-border: #e2e8f0;
+  --healthcare-surface: #ffffff;
+  --healthcare-surface-alt: #f8fafc;
+  --healthcare-primary: #dc2626;
+  --healthcare-primary-dark: #b91c1c;
+  --healthcare-accent: #059669;
+  --healthcare-danger: #dc2626;
+  --healthcare-warning: #d97706;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  color: var(--healthcare-ink);
+}
+
+.healthcare-hero,
+.healthcare-section {
+  background: var(--healthcare-surface);
+  border: 1px solid var(--healthcare-border);
+  border-radius: 24px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+}
+
+.healthcare-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: 1.5rem;
+  padding: 1.75rem;
+  background:
+    radial-gradient(circle at top left, rgba(220, 38, 38, 0.12), transparent 35%),
+    linear-gradient(135deg, #fef7f7 0%, #fdf9f9 100%);
+}
+
+.healthcare-hero-copy h1 {
+  margin: 0;
+  line-height: 1.15;
+  font-size: clamp(2rem, 3vw, 3.3rem);
+  max-width: 14ch;
+}
+
+.healthcare-hero-copy p,
+.healthcare-section-heading p {
+  color: var(--healthcare-muted);
+}
+
+.healthcare-hero-copy p {
+  max-width: 62ch;
+  margin: 1rem 0 0;
+}
+
+.healthcare-primary-button,
+.healthcare-secondary-button,
+.healthcare-emergency-button {
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.healthcare-primary-button {
+  border: 0;
+  background: var(--healthcare-primary);
+  color: #fff;
+  padding: 0.9rem 1.25rem;
+}
+
+.healthcare-primary-button:hover,
+.healthcare-secondary-button:hover,
+.healthcare-emergency-button:hover {
+  transform: translateY(-1px);
+}
+
+.healthcare-secondary-button {
+  border: 1px solid var(--healthcare-border);
+  background: #fff;
+  color: var(--healthcare-ink);
+  padding: 0.85rem 1.15rem;
+}
+
+.healthcare-emergency-button {
+  border: 0;
+  background: var(--healthcare-danger);
+  color: #fff;
+  padding: 1rem 1.5rem;
+  font-size: 1.1rem;
+}
+
+.healthcare-hero-actions,
+.healthcare-hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.healthcare-hero-actions {
+  margin-top: 1.25rem;
+}
+
+.healthcare-hero-tags span {
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--healthcare-primary-dark);
+  font-size: 0.88rem;
+}
+
+.healthcare-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.healthcare-nav-item {
+  text-align: center;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--healthcare-border);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.healthcare-nav-item.active {
+  border-color: rgba(220, 38, 38, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.12);
+}
+
+.healthcare-nav-icon {
+  display: block;
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.healthcare-nav-item strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.healthcare-nav-item span {
+  color: var(--healthcare-muted);
+  font-size: 0.9rem;
+}
+
+.healthcare-section {
+  margin-top: 1.25rem;
+  padding: 1.3rem;
+}
+
+.healthcare-section-heading {
+  margin-bottom: 1rem;
+}
+
+.healthcare-section-heading h2 {
+  margin: 0;
+}
+
+.healthcare-consultation-grid,
+.healthcare-lab-grid,
+.healthcare-records-grid,
+.healthcare-pharmacy-grid,
+.healthcare-emergency-grid,
+.healthcare-elderly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.healthcare-filter-card,
+.healthcare-doctor-card,
+.healthcare-test-card,
+.healthcare-package-card,
+.healthcare-record-card,
+.healthcare-upload-card,
+.healthcare-medicine-card,
+.healthcare-emergency-card,
+.healthcare-care-card {
+  border: 1px solid var(--healthcare-border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  background: var(--healthcare-surface);
+}
+
+.healthcare-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.healthcare-field input,
+.healthcare-field select {
+  border: 1px solid var(--healthcare-border);
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  font: inherit;
+  color: var(--healthcare-ink);
+  background: #fff;
+}
+
+.healthcare-search-input {
+  width: 100%;
+  border: 1px solid var(--healthcare-border);
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  margin-bottom: 1rem;
+  font: inherit;
+  color: var(--healthcare-ink);
+  background: #fff;
+}
+
+.healthcare-doctor-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.healthcare-discount {
+  color: var(--healthcare-accent);
+  font-weight: 700;
+}
+
+.healthcare-lab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.healthcare-lab-section h3 {
+  margin: 0;
+  color: var(--healthcare-primary);
+}
+
+.healthcare-medicines-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.healthcare-disclaimer {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: rgba(217, 119, 6, 0.1);
+  border: 1px solid rgba(217, 119, 6, 0.2);
+  border-radius: 12px;
+  color: var(--healthcare-warning);
+  font-size: 0.9rem;
+}
+
+.healthcare-upload-card input {
+  margin: 1rem 0;
+  padding: 0.5rem;
+  border: 1px solid var(--healthcare-border);
+  border-radius: 8px;
+}
+
+@media (max-width: 1200px) {
+  .healthcare-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .healthcare-consultation-grid,
+  .healthcare-lab-grid,
+  .healthcare-records-grid,
+  .healthcare-pharmacy-grid,
+  .healthcare-emergency-grid,
+  .healthcare-elderly-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .healthcare-shell {
+    padding-inline: 0.75rem;
+  }
+
+  .healthcare-hero,
+  .healthcare-section {
+    padding: 1rem;
+  }
+
+  .healthcare-hero-copy h1 {
+    max-width: none;
+  }
+
+  .healthcare-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .healthcare-doctor-actions {
+    flex-direction: column;
+  }
+}

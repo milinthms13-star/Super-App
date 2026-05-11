@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
+    modules: ["fooddelivery", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
   },
   utilities: {
     label: "Utilities",
@@ -104,6 +104,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "localservices", label: t("modules.localservices", "Local Services Marketplace"), icon: "LS", sellerVisible: true },
     { id: "nilaaihub", label: t("modules.nilaaihub", "Nila AI Hub"), icon: "🤖" },
     { id: "gulfservices", label: t("modules.gulfservices", "Gulf Services"), icon: "🌍" },
+    { id: "healthcare", label: t("modules.healthcare", "NilaCare"), icon: "🏥" },
     { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
     { id: "businessbuilder", label: t("modules.businessbuilder", "AI Business Builder"), icon: "🚀", sellerVisible: true },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
