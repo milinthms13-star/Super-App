@@ -6,6 +6,7 @@ import EmojiPicker from './EmojiPicker';
 import ReadReceipts from './ReadReceipts';
 import MessagePagination from './MessagePagination';
 import AISmartReplies from './AISmartReplies';
+import LocationSharing from '../../components/LocationSharing';
 import { getAvatarLabel, getEntityId, isSameEntity, checkFamilyAutoAccess, canSeeReadReceipts } from './utils';
 
 const ChatWindow = ({
@@ -72,6 +73,7 @@ const ChatWindow = ({
   });
   const [isFamilyMember, setIsFamilyMember] = useState(false);
   const [showReadReceipts, setShowReadReceipts] = useState(false);
+  const [showLocationSharing, setShowLocationSharing] = useState(false);
   const messagesEndRef = useRef(null);
   const messageContainerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -1139,6 +1141,14 @@ const ChatWindow = ({
                 {showBackgroundPanel ? 'Hide Background Panel' : 'Background Settings'}
               </button>
               <button
+                className="chat-header-actions-item"
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={(event) => runHeaderMenuAction(event, () => setShowLocationSharing(true))}
+                type="button"
+              >
+                📍 Share Location
+              </button>
+              <button
                 className="chat-header-actions-item danger"
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={(event) => runHeaderMenuAction(event, onDeleteAllMessages)}
@@ -1694,6 +1704,16 @@ const ChatWindow = ({
           </div>
         )}
       </div>
+
+      {showLocationSharing && (
+        <div className="location-sharing-overlay">
+          <LocationSharing
+            recipientId={chat.participants.find(p => p._id !== currentUser?._id)?._id}
+            recipientName={chat.participants.find(p => p._id !== currentUser?._id)?.name || 'Recipient'}
+            onClose={() => setShowLocationSharing(false)}
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -1717,6 +1737,19 @@ const familyBadgeStyles = `
     border-radius: 10px;
     font-size: 10px;
     font-weight: 600;
+  }
+
+  .location-sharing-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
   }
 `;
 

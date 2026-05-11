@@ -11,13 +11,15 @@ const AIReply = require('../models/AIReply');
 const ChatNotification = require('../models/ChatNotification');
 const MessagingSettings = require('../models/MessagingSettings');
 const User = require('../models/User');
+const LocationSession = require('../models/LocationSession');
+const LocationUpdate = require('../models/LocationUpdate');
 const FamilyAccessService = require('../services/FamilyAccessService');
 const { ensureMessagingUser } = require('../utils/ensureMessagingUser');
 const { generateKeyPair, encryptMessage, decryptMessage, generateKeyFingerprint } = require('../utils/encryption');
 const { generateS3Key, uploadToS3, generateSignedUrl, deleteFromS3 } = require('../utils/s3Storage');
 const { generateAISuggestions } = require('../utils/aiChat');
 const { emitToUser } = require('../config/websocket');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authenticateToken } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -3291,6 +3293,16 @@ function extractKeywords(messages) {
   return Array.from(keywords).slice(0, 10);
 }
 
+// Check if sender has auto location access to recipient
+async function checkFamilyAutoLocationAccess(senderId, recipientId) {
+  try {
+    return await FamilyAccessService.hasAutoLocationAccess(senderId, recipientId);
+  } catch (error) {
+    logger.error(`Family auto location access check error: ${error.message}`);
+    return false;
+  }
+}
+
 // ============ FAMILY MESSAGING ROUTES ============
 
 // Get all family member chats
@@ -3447,6 +3459,225 @@ router.post('/send-with-family-access', authenticate, attachMessagingUser, async
     });
   } catch (error) {
     logger.error(`Send with family access error: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============ BACKGROUND LOCATION SHARING API ============
+
+// Start location sharing session
+router.post('/location/start-session', authenticateToken, async (req, res) => {
+  try {
+    const { recipientId, duration = 3600000, periodic = false } = req.body; // duration in ms, default 1 hour
+    const senderId = req.user.id;
+
+    // Check if recipient allows auto location access
+    const hasAutoAccess = await checkFamilyAutoLocationAccess(senderId, recipientId);
+    
+    if (!hasAutoAccess) {
+      return res.status(403).json({ 
+        message: 'Location sharing requires family auto-access permission' 
+      });
+    }
+
+    // Create location sharing session
+    const session = new LocationSession({
+      senderId,
+      recipientId,
+      startTime: new Date(),
+      endTime: new Date(Date.now() + duration),
+      periodic,
+      active: true
+    });
+
+    await session.save();
+
+    // Notify recipient via socket if online
+    const io = req.app.get('io');
+    if (io) {
+      io.to(recipientId.toString()).emit('location-share-started', {
+        sessionId: session._id,
+        senderId,
+        duration,
+        periodic
+      });
+    }
+
+    res.json({
+      success: true,
+      sessionId: session._id,
+      endTime: session.endTime,
+      message: 'Location sharing session started'
+    });
+
+  } catch (error) {
+    logger.error(`Start location session error: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update location (called by service worker)
+router.post('/location/update', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId, latitude, longitude, timestamp, accuracy } = req.body;
+    const userId = req.user.id;
+
+    // Verify session exists and user is sender
+    const session = await LocationSession.findOne({
+      _id: sessionId,
+      senderId: userId,
+      active: true
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: 'Active location session not found' });
+    }
+
+    // Check if session expired
+    if (new Date() > session.endTime) {
+      session.active = false;
+      await session.save();
+      return res.status(410).json({ message: 'Location session expired' });
+    }
+
+    // Save location update
+    const locationUpdate = new LocationUpdate({
+      sessionId,
+      latitude,
+      longitude,
+      timestamp: new Date(timestamp),
+      accuracy
+    });
+
+    await locationUpdate.save();
+
+    // Emit to recipient via socket
+    const io = req.app.get('io');
+    if (io) {
+      io.to(session.recipientId.toString()).emit('location-update', {
+        sessionId,
+        latitude,
+        longitude,
+        timestamp,
+        accuracy,
+        senderId: userId
+      });
+    }
+
+    res.json({ success: true });
+
+  } catch (error) {
+    logger.error(`Location update error: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// End location sharing session
+router.post('/location/end-session', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const userId = req.user.id;
+
+    const session = await LocationSession.findOneAndUpdate(
+      { _id: sessionId, senderId: userId },
+      { active: false, endTime: new Date() },
+      { new: true }
+    );
+
+    if (!session) {
+      return res.status(404).json({ message: 'Location session not found' });
+    }
+
+    // Notify recipient
+    const io = req.app.get('io');
+    if (io) {
+      io.to(session.recipientId.toString()).emit('location-share-ended', {
+        sessionId,
+        senderId: userId
+      });
+    }
+
+    res.json({ success: true, message: 'Location sharing session ended' });
+
+  } catch (error) {
+    logger.error(`End location session error: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get active location sessions for user
+router.get('/location/sessions', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const sessions = await LocationSession.find({
+      $or: [{ senderId: userId }, { recipientId: userId }],
+      active: true,
+      endTime: { $gt: new Date() }
+    }).populate('senderId', 'name email')
+      .populate('recipientId', 'name email')
+      .sort({ startTime: -1 });
+
+    res.json({
+      success: true,
+      sessions: sessions.map(session => ({
+        id: session._id,
+        sender: {
+          id: session.senderId._id,
+          name: session.senderId.name,
+          email: session.senderId.email
+        },
+        recipient: {
+          id: session.recipientId._id,
+          name: session.recipientId.name,
+          email: session.recipientId.email
+        },
+        startTime: session.startTime,
+        endTime: session.endTime,
+        periodic: session.periodic,
+        isSender: session.senderId._id.toString() === userId
+      }))
+    });
+
+  } catch (error) {
+    logger.error(`Get location sessions error: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get location history for a session
+router.get('/location/history/:sessionId', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.user.id;
+
+    // Verify user has access to this session
+    const session = await LocationSession.findOne({
+      _id: sessionId,
+      $or: [{ senderId: userId }, { recipientId: userId }]
+    });
+
+    if (!session) {
+      return res.status(404).json({ message: 'Location session not found' });
+    }
+
+    const updates = await LocationUpdate.find({ sessionId })
+      .sort({ timestamp: -1 })
+      .limit(100); // Last 100 updates
+
+    res.json({
+      success: true,
+      sessionId,
+      updates: updates.map(update => ({
+        latitude: update.latitude,
+        longitude: update.longitude,
+        timestamp: update.timestamp,
+        accuracy: update.accuracy
+      }))
+    });
+
+  } catch (error) {
+    logger.error(`Get location history error: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
