@@ -21,6 +21,7 @@ import ChatroomCreation from './ChatroomCreation';
 import ChatroomBrowser from './ChatroomBrowser';
 import ChatroomList from './ChatroomList';
 import ChatroomPanel from './ChatroomPanel';
+import FamilyQuickChat from './FamilyQuickChat';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
 import {
@@ -2551,15 +2552,21 @@ const Messaging = () => {
           </div>
 
           {activeTab === 'chats' && (
-            <ChatList
-              chats={chats}
-              selectedChat={selectedChat}
-              onSelectChat={handleSelectChat}
-              onNewChat={() => setShowNewChat(true)}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              clearedChats={clearedChats}
-            />
+            <>
+              <FamilyQuickChat
+                currentUser={currentUser}
+                onSelectChat={handleSelectChat}
+              />
+              <ChatList
+                chats={chats}
+                selectedChat={selectedChat}
+                onSelectChat={handleSelectChat}
+                onNewChat={() => setShowNewChat(true)}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                clearedChats={clearedChats}
+              />
+            </>
           )}
 
           {activeTab === 'chatrooms' && (

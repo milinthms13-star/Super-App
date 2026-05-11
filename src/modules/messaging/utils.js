@@ -375,3 +375,116 @@ export const getFamilyPermissionSnapshot = (permission = {}, referenceDate = new
     active: isFamilyPermissionActive(permission, referenceDate),
   };
 };
+
+// ===== FAMILY AUTO-ACCESS FUNCTIONS =====
+// Import FamilyAccessService dynamically to avoid circular dependencies
+let FamilyAccessService = null;
+const getFamilyAccessService = async () => {
+  if (!FamilyAccessService) {
+    const module = await import('../../services/familyAccessService');
+    FamilyAccessService = module.default;
+  }
+  return FamilyAccessService;
+};
+
+/**
+ * Check if two users are family members with auto-access
+ */
+export const checkFamilyAutoAccess = async (userId, targetUserId) => {
+  try {
+    const service = await getFamilyAccessService();
+    const families = await service.getUserFamilies();
+
+    for (const family of families) {
+      const hasBothUsers = family.members.some(m => m.userId === userId) &&
+                          family.members.some(m => m.userId === targetUserId);
+
+      if (hasBothUsers && family.accessPermissions?.activity?.enabled) {
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('Error checking family access:', error);
+    return false;
+  }
+};
+
+/**
+ * Get all family members for quick messaging
+ */
+export const getFamilyMembersForChat = async () => {
+  try {
+    const service = await getFamilyAccessService();
+    const families = await service.getUserFamilies();
+    const members = [];
+
+    for (const family of families) {
+      family.members.forEach(member => {
+        if (member.autoAccessEnabled && member.status === 'active') {
+          members.push({
+            userId: member.userId,
+            name: member.name || member.email,
+            email: member.email,
+            relationship: member.relationship,
+            familyGroup: family.familyGroupId,
+            isFamilyMember: true,
+          });
+        }
+      });
+    }
+
+    return members;
+  } catch (error) {
+    console.error('Error getting family members:', error);
+    return [];
+  }
+};
+
+/**
+ * Check if user should see typing indicator
+ */
+export const canSeeTypingIndicator = async (userId, targetUserId) => {
+  return await checkFamilyAutoAccess(userId, targetUserId);
+};
+
+/**
+ * Check if user should see read receipts
+ */
+export const canSeeReadReceipts = async (userId, targetUserId) => {
+  return await checkFamilyAutoAccess(userId, targetUserId);
+};
+
+/**
+ * Check if user should see online status
+ */
+export const canSeeOnlineStatus = async (userId, targetUserId) => {
+  return await checkFamilyAutoAccess(userId, targetUserId);
+};
+
+/**
+ * Get family member info
+ */
+export const getFamilyMemberInfo = async (userId) => {
+  try {
+    const service = await getFamilyAccessService();
+    const families = await service.getUserFamilies();
+    const memberInfo = [];
+
+    for (const family of families) {
+      const member = family.members.find(m => m.userId === userId);
+      if (member) {
+        memberInfo.push({
+          familyName: family.familyName,
+          relationship: member.relationship,
+          isFamilyMember: true,
+          autoAccess: member.autoAccessEnabled,
+        });
+      }
+    }
+    return memberInfo;
+  } catch (error) {
+    console.error('Error getting family member info:', error);
+    return [];
+  }
+};

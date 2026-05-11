@@ -5,6 +5,7 @@ import {
   getChatClearTimestamp,
   isMessageHiddenByClear,
   isSameEntity,
+  checkFamilyAutoAccess,
 } from './utils';
 
 const ChatList = ({
@@ -18,6 +19,7 @@ const ChatList = ({
 }) => {
   const { currentUser } = useApp();
   const [filteredChats, setFilteredChats] = useState(chats);
+  const [familyMembers, setFamilyMembers] = useState({});
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -34,6 +36,34 @@ const ChatList = ({
 
     setFilteredChats(chats);
   }, [searchQuery, chats]);
+
+  // Load family info for chats
+  useEffect(() => {
+    const loadFamilyInfo = async () => {
+      const familyData = {};
+
+      for (const chat of chats) {
+        const recipientId = getOtherUser(chat)?._id;
+        if (recipientId) {
+          try {
+            const isFamilyMember = await checkFamilyAutoAccess(
+              currentUser._id,
+              recipientId
+            );
+            familyData[recipientId] = isFamilyMember;
+          } catch (error) {
+            console.error('Error checking family access:', error);
+          }
+        }
+      }
+
+      setFamilyMembers(familyData);
+    };
+
+    if (chats?.length > 0 && currentUser?._id) {
+      loadFamilyInfo();
+    }
+  }, [chats, currentUser?._id]);
 
   const getOtherUser = (chat) =>
     chat.participants?.find((participant) => !isSameEntity(participant, currentUser));
@@ -220,6 +250,9 @@ const ChatList = ({
                     <h4 className="chat-title">{getChatTitle(chat)}</h4>
                     {chat?.type === 'group' && <span className="chat-type-badge">Group</span>}
                     {chat?.isPinned && <span className="chat-type-badge pinned">Pinned</span>}
+                    {familyMembers[otherUser?._id] && (
+                      <span className="family-indicator" title="Family Member">👨‍👩‍👧</span>
+                    )}
                     {chat?.typing && <span className="chat-typing-inline">typing...</span>}
                   </div>
                   <p className="chat-preview">{getChatPreview(chat)}</p>
@@ -256,5 +289,25 @@ const ChatList = ({
     </div>
   );
 };
+
+// Family indicator styles
+const familyIndicatorStyles = `
+  .family-indicator {
+    font-size: 14px;
+    margin-left: 4px;
+    opacity: 0.8;
+  }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+  const styleId = 'family-indicator-styles';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = familyIndicatorStyles;
+    document.head.appendChild(style);
+  }
+}
 
 export default ChatList;

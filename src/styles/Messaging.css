@@ -3715,6 +3715,13 @@
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.07);
 }
 
+.contact-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.72rem;
+}
+
 .chat-item:hover,
 .contact-item:hover {
   background: var(--linkup-surface-strong);
@@ -3794,6 +3801,9 @@
 .contact-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .contacts-filters {
@@ -3823,6 +3833,8 @@
 
 .btn-action-sm {
   padding: 0.58rem 0.9rem;
+  white-space: nowrap;
+  line-height: 1.1;
 }
 
 .btn-action-sm:hover {
@@ -6225,6 +6237,19 @@
   background: rgba(59, 130, 246, 0.12);
   border-color: rgba(59, 130, 246, 0.24);
   color: #1d4ed8;
+}
+
+@media (max-width: 1180px) {
+  .contact-actions .btn-action-sm {
+    flex: 1 1 calc(50% - 0.5rem);
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .contact-actions .btn-action-sm {
+    flex: 1 1 100%;
+  }
 }
 
 .family-access-manager .block-manager-content {

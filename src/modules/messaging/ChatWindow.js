@@ -6,7 +6,7 @@ import EmojiPicker from './EmojiPicker';
 import ReadReceipts from './ReadReceipts';
 import MessagePagination from './MessagePagination';
 import AISmartReplies from './AISmartReplies';
-import { getAvatarLabel, getEntityId, isSameEntity } from './utils';
+import { getAvatarLabel, getEntityId, isSameEntity, checkFamilyAutoAccess, canSeeReadReceipts } from './utils';
 
 const ChatWindow = ({
   chat,
@@ -70,6 +70,8 @@ const ChatWindow = ({
     value: '',
     layout: 'one-side',
   });
+  const [isFamilyMember, setIsFamilyMember] = useState(false);
+  const [showReadReceipts, setShowReadReceipts] = useState(false);
   const messagesEndRef = useRef(null);
   const messageContainerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -281,6 +283,39 @@ const ChatWindow = ({
     window.addEventListener('mousedown', handleOutsideClick);
     return () => window.removeEventListener('mousedown', handleOutsideClick);
   }, [showHeaderActionsMenu]);
+
+  // Family auto-access check
+  useEffect(() => {
+    const checkFamilyAccess = async () => {
+      try {
+        const recipientId = getEntityId(getOtherParticipants()[0]);
+        if (!currentUser?._id || !recipientId) return;
+
+        // Check if family member
+        const isFamilyMember = await checkFamilyAutoAccess(
+          currentUser._id,
+          recipientId
+        );
+
+        if (isFamilyMember) {
+          console.log('✓ Family member detected - enabling auto-access features');
+
+          // You can set state or conditionally render family-specific UI
+          setIsFamilyMember(isFamilyMember);
+
+          // Check read receipt visibility
+          const canSee = await canSeeReadReceipts(currentUser._id, recipientId);
+          setShowReadReceipts(canSee);
+        }
+      } catch (error) {
+        console.error('Error checking family access:', error);
+      }
+    };
+
+    if (currentUser?._id && chat?._id) {
+      checkFamilyAccess();
+    }
+  }, [currentUser?._id, chat?._id]);
 
   const runHeaderMenuAction = (event, action) => {
     event.preventDefault();
@@ -992,6 +1027,12 @@ const ChatWindow = ({
           <span className="chat-header-avatar">{getChatAvatar()}</span>
           <div className="chat-header-info">
             <h3>{getChatTitle()}</h3>
+            {isFamilyMember && (
+              <div className="family-badge">
+                <span>👨‍👩‍👧 Family Member</span>
+                <span className="auto-access">Auto-Access Enabled</span>
+              </div>
+            )}
             <p className="chat-status">{getChatInfo()}</p>
             {(familyAutoLocationEnabled || familyAutoCameraEnabled) && (
               <p className="chat-status">
@@ -1656,5 +1697,38 @@ const ChatWindow = ({
     </div>
   );
 };
+
+// Family badge styles
+const familyBadgeStyles = `
+  .family-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+    font-size: 12px;
+    color: #667eea;
+    font-weight: 600;
+  }
+  
+  .family-badge .auto-access {
+    background: #667eea;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+  const styleId = 'family-badge-styles';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = familyBadgeStyles;
+    document.head.appendChild(style);
+  }
+}
 
 export default ChatWindow;

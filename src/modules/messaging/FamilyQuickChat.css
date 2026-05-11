@@ -1,0 +1,151 @@
+.family-quick-chat {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.family-quick-chat.loading,
+.family-quick-chat.error,
+.family-quick-chat.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  color: #666;
+}
+
+.family-quick-chat.error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.family-quick-chat.empty {
+  background: #f9f9f9;
+  color: #999;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #667eea;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.family-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(102, 126, 234, 0.3);
+}
+
+.family-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.badge {
+  background: #667eea;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.family-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.family-member-btn {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+}
+
+.family-member-btn:hover {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+  transform: translateX(2px);
+}
+
+.family-member-btn:active {
+  transform: translateX(2px);
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 10px;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.family-member-btn:hover .avatar {
+  background: white;
+  color: #667eea;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+.member-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-info .name {
+  margin: 0;
+  font-weight: 600;
+  font-size: 13px;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.member-info .relationship {
+  margin: 2px 0 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+  text-transform: capitalize;
+  color: inherit;
+}
+
+.auto-access-badge {
+  font-size: 14px;
+  margin-left: 8px;
+  opacity: 0.7;
+}
+
+.family-member-btn:hover .auto-access-badge {
+  opacity: 1;
+}

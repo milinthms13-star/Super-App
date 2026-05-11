@@ -11,6 +11,7 @@ const AIReply = require('../models/AIReply');
 const ChatNotification = require('../models/ChatNotification');
 const MessagingSettings = require('../models/MessagingSettings');
 const User = require('../models/User');
+const FamilyAccessService = require('../services/FamilyAccessService');
 const { ensureMessagingUser } = require('../utils/ensureMessagingUser');
 const { generateKeyPair, encryptMessage, decryptMessage, generateKeyFingerprint } = require('../utils/encryption');
 const { generateS3Key, uploadToS3, generateSignedUrl, deleteFromS3 } = require('../utils/s3Storage');
@@ -709,6 +710,18 @@ router.post('/messages', authenticate, attachMessagingUser, async (req, res, nex
     // Check if sender is blocked by any recipient in the chat
     for (const participant of chat.participants) {
       if (!objectIdEquals(participant, req.user._id)) {
+        // First check if this is a family member with auto-access
+        const isFamilyMember = await FamilyAccessService.hasAutoLocationAccess(
+          req.user._id,
+          participant
+        );
+
+        if (isFamilyMember) {
+          // Family members bypass blocking checks
+          logger.debug(`Family auto-access: Allowing message from ${req.user._id} to ${participant}`);
+          continue;
+        }
+
         // Check if this participant has blocked the sender
         const blockedByParticipant = await Contact.findOne({
           userId: participant,
@@ -3277,6 +3290,166 @@ function extractKeywords(messages) {
 
   return Array.from(keywords).slice(0, 10);
 }
+
+// ============ FAMILY MESSAGING ROUTES ============
+
+// Get all family member chats
+router.get('/chats/family', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+
+    // Get family members
+    const members = await FamilyAccessService.getFamilyMembersWithLocationAccess(userId);
+
+    // Get or create chats with each family member
+    const familyChats = [];
+    for (const member of members) {
+      let chat = await Chat.findOne({
+        type: 'direct',
+        participants: { $all: [userId, member.memberId] },
+      }).populate('participants', 'name email');
+
+      if (!chat) {
+        // Create new chat if doesn't exist
+        chat = new Chat({
+          type: 'direct',
+          participants: [userId, member.memberId],
+        });
+        await chat.save();
+      }
+
+      familyChats.push({
+        ...chat.toObject(),
+        isFamilyMember: true,
+        relationship: member.relationship,
+        autoAccess: true,
+        showReadReceipts: true,
+      });
+    }
+
+    res.json({
+      success: true,
+      chats: familyChats,
+      count: familyChats.length,
+    });
+  } catch (error) {
+    logger.error(`Family chats error for user ${req.user._id}: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Enhanced message sending with family auto-access
+router.post('/send-with-family-access', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { recipientId, content, chatId } = req.body;
+    const senderId = req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(recipientId)) {
+      return res.status(400).json({ message: 'Invalid recipient ID' });
+    }
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Message content is required' });
+    }
+
+    // Check if should deliver (includes family auto-access)
+    const isFamilyMember = await FamilyAccessService.hasAutoLocationAccess(
+      senderId,
+      recipientId
+    );
+
+    let chat;
+    if (chatId) {
+      chat = await Chat.findById(chatId);
+    } else {
+      // Find or create direct chat
+      chat = await Chat.findOne({
+        type: 'direct',
+        participants: { $all: [senderId, recipientId] },
+      });
+
+      if (!chat) {
+        chat = new Chat({
+          type: 'direct',
+          participants: [senderId, recipientId],
+        });
+        await chat.save();
+      }
+    }
+
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat not found' });
+    }
+
+    // Verify user is participant
+    if (!arrayHasObjectId(chat.participants, senderId)) {
+      return res.status(403).json({ message: 'Not authorized to send message in this chat' });
+    }
+
+    // Family members bypass blocking checks
+    if (!isFamilyMember) {
+      // Check if sender is blocked by recipient
+      const blockedByRecipient = await Contact.findOne({
+        userId: recipientId,
+        contactUserId: senderId,
+      });
+
+      if (blockedByRecipient) {
+        blockedByRecipient.cleanupExpiredBlocks();
+        
+        if (blockedByRecipient.isCurrentlyBlocked()) {
+          return res.status(403).json({
+            message: 'You are blocked by this user and cannot send messages',
+          });
+        }
+      }
+    }
+
+    // Create message
+    const message = new Message({
+      chatId: chat._id,
+      senderId,
+      content: content.trim(),
+      isFamilyMessage: isFamilyMember,
+      metadata: {
+        deliveryMethod: isFamilyMember ? 'family_auto_access' : 'normal_delivery',
+      },
+    });
+
+    await message.save();
+
+    // Populate sender info
+    await message.populate('senderId', 'name avatar email');
+
+    // Update chat's last message
+    await Chat.updateOne(
+      { _id: chat._id },
+      {
+        $set: {
+          lastMessage: message._id,
+          lastMessageAt: new Date(),
+        },
+      }
+    );
+
+    // Emit socket event to recipient
+    const io = require('../config/websocket').getIO();
+    io.to(recipientId).emit('message:received', {
+      ...message.toObject(),
+      showReadReceipt: isFamilyMember, // Family members always see read receipts
+      isFamilyMessage: isFamilyMember,
+    });
+
+    res.json({
+      success: true,
+      message,
+      deliveryMethod: isFamilyMember ? 'family_auto_access' : 'normal_delivery',
+    });
+  } catch (error) {
+    logger.error(`Send with family access error: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = router;
 module.exports.__testables = {
