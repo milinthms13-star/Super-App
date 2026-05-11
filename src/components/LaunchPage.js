@@ -82,6 +82,12 @@ const moduleFallbacks = {
     icon: "FaStar",
     isComingSoon: false,
   },
+  localservices: {
+    title: "Local Services Marketplace",
+    description: "Book caterers, decorators, photographers, and complete local event service bundles.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   mydiary: {
     title: "MyDiary",
     description: "Personal diary, journaling, and memory storage.",
@@ -141,6 +147,7 @@ const LaunchPage = ({
     Feastly: "fooddelivery",
     Devadarshan: "devadarshan",
     "Nila Hyperlocal Delivery": "hyperlocal",
+    "Local Services Marketplace": "localservices",
     "Local Market": "localmarket",
     SwiftRide: "ridesharing",
     SoulMatch: "matrimonial",

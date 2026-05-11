@@ -158,6 +158,14 @@ const Icon = ({ type, className = "" }) => {
           <path d="M10 14h4" />
         </svg>
       );
+    case "localservices":
+      return (
+        <svg {...common}>
+          <rect x="4" y="5" width="16" height="14" rx="2" />
+          <path d="M8 9h8M8 13h5" />
+          <circle cx="16.5" cy="16.5" r="1.5" />
+        </svg>
+      );
     case "hyperlocal":
       return (
         <svg {...common}>
@@ -355,6 +363,17 @@ const MODULE_CONFIG = [
     stats: "42K+ Temple Bookings",
     gradient: "linear-gradient(135deg, #0F4C81 0%, #1E3A8A 45%, #0EA5A7 100%)",
     emoji: "DV",
+  },
+  {
+    id: "localservices",
+    nameKey: "modules.localservices",
+    fallbackName: "Local Services Marketplace",
+    icon: "localservices",
+    descriptionKey: "dashboard.moduleDescriptions.localservices",
+    fallbackDescription: "Find and book local caterers, decorators, photographers, and full event service packages.",
+    stats: "68K+ Service Leads",
+    gradient: "linear-gradient(135deg, #0A2342 0%, #0F766E 48%, #1D4ED8 100%)",
+    emoji: "LS",
   },
   {
     id: "hyperlocal",
@@ -683,6 +702,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "billpay" ||
         module.id === "skilllearning" ||
         module.id === "devadarshan" ||
+        module.id === "localservices" ||
         module.id === "hyperlocal" ||
         normalizedEnabledModuleIds.includes(module.id)
       );
@@ -695,6 +715,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "billpay" ||
         module.id === "skilllearning" ||
         module.id === "devadarshan" ||
+        module.id === "localservices" ||
         module.id === "hyperlocal" ||
         subscribedCategoryIds.includes(module.id)
     );

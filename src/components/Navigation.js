@@ -7,7 +7,7 @@ import GlobalSearch from "./GlobalSearch";
 import "../styles/NavigationEnhanced.css";
 import "../styles/PlatformPolish.css";
 
-const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks", "maps", "support", "finance", "freelancer", "billpay", "skilllearning", "devadarshan", "hyperlocal"]);
+const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks", "maps", "support", "finance", "freelancer", "billpay", "skilllearning", "devadarshan", "hyperlocal", "localservices"]);
 const USER_IMAGE_KEYS = ["photoURL", "avatar", "photo", "profileImage", "picture"];
 const MODULE_ID_ALIASES = {
   quicklink: "quicklinks",
@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "devadarshan", "hyperlocal", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
+    modules: ["fooddelivery", "devadarshan", "hyperlocal", "localservices", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
   },
   utilities: {
     label: "Utilities",
@@ -101,6 +101,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly"), icon: "🍽️" },
     { id: "devadarshan", label: t("modules.devadarshan", "Devadarshan"), icon: "DV", sellerVisible: true },
     { id: "hyperlocal", label: t("modules.hyperlocal", "Nila Hyperlocal Delivery"), icon: "HD", sellerVisible: true },
+    { id: "localservices", label: t("modules.localservices", "Local Services Marketplace"), icon: "LS", sellerVisible: true },
     { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
     { id: "maps", label: t("modules.maps", "Maps"), icon: "🗺️", sellerVisible: true },

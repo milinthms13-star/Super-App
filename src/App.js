@@ -49,6 +49,9 @@ const DevadarshanHub = React.lazy(() => import("./modules/devadarshan/Devadarsha
 const HyperlocalDeliveryHub = React.lazy(() =>
   import("./modules/hyperlocal/HyperlocalDeliveryHub")
 );
+const LocalServicesMarketplace = React.lazy(() =>
+  import("./modules/localservices/LocalServicesMarketplace")
+);
 const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket"));
 const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
 const DriverMap = React.lazy(() => import("./modules/maps/DriverMap"));
@@ -123,6 +126,7 @@ const PREVIEW_ENABLED_MODULES = [
   "fooddelivery",
   "devadarshan",
   "hyperlocal",
+  "localservices",
   "localmarket",
   "ridesharing",
   "matrimonial",
@@ -151,6 +155,7 @@ const PREVIEW_BUSINESS_CATEGORIES = [
   { id: "fooddelivery", name: "Feastly", fee: 1999, requiresFoodLicense: true },
   { id: "devadarshan", name: "Devadarshan", fee: 1299, requiresFoodLicense: false },
   { id: "hyperlocal", name: "Nila Hyperlocal Delivery", fee: 1799, requiresFoodLicense: false },
+  { id: "localservices", name: "Nila Local Services Marketplace", fee: 1499, requiresFoodLicense: false },
   { id: "ridesharing", name: "SwiftRide", fee: 1499, requiresFoodLicense: false },
   { id: "matrimonial", name: "SoulMatch", fee: 899, requiresFoodLicense: false },
 ];
@@ -1136,6 +1141,7 @@ function AppShell() {
               <Route path="fooddelivery" element={<FoodDelivery />} />
               <Route path="devadarshan" element={<DevadarshanHub />} />
               <Route path="hyperlocal" element={<HyperlocalDeliveryHub />} />
+              <Route path="localservices" element={<LocalServicesMarketplace />} />
               <Route path="localmarket" element={<LocalMarket />} />
               <Route path="ridesharing" element={<RideSharing />} />
               <Route path="ridesharing/driver-map" element={<DriverMap />} />

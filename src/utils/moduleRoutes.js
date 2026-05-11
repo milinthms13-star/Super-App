@@ -15,6 +15,7 @@ export const MODULE_PATHS = {
   fooddelivery: "/fooddelivery",
   devadarshan: "/devadarshan",
   hyperlocal: "/hyperlocal",
+  localservices: "/localservices",
   localmarket: "/localmarket",
   ridesharing: "/ridesharing",
   maps: "/maps",
@@ -61,6 +62,12 @@ const MODULE_ID_ALIASES = {
   vazhipadu: "devadarshan",
   poojalink: "devadarshan",
   blessinghub: "devadarshan",
+  localservice: "localservices",
+  localservicesmarket: "localservices",
+  eventservice: "localservices",
+  caterers: "localservices",
+  decorators: "localservices",
+  photographers: "localservices",
 };
 
 export const normalizeModuleId = (moduleId = "") => {

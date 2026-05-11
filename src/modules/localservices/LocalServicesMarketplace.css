@@ -1,0 +1,187 @@
+.local-services-page {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.local-services-hero,
+.local-services-panel,
+.local-services-card,
+.local-services-provider-item {
+  border: 1px solid #c7d9ec;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f8fcff, #edf6fc);
+}
+
+.local-services-hero {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem;
+}
+
+.local-services-kicker {
+  margin: 0;
+  color: #0e4f8f;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.local-services-hero h1 {
+  margin: 0;
+  color: #123456;
+  font-size: clamp(1.28rem, 2.4vw, 2rem);
+}
+
+.local-services-subtitle {
+  margin: 0;
+  color: #476684;
+}
+
+.local-services-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.local-services-section h2,
+.local-services-panel h2,
+.local-services-panel h3 {
+  margin: 0;
+  color: #123456;
+}
+
+.local-services-categories {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.local-services-card {
+  padding: 0.9rem;
+}
+
+.local-services-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.local-services-panel {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.local-services-form {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.local-services-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #214562;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.local-services-form input,
+.local-services-form select,
+.local-services-form textarea {
+  width: 100%;
+  border: 1px solid #b5cfe5;
+  border-radius: 11px;
+  background: #fff;
+  color: #1a3550;
+  padding: 0.66rem 0.75rem;
+}
+
+.local-services-row {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+.local-services-provider-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.local-services-provider-item {
+  padding: 0.8rem;
+}
+
+.local-services-provider-item h3,
+.local-services-provider-item p {
+  margin: 0.25rem 0;
+}
+
+.local-services-provider-item p {
+  color: #486783;
+  font-size: 0.92rem;
+}
+
+.local-services-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.local-services-form button,
+.local-services-actions button,
+.local-services-panel > button {
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #136fa8, #1ab3b7);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.55rem 0.8rem;
+}
+
+.local-services-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.local-services-checkbox input {
+  width: auto;
+}
+
+.local-services-checkbox-grid {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.local-services-status {
+  margin: 0;
+  border: 1px solid #b8e4c6;
+  border-radius: 12px;
+  background: #e7f8ed;
+  color: #1f6f41;
+  padding: 0.65rem 0.75rem;
+  font-weight: 600;
+}
+
+.local-services-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #2f506b;
+}
+
+.local-services-list li {
+  margin: 0.3rem 0;
+}
+
+@media (max-width: 720px) {
+  .local-services-page {
+    padding: 0.75rem;
+  }
+
+  .local-services-row {
+    grid-template-columns: 1fr;
+  }
+}
