@@ -2554,8 +2554,8 @@ const Messaging = () => {
           {activeTab === 'chats' && (
             <>
               <FamilyQuickChat
-                currentUser={currentUser}
-                onSelectChat={handleSelectChat}
+                contacts={contacts}
+                onSelectFamilyMember={handleCreateDirectChat}
               />
               <ChatList
                 chats={chats}

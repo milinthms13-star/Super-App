@@ -1,56 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { getFamilyMembersForChat } from './utils';
+import React, { useMemo } from 'react';
 import './FamilyQuickChat.css';
 
 /**
  * FamilyQuickChat Component
- * Displays family members for quick messaging
- * Integrates with LinkUp messaging
+ * Displays family contacts (category-based) for quick messaging.
  */
-const FamilyQuickChat = ({ currentUser, onSelectChat }) => {
-  const [familyMembers, setFamilyMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const loadFamily = async () => {
-      try {
-        setLoading(true);
-        const members = await getFamilyMembersForChat();
-        setFamilyMembers(members);
-      } catch (err) {
-        console.error('Error loading family members:', err);
-        setError('Failed to load family members');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadFamily();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="family-quick-chat loading">
-        <div className="spinner"></div>
-        <p>Loading family...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="family-quick-chat error">
-        <p>{error}</p>
-      </div>
-    );
-  }
+const FamilyQuickChat = ({ contacts = [], onSelectFamilyMember }) => {
+  const familyMembers = useMemo(
+    () => (Array.isArray(contacts) ? contacts : []).filter(
+      (contact) => String(contact?.category || '').trim().toLowerCase() === 'family' && !contact?.isBlocked
+    ),
+    [contacts]
+  );
 
   if (familyMembers.length === 0) {
     return (
       <div className="family-quick-chat empty">
-        <p>👨‍👩‍👧 No family members to chat with</p>
-        <small>Create a family group first</small>
+        <p>No family contacts yet</p>
+        <small>Mark a contact as Family in the Contacts tab.</small>
       </div>
     );
   }
@@ -58,28 +25,36 @@ const FamilyQuickChat = ({ currentUser, onSelectChat }) => {
   return (
     <div className="family-quick-chat">
       <div className="family-header">
-        <h3>👨‍👩‍👧 Family (Auto-Access)</h3>
+        <h3>Family Contacts</h3>
         <span className="badge">{familyMembers.length}</span>
       </div>
 
       <div className="family-members-list">
-        {familyMembers.map((member) => (
-          <button
-            key={member.userId}
-            className="family-member-btn"
-            onClick={() => onSelectChat(member.userId)}
-            title={`${member.relationship} - ${member.email}`}
-          >
-            <div className="avatar">
-              {member.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="member-info">
-              <p className="name">{member.name}</p>
-              <p className="relationship">{member.relationship}</p>
-            </div>
-            <span className="auto-access-badge">✓</span>
-          </button>
-        ))}
+        {familyMembers.map((member) => {
+          const user = member?.contactUserId || member;
+          const userId = user?._id || member?._id;
+          const displayName = member?.displayName || user?.name || user?.username || user?.email || 'Family member';
+          const relationship = member?.relationship || member?.category || 'family';
+
+          return (
+            <button
+              key={userId}
+              className="family-member-btn"
+              onClick={() => onSelectFamilyMember && onSelectFamilyMember(userId)}
+              title={`${relationship} - ${user?.email || ''}`.trim()}
+              type="button"
+            >
+              <div className="avatar">
+                {displayName.charAt(0).toUpperCase()}
+              </div>
+              <div className="member-info">
+                <p className="name">{displayName}</p>
+                <p className="relationship">{relationship}</p>
+              </div>
+              <span className="auto-access-badge">?</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
