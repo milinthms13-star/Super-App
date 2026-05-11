@@ -40,6 +40,12 @@ const iconMap = {
 };
 
 const moduleFallbacks = {
+  finance: {
+    title: "Nila Finance Hub",
+    description: "Loan guidance, EMI tools, institution compare, and finance support.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   localmarket: {
     title: "Local Market",
     description: "Shop from local vendors and fresh producers.",
@@ -98,6 +104,7 @@ const LaunchPage = ({
     LinkUp: "messaging",
     TradePost: "classifieds",
     HomeSphere: "realestate",
+    "Nila Finance Hub": "finance",
     Feastly: "fooddelivery",
     "Local Market": "localmarket",
     SwiftRide: "ridesharing",

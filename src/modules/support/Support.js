@@ -122,6 +122,7 @@ const Support = () => {
               <option value="messaging">LinkUp</option>
               <option value="classifieds">TradePost</option>
               <option value="realestate">HomeSphere</option>
+              <option value="finance">Nila Finance Hub</option>
               <option value="fooddelivery">Feastly</option>
               <option value="localmarket">Local Market</option>
               <option value="ridesharing">SwiftRide</option>

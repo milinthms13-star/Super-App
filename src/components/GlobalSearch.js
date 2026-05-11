@@ -1,29 +1,26 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp } from "../contexts/AppContext";
 import "../styles/GlobalSearchEnhanced.css";
 
 const GlobalSearch = () => {
   const navigate = useNavigate();
-  const { currentUser } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
-  const [activeCategory, setActiveCategory] = useState(null);
   const inputRef = useRef(null);
 
   const searchCategories = [
-    { id: "products", label: "Products", icon: "🛍️", module: "ecommerce" },
-    { id: "people", label: "People & Vendors", icon: "👥", module: "messaging" },
-    { id: "homes", label: "Homes & Properties", icon: "🏠", module: "realestate" },
-    { id: "rides", label: "Rides", icon: "🚗", module: "ridesharing" },
-    { id: "food", label: "Food & Restaurants", icon: "🍽️", module: "fooddelivery" },
-    { id: "jobs", label: "Jobs & Services", icon: "💼", module: "classifieds" },
-    { id: "posts", label: "Community Posts", icon: "📱", module: "socialmedia" },
-    { id: "listings", label: "Local Listings", icon: "📦", module: "localmarket" },
+    { id: "products", label: "Products", icon: "P", module: "ecommerce" },
+    { id: "people", label: "People & Vendors", icon: "U", module: "messaging" },
+    { id: "homes", label: "Homes & Properties", icon: "H", module: "realestate" },
+    { id: "loans", label: "Loans & Finance", icon: "F", module: "finance" },
+    { id: "rides", label: "Rides", icon: "R", module: "ridesharing" },
+    { id: "food", label: "Food & Restaurants", icon: "D", module: "fooddelivery" },
+    { id: "jobs", label: "Jobs & Services", icon: "J", module: "classifieds" },
+    { id: "posts", label: "Community Posts", icon: "S", module: "socialmedia" },
+    { id: "listings", label: "Local Listings", icon: "L", module: "localmarket" },
   ];
 
-  // Mock search results generator (replace with real API)
   const performSearch = (query) => {
     if (!query.trim()) {
       setSearchResults([]);
@@ -45,10 +42,9 @@ const GlobalSearch = () => {
       }
     });
 
-    // Add demo results for each category
     if (query.length > 0) {
-      ["products", "people", "homes", "rides"].forEach((cat) => {
-        const categoryData = searchCategories.find((c) => c.id === cat);
+      ["products", "people", "homes", "loans", "rides"].forEach((cat) => {
+        const categoryData = searchCategories.find((entry) => entry.id === cat);
         if (categoryData) {
           mockResults.push({
             id: `${cat}-demo-${query.length}`,
@@ -66,8 +62,8 @@ const GlobalSearch = () => {
     setSearchResults(mockResults);
   };
 
-  const handleSearchChange = (e) => {
-    const query = e.target.value;
+  const handleSearchChange = (event) => {
+    const query = event.target.value;
     setSearchQuery(query);
     performSearch(query);
   };
@@ -99,18 +95,16 @@ const GlobalSearch = () => {
           onClick={() => setIsOpen(!isOpen)}
           title="Search NilaHub ecosystem"
         >
-          <span className="search-icon">🔍</span>
+          <span className="search-icon">S</span>
           <span className="search-placeholder">Search products, homes, rides...</span>
         </button>
 
-        {isOpen && (
-          <div className="search-overlay" onClick={() => setIsOpen(false)} />
-        )}
+        {isOpen && <div className="search-overlay" onClick={() => setIsOpen(false)} />}
 
         {isOpen && (
           <div className="search-dropdown">
             <div className="search-input-box">
-              <span className="search-icon">🔍</span>
+              <span className="search-icon">S</span>
               <input
                 ref={inputRef}
                 type="text"
@@ -118,8 +112,10 @@ const GlobalSearch = () => {
                 className="search-input"
                 value={searchQuery}
                 onChange={handleSearchChange}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setIsOpen(false);
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setIsOpen(false);
+                  }
                 }}
               />
               {searchQuery && (
@@ -131,7 +127,7 @@ const GlobalSearch = () => {
                     setSearchResults([]);
                   }}
                 >
-                  ✕
+                  X
                 </button>
               )}
             </div>
@@ -156,7 +152,7 @@ const GlobalSearch = () => {
                             <p className="result-title">{result.title}</p>
                             <p className="result-subtitle">{result.subtitle}</p>
                           </div>
-                          <span className="result-arrow">→</span>
+                          <span className="result-arrow">-&gt;</span>
                         </button>
                       ))}
                     </div>
@@ -187,7 +183,7 @@ const GlobalSearch = () => {
             )}
 
             <div className="search-footer">
-              <p className="search-tip">💡 Tip: Search across all platforms instantly</p>
+              <p className="search-tip">Tip: Search across all platforms instantly</p>
             </div>
           </div>
         )}

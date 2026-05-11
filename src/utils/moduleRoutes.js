@@ -8,6 +8,7 @@ export const MODULE_PATHS = {
   messaging: "/messaging",
   classifieds: "/classifieds",
   realestate: "/realestate",
+  finance: "/finance",
   fooddelivery: "/fooddelivery",
   localmarket: "/localmarket",
   ridesharing: "/ridesharing",
@@ -28,6 +29,8 @@ const MODULE_ID_ALIASES = {
   mydiary: "diary",
   personaldiary: "diary",
   map: "maps",
+  loans: "finance",
+  financehub: "finance",
 };
 
 export const normalizeModuleId = (moduleId = "") => {

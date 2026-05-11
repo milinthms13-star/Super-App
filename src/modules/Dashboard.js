@@ -110,6 +110,13 @@ const Icon = ({ type, className = "" }) => {
           <path d="M10 20v-5h4v5" />
         </svg>
       );
+    case "finance":
+      return (
+        <svg {...common}>
+          <path d="M12 2v20" />
+          <path d="M16.5 6.5c0-1.4-1.8-2.5-4-2.5s-4 1.1-4 2.5 1.8 2.5 4 2.5 4 1.1 4 2.5-1.8 2.5-4 2.5-4-1.1-4-2.5" />
+        </svg>
+      );
     case "fooddelivery":
       return (
         <svg {...common}>
@@ -241,6 +248,17 @@ const MODULE_CONFIG = [
     stats: "185K+ Properties",
     gradient: "linear-gradient(135deg, #9B59B6 0%, #8E44AD 100%)",
     emoji: "🏠",
+  },
+  {
+    id: "finance",
+    nameKey: "modules.finance",
+    fallbackName: "Nila Finance Hub",
+    icon: "finance",
+    descriptionKey: "dashboard.moduleDescriptions.finance",
+    fallbackDescription: "Loan guidance, institution marketplace, EMI planning, and financial support connectivity",
+    stats: "85K+ Finance Leads",
+    gradient: "linear-gradient(135deg, #0F766E 0%, #115E59 45%, #1D4ED8 100%)",
+    emoji: "💰",
   },
   {
     id: "fooddelivery",
@@ -563,9 +581,12 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         return true;
       }
 
-      return normalizedEnabledModuleIds.includes(module.id);
+      return module.id === "finance" || normalizedEnabledModuleIds.includes(module.id);
     })
-    .filter((module) => !isSeller || subscribedCategoryIds.includes(module.id));
+    .filter(
+      (module) =>
+        !isSeller || module.id === "finance" || subscribedCategoryIds.includes(module.id)
+    );
   const visibleCards = [
     ...filteredModules.map((module) => ({ ...module, cardType: "module" })),
     ...customLinks.map((link) => ({
