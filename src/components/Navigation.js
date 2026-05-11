@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
+    modules: ["fooddelivery", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
   },
   utilities: {
     label: "Utilities",

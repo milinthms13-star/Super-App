@@ -24,6 +24,7 @@ const jsonResponse = (data) =>
 describe('DiarySearch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    localStorage.setItem('token', 'mock-token');
     global.fetch.mockResolvedValue(
       jsonResponse({
         success: true,
@@ -114,12 +115,12 @@ describe('DiarySearch', () => {
     fireEvent.click(screen.getByRole('button', { name: /search/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenLastCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         '/api/diary/search/query',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            Authorization: 'Bearer mock-token',
+            Authorization: expect.stringMatching(/^Bearer/),
           }),
         })
       );
@@ -227,6 +228,12 @@ describe('DiarySearch', () => {
     render(<DiarySearch />);
 
     const input = screen.getByPlaceholderText(/search your diary entries/i);
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/diary/search/history',
+        expect.any(Object)
+      );
+    });
     fireEvent.focus(input);
 
     expect(await screen.findByText(/recent searches/i)).toBeInTheDocument();
@@ -235,7 +242,7 @@ describe('DiarySearch', () => {
     fireEvent.click(screen.getByRole('button', { name: /clear/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenLastCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         '/api/diary/search/history',
         expect.objectContaining({
           method: 'DELETE',

@@ -71,7 +71,7 @@ describe("ReminderAlert", () => {
   test("shows backend errors without falling back to fake seed reminders", async () => {
     fetchReminders.mockRejectedValue(new Error("Backend is unavailable"));
 
-    render(<ReminderAlert customLinks={[]} onCustomLinksChange={jest.fn()} />);
+    render(<ReminderAlert />);
 
     expect(
       await screen.findByText("An unexpected error occurred. Please try again.")
@@ -103,7 +103,7 @@ describe("ReminderAlert", () => {
     deleteReminder.mockResolvedValue({});
     toggleReminderCompletion.mockResolvedValue({ data: {} });
 
-    render(<ReminderAlert customLinks={[]} onCustomLinksChange={jest.fn()} />);
+    render(<ReminderAlert />);
 
     const reminderTitles = await screen.findAllByText("Doctor follow-up");
     expect(reminderTitles.length).toBeGreaterThan(0);
@@ -162,9 +162,9 @@ describe("ReminderAlert", () => {
       },
     });
 
-    render(<ReminderAlert customLinks={[]} onCustomLinksChange={jest.fn()} />);
+    render(<ReminderAlert />);
 
-    const addButton = await screen.findByRole("button", { name: /add reminder/i });
+    const addButton = (await screen.findAllByRole("button", { name: /add reminder/i }))[0];
     await waitFor(() => expect(addButton).not.toBeDisabled());
     fireEvent.click(addButton);
     fireEvent.change(screen.getByPlaceholderText("Example: Doctor follow-up"), {
@@ -186,9 +186,9 @@ describe("ReminderAlert", () => {
   test("requires an uploaded voice note for audio call reminders", async () => {
     fetchReminders.mockResolvedValue({ data: [] });
 
-    render(<ReminderAlert customLinks={[]} onCustomLinksChange={jest.fn()} />);
+    render(<ReminderAlert />);
 
-    const addButton = await screen.findByRole("button", { name: /add reminder/i });
+    const addButton = (await screen.findAllByRole("button", { name: /add reminder/i }))[0];
     await waitFor(() => expect(addButton).not.toBeDisabled());
     fireEvent.click(addButton);
     fireEvent.change(screen.getByPlaceholderText("Example: Doctor follow-up"), {
@@ -201,7 +201,7 @@ describe("ReminderAlert", () => {
     fireEvent.change(screen.getByLabelText(/Phone number/i), {
       target: { value: "+919876543210" },
     });
-    fireEvent.change(screen.getByLabelText(/Voice message type/i), {
+    fireEvent.change(screen.getByLabelText(/Message type/i), {
       target: { value: "audio" },
     });
     fireEvent.click(screen.getByRole("button", { name: /save reminder/i }));
@@ -239,9 +239,9 @@ describe("ReminderAlert", () => {
       },
     });
 
-    render(<ReminderAlert customLinks={[]} onCustomLinksChange={jest.fn()} />);
+    render(<ReminderAlert />);
 
-    const addButton = await screen.findByRole("button", { name: /add reminder/i });
+    const addButton = (await screen.findAllByRole("button", { name: /add reminder/i }))[0];
     await waitFor(() => expect(addButton).not.toBeDisabled());
     fireEvent.click(addButton);
     fireEvent.change(screen.getByPlaceholderText("Example: Doctor follow-up"), {

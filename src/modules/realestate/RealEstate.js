@@ -41,6 +41,42 @@ const DEFAULT_LISTING_FORM = {
   areaSqft: "",
 };
 
+const CONSTRUCTION_SERVICES = [
+  {
+    id: "renovation",
+    title: "Renovation & Interiors",
+    description: "Design, budgeting, and trusted contractors for every home upgrade.",
+  },
+  {
+    id: "project-launch",
+    title: "Project Marketing",
+    description: "Launch ready-to-sell inventory, virtual tours, and booking workflows.",
+  },
+  {
+    id: "legal-support",
+    title: "Legal & Documentation",
+    description: "Title search, agreements, approvals and regulatory compliance support.",
+  },
+  {
+    id: "tenant-services",
+    title: "Tenant Services",
+    description: "Rent collection, maintenance scheduling, and move-in welcome support.",
+  },
+];
+
+const HOME_LOAN_PARTNERS = [
+  { name: "Nila Bank Home Loans", rate: 7.9 },
+  { name: "Gulf Finance Partners", rate: 8.1 },
+  { name: "Malabar Housing Credit", rate: 8.5 },
+];
+
+const TENANT_UTILITIES = [
+  "Rent payment reminders",
+  "Maintenance request tracking",
+  "Rental agreement templates",
+  "Homeowner insurance guidance",
+];
+
 const REAL_ESTATE_SEED_PROPERTIES = [
   {
     id: "re-1",
@@ -331,6 +367,23 @@ const formatDateTime = (value) => {
 const resolveErrorMessage = (error, fallbackMessage) =>
   error?.response?.data?.message || error?.message || fallbackMessage;
 
+const calculateEMI = (amount, annualRate, tenureYears) => {
+  const principalLakh = Number(amount);
+  const principal = principalLakh * 100000;
+  const months = Number(tenureYears) * 12;
+  const monthlyRate = Number(annualRate) / 12 / 100;
+
+  if (!principalLakh || !months || !monthlyRate) {
+    return 0;
+  }
+
+  const monthlyPayment =
+    (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) /
+    (Math.pow(1 + monthlyRate, months) - 1);
+
+  return Math.round(monthlyPayment);
+};
+
 const getUserIdentity = (user) => {
   if (!user) {
     return {
@@ -558,6 +611,13 @@ const RealEstate = () => {
   const [visitNote, setVisitNote] = useState("");
   const [listingForm, setListingForm] = useState(DEFAULT_LISTING_FORM);
   const [editListingId, setEditListingId] = useState("");
+  const [selectedService, setSelectedService] = useState(CONSTRUCTION_SERVICES[0].id);
+  const [loanAmount, setLoanAmount] = useState("72");
+  const [loanTenure, setLoanTenure] = useState("20");
+  const [loanInterest, setLoanInterest] = useState("8.5");
+  const [loanEstimateResult, setLoanEstimateResult] = useState("");
+  const [maintenanceRequest, setMaintenanceRequest] = useState("");
+  const [maintenanceType, setMaintenanceType] = useState(TENANT_UTILITIES[0]);
   const { ownerId: currentOwnerId } = useMemo(() => getUserIdentity(currentUser), [currentUser]);
   const allowedRoleModes = useMemo(() => getAllowedRoleModes(currentUser), [currentUser]);
   const currentUserEmail = useMemo(
@@ -1058,6 +1118,37 @@ const RealEstate = () => {
     }
   };
 
+  const handleConstructionRequest = (serviceId) => {
+    const service = CONSTRUCTION_SERVICES.find((item) => item.id === serviceId);
+    setSelectedService(serviceId);
+    setStatusMessage(
+      `Request submitted for ${service?.title || "construction support"}. Our partner team will contact you shortly.`
+    );
+  };
+
+  const handleLoanEstimate = () => {
+    const monthly = calculateEMI(loanAmount, loanInterest, loanTenure);
+    if (!monthly) {
+      setLoanEstimateResult("Enter a valid loan amount, interest rate and tenure.");
+      return;
+    }
+
+    setLoanEstimateResult(`Estimated EMI ₹${monthly.toLocaleString("en-IN")} / month`);
+    setStatusMessage("Home loan estimate is ready. Compare partner offers and start your application.");
+  };
+
+  const handleMaintenanceSubmit = () => {
+    if (!maintenanceRequest.trim()) {
+      setStatusMessage("Describe the maintenance support you need before sending the request.");
+      return;
+    }
+
+    setMaintenanceRequest("");
+    setStatusMessage(
+      `Maintenance request for ${maintenanceType} submitted. A certified technician will reach out shortly.`
+    );
+  };
+
   return (
     <div className="realestate-shell">
       <section className="realestate-hero">
@@ -1138,6 +1229,28 @@ const RealEstate = () => {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="realestate-ecosystem-grid">
+        <article className="realestate-surface-card">
+          <div className="realestate-section-heading">
+            <h2>Real Estate Ecosystem</h2>
+            <p>One platform for listings, construction, financing, tenancy, and homeowner services.</p>
+          </div>
+          <div className="realestate-service-grid">
+            {CONSTRUCTION_SERVICES.map((service) => (
+              <button
+                key={service.id}
+                type="button"
+                className={`realestate-service-card ${selectedService === service.id ? "active" : ""}`}
+                onClick={() => handleConstructionRequest(service.id)}
+              >
+                <strong>{service.title}</strong>
+                <span>{service.description}</span>
+              </button>
+            ))}
+          </div>
+        </article>
       </section>
 
       {statusMessage ? <div className="realestate-status-banner">{statusMessage}</div> : null}
@@ -1478,6 +1591,26 @@ const RealEstate = () => {
             </section>
           </article>
 
+          <article className="realestate-surface-card">
+            <div className="realestate-section-heading">
+              <h2>Construction & owner services</h2>
+              <p>Book renovation, project launch, or tenant-ready services as part of your property workflow.</p>
+            </div>
+            <div className="realestate-service-grid">
+              {CONSTRUCTION_SERVICES.map((service) => (
+                <button
+                  key={service.id}
+                  type="button"
+                  className={`realestate-service-card ${selectedService === service.id ? "active" : ""}`}
+                  onClick={() => handleConstructionRequest(service.id)}
+                >
+                  <strong>{service.title}</strong>
+                  <span>{service.description}</span>
+                </button>
+              ))}
+            </div>
+          </article>
+
           {(activeRole === "owner" || activeRole === "agent" || activeRole === "builder") ? (
             <article className="realestate-surface-card">
               <div className="realestate-section-heading">
@@ -1713,6 +1846,88 @@ const RealEstate = () => {
                     <strong>No Fake Listing Guarantee</strong>
                   </span>
                 </div>
+
+                <section className="realestate-loan-card">
+                  <div className="realestate-section-heading">
+                    <h3>Home loan calculator</h3>
+                    <p>Estimate EMIs from verified partners and compare affordable financing quickly.</p>
+                  </div>
+                  <label className="realestate-field">
+                    <span>Loan amount (Lakhs)</span>
+                    <input
+                      type="number"
+                      value={loanAmount}
+                      onChange={(event) => setLoanAmount(event.target.value)}
+                      placeholder="72"
+                    />
+                  </label>
+                  <label className="realestate-field">
+                    <span>Tenure (years)</span>
+                    <select value={loanTenure} onChange={(event) => setLoanTenure(event.target.value)}>
+                      {Array.from({ length: 25 }, (_, index) => String(index + 5)).map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="realestate-field">
+                    <span>Interest rate (%)</span>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={loanInterest}
+                      onChange={(event) => setLoanInterest(event.target.value)}
+                      placeholder="8.5"
+                    />
+                  </label>
+                  <button type="button" className="realestate-primary-button" onClick={handleLoanEstimate}>
+                    Estimate EMI
+                  </button>
+                  {loanEstimateResult ? <p className="realestate-pitch">{loanEstimateResult}</p> : null}
+                  <div className="realestate-plan-list">
+                    {HOME_LOAN_PARTNERS.map((partner) => (
+                      <div key={partner.name}>
+                        <strong>{partner.name}</strong>
+                        <span>{partner.rate}% p.a. starting rate</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="realestate-utility-card">
+                  <div className="realestate-section-heading">
+                    <h3>Homeowner & tenant utilities</h3>
+                    <p>Keep rental collections, maintenance, and documentation within the same ecosystem.</p>
+                  </div>
+                  <div className="realestate-chip-cloud">
+                    {TENANT_UTILITIES.map((utility) => (
+                      <span key={utility}>{utility}</span>
+                    ))}
+                  </div>
+                  <label className="realestate-field">
+                    <span>Request type</span>
+                    <select value={maintenanceType} onChange={(event) => setMaintenanceType(event.target.value)}>
+                      {TENANT_UTILITIES.map((utility) => (
+                        <option key={utility} value={utility}>
+                          {utility}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="realestate-field">
+                    <span>Request details</span>
+                    <textarea
+                      rows="3"
+                      value={maintenanceRequest}
+                      onChange={(event) => setMaintenanceRequest(event.target.value)}
+                      placeholder="Describe the repair, tenant request, or homeowner service you need"
+                    />
+                  </label>
+                  <button type="button" className="realestate-secondary-button" onClick={handleMaintenanceSubmit}>
+                    Submit request
+                  </button>
+                </section>
 
                 <div className="realestate-action-stack">
                   <button type="button" className="realestate-primary-button" onClick={handleEnquirySubmit}>

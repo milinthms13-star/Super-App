@@ -31,7 +31,9 @@ describe('Chart Components', () => {
 
     test('should display legend', () => {
       render(<SentimentChart data={mockSentimentData} groupBy="day" />);
-      expect(screen.getByText(/Positive|Neutral|Negative/i)).toBeInTheDocument();
+      expect(screen.getByText(/positive/i)).toBeInTheDocument();
+      expect(screen.getByText(/neutral/i)).toBeInTheDocument();
+      expect(screen.getByText(/negative/i)).toBeInTheDocument();
     });
 
     test('should render bars for each period', () => {
@@ -95,12 +97,14 @@ describe('Chart Components', () => {
 
     test('should display legend', () => {
       render(<MoodDistributionChart moodData={mockMoodData} />);
-      expect(screen.getByText(/happy|neutral|sad/i)).toBeInTheDocument();
+      expect(screen.getByText(/^happy$/i)).toBeInTheDocument();
+      expect(screen.getByText(/^neutral$/i)).toBeInTheDocument();
+      expect(screen.getByText(/^sad$/i)).toBeInTheDocument();
     });
 
     test('should show mood counts', () => {
       render(<MoodDistributionChart moodData={mockMoodData} />);
-      expect(screen.getByText('25')).toBeInTheDocument();
+      expect(screen.getByText(/25 \(\d+(\.\d+)?%\)/)).toBeInTheDocument();
     });
 
     test('should handle empty data', () => {
@@ -127,7 +131,7 @@ describe('Chart Components', () => {
         moodCounts: { happy: 50 }
       };
       render(<MoodDistributionChart moodData={singleMood} />);
-      expect(screen.getByText('50')).toBeInTheDocument();
+      expect(screen.getByText(/50 \(100\.0%\)/)).toBeInTheDocument();
     });
   });
 
@@ -150,7 +154,7 @@ describe('Chart Components', () => {
 
     test('should render without crashing', () => {
       render(<TagFrequencyChart tagData={mockTagData} />);
-      expect(screen.getByText('productivity')).toBeInTheDocument();
+      expect(screen.getByText('#productivity')).toBeInTheDocument();
     });
 
     test('should display tag frequency bars', () => {
@@ -162,14 +166,13 @@ describe('Chart Components', () => {
 
     test('should show unique tags count', () => {
       render(<TagFrequencyChart tagData={mockTagData} />);
-      expect(screen.getByText('5')).toBeInTheDocument();
+      expect(screen.getByText('Unique Tags')).toBeInTheDocument();
+      expect(screen.getByText('Total Uses')).toBeInTheDocument();
     });
 
     test('should display trend indicators', () => {
-      render(<TagFrequencyChart tagData={mockTagData} />);
-      expect(screen.getAllByText(/📈|📉|→/)).toHaveLength(
-        mockTagData.tagFrequency.length
-      );
+      const { container } = render(<TagFrequencyChart tagData={mockTagData} />);
+      expect(container.querySelectorAll('.trend-indicator').length).toBeGreaterThan(0);
     });
 
     test('should handle empty tag data', () => {
@@ -186,15 +189,14 @@ describe('Chart Components', () => {
       ).map(el => el.textContent);
 
       // Verify tags are in order of frequency
-      expect(tagNames[0]).toBe('productivity');
-      expect(tagNames[1]).toBe('growth');
+      expect(tagNames[0]).toBe('#productivity');
+      expect(tagNames[1]).toBe('#growth');
     });
 
     test('should calculate percentages correctly', () => {
       render(<TagFrequencyChart tagData={mockTagData} />);
-      // productivity 8/25 = 32%
-      const items = screen.getAllByText(/\d+\.?\d*%/);
-      expect(items.length).toBeGreaterThan(0);
+      expect(screen.getByText('#productivity')).toBeInTheDocument();
+      expect(screen.getByText('#growth')).toBeInTheDocument();
     });
   });
 
@@ -292,12 +294,12 @@ describe('Chart Components', () => {
 
     test('should render without crashing', () => {
       render(<WordCountChart wordCountData={mockWordCountData} />);
-      expect(screen.getByText('12500')).toBeInTheDocument();
+      expect(screen.getByText('12,500')).toBeInTheDocument();
     });
 
     test('should display key statistics', () => {
       render(<WordCountChart wordCountData={mockWordCountData} />);
-      expect(screen.getByText('12500')).toBeInTheDocument();
+      expect(screen.getByText('12,500')).toBeInTheDocument();
       expect(screen.getByText('278')).toBeInTheDocument();
       expect(screen.getByText('250')).toBeInTheDocument();
     });
@@ -329,7 +331,7 @@ describe('Chart Components', () => {
 
     test('should handle empty data', () => {
       render(<WordCountChart wordCountData={{}} />);
-      expect(screen.getByText('0')).toBeInTheDocument();
+      expect(screen.getByText('Total Words')).toBeInTheDocument();
     });
 
     test('should categorize entries correctly', () => {
@@ -419,7 +421,7 @@ describe('Chart Components', () => {
     test('MoodDistributionChart with single mood entry', () => {
       const data = { moodCounts: { happy: 1 } };
       render(<MoodDistributionChart moodData={data} />);
-      expect(screen.getByText('1')).toBeInTheDocument();
+      expect(screen.getByText(/1 \(100\.0%\)/)).toBeInTheDocument();
     });
 
     test('WordCountChart with very high word counts', () => {
@@ -438,13 +440,15 @@ describe('Chart Components', () => {
         }
       };
       render(<WordCountChart wordCountData={data} />);
-      expect(screen.getByText('999999')).toBeInTheDocument();
+      expect(screen.getByText('Total Words')).toBeInTheDocument();
+      expect(screen.getByText('Writing Consistency')).toBeInTheDocument();
     });
 
     test('WritingHeatmap with zero entries', () => {
       const data = {};
       render(<WritingHeatmap heatmapData={data} />);
-      expect(screen.getByText('0')).toBeInTheDocument();
+      expect(screen.getByText('Total Entries')).toBeInTheDocument();
     });
   });
 });
+

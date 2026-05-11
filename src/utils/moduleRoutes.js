@@ -14,6 +14,7 @@ export const MODULE_PATHS = {
   businessbuilder: "/business-builder",
   nilaaihub: "/nila-ai-hub",
   gulfservices: "/gulf-services",
+  education: "/education",
   skilllearning: "/skilllearning",
   fooddelivery: "/fooddelivery",
   devadarshan: "/devadarshan",

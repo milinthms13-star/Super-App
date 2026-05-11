@@ -43,11 +43,10 @@ describe('ExportManager', () => {
     renderComponent();
 
     expect(screen.getByText(/export diary/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /csv/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /export as csv/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /json/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /pdf/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/include analytics/i)).toBeChecked();
-    expect(screen.getByRole('button', { name: /export as csv/i })).toBeInTheDocument();
   });
 
   test('shows the time period selector only for csv exports', () => {
@@ -58,7 +57,7 @@ describe('ExportManager', () => {
     fireEvent.click(screen.getByRole('button', { name: /json/i }));
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /csv/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /csv/i })[0]);
     expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
 
@@ -110,7 +109,7 @@ describe('ExportManager', () => {
 
     expect(global.URL.createObjectURL).toHaveBeenCalledWith(blob);
     expect(mockOnSuccess).toHaveBeenCalledWith('Export completed successfully');
-    expect(screen.getByText(/export completed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/check your downloads/i)).toBeInTheDocument();
   });
 
   test('submits a json export and downloads the returned payload', async () => {

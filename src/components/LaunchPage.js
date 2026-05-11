@@ -76,6 +76,12 @@ const moduleFallbacks = {
     icon: "FaBriefcase",
     isComingSoon: false,
   },
+  education: {
+    title: "Education Ecosystem",
+    description: "Online tuition, skill courses, student community, study abroad guidance, and scholarship finder.",
+    icon: "FaBook",
+    isComingSoon: false,
+  },
   businessbuilder: {
     title: "AI Business Builder",
     description: "Create business profiles, invoices, and mini apps from one smart platform.",

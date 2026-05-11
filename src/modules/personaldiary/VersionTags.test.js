@@ -93,13 +93,15 @@ describe('VersionTags', () => {
   test('opens the add-tag form and lists predefined tags', async () => {
     queueInitialFetches([]);
 
-    renderComponent();
+    const { container } = renderComponent();
 
-    fireEvent.click(await screen.findByRole('button', { name: /\+ add tag/i }));
+    const addTagButton = await screen.findByRole('button', { name: /\+ add tag/i });
+    await waitFor(() => expect(addTagButton).not.toBeDisabled());
+    fireEvent.click(addTagButton);
 
-    const select = screen.getByRole('combobox');
+    const select = container.querySelector('.tag-form-content select');
     expect(select).toBeInTheDocument();
-    expect(screen.getByText(/final version ready for archival/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/final version ready for archival/i).length).toBeGreaterThan(0);
   });
 
   test('adds a selected tag and renders it in the list', async () => {
@@ -111,10 +113,13 @@ describe('VersionTags', () => {
       }),
     });
 
-    renderComponent();
-
-    fireEvent.click(await screen.findByRole('button', { name: /\+ add tag/i }));
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'important' } });
+    const { container } = renderComponent();
+    const addTagButton = await screen.findByRole('button', { name: /\+ add tag/i });
+    await waitFor(() => expect(addTagButton).not.toBeDisabled());
+    fireEvent.click(addTagButton);
+    const select = container.querySelector('.tag-form-content select');
+    expect(select).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: 'important' } });
     fireEvent.click(screen.getByRole('button', { name: /add tag/i }));
 
     await waitFor(() => {
@@ -148,7 +153,9 @@ describe('VersionTags', () => {
       );
     });
 
-    expect(screen.queryByText('final')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('final')).not.toBeInTheDocument();
+    });
     window.confirm.mockRestore();
   });
 
@@ -159,10 +166,12 @@ describe('VersionTags', () => {
       json: async () => ({ error: 'Tag already exists' }),
     });
 
-    renderComponent();
-
-    fireEvent.click(await screen.findByRole('button', { name: /\+ add tag/i }));
-    fireEvent.click(screen.getByRole('button', { name: /add tag/i }));
+    const { container } = renderComponent();
+    const addTagButton = await screen.findByRole('button', { name: /\+ add tag/i });
+    await waitFor(() => expect(addTagButton).not.toBeDisabled());
+    fireEvent.click(addTagButton);
+    const confirmButton = container.querySelector('.btn-confirm');
+    fireEvent.click(confirmButton);
 
     expect(await screen.findByText(/tag already exists/i)).toBeInTheDocument();
   });

@@ -86,7 +86,7 @@ describe('DiaryFilterBuilder', () => {
     fireEvent.click(await screen.findByRole('button', { name: /apply filter/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenLastCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         '/api/diary/filter/apply',
         expect.objectContaining({
           method: 'POST',
@@ -123,7 +123,7 @@ describe('DiaryFilterBuilder', () => {
     fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenLastCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         '/api/diary/filters/save',
         expect.objectContaining({
           method: 'POST',

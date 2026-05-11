@@ -74,7 +74,9 @@ beforeEach(() => {
 test("keeps SOS contacts independent from LinkUp contacts", async () => {
   render(<SOSAlert />);
 
-  expect(await screen.findByRole("heading", { level: 1, name: /sos safety center/i })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { level: 1, name: /rapid help when every second counts/i })
+  ).toBeInTheDocument();
 
   await waitFor(() => {
     expect(

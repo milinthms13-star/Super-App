@@ -185,11 +185,12 @@ export const onAuthStateChange = (callback) => {
  * @returns {string} International format phone number
  */
 export const formatPhoneForFirebase = (phoneNumber) => {
-  const cleaned = phoneNumber.replace(/\D/g, '').slice(-10);
+  const normalizedInput = typeof phoneNumber === 'string' ? phoneNumber : String(phoneNumber || '');
+  const cleaned = normalizedInput.replace(/\D/g, '').slice(-10);
   if (cleaned.length === 10) {
     return `+91${cleaned}`;
   }
-  return phoneNumber;
+  return normalizedInput;
 };
 
 export default {

@@ -52,7 +52,7 @@ describe('VersionComments', () => {
     renderComponent();
 
     expect(await screen.findByText(/comments on v5/i)).toBeInTheDocument();
-    expect(screen.getByText(/no comments yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no comments yet/i)).toBeInTheDocument();
   });
 
   test('hides the comment composer in read-only mode', async () => {
@@ -126,7 +126,8 @@ describe('VersionComments', () => {
 
     renderComponent();
 
-    fireEvent.click(await screen.findByRole('button', { name: /2/i }));
+    const likeButton = await screen.findByRole('button', { name: /2/i });
+    fireEvent.click(likeButton);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenLastCalledWith(
@@ -137,7 +138,7 @@ describe('VersionComments', () => {
       );
     });
 
-    expect(screen.getByRole('button', { name: /3/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /3/i })).toBeInTheDocument();
   });
 
   test('deletes a comment after confirmation', async () => {
@@ -165,7 +166,9 @@ describe('VersionComments', () => {
       );
     });
 
-    expect(screen.queryByText('Great version')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('Great version')).not.toBeInTheDocument();
+    });
     window.confirm.mockRestore();
   });
 

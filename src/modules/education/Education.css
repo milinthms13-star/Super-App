@@ -1,0 +1,268 @@
+.education-shell {
+  --education-ink: #173042;
+  --education-muted: #5d7282;
+  --education-border: #d5e0e6;
+  --education-surface: #ffffff;
+  --education-surface-alt: #eef4f6;
+  --education-primary: #0d7a69;
+  --education-primary-dark: #095a4d;
+  --education-accent: #c98a2e;
+  --education-danger: #c84d4d;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  color: var(--education-ink);
+}
+
+.education-hero,
+.education-section {
+  background: var(--education-surface);
+  border: 1px solid var(--education-border);
+  border-radius: 24px;
+  box-shadow: 0 14px 40px rgba(19, 48, 66, 0.08);
+}
+
+.education-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: 1.5rem;
+  padding: 1.75rem;
+  background:
+    radial-gradient(circle at top left, rgba(201, 138, 46, 0.18), transparent 35%),
+    linear-gradient(135deg, #f6fbfb 0%, #edf4f4 100%);
+}
+
+.education-hero-copy h1 {
+  margin: 0;
+  line-height: 1.15;
+  font-size: clamp(2rem, 3vw, 3.3rem);
+  max-width: 14ch;
+}
+
+.education-hero-copy p,
+.education-section-heading p {
+  color: var(--education-muted);
+}
+
+.education-hero-copy p {
+  max-width: 62ch;
+  margin: 1rem 0 0;
+}
+
+.education-primary-button,
+.education-secondary-button {
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.education-primary-button {
+  border: 0;
+  background: var(--education-primary);
+  color: #fff;
+  padding: 0.9rem 1.25rem;
+}
+
+.education-primary-button:hover,
+.education-secondary-button:hover {
+  transform: translateY(-1px);
+}
+
+.education-secondary-button {
+  border: 1px solid var(--education-border);
+  background: #fff;
+  color: var(--education-ink);
+  padding: 0.85rem 1.15rem;
+}
+
+.education-hero-actions,
+.education-hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.education-hero-actions {
+  margin-top: 1.25rem;
+}
+
+.education-hero-tags span {
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(13, 122, 105, 0.12);
+  color: var(--education-primary-dark);
+  font-size: 0.88rem;
+}
+
+.education-nav {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.education-nav-item {
+  text-align: center;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--education-border);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.education-nav-item.active {
+  border-color: rgba(13, 122, 105, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(13, 122, 105, 0.12);
+}
+
+.education-nav-icon {
+  display: block;
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.education-nav-item strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.education-nav-item span {
+  color: var(--education-muted);
+  font-size: 0.9rem;
+}
+
+.education-section {
+  margin-top: 1.25rem;
+  padding: 1.3rem;
+}
+
+.education-section-heading {
+  margin-bottom: 1rem;
+}
+
+.education-section-heading h2 {
+  margin: 0;
+}
+
+.education-tuition-grid,
+.education-courses-grid,
+.education-community-grid,
+.education-abroad-grid,
+.education-scholarships-list,
+.education-exam-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.education-filter-card,
+.education-tutor-card,
+.education-course-card,
+.education-forum-card,
+.education-country-card,
+.education-scholarship-card,
+.education-exam-card {
+  border: 1px solid var(--education-border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  background: var(--education-surface);
+}
+
+.education-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.education-field input,
+.education-field select {
+  border: 1px solid var(--education-border);
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  font: inherit;
+  color: var(--education-ink);
+  background: #fff;
+}
+
+.education-scholarship-search {
+  margin-bottom: 1rem;
+}
+
+.education-ai-assistant,
+.education-exam-prep {
+  margin-top: 1.25rem;
+  padding: 1.3rem;
+  background: var(--education-surface);
+  border: 1px solid var(--education-border);
+  border-radius: 24px;
+}
+
+.education-ai-chat {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.education-ai-chat input {
+  flex: 1;
+  border: 1px solid var(--education-border);
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+}
+
+.education-ai-chat button {
+  border: 0;
+  background: var(--education-primary);
+  color: #fff;
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.education-ai-response {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--education-surface-alt);
+  border-radius: 12px;
+  border-left: 4px solid var(--education-accent);
+}
+
+@media (max-width: 1200px) {
+  .education-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .education-tuition-grid,
+  .education-courses-grid,
+  .education-community-grid,
+  .education-abroad-grid,
+  .education-scholarships-list,
+  .education-exam-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .education-shell {
+    padding-inline: 0.75rem;
+  }
+
+  .education-hero,
+  .education-section {
+    padding: 1rem;
+  }
+
+  .education-hero-copy h1 {
+    max-width: none;
+  }
+
+  .education-nav {
+    grid-template-columns: 1fr;
+  }
+}

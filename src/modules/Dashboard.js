@@ -244,6 +244,14 @@ case "astrology":
           <path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4" />
         </svg>
       );
+    case "education":
+      return (
+        <svg {...common}>
+          <path d="M4 6h16v12H4z" />
+          <path d="M8 10h8M8 14h5" />
+          <path d="M12 6V4" />
+        </svg>
+      );
     default:
       return (
         <svg {...common}>
@@ -330,6 +338,17 @@ const MODULE_CONFIG = [
     stats: "Trusted services for Gulf families",
     gradient: "linear-gradient(135deg, #0C4A6E 0%, #2563EB 45%, #38BDF8 100%)",
     emoji: "🌍",
+  },
+  {
+    id: "education",
+    nameKey: "modules.education",
+    fallbackName: "Education Ecosystem",
+    icon: "education",
+    descriptionKey: "dashboard.moduleDescriptions.education",
+    fallbackDescription: "Online tuition, skill courses, student community, study abroad guidance, and scholarship finder.",
+    stats: "Complete education solutions",
+    gradient: "linear-gradient(135deg, #7C3AED 0%, #A855F7 45%, #C084FC 100%)",
+    emoji: "📚",
   },
   {
     id: "nilaaihub",
