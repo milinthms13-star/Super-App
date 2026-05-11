@@ -53,6 +53,7 @@ const LocalServicesMarketplace = React.lazy(() =>
   import("./modules/localservices/LocalServicesMarketplace")
 );
 const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket"));
+const BusinessBuilder = React.lazy(() => import("./modules/businessbuilder/BusinessBuilder"));
 const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
 const DriverMap = React.lazy(() => import("./modules/maps/DriverMap"));
 const Matrimonial = React.lazy(() => import("./modules/matrimonial/Matrimonial"));
@@ -122,6 +123,7 @@ const PREVIEW_ENABLED_MODULES = [
   "finance",
   "freelancer",
   "billpay",
+  "businessbuilder",
   "skilllearning",
   "fooddelivery",
   "devadarshan",
@@ -1135,6 +1137,7 @@ function AppShell() {
               <Route path="classifieds" element={<Classifieds />} />
               <Route path="realestate" element={<RealEstate />} />
               <Route path="finance" element={<FinanceHub />} />
+              <Route path="business-builder" element={<BusinessBuilder />} />
               <Route path="freelancer" element={<FreelancerMarketplace />} />
               <Route path="billpay" element={<BillPayHub />} />
               <Route path="skilllearning" element={<SkillLearningHub />} />

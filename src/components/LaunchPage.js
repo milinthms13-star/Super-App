@@ -70,6 +70,12 @@ const moduleFallbacks = {
     icon: "FaStore",
     isComingSoon: false,
   },
+  businessbuilder: {
+    title: "AI Business Builder",
+    description: "Create business profiles, invoices, and mini apps from one smart platform.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   hyperlocal: {
     title: "Nila Hyperlocal Delivery",
     description: "Grocery, pharmacy, food, and local pickup/drop with fast delivery workflows.",
@@ -149,6 +155,7 @@ const LaunchPage = ({
     "Nila Hyperlocal Delivery": "hyperlocal",
     "Local Services Marketplace": "localservices",
     "Local Market": "localmarket",
+    "Gulf Support Hub": "gulfservices",
     SwiftRide: "ridesharing",
     SoulMatch: "matrimonial",
     VibeHub: "socialmedia",

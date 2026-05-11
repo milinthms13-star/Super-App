@@ -81,6 +81,7 @@ const appDataRoutes = require('./routes/appData');
 app.use('/api/auth', authRoutes);
 app.use('/api/appdata', appDataRoutes);
 app.use('/api/app-data', appDataRoutes);
+app.use('/api/business-builder', require('./routes/businessBuilderRoutes'));
 
 // Phase 4: Message Enhancements Routes (Reactions, Editing, Search, Threading, Forwarding, Pinning, Receipts, Translation, Analytics)
 app.use('/api/messaging/v4/reactions', require('./routes/messageReactionsRoutes'));

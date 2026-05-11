@@ -11,6 +11,8 @@ export const MODULE_PATHS = {
   finance: "/finance",
   freelancer: "/freelancer",
   billpay: "/billpay",
+  businessbuilder: "/business-builder",
+  gulfservices: "/gulf-services",
   skilllearning: "/skilllearning",
   fooddelivery: "/fooddelivery",
   devadarshan: "/devadarshan",
@@ -68,6 +70,7 @@ const MODULE_ID_ALIASES = {
   caterers: "localservices",
   decorators: "localservices",
   photographers: "localservices",
+  "business-builder": "businessbuilder",
 };
 
 export const normalizeModuleId = (moduleId = "") => {

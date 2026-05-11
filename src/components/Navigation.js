@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "devadarshan", "hyperlocal", "localservices", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
+    modules: ["fooddelivery", "devadarshan", "hyperlocal", "localservices", "gulfservices", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
   },
   utilities: {
     label: "Utilities",
@@ -102,8 +102,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "devadarshan", label: t("modules.devadarshan", "Devadarshan"), icon: "DV", sellerVisible: true },
     { id: "hyperlocal", label: t("modules.hyperlocal", "Nila Hyperlocal Delivery"), icon: "HD", sellerVisible: true },
     { id: "localservices", label: t("modules.localservices", "Local Services Marketplace"), icon: "LS", sellerVisible: true },
-    { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
-    { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
+    { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },    { id: "businessbuilder", label: t("modules.businessbuilder", "AI Business Builder"), icon: "🚀", sellerVisible: true },    { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
     { id: "maps", label: t("modules.maps", "Maps"), icon: "🗺️", sellerVisible: true },
     { id: "matrimonial", label: t("modules.matrimonial", "SoulMatch"), icon: "💕" },
     { id: "socialmedia", label: t("modules.socialmedia", "VibeHub"), icon: "🌐" },

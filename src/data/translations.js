@@ -98,6 +98,7 @@ const translations = {
       localmarket: "Local Market",
       mydiary: "MyDiary",
       astrology: "AstroNila",
+      businessbuilder: "AI Business Builder",
       admin: "Admin Dashboard",
     },
     navigation: {
@@ -127,6 +128,8 @@ const translations = {
         quicklinks: "Save and manage shortcuts to your favorite websites and services",
         sosalert: "Emergency alerts with live location sharing, escalation, and trusted contact tracking",
         localmarket: "Local vendors, fresh produce, handmade goods, and neighborhood services",
+        gulfservices: "Complete Gulf support for visas, jobs, travel, attestation, NRI services, and returnee assistance.",
+        businessbuilder: "Build business profiles, create invoices, and register mini apps with AI-driven tools",
         mydiary: "Personal diary, journaling, and memory storage",
         astrology: "Daily horoscope, Vedic insights, and personalized astrology readings for all zodiac signs",
       },
