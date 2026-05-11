@@ -82,6 +82,12 @@ const moduleFallbacks = {
     icon: "FaBriefcase",
     isComingSoon: false,
   },
+  nilaaihub: {
+    title: "Nila AI Hub",
+    description: "A conversational AI ecosystem for discovery, planning, travel, loans, and daily tasks.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   hyperlocal: {
     title: "Nila Hyperlocal Delivery",
     description: "Grocery, pharmacy, food, and local pickup/drop with fast delivery workflows.",
