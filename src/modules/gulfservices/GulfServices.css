@@ -1,0 +1,215 @@
+.gulf-services-page {
+  padding: 30px 24px;
+  max-width: 1240px;
+  margin: 0 auto;
+  color: #0f172a;
+}
+
+.gulf-services-hero {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 28px;
+  align-items: start;
+  margin-bottom: 32px;
+}
+
+.gulf-services-badge {
+  display: inline-block;
+  margin-bottom: 16px;
+  padding: 8px 14px;
+  background: #0f172a;
+  color: #ffffff;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.gulf-services-hero h1 {
+  font-size: clamp(2rem, 3vw, 3rem);
+  margin-bottom: 16px;
+  line-height: 1.05;
+}
+
+.gulf-services-hero p {
+  max-width: 640px;
+  margin-bottom: 24px;
+  color: #334155;
+  line-height: 1.8;
+}
+
+.gulf-services-hero-actions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.gulf-services-hero-actions .btn {
+  min-width: 180px;
+}
+
+.gulf-services-hero-summary {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  background: #f8fafc;
+  border-radius: 20px;
+}
+
+.gulf-services-hero-summary div {
+  background: #ffffff;
+  padding: 18px 20px;
+  border-radius: 16px;
+  box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08);
+}
+
+.gulf-services-hero-summary strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #0f172a;
+}
+
+.gulf-services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-bottom: 32px;
+}
+
+.gulf-services-card {
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 22px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.gulf-services-card h3 {
+  margin-bottom: 12px;
+  font-size: 1.1rem;
+}
+
+.gulf-services-card p {
+  color: #475569;
+  line-height: 1.7;
+}
+
+.gulf-services-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.gulf-services-panel-left,
+.gulf-services-panel-right {
+  background: #ffffff;
+  padding: 28px;
+  border-radius: 24px;
+  border: 1px solid #e2e8f0;
+}
+
+.gulf-services-panel h2 {
+  margin-bottom: 18px;
+}
+
+.gulf-services-panel ul {
+  list-style: disc;
+  padding-left: 20px;
+  color: #475569;
+  line-height: 1.8;
+}
+
+.gulf-services-country-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.gulf-services-country-selector button {
+  padding: 10px 14px;
+  background: #f1f5f9;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #0f172a;
+  transition: all 0.2s ease;
+}
+
+.gulf-services-country-selector button.active,
+.gulf-services-country-selector button:hover {
+  background: #0ea5e9;
+  color: #ffffff;
+  border-color: #0ea5e9;
+}
+
+.gulf-services-job-list {
+  display: grid;
+  gap: 14px;
+}
+
+.gulf-services-job-card {
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.gulf-services-job-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #0f172a;
+}
+
+.gulf-services-job-card span {
+  display: inline-block;
+  margin-bottom: 10px;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.gulf-services-job-card p {
+  color: #475569;
+  line-height: 1.75;
+}
+
+.gulf-services-features {
+  margin-bottom: 48px;
+}
+
+.gulf-services-features h2 {
+  margin-bottom: 20px;
+}
+
+.gulf-services-features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+.gulf-services-features-grid article {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.gulf-services-features-grid h3 {
+  margin-bottom: 10px;
+}
+
+.gulf-services-features-grid p {
+  color: #475569;
+  line-height: 1.75;
+}
+
+@media (max-width: 900px) {
+  .gulf-services-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-panel {
+    grid-template-columns: 1fr;
+  }
+}

@@ -332,6 +332,17 @@ const MODULE_CONFIG = [
     emoji: "🌍",
   },
   {
+    id: "nilaaihub",
+    nameKey: "modules.nilaaihub",
+    fallbackName: "Nila AI Hub",
+    icon: "nilaaihub",
+    descriptionKey: "dashboard.moduleDescriptions.nilaaihub",
+    fallbackDescription: "Your personal AI assistant for services, loans, jobs, health, travel, and daily life.",
+    stats: "AI assistant for every need",
+    gradient: "linear-gradient(135deg, #0D9488 0%, #14B8A6 45%, #22C55E 100%)",
+    emoji: "🤖",
+  },
+  {
     id: "freelancer",
     nameKey: "modules.freelancer",
     fallbackName: "NilaWorks",

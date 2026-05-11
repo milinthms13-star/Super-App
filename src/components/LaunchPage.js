@@ -70,6 +70,12 @@ const moduleFallbacks = {
     icon: "FaStore",
     isComingSoon: false,
   },
+  gulfservices: {
+    title: "Gulf Services",
+    description: "Complete Gulf support hub for visas, jobs, travel, attestation, and returnee services.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   businessbuilder: {
     title: "AI Business Builder",
     description: "Create business profiles, invoices, and mini apps from one smart platform.",
@@ -156,6 +162,7 @@ const LaunchPage = ({
     "Local Services Marketplace": "localservices",
     "Local Market": "localmarket",
     "Gulf Support Hub": "gulfservices",
+    "Nila AI Hub": "nilaaihub",
     SwiftRide: "ridesharing",
     SoulMatch: "matrimonial",
     VibeHub: "socialmedia",

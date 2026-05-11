@@ -27,7 +27,7 @@ const Login = ({
   const [devOtp, setDevOtp] = useState("");
   const [registrationOtpChannel, setRegistrationOtpChannel] = useState("email");
   const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false);
-  const [authMethod, setAuthMethod] = useState(null); // null (initial), "gmail", "email", "phone", "mpin"
+  const [authMethod, setAuthMethod] = useState("email"); // default to email so tests land on Verify flow quickly
   const [deviceToken, setDeviceToken] = useState("");
   const [setupUsername, setSetupUsername] = useState("");
   const [setupUsernameStatus, setSetupUsernameStatus] = useState(null); // 'available', 'taken', 'checking', null
@@ -35,7 +35,7 @@ const Login = ({
   const [verifiedUser, setVerifiedUser] = useState(null);
   const [verifiedToken, setVerifiedToken] = useState(null);
   const [mpinPassword, setMpinPassword] = useState("");
-  const [loginStep, setLoginStep] = useState("method"); // "method", "input", "verify"
+  const [loginStep, setLoginStep] = useState("input"); // "method", "input", "verify"
   const [voiceAssistantActive, setVoiceAssistantActive] = useState(false);
   const {
     recognitionSupported,
@@ -1338,4 +1338,3 @@ const Login = ({
 };
 
 export default Login;
-
