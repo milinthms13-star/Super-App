@@ -7,6 +7,8 @@ const ContactsList = ({
   onBlockContact,
   onUnblockContact,
   onToggleFavorite,
+  onToggleFamilyCategory,
+  onManageFamilyAccess,
   searchQuery,
   onSearchChange,
   onFilterChange,
@@ -14,7 +16,7 @@ const ContactsList = ({
   filterType = 'all',
 }) => {
   const [filteredContacts, setFilteredContacts] = useState(contacts);
-  const [localFavorites, setLocalFavorites] = useState({}); // Track local favorite state changes
+  const [localFavorites, setLocalFavorites] = useState({});
 
   useEffect(() => {
     let filtered = contacts;
@@ -31,35 +33,32 @@ const ContactsList = ({
 
     if (filterType === 'favorites') {
       filtered = filtered.filter((contact) => contact.isFavorite && !contact.isBlocked);
+    } else if (filterType === 'family') {
+      filtered = filtered.filter(
+        (contact) => String(contact.category || '').toLowerCase() === 'family' && !contact.isBlocked
+      );
     } else if (filterType === 'blocked') {
       filtered = filtered.filter((contact) => contact.isBlocked);
     } else {
-      // For 'all', exclude blocked contacts by default
       filtered = filtered.filter((contact) => !contact.isBlocked);
     }
 
     setFilteredContacts(filtered);
   }, [contacts, searchQuery, filterType]);
 
-  // Helper function to get display identifier for contact
   const getContactIdentifier = (contact) => {
     const username = contact.contactUserId?.username;
     const email = contact.contactUserId?.email;
     const name = contact.contactUserId?.name;
-
-    // Return identifier in priority order
     return username || email || name || 'Unknown';
   };
 
-  // Handle favorite toggle with immediate visual feedback
   const handleFavoriteClick = (contactId, currentFavorite) => {
-    // Update local state immediately for UI feedback
     setLocalFavorites((prev) => ({
       ...prev,
       [contactId]: !currentFavorite,
     }));
 
-    // Call the actual toggle function
     if (onToggleFavorite) {
       onToggleFavorite(contactId);
     }
@@ -75,11 +74,7 @@ const ContactsList = ({
         <div className="contacts-filters">
           <button
             className={`filter-btn ${filterType === 'all' ? 'active' : ''}`}
-            onClick={() => {
-              if (onFilterChange) {
-                onFilterChange('all');
-              }
-            }}
+            onClick={() => onFilterChange && onFilterChange('all')}
             type="button"
             title="Show all contacts"
             aria-pressed={filterType === 'all'}
@@ -88,29 +83,30 @@ const ContactsList = ({
           </button>
           <button
             className={`filter-btn ${filterType === 'favorites' ? 'active' : ''}`}
-            onClick={() => {
-              if (onFilterChange) {
-                onFilterChange('favorites');
-              }
-            }}
+            onClick={() => onFilterChange && onFilterChange('favorites')}
             type="button"
             title="Show favorite contacts"
             aria-pressed={filterType === 'favorites'}
           >
-            ⭐ Favorites
+            Favorites
+          </button>
+          <button
+            className={`filter-btn ${filterType === 'family' ? 'active' : ''}`}
+            onClick={() => onFilterChange && onFilterChange('family')}
+            type="button"
+            title="Show family contacts"
+            aria-pressed={filterType === 'family'}
+          >
+            Family
           </button>
           <button
             className={`filter-btn ${filterType === 'blocked' ? 'active' : ''}`}
-            onClick={() => {
-              if (onFilterChange) {
-                onFilterChange('blocked');
-              }
-            }}
+            onClick={() => onFilterChange && onFilterChange('blocked')}
             type="button"
             title="Show blocked contacts"
             aria-pressed={filterType === 'blocked'}
           >
-            🚫 Blocked
+            Blocked
           </button>
         </div>
       </div>
@@ -129,8 +125,12 @@ const ContactsList = ({
         {filteredContacts.length > 0 ? (
           filteredContacts.map((contact) => {
             const contactUserId = contact.contactUserId?._id;
-            const isFavorite = localFavorites[contactUserId] !== undefined ? localFavorites[contactUserId] : contact.isFavorite;
-            
+            const isFavorite =
+              localFavorites[contactUserId] !== undefined
+                ? localFavorites[contactUserId]
+                : contact.isFavorite;
+            const isFamily = String(contact.category || '').toLowerCase() === 'family';
+
             return (
               <div key={contact._id} className="contact-item">
                 <div
@@ -138,8 +138,8 @@ const ContactsList = ({
                   onClick={() => onSelectContact(contact.contactUserId)}
                   role="button"
                   tabIndex="0"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
                       onSelectContact(contact.contactUserId);
                     }
                   }}
@@ -157,13 +157,31 @@ const ContactsList = ({
                     <h4 className="contact-name">
                       {contact.displayName || contact.contactUserId?.name || 'Unknown'}
                     </h4>
-                    <p className="contact-identifier">
-                      @{getContactIdentifier(contact)}
-                    </p>
+                    <p className="contact-identifier">@{getContactIdentifier(contact)}</p>
                     <p className="contact-category">{contact.category || 'Contact'}</p>
                   </div>
                 </div>
                 <div className="contact-actions">
+                  <button
+                    className={`btn-action-sm family-btn ${isFamily ? 'is-family' : ''}`}
+                    onClick={() => onToggleFamilyCategory && onToggleFamilyCategory(contact)}
+                    title={isFamily ? 'Remove from family contacts' : 'Mark as family contact'}
+                    type="button"
+                    aria-label={isFamily ? 'Remove from family contacts' : 'Mark as family contact'}
+                  >
+                    Family
+                  </button>
+                  {isFamily && (
+                    <button
+                      className="btn-action-sm family-access-btn"
+                      onClick={() => onManageFamilyAccess && onManageFamilyAccess(contact)}
+                      title="Manage family camera and location access"
+                      type="button"
+                      aria-label="Manage family camera and location access"
+                    >
+                      Access
+                    </button>
+                  )}
                   <button
                     className="btn-action-sm favorite-btn"
                     onClick={() => handleFavoriteClick(contactUserId, isFavorite)}
@@ -171,7 +189,7 @@ const ContactsList = ({
                     type="button"
                     aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                   >
-                    {isFavorite ? '⭐' : '☆'}
+                    {isFavorite ? 'Starred' : 'Star'}
                   </button>
                   <button
                     className="btn-action-sm schedule-btn"
@@ -180,7 +198,7 @@ const ContactsList = ({
                     type="button"
                     aria-label="Manage scheduled blocks"
                   >
-                    ⏰
+                    Schedule
                   </button>
                   {contact.isBlocked ? (
                     <button
@@ -209,11 +227,7 @@ const ContactsList = ({
           })
         ) : (
           <div className="empty-contacts">
-            <p>
-              {searchQuery
-                ? 'No contacts match your search.'
-                : `No ${filterType} contacts yet.`}
-            </p>
+            <p>{searchQuery ? 'No contacts match your search.' : `No ${filterType} contacts yet.`}</p>
           </div>
         )}
       </div>

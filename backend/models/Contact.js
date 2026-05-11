@@ -1,5 +1,58 @@
 const mongoose = require('mongoose');
 
+const accessTimeRestrictionSchema = new mongoose.Schema(
+  {
+    startTime: {
+      type: String,
+      default: '00:00',
+    },
+    endTime: {
+      type: String,
+      default: '23:59',
+    },
+    daysOfWeek: {
+      type: [Number],
+      default: [0, 1, 2, 3, 4, 5, 6],
+    },
+    timezone: {
+      type: String,
+      default: 'Asia/Kolkata',
+    },
+  },
+  { _id: false }
+);
+
+const familyAccessPermissionSchema = new mongoose.Schema(
+  {
+    enabled: {
+      type: Boolean,
+      default: false,
+    },
+    mode: {
+      type: String,
+      enum: ['none', 'temporary', 'permanent', 'time_restricted'],
+      default: 'none',
+    },
+    consentGivenAt: {
+      type: Date,
+      sparse: true,
+    },
+    expiresAt: {
+      type: Date,
+      sparse: true,
+    },
+    timeRestrictions: {
+      type: accessTimeRestrictionSchema,
+      default: () => ({}),
+    },
+    note: {
+      type: String,
+      sparse: true,
+    },
+  },
+  { _id: false }
+);
+
 const contactSchema = new mongoose.Schema(
   {
     // User who has the contact
@@ -148,6 +201,22 @@ const contactSchema = new mongoose.Schema(
     customAvatar: {
       type: String,
       sparse: true,
+    },
+
+    // Family sharing controls (consent-based camera/location access)
+    familyAccess: {
+      camera: {
+        type: familyAccessPermissionSchema,
+        default: () => ({}),
+      },
+      location: {
+        type: familyAccessPermissionSchema,
+        default: () => ({}),
+      },
+      updatedAt: {
+        type: Date,
+        default: Date.now,
+      },
     },
   },
   {

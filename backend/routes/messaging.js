@@ -20,6 +20,14 @@ const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();
+const FAMILY_ACCESS_MODES = ['none', 'temporary', 'permanent', 'time_restricted'];
+const CONTACT_CATEGORIES = ['personal', 'business', 'family', 'friends', 'work', 'other'];
+const DEFAULT_TIME_RESTRICTIONS = {
+  startTime: '00:00',
+  endTime: '23:59',
+  daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+  timezone: 'Asia/Kolkata',
+};
 
 const normalizeObjectId = (value) => {
   if (!value) {
@@ -129,6 +137,70 @@ const getAuthorizedChat = async (chatId, userId) => {
   return {
     chat,
     authorized: arrayHasObjectId(chat.participants, userId),
+  };
+};
+
+const sanitizeFamilyTimeRestrictions = (candidate = {}, fallback = {}) => {
+  const normalizedDays = Array.isArray(candidate.daysOfWeek)
+    ? candidate.daysOfWeek
+        .map((day) => Number(day))
+        .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+    : Array.isArray(fallback.daysOfWeek)
+      ? fallback.daysOfWeek
+      : DEFAULT_TIME_RESTRICTIONS.daysOfWeek;
+
+  return {
+    startTime:
+      typeof candidate.startTime === 'string' && candidate.startTime.trim()
+        ? candidate.startTime.trim()
+        : fallback.startTime || DEFAULT_TIME_RESTRICTIONS.startTime,
+    endTime:
+      typeof candidate.endTime === 'string' && candidate.endTime.trim()
+        ? candidate.endTime.trim()
+        : fallback.endTime || DEFAULT_TIME_RESTRICTIONS.endTime,
+    daysOfWeek: normalizedDays.length > 0 ? normalizedDays : DEFAULT_TIME_RESTRICTIONS.daysOfWeek,
+    timezone:
+      typeof candidate.timezone === 'string' && candidate.timezone.trim()
+        ? candidate.timezone.trim()
+        : fallback.timezone || DEFAULT_TIME_RESTRICTIONS.timezone,
+  };
+};
+
+const sanitizeFamilyPermission = (existingPermission = {}, updates = {}) => {
+  const fallback = existingPermission || {};
+  const requestedMode = String(updates.mode || fallback.mode || 'none').trim().toLowerCase();
+  const mode = FAMILY_ACCESS_MODES.includes(requestedMode) ? requestedMode : 'none';
+
+  let expiresAt = null;
+  if (mode === 'temporary') {
+    const rawExpiry = updates.expiresAt || fallback.expiresAt;
+    const parsedExpiry = rawExpiry ? new Date(rawExpiry) : null;
+    if (!parsedExpiry || Number.isNaN(parsedExpiry.getTime())) {
+      throw new Error('Temporary family sharing requires a valid expiry date/time.');
+    }
+    if (parsedExpiry.getTime() <= Date.now()) {
+      throw new Error('Temporary family sharing expiry must be in the future.');
+    }
+    expiresAt = parsedExpiry;
+  }
+
+  const noteValue =
+    typeof updates.note === 'string'
+      ? updates.note.trim().slice(0, 160)
+      : typeof fallback.note === 'string'
+        ? fallback.note
+        : '';
+
+  return {
+    enabled: mode !== 'none',
+    mode,
+    consentGivenAt: mode === 'none' ? null : new Date(),
+    expiresAt,
+    timeRestrictions:
+      mode === 'time_restricted'
+        ? sanitizeFamilyTimeRestrictions(updates.timeRestrictions || {}, fallback.timeRestrictions || {})
+        : sanitizeFamilyTimeRestrictions({}, {}),
+    note: noteValue || undefined,
   };
 };
 
@@ -1265,7 +1337,7 @@ router.get('/search/messages', authenticate, attachMessagingUser, async (req, re
 // Get all contacts
 router.get('/contacts', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
-    const { page = 1, limit = 50, favorite, showBlocked } = req.query;
+    const { page = 1, limit = 50, favorite, showBlocked, category } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const pageLimit = Math.min(parseInt(limit), 100);
@@ -1286,6 +1358,13 @@ router.get('/contacts', authenticate, attachMessagingUser, async (req, res, next
       query.isFavorite = true;
     }
 
+    if (typeof category === 'string' && category.trim()) {
+      const normalizedCategory = category.trim().toLowerCase();
+      if (CONTACT_CATEGORIES.includes(normalizedCategory)) {
+        query.category = normalizedCategory;
+      }
+    }
+
     const contacts = await Contact.find(query)
       .populate('contactUserId', 'name username email avatar status')
       .sort({ lastInteractionAt: -1 })
@@ -1303,6 +1382,64 @@ router.get('/contacts', authenticate, attachMessagingUser, async (req, res, next
         pages: Math.ceil(total / pageLimit),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update contact category (including Family)
+router.put('/contacts/:contactUserId/category', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { contactUserId } = req.params;
+    const requestedCategory = String(req.body?.category || '').trim().toLowerCase();
+
+    if (!mongoose.Types.ObjectId.isValid(contactUserId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    if (!CONTACT_CATEGORIES.includes(requestedCategory)) {
+      return res.status(400).json({ message: `Invalid category. Supported: ${CONTACT_CATEGORIES.join(', ')}` });
+    }
+
+    let contact = await Contact.findOne({
+      userId: req.user._id,
+      contactUserId,
+    });
+
+    if (!contact) {
+      contact = new Contact({
+        userId: req.user._id,
+        contactUserId,
+      });
+    }
+
+    contact.category = requestedCategory;
+    contact.lastInteractionAt = new Date();
+
+    if (requestedCategory !== 'family') {
+      contact.familyAccess = {
+        camera: {
+          enabled: false,
+          mode: 'none',
+          consentGivenAt: null,
+          expiresAt: null,
+          timeRestrictions: DEFAULT_TIME_RESTRICTIONS,
+        },
+        location: {
+          enabled: false,
+          mode: 'none',
+          consentGivenAt: null,
+          expiresAt: null,
+          timeRestrictions: DEFAULT_TIME_RESTRICTIONS,
+        },
+        updatedAt: new Date(),
+      };
+    }
+
+    await contact.save();
+    await contact.populate('contactUserId', 'name username email avatar status');
+
+    res.json({ contact });
   } catch (err) {
     next(err);
   }
@@ -1441,6 +1578,59 @@ router.put('/contacts/:contactUserId/favorite', authenticate, attachMessagingUse
     res.json({ contact, isFavorite: contact.isFavorite });
   } catch (err) {
     next(err);
+  }
+});
+
+// Update family camera/location access controls for a contact
+router.put('/contacts/:contactUserId/family-access', authenticate, attachMessagingUser, async (req, res, next) => {
+  try {
+    const { contactUserId } = req.params;
+    const { camera, location } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(contactUserId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    let contact = await Contact.findOne({
+      userId: req.user._id,
+      contactUserId,
+    });
+
+    if (!contact) {
+      contact = new Contact({
+        userId: req.user._id,
+        contactUserId,
+      });
+    }
+
+    if (contact.category !== 'family') {
+      contact.category = 'family';
+    }
+
+    const currentAccess = contact.familyAccess || {};
+    const nextAccess = {
+      camera: currentAccess.camera || {},
+      location: currentAccess.location || {},
+      updatedAt: new Date(),
+    };
+
+    if (camera) {
+      nextAccess.camera = sanitizeFamilyPermission(currentAccess.camera || {}, camera);
+    }
+
+    if (location) {
+      nextAccess.location = sanitizeFamilyPermission(currentAccess.location || {}, location);
+    }
+
+    contact.familyAccess = nextAccess;
+    contact.lastInteractionAt = new Date();
+    await contact.save();
+    await contact.populate('contactUserId', 'name username email avatar status');
+
+    res.json({ contact });
+  } catch (err) {
+    const errorMessage = err?.message || 'Could not update family sharing settings.';
+    return res.status(400).json({ message: errorMessage });
   }
 });
 

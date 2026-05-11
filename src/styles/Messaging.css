@@ -6207,3 +6207,109 @@
   }
 }
 
+/* Family contact controls */
+.family-btn {
+  min-width: 74px;
+  font-size: 0.76rem;
+}
+
+.family-btn.is-family {
+  background: rgba(20, 184, 166, 0.16);
+  border-color: rgba(20, 184, 166, 0.32);
+  color: #0f766e;
+}
+
+.family-access-btn {
+  min-width: 72px;
+  font-size: 0.76rem;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.24);
+  color: #1d4ed8;
+}
+
+.family-access-manager .block-manager-content {
+  display: grid;
+  gap: 1rem;
+}
+
+.family-access-section {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  padding: 0.9rem;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.family-access-section h4 {
+  margin: 0 0 0.75rem;
+  color: var(--linkup-text, #1f2937);
+}
+
+.family-access-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.family-access-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.family-access-field span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--linkup-muted, #64748b);
+}
+
+.family-access-field input,
+.family-access-field select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  padding: 0.62rem 0.72rem;
+  font: inherit;
+  background: #fff;
+}
+
+.family-access-field-full {
+  grid-column: 1 / -1;
+}
+
+.family-access-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.family-access-day-chip {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--linkup-text, #1f2937);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+.family-access-day-chip.active {
+  background: linear-gradient(135deg, var(--linkup-accent, #3b82f6), var(--linkup-accent-soft, #22d3ee));
+  border-color: transparent;
+  color: #fff;
+}
+
+.family-access-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 800px) {
+  .family-access-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .family-access-actions .btn-add-block {
+    width: 100%;
+  }
+}
+

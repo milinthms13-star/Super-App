@@ -16,6 +16,7 @@ import VisibilitySettings from './VisibilitySettings';
 import ContactMeansSettings from './ContactMeansSettings';
 import GroupCreation from './GroupCreation';
 import ScheduledBlockManager from './ScheduledBlockManager';
+import FamilyAccessManager from './FamilyAccessManager';
 import ChatroomCreation from './ChatroomCreation';
 import ChatroomBrowser from './ChatroomBrowser';
 import ChatroomList from './ChatroomList';
@@ -262,6 +263,8 @@ const Messaging = () => {
   const [clearedChats, setClearedChats] = useState(() => loadClearedChats());
   const [showScheduledBlockManager, setShowScheduledBlockManager] = useState(false);
   const [selectedContactForScheduledBlock, setSelectedContactForScheduledBlock] = useState(null);
+  const [showFamilyAccessManager, setShowFamilyAccessManager] = useState(false);
+  const [selectedContactForFamilyAccess, setSelectedContactForFamilyAccess] = useState(null);
   const [isNetworkOnline, setIsNetworkOnline] = useState(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine !== false
   );
@@ -507,6 +510,8 @@ const Messaging = () => {
         url = '/messaging/contacts?showBlocked=true';
       } else if (filterType === 'favorites') {
         url = '/messaging/contacts?favorite=true';
+      } else if (filterType === 'family') {
+        url = '/messaging/contacts?category=family';
       }
 
       const response = await apiCall(url, 'GET');
@@ -1798,6 +1803,30 @@ const Messaging = () => {
     setShowScheduledBlockManager(true);
   };
 
+  const handleToggleFamilyCategory = async (contact) => {
+    const contactId = getEntityId(contact?.contactUserId || contact);
+    if (!contactId) {
+      return;
+    }
+
+    const currentCategory = String(contact?.category || '').trim().toLowerCase();
+    const nextCategory = currentCategory === 'family' ? 'personal' : 'family';
+
+    try {
+      await apiCall(`/messaging/contacts/${contactId}/category`, 'PUT', {
+        category: nextCategory,
+      });
+      await loadContacts(contactFilterType);
+    } catch (error) {
+      console.error('Error updating contact category:', error);
+    }
+  };
+
+  const handleManageFamilyAccess = (contact) => {
+    setSelectedContactForFamilyAccess(contact);
+    setShowFamilyAccessManager(true);
+  };
+
   const handleSelectContact = (contact) => {
     const contactId = contact?.contactUserId?._id || contact?._id;
 
@@ -2484,6 +2513,8 @@ const Messaging = () => {
               onBlockContact={handleBlockContact}
               onUnblockContact={handleUnblockContact}
               onToggleFavorite={handleToggleFavorite}
+              onToggleFamilyCategory={handleToggleFamilyCategory}
+              onManageFamilyAccess={handleManageFamilyAccess}
               onScheduleBlock={handleScheduleBlock}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
@@ -2987,6 +3018,16 @@ const Messaging = () => {
             contact={selectedContactForScheduledBlock}
             onClose={() => setShowScheduledBlockManager(false)}
             onBlockAdded={() => loadContacts(contactFilterType)}
+          />
+        </div>
+      )}
+
+      {showFamilyAccessManager && selectedContactForFamilyAccess && (
+        <div className="modal-overlay">
+          <FamilyAccessManager
+            contact={selectedContactForFamilyAccess}
+            onClose={() => setShowFamilyAccessManager(false)}
+            onUpdated={() => loadContacts(contactFilterType)}
           />
         </div>
       )}
