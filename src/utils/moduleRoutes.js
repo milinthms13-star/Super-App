@@ -13,6 +13,7 @@ export const MODULE_PATHS = {
   billpay: "/billpay",
   skilllearning: "/skilllearning",
   fooddelivery: "/fooddelivery",
+  devadarshan: "/devadarshan",
   hyperlocal: "/hyperlocal",
   localmarket: "/localmarket",
   ridesharing: "/ridesharing",
@@ -54,6 +55,12 @@ const MODULE_ID_ALIASES = {
   deliveryhub: "hyperlocal",
   instamart: "hyperlocal",
   dunzo: "hyperlocal",
+  templebooking: "devadarshan",
+  eventbooking: "devadarshan",
+  hallbooking: "devadarshan",
+  vazhipadu: "devadarshan",
+  poojalink: "devadarshan",
+  blessinghub: "devadarshan",
 };
 
 export const normalizeModuleId = (moduleId = "") => {

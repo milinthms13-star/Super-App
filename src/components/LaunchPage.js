@@ -76,6 +76,12 @@ const moduleFallbacks = {
     icon: "FaUtensils",
     isComingSoon: false,
   },
+  devadarshan: {
+    title: "Devadarshan",
+    description: "Temple vazhipadu, event booking, hall booking, donation receipts, and schedule tracking.",
+    icon: "FaStar",
+    isComingSoon: false,
+  },
   mydiary: {
     title: "MyDiary",
     description: "Personal diary, journaling, and memory storage.",
@@ -133,6 +139,7 @@ const LaunchPage = ({
     "Nila Utility Hub": "billpay",
     "Nila Skill Hub": "skilllearning",
     Feastly: "fooddelivery",
+    Devadarshan: "devadarshan",
     "Nila Hyperlocal Delivery": "hyperlocal",
     "Local Market": "localmarket",
     SwiftRide: "ridesharing",

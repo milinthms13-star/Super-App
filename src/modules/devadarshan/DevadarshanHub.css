@@ -1,0 +1,167 @@
+.devadarshan-page {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.devadarshan-hero,
+.devadarshan-panel,
+.devadarshan-card {
+  border: 1px solid #c7d9ed;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f9fcff, #edf6fd);
+}
+
+.devadarshan-hero {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.devadarshan-kicker {
+  margin: 0;
+  color: #0e4f8f;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.devadarshan-hero h1 {
+  margin: 0;
+  color: #123456;
+  font-size: clamp(1.3rem, 2.6vw, 2rem);
+}
+
+.devadarshan-subtitle {
+  margin: 0;
+  color: #456684;
+}
+
+.devadarshan-hero-controls {
+  display: grid;
+  grid-template-columns: 1fr 190px;
+  gap: 0.65rem;
+}
+
+.devadarshan-hero-controls input,
+.devadarshan-hero-controls select,
+.devadarshan-form input,
+.devadarshan-form select,
+.devadarshan-form textarea {
+  width: 100%;
+  border: 1px solid #b6cee5;
+  border-radius: 11px;
+  padding: 0.66rem 0.75rem;
+  background: #fff;
+  color: #17324c;
+}
+
+.devadarshan-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.devadarshan-section h2,
+.devadarshan-panel h2,
+.devadarshan-panel h3 {
+  margin: 0;
+  color: #123456;
+}
+
+.devadarshan-cards {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.devadarshan-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem;
+}
+
+.devadarshan-card h3,
+.devadarshan-card p {
+  margin: 0;
+}
+
+.devadarshan-card p {
+  color: #42627f;
+  font-size: 0.92rem;
+}
+
+.devadarshan-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.devadarshan-panel {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.devadarshan-form {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.devadarshan-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #224561;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.devadarshan-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.devadarshan-checkbox input {
+  width: auto;
+}
+
+.devadarshan-card button,
+.devadarshan-form button {
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0e6ba8, #199eae);
+  color: #fff;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.devadarshan-status {
+  margin: 0;
+  border-radius: 12px;
+  border: 1px solid #b8e4c6;
+  background: #e8f8ed;
+  color: #1f6f41;
+  padding: 0.66rem 0.75rem;
+  font-weight: 600;
+}
+
+.devadarshan-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #2f4f68;
+}
+
+.devadarshan-list li {
+  margin: 0.3rem 0;
+}
+
+@media (max-width: 720px) {
+  .devadarshan-hero-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .devadarshan-page {
+    padding: 0.75rem;
+  }
+}

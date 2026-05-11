@@ -19,6 +19,7 @@ const GlobalSearch = () => {
     { id: "learning", label: "Skill Learning & Career", icon: "K", module: "skilllearning" },
     { id: "rides", label: "Rides", icon: "R", module: "ridesharing" },
     { id: "food", label: "Food & Restaurants", icon: "D", module: "fooddelivery" },
+    { id: "temple", label: "Temple & Event Booking", icon: "T", module: "devadarshan" },
     { id: "hyperlocal", label: "Hyperlocal Delivery", icon: "H", module: "hyperlocal" },
     { id: "jobs", label: "Jobs & Services", icon: "J", module: "classifieds" },
     { id: "posts", label: "Community Posts", icon: "S", module: "socialmedia" },
@@ -47,7 +48,7 @@ const GlobalSearch = () => {
     });
 
     if (query.length > 0) {
-      ["products", "people", "homes", "loans", "freelancers", "bills", "learning", "rides", "hyperlocal"].forEach((cat) => {
+      ["products", "people", "homes", "loans", "freelancers", "bills", "learning", "rides", "food", "temple", "hyperlocal"].forEach((cat) => {
         const categoryData = searchCategories.find((entry) => entry.id === cat);
         if (categoryData) {
           mockResults.push({

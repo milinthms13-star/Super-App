@@ -149,6 +149,15 @@ const Icon = ({ type, className = "" }) => {
           <path d="M17 4c1.7 2 1.7 6 0 8" />
         </svg>
       );
+    case "devadarshan":
+      return (
+        <svg {...common}>
+          <path d="M4 20h16" />
+          <path d="M6 20V10h12v10" />
+          <path d="M12 4 4 10h16L12 4Z" />
+          <path d="M10 14h4" />
+        </svg>
+      );
     case "hyperlocal":
       return (
         <svg {...common}>
@@ -335,6 +344,17 @@ const MODULE_CONFIG = [
     stats: "156K Deliveries",
     gradient: "linear-gradient(135deg, #FF5252 0%, #FF6B5B 100%)",
     emoji: "🍽️",
+  },
+  {
+    id: "devadarshan",
+    nameKey: "modules.devadarshan",
+    fallbackName: "Devadarshan",
+    icon: "devadarshan",
+    descriptionKey: "dashboard.moduleDescriptions.devadarshan",
+    fallbackDescription: "Temple vazhipadu, event and hall booking with donation receipts and Kerala-focused workflows.",
+    stats: "42K+ Temple Bookings",
+    gradient: "linear-gradient(135deg, #0F4C81 0%, #1E3A8A 45%, #0EA5A7 100%)",
+    emoji: "DV",
   },
   {
     id: "hyperlocal",
@@ -662,6 +682,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "freelancer" ||
         module.id === "billpay" ||
         module.id === "skilllearning" ||
+        module.id === "devadarshan" ||
         module.id === "hyperlocal" ||
         normalizedEnabledModuleIds.includes(module.id)
       );
@@ -673,6 +694,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "freelancer" ||
         module.id === "billpay" ||
         module.id === "skilllearning" ||
+        module.id === "devadarshan" ||
         module.id === "hyperlocal" ||
         subscribedCategoryIds.includes(module.id)
     );
