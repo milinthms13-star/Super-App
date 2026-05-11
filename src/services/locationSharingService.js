@@ -176,6 +176,16 @@ class LocationSharingService {
     }
   }
 
+  async requestCameraPermission() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Camera support is unavailable in this browser.');
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    stream.getTracks().forEach((track) => track.stop());
+    return true;
+  }
+
   // Get active location sessions
   async getActiveSessions() {
     try {

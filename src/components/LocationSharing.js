@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import locationSharingService from '../services/locationSharingService';
+import FamilyAccessService from '../services/familyAccessService';
 import './LocationSharing.css';
 
 const LocationSharing = ({ recipientId, recipientName, onClose }) => {
@@ -10,6 +11,10 @@ const LocationSharing = ({ recipientId, recipientName, onClose }) => {
   const [periodic, setPeriodic] = useState(false);
   const [loading, setLoading] = useState(false);
   const [locationHistory, setLocationHistory] = useState([]);
+  const [cameraPermissionGranted, setCameraPermissionGranted] = useState(false);
+  const [cameraAccessAllowed, setCameraAccessAllowed] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const [cameraError, setCameraError] = useState('');
 
   useEffect(() => {
     const initialize = async () => {
@@ -81,6 +86,66 @@ const LocationSharing = ({ recipientId, recipientName, onClose }) => {
     } catch (error) {
       console.error('Failed to load location history:', error);
     }
+  };
+
+  const checkCameraAccessPermission = async () => {
+    if (!recipientId) {
+      setCameraError('Camera access requires a recipient.');
+      return false;
+    }
+
+    setCameraLoading(true);
+    setCameraError('');
+
+    try {
+      const result = await FamilyAccessService.checkCameraAccess(recipientId);
+      const allowed = Boolean(
+        result?.allowed ||
+        result?.accessResult?.allowed ||
+        result?.accessResult?.accessAllowed ||
+        false
+      );
+      setCameraAccessAllowed(allowed);
+      if (!allowed) {
+        setCameraError('Camera access is not enabled via family permission.');
+      }
+      return allowed;
+    } catch (error) {
+      setCameraError(error?.message || 'Unable to verify camera access.');
+      return false;
+    } finally {
+      setCameraLoading(false);
+    }
+  };
+
+  const requestCameraAccess = async () => {
+    setCameraLoading(true);
+    setCameraError('');
+
+    try {
+      await locationSharingService.requestCameraPermission();
+      setCameraPermissionGranted(true);
+      return true;
+    } catch (error) {
+      console.error('Camera permission request failed:', error);
+      setCameraError(
+        error?.message ||
+          'Unable to access the camera. Please check browser permissions and try again.'
+      );
+      setCameraPermissionGranted(false);
+      return false;
+    } finally {
+      setCameraLoading(false);
+    }
+  };
+
+  const handleRequestCameraAccess = async () => {
+    const allowed = await checkCameraAccessPermission();
+    if (!allowed) {
+      return;
+    }
+
+    await requestCameraAccess();
   };
 
   const formatTimeRemaining = (endTime) => {
@@ -172,6 +237,42 @@ const LocationSharing = ({ recipientId, recipientName, onClose }) => {
             </button>
           </div>
         )}
+
+        <div className="camera-permission-section">
+          <h4>📷 Camera Access</h4>
+          <p className="camera-permission-description">
+            Request camera permission for {recipientName}. This checks your family access setting and prompts the browser to grant camera use.
+          </p>
+          <div className="camera-permission-controls">
+            <button
+              className="camera-permission-button"
+              onClick={handleRequestCameraAccess}
+              disabled={cameraLoading}
+              type="button"
+            >
+              {cameraLoading ? 'Checking...' : 'Request Camera Access'}
+            </button>
+            <button
+              className="camera-permission-secondary"
+              onClick={checkCameraAccessPermission}
+              disabled={cameraLoading}
+              type="button"
+            >
+              Check Family Camera Access
+            </button>
+          </div>
+          <div className="camera-permission-status">
+            <span>Status: </span>
+            <strong>
+              {cameraPermissionGranted
+                ? 'Camera permission granted'
+                : cameraAccessAllowed
+                ? 'Family access allowed, camera permission not granted yet'
+                : 'Camera access not allowed'}
+            </strong>
+          </div>
+          {cameraError && <p className="camera-permission-error">{cameraError}</p>}
+        </div>
 
         <div className="active-sessions-section">
           <h4>All Location Sessions</h4>

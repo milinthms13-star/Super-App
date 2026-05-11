@@ -112,6 +112,63 @@
   font-size: 0.9rem;
 }
 
+.camera-permission-section {
+  margin-top: 24px;
+  padding: 18px;
+  background: #f6f8ff;
+  border: 1px solid #d7def6;
+  border-radius: 10px;
+}
+
+.camera-permission-section h4 {
+  margin-top: 0;
+  color: #2f3a85;
+}
+
+.camera-permission-description {
+  margin: 10px 0 16px;
+  color: #475375;
+  font-size: 0.95rem;
+}
+
+.camera-permission-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.camera-permission-button,
+.camera-permission-secondary {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.camera-permission-button {
+  background: #4f6ef7;
+  color: white;
+}
+
+.camera-permission-secondary {
+  background: white;
+  color: #4f6ef7;
+  border: 1px solid #4f6ef7;
+}
+
+.camera-permission-status {
+  color: #2a2e45;
+  font-size: 0.95rem;
+}
+
+.camera-permission-error {
+  margin: 10px 0 0;
+  color: #b02a37;
+  font-size: 0.93rem;
+}
+
 .start-sharing-button,
 .stop-sharing-button {
   width: 100%;
