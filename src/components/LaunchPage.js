@@ -40,6 +40,12 @@ const iconMap = {
 };
 
 const moduleFallbacks = {
+  skilllearning: {
+    title: "Nila Skill Hub",
+    description: "Skill learning, mock tests, interview prep, and certification tracking.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   billpay: {
     title: "Nila Utility Hub",
     description: "BBPS sandbox bill fetch/pay, reminders, saved billers, and receipt vault.",
@@ -119,6 +125,7 @@ const LaunchPage = ({
     "Nila Finance Hub": "finance",
     NilaWorks: "freelancer",
     "Nila Utility Hub": "billpay",
+    "Nila Skill Hub": "skilllearning",
     Feastly: "fooddelivery",
     "Local Market": "localmarket",
     SwiftRide: "ridesharing",

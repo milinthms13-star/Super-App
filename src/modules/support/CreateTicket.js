@@ -98,6 +98,7 @@ const CreateTicket = ({ onCancel, onSubmit }) => {
                 <option value="finance">Nila Finance Hub</option>
                 <option value="freelancer">NilaWorks</option>
                 <option value="billpay">Nila Utility Hub</option>
+                <option value="skilllearning">Nila Skill Hub</option>
                 <option value="fooddelivery">Feastly</option>
                 <option value="localmarket">Local Market</option>
                 <option value="ridesharing">SwiftRide</option>

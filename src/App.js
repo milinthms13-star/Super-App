@@ -43,6 +43,7 @@ const FreelancerMarketplace = React.lazy(() =>
   import("./modules/freelancer/FreelancerMarketplace")
 );
 const BillPayHub = React.lazy(() => import("./modules/billpay/BillPayHub"));
+const SkillLearningHub = React.lazy(() => import("./modules/skilllearning/SkillLearningHub"));
 const FoodDelivery = React.lazy(() => import("./modules/fooddelivery/FoodDelivery"));
 const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket"));
 const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
@@ -114,6 +115,7 @@ const PREVIEW_ENABLED_MODULES = [
   "finance",
   "freelancer",
   "billpay",
+  "skilllearning",
   "fooddelivery",
   "localmarket",
   "ridesharing",
@@ -139,6 +141,7 @@ const PREVIEW_BUSINESS_CATEGORIES = [
   { id: "finance", name: "Nila Finance Hub", fee: 1599, requiresFoodLicense: false },
   { id: "freelancer", name: "NilaWorks", fee: 1399, requiresFoodLicense: false },
   { id: "billpay", name: "Nila Utility Hub", fee: 1199, requiresFoodLicense: false },
+  { id: "skilllearning", name: "Nila Skill Hub", fee: 999, requiresFoodLicense: false },
   { id: "fooddelivery", name: "Feastly", fee: 1999, requiresFoodLicense: true },
   { id: "ridesharing", name: "SwiftRide", fee: 1499, requiresFoodLicense: false },
   { id: "matrimonial", name: "SoulMatch", fee: 899, requiresFoodLicense: false },
@@ -1121,6 +1124,7 @@ function AppShell() {
               <Route path="finance" element={<FinanceHub />} />
               <Route path="freelancer" element={<FreelancerMarketplace />} />
               <Route path="billpay" element={<BillPayHub />} />
+              <Route path="skilllearning" element={<SkillLearningHub />} />
               <Route path="fooddelivery" element={<FoodDelivery />} />
               <Route path="localmarket" element={<LocalMarket />} />
               <Route path="ridesharing" element={<RideSharing />} />

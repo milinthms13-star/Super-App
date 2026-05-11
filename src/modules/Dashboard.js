@@ -133,6 +133,14 @@ const Icon = ({ type, className = "" }) => {
           <path d="M16 4v4h4" />
         </svg>
       );
+    case "skilllearning":
+      return (
+        <svg {...common}>
+          <path d="M4 6h16v12H4z" />
+          <path d="M8 10h8M8 14h5" />
+          <path d="M12 6V4" />
+        </svg>
+      );
     case "fooddelivery":
       return (
         <svg {...common}>
@@ -297,6 +305,17 @@ const MODULE_CONFIG = [
     stats: "210K+ Utility Events",
     gradient: "linear-gradient(135deg, #0B2545 0%, #134E4A 55%, #1D4ED8 100%)",
     emoji: "B",
+  },
+  {
+    id: "skilllearning",
+    nameKey: "modules.skilllearning",
+    fallbackName: "Nila Skill Hub",
+    icon: "skilllearning",
+    descriptionKey: "dashboard.moduleDescriptions.skilllearning",
+    fallbackDescription: "Learning platform with courses, mock tests, certification wallet, and AI career guidance",
+    stats: "300K+ Learning Actions",
+    gradient: "linear-gradient(135deg, #1E1B4B 0%, #0F4C81 55%, #0EA5A7 100%)",
+    emoji: "K",
   },
   {
     id: "fooddelivery",
@@ -623,6 +642,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "finance" ||
         module.id === "freelancer" ||
         module.id === "billpay" ||
+        module.id === "skilllearning" ||
         normalizedEnabledModuleIds.includes(module.id)
       );
     })
@@ -632,6 +652,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "finance" ||
         module.id === "freelancer" ||
         module.id === "billpay" ||
+        module.id === "skilllearning" ||
         subscribedCategoryIds.includes(module.id)
     );
   const visibleCards = [
