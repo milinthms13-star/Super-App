@@ -214,6 +214,43 @@ const normalizeProfilePayload = (payload = {}) => ({
   updatedAt: payload.updatedAt || "",
 });
 
+const normalizeConsultantPayload = (payload = {}) => ({
+  id: String(payload.id || payload.name || `consultant-${Math.random().toString(36).slice(2)}`).trim(),
+  name: String(payload.name || "Astrology Consultant").trim(),
+  specialty: String(payload.specialty || "General consultation").trim(),
+  rate: String(payload.rate || "₹1,000 / 15 min").trim(),
+  amountInr: Number(payload.amountInr) > 0 ? Number(payload.amountInr) : 1000,
+  availability: String(payload.availability || "Today").trim(),
+  availableSlots: Array.isArray(payload.availableSlots)
+    ? payload.availableSlots
+        .map((slot, index) => ({
+          id: String(slot?.id || `${payload.id || "slot"}-${index + 1}`).trim(),
+          label: String(slot?.label || slot?.slot || "").trim(),
+          date: String(slot?.date || "").trim(),
+        }))
+        .filter((slot) => slot.id && slot.label)
+    : [],
+});
+
+const normalizeConsultationBooking = (payload = {}) => ({
+  id: String(payload.id || payload._id || payload.confirmationCode || "").trim(),
+  consultantId: String(payload.consultantId || "").trim(),
+  consultantName: String(payload.consultantName || "").trim(),
+  slot: String(payload.slot || "").trim(),
+  preferredDate: formatDateInputValue(payload.preferredDate) || "",
+  status: String(payload.status || "confirmed").trim(),
+  confirmationCode: String(payload.confirmationCode || "").trim(),
+  amountInr: Number(payload.amountInr) > 0 ? Number(payload.amountInr) : 0,
+  currency: String(payload.currency || "INR").trim(),
+  createdAt: payload.createdAt || "",
+});
+
+const extractFileNameFromContentDisposition = (contentDisposition = "") => {
+  const headerValue = String(contentDisposition || "");
+  const fileNameMatch = headerValue.match(/filename="?([^";]+)"?/i);
+  return fileNameMatch?.[1] || `kundli-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+};
+
 const buildServiceError = (error, fallbackData, defaultMessage) => {
   const nextError = new Error(
     error?.response?.data?.message || error?.message || defaultMessage || "Astrology request failed."
@@ -337,7 +374,7 @@ export const astrologyService = {
     const fallback = {
       tithi: "Shukla Paksha Tritiya",
       nakshatra: "Revati",
-      yoga: "Rohini",
+      yoga: "Siddha",
       karana: "Bava",
       sunrise: "06:02 AM",
       sunset: "06:40 PM",
@@ -413,6 +450,11 @@ export const astrologyService = {
         { planet: "Mars", position: "05° Gemini" },
         { planet: "Mercury", position: "18° Taurus" },
       ],
+      remedies: [
+        "Begin the day with focused breathing and prayer.",
+        "Make one practical plan for the week and follow through.",
+        "Support family harmony with calm communication.",
+      ],
     };
 
     try {
@@ -429,7 +471,8 @@ export const astrologyService = {
   async getCompatibility(sign, partnerSign) {
     const fallback = {
       score: 76,
-      summary: "Your signs have strong emotional alignment, with small adjustments needed around timing and finances.",
+      summary:
+        "Your signs have strong emotional alignment, with small adjustments needed around timing and finances.",
       keyMatch: "Rasi Porutham: Sama, Gana Porutham: Maitra, Vasya Porutham: Anuradha",
     };
 
@@ -474,16 +517,28 @@ export const astrologyService = {
   async getConsultants() {
     const fallback = [
       {
+        id: "acharya-madhav",
         name: "Madhav Acharya",
         specialty: "Kerala Jathakam, Matchmaking, Remedies",
         rate: "₹1,200 / 15 min",
+        amountInr: 1200,
         availability: "Today 4:00 PM - 7:00 PM",
+        availableSlots: [
+          { id: "today-1600", label: "Today 4:00 PM", date: "today" },
+          { id: "today-1730", label: "Today 5:30 PM", date: "today" },
+        ],
       },
       {
+        id: "nambiar-priya",
         name: "Priya Nambiar",
         specialty: "Kundli, Nakshatra counseling, Blessings rituals",
         rate: "₹950 / 15 min",
+        amountInr: 950,
         availability: "Tomorrow 10:00 AM - 1:00 PM",
+        availableSlots: [
+          { id: "tomorrow-1000", label: "Tomorrow 10:00 AM", date: "tomorrow" },
+          { id: "tomorrow-1130", label: "Tomorrow 11:30 AM", date: "tomorrow" },
+        ],
       },
     ];
 
@@ -492,9 +547,74 @@ export const astrologyService = {
       if (!response.data?.success || !Array.isArray(response.data?.data)) {
         throw new Error("Unable to load astrologer profiles.");
       }
-      return response.data.data;
+      return response.data.data.map(normalizeConsultantPayload);
     } catch (error) {
-      throw buildServiceError(error, fallback, "Unable to load astrologer profiles.");
+      throw buildServiceError(
+        error,
+        fallback.map(normalizeConsultantPayload),
+        "Unable to load astrologer profiles."
+      );
+    }
+  },
+
+  async downloadKundliReport(profile = {}) {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/astrology/kundli/report`,
+        { profile },
+        {
+          responseType: "blob",
+        }
+      );
+
+      const fileName = extractFileNameFromContentDisposition(
+        response.headers?.["content-disposition"]
+      );
+
+      return {
+        blob: response.data,
+        fileName,
+      };
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to download Kundli PDF report.");
+    }
+  },
+
+  async createConsultationBooking(payload = {}) {
+    const normalizedPayload = {
+      consultantId: String(payload.consultantId || "").trim(),
+      slotId: String(payload.slotId || "").trim(),
+      preferredDate: payload.preferredDate || new Date().toISOString(),
+      notes: String(payload.notes || "").trim(),
+    };
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/astrology/consultations/book`,
+        normalizedPayload
+      );
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to create consultation booking.");
+      }
+
+      return normalizeConsultationBooking(response.data.data);
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to create consultation booking.");
+    }
+  },
+
+  async getConsultationHistory() {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/consultations`);
+
+      if (!response.data?.success || !Array.isArray(response.data?.data)) {
+        throw new Error("Unable to load consultation history.");
+      }
+
+      return response.data.data.map(normalizeConsultationBooking);
+    } catch (error) {
+      throw buildServiceError(error, [], "Unable to load consultation history.");
     }
   },
 };

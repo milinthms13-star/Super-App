@@ -1,5 +1,5 @@
 .business-builder-page {
-  max-width: 1180px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 24px 20px 56px;
   color: #111827;
@@ -35,10 +35,11 @@
   border: 1px solid #d1d5db;
   background: #ffffff;
   color: #0f172a;
-  padding: 12px 18px;
+  padding: 11px 16px;
   border-radius: 999px;
   cursor: pointer;
   transition: all 0.2s ease;
+  font-weight: 600;
 }
 
 .tab-button.active,
@@ -59,12 +60,27 @@
 
 .section-card h2 {
   margin-bottom: 8px;
-  font-size: 1.9rem;
+  font-size: 1.8rem;
 }
 
 .section-subtitle {
   color: #475569;
   margin-bottom: 20px;
+}
+
+.status-banner {
+  margin: 0 0 20px;
+  border-radius: 14px;
+  padding: 14px 18px;
+  background: #d1fae5;
+  border: 1px solid #34d399;
+  color: #065f46;
+}
+
+.status-banner.info {
+  background: #eff6ff;
+  border-color: #60a5fa;
+  color: #1d4ed8;
 }
 
 .form-grid {
@@ -94,7 +110,7 @@
 }
 
 .form-grid textarea {
-  min-height: 96px;
+  min-height: 110px;
   resize: vertical;
 }
 
@@ -125,19 +141,280 @@
   color: #0f172a;
 }
 
-.status-banner {
-  margin: 0 0 20px;
-  border-radius: 14px;
-  padding: 14px 18px;
-  background: #d1fae5;
-  border: 1px solid #34d399;
-  color: #065f46;
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
 }
 
-.status-banner.info {
-  background: #eff6ff;
-  border-color: #60a5fa;
-  color: #1d4ed8;
+.kpi-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kpi-card strong {
+  font-size: 1.3rem;
+  color: #0f172a;
+}
+
+.kpi-card.highlight {
+  background: #f0fdfa;
+  border-color: #99f6e4;
+}
+
+.kpi-label {
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.insight-panels {
+  margin-top: 22px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.insight-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.insight-card h3 {
+  margin-bottom: 8px;
+}
+
+.insight-card ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #334155;
+}
+
+.wizard-progress-wrap {
+  margin-bottom: 16px;
+}
+
+.wizard-progress-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #14b8a6, #10b981);
+}
+
+.wizard-card {
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.wizard-card textarea {
+  width: 100%;
+  margin-top: 10px;
+  min-height: 120px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.wizard-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.wizard-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wizard-summary-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.wizard-summary-item p {
+  color: #475569;
+  margin-top: 6px;
+  white-space: pre-wrap;
+}
+
+.ai-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.plan-output {
+  display: grid;
+  gap: 14px;
+}
+
+.plan-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.plan-section h3 {
+  margin-bottom: 8px;
+  color: #0f172a;
+}
+
+.plan-section p,
+.plan-section li {
+  color: #334155;
+}
+
+.swot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.section-note {
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.branding-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.branding-grid ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.brand-color-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.brand-color-chip {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+}
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.scheme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scheme-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.scheme-tags {
+  color: #0f766e;
+  font-size: 0.9rem;
+}
+
+.document-preview {
+  margin-top: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.document-preview pre {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  color: #334155;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 0.9rem;
+}
+
+.document-history {
+  display: grid;
+  gap: 10px;
+}
+
+.document-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.checklist-list {
+  display: grid;
+  gap: 10px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.checklist-item.done {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.list-section {
+  margin-top: 28px;
+}
+
+.list-section.compact {
+  margin-top: 16px;
 }
 
 .invoice-items-header,
@@ -156,10 +433,6 @@
 
 .invoice-item-row input {
   min-height: 40px;
-}
-
-.list-section {
-  margin-top: 28px;
 }
 
 .invoice-list,
@@ -205,6 +478,17 @@
   font-size: 0.85rem;
 }
 
+@media (max-width: 980px) {
+  .kpi-grid,
+  .insight-panels,
+  .wizard-summary-grid,
+  .branding-grid,
+  .toggle-grid,
+  .scheme-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 900px) {
   .form-grid {
     grid-template-columns: 1fr;
@@ -212,6 +496,10 @@
 
   .invoice-items-header,
   .invoice-item-row {
+    grid-template-columns: 1fr;
+  }
+
+  .swot-grid {
     grid-template-columns: 1fr;
   }
 }

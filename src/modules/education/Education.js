@@ -1,95 +1,217 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import "./Education.css";
 
 const EDUCATION_SECTIONS = [
   {
-    id: "tuition",
-    title: "Online Tuition",
-    description: "Local + online tutor marketplace for classes 1-12",
-    icon: "📚",
-    features: ["Subject-wise tutors", "One-to-one live classes", "Demo booking", "Progress reports"],
+    id: "home",
+    title: "Overview",
+    description: "Get a quick overview of tuition, courses, community and support",
+    icon: "🏠",
   },
   {
     id: "courses",
-    title: "Skill Courses",
-    description: "Job-oriented learning with certificates",
+    title: "Courses",
+    description: "Browse skill courses, filter by level, view details and enroll",
     icon: "🎓",
-    features: ["Spoken English", "Coding", "Digital Marketing", "Placement support"],
+  },
+  {
+    id: "my-learning",
+    title: "My Learning",
+    description: "Continue your enrolled courses and revisit progress",
+    icon: "📘",
   },
   {
     id: "community",
-    title: "Student Community",
-    description: "Safe moderated forums and study groups",
+    title: "Community",
+    description: "Study groups, doubt boards and student discussions",
     icon: "👥",
-    features: ["Doubt posting", "Notes sharing", "Study partners", "Daily GK"],
   },
   {
-    id: "abroad",
-    title: "Study Abroad",
-    description: "Guidance for international education",
-    icon: "✈️",
-    features: ["Country selection", "College finder", "Visa support", "Education loans"],
+    id: "career",
+    title: "Career",
+    description: "Resume help, interview prep and job pathways",
+    icon: "💼",
   },
   {
-    id: "scholarships",
-    title: "Scholarship Finder",
-    description: "Government and merit scholarships",
-    icon: "🏆",
-    features: ["Eligibility checker", "Deadline alerts", "Document guidance"],
+    id: "government",
+    title: "Government",
+    description: "Scholarships, schemes and government support",
+    icon: "🏛️",
   },
 ];
 
 const TUITION_SUBJECTS = [
-  "Mathematics", "Science", "English", "Social Studies", "Hindi", "Malayalam", "Physics", "Chemistry", "Biology"
+  "Mathematics",
+  "Science",
+  "English",
+  "Social Studies",
+  "Hindi",
+  "Malayalam",
+  "Physics",
+  "Chemistry",
+  "Biology",
 ];
 
 const SKILL_COURSES = [
-  { title: "Spoken English", level: "Beginner", duration: "3 months", price: "₹2,999" },
-  { title: "Computer Basics", level: "Beginner", duration: "2 months", price: "₹1,999" },
-  { title: "Coding Fundamentals", level: "Intermediate", duration: "6 months", price: "₹9,999" },
-  { title: "Digital Marketing", level: "Advanced", duration: "4 months", price: "₹7,999" },
+  {
+    id: "spoken-english",
+    title: "Spoken English",
+    level: "Beginner",
+    duration: "3 months",
+    price: "₹2,999",
+    description: "Build confidence, fluency and spoken skills for school, college, and interviews.",
+    syllabus: ["Everyday conversation", "Pronunciation practice", "Grammar basics", "Mock speaking tests"],
+    outcomes: ["Improved confidence", "Interview readiness", "Better classroom performance"],
+  },
+  {
+    id: "computer-basics",
+    title: "Computer Basics",
+    level: "Beginner",
+    duration: "2 months",
+    price: "₹1,999",
+    description: "Learn essential computer skills, MS Office, email, and internet basics for students.",
+    syllabus: ["PC fundamentals", "Word processing", "Spreadsheets", "Email and internet safety"],
+    outcomes: ["Basic office skills", "Online learning readiness", "Homework productivity"],
+  },
+  {
+    id: "coding-fundamentals",
+    title: "Coding Fundamentals",
+    level: "Intermediate",
+    duration: "6 months",
+    price: "₹9,999",
+    description: "Understand programming logic, Python basics and problem solving for future careers.",
+    syllabus: ["Variables and flow control", "Functions", "Data structures", "Project building"],
+    outcomes: ["Coding confidence", "Problem solving", "Portfolio project"],
+  },
+  {
+    id: "digital-marketing",
+    title: "Digital Marketing",
+    level: "Advanced",
+    duration: "4 months",
+    price: "₹7,999",
+    description: "Master digital marketing fundamentals including social media, ads and content strategy.",
+    syllabus: ["Social media marketing", "Search marketing", "Content planning", "Campaign analytics"],
+    outcomes: ["Digital marketing skills", "Portfolio-ready campaigns", "Job preparation"],
+  },
 ];
 
 const SCHOLARSHIPS = [
-  { name: "Kerala State Merit Scholarship", amount: "₹10,000/year", deadline: "June 30, 2026", eligibility: "Merit-based" },
-  { name: "Central Government SC/ST Scholarship", amount: "₹20,000/year", deadline: "July 15, 2026", eligibility: "SC/ST students" },
-  { name: "Women Education Scholarship", amount: "₹15,000/year", deadline: "August 10, 2026", eligibility: "Female students" },
+  {
+    name: "Kerala State Merit Scholarship",
+    amount: "₹10,000/year",
+    deadline: "June 30, 2026",
+    eligibility: "Merit-based",
+  },
+  {
+    name: "Central Government SC/ST Scholarship",
+    amount: "₹20,000/year",
+    deadline: "July 15, 2026",
+    eligibility: "SC/ST students",
+  },
+  {
+    name: "Women Education Scholarship",
+    amount: "₹15,000/year",
+    deadline: "August 10, 2026",
+    eligibility: "Female students",
+  },
+];
+
+const GOVERNMENT_SCHEMES = [
+  {
+    title: "Scholarship Eligibility Checker",
+    summary: "Find scholarships you qualify for based on category and academic level.",
+  },
+  {
+    title: "Education Loan Assistance",
+    summary: "Compare low-interest government education loans for tuition and hostel support.",
+  },
+  {
+    title: "Skill Development Grants",
+    summary: "Apply for government support to cover certified skill training programs.",
+  },
+];
+
+const COMMUNITY_GROUPS = [
+  {
+    title: "Class 10 Mathematics Doubts",
+    description: "23 active discussions • Moderated",
+    action: "Join Discussion",
+  },
+  {
+    title: "SSLC Exam Preparation",
+    description: "156 members • Study partners available",
+    action: "Join Group",
+  },
+  {
+    title: "Spoken English Practice",
+    description: "100 members • Live practice sessions",
+    action: "Join Session",
+  },
+];
+
+const CAREER_RESOURCES = [
+  {
+    title: "Resume & Interview Coaching",
+    description: "Prepare a professional resume and practice interview questions.",
+    action: "Start Coaching",
+  },
+  {
+    title: "Job Pathways",
+    description: "Explore career pathways for IT, marketing, teaching and government exams.",
+    action: "Explore Jobs",
+  },
+  {
+    title: "Skill Assessment",
+    description: "Take a quick assessment to match your strengths with the best course.",
+    action: "Take Assessment",
+  },
 ];
 
 const Education = () => {
   const { currentUser } = useApp();
-  const [activeSection, setActiveSection] = useState("tuition");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [activeSection, setActiveSection] = useState("home");
+  const [courseSearchQuery, setCourseSearchQuery] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("Mathematics");
-  const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState(null);
   const [scholarshipQuery, setScholarshipQuery] = useState("");
   const [aiQuery, setAiQuery] = useState("");
   const [aiResponse, setAiResponse] = useState("");
 
+  const filteredCourses = useMemo(() => {
+    const query = courseSearchQuery.toLowerCase().trim();
+    return SKILL_COURSES.filter((course) =>
+      course.title.toLowerCase().includes(query) ||
+      course.level.toLowerCase().includes(query) ||
+      course.description.toLowerCase().includes(query)
+    );
+  }, [courseSearchQuery]);
+
   const filteredScholarships = useMemo(() => {
-    return SCHOLARSHIPS.filter(scholarship =>
-      scholarship.name.toLowerCase().includes(scholarshipQuery.toLowerCase()) ||
-      scholarship.eligibility.toLowerCase().includes(scholarshipQuery.toLowerCase())
+    const query = scholarshipQuery.toLowerCase().trim();
+    return SCHOLARSHIPS.filter((scholarship) =>
+      scholarship.name.toLowerCase().includes(query) ||
+      scholarship.eligibility.toLowerCase().includes(query)
     );
   }, [scholarshipQuery]);
 
   const handleAiQuery = () => {
     if (!aiQuery.trim()) return;
-    // Mock AI response
-    setAiResponse(`AI Study Assistant: Here's help for "${aiQuery}". This is a demo response. In a real app, this would connect to an AI service.`);
+    setAiResponse(
+      `AI Study Assistant: Here's help for "${aiQuery}". This is a demo response. In a real app, this would connect to an AI service.`
+    );
   };
 
   const handleTuitionBooking = (subject) => {
     alert(`Demo: Booked tuition for ${subject}. In real app, this would open booking flow.`);
   };
 
-  const handleCourseEnroll = (course) => {
-    alert(`Demo: Enrolled in ${course}. In real app, this would process payment.`);
+  const handleCourseEnroll = (courseTitle) => {
+    alert(`Demo: Enrolled in ${courseTitle}. In real app, this would process payment and create learning access.`);
   };
 
-  const handleScholarshipApply = (scholarship) => {
-    alert(`Demo: Applied for ${scholarship}. In real app, this would guide through application.`);
+  const handleScholarshipApply = (scholarshipName) => {
+    alert(`Demo: Applied for ${scholarshipName}. In real app, this would guide through the application process.`);
   };
 
   return (
@@ -101,12 +223,8 @@ const Education = () => {
             Connect students, parents, tutors, and institutes in a comprehensive learning platform with AI assistance and community features.
           </p>
           <div className="education-hero-actions">
-            <button type="button" className="education-primary-button" onClick={() => setActiveSection("tuition")}>
-              Find a Tutor
-            </button>
-            <button type="button" className="education-secondary-button" onClick={() => setActiveSection("courses")}>
-              Browse Courses
-            </button>
+            <button type="button" className="education-primary-button" onClick={() => setActiveSection("home")}>Home</button>
+            <button type="button" className="education-secondary-button" onClick={() => setActiveSection("courses")}>Browse Courses</button>
           </div>
           <div className="education-hero-tags">
             <span>CBSE/ICSE/Kerala syllabus</span>
@@ -132,39 +250,32 @@ const Education = () => {
         ))}
       </section>
 
-      {activeSection === "tuition" && (
+      {activeSection === "home" && (
         <section className="education-section">
           <div className="education-section-heading">
-            <h2>Online Tuition Marketplace</h2>
-            <p>Find verified tutors for classes 1-12 with live classes and progress tracking.</p>
+            <h2>Learning at a glance</h2>
+            <p>Find the right tuition, skill course, career guidance, community support, or government scholarship from one hub.</p>
           </div>
-          <div className="education-tuition-grid">
-            <div className="education-filter-card">
-              <label className="education-field">
-                <span>Subject</span>
-                <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}>
-                  {TUITION_SUBJECTS.map((subject) => (
-                    <option key={subject} value={subject}>{subject}</option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" className="education-primary-button" onClick={() => handleTuitionBooking(selectedSubject)}>
-                Book Demo Class
-              </button>
+          <div className="education-home-grid">
+            <div className="education-course-card">
+              <h3>Start with Skill Courses</h3>
+              <p>Choose from beginner to advanced programs that are built for employability.</p>
+              <button type="button" className="education-primary-button" onClick={() => setActiveSection("courses")}>Browse Courses</button>
             </div>
-            <div className="education-tutors-list">
-              <div className="education-tutor-card">
-                <strong>Ms. Priya Nair</strong>
-                <span>Mathematics Expert • 8 years experience</span>
-                <span>₹800/month • 4.9 ⭐ (156 reviews)</span>
-                <button type="button" className="education-secondary-button">Contact Tutor</button>
-              </div>
-              <div className="education-tutor-card">
-                <strong>Mr. Rajesh Kumar</strong>
-                <span>Science Teacher • Kerala Syllabus</span>
-                <span>₹750/month • 4.8 ⭐ (89 reviews)</span>
-                <button type="button" className="education-secondary-button">Contact Tutor</button>
-              </div>
+            <div className="education-course-card">
+              <h3>Prepare for Government Support</h3>
+              <p>Search scholarships, loan assistance and education grants for students.</p>
+              <button type="button" className="education-secondary-button" onClick={() => setActiveSection("government")}>View Support</button>
+            </div>
+            <div className="education-course-card">
+              <h3>Join the Community</h3>
+              <p>Get help in doubt forums, study groups and peer sessions.</p>
+              <button type="button" className="education-secondary-button" onClick={() => setActiveSection("community")}>Join Community</button>
+            </div>
+            <div className="education-course-card">
+              <h3>Career Growth</h3>
+              <p>Access resume help, interview coaching and job readiness plans.</p>
+              <button type="button" className="education-secondary-button" onClick={() => setActiveSection("career")}>Explore Career</button>
             </div>
           </div>
         </section>
@@ -176,15 +287,43 @@ const Education = () => {
             <h2>Skill Courses Hub</h2>
             <p>Learn job-ready skills with certificates and placement support.</p>
           </div>
+          <div className="education-search-bar">
+            <label className="education-field">
+              <span>Search courses</span>
+              <input
+                type="text"
+                placeholder="Search by course name, level, or topic"
+                value={courseSearchQuery}
+                onChange={(e) => setCourseSearchQuery(e.target.value)}
+              />
+            </label>
+          </div>
           <div className="education-courses-grid">
-            {SKILL_COURSES.map((course) => (
-              <div key={course.title} className="education-course-card">
+            {filteredCourses.map((course) => (
+              <div key={course.id} className="education-course-card">
                 <h3>{course.title}</h3>
                 <span>{course.level} • {course.duration}</span>
                 <strong>{course.price}</strong>
-                <button type="button" className="education-primary-button" onClick={() => handleCourseEnroll(course.title)}>
-                  Enroll Now
-                </button>
+                <p>{course.description}</p>
+                <div className="education-course-actions">
+                  <button
+                    type="button"
+                    className="education-secondary-button"
+                    onClick={() => {
+                      setSelectedCourse(course);
+                      setActiveSection("course-detail");
+                    }}
+                  >
+                    View Details
+                  </button>
+                  <button
+                    type="button"
+                    className="education-primary-button"
+                    onClick={() => handleCourseEnroll(course.title)}
+                  >
+                    Enroll Now
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -212,37 +351,124 @@ const Education = () => {
         </section>
       )}
 
-      {activeSection === "abroad" && (
+      {activeSection === "my-learning" && (
         <section className="education-section">
           <div className="education-section-heading">
-            <h2>Study Abroad Guidance</h2>
-            <p>Get expert help for international education in Canada, UK, Australia, and more.</p>
+            <h2>My Learning</h2>
+            <p>Access your enrolled courses, progress, and upcoming lessons.</p>
           </div>
-          <div className="education-abroad-grid">
-            <div className="education-country-card">
-              <h3>🇨🇦 Canada</h3>
-              <span>IELTS required • Education loans available</span>
-              <button type="button" className="education-primary-button">Get Guidance</button>
-            </div>
-            <div className="education-country-card">
-              <h3>🇬🇧 UK</h3>
-              <span>PTE accepted • Scholarship opportunities</span>
-              <button type="button" className="education-primary-button">Get Guidance</button>
-            </div>
+          <div className="education-courses-grid">
+            {SKILL_COURSES.map((course) => (
+              <div key={course.id} className="education-course-card">
+                <h3>{course.title}</h3>
+                <span>{course.level} • {course.duration}</span>
+                <strong>{course.price}</strong>
+                <div className="education-course-actions">
+                  <button
+                    type="button"
+                    className="education-secondary-button"
+                    onClick={() => {
+                      setSelectedCourse(course);
+                      setActiveSection("course-detail");
+                    }}
+                  >
+                    View Course
+                  </button>
+                  <button
+                    type="button"
+                    className="education-primary-button"
+                    onClick={() => alert(`Continue learning ${course.title}.`)}
+                  >
+                    Continue Learning
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       )}
 
-      {activeSection === "scholarships" && (
+      {activeSection === "course-detail" && (
+        <section className="education-section education-course-detail">
+          <div className="education-section-heading">
+            <h2>{selectedCourse ? selectedCourse.title : "Course Detail"}</h2>
+            <p>Course details, syllabus, outcomes, and next steps.</p>
+          </div>
+          {selectedCourse ? (
+            <div className="education-course-detail-grid">
+              <div className="education-course-detail-card">
+                <h3>About this course</h3>
+                <p>{selectedCourse.description}</p>
+                <ul>
+                  {selectedCourse.syllabus.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="education-course-detail-card">
+                <h3>What you'll gain</h3>
+                <ul>
+                  {selectedCourse.outcomes.map((outcome) => (
+                    <li key={outcome}>{outcome}</li>
+                  ))}
+                </ul>
+                <p><strong>Duration:</strong> {selectedCourse.duration}</p>
+                <p><strong>Level:</strong> {selectedCourse.level}</p>
+                <p><strong>Price:</strong> {selectedCourse.price}</p>
+                <div className="education-course-actions">
+                  <button
+                    type="button"
+                    className="education-secondary-button"
+                    onClick={() => setActiveSection("courses")}
+                  >
+                    Back to Courses
+                  </button>
+                  <button
+                    type="button"
+                    className="education-primary-button"
+                    onClick={() => handleCourseEnroll(selectedCourse.title)}
+                  >
+                    Enroll in Course
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="education-course-detail-card">
+              <p>Select a course to see its details.</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeSection === "career" && (
         <section className="education-section">
           <div className="education-section-heading">
-            <h2>Scholarship Finder</h2>
-            <p>Discover government and merit scholarships with eligibility checking.</p>
+            <h2>Career Support</h2>
+            <p>Get career guidance, resume help, interview preparation and placement readiness.</p>
+          </div>
+          <div className="education-career-grid">
+            {CAREER_RESOURCES.map((resource) => (
+              <div key={resource.title} className="education-course-card">
+                <h3>{resource.title}</h3>
+                <p>{resource.description}</p>
+                <button type="button" className="education-primary-button">{resource.action}</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeSection === "government" && (
+        <section className="education-section">
+          <div className="education-section-heading">
+            <h2>Government Support</h2>
+            <p>Find scholarships, education loans, and government scheme assistance.</p>
           </div>
           <div className="education-scholarship-search">
             <input
               type="text"
-              placeholder="Search scholarships by name or eligibility..."
+              placeholder="Search scholarships or schemes..."
               value={scholarshipQuery}
               onChange={(e) => setScholarshipQuery(e.target.value)}
             />
@@ -257,6 +483,15 @@ const Education = () => {
                 <button type="button" className="education-primary-button" onClick={() => handleScholarshipApply(scholarship.name)}>
                   Apply Now
                 </button>
+              </div>
+            ))}
+          </div>
+          <div className="education-government-grid">
+            {GOVERNMENT_SCHEMES.map((scheme) => (
+              <div key={scheme.title} className="education-course-card">
+                <h3>{scheme.title}</h3>
+                <p>{scheme.summary}</p>
+                <button type="button" className="education-secondary-button">Learn More</button>
               </div>
             ))}
           </div>

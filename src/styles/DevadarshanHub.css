@@ -1,0 +1,15 @@
+/* Minimal stub stylesheet to keep the app building.
+   DevadarshanHub currently renders a simple placeholder UI. */
+
+.devadarshan-hub {
+  padding: 24px;
+}
+
+.devadarshan-hub h1 {
+  margin: 0 0 8px;
+}
+
+.devadarshan-hub p {
+  margin: 0;
+  opacity: 0.8;
+}

@@ -5,71 +5,230 @@ import { BACKEND_BASE_URL } from "../../utils/api";
 
 const SERVICE_CATEGORIES = [
   {
-    id: "gst-tax",
-    name: "GST & Tax Services",
+    id: "gst-services",
+    name: "GST Registration / Filing",
     icon: "📊",
-    description: "Complete GST and tax compliance solutions",
+    description: "GST registration, monthly filing, and compliance assistance for growing businesses.",
     services: [
       { id: "gst-registration", name: "GST Registration", price: "₹1,500", duration: "3-5 days" },
-      { id: "gst-filing", name: "GST Filing (Monthly)", price: "₹500", duration: "2-3 days" },
-      { id: "gst-quarterly", name: "GST Filing (Quarterly)", price: "₹1,200", duration: "5-7 days" },
-      { id: "gst-correction", name: "GST Return Correction", price: "₹800", duration: "3-5 days" },
-      { id: "income-tax", name: "Income Tax Filing", price: "₹2,500", duration: "7-10 days" },
-      { id: "tds-filing", name: "TDS Filing", price: "₹1,000", duration: "3-5 days" },
-      { id: "pan-tan", name: "PAN/TAN Application", price: "₹300", duration: "1-2 days" },
-      { id: "accounting", name: "Accounting Support", price: "₹2,000/month", duration: "Monthly" },
+      { id: "gst-filing-basic", name: "GST Filing Basic", price: "₹499", duration: "2-3 days" },
+      { id: "gst-filing-standard", name: "GST Filing Standard", price: "₹1,499", duration: "2-3 days" },
+      { id: "gst-filing-premium", name: "GST Filing Premium", price: "₹2,499", duration: "2-3 days" },
+      { id: "gst-return-correction", name: "GST Return Correction", price: "₹999", duration: "3-5 days" },
     ],
   },
   {
     id: "company-registration",
     name: "Company Registration",
     icon: "🏢",
-    description: "Register your business with government authorities",
+    description: "Entity registration for proprietorships, partnerships, LLPs, and private limited companies.",
     services: [
       { id: "proprietorship", name: "Proprietorship Registration", price: "₹2,500", duration: "5-7 days" },
       { id: "partnership", name: "Partnership Firm Registration", price: "₹5,000", duration: "7-10 days" },
       { id: "llp", name: "LLP Registration", price: "₹15,000", duration: "15-20 days" },
-      { id: "private-limited", name: "Private Limited Company", price: "₹25,000", duration: "20-25 days" },
-      { id: "msme", name: "MSME/Udyam Registration", price: "₹1,000", duration: "2-3 days" },
-      { id: "fssai", name: "FSSAI License", price: "₹3,500", duration: "7-10 days" },
-      { id: "trade-license", name: "Trade License", price: "₹2,000", duration: "5-7 days" },
-      { id: "shops-establishment", name: "Shops & Establishment", price: "₹1,500", duration: "3-5 days" },
+      { id: "private-limited", name: "Private Limited Company Registration", price: "₹25,000", duration: "20-25 days" },
+    ],
+  },
+  {
+    id: "msme-udyam",
+    name: "MSME / Udyam Registration",
+    icon: "🧾",
+    description: "MSME/Udyam registration and scheme assistance for small and medium enterprises.",
+    services: [
+      { id: "msme-registration", name: "MSME / Udyam Registration", price: "₹1,000", duration: "2-3 days" },
+      { id: "scheme-assistance", name: "Government Scheme Assistance", price: "₹2,500", duration: "5-7 days" },
+    ],
+  },
+  {
+    id: "trademark",
+    name: "Trademark Registration",
+    icon: "®️",
+    description: "Brand protection with trademark search, filing, and post-registration support.",
+    services: [
+      { id: "trademark-registration", name: "Trademark Registration", price: "₹8,000", duration: "30-45 days" },
+      { id: "trademark-search", name: "Trademark Search & Opinion", price: "₹3,500", duration: "3-5 days" },
     ],
   },
   {
     id: "legal-consultation",
     name: "Legal Consultation",
     icon: "⚖️",
-    description: "Expert legal advice and documentation services",
+    description: "Legal advice for agreements, notices, contract review, and compliance queries.",
     services: [
-      { id: "business-agreement", name: "Business Agreement Drafting", price: "₹3,000", duration: "3-5 days" },
-      { id: "rental-agreement", name: "Rental Agreement", price: "₹1,500", duration: "1-2 days" },
-      { id: "partnership-deed", name: "Partnership Deed", price: "₹4,000", duration: "5-7 days" },
+      { id: "business-agreement", name: "Business Agreement Drafting", price: "₹3,500", duration: "3-5 days" },
       { id: "legal-notice", name: "Legal Notice Drafting", price: "₹2,500", duration: "2-3 days" },
-      { id: "trademark", name: "Trademark Registration", price: "₹8,000", duration: "30-45 days" },
-      { id: "consumer-complaint", name: "Consumer Complaint Support", price: "₹2,000", duration: "3-5 days" },
-      { id: "legal-consultation", name: "Legal Consultation", price: "₹1,000/hour", duration: "1 hour" },
-      { id: "advocate-booking", name: "Advocate Booking", price: "₹2,000", duration: "As scheduled" },
+      { id: "company-law-consultation", name: "Company Law Consultation", price: "₹2,000/hour", duration: "1 hour" },
+    ],
+  },
+  {
+    id: "accounting-bookkeeping",
+    name: "Accounting & Bookkeeping",
+    icon: "📒",
+    description: "Accounting, bookkeeping, TDS filing, and financial reporting for businesses.",
+    services: [
+      { id: "monthly-bookkeeping", name: "Monthly Bookkeeping", price: "₹4,000/month", duration: "Monthly" },
+      { id: "income-tax-filing", name: "Income Tax Filing", price: "₹2,500", duration: "7-10 days" },
+      { id: "tds-filing", name: "TDS Filing", price: "₹1,000", duration: "3-5 days" },
     ],
   },
   {
     id: "digital-marketing",
     name: "Digital Marketing",
     icon: "📱",
-    description: "Boost your online presence and reach more customers",
+    description: "Branding, social media, SEO, and advertising services to grow your visibility.",
     services: [
       { id: "logo-design", name: "Logo Design", price: "₹3,000", duration: "5-7 days" },
-      { id: "social-media-design", name: "Social Media Poster Design", price: "₹500", duration: "2-3 days" },
-      { id: "instagram-setup", name: "Instagram/Facebook Setup", price: "₹2,000", duration: "3-5 days" },
-      { id: "google-business", name: "Google Business Profile", price: "₹1,500", duration: "2-3 days" },
-      { id: "whatsapp-business", name: "WhatsApp Business Setup", price: "₹1,000", duration: "1-2 days" },
-      { id: "website-creation", name: "Website/Landing Page", price: "₹8,000", duration: "10-15 days" },
+      { id: "social-media-setup", name: "Social Media Setup", price: "₹1,999", duration: "3-5 days" },
       { id: "seo-service", name: "SEO Service", price: "₹5,000/month", duration: "Monthly" },
-      { id: "paid-ads", name: "Paid Ads Support", price: "₹3,000", duration: "5-7 days" },
-      { id: "product-photography", name: "Product Photography", price: "₹2,500", duration: "3-5 days" },
+    ],
+  },
+  {
+    id: "webapp-development",
+    name: "Website / App Development",
+    icon: "💻",
+    description: "Create websites, landing pages, and mobile-ready apps with expert support.",
+    services: [
+      { id: "website-basic", name: "Website Basic", price: "₹8,000", duration: "10-15 days" },
+      { id: "website-pro", name: "Website Pro", price: "₹15,000", duration: "15-20 days" },
+      { id: "app-mvp", name: "App MVP Development", price: "₹45,000", duration: "30-45 days" },
+    ],
+  },
+  {
+    id: "loan-funding",
+    name: "Loan / Funding Documentation",
+    icon: "💰",
+    description: "Loan, subsidy, and funding documentation support for business owners.",
+    services: [
+      { id: "mudra-loan-docs", name: "Mudra Loan Documentation", price: "₹3,500", duration: "5-7 days" },
+      { id: "pmegpsupport", name: "PMEGP Scheme Documentation", price: "₹4,500", duration: "7-10 days" },
+      { id: "loan-proposal", name: "Loan & Funding Proposal", price: "₹5,500", duration: "7-10 days" },
+    ],
+  },
+  {
+    id: "business-planning",
+    name: "Business Plan / Pitch Deck Support",
+    icon: "📊",
+    description: "Investor-ready business plans, pitch decks, and proposal documents.",
+    services: [
+      { id: "business-plan", name: "Business Plan Preparation", price: "₹4,999", duration: "7-10 days" },
+      { id: "pitch-deck", name: "Pitch Deck Design", price: "₹6,999", duration: "7-10 days" },
+      { id: "proposal-draft", name: "Proposal / Tender Drafting", price: "₹3,500", duration: "5-7 days" },
     ],
   },
 ];
+
+const SERVICE_DETAILS = {
+  "gst-registration": {
+    overview: "GST registration service with document preparation, filing, and follow-up support.",
+    included: [
+      "GST application filing",
+      "Form GST REG-06 preparation",
+      "Help with documents and registration certificate",
+      "Dedicated CA consultant review",
+    ],
+    requiredDocuments: ["PAN card", "Aadhaar card", "Business address proof", "Bank statement"],
+    timeline: [
+      "Request submitted",
+      "Documents pending",
+      "Under review",
+      "Application filed",
+      "GSTIN issued",
+    ],
+    packages: [
+      {
+        tier: "Basic",
+        price: "₹1,500",
+        description: "GST registration with application filing and confirmation.",
+        features: ["Form submission", "Document review", "3-day support"],
+      },
+      {
+        tier: "Standard",
+        price: "₹2,500",
+        description: "GST registration with follow-up and personalized onboarding.",
+        features: ["Basic package", "GST orientation", "5-day support"],
+      },
+      {
+        tier: "Premium",
+        price: "₹3,999",
+        description: "End-to-end registration with priority support and filing advisory.",
+        features: ["Standard package", "Priority review", "10-day support"],
+      },
+    ],
+    consultant: {
+      name: "CA Arjun Menon",
+      title: "GST & Compliance Specialist",
+      rating: 4.9,
+      reviews: 74,
+      experience: "10 years",
+    },
+    vendor: {
+      name: "Sahyog Business Partners",
+      title: "GST Service Partner",
+      rating: 4.8,
+      reviews: 120,
+      responseTime: "Within 24 hours",
+      location: "Pan-India",
+      type: "Verified GST Partner",
+      highlights: ["Priority support", "Expert documentation team", "Trusted by 600+ businesses"],
+    },
+    faqs: [
+      { question: "How long does GST registration take?", answer: "Most applications are processed within 3-5 business days." },
+      { question: "Can I apply without a business address proof?", answer: "You need a valid local address proof to complete the registration." },
+    ],
+    refundPolicy: "Full refund if the application is rejected by GST authorities before filing. Otherwise, service fees are non-refundable.",
+  },
+  "gst-filing-basic": {
+    overview: "Standard GST filing support for your monthly returns with validation checks.",
+    included: ["GSTR-1 review", "GSTR-3B filing", "Compliance checklist", "Return status update"],
+    requiredDocuments: ["Sales invoices", "Purchase invoices", "Bank statement"],
+    timeline: ["Request submitted", "Document review", "Filing completed", "Confirmation received"],
+    packages: [
+      { tier: "Basic", price: "₹499", description: "Basic tax return filing for small businesses.", features: ["GSTR-1 summary", "GSTR-3B filing"] },
+      { tier: "Standard", price: "₹1,499", description: "Detailed filing with tax advisory and support.", features: ["Basic package", "Tax review", "Compliance guidance"] },
+      { tier: "Premium", price: "₹2,499", description: "CA-assisted filing with follow-up and query handling.", features: ["Standard package", "CA review", "3 months support"] },
+    ],
+    consultant: { name: "CA Nisha Reddy", title: "Tax Advisory Lead", rating: 4.8, reviews: 58, experience: "8 years" },
+    faqs: [
+      { question: "Can you file for a previous month?", answer: "Yes, we can assist with delayed filings for an additional fee." },
+      { question: "Do you support composition scheme?", answer: "Yes, we can file GST returns for composition taxpayers." },
+    ],
+    refundPolicy: "If filing is rejected due to our error, we will refund the service fee after reviewing the case.",
+  },
+  "trademark-registration": {
+    overview: "Trademark application filing to protect your brand in India.",
+    included: ["Trademark search", "Application filing", "Document preparation", "Status monitoring"],
+    requiredDocuments: ["Logo design file", "Business PAN", "Authorization letter"],
+    timeline: ["Request submitted", "Search completed", "Application filed", "Examination report", "Trademark granted"],
+    packages: [
+      { tier: "Basic", price: "₹8,000", description: "Single-class trademark filing.", features: ["Search report", "Application filing"] },
+      { tier: "Standard", price: "₹12,000", description: "Trademark filing with objection support.", features: ["Basic package", "Exam report handling"] },
+      { tier: "Premium", price: "₹18,000", description: "End-to-end trademark filing with priority processing.", features: ["Standard package", "Priority support", "Post-registration support"] },
+    ],
+    consultant: { name: "Adv. Meera Suresh", title: "IP & Trademark Advisor", rating: 4.7, reviews: 42, experience: "9 years" },
+    faqs: [
+      { question: "How many classes can I file in?", answer: "The basic package covers one class. We can quote for additional classes separately." },
+      { question: "Will I get a certificate?", answer: "Yes, you will receive a trademark registration certificate upon grant." },
+    ],
+    refundPolicy: "Refund available only if the application is not filed. No refund after formal filing with the Registry.",
+  },
+  "business-plan": {
+    overview: "Create an investor-ready business plan and financial model for your startup.",
+    included: ["Executive summary", "Market analysis", "Financial projections", "Go-to-market plan"],
+    requiredDocuments: ["Business idea summary", "Revenue model", "Current financial data"],
+    timeline: ["Request submitted", "Draft created", "Review meeting", "Final delivery"],
+    packages: [
+      { tier: "Basic", price: "₹4,999", description: "Standard business plan with key sections.", features: ["Plan document", "1 revision"] },
+      { tier: "Standard", price: "₹7,999", description: "Detailed plan with financial forecasts.", features: ["Basic package", "Financial model", "2 revisions"] },
+      { tier: "Premium", price: "₹12,999", description: "Investor pitch-ready plan with deck and strategy.", features: ["Standard package", "Pitch deck", "3 revisions"] },
+    ],
+    consultant: { name: "Shruti Raj", title: "Startup Strategy Consultant", rating: 4.9, reviews: 29, experience: "11 years" },
+    faqs: [
+      { question: "Can you help with investor presentations?", answer: "Yes, the premium package includes a pitch deck." },
+      { question: "Do you support SaaS and service businesses?", answer: "Yes, we tailor the plan for your industry." },
+    ],
+    refundPolicy: "Refunds are available before the first draft is delivered. After draft delivery, fees are non-refundable.",
+  },
+};
 
 const BUSINESS_STARTER_PACKAGE = {
   name: "Start Your Business in 7 Days",
@@ -78,7 +237,7 @@ const BUSINESS_STARTER_PACKAGE = {
   discount: "40% OFF",
   services: [
     "GST Registration",
-    "MSME/Udyam Registration",
+    "MSME / Udyam Registration",
     "Trade License",
     "Professional Logo Design",
     "Google Business Profile Setup",
@@ -88,22 +247,54 @@ const BUSINESS_STARTER_PACKAGE = {
   ],
   features: [
     "Complete documentation support",
-    "Expert guidance throughout",
-    "Priority processing",
-    "Post-registration support",
-    "Digital presence setup",
+    "Priority handling by experts",
+    "Digital setup starter kit",
+    "Post-registration handholding",
   ],
 };
 
+const DEFAULT_SERVICE_DETAILS = {
+  overview: "A complete business service designed to help you grow with expert support and trusted delivery.",
+  included: ["Service planning", "Documentation support", "Consultant review", "Post-delivery guidance"],
+  requiredDocuments: ["PAN card", "Aadhaar card", "Business proof"],
+  timeline: ["Request submitted", "Documents pending", "Under review", "Work in progress", "Completed"],
+  packages: [
+    { tier: "Basic", price: "₹2,499", description: "Essential support to get started.", features: ["Core service", "Standard support"] },
+    { tier: "Standard", price: "₹4,999", description: "Extended support with advisor input.", features: ["Basic package", "Priority support"] },
+    { tier: "Premium", price: "₹7,999", description: "Full-service delivery with expert consultation.", features: ["Standard package", "Fast-track delivery"] },
+  ],
+  consultant: { name: "Expert Consultant", title: "Business Specialist", rating: 4.8, reviews: 21, experience: "8 years" },
+  vendor: {
+    name: "Trusted Partner Network",
+    title: "Verified Service Marketplace",
+    rating: 4.7,
+    reviews: 320,
+    responseTime: "Same-day response",
+    location: "Nationwide",
+    type: "Marketplace Partner",
+    highlights: ["Same-day response", "Verified service delivery", "Dedicated account support"],
+  },
+  faqs: [
+    { question: "How long does this service take?", answer: "Delivery times vary by service, typically 5-15 days." },
+    { question: "Can I chat before booking?", answer: "Yes, use the chat before booking button on the service detail page." },
+  ],
+  refundPolicy: "Refunds depend on the service stage. Contact support for detailed policy.",
+};
+
 const ORDER_STATUSES = [
-  { id: "submitted", label: "Submitted", color: "#f59e0b", icon: "📝" },
-  { id: "under-review", label: "Under Review", color: "#3b82f6", icon: "🔍" },
-  { id: "processing", label: "Processing", color: "#8b5cf6", icon: "⚙️" },
+  { id: "submitted", label: "Request submitted", color: "#f59e0b", icon: "📝" },
+  { id: "documents-pending", label: "Documents pending", color: "#f97316", icon: "📎" },
+  { id: "under-review", label: "Under review", color: "#3b82f6", icon: "🔍" },
+  { id: "assigned-to-expert", label: "Assigned to expert", color: "#8b5cf6", icon: "👩‍💼" },
+  { id: "work-in-progress", label: "Work in progress", color: "#0ea5e9", icon: "⚙️" },
+  { id: "approval-pending", label: "Customer approval pending", color: "#facc15", icon: "⏳" },
+  { id: "invoice-generated", label: "Invoice generated", color: "#14b8a6", icon: "🧾" },
   { id: "completed", label: "Completed", color: "#10b981", icon: "✅" },
 ];
 
+const getServiceDetails = (serviceId) => SERVICE_DETAILS[serviceId] || DEFAULT_SERVICE_DETAILS;
+
 const parseINRToNumber = (priceText = "") => {
-  // accepts strings like "₹2,000/month" or "₹15,000" -> returns 2000/15000
   const numeric = Number(String(priceText).replace(/[^0-9]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
 };
@@ -126,6 +317,7 @@ const BusinessServices = () => {
     phone: "",
     businessName: "",
     businessType: "",
+    packageTier: "Standard",
     documents: [],
     requirements: "",
     preferredDate: "",
@@ -165,6 +357,13 @@ const BusinessServices = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleOpenServiceDetail = (category, service) => {
+    setSelectedCategory(category);
+    setSelectedService(service);
+    setActiveSection("service-detail");
+    setSubmitError("");
+  };
+
   const handleServiceSelect = (category, service) => {
     setSelectedCategory(category);
     setSelectedService(service);
@@ -184,6 +383,25 @@ const BusinessServices = () => {
     setOrderForm((prev) => ({ ...prev, documents: [...prev.documents, ...fileList] }));
   };
 
+  const selectedServiceDetails = useMemo(
+    () => (selectedService ? getServiceDetails(selectedService.id) : null),
+    [selectedService]
+  );
+
+  const requiredDocuments = selectedServiceDetails?.requiredDocuments || [];
+
+  const missingDocuments = requiredDocuments.filter((required) =>
+    !orderForm.documents.some((doc) =>
+      doc.name.toLowerCase().includes(required.toLowerCase().split(" ")[0])
+    )
+  );
+
+  const selectedPackageDetails = selectedServiceDetails?.packages?.find(
+    (pkg) => pkg.tier === orderForm.packageTier
+  );
+
+  const serviceVendor = selectedServiceDetails?.vendor || DEFAULT_SERVICE_DETAILS.vendor;
+
   const handleOrderSubmit = async () => {
     if (!selectedService || !selectedCategory) return;
 
@@ -201,9 +419,10 @@ const BusinessServices = () => {
       formData.append(
         "pricing",
         JSON.stringify({
-          priceText: selectedService.price,
-          priceNumber: parseINRToNumber(selectedService.price),
+          priceText: selectedPackageDetails?.price || selectedService.price,
+          priceNumber: parseINRToNumber(selectedPackageDetails?.price || selectedService.price),
           durationText: selectedService.duration,
+          packageTier: orderForm.packageTier,
         })
       );
 
@@ -220,6 +439,7 @@ const BusinessServices = () => {
         })
       );
 
+      formData.append("packageTier", orderForm.packageTier);
       formData.append("requirements", orderForm.requirements || "");
       // backend expects estimatedCompletion as ISO date string (optional)
       formData.append("estimatedCompletion", orderForm.preferredDate ? `${orderForm.preferredDate}T00:00:00.000Z` : "");
@@ -503,9 +723,14 @@ const BusinessServices = () => {
                             <span className="duration">{service.duration}</span>
                           </div>
                         </div>
-                        <button className="select-service-btn" onClick={() => handleServiceSelect(category, service)} type="button">
-                          Select
-                        </button>
+                        <div className="service-actions-inline">
+                          <button className="secondary-button" onClick={() => handleOpenServiceDetail(category, service)} type="button">
+                            View Details
+                          </button>
+                          <button className="select-service-btn" onClick={() => handleServiceSelect(category, service)} type="button">
+                            Book Now
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -618,11 +843,30 @@ const BusinessServices = () => {
                           Estimated:{" "}
                           {order.estimatedCompletion ? new Date(order.estimatedCompletion).toLocaleDateString() : "—"}
                         </span>
-                        <span>Price: {order.pricing?.priceText || order.pricing?.priceText || "—"}</span>
+                        <span>Price: {order.pricing?.priceText || "—"}</span>
                       </div>
 
-                      {order.status === "completed" ? (
-                        <div className="order-actions">
+                      <div className="order-timeline">
+                        {ORDER_STATUSES.map((step, index) => {
+                          const currentIndex = ORDER_STATUSES.findIndex((status) => status.id === order.status);
+                          const isActive = currentIndex >= index;
+                          return (
+                            <div key={step.id} className={`timeline-step ${isActive ? "active" : ""}`}>
+                              <span>{step.icon}</span>
+                              <span>{step.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="order-actions">
+                        <button className="chat-btn" type="button" onClick={() => setSubmitError("Consultant chat/call is not wired yet.")}>
+                          💬 Chat with Consultant
+                        </button>
+                        <button className="call-btn" type="button" onClick={() => setSubmitError("Request call is not wired yet.")}>
+                          📞 Request Call
+                        </button>
+                        {(order.status === "completed" || order.status === "invoice-generated") && (
                           <button
                             className="download-btn"
                             type="button"
@@ -630,17 +874,8 @@ const BusinessServices = () => {
                           >
                             🧾 Download Invoice
                           </button>
-                        </div>
-                      ) : (
-                        <div className="order-actions">
-                          <button className="chat-btn" type="button" onClick={() => setSubmitError("Consultant chat/call is not wired yet.")}>
-                            💬 Chat with Consultant
-                          </button>
-                          <button className="call-btn" type="button" onClick={() => setSubmitError("Request call is not wired yet.")}>
-                            📞 Request Call
-                          </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -698,11 +933,146 @@ const BusinessServices = () => {
                       <span className="duration">{service.duration}</span>
                     </div>
                   </div>
-                  <button className="primary-button" onClick={() => handleServiceSelect(selectedCategory, service)} type="button">
-                    Order This Service
-                  </button>
+                  <div className="service-detail-actions">
+                    <button className="secondary-button" onClick={() => handleOpenServiceDetail(selectedCategory, service)} type="button">
+                      View Details
+                    </button>
+                    <button className="primary-button" onClick={() => handleServiceSelect(selectedCategory, service)} type="button">
+                      Order This Service
+                    </button>
+                  </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeSection === "service-detail" && selectedService && (
+          <div className="business-services-section">
+            <div className="section-header">
+              <h2>{selectedService.name}</h2>
+              <p>{selectedServiceDetails?.overview}</p>
+              <button className="back-btn" onClick={() => setActiveSection("category-detail")} type="button">
+                ← Back to {selectedCategory?.name || "Services"}
+              </button>
+            </div>
+
+            <div className="service-detail-grid">
+              <div className="detail-left">
+                <div className="detail-card">
+                  <h4>What is included</h4>
+                  <ul>
+                    {(selectedServiceDetails?.included || []).map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="detail-card">
+                  <h4>Required documents</h4>
+                  <ul>
+                    {(selectedServiceDetails?.requiredDocuments || []).map((doc, index) => (
+                      <li key={index}>{doc}</li>
+                    ))}
+                  </ul>
+                  {missingDocuments.length > 0 && (
+                    <div className="missing-docs-alert">
+                      <strong>Missing documents:</strong> {missingDocuments.join(", ")}.
+                    </div>
+                  )}
+                </div>
+
+                <div className="detail-card">
+                  <h4>Timeline</h4>
+                  <ol>
+                    {(selectedServiceDetails?.timeline || []).map((step, index) => (
+                      <li key={index}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+
+                <div className="detail-card">
+                  <h4>FAQs</h4>
+                  {(selectedServiceDetails?.faqs || []).map((faq, index) => (
+                    <div key={index} className="faq-item">
+                      <strong>{faq.question}</strong>
+                      <p>{faq.answer}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <aside className="detail-right">
+                <div className="detail-card consultant-card">
+                  <h4>Consultant profile</h4>
+                  <p className="consultant-name">{selectedServiceDetails?.consultant?.name}</p>
+                  <p>{selectedServiceDetails?.consultant?.title}</p>
+                  <p>{selectedServiceDetails?.consultant?.experience} experience</p>
+                  <p>⭐ {selectedServiceDetails?.consultant?.rating} ({selectedServiceDetails?.consultant?.reviews} reviews)</p>
+                  <button className="chat-btn" type="button" onClick={() => setSubmitError("Chat before booking is not wired yet.")}>
+                    💬 Chat before booking
+                  </button>
+                </div>
+
+                <div className="detail-card vendor-card">
+                  <div className="vendor-badge">Verified Partner</div>
+                  <h4>Expert vendor</h4>
+                  <p className="vendor-name">{serviceVendor.name}</p>
+                  <p>{serviceVendor.title}</p>
+                  <div className="vendor-profile-tags">
+                    <span>{serviceVendor.type}</span>
+                    <span>{serviceVendor.location}</span>
+                  </div>
+                  <p>⭐ {serviceVendor.rating} ({serviceVendor.reviews} reviews)</p>
+                  <p>Response: {serviceVendor.responseTime}</p>
+                  {serviceVendor.highlights?.length > 0 && (
+                    <ul className="vendor-highlights">
+                      {serviceVendor.highlights.map((item, index) => (
+                        <li key={index}>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                  <button className="secondary-button" type="button" onClick={() => setSubmitError("Vendor contact is not available yet.")}>View Vendor Profile</button>
+                </div>
+
+                <div className="detail-card package-grid">
+                  <h4>Package pricing</h4>
+                  {(selectedServiceDetails?.packages || []).map((pkg) => (
+                    <div key={pkg.tier} className={`package-card ${orderForm.packageTier === pkg.tier ? "selected" : ""}`}>
+                      <div className="package-card-header">
+                        <strong>{pkg.tier}</strong>
+                        <span>{pkg.price}</span>
+                      </div>
+                      <p>{pkg.description}</p>
+                      <ul>
+                        {pkg.features.map((feature, index) => (
+                          <li key={index}>{feature}</li>
+                        ))}
+                      </ul>
+                      <button
+                        className={`secondary-button ${orderForm.packageTier === pkg.tier ? "selected-action" : ""}`}
+                        type="button"
+                        onClick={() => setOrderForm((prev) => ({ ...prev, packageTier: pkg.tier }))}
+                      >
+                        {orderForm.packageTier === pkg.tier ? "Selected" : "Select"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="detail-card refund-card">
+                  <h4>Refund & cancellation</h4>
+                  <p>{selectedServiceDetails?.refundPolicy}</p>
+                </div>
+
+                <div className="detail-card">
+                  <h4>Ready to book?</h4>
+                  <p>Choose a package and upload documents to start the order.</p>
+                  <button className="primary-button" type="button" onClick={() => handleServiceSelect(selectedCategory, selectedService)}>
+                    Book {selectedService.name}
+                  </button>
+                </div>
+              </aside>
             </div>
           </div>
         )}
@@ -760,16 +1130,44 @@ const BusinessServices = () => {
                   <option value="private-limited">Private Limited</option>
                   <option value="other">Other</option>
                 </select>
+                {selectedServiceDetails?.packages && (
+                  <select
+                    value={orderForm.packageTier}
+                    onChange={(e) => setOrderForm((prev) => ({ ...prev, packageTier: e.target.value }))}
+                  >
+                    {(selectedServiceDetails.packages || []).map((pkg) => (
+                      <option key={pkg.tier} value={pkg.tier}>
+                        {pkg.tier} — {pkg.price}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="form-section">
                 <h4>Documents Upload</h4>
+                <p className="doc-vault-note">Secure document vault: Your uploads are stored safely and only shared with your assigned consultant.</p>
                 <input
                   type="file"
                   multiple
                   onChange={(e) => handleFileUpload(e.target.files)}
                   accept=".pdf,.jpg,.jpeg,.png"
                 />
+                {selectedServiceDetails?.requiredDocuments?.length > 0 && (
+                  <div className="document-checklist">
+                    <h5>Checklist</h5>
+                    <ul>
+                      {selectedServiceDetails.requiredDocuments.map((doc, i) => (
+                        <li key={i}>{doc}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {missingDocuments.length > 0 && (
+                  <div className="missing-docs-alert">
+                    <strong>Missing documents:</strong> {missingDocuments.join(", ")}.
+                  </div>
+                )}
                 {orderForm.documents.length > 0 && (
                   <div className="uploaded-files">
                     {orderForm.documents.map((file, i) => (
@@ -804,8 +1202,12 @@ const BusinessServices = () => {
                   <span>{selectedService.name}</span>
                 </div>
                 <div className="summary-item">
+                  <span>Package:</span>
+                  <span>{orderForm.packageTier}</span>
+                </div>
+                <div className="summary-item">
                   <span>Price:</span>
-                  <span>{selectedService.price}</span>
+                  <span>{selectedPackageDetails?.price || selectedService.price}</span>
                 </div>
                 <div className="summary-item">
                   <span>Duration:</span>

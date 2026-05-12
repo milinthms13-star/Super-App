@@ -296,6 +296,12 @@ const localize = (en, ml, language) => {
     return en;
   }
 
+  // Prevent placeholder content from showing up as "????".
+  // If the Malayalam string contains '?' (common placeholder), fall back to English.
+  if (ml.includes("?")) {
+    return en;
+  }
+
   return ml;
 };
 
@@ -322,9 +328,18 @@ const AstrologyHome = () => {
   const [compatibility, setCompatibility] = useState(null);
   const [consultants, setConsultants] = useState([]);
   const [festivals, setFestivals] = useState([]);
+  const [panchangam, setPanchangam] = useState(null);
+  const [panchangamNotice, setPanchangamNotice] = useState("");
+  const [panchangamLoading, setPanchangamLoading] = useState(true);
   const [aiQuestion, setAiQuestion] = useState("");
   const [assistantAnswer, setAssistantAnswer] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [kundliData, setKundliData] = useState(null);
+  const [kundliLoading, setKundliLoading] = useState(false);
+  const [downloadingKundli, setDownloadingKundli] = useState(false);
+  const [consultationSlots, setConsultationSlots] = useState({});
+  const [bookingLoadingId, setBookingLoadingId] = useState("");
+  const selectedProfile = familyProfiles[activeFamilyIndex] || familyProfiles[0] || {};
 
   useEffect(() => {
     let active = true;
@@ -465,8 +480,27 @@ const AstrologyHome = () => {
       try {
         const nextConsultants = await astrologyService.getConsultants();
         setConsultants(nextConsultants);
+        setConsultationSlots(
+          nextConsultants.reduce((acc, consultant) => {
+            const firstSlotId = consultant?.availableSlots?.[0]?.id || "";
+            return {
+              ...acc,
+              [consultant.id || consultant.name]: firstSlotId,
+            };
+          }, {})
+        );
       } catch (error) {
-        setConsultants(error.fallbackData || []);
+        const fallbackConsultants = error.fallbackData || [];
+        setConsultants(fallbackConsultants);
+        setConsultationSlots(
+          fallbackConsultants.reduce((acc, consultant) => {
+            const firstSlotId = consultant?.availableSlots?.[0]?.id || "";
+            return {
+              ...acc,
+              [consultant.id || consultant.name]: firstSlotId,
+            };
+          }, {})
+        );
       }
     };
 
@@ -479,9 +513,68 @@ const AstrologyHome = () => {
       }
     };
 
+    const loadPanchangam = async () => {
+      setPanchangamLoading(true);
+      setPanchangamNotice("");
+
+      try {
+        const data = await astrologyService.getPanchangam();
+        setPanchangam(data);
+      } catch (error) {
+        setPanchangam(error.fallbackData || null);
+        setPanchangamNotice(
+          error?.message || "Unable to fetch Panchangam details. Showing offline data."
+        );
+      } finally {
+        setPanchangamLoading(false);
+      }
+    };
+
     loadConsultants();
     loadFestivals();
+    loadPanchangam();
   }, []);
+
+  useEffect(() => {
+    if (activeSection !== "kundli") {
+      return;
+    }
+
+    let active = true;
+    setKundliLoading(true);
+
+    const loadKundliData = async () => {
+      try {
+        const kundli = await astrologyService.getKundliData({
+          ...selectedProfile,
+          sign: selectedProfile.sign || selectedSign,
+        });
+        if (!active) {
+          return;
+        }
+        setKundliData(kundli);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setKundliData(error.fallbackData || null);
+        setSaveState({
+          type: "error",
+          message: error.message || "Unable to load Kundli details.",
+        });
+      } finally {
+        if (active) {
+          setKundliLoading(false);
+        }
+      }
+    };
+
+    loadKundliData();
+
+    return () => {
+      active = false;
+    };
+  }, [activeSection, selectedProfile, selectedSign]);
 
   const selectedSignDetails =
     signs.find((entry) => entry.sign === selectedSign) ||
@@ -642,7 +735,81 @@ const AstrologyHome = () => {
     }
   };
 
-  const selectedProfile = familyProfiles[activeFamilyIndex] || familyProfiles[0] || {};
+  const handleDownloadKundliReport = async () => {
+    setDownloadingKundli(true);
+    setSaveState({ type: "", message: "" });
+
+    try {
+      const { blob, fileName } = await astrologyService.downloadKundliReport({
+        ...selectedProfile,
+        sign: selectedProfile.sign || selectedSign,
+        name: selectedProfile.name || currentUser?.name || "Astrology User",
+      });
+
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName || "kundli-report.pdf";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(objectUrl);
+
+      setSaveState({
+        type: "success",
+        message: "Kundli PDF report downloaded successfully.",
+      });
+    } catch (error) {
+      setSaveState({
+        type: "error",
+        message: error.message || "Unable to download Kundli PDF report.",
+      });
+    } finally {
+      setDownloadingKundli(false);
+    }
+  };
+
+  const handleConsultationSlotChange = (consultantKey, slotId) => {
+    setConsultationSlots((currentSlots) => ({
+      ...currentSlots,
+      [consultantKey]: slotId,
+    }));
+  };
+
+  const handleBookConsultation = async (consultant) => {
+    const consultantKey = consultant.id || consultant.name;
+    const slotId = consultationSlots[consultantKey] || consultant?.availableSlots?.[0]?.id;
+
+    if (!slotId) {
+      setSaveState({
+        type: "error",
+        message: "Please choose an available slot before booking.",
+      });
+      return;
+    }
+
+    setBookingLoadingId(consultantKey);
+    setSaveState({ type: "", message: "" });
+
+    try {
+      const booking = await astrologyService.createConsultationBooking({
+        consultantId: consultant.id,
+        slotId,
+      });
+
+      setSaveState({
+        type: "success",
+        message: `Consultation booked. Confirmation: ${booking.confirmationCode}`,
+      });
+    } catch (error) {
+      setSaveState({
+        type: "error",
+        message: error.message || "Unable to book consultation.",
+      });
+    } finally {
+      setBookingLoadingId("");
+    }
+  };
 
   return (
     <section className="astrology-home">
@@ -914,15 +1081,15 @@ const AstrologyHome = () => {
                       <article className="astrology-panel astrology-detail-card">
                         <h3>{localize("Panchangam snapshot", "പഞ്ചാംഗം അവലോകനം", language)}</h3>
                         <ul>
-                          <li>{localize("Tithi", "തിഥി", language)} : Shukla Paksha Tritiya</li>
-                          <li>{localize("Nakshatra", "നക്ഷത്രം", language)} : {selectedSignDetails?.nakshatra || getNakshatraFromSign(selectedSign)}</li>
-                          <li>{localize("Rahu Kalam", "റാഹു കാലം", language)} : 10:30 AM - 12:00 PM</li>
-                          <li>{localize("Yamagandam", "യമഗന്ധം", language)} : 03:00 PM - 04:30 PM</li>
+                          <li>{localize("Tithi", "തിഥി", language)} : {panchangam?.tithi || "Shukla Paksha Tritiya"}</li>
+                          <li>{localize("Nakshatra", "നക്ഷത്രം", language)} : {panchangam?.nakshatra || selectedSignDetails?.nakshatra || getNakshatraFromSign(selectedSign)}</li>
+                          <li>{localize("Rahu Kalam", "റാഹു കാലം", language)} : {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li>
+                          <li>{localize("Yamagandam", "യമഗന്ധം", language)} : {panchangam?.yamagandam || "03:00 PM - 04:30 PM"}</li>
                         </ul>
                       </article>
                       <article className="astrology-panel astrology-detail-card">
                         <h3>{localize("Kerala festival note", "കേരള ഉത്സവ കുറിപ്പ്", language)}</h3>
-                        <p>{localize("Vishu is ideal for new plans and family puja.", "വിഷു പുതിയ പദ്ധതികൾക്കും കുടുംബ പൂജയ്ക്കും അനുയോജ്യമാണ്.", language)}</p>
+                        <p>{festivals[0]?.note || localize("Vishu is ideal for new plans and family puja.", "???? ????? ????????????? ?????? ?????????? ????????????.", language)}</p>
                       </article>
                     </div>
                   </>
@@ -1100,14 +1267,43 @@ const AstrologyHome = () => {
                   <div className="astrology-detail-grid">
                     <article className="astrology-panel astrology-detail-card">
                       <h3>{localize("Panchangam today", "????? ????????", language)}</h3>
-                      <ul>
-                        <li>Shukla Paksha Tritiya</li>
-                        <li>{localize("Nakshatra", "????????", language)}: Revati</li>
-                        <li>{localize("Rahu Kalam", "???? ????", language)} : 10:30 AM - 12:00 PM</li>
-                        <li>{localize("Yamagandam", "???????", language)} : 03:00 PM - 04:30 PM</li>
-                        <li>{localize("Gulika", "?????", language)}: 07:30 AM - 09:00 AM</li>
-                      </ul>
+
+                      {panchangamNotice ? (
+                        <p className="astrology-inline-message astrology-inline-message-warning">
+                          {panchangamNotice}
+                        </p>
+                      ) : null}
+
+                      {panchangamLoading ? (
+                        <p className="astrology-inline-message">{localize("Loading Panchangam...", "ലോഡ് ചെയ്യുന്നു...", language)}</p>
+                      ) : null}
+
+                      {!panchangamLoading ? (
+                        <ul>
+                          <li>
+                            {localize("Tithi", "തിഥി", language)} :{" "}
+                            {panchangam?.tithi || "Shukla Paksha Tritiya"}
+                          </li>
+                          <li>
+                            {localize("Nakshatra", "നക്ഷത്രം", language)} :{" "}
+                            {panchangam?.nakshatra || "Revati"}
+                          </li>
+                          <li>
+                            {localize("Rahu Kalam", "റാഹു കാലം", language)} :{" "}
+                            {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}
+                          </li>
+                          <li>
+                            {localize("Yamagandam", "യമഗന്ധം", language)} :{" "}
+                            {panchangam?.yamagandam || "03:00 PM - 04:30 PM"}
+                          </li>
+                          <li>
+                            {localize("Gulika", "ഗുളിക", language)} :{" "}
+                            {panchangam?.gulika || "07:30 AM - 09:00 AM"}
+                          </li>
+                        </ul>
+                      ) : null}
                     </article>
+
                     <article className="astrology-panel astrology-detail-card">
                       <h3>{localize("Festival reminders", "????? ??????????", language)}</h3>
                       <ul>
@@ -1194,3 +1390,5 @@ const AstrologyHome = () => {
 };
 
 export default AstrologyHome;
+
+
