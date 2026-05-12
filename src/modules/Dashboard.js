@@ -141,6 +141,15 @@ const Icon = ({ type, className = "" }) => {
           <path d="M12 6V4" />
         </svg>
       );
+    case "tourism":
+      return (
+        <svg {...common}>
+          <path d="M4 14h16" />
+          <path d="M8 14V8l4-2 4 2v6" />
+          <path d="M12 6V3" />
+          <circle cx="12" cy="18" r="2" />
+        </svg>
+      );
     case "fooddelivery":
       return (
         <svg {...common}>
@@ -340,6 +349,17 @@ const MODULE_CONFIG = [
     emoji: "🌍",
   },
   {
+    id: "hotelbooking",
+    nameKey: "modules.hotelbooking",
+    fallbackName: "NilaStay",
+    icon: "hotelbooking",
+    descriptionKey: "dashboard.moduleDescriptions.hotelbooking",
+    fallbackDescription: "Book verified hotels and homestays across Kerala with direct contact and local support.",
+    stats: "Kerala stays booking",
+    gradient: "linear-gradient(135deg, #059669 0%, #10B981 45%, #34D399 100%)",
+    emoji: "🏨",
+  },
+  {
     id: "healthcare",
     nameKey: "modules.healthcare",
     fallbackName: "NilaCare",
@@ -351,6 +371,39 @@ const MODULE_CONFIG = [
     emoji: "🏥",
   },
   {
+    id: "bustrainbooking",
+    nameKey: "modules.bustrainbooking",
+    fallbackName: "NilaTravel Bus/Train",
+    icon: "bustrainbooking",
+    descriptionKey: "dashboard.moduleDescriptions.bustrainbooking",
+    fallbackDescription: "Book buses and trains across Kerala with IRCTC and KSRTC integration, PNR status tracking, fare comparison, and assisted booking.",
+    stats: "Government portal integration",
+    gradient: "linear-gradient(135deg, #2563EB 0%, #3B82F6 45%, #60A5FA 100%)",
+    emoji: "🚆",
+  },
+  {
+    id: "resumebuilder",
+    nameKey: "modules.resumebuilder",
+    fallbackName: "AI Resume Builder",
+    icon: "resumebuilder",
+    descriptionKey: "dashboard.moduleDescriptions.resumebuilder",
+    fallbackDescription: "AI-powered resume creation with ATS optimization, job-specific tailoring, cover letters, and interview preparation for global job markets.",
+    stats: "ATS-optimized resumes",
+    gradient: "linear-gradient(135deg, #7C3AED 0%, #A855F7 45%, #C084FC 100%)",
+    emoji: "📄",
+  },
+  {
+    id: "businessservices",
+    nameKey: "modules.businessservices",
+    fallbackName: "Business Services Hub",
+    icon: "businessservices",
+    descriptionKey: "dashboard.moduleDescriptions.businessservices",
+    fallbackDescription: "Complete business services hub with GST filing, company registration, legal consultation, digital marketing, and the 'Start Your Business in 7 Days' package for Kerala entrepreneurs.",
+    stats: "Business setup in 7 days",
+    gradient: "linear-gradient(135deg, #1E293B 0%, #334155 45%, #475569 100%)",
+    emoji: "💼",
+  },
+  {
     id: "education",
     nameKey: "modules.education",
     fallbackName: "Education Ecosystem",
@@ -360,6 +413,17 @@ const MODULE_CONFIG = [
     stats: "Complete education solutions",
     gradient: "linear-gradient(135deg, #7C3AED 0%, #A855F7 45%, #C084FC 100%)",
     emoji: "📚",
+  },
+  {
+    id: "tourism",
+    nameKey: "modules.tourism",
+    fallbackName: "NilaTravel",
+    icon: "tourism",
+    descriptionKey: "dashboard.moduleDescriptions.tourism",
+    fallbackDescription: "Kerala tourism marketplace for curated packages, custom trips, and local experiences.",
+    stats: "Curated Kerala travel plans",
+    gradient: "linear-gradient(135deg, #0F766E 0%, #0EA5A7 45%, #14B8A6 100%)",
+    emoji: "TR",
   },
   {
     id: "nilaaihub",

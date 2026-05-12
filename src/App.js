@@ -56,8 +56,13 @@ const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket")
 const BusinessBuilder = React.lazy(() => import("./modules/businessbuilder/BusinessBuilder"));
 const NilaAIHub = React.lazy(() => import("./modules/nilaaihub/NilaAIHub"));
 const GulfServices = React.lazy(() => import("./modules/gulfservices/GulfServices"));
+const HotelBooking = React.lazy(() => import("./modules/hotelbooking/HotelBooking"));
 const Healthcare = React.lazy(() => import("./modules/healthcare/Healthcare"));
+const BusTrainBooking = React.lazy(() => import("./modules/bustrainbooking/BusTrainBooking"));
+const ResumeBuilder = React.lazy(() => import("./modules/resumebuilder/ResumeBuilder"));
+const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
 const Education = React.lazy(() => import("./modules/education/Education"));
+const TourismMarketplace = React.lazy(() => import("./modules/tourism/TourismMarketplace"));
 const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
 const DriverMap = React.lazy(() => import("./modules/maps/DriverMap"));
 const Matrimonial = React.lazy(() => import("./modules/matrimonial/Matrimonial"));
@@ -129,6 +134,7 @@ const PREVIEW_ENABLED_MODULES = [
   "billpay",
   "businessbuilder",
   "skilllearning",
+  "tourism",
   "fooddelivery",
   "devadarshan",
   "hyperlocal",
@@ -158,6 +164,7 @@ const PREVIEW_BUSINESS_CATEGORIES = [
   { id: "freelancer", name: "NilaWorks", fee: 1399, requiresFoodLicense: false },
   { id: "billpay", name: "Nila Utility Hub", fee: 1199, requiresFoodLicense: false },
   { id: "skilllearning", name: "Nila Skill Hub", fee: 999, requiresFoodLicense: false },
+  { id: "tourism", name: "NilaTravel", fee: 1699, requiresFoodLicense: false },
   { id: "fooddelivery", name: "Feastly", fee: 1999, requiresFoodLicense: true },
   { id: "devadarshan", name: "Devadarshan", fee: 1299, requiresFoodLicense: false },
   { id: "hyperlocal", name: "Nila Hyperlocal Delivery", fee: 1799, requiresFoodLicense: false },
@@ -1144,8 +1151,13 @@ function AppShell() {
               <Route path="business-builder" element={<BusinessBuilder />} />
               <Route path="nila-ai-hub" element={<NilaAIHub />} />
               <Route path="gulf-services" element={<GulfServices />} />
+              <Route path="hotelbooking" element={<HotelBooking />} />
               <Route path="healthcare" element={<Healthcare />} />
+              <Route path="bustrainbooking" element={<BusTrainBooking />} />
+              <Route path="resumebuilder" element={<ResumeBuilder />} />
+              <Route path="businessservices" element={<BusinessServices />} />
               <Route path="education" element={<Education />} />
+              <Route path="tourism" element={<TourismMarketplace />} />
               <Route path="freelancer" element={<FreelancerMarketplace />} />
               <Route path="billpay" element={<BillPayHub />} />
               <Route path="skilllearning" element={<SkillLearningHub />} />

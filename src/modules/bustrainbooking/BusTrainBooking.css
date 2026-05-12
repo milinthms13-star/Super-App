@@ -1,0 +1,507 @@
+.bus-train-booking-shell {
+  --bus-train-booking-ink: #0f172a;
+  --bus-train-booking-muted: #64748b;
+  --bus-train-booking-border: #e2e8f0;
+  --bus-train-booking-surface: #ffffff;
+  --bus-train-booking-surface-alt: #f8fafc;
+  --bus-train-booking-primary: #2563eb;
+  --bus-train-booking-primary-dark: #1d4ed8;
+  --bus-train-booking-accent: #f59e0b;
+  --bus-train-booking-danger: #dc2626;
+  --bus-train-booking-success: #10b981;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  color: var(--bus-train-booking-ink);
+}
+
+.bus-train-booking-hero,
+.bus-train-booking-section {
+  background: var(--bus-train-booking-surface);
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 24px;
+  box-shadow: 0 14px 40px rgba(37, 99, 235, 0.08);
+}
+
+.bus-train-booking-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: 1.5rem;
+  padding: 1.75rem;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 35%),
+    linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+.bus-train-booking-hero-copy h1 {
+  margin: 0;
+  line-height: 1.15;
+  font-size: clamp(2rem, 3vw, 3.3rem);
+  max-width: 14ch;
+}
+
+.bus-train-booking-hero-copy p,
+.bus-train-booking-section-heading p {
+  color: var(--bus-train-booking-muted);
+}
+
+.bus-train-booking-hero-copy p {
+  max-width: 62ch;
+  margin: 1rem 0 0;
+}
+
+.bus-train-booking-primary-button,
+.bus-train-booking-secondary-button {
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.bus-train-booking-primary-button {
+  border: 0;
+  background: var(--bus-train-booking-primary);
+  color: #fff;
+  padding: 0.9rem 1.25rem;
+}
+
+.bus-train-booking-primary-button:hover,
+.bus-train-booking-secondary-button:hover {
+  transform: translateY(-1px);
+}
+
+.bus-train-booking-secondary-button {
+  border: 1px solid var(--bus-train-booking-border);
+  background: #fff;
+  color: var(--bus-train-booking-ink);
+  padding: 0.85rem 1.15rem;
+}
+
+.bus-train-booking-hero-actions,
+.bus-train-booking-hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.bus-train-booking-hero-actions {
+  margin-top: 1.25rem;
+}
+
+.bus-train-booking-hero-tags span {
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--bus-train-booking-primary-dark);
+  font-size: 0.88rem;
+}
+
+.bus-train-booking-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.bus-train-booking-nav-item {
+  text-align: center;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--bus-train-booking-border);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bus-train-booking-nav-item.active {
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.bus-train-booking-nav-item:hover {
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+.bus-train-booking-section {
+  margin-top: 1.25rem;
+  padding: 1.3rem;
+}
+
+.bus-train-booking-section-heading {
+  margin-bottom: 1rem;
+}
+
+.bus-train-booking-section-heading h2 {
+  margin: 0;
+}
+
+.bus-train-booking-type-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.bus-train-booking-type-btn {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bus-train-booking-type-btn.active {
+  background: var(--bus-train-booking-primary);
+  color: white;
+  border-color: var(--bus-train-booking-primary);
+}
+
+.bus-train-booking-search-form {
+  background: var(--bus-train-booking-surface-alt);
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.bus-train-booking-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bus-train-booking-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bus-train-booking-field label {
+  font-weight: 600;
+  color: var(--bus-train-booking-ink);
+}
+
+.bus-train-booking-field input,
+.bus-train-booking-field select {
+  padding: 0.75rem;
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+
+.bus-train-booking-field input:focus,
+.bus-train-booking-field select:focus {
+  outline: none;
+  border-color: var(--bus-train-booking-primary);
+}
+
+.search-btn {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.bus-train-booking-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.bus-train-booking-bus-card,
+.bus-train-booking-train-card {
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  background: var(--bus-train-booking-surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.bus-train-booking-bus-header,
+.bus-train-booking-train-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bus-train-booking-bus-header h4,
+.bus-train-booking-train-header h4 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+}
+
+.bus-train-booking-bus-header span,
+.bus-train-booking-train-header span {
+  color: var(--bus-train-booking-muted);
+  font-size: 0.9rem;
+}
+
+.bus-train-booking-rating {
+  color: var(--bus-train-booking-accent);
+  font-weight: 600;
+}
+
+.bus-train-booking-bus-timing,
+.bus-train-booking-train-timing {
+  text-align: right;
+  font-weight: 600;
+}
+
+.bus-train-booking-time {
+  font-size: 1.1rem;
+  color: var(--bus-train-booking-primary);
+}
+
+.bus-train-booking-duration {
+  color: var(--bus-train-booking-muted);
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+
+.bus-train-booking-bus-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.bus-train-booking-amenities {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bus-train-booking-amenity {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--bus-train-booking-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+}
+
+.bus-train-booking-bus-actions,
+.bus-train-booking-train-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bus-train-booking-status.ontime {
+  color: var(--bus-train-booking-success);
+  font-weight: 600;
+}
+
+.bus-train-booking-status.delayed {
+  color: var(--bus-train-booking-danger);
+  font-weight: 600;
+}
+
+.bus-train-booking-classes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.bus-train-booking-class-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 8px;
+  background: var(--bus-train-booking-surface-alt);
+}
+
+.bus-train-booking-class-info {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.bus-train-booking-class-type {
+  font-weight: 600;
+  color: var(--bus-train-booking-primary);
+}
+
+.bus-train-booking-class-fare {
+  font-weight: 600;
+  color: var(--bus-train-booking-success);
+}
+
+.bus-train-booking-class-seats {
+  color: var(--bus-train-booking-muted);
+  font-size: 0.9rem;
+}
+
+.bus-train-booking-pnr-form,
+.bus-train-booking-status-form {
+  max-width: 400px;
+  margin: 0 auto 2rem;
+}
+
+.bus-train-booking-pnr-info,
+.bus-train-booking-status-features {
+  margin-top: 2rem;
+}
+
+.bus-train-booking-pnr-info h3,
+.bus-train-booking-status-features h3 {
+  margin-bottom: 1rem;
+  color: var(--bus-train-booking-primary);
+}
+
+.bus-train-booking-pnr-info ul {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.bus-train-booking-pnr-info li {
+  margin-bottom: 0.5rem;
+  color: var(--bus-train-booking-muted);
+}
+
+.bus-train-booking-pnr-note {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 8px;
+  color: var(--bus-train-booking-accent);
+  font-weight: 600;
+}
+
+.bus-train-booking-status-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.bus-train-booking-feature-card {
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  background: var(--bus-train-booking-surface);
+  text-align: center;
+}
+
+.bus-train-booking-feature-card h4 {
+  margin: 0 0 0.5rem;
+  color: var(--bus-train-booking-primary);
+}
+
+.bus-train-booking-feature-card p {
+  margin: 0;
+  color: var(--bus-train-booking-muted);
+}
+
+.bus-train-booking-support-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.bus-train-booking-support-card {
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  background: var(--bus-train-booking-surface);
+  text-align: center;
+}
+
+.bus-train-booking-support-card h3 {
+  margin: 0 0 1rem;
+  color: var(--bus-train-booking-primary);
+}
+
+.bus-train-booking-support-card p {
+  margin: 0 0 1rem;
+  color: var(--bus-train-booking-muted);
+}
+
+.bus-train-booking-support-note {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--bus-train-booking-surface-alt);
+  border: 1px solid var(--bus-train-booking-border);
+  border-radius: 12px;
+}
+
+.bus-train-booking-support-note h3 {
+  margin: 0 0 1rem;
+  color: var(--bus-train-booking-primary);
+}
+
+.bus-train-booking-support-note ul {
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.bus-train-booking-support-note li {
+  margin-bottom: 0.75rem;
+  color: var(--bus-train-booking-muted);
+}
+
+.bus-train-booking-support-note strong {
+  color: var(--bus-train-booking-ink);
+}
+
+@media (max-width: 1200px) {
+  .bus-train-booking-nav {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .bus-train-booking-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .bus-train-booking-bus-header,
+  .bus-train-booking-train-header {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .bus-train-booking-bus-timing,
+  .bus-train-booking-train-timing {
+    text-align: center;
+    margin-top: 1rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .bus-train-booking-shell {
+    padding-inline: 0.75rem;
+  }
+
+  .bus-train-booking-hero,
+  .bus-train-booking-section {
+    padding: 1rem;
+  }
+
+  .bus-train-booking-hero-copy h1 {
+    max-width: none;
+  }
+
+  .bus-train-booking-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .bus-train-booking-bus-actions,
+  .bus-train-booking-train-actions {
+    flex-direction: column;
+  }
+
+  .bus-train-booking-support-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bus-train-booking-status-features {
+    grid-template-columns: 1fr;
+  }
+}

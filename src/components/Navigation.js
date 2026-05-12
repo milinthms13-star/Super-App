@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
+    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
   },
   utilities: {
     label: "Utilities",
@@ -98,13 +98,18 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "freelancer", label: t("modules.freelancer", "NilaWorks"), icon: "W", sellerVisible: true },
     { id: "billpay", label: t("modules.billpay", "Nila Utility Hub"), icon: "B", sellerVisible: true },
     { id: "skilllearning", label: t("modules.skilllearning", "Nila Skill Hub"), icon: "K", sellerVisible: true },
+    { id: "tourism", label: t("modules.tourism", "NilaTravel"), icon: "T", sellerVisible: true },
     { id: "fooddelivery", label: t("modules.fooddelivery", "Feastly"), icon: "🍽️" },
     { id: "devadarshan", label: t("modules.devadarshan", "Devadarshan"), icon: "DV", sellerVisible: true },
     { id: "hyperlocal", label: t("modules.hyperlocal", "Nila Hyperlocal Delivery"), icon: "HD", sellerVisible: true },
     { id: "localservices", label: t("modules.localservices", "Local Services Marketplace"), icon: "LS", sellerVisible: true },
     { id: "nilaaihub", label: t("modules.nilaaihub", "Nila AI Hub"), icon: "🤖" },
     { id: "gulfservices", label: t("modules.gulfservices", "Gulf Services"), icon: "🌍" },
+    { id: "hotelbooking", label: t("modules.hotelbooking", "NilaStay"), icon: "🏨" },
     { id: "healthcare", label: t("modules.healthcare", "NilaCare"), icon: "🏥" },
+    { id: "bustrainbooking", label: t("modules.bustrainbooking", "NilaTravel Bus/Train"), icon: "🚆" },
+    { id: "resumebuilder", label: t("modules.resumebuilder", "AI Resume Builder"), icon: "📄" },
+    { id: "businessservices", label: t("modules.businessservices", "Business Services Hub"), icon: "💼" },
     { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
     { id: "businessbuilder", label: t("modules.businessbuilder", "AI Business Builder"), icon: "🚀", sellerVisible: true },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
@@ -389,6 +394,9 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 };
 
 export default Navigation;
+
+
+
 
 
 
