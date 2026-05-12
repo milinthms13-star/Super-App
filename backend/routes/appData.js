@@ -276,6 +276,12 @@ const realEstateVisitUpdateSchema = Joi.object({
   note: Joi.string().allow('').trim().max(500).optional(),
 }).min(1);
 
+const educationStateSchema = Joi.object({
+  enrolledCourseIds: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
+  appliedScholarships: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
+  joinedGroups: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
+});
+
 const slugifyCategoryName = (value = '') =>
   String(value || '')
     .trim()
@@ -573,6 +579,43 @@ const normalizeClassifiedsModule = (moduleData = {}) => {
 };
 
 const normalizeEmailAddress = (value = '') => String(value || '').trim().toLowerCase();
+
+const normalizeEducationState = (state = {}) => {
+  const normalizeList = (values) =>
+    [...new Set((Array.isArray(values) ? values : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean))];
+
+  return {
+    enrolledCourseIds: normalizeList(state.enrolledCourseIds),
+    appliedScholarships: normalizeList(state.appliedScholarships),
+    joinedGroups: normalizeList(state.joinedGroups),
+  };
+};
+
+const getUserEducationStateFromFile = async (userEmail) => {
+  const currentData = await devAppDataStore.readAppData();
+  const normalizedEmail = normalizeEmailAddress(userEmail);
+  return normalizeEducationState(currentData.userEducation?.[normalizedEmail]);
+};
+
+const updateUserEducationState = async (userEmail, updater) => {
+  const normalizedEmail = normalizeEmailAddress(userEmail);
+  const nextData = await devAppDataStore.updateAppData(async (currentData) => {
+    const currentState = normalizeEducationState(currentData.userEducation?.[normalizedEmail]);
+    const nextState = normalizeEducationState(await updater(currentState));
+
+    return {
+      ...currentData,
+      userEducation: {
+        ...(currentData.userEducation || {}),
+        [normalizedEmail]: nextState,
+      },
+    };
+  });
+
+  return normalizeEducationState(nextData.userEducation?.[normalizedEmail]);
+};
 
 const getClassifiedPublicInteractionGuard = (listing = {}, user = {}) => {
   const normalizedUserEmail = normalizeEmailAddress(user?.email);
@@ -1334,6 +1377,58 @@ router.get('/public', async (req, res) => {
       },
     },
   });
+});
+
+router.get('/education/state', authenticate, async (req, res) => {
+  try {
+    const state = await getUserEducationStateFromFile(
+      req.user?.email || req.user?.id || req.user?._id
+    );
+    return res.json({
+      success: true,
+      data: {
+        state,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load education state.',
+      error: error.message,
+    });
+  }
+});
+
+router.patch('/education/state', authenticate, async (req, res) => {
+  const { error, value } = educationStateSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const state = await updateUserEducationState(
+      req.user?.email || req.user?.id || req.user?._id,
+      () => value
+    );
+    return res.json({
+      success: true,
+      data: {
+        state,
+      },
+    });
+  } catch (saveError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to save education state.',
+      error: saveError.message,
+    });
+  }
 });
 
 router.get('/classifieds/user/:sellerEmail/rating', async (req, res) => {
@@ -4092,6 +4187,7 @@ module.exports = router;
 module.exports.__testables = {
   normalizeClassifiedsListingRecord,
   normalizeClassifiedsModule,
+  normalizeEducationState,
   buildClassifiedPlanLabel,
   buildClassifiedLifecycleFields,
   buildClassifiedRenewalFields,

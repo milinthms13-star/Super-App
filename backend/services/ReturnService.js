@@ -7,7 +7,7 @@ const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const Return = require('../models/Return');
 const Notification = require('../models/Notification');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
 class ReturnService {
@@ -48,7 +48,7 @@ class ReturnService {
       }
 
       // Create return request
-      const returnId = `RET_${Date.now()}_${uuidv4().split('-')[0].toUpperCase()}`;
+      const returnId = `RET_${Date.now()}_${randomUUID().split('-')[0].toUpperCase()}`;
 
       const returnRequest = new Return({
         returnId,

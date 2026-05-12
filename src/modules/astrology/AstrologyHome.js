@@ -305,6 +305,25 @@ const localize = (en, ml, language) => {
   return ml;
 };
 
+const loadRazorpaySdk = () =>
+  new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(false);
+      return;
+    }
+
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+
 const AstrologyHome = () => {
   const { currentUser } = useApp();
   const [language, setLanguage] = useState("en");
@@ -339,6 +358,9 @@ const AstrologyHome = () => {
   const [downloadingKundli, setDownloadingKundli] = useState(false);
   const [consultationSlots, setConsultationSlots] = useState({});
   const [bookingLoadingId, setBookingLoadingId] = useState("");
+  const [lastBooking, setLastBooking] = useState(null);
+  const [paymentOrder, setPaymentOrder] = useState(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const selectedProfile = familyProfiles[activeFamilyIndex] || familyProfiles[0] || {};
 
   useEffect(() => {
@@ -608,6 +630,10 @@ const AstrologyHome = () => {
 
   const handleProfileSave = async (event) => {
     event.preventDefault();
+    if (!requireLogin()) {
+      return;
+    }
+
     setSavingProfile(true);
     setSaveState({ type: "", message: "" });
 
@@ -652,6 +678,17 @@ const AstrologyHome = () => {
   const selectFamilyProfile = (index) => {
     setActiveFamilyIndex(index);
     setFamilyDraft(createFamilyProfileDraft(familyProfiles[index]));
+  };
+
+  const requireLogin = () => {
+    if (!currentUser?.id && !currentUser?.name) {
+      setSaveState({
+        type: "error",
+        message: "Please sign in to use AstroNila features.",
+      });
+      return false;
+    }
+    return true;
   };
 
   const handleFamilyProfileSave = async () => {
@@ -736,6 +773,10 @@ const AstrologyHome = () => {
   };
 
   const handleDownloadKundliReport = async () => {
+    if (!requireLogin()) {
+      return;
+    }
+
     setDownloadingKundli(true);
     setSaveState({ type: "", message: "" });
 
@@ -777,6 +818,10 @@ const AstrologyHome = () => {
   };
 
   const handleBookConsultation = async (consultant) => {
+    if (!requireLogin()) {
+      return;
+    }
+
     const consultantKey = consultant.id || consultant.name;
     const slotId = consultationSlots[consultantKey] || consultant?.availableSlots?.[0]?.id;
 
@@ -797,9 +842,11 @@ const AstrologyHome = () => {
         slotId,
       });
 
+      setLastBooking(booking);
+      setPaymentOrder(null);
       setSaveState({
         type: "success",
-        message: `Consultation booked. Confirmation: ${booking.confirmationCode}`,
+        message: `Consultation booked: ${booking.confirmationCode}`,
       });
     } catch (error) {
       setSaveState({
@@ -808,6 +855,79 @@ const AstrologyHome = () => {
       });
     } finally {
       setBookingLoadingId("");
+    }
+  };
+
+  const handleCreateConsultationPaymentOrder = async () => {
+    if (!lastBooking?.id) {
+      return;
+    }
+
+    setPaymentLoading(true);
+    setSaveState({ type: "", message: "" });
+
+    try {
+      const order = await astrologyService.createConsultationPaymentOrder(lastBooking.id);
+      setPaymentOrder(order);
+      const isRazorpayReady = await loadRazorpaySdk();
+
+      if (!isRazorpayReady || !window.Razorpay) {
+        setSaveState({
+          type: "success",
+          message: `Payment order created: ${order.orderId}. Complete payment in your gateway console.`,
+        });
+        return;
+      }
+
+      const paymentOptions = {
+        key: order.keyId,
+        amount: Number(order.amountInr || 0) * 100,
+        currency: order.currency || "INR",
+        name: "AstroNila",
+        description: "Consultation booking payment",
+        order_id: order.orderId,
+        prefill: {
+          name: currentUser?.name || "Astrology User",
+          email: currentUser?.email || "",
+        },
+        handler: async (response) => {
+          try {
+            const verifiedBooking = await astrologyService.verifyConsultationPayment(lastBooking.id, {
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+            });
+            setLastBooking(verifiedBooking);
+            setSaveState({
+              type: "success",
+              message: `Payment verified: ${verifiedBooking.confirmationCode}`,
+            });
+          } catch (verificationError) {
+            setSaveState({
+              type: "error",
+              message: verificationError.message || "Payment verification failed.",
+            });
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setSaveState({
+              type: "warning",
+              message: "Payment window closed before completion.",
+            });
+          },
+        },
+      };
+
+      const razorpay = new window.Razorpay(paymentOptions);
+      razorpay.open();
+    } catch (error) {
+      setSaveState({
+        type: "error",
+        message: error.message || "Unable to create payment order.",
+      });
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -974,7 +1094,7 @@ const AstrologyHome = () => {
                   <p className="astrology-history-empty">
                     {localize(
                       "Save your profile once to keep a small history of recent readings here.",
-                      "??? ??? ??????? ???? ??????? ????? ??????? ???????? ????? ??????? ???????????.",
+                      "സമീപകാല വായനകളുടെ ചെറിയ ചരിത്രം ഇവിടെ സൂക്ഷിക്കാൻ ഒരിക്കൽ പ്രൊഫൈൽ സംരക്ഷിക്കുക.",
                       language
                     )}
                   </p>
@@ -1089,7 +1209,14 @@ const AstrologyHome = () => {
                       </article>
                       <article className="astrology-panel astrology-detail-card">
                         <h3>{localize("Kerala festival note", "കേരള ഉത്സവ കുറിപ്പ്", language)}</h3>
-                        <p>{festivals[0]?.note || localize("Vishu is ideal for new plans and family puja.", "???? ????? ????????????? ?????? ?????????? ????????????.", language)}</p>
+                        <p>{
+                          festivals[0]?.note ||
+                          localize(
+                            "Vishu is ideal for new plans and family puja.",
+                            "വിഷു പുതിയ പദ്ധതികൾക്കും കുടുംബ പൂജയ്ക്കും അനുയോജ്യമാണ്.",
+                            language
+                          )
+                        }</p>
                       </article>
                     </div>
                   </>
@@ -1183,7 +1310,7 @@ const AstrologyHome = () => {
                           </label>
                         </div>
                         <button type="button" className="astrology-save-button" onClick={handleFamilyProfileSave}>
-                          {localize("Save family profile", "?????? ??????? ????????????", language)}
+                          {localize("Save family profile", "കുടുംബ പ്രൊഫൈൽ സംരക്ഷിക്കുക", language)}
                         </button>
                       </section>
                     </div>
@@ -1191,46 +1318,53 @@ const AstrologyHome = () => {
                 ) : activeSection === "rashi" ? (
                   <div className="astrology-detail-grid">
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Rashi overview", "???? ???????", language)}</h3>
+                      <h3>{localize("Rashi overview", "രാശി അവലോകനം", language)}</h3>
                       <p>{getRashiSummary(selectedSign)}</p>
                       <ul>
-                        <li>{localize("Rashi", "????", language)} : {getRashiFromSign(selectedSign)}</li>
-                        <li>{localize("Nakshatra", "????????", language)} : {getNakshatraFromSign(selectedSign)}</li>
-                        <li>{localize("Lagna", "?????", language)} : {getLagnaFromTime(profileDraft.birthTime)}</li>
+                        <li>{localize("Rashi", "രാശി", language)} : {getRashiFromSign(selectedSign)}</li>
+                        <li>{localize("Nakshatra", "നക്ഷത്രം", language)} : {getNakshatraFromSign(selectedSign)}</li>
+                        <li>{localize("Lagna", "ലഗ്നം", language)} : {getLagnaFromTime(profileDraft.birthTime)}</li>
                       </ul>
                     </article>
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Energy focus", "????? ????????????", language)}</h3>
-                      <p>{localize("This week is ideal for resetting habits and opening conversation with elders.", "ഈ ആഴ്ച பழക്കങ്ങൾ പുതുക്കാനും മുതിർന്നവരുമായി സംഭാഷണം ആരംഭിക്കാനും അനുയോജ്യമാണ്.", language)}</p>
+                      <h3>{localize("Energy focus", "ഊർജ്ജ കേന്ദ്രീകരണം", language)}</h3>
+                      <p>{localize("This week is ideal for resetting habits and opening conversation with elders.", "ഈ ആഴ്ച പതിവുകൾ പുനഃക്രമീകരിക്കാനും മുതിർന്നവരുമായി സംഭാഷണം ആരംഭിക്കാനും അനുയോജ്യമാണ്.", language)}</p>
                     </article>
                   </div>
                 ) : activeSection === "kundli" ? (
                   <div className="astrology-detail-grid">
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Kundli summary", "??????? ???????", language)}</h3>
+                      <h3>{localize("Kundli summary", "കുണ്ടലി സംഗ്രഹം", language)}</h3>
                       <p>{localize("Your birth chart is anchored in strong family support and creative momentum.", "നിങ്ങളുടെ ജനന ചാർട്ട് ശക്തമായ കുടുംബ പിന്തുണയിലും സൃഷ്ടിപരമായ പ്രേരണയിലും ആധാരമുണ്ട്.", language)}</p>
                       <ul>
-                        <li>{localize("Ascendant", "?????", language)} : {selectedProfile.lagna || "Mesha"}</li>
-                        <li>{localize("Current Dasha", "??????? ??", language)} : Venus</li>
-                        <li>{localize("Navamsa power", "നവാംശ ശക്തി", language)} : {localize("Stable and supportive", "സ്ഥിരവും പിന്തുണയേടും", language)}</li>
+                        <li>{localize("Ascendant", "ലഗ്നം", language)} : {selectedProfile.lagna || "Mesha"}</li>
+                        <li>{localize("Current Dasha", "നിലവിലെ ദശ", language)} : Venus</li>
+                        <li>{localize("Navamsa power", "നവാംശ ശക്തി", language)} : {localize("Stable and supportive", "സ്ഥിരവും പിന്തുണയുള്ളതും", language)}</li>
                       </ul>
                     </article>
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Next step", "?????? ?????", language)}</h3>
+                      <h3>{localize("Next step", "അടുത്ത പടി", language)}</h3>
                       <p>{localize("Use this week for steady planning and a small temple visit to deepen your focus.", "ഈ ആഴ്ച സ്ഥിരതയുള്ള പദ്ധതിയിടലിനും ശ്രദ്ധതീവ്രമനയ്ക്കും ഒരു ചെറിയ ക്ഷേത്ര സന്ദർശനത്തിനുമാണ് ഉപയോഗിക്കുന്നത്.", language)}</p>
-                      <button type="button" className="astrology-save-button">
-                        {localize("Download PDF report", "PDF ??????????? ??????? ???????", language)}
+                      <button
+                        type="button"
+                        className="astrology-save-button"
+                        disabled={kundliLoading || downloadingKundli}
+                        onClick={handleDownloadKundliReport}
+                      >
+                        {downloadingKundli
+                          ? localize("Downloading...", "ഡൗൺലോഡ് ചെയ്യുന്നു...", language)
+                          : localize("Download PDF report", "PDF റിപ്പോർട്ട് ഡൗൺലോഡ് ചെയ്യുക", language)}
                       </button>
                     </article>
                   </div>
                 ) : activeSection === "match" ? (
                   <div className="astrology-detail-grid">
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Marriage compatibility", "????? ????????", language)}</h3>
+                      <h3>{localize("Marriage compatibility", "വിവാഹ പൊരുത്തം", language)}</h3>
                       <p>{localize("Compare two signs for emotional and financial harmony.", "രൗദ്രവും ധനപരവുമായ ഐക്യത്തിനായി രണ്ട് രാശികൾ താരതമ്യപ്പെടുത്തുക.", language)}</p>
                       <div className="astrology-form-grid">
                         <label className="astrology-field">
-                          <span>{localize("Your sign", "????????? ????", language)}</span>
+                          <span>{localize("Your sign", "നിങ്ങളുടെ രാശി", language)}</span>
                           <select value={selectedSign} onChange={(event) => setSelectedSign(event.target.value)}>
                             {signs.map((sign) => (
                               <option key={sign.sign} value={sign.sign}>
@@ -1240,7 +1374,7 @@ const AstrologyHome = () => {
                           </select>
                         </label>
                         <label className="astrology-field">
-                          <span>{localize("Partner sign", "??????????? ????", language)}</span>
+                          <span>{localize("Partner sign", "പങ്കാളിയുടെ രാശി", language)}</span>
                           <select value={partnerSign} onChange={(event) => setPartnerSign(event.target.value)}>
                             {signs.map((sign) => (
                               <option key={sign.sign} value={sign.sign}>
@@ -1251,12 +1385,12 @@ const AstrologyHome = () => {
                         </label>
                       </div>
                       <button type="button" className="astrology-save-button" onClick={handleCompatibilitySubmit}>
-                        {localize("Check porutham", "???????? ????????????", language)}
+                        {localize("Check porutham", "പൊരുത്തം പരിശോധിക്കുക", language)}
                       </button>
                     </article>
                     {compatibility ? (
                       <article className="astrology-panel astrology-detail-card">
-                        <h3>{localize("Compatibility score", "???????? ?????", language)}</h3>
+                        <h3>{localize("Compatibility score", "പൊരുത്ത സ്കോർ", language)}</h3>
                         <p>{compatibility.summary}</p>
                         <strong>{compatibility.score}%</strong>
                         <p>{compatibility.keyMatch}</p>
@@ -1266,7 +1400,7 @@ const AstrologyHome = () => {
                 ) : activeSection === "panchangam" ? (
                   <div className="astrology-detail-grid">
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Panchangam today", "????? ????????", language)}</h3>
+                      <h3>{localize("Panchangam today", "ഇന്നത്തെ പഞ്ചാംഗം", language)}</h3>
 
                       {panchangamNotice ? (
                         <p className="astrology-inline-message astrology-inline-message-warning">
@@ -1305,7 +1439,7 @@ const AstrologyHome = () => {
                     </article>
 
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Festival reminders", "????? ??????????", language)}</h3>
+                      <h3>{localize("Festival reminders", "ഉത്സവ ഓർമ്മപ്പെടുത്തലുകൾ", language)}</h3>
                       <ul>
                         {festivals.map((festival) => (
                           <li key={festival.name}>
@@ -1319,7 +1453,7 @@ const AstrologyHome = () => {
                 ) : activeSection === "remedies" ? (
                   <div className="astrology-detail-grid">
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Remedies for strength", "???????????? ??????????", language)}</h3>
+                      <h3>{localize("Remedies for strength", "ശക്തിക്കായുള്ള പരിഹാരങ്ങൾ", language)}</h3>
                       <ul>
                         <li>{localize("Recite the Ganapathi mantra before sunrise.", "ഉദയം മുൻപ് ഗണപതി മന്ത്രം ജപിക്കുക.", language)}</li>
                         <li>{localize("Offer yellow flowers to Vishnu on Thursdays.", "വ്യാഴാഴ്ച വിസ്ംനുവിന് മഞ്ഞ പുഷ്പങ്ങൾ അർപ്പിക്കുക.", language)}</li>
@@ -1327,35 +1461,90 @@ const AstrologyHome = () => {
                       </ul>
                     </article>
                     <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Temple guidance", "??????? ?????????????", language)}</h3>
+                      <h3>{localize("Temple guidance", "ക്ഷേത്ര മാർഗനിർദ്ദേശം", language)}</h3>
                       <p>{localize("Visit Guruvayur for peace, or perform a local vratam on Saturday.", "ശാന്തിക്കായി ഗുരുവായൂരിലേക്ക് പോകാം, അല്ലെങ്കിൽ ശനിയാഴ്ച അടുത്തുള്ള ഒരു വ്രതം നിർവ്വഹിക്കാം.", language)}</p>
                     </article>
                   </div>
                 ) : activeSection === "consult" ? (
                   <div className="astrology-detail-grid">
-                    {consultants.map((consultant) => (
-                      <article key={consultant.name} className="astrology-panel astrology-detail-card">
-                        <h3>{consultant.name}</h3>
-                        <p>{consultant.specialty}</p>
-                        <p>{consultant.rate}</p>
-                        <p>{consultant.availability}</p>
-                        <button type="button" className="astrology-save-button">
-                          {localize("Book consultation", "??????? ?????? ???????", language)}
+                    {consultants.map((consultant) => {
+                      const consultantKey = consultant.id || consultant.name;
+                      return (
+                        <article key={consultantKey} className="astrology-panel astrology-detail-card">
+                          <h3>{consultant.name}</h3>
+                          <p>{consultant.specialty}</p>
+                          <p>{consultant.rate}</p>
+                          <p>{consultant.availability}</p>
+                          <label className="astrology-field">
+                            <span>{localize("Choose a slot", "സ്ലോട്ട് തിരഞ്ഞെടുക്കുക", language)}</span>
+                            <select
+                              value={consultationSlots[consultantKey] || ""}
+                              onChange={(event) => handleConsultationSlotChange(consultantKey, event.target.value)}
+                            >
+                              {consultant.availableSlots.map((slot) => (
+                                <option key={slot.id} value={slot.id}>
+                                  {slot.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            className="astrology-save-button"
+                            disabled={bookingLoadingId === consultantKey}
+                            onClick={() => handleBookConsultation(consultant)}
+                          >
+                            {bookingLoadingId === consultantKey
+                              ? localize("Booking...", "ബുക്കിംഗ് പൂർത്തിയാക്കുന്നു...", language)
+                              : localize("Book consultation", "സഹായിയെ വിളിക്കുക", language)}
+                          </button>
+                        </article>
+                      );
+                    })}
+                    {lastBooking ? (
+                      <article className="astrology-panel astrology-detail-card astrology-booking-confirmation">
+                        <h3>{localize("Booking confirmed", "ബുക്കിംഗ് സ്ഥിരീകരിച്ചു", language)}</h3>
+                        <p>
+                          {localize("Confirmation code", "സ്ഥിരീകരണ കോഡ്", language)}: {lastBooking.confirmationCode}
+                        </p>
+                        <p>
+                          {localize("Consultant", "സലാഹകൻ", language)}: {lastBooking.consultantName}
+                        </p>
+                        <p>
+                          {localize("Slot", "സ്ലോട്ട്", language)}: {lastBooking.slot}
+                        </p>
+                        <p>
+                          {localize("Payment status", "പേയ്മെന്റ് നില", language)}: {lastBooking.paymentStatus || "pending"}
+                        </p>
+                        <button
+                          type="button"
+                          className="astrology-save-button"
+                          onClick={handleCreateConsultationPaymentOrder}
+                          disabled={paymentLoading}
+                        >
+                          {paymentLoading
+                            ? localize("Preparing payment...", "പേയ്മെന്റ് തയ്യാറാക്കുന്നു...", language)
+                            : localize("Pay now", "ഇപ്പോൾ പേയ് ചെയ്യുക", language)}
                         </button>
+                        {paymentOrder ? (
+                          <p>
+                            {localize("Order ID", "ഓർഡർ ഐഡി", language)}: {paymentOrder.orderId}
+                          </p>
+                        ) : null}
                       </article>
-                    ))}
+                    ) : null}
                   </div>
                 ) : activeSection === "ai" ? (
                   <div className="astrology-ai-panel">
                     <label className="astrology-field">
-                      <span>{localize("Ask your astrology assistant", "????????? ??????? ????? ?????????", language)}</span>
+                      <span>{localize("Ask your astrology assistant", "നിങ്ങളുടെ ജ്യോതിഷ സഹായിയോട് ചോദിക്കുക", language)}</span>
                       <textarea
                         rows={5}
                         value={aiQuestion}
                         onChange={(event) => setAiQuestion(event.target.value)}
                         placeholder={localize(
                           "What should I focus on this week?",
-                          "? ???? ??? ??? ?????????? ?????????????",
+                          "ഈ ആഴ്ച ഞാൻ ഏതിന്മേൽ ശ്രദ്ധ കേന്ദ്രീകരിക്കണം?",
                           language
                         )}
                       />
@@ -1390,5 +1579,3 @@ const AstrologyHome = () => {
 };
 
 export default AstrologyHome;
-
-

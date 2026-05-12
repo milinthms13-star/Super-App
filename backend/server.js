@@ -319,6 +319,7 @@ app.use('/api/voice-input', require('./routes/voiceInput'));
 
 // Astrology module routes
 app.use('/api/astrology', require('./routes/astrology'));
+app.use('/api/billpay', require('./routes/billpay'));
 
 // Job Portal routes
 app.use('/api/jobportal', require('./routes/jobportal'));

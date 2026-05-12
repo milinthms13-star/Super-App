@@ -9,7 +9,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const EmailNotificationService = require('./EmailNotificationService');
 const CarrierIntegrationService = require('./CarrierIntegrationService');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
 class FulfillmentService {
@@ -32,7 +32,7 @@ class FulfillmentService {
         throw new Error('Order not found');
       }
 
-      const shipmentId = `SHP_${Date.now()}_${uuidv4().split('-')[0].toUpperCase()}`;
+      const shipmentId = `SHP_${Date.now()}_${randomUUID().split('-')[0].toUpperCase()}`;
 
       const shipment = new Shipment({
         shipmentId,

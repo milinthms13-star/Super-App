@@ -1,0 +1,76 @@
+.consultant-admin-panel {
+  padding: 16px;
+}
+
+.admin-header {
+  margin-bottom: 12px;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.tab {
+  border: 1px solid #d6d6d6;
+  background: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: #f3f7ff;
+  border-color: #aac4ff;
+}
+
+.booking-card,
+.slot-item {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.booking-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.filter-btn {
+  border: 1px solid #d6d6d6;
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.filter-btn.active {
+  background: #f3f7ff;
+  border-color: #aac4ff;
+}
+
+.add-slot-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.add-slot-form input {
+  flex: 1;
+  min-width: 220px;
+}
+
+.error-message {
+  color: #b42318;
+  margin-bottom: 10px;
+}

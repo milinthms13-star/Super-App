@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const Device = require('../models/Device');
 const DeviceSession = require('../models/DeviceSession');
 const deviceService = require('../services/deviceService');

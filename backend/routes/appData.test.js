@@ -1,5 +1,23 @@
 const appDataRouter = require('./appData');
 
+describe('education app-data helpers', () => {
+  test('normalizes education state lists and removes duplicates', () => {
+    const { normalizeEducationState } = appDataRouter.__testables;
+
+    const normalized = normalizeEducationState({
+      enrolledCourseIds: ['spoken-english', 'spoken-english', ' coding-fundamentals '],
+      appliedScholarships: ['Kerala State Merit Scholarship', ''],
+      joinedGroups: ['SSLC Exam Preparation', 'SSLC Exam Preparation', ' '],
+    });
+
+    expect(normalized).toEqual({
+      enrolledCourseIds: ['spoken-english', 'coding-fundamentals'],
+      appliedScholarships: ['Kerala State Merit Scholarship'],
+      joinedGroups: ['SSLC Exam Preparation'],
+    });
+  });
+});
+
 describe('classifieds app-data helpers', () => {
   test('normalizes legacy classifieds records into the persisted module shape', () => {
     const { normalizeClassifiedsModule } = appDataRouter.__testables;

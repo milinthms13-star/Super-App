@@ -7,7 +7,7 @@ const Subscription = require('../models/Subscription');
 const SubscriptionPlan = require('../models/SubscriptionPlan');
 const Payment = require('../models/Payment');
 const PaymentService = require('./PaymentService');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('./logger');
 
 class SubscriptionService {
@@ -16,7 +16,7 @@ class SubscriptionService {
    */
   static async createSubscription(subscriptionData) {
     try {
-      const subscriptionId = `SUB_${uuidv4()}`;
+      const subscriptionId = `SUB_${randomUUID()}`;
       const nextBillingDate = this.calculateNextBillingDate(
         subscriptionData.startDate,
         subscriptionData.planDuration
@@ -473,7 +473,7 @@ class SubscriptionService {
       renewalDate.setMonth(renewalDate.getMonth() + (billingCycle === 'annual' ? 12 : 1));
 
       const subscription = new Subscription({
-        subscriptionId: `SUB_${uuidv4()}`,
+        subscriptionId: `SUB_${randomUUID()}`,
         userId,
         planId: plan._id,
         planTier: plan.planTier,

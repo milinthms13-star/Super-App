@@ -1,56 +1,92 @@
-# Education User Manual (Front-End)
+# Education User Manual (Front-End + Sync)
 
 > Module: `src/modules/education/Education.js`
 
 ## 1) What this module does
-The Education module is a learning hub where users can browse educational content, access learning materials, and potentially enroll or track learning progress.
+The Education module provides:
+- skill course discovery and enrollment
+- My Learning continuation
+- scholarship search and application tracking
+- community group joining
+- tuition request capture
+- study assistant responses
+
+Education progress is stored per account and synced via backend, with local fallback when offline.
 
 ## 2) Entry point
 1. Login.
-2. Open **Education** from the app navigation.
-3. The module typically starts on a course/content listing or home dashboard.
+2. Open **Education** from app navigation.
+3. Use the module navigation cards (Overview, Courses, My Learning, Community, Career, Government).
 
 ## 3) Step-by-step user flows
 
-### 3.1 Browse courses/content
-1. Open Education.
-2. Browse available courses/content cards.
-3. Use filters/search (if present) to narrow by topic/level.
+### 3.1 Browse and filter courses
+1. Open **Courses**.
+2. Use **Search courses**.
+3. Course list filters instantly.
 
 Expected result:
-- A list/grid of learning items is shown.
+- Matching course cards are shown.
 
-### 3.2 Open content details
-1. Click a course/content card.
-2. Review description, syllabus/topics, and available actions.
-
-Expected result:
-- Detail page opens with relevant actions.
-
-### 3.3 Enroll / start learning (if supported)
-1. Click **Enroll**, **Start**, or equivalent action.
-2. Confirm any required prompts (subscription/permission if present).
+### 3.2 Open course detail
+1. Click **View Details**.
+2. Review syllabus, outcomes, duration, level, and price.
 
 Expected result:
-- The item appears in “My Learning” / progress area (if available).
+- Course detail renders.
+- If no course is selected, fallback message appears with **Back to Courses**.
 
-### 3.4 Track progress (if supported)
-1. Open **My Learning** / progress tab (if present).
-2. Review completion status/chapters/modules.
+### 3.3 Enroll and sync
+1. Click **Enroll Now**.
+2. See status confirmation.
+3. Open **My Learning**.
 
 Expected result:
-- Progress indicators update as you learn (or after completion).
+- Course appears in **My Learning**.
+- Enrollment is synced to account-level education state.
 
-## 4) Troubleshooting (UI-level)
-- Content doesn’t load:
-  - Refresh the page.
-  - Confirm login/session is valid.
-  - Check connectivity.
-- Enroll/start button missing:
-  - Verify feature is enabled for your account/role.
+### 3.4 Scholarship apply and sync
+1. Open **Government**.
+2. Search scholarship.
+3. Click **Apply Now**.
 
-## 5) UI sections reference
-- Course/content listing/grid
-- Content detail pages
-- Enroll/start action areas
-- My Learning/progress view (if enabled)
+Expected result:
+- Button changes to **Applied**.
+- Applied state syncs to account-level education state.
+
+### 3.5 Join community and sync
+1. Open **Community**.
+2. Click group action.
+
+Expected result:
+- Button changes to **Joined**.
+- Joined state syncs to account-level education state.
+
+### 3.6 Tuition request
+1. Open **Overview**.
+2. Select subject.
+3. Click **Request Tuition**.
+
+Expected result:
+- Status banner confirms request capture.
+
+### 3.7 Study assistant
+1. Enter question in **Study Assistant**.
+2. Click **Ask Assistant**.
+
+Expected result:
+- Contextual guidance response is shown.
+
+## 4) Sync behavior
+- Primary sync: backend API (`/api/app-data/education/state`).
+- Fallback: local browser storage if backend is unavailable.
+- Sync indicator appears while state is being loaded/saved.
+
+## 5) Troubleshooting
+- State not syncing across devices:
+  - Verify login uses same account on both devices.
+  - Confirm backend API is reachable.
+- Recent action shows but later disappears:
+  - Check if backend sync failed and local data was cleared.
+- UI shows sync banner for long time:
+  - Check network/API latency and backend health.

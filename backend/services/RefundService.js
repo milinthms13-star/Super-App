@@ -6,7 +6,7 @@
 const Payment = require('../models/Payment');
 const Transaction = require('../models/Transaction');
 const PaymentService = require('./PaymentService');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
 class RefundService {

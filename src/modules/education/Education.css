@@ -14,6 +14,42 @@
   color: var(--education-ink);
 }
 
+.education-status-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  background: #e8f4f1;
+  border: 1px solid #b7dcd4;
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.education-status-banner p {
+  margin: 0;
+  color: #0a5f52;
+  font-weight: 600;
+}
+
+.education-sync-banner {
+  margin-bottom: 1rem;
+  border-radius: 12px;
+  border: 1px solid #d7e1f2;
+  background: #f3f6fc;
+  color: #1f3b68;
+  font-weight: 600;
+  padding: 0.6rem 0.9rem;
+}
+
+.education-status-dismiss {
+  border: 1px solid var(--education-border);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+}
+
 .education-hero,
 .education-section {
   background: var(--education-surface);
@@ -147,8 +183,11 @@
 }
 
 .education-tuition-grid,
+.education-home-grid,
 .education-courses-grid,
 .education-community-grid,
+.education-career-grid,
+.education-government-grid,
 .education-abroad-grid,
 .education-scholarships-list,
 .education-exam-grid {
@@ -193,6 +232,25 @@
   margin-bottom: 1rem;
 }
 
+.education-course-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.education-empty-state {
+  border: 1px dashed var(--education-border);
+  border-radius: 16px;
+  background: var(--education-surface-alt);
+  padding: 1rem;
+}
+
+.education-empty-state h3,
+.education-empty-state p {
+  margin: 0 0 0.75rem;
+}
+
 .education-ai-assistant,
 .education-exam-prep {
   margin-top: 1.25rem;
@@ -203,9 +261,15 @@
 }
 
 .education-ai-chat {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: 0.5rem;
   margin-top: 1rem;
+  align-items: end;
+}
+
+.education-ai-chat .education-field {
+  margin: 0;
 }
 
 .education-ai-chat input {
@@ -226,6 +290,7 @@
 }
 
 .education-ai-response {
+  grid-column: 1 / -1;
   margin-top: 1rem;
   padding: 1rem;
   background: var(--education-surface-alt);
@@ -239,8 +304,11 @@
   }
 
   .education-tuition-grid,
+  .education-home-grid,
   .education-courses-grid,
   .education-community-grid,
+  .education-career-grid,
+  .education-government-grid,
   .education-abroad-grid,
   .education-scholarships-list,
   .education-exam-grid {
@@ -263,6 +331,15 @@
   }
 
   .education-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .education-status-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .education-ai-chat {
     grid-template-columns: 1fr;
   }
 }

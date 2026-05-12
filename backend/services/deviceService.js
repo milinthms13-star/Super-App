@@ -7,7 +7,7 @@
 const Device = require('../models/Device');
 const DeviceSession = require('../models/DeviceSession');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
 class DeviceService {
@@ -16,7 +16,7 @@ class DeviceService {
    */
   async registerDevice(userId, deviceInfo, options = {}) {
     try {
-      const deviceId = uuidv4();
+      const deviceId = randomUUID();
       const deviceFingerprint = this.generateDeviceFingerprint(deviceInfo);
 
       // Check if similar device already exists (fingerprint matching)

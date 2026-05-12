@@ -4,7 +4,7 @@
  */
 
 const Invoice = require('../models/Invoice');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const PDFDocument = require('pdfkit');
 const logger = require('../utils/logger');
 
@@ -14,7 +14,7 @@ class InvoiceService {
    */
   static async createInvoice(paymentData, invoiceData) {
     try {
-      const invoiceId = `INV_${uuidv4()}`;
+      const invoiceId = `INV_${randomUUID()}`;
       const invoiceNumber = await this.generateInvoiceNumber();
 
       const subtotal = invoiceData.items.reduce((sum, item) => sum + item.totalAmount, 0);

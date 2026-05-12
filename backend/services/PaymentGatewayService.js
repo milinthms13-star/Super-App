@@ -4,7 +4,7 @@
  */
 
 const PaymentGateway = require('../models/PaymentGateway');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
 class PaymentGatewayService {
@@ -13,7 +13,7 @@ class PaymentGatewayService {
    */
   static async configureGateway(gatewayData) {
     try {
-      const gatewayId = `GW_${Date.now()}_${uuidv4().split('-')[0].toUpperCase()}`;
+      const gatewayId = `GW_${Date.now()}_${randomUUID().split('-')[0].toUpperCase()}`;
 
       let gateway = await PaymentGateway.findOne({ 
         gatewayName: gatewayData.gatewayName 

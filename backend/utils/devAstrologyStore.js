@@ -48,10 +48,68 @@ const listBookings = async (userId) => {
   return cloneValue(bookings);
 };
 
+const listAllBookings = async () => {
+  const allBookings = [];
+
+  bookingsByUserId.forEach((bookings) => {
+    allBookings.push(...bookings);
+  });
+
+  return cloneValue(
+    allBookings.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+  );
+};
+
+const findBookingById = async (bookingId) => {
+  const normalizedId = String(bookingId || '');
+  if (!normalizedId) {
+    return null;
+  }
+
+  for (const bookings of bookingsByUserId.values()) {
+    const booking = bookings.find((entry) => String(entry.id) === normalizedId);
+    if (booking) {
+      return cloneValue(booking);
+    }
+  }
+
+  return null;
+};
+
+const updateBookingById = async (bookingId, updates = {}) => {
+  const normalizedId = String(bookingId || '');
+  if (!normalizedId) {
+    return null;
+  }
+
+  for (const [userId, bookings] of bookingsByUserId.entries()) {
+    const bookingIndex = bookings.findIndex((entry) => String(entry.id) === normalizedId);
+    if (bookingIndex === -1) {
+      continue;
+    }
+
+    const nextBooking = {
+      ...bookings[bookingIndex],
+      ...cloneValue(updates),
+      userId,
+      updatedAt: new Date().toISOString(),
+    };
+
+    bookings[bookingIndex] = nextBooking;
+    bookingsByUserId.set(userId, bookings);
+    return cloneValue(nextBooking);
+  }
+
+  return null;
+};
+
 module.exports = {
   findProfile,
   saveProfile,
   createBooking,
   listBookings,
+  listAllBookings,
+  findBookingById,
+  updateBookingById,
   resetStore,
 };

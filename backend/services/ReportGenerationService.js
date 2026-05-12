@@ -11,7 +11,7 @@ const Payment = require('../models/Payment');
 const Commission = require('../models/Commission');
 const Invoice = require('../models/Invoice');
 const InstantSettlement = require('../models/InstantSettlement');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('./logger');
 
 class ReportGenerationService {
@@ -20,7 +20,7 @@ class ReportGenerationService {
    */
   static async generatePaymentAnalytics(startDate, endDate, period) {
     try {
-      const analyticsId = `PA-${Date.now()}-${uuidv4().substring(0, 8)}`;
+      const analyticsId = `PA-${Date.now()}-${randomUUID().substring(0, 8)}`;
 
       // Fetch payments in range
       const payments = await Payment.find({
@@ -73,7 +73,7 @@ class ReportGenerationService {
    */
   static async generateCommissionReport(startDate, endDate, period) {
     try {
-      const reportId = `CR-${Date.now()}-${uuidv4().substring(0, 8)}`;
+      const reportId = `CR-${Date.now()}-${randomUUID().substring(0, 8)}`;
 
       // Fetch commissions in range
       const commissions = await Commission.find({
@@ -121,7 +121,7 @@ class ReportGenerationService {
    */
   static async generateInvoiceAnalytics(startDate, endDate, period) {
     try {
-      const analyticsId = `IA-${Date.now()}-${uuidv4().substring(0, 8)}`;
+      const analyticsId = `IA-${Date.now()}-${randomUUID().substring(0, 8)}`;
 
       // Fetch invoices in range
       const invoices = await Invoice.find({
@@ -171,7 +171,7 @@ class ReportGenerationService {
    */
   static async generateSettlementReport(startDate, endDate, period) {
     try {
-      const reportId = `SR-${Date.now()}-${uuidv4().substring(0, 8)}`;
+      const reportId = `SR-${Date.now()}-${randomUUID().substring(0, 8)}`;
 
       // Fetch settlements in range
       const settlements = await InstantSettlement.find({

@@ -5,7 +5,7 @@
 
 const Commission = require('../models/Commission');
 const Payment = require('../models/Payment');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('./logger');
 
 class CommissionService {
@@ -14,7 +14,7 @@ class CommissionService {
    */
   static async createCommission(commissionData) {
     try {
-      const commissionId = `COM_${uuidv4()}`;
+      const commissionId = `COM_${randomUUID()}`;
 
       // Calculate commission
       let commissionAmount = (commissionData.orderAmount * commissionData.commissionRate) / 100;
@@ -301,7 +301,7 @@ class CommissionService {
   static async bulkCreateCommissions(commissionsData) {
     try {
       const commissions = commissionsData.map((data) => ({
-        commissionId: `COM_${uuidv4()}`,
+        commissionId: `COM_${randomUUID()}`,
         ...data,
         status: 'pending',
       }));

@@ -1,462 +1,341 @@
 const express = require('express');
-const PDFDocument = require('pdfkit');
-const Business = require('../models/Business');
-const BusinessInvoice = require('../models/BusinessInvoice');
-const MiniApp = require('../models/MiniApp');
-const MiniAppProduct = require('../models/MiniAppProduct');
 const { authenticate } = require('../middleware/auth');
+const businessBuilderService = require('../services/businessBuilderService');
 
 const router = express.Router();
 
-function generateInvoiceNumber(business) {
-  const prefix = business?.invoiceSettings?.invoicePrefix || 'INV';
-  const timestamp = Date.now();
-  return `${prefix}-${String(timestamp).slice(-6)}-${Math.floor(Math.random() * 9000 + 1000)}`;
-}
+// All routes require authentication
+router.use(authenticate);
 
-function calculateInvoiceTotals(items = [], discountAmount = 0) {
-  const sanitizedItems = items.map((item) => {
-    const quantity = Number(item.quantity || 0);
-    const unitPrice = Number(item.unitPrice || 0);
-    const taxRate = Number(item.taxRate || 0);
-    const amount = quantity * unitPrice;
-    return { ...item, quantity, unitPrice, taxRate, amount };
-  });
-
-  const subtotal = sanitizedItems.reduce((sum, item) => sum + item.amount, 0);
-  const taxAmount = sanitizedItems.reduce(
-    (sum, item) => sum + (item.amount * (item.taxRate || 0)) / 100,
-    0
-  );
-  const discount = Number(discountAmount || 0);
-  const total = subtotal + taxAmount - discount;
-
-  return {
-    items: sanitizedItems,
-    subtotal,
-    taxAmount,
-    total,
-    discountAmount: discount,
-  };
-}
-
-function generateInvoicePdfBuffer(invoice, business) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 40 });
-    const chunks = [];
-
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-
-    const businessName = business?.businessName || 'Business';
-    const businessAddress = [
-      business?.address?.street,
-      business?.address?.city,
-      business?.address?.state,
-      business?.address?.pincode,
-      business?.address?.country,
-    ]
-      .filter(Boolean)
-      .join(', ');
-
-    doc.fillColor('#111827').fontSize(20).text(businessName, { continued: false });
-    if (businessAddress) {
-      doc.fontSize(10).fillColor('#4b5563').text(businessAddress);
-    }
-    if (business?.phone || business?.email) {
-      doc.moveDown(0.25);
-      doc.fontSize(10).fillColor('#4b5563');
-      if (business.phone) doc.text(`Phone: ${business.phone}`);
-      if (business.email) doc.text(`Email: ${business.email}`);
-    }
-
-    doc.moveDown(1);
-    doc.fillColor('#111827').fontSize(18).text('Invoice', { underline: true });
-    doc.moveDown(0.5);
-
-    const leftStart = 40;
-    const rightStart = 330;
-    doc.fontSize(10).fillColor('#374151');
-    doc.text(`Invoice Number: ${invoice.invoiceNumber}`, leftStart, doc.y);
-    doc.text(`Issue Date: ${new Date(invoice.issueDate).toLocaleDateString('en-IN')}`);
-    doc.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString('en-IN')}`);
-
-    doc.moveDown(0.75);
-    doc.fontSize(12).fillColor('#111827').text('Bill To:', leftStart);
-    doc.fontSize(10).fillColor('#374151');
-    doc.text(invoice.customerName || '');
-    if (invoice.customerAddress) doc.text(invoice.customerAddress);
-    if (invoice.customerPhone) doc.text(`Phone: ${invoice.customerPhone}`);
-    if (invoice.customerEmail) doc.text(`Email: ${invoice.customerEmail}`);
-    if (invoice.customerGSTIN) doc.text(`GSTIN: ${invoice.customerGSTIN}`);
-
-    doc.moveDown(1);
-    const tableTop = doc.y;
-    doc.fontSize(10).fillColor('#111827').text('Description', leftStart, tableTop);
-    doc.text('Qty', 260, tableTop, { width: 50, align: 'right' });
-    doc.text('Rate', 320, tableTop, { width: 70, align: 'right' });
-    doc.text('Tax', 400, tableTop, { width: 60, align: 'right' });
-    doc.text('Amount', 470, tableTop, { width: 90, align: 'right' });
-
-    doc.moveTo(leftStart, tableTop + 15).lineTo(550, tableTop + 15).stroke('#e5e7eb');
-
-    let y = tableTop + 24;
-    invoice.items.forEach((item) => {
-      const description = item.name + (item.description ? ` - ${item.description}` : '');
-      doc.fontSize(10).fillColor('#374151').text(description, leftStart, y, { width: 220 });
-      doc.text(item.quantity.toString(), 260, y, { width: 50, align: 'right' });
-      doc.text(item.unitPrice.toFixed(2), 320, y, { width: 70, align: 'right' });
-      doc.text(`${item.taxRate || 0}%`, 400, y, { width: 60, align: 'right' });
-      doc.text((item.amount || 0).toFixed(2), 470, y, { width: 90, align: 'right' });
-      y += 18;
+// Business CRUD routes
+router.post('/businesses', async (req, res) => {
+  try {
+    const business = await businessBuilderService.createBusiness(req.user.id, req.body);
+    res.status(201).json({
+      success: true,
+      data: business,
+      message: 'Business created successfully'
     });
-
-    doc.moveDown(1.5);
-    const totalsTop = y + 20;
-    doc.text(`Subtotal:`, 360, totalsTop, { width: 120, align: 'right' });
-    doc.text(`${invoice.subtotal.toFixed(2)}`, 470, totalsTop, { width: 90, align: 'right' });
-    doc.text(`Tax:`, 360, totalsTop + 16, { width: 120, align: 'right' });
-    doc.text(`${invoice.taxAmount.toFixed(2)}`, 470, totalsTop + 16, { width: 90, align: 'right' });
-    doc.text(`Discount:`, 360, totalsTop + 32, { width: 120, align: 'right' });
-    doc.text(`${Number(invoice.discountAmount || 0).toFixed(2)}`, 470, totalsTop + 32, { width: 90, align: 'right' });
-    doc.fontSize(12).fillColor('#111827').text(`Total:`, 360, totalsTop + 52, { width: 120, align: 'right' });
-    doc.text(`${invoice.total.toFixed(2)}`, 470, totalsTop + 52, { width: 90, align: 'right' });
-
-    if (invoice.notes) {
-      doc.moveDown(7);
-      doc.fontSize(10).fillColor('#4b5563').text('Notes', { underline: true });
-      doc.moveDown(0.2);
-      doc.fontSize(10).text(invoice.notes);
-    }
-
-    doc.end();
-  });
-}
-
-router.post('/businesses', authenticate, async (req, res) => {
-  try {
-    const {
-      businessName,
-      businessType,
-      phone,
-      email,
-      website,
-      gstin,
-      address,
-      primaryColor,
-      secondaryColor,
-    } = req.body;
-
-    if (!businessName || !businessType || !phone || !email) {
-      return res.status(400).json({ success: false, message: 'Required business fields are missing' });
-    }
-
-    let business = await Business.findOne({ userId: req.user._id });
-    if (business) {
-      business.businessName = businessName;
-      business.businessType = businessType;
-      business.phone = phone;
-      business.email = email;
-      business.website = website;
-      business.gstin = gstin;
-      business.address = address || business.address;
-      business.primaryColor = primaryColor || business.primaryColor;
-      business.secondaryColor = secondaryColor || business.secondaryColor;
-      business.updatedAt = new Date();
-      await business.save();
-    } else {
-      business = new Business({
-        userId: req.user._id,
-        businessName,
-        businessType,
-        phone,
-        email,
-        website,
-        gstin,
-        address,
-        primaryColor,
-        secondaryColor,
-      });
-      await business.save();
-    }
-
-    return res.status(201).json({ success: true, business });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-router.get('/businesses/me', authenticate, async (req, res) => {
-  try {
-    const business = await Business.findOne({ userId: req.user._id });
-    if (!business) {
-      return res.status(404).json({ success: false, message: 'Business not found' });
-    }
-    return res.json({ success: true, business });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-router.post('/invoices', authenticate, async (req, res) => {
-  try {
-    const {
-      customerName,
-      customerPhone,
-      customerEmail,
-      customerGSTIN,
-      customerAddress,
-      items,
-      dueDate,
-      discountAmount,
-      currency,
-      notes,
-    } = req.body;
-
-    if (!customerName || !items || !Array.isArray(items) || !items.length || !dueDate) {
-      return res.status(400).json({ success: false, message: 'Missing required invoice fields' });
-    }
-
-    const parsedDueDate = new Date(dueDate);
-    if (Number.isNaN(parsedDueDate.getTime())) {
-      return res.status(400).json({ success: false, message: 'Invalid dueDate' });
-    }
-
-    // Validate numeric fields early to avoid NaN totals / PDF issues
-    const sanitizedItems = items.map((it, idx) => {
-      const name = it?.name;
-      const quantity = Number(it?.quantity);
-      const unitPrice = Number(it?.unitPrice);
-      const taxRate = Number(it?.taxRate);
-
-      const isValidNumber = (n) => Number.isFinite(n) && !Number.isNaN(n);
-
-      if (!name || typeof name !== 'string') {
-        throw new Error(`Invalid item name at index ${idx}`);
-      }
-      if (!isValidNumber(quantity) || quantity < 0) {
-        throw new Error(`Invalid quantity at index ${idx}`);
-      }
-      if (!isValidNumber(unitPrice) || unitPrice < 0) {
-        throw new Error(`Invalid unitPrice at index ${idx}`);
-      }
-      if (!isValidNumber(taxRate) || taxRate < 0 || taxRate > 100) {
-        throw new Error(`Invalid taxRate at index ${idx}`);
-      }
-
-      return {
-        ...it,
-        name,
-        quantity,
-        unitPrice,
-        taxRate,
-        description: it?.description,
-      };
+    res.status(400).json({
+      success: false,
+      message: error.message
     });
+  }
+});
 
-    const business = await Business.findOne({ userId: req.user._id });
-    if (!business) {
-      return res.status(404).json({ success: false, message: 'Business not found' });
-    }
-
-    const totals = calculateInvoiceTotals(sanitizedItems, discountAmount);
-
-    if (!Number.isFinite(totals.total) || !Number.isFinite(totals.subtotal) || !Number.isFinite(totals.taxAmount)) {
-      return res.status(400).json({ success: false, message: 'Invalid invoice totals calculated' });
-    }
-
-    const invoice = new BusinessInvoice({
-      businessId: business._id,
-      invoiceNumber: generateInvoiceNumber(business),
-      customerName,
-      customerPhone,
-      customerEmail,
-      customerGSTIN,
-      customerAddress,
-      items: totals.items,
-      subtotal: totals.subtotal,
-      taxAmount: totals.taxAmount,
-      discountAmount: totals.discountAmount,
-      total: totals.total,
-      currency: currency || 'INR',
-      issueDate: new Date(),
-      dueDate: parsedDueDate,
-      notes,
-      status: 'Sent',
-      paymentStatus: 'Pending',
-      businessBranding: {
-        logo: business.logo,
-        primaryColor: business.primaryColor,
-        secondaryColor: business.secondaryColor,
-      },
+router.get('/businesses', async (req, res) => {
+  try {
+    const businesses = await businessBuilderService.getBusinesses(req.user.id);
+    res.json({
+      success: true,
+      data: businesses
     });
-
-    await invoice.save();
-    return res.status(201).json({ success: true, invoice });
   } catch (error) {
-    const msg = typeof error?.message === 'string' ? error.message : 'Unable to create invoice';
-    if (msg.startsWith('Invalid item') || msg.startsWith('Invalid')) {
-      return res.status(400).json({ success: false, message: msg });
-    }
-    return res.status(500).json({ success: false, message: msg });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
-router.get('/invoices', authenticate, async (req, res) => {
+router.get('/businesses/:businessId', async (req, res) => {
   try {
-    const business = await Business.findOne({ userId: req.user._id });
-    if (!business) {
-      return res.status(404).json({ success: false, message: 'Business not found' });
-    }
-    const invoices = await BusinessInvoice.find({ businessId: business._id }).sort({ createdAt: -1 });
-    return res.json({ success: true, invoices });
+    const business = await businessBuilderService.getBusinessById(req.params.businessId, req.user.id);
+    res.json({
+      success: true,
+      data: business
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    const statusCode = error.message === 'Business not found' ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
-router.get('/invoices/:id', authenticate, async (req, res) => {
+router.put('/businesses/:businessId', async (req, res) => {
   try {
-    const business = await Business.findOne({ userId: req.user._id });
-    if (!business) {
-      return res.status(404).json({ success: false, message: 'Business not found' });
-    }
-    const invoice = await BusinessInvoice.findOne({ _id: req.params.id, businessId: business._id });
-    if (!invoice) {
-      return res.status(404).json({ success: false, message: 'Invoice not found' });
-    }
-    return res.json({ success: true, invoice });
+    const business = await businessBuilderService.updateBusiness(req.params.businessId, req.user.id, req.body);
+    res.json({
+      success: true,
+      data: business,
+      message: 'Business updated successfully'
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    const statusCode = error.message === 'Business not found' ? 404 : 400;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
-router.get('/invoices/:id/pdf', authenticate, async (req, res) => {
+router.delete('/businesses/:businessId', async (req, res) => {
   try {
-    const business = await Business.findOne({ userId: req.user._id });
-    if (!business) {
-      return res.status(404).json({ success: false, message: 'Business not found' });
-    }
+    await businessBuilderService.deleteBusiness(req.params.businessId, req.user.id);
+    res.json({
+      success: true,
+      message: 'Business deleted successfully'
+    });
+  } catch (error) {
+    const statusCode = error.message === 'Business not found' ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
 
-    const invoice = await BusinessInvoice.findOne({ _id: req.params.id, businessId: business._id });
-    if (!invoice) {
-      return res.status(404).json({ success: false, message: 'Invoice not found' });
-    }
+// Business Plan routes
+router.post('/businesses/:businessId/generate-plan', async (req, res) => {
+  try {
+    const businessPlan = await businessBuilderService.generateBusinessPlan(req.params.businessId, req.user.id);
+    res.json({
+      success: true,
+      data: businessPlan,
+      message: 'Business plan generated successfully'
+    });
+  } catch (error) {
+    const statusCode = error.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
 
-    const buffer = await generateInvoicePdfBuffer(invoice, business);
+router.get('/businesses/:businessId/schemes', async (req, res) => {
+  try {
+    const schemes = await businessBuilderService.getEligibleSchemes(req.params.businessId, req.user.id);
+    res.json({
+      success: true,
+      data: schemes
+    });
+  } catch (error) {
+    const statusCode = error.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Checklist routes
+router.put('/businesses/:businessId/checklist', async (req, res) => {
+  try {
+    const { checklistUpdates } = req.body;
+    const checklist = await businessBuilderService.updateChecklist(req.params.businessId, req.user.id, checklistUpdates);
+    res.json({
+      success: true,
+      data: checklist,
+      message: 'Checklist updated successfully'
+    });
+  } catch (error) {
+    const statusCode = error.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Invoice CRUD routes
+router.post('/invoices', async (req, res) => {
+  try {
+    const invoice = await businessBuilderService.createInvoice(req.user.id, req.body);
+    res.status(201).json({
+      success: true,
+      data: invoice,
+      message: 'Invoice created successfully'
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+router.get('/invoices', async (req, res) => {
+  try {
+    const { businessId } = req.query;
+    const invoices = await businessBuilderService.getInvoices(req.user.id, businessId);
+    res.json({
+      success: true,
+      data: invoices
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+router.get('/invoices/:invoiceId', async (req, res) => {
+  try {
+    const invoice = await businessBuilderService.getInvoiceById(req.params.invoiceId, req.user.id);
+    res.json({
+      success: true,
+      data: invoice
+    });
+  } catch (error) {
+    const statusCode = error.message === 'Invoice not found' ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+router.put('/invoices/:invoiceId', async (req, res) => {
+  try {
+    const invoice = await businessBuilderService.updateInvoice(req.params.invoiceId, req.user.id, req.body);
+    res.json({
+      success: true,
+      data: invoice,
+      message: 'Invoice updated successfully'
+    });
+  } catch (error) {
+    const statusCode = error.message === 'Invoice not found' ? 404 : 400;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+router.delete('/invoices/:invoiceId', async (req, res) => {
+  try {
+    await businessBuilderService.deleteInvoice(req.params.invoiceId, req.user.id);
+    res.json({
+      success: true,
+      message: 'Invoice deleted successfully'
+    });
+  } catch (error) {
+    const statusCode = error.message === 'Invoice not found' ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Invoice PDF generation
+router.get('/invoices/:invoiceId/pdf', async (req, res) => {
+  try {
+    const pdfBuffer = await businessBuilderService.generateInvoicePDF(req.params.invoiceId, req.user.id);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=${invoice.invoiceNumber}.pdf`);
-    res.send(buffer);
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${req.params.invoiceId}.pdf`);
+    res.send(pdfBuffer);
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-router.post('/mini-apps', authenticate, async (req, res) => {
-  try {
-    const { displayName, slug, category, branding, businessProfile, configuration } = req.body;
-
-    if (!displayName || !slug || !category) {
-      return res.status(400).json({ success: false, message: 'Missing required mini app fields' });
-    }
-
-    if (typeof slug !== 'string' || !/^[a-z0-9-]+$/.test(slug)) {
-      return res.status(400).json({ success: false, message: 'Invalid slug format' });
-    }
-
-    const business = await Business.findOne({ userId: req.user._id });
-    if (!business) {
-      return res.status(404).json({ success: false, message: 'Business not found' });
-    }
-
-    const existing = await MiniApp.findOne({ slug });
-    if (existing) {
-      return res.status(400).json({ success: false, message: 'Slug already taken' });
-    }
-
-    const miniApp = new MiniApp({
-      businessId: business._id,
-      displayName,
-      slug,
-      category,
-      branding,
-      businessProfile,
-      configuration,
-      status: 'Active',
-      verificationStatus: 'Unverified',
+    const statusCode = error.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
     });
-
-    await miniApp.save();
-    return res.status(201).json({ success: true, miniApp });
-  } catch (error) {
-    const msg = typeof error?.message === 'string' ? error.message : 'Unable to create mini app';
-    return res.status(500).json({ success: false, message: msg });
   }
 });
 
-router.get('/mini-apps', authenticate, async (req, res) => {
+// Mini App CRUD routes
+router.post('/mini-apps', async (req, res) => {
   try {
-    const business = await Business.findOne({ userId: req.user._id });
-    if (!business) {
-      return res.status(404).json({ success: false, message: 'Business not found' });
-    }
-
-    const miniApps = await MiniApp.find({ businessId: business._id }).sort({ createdAt: -1 });
-    return res.json({ success: true, miniApps });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-router.post('/mini-apps/:miniAppId/products', authenticate, async (req, res) => {
-  try {
-    const { miniAppId } = req.params;
-    const { name, description, category, price, discountedPrice, stock, images } = req.body;
-
-    if (!name || price == null) {
-      return res.status(400).json({ success: false, message: 'Product name and price are required' });
-    }
-
-    const business = await Business.findOne({ userId: req.user._id });
-    if (!business) {
-      return res.status(404).json({ success: false, message: 'Business not found' });
-    }
-
-    const miniApp = await MiniApp.findOne({ _id: miniAppId, businessId: business._id });
-    if (!miniApp) {
-      return res.status(404).json({ success: false, message: 'Mini app not found' });
-    }
-
-    const product = new MiniAppProduct({
-      miniAppId: miniApp._id,
-      businessId: business._id,
-      name,
-      description,
-      category,
-      price,
-      discountedPrice,
-      stock: stock == null ? 0 : stock,
-      images: Array.isArray(images) ? images : [],
+    const miniApp = await businessBuilderService.createMiniApp(req.user.id, req.body);
+    res.status(201).json({
+      success: true,
+      data: miniApp,
+      message: 'Mini app created successfully'
     });
-
-    await product.save();
-    return res.status(201).json({ success: true, product });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
-router.get('/mini-apps/:slug', async (req, res) => {
+router.get('/mini-apps', async (req, res) => {
   try {
-    const miniApp = await MiniApp.findOne({ slug: req.params.slug, status: 'Active' });
-    if (!miniApp) {
-      return res.status(404).json({ success: false, message: 'Mini app not found' });
-    }
-    return res.json({ success: true, miniApp });
+    const { businessId } = req.query;
+    const miniApps = await businessBuilderService.getMiniApps(req.user.id, businessId);
+    res.json({
+      success: true,
+      data: miniApps
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+router.get('/mini-apps/:miniAppId', async (req, res) => {
+  try {
+    const miniApp = await businessBuilderService.getMiniAppById(req.params.miniAppId, req.user.id);
+    res.json({
+      success: true,
+      data: miniApp
+    });
+  } catch (error) {
+    const statusCode = error.message === 'Mini app not found' ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+router.put('/mini-apps/:miniAppId', async (req, res) => {
+  try {
+    const miniApp = await businessBuilderService.updateMiniApp(req.params.miniAppId, req.user.id, req.body);
+    res.json({
+      success: true,
+      data: miniApp,
+      message: 'Mini app updated successfully'
+    });
+  } catch (error) {
+    const statusCode = error.message === 'Mini app not found' ? 404 : 400;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+router.delete('/mini-apps/:miniAppId', async (req, res) => {
+  try {
+    await businessBuilderService.deleteMiniApp(req.params.miniAppId, req.user.id);
+    res.json({
+      success: true,
+      message: 'Mini app deleted successfully'
+    });
+  } catch (error) {
+    const statusCode = error.message === 'Mini app not found' ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+// Mini app analytics
+router.post('/mini-apps/:miniAppId/view', async (req, res) => {
+  try {
+    const miniApp = await businessBuilderService.getMiniAppById(req.params.miniAppId, req.user.id);
+    await miniApp.incrementView();
+    res.json({
+      success: true,
+      message: 'View recorded'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 

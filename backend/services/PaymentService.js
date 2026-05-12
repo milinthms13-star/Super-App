@@ -7,7 +7,7 @@ const Payment = require('../models/Payment');
 const Transaction = require('../models/Transaction');
 const PaymentGateway = require('../models/PaymentGateway');
 const FraudDetection = require('../models/FraudDetection');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
 class PaymentService {
@@ -16,7 +16,7 @@ class PaymentService {
    */
   static async createPayment(paymentData) {
     try {
-      const paymentId = `PAY_${Date.now()}_${uuidv4().split('-')[0].toUpperCase()}`;
+      const paymentId = `PAY_${Date.now()}_${randomUUID().split('-')[0].toUpperCase()}`;
       
       // Validate gateway
       const gateway = await PaymentGateway.findOne({ 
@@ -194,7 +194,7 @@ class PaymentService {
         throw new Error('Payment cannot be refunded in current state');
       }
 
-      const refundId = `REF_${Date.now()}_${uuidv4().split('-')[0].toUpperCase()}`;
+      const refundId = `REF_${Date.now()}_${randomUUID().split('-')[0].toUpperCase()}`;
       const refundAmount = refundData.amount || payment.amount;
 
       const refundResponse = await this.callPaymentGateway(

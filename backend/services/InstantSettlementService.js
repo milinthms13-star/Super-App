@@ -6,7 +6,7 @@
 const InstantSettlement = require('../models/InstantSettlement');
 const PaymentGateway = require('../models/PaymentGateway');
 const GatewayIntegrations = require('../utils/GatewayIntegrations');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('./logger');
 
 class InstantSettlementService {
@@ -15,7 +15,7 @@ class InstantSettlementService {
    */
   static async createSettlementRequest(settlementData) {
     try {
-      const settlementId = `SETTLE_${uuidv4()}`;
+      const settlementId = `SETTLE_${randomUUID()}`;
       const gateway = await PaymentGateway.findOne({ gatewayName: settlementData.paymentGateway });
 
       if (!gateway) {

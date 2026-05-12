@@ -6,11 +6,34 @@ const MiniAppSchema = new mongoose.Schema(
       type: String,
       unique: true,
       required: true,
-      default: () => `app-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      default: () => `mini-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     },
     businessId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Business',
+      required: true,
+      index: true,
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    appName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 50,
+    },
+    appDescription: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+    },
+    appType: {
+      type: String,
+      enum: ['Business Card', 'Product Showcase', 'Service Booking', 'Store Locator', 'Contact Form'],
       required: true,
     },
     slug: {
@@ -21,44 +44,40 @@ const MiniAppSchema = new mongoose.Schema(
       trim: true,
       match: /^[a-z0-9-]+$/,
     },
-    displayName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    category: {
-      type: String,
-      enum: ['Retail', 'Service', 'Food', 'Education', 'Health', 'Travel', 'RealEstate', 'Beauty', 'Fitness', 'Other'],
-      required: true,
-    },
     status: {
       type: String,
-      enum: ['Active', 'Inactive', 'Suspended', 'Draft'],
+      enum: ['Draft', 'Published', 'Unpublished', 'Suspended'],
       default: 'Draft',
     },
-    verificationStatus: {
-      type: String,
-      enum: ['Unverified', 'Pending', 'Verified'],
-      default: 'Unverified',
-    },
     branding: {
+      primaryColor: {
+        type: String,
+        default: '#0f766e',
+        match: /^#[0-9A-F]{6}$/i,
+      },
+      secondaryColor: {
+        type: String,
+        default: '#10b981',
+        match: /^#[0-9A-F]{6}$/i,
+      },
       logo: String,
-      primaryColor: { type: String, default: '#3498db' },
-      secondaryColor: { type: String, default: '#2ecc71' },
-      description: { type: String, maxlength: 160 },
       banner: String,
-      coverImage: String,
     },
-    businessProfile: {
-      phone: String,
-      whatsapp: String,
-      email: String,
-      address: String,
-      city: String,
-      state: String,
-      coordinates: {
-        lat: Number,
-        lng: Number,
+    content: {
+      heroTitle: { type: String, trim: true },
+      heroSubtitle: { type: String, trim: true },
+      aboutText: { type: String, trim: true },
+      services: [{
+        title: { type: String, trim: true },
+        description: { type: String, trim: true },
+        price: Number,
+        image: String,
+      }],
+      contactInfo: {
+        phone: String,
+        email: String,
+        address: String,
+        whatsapp: String,
       },
       businessHours: {
         monday: { open: String, close: String, closed: Boolean },
@@ -70,60 +89,23 @@ const MiniAppSchema = new mongoose.Schema(
         sunday: { open: String, close: String, closed: Boolean },
       },
     },
-    pages: {
-      home: {
-        enabled: { type: Boolean, default: true },
-        heroTitle: String,
-        heroSubtitle: String,
-        heroImage: String,
-        ctaText: String,
-        ctaLink: String,
-      },
-      products: {
-        enabled: { type: Boolean, default: true },
-        layout: { type: String, enum: ['Grid', 'List', 'Card'], default: 'Grid' },
-      },
-      booking: {
-        enabled: { type: Boolean, default: false },
-        bookingType: String, // 'Appointment', 'Order', 'Reservation'
-        formFields: [String],
-      },
-      offers: {
-        enabled: { type: Boolean, default: true },
-      },
-      chat: {
-        enabled: { type: Boolean, default: true },
-      },
-      reviews: {
-        enabled: { type: Boolean, default: true },
-      },
-    },
-    configuration: {
-      enableChat: { type: Boolean, default: true },
-      enableReviews: { type: Boolean, default: true },
-      enableNotifications: { type: Boolean, default: true },
-      enablePayments: { type: Boolean, default: true },
-      paymentGateway: {
-        type: String,
-        enum: ['Razorpay', 'Stripe'],
-        default: 'Razorpay',
-      },
-      timezone: { type: String, default: 'Asia/Kolkata' },
-      language: { type: String, default: 'en' },
-    },
-    engagement: {
-      followers: { type: Number, default: 0 },
-      subscribers: { type: Number, default: 0 },
-      averageRating: { type: Number, default: 0, min: 0, max: 5 },
-      reviewCount: { type: Number, default: 0 },
+    features: {
+      whatsappIntegration: { type: Boolean, default: true },
+      callIntegration: { type: Boolean, default: true },
+      emailIntegration: { type: Boolean, default: true },
+      locationIntegration: { type: Boolean, default: false },
+      bookingSystem: { type: Boolean, default: false },
+      paymentIntegration: { type: Boolean, default: false },
     },
     analytics: {
-      totalViews: { type: Number, default: 0 },
-      totalClicks: { type: Number, default: 0 },
-      totalOrders: { type: Number, default: 0 },
-      totalRevenue: { type: Number, default: 0 },
-      conversionRate: { type: Number, default: 0 },
-      lastViewDate: Date,
+      views: { type: Number, default: 0 },
+      shares: { type: Number, default: 0 },
+      contacts: { type: Number, default: 0 },
+      lastViewed: Date,
+    },
+    qrCode: {
+      data: String,
+      imageUrl: String,
     },
     createdAt: {
       type: Date,
@@ -134,13 +116,53 @@ const MiniAppSchema = new mongoose.Schema(
       default: Date.now,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// Indexes for common queries
-MiniAppSchema.index({ businessId: 1, createdAt: -1 });
-MiniAppSchema.index({ slug: 1 }, { unique: true });
-MiniAppSchema.index({ category: 1, status: 1 });
-MiniAppSchema.index({ 'engagement.followers': -1 });
+// Indexes for performance
+MiniAppSchema.index({ businessId: 1, status: 1 });
+MiniAppSchema.index({ userId: 1, createdAt: -1 });
+MiniAppSchema.index({ slug: 1 });
+MiniAppSchema.index({ appType: 1 });
+
+// Pre-save middleware to generate slug if not provided
+MiniAppSchema.pre('save', function(next) {
+  if (!this.slug && this.appName) {
+    this.slug = this.appName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim('-');
+  }
+  next();
+});
+
+// Instance method to generate QR code data
+MiniAppSchema.methods.generateQRData = function(baseUrl = 'https://malabarbazaar.com') {
+  const url = `${baseUrl}/miniapp/${this.slug}`;
+  this.qrCode = {
+    data: url,
+    imageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`,
+  };
+  return this.save();
+};
+
+// Instance method to increment analytics
+MiniAppSchema.methods.incrementView = function() {
+  this.analytics.views += 1;
+  this.analytics.lastViewed = new Date();
+  return this.save();
+};
+
+// Static method to find published mini apps by business
+MiniAppSchema.statics.findPublishedByBusiness = function(businessId) {
+  return this.find({
+    businessId,
+    status: 'Published',
+  }).sort({ createdAt: -1 });
+};
 
 module.exports = mongoose.model('MiniApp', MiniAppSchema);

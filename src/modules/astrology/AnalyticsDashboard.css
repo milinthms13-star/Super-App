@@ -1,0 +1,64 @@
+.analytics-dashboard {
+  padding: 16px;
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.analytics-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.metric-card {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.metric-card span {
+  display: block;
+  color: #666;
+}
+
+.analytics-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.analytics-sections table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.analytics-sections th,
+.analytics-sections td {
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  padding: 6px;
+}
+
+.analytics-error {
+  color: #b42318;
+}
+
+@media (max-width: 900px) {
+  .analytics-sections {
+    grid-template-columns: 1fr;
+  }
+}

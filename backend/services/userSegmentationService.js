@@ -7,7 +7,7 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const Payment = require('../models/Payment');
 const logger = require('./logger');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 
 class UserSegmentationService {
   /**

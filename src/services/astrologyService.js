@@ -242,6 +242,9 @@ const normalizeConsultationBooking = (payload = {}) => ({
   confirmationCode: String(payload.confirmationCode || "").trim(),
   amountInr: Number(payload.amountInr) > 0 ? Number(payload.amountInr) : 0,
   currency: String(payload.currency || "INR").trim(),
+  paymentStatus: String(payload.paymentStatus || "pending").trim(),
+  paymentOrderId: String(payload.paymentOrderId || "").trim(),
+  paymentId: String(payload.paymentId || "").trim(),
   createdAt: payload.createdAt || "",
 });
 
@@ -615,6 +618,82 @@ export const astrologyService = {
       return response.data.data.map(normalizeConsultationBooking);
     } catch (error) {
       throw buildServiceError(error, [], "Unable to load consultation history.");
+    }
+  },
+
+  async createConsultationPaymentOrder(bookingId) {
+    const normalizedBookingId = String(bookingId || "").trim();
+    if (!normalizedBookingId) {
+      throw new Error("Booking id is required to create a payment order.");
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/astrology/consultations/${encodeURIComponent(
+          normalizedBookingId
+        )}/payment/create-order`
+      );
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to create consultation payment order.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to create consultation payment order.");
+    }
+  },
+
+  async verifyConsultationPayment(bookingId, payload = {}) {
+    const normalizedBookingId = String(bookingId || "").trim();
+    if (!normalizedBookingId) {
+      throw new Error("Booking id is required to verify payment.");
+    }
+
+    const normalizedPayload = {
+      orderId: String(payload.orderId || "").trim(),
+      paymentId: String(payload.paymentId || "").trim(),
+      signature: String(payload.signature || "").trim(),
+    };
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/astrology/consultations/${encodeURIComponent(
+          normalizedBookingId
+        )}/payment/verify`,
+        normalizedPayload
+      );
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to verify consultation payment.");
+      }
+
+      return normalizeConsultationBooking(response.data.data);
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to verify consultation payment.");
+    }
+  },
+
+  async getConsultationPaymentStatus(bookingId) {
+    const normalizedBookingId = String(bookingId || "").trim();
+    if (!normalizedBookingId) {
+      throw new Error("Booking id is required to load payment status.");
+    }
+
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/astrology/consultations/${encodeURIComponent(
+          normalizedBookingId
+        )}/payment`
+      );
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to load consultation payment status.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to load consultation payment status.");
     }
   },
 };

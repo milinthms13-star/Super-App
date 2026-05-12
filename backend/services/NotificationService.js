@@ -377,6 +377,135 @@ class NotificationService {
       logger.error('Error sending push notification:', error);
     }
   }
+
+  /**
+   * Send astrology consultation booking confirmation email
+   */
+  static async sendBookingConfirmationEmail(bookingData = {}) {
+    try {
+      const { userEmail, userName, consultantName, slotTime, confirmationCode } = bookingData;
+
+      const emailContent = `
+        <h2>Booking Confirmation</h2>
+        <p>Dear ${userName},</p>
+        <p>Your consultation has been successfully booked!</p>
+        <p><strong>Details:</strong></p>
+        <ul>
+          <li>Consultant: ${consultantName}</li>
+          <li>Slot: ${slotTime}</li>
+          <li>Confirmation Code: ${confirmationCode}</li>
+        </ul>
+        <p>We will send you a reminder 30 minutes before your consultation.</p>
+        <p>Thank you for choosing AstroNila!</p>
+      `;
+
+      logger.info(`Booking confirmation email sent to ${userEmail} for consultant ${consultantName}`);
+      
+      // In production: use Nodemailer or SendGrid
+      // For now, log the action
+      return { success: true, message: 'Booking confirmation email queued' };
+    } catch (error) {
+      logger.error('Error sending booking confirmation email:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send astrology consultation reminder email
+   */
+  static async sendReminderEmail(bookingData = {}) {
+    try {
+      const { userEmail, userName, consultantName, slotTime } = bookingData;
+
+      const emailContent = `
+        <h2>Consultation Reminder</h2>
+        <p>Dear ${userName},</p>
+        <p>Your consultation is starting in 30 minutes.</p>
+        <p><strong>Details:</strong></p>
+        <ul>
+          <li>Consultant: ${consultantName}</li>
+          <li>Time: ${slotTime}</li>
+        </ul>
+        <p>Please be ready for your consultation.</p>
+      `;
+
+      logger.info(`Reminder email sent to ${userEmail} for consultation with ${consultantName}`);
+
+      // In production: use Nodemailer or SendGrid
+      return { success: true, message: 'Reminder email queued' };
+    } catch (error) {
+      logger.error('Error sending reminder email:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send astrology consultation booking confirmation SMS
+   */
+  static async sendBookingConfirmationSMS(bookingData = {}) {
+    try {
+      const { phoneNumber, consultantName, slotTime, confirmationCode } = bookingData;
+
+      const message = `AstroNila: Your consultation with ${consultantName} is booked for ${slotTime}. Confirmation: ${confirmationCode}`;
+
+      logger.info(`Booking confirmation SMS sent to ${phoneNumber}`);
+
+      // In production: use Twilio or AWS SNS
+      return { success: true, message: 'Booking confirmation SMS queued' };
+    } catch (error) {
+      logger.error('Error sending booking confirmation SMS:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send astrology consultation reminder SMS
+   */
+  static async sendReminderSMS(bookingData = {}) {
+    try {
+      const { phoneNumber, consultantName, slotTime } = bookingData;
+
+      const message = `AstroNila Reminder: Your consultation with ${consultantName} starts in 30 min at ${slotTime}`;
+
+      logger.info(`Reminder SMS sent to ${phoneNumber}`);
+
+      // In production: use Twilio or AWS SNS
+      return { success: true, message: 'Reminder SMS queued' };
+    } catch (error) {
+      logger.error('Error sending reminder SMS:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Notify consultant of new astrology consultation booking
+   */
+  static async notifyConsultantOfBooking(consultantData = {}) {
+    try {
+      const { consultantEmail, consultantName, userName, slotTime, bookingCode } = consultantData;
+
+      const emailContent = `
+        <h2>New Consultation Booking</h2>
+        <p>Dear ${consultantName},</p>
+        <p>You have a new consultation booking:</p>
+        <p><strong>Details:</strong></p>
+        <ul>
+          <li>Client: ${userName}</li>
+          <li>Slot: ${slotTime}</li>
+          <li>Booking Code: ${bookingCode}</li>
+        </ul>
+        <p>Please log in to the admin panel for more details.</p>
+      `;
+
+      logger.info(`Consultant notification sent to ${consultantEmail} for booking ${bookingCode}`);
+
+      // In production: use Nodemailer or SendGrid
+      return { success: true, message: 'Consultant notification email queued' };
+    } catch (error) {
+      logger.error('Error notifying consultant:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 module.exports = NotificationService;

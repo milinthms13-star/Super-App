@@ -4,7 +4,7 @@
  */
 
 const PaymentLink = require('../models/PaymentLink');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const crypto = require('crypto');
 const QRCode = require('qrcode');
 const logger = require('./logger');
@@ -15,7 +15,7 @@ class PaymentLinkService {
    */
   static async createPaymentLink(linkData) {
     try {
-      const linkId = `PL_${uuidv4()}`;
+      const linkId = `PL_${randomUUID()}`;
       const linkToken = crypto.randomBytes(32).toString('hex');
       const expiryDate = new Date(Date.now() + (linkData.expiryDays || 30) * 24 * 60 * 60 * 1000);
 

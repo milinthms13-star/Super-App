@@ -4,7 +4,7 @@
  */
 
 const Transaction = require('../models/Transaction');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
 class TransactionService {
@@ -13,7 +13,7 @@ class TransactionService {
    */
   static async createTransaction(transactionData) {
     try {
-      const transactionId = `TXN_${Date.now()}_${uuidv4().split('-')[0].toUpperCase()}`;
+      const transactionId = `TXN_${Date.now()}_${randomUUID().split('-')[0].toUpperCase()}`;
 
       const transaction = new Transaction({
         ...transactionData,
@@ -176,7 +176,7 @@ class TransactionService {
       }
 
       // Create reversal transaction
-      const reversalId = `REV_${Date.now()}_${uuidv4().split('-')[0].toUpperCase()}`;
+      const reversalId = `REV_${Date.now()}_${randomUUID().split('-')[0].toUpperCase()}`;
       
       const reversal = new Transaction({
         transactionId: reversalId,

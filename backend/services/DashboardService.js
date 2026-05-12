@@ -8,7 +8,7 @@ const Payment = require('../models/Payment');
 const Commission = require('../models/Commission');
 const Invoice = require('../models/Invoice');
 const InstantSettlement = require('../models/InstantSettlement');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('./logger');
 
 class DashboardService {
@@ -17,7 +17,7 @@ class DashboardService {
    */
   static async generateExecutiveDashboard(period = 'this_month') {
     try {
-      const metricsId = `ED-${Date.now()}-${uuidv4().substring(0, 8)}`;
+      const metricsId = `ED-${Date.now()}-${randomUUID().substring(0, 8)}`;
       const dateRange = this._getDateRange(period);
 
       // Fetch data
@@ -118,7 +118,7 @@ class DashboardService {
    */
   static async generateAdminDashboard(period = 'this_month') {
     try {
-      const metricsId = `AD-${Date.now()}-${uuidv4().substring(0, 8)}`;
+      const metricsId = `AD-${Date.now()}-${randomUUID().substring(0, 8)}`;
       const dateRange = this._getDateRange(period);
 
       // Fetch all data
@@ -500,7 +500,7 @@ class DashboardService {
     const failureCount = payments.filter((p) => p.status === 'failed').length;
     if (failureCount > 0 && failureCount / payments.length > 0.05) {
       alerts.push({
-        alertId: uuidv4(),
+        alertId: randomUUID(),
         type: 'warning',
         title: 'High Payment Failure Rate',
         message: `Payment failure rate is ${((failureCount / payments.length) * 100).toFixed(2)}%`,
@@ -515,7 +515,7 @@ class DashboardService {
     const pendingCommissions = commissions.filter((c) => c.status === 'pending').length;
     if (pendingCommissions > 0) {
       alerts.push({
-        alertId: uuidv4(),
+        alertId: randomUUID(),
         type: 'info',
         title: 'Pending Commission Approvals',
         message: `${pendingCommissions} commissions awaiting approval`,
@@ -530,7 +530,7 @@ class DashboardService {
     const overdueInvoices = invoices.filter((i) => i.status === 'overdue').length;
     if (overdueInvoices > 0) {
       alerts.push({
-        alertId: uuidv4(),
+        alertId: randomUUID(),
         type: 'error',
         title: 'Overdue Invoices',
         message: `${overdueInvoices} invoices are overdue`,

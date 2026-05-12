@@ -6,7 +6,7 @@
 const Reconciliation = require('../models/Reconciliation');
 const Payment = require('../models/Payment');
 const Transaction = require('../models/Transaction');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
 class ReconciliationService {
@@ -15,7 +15,7 @@ class ReconciliationService {
    */
   static async initiateReconciliation(reconciliationData) {
     try {
-      const reconciliationId = `REC_${Date.now()}_${uuidv4().split('-')[0].toUpperCase()}`;
+      const reconciliationId = `REC_${Date.now()}_${randomUUID().split('-')[0].toUpperCase()}`;
 
       const reconciliation = new Reconciliation({
         ...reconciliationData,

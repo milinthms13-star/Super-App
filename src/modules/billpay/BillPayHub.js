@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
 import "./BillPayHub.css";
+import billpayService from "../../services/billpayService";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HIGH_VALUE_THRESHOLD = 5000;
@@ -31,19 +32,6 @@ const BBPS_CATEGORIES = [
   "Donations",
   "Rental Collection",
   "OTT Services",
-];
-
-const BILLERS = [
-  { id: "KSEB", name: "Kerala State Electricity Board", category: "Electricity" },
-  { id: "KWA", name: "Kerala Water Authority", category: "Water" },
-  { id: "BSES-LPG", name: "Bharat LPG Utility", category: "LPG Gas" },
-  { id: "AIRTEL-DTH", name: "Airtel DTH", category: "DTH" },
-  { id: "JIO-BB", name: "JioFiber Broadband", category: "Broadband" },
-  { id: "AXIS-INS", name: "Axis Insurance Services", category: "Insurance Premium" },
-  { id: "HDFC-EMI", name: "HDFC Loan EMI", category: "Loan EMI" },
-  { id: "SBI-CC", name: "SBI Card", category: "Credit Card" },
-  { id: "KOCHI-MUNI", name: "Kochi Municipal Tax", category: "Municipal Tax" },
-  { id: "FASTAG-NHAI", name: "NHAI FASTag Recharge", category: "FASTag" },
 ];
 
 const TABS = [
@@ -118,6 +106,107 @@ const getBillState = (bill) => {
   }
   return "upcoming";
 };
+
+const shortCode = (value = "", prefix = "ID") => {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return `${prefix}-NA`;
+  }
+  if (normalized.toUpperCase().startsWith(`${prefix}-`)) {
+    return normalized;
+  }
+  return `${prefix}-${normalized.slice(-6).toUpperCase()}`;
+};
+
+const normalizeBill = (bill = {}) => ({
+  id: String(bill._id || bill.id || ""),
+  nickname: String(bill.nickname || "Saved Bill"),
+  billerId: String(bill.billerId || ""),
+  billerName: String(bill.billerName || "Biller"),
+  category: String(bill.category || "Utility"),
+  consumerId: String(bill.consumerId || ""),
+  mobile: String(bill.mobile || ""),
+  amount: Number(bill.amount || 0),
+  dueDate: bill.dueDate ? toISODate(bill.dueDate) : relativeDate(5),
+  status: String(bill.status || "Due"),
+  autopayEnabled: Boolean(bill.autopayEnabled),
+  familyMember: String(bill.familyMember || "Self"),
+});
+
+const normalizeTransaction = (txn = {}) => {
+  const transactionId = String(txn._id || txn.id || "");
+  const billId =
+    typeof txn.billId === "object" && txn.billId !== null
+      ? String(txn.billId._id || txn.billId.id || "")
+      : String(txn.billId || "");
+  return {
+    id: transactionId,
+    displayId: shortCode(transactionId, "TXN"),
+    billId,
+    billerName: String(txn.billerName || txn.billId?.billerName || "Biller"),
+    category: String(txn.category || "Utility"),
+    amount: Number(txn.amount || 0),
+    status: String(txn.status || "Pending"),
+    paidAt: txn.paidAt ? new Date(txn.paidAt).toLocaleString("en-IN") : new Date().toLocaleString("en-IN"),
+    method: String(txn.method || "UPI"),
+    authMode: String(txn.authMode || "PIN + OTP"),
+    otpUsed: Boolean(txn.otpUsed),
+    amountDeducted: Boolean(txn.amountDeducted),
+    refundStatus: String(txn.refundStatus || "Not Applicable"),
+    billerReference: String(txn.billerReference || ""),
+    receiptId: String(txn.receiptId || shortCode(transactionId, "RCPT")),
+    failureReason: String(txn.failureReason || ""),
+  };
+};
+
+const normalizeDispute = (item = {}) => {
+  const disputeId = String(item._id || item.id || "");
+  const transactionId =
+    typeof item.transactionId === "object" && item.transactionId !== null
+      ? String(item.transactionId._id || item.transactionId.id || "")
+      : String(item.transactionId || item.txnId || "");
+  return {
+    id: disputeId,
+    displayId: shortCode(disputeId, "DSP"),
+    txnId: transactionId,
+    type: String(item.type || "Other"),
+    description: String(item.description || ""),
+    status: String(item.status || "Open"),
+    createdAt: item.createdAt
+      ? new Date(item.createdAt).toLocaleString("en-IN")
+      : new Date().toLocaleString("en-IN"),
+  };
+};
+
+const normalizeMandate = (mandate = {}) => ({
+  id: String(mandate._id || mandate.id || ""),
+  billId:
+    typeof mandate.billId === "object" && mandate.billId !== null
+      ? String(mandate.billId._id || mandate.billId.id || "")
+      : String(mandate.billId || ""),
+  nickname: String(mandate.nickname || mandate.billId?.nickname || "Mandate"),
+  maxAmount: Number(mandate.maxAmount || 0),
+  status: String(mandate.status || "Active"),
+  nextRun: mandate.nextRunDate ? toISODate(mandate.nextRunDate) : relativeDate(30),
+  frequency: String(mandate.frequency || "Monthly"),
+});
+
+const mapAdminDateRange = (value) => {
+  switch (value) {
+    case "Last 30 Days":
+      return "last30Days";
+    case "Quarter":
+      return "quarter";
+    default:
+      return "thisMonth";
+  }
+};
+
+const buildErrorMessage = (error, fallbackMessage) =>
+  error?.response?.data?.error ||
+  error?.response?.data?.message ||
+  error?.message ||
+  fallbackMessage;
 
 const createInitialBills = () => [
   {
@@ -300,7 +389,6 @@ const BillPayHub = () => {
     otp: "",
     biometricConfirmed: false,
     riskAcknowledged: false,
-    simulateFailure: false,
   });
 
   const [securityMessage, setSecurityMessage] = useState("");
@@ -329,6 +417,10 @@ const BillPayHub = () => {
   });
 
   const [adminRange, setAdminRange] = useState("This Month");
+  const [syncMessage, setSyncMessage] = useState("Syncing with BillPay backend...");
+  const [isSyncing, setIsSyncing] = useState(true);
+  const [adminError, setAdminError] = useState("");
+  const [adminMetricsApi, setAdminMetricsApi] = useState(null);
 
   const selectedBill = useMemo(
     () => bills.find((bill) => bill.id === payForm.billId),
@@ -336,6 +428,73 @@ const BillPayHub = () => {
   );
 
   const unpaidBills = useMemo(() => bills.filter((bill) => bill.status !== "Paid"), [bills]);
+
+  const refreshBillpayData = useCallback(async (options = {}) => {
+    const { silent = false } = options;
+    if (!silent) {
+      setIsSyncing(true);
+      setSyncMessage("Syncing with BillPay backend...");
+    }
+
+    try {
+      const [billsResponse, historyResponse, disputesResponse, mandatesResponse] = await Promise.all([
+        billpayService.getBills(),
+        billpayService.getHistory(200, 0),
+        billpayService.getDisputes(100, 0),
+        billpayService.getMandates(),
+      ]);
+
+      const nextBills = Array.isArray(billsResponse?.bills) ? billsResponse.bills.map(normalizeBill) : [];
+      const nextTransactions = Array.isArray(historyResponse?.transactions)
+        ? historyResponse.transactions.map(normalizeTransaction)
+        : [];
+      const nextDisputes = Array.isArray(disputesResponse?.disputes)
+        ? disputesResponse.disputes.map(normalizeDispute)
+        : [];
+      const nextMandates = Array.isArray(mandatesResponse?.mandates)
+        ? mandatesResponse.mandates.map(normalizeMandate)
+        : [];
+
+      const billsCount = Number(billsResponse?.count);
+      if (nextBills.length > 0 || billsCount === 0) {
+        setBills(nextBills);
+        if (nextBills.length > 0) {
+          setPayForm((current) => {
+            const hasCurrentBill = nextBills.some((item) => item.id === current.billId);
+            if (hasCurrentBill) {
+              return current;
+            }
+            return {
+              ...current,
+              billId: nextBills[0].id,
+              amount: String(nextBills[0].amount || ""),
+            };
+          });
+        }
+      }
+      if (nextTransactions.length > 0 || historyResponse?.total === 0) {
+        setTransactions(nextTransactions);
+      }
+      if (nextDisputes.length > 0 || disputesResponse?.total === 0) {
+        setDisputes(nextDisputes);
+      }
+      if (nextMandates.length > 0 || mandatesResponse?.count === 0) {
+        setMandates(nextMandates);
+      }
+
+      setSyncMessage(`Backend sync complete at ${new Date().toLocaleTimeString("en-IN")}.`);
+    } catch (error) {
+      setSyncMessage(
+        buildErrorMessage(error, "Using local fallback data. Backend sync will retry on next action.")
+      );
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshBillpayData();
+  }, [refreshBillpayData]);
 
   const dashboard = useMemo(() => {
     const dueSoon = bills.filter((bill) => getBillState(bill) === "dueSoon" && bill.status !== "Paid").length;
@@ -416,7 +575,7 @@ const BillPayHub = () => {
     };
   }, [transactions, categorySpend, unpaidBills.length]);
 
-  const adminMetrics = useMemo(() => {
+  const localAdminMetrics = useMemo(() => {
     const totalTransactions = transactions.length;
     const successCount = transactions.filter((txn) => txn.status === "Success").length;
     const failureCount = transactions.filter((txn) => txn.status === "Failed").length;
@@ -469,7 +628,50 @@ const BillPayHub = () => {
     };
   }, [transactions, disputes.length]);
 
-  const handleDiscovery = (event) => {
+  useEffect(() => {
+    if (activeTab !== "Admin Reports") {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAdminMetrics = async () => {
+      setAdminError("");
+      try {
+        const response = await billpayService.getAdminAnalytics(mapAdminDateRange(adminRange));
+        if (cancelled) {
+          return;
+        }
+        setAdminMetricsApi({
+          totalTransactions: Number(response?.totalTransactions || 0),
+          successCount: Number(response?.successCount || 0),
+          failureCount: Number(response?.failureCount || 0),
+          successRate: String(response?.successRate || "0.0"),
+          pendingRefunds: Number(response?.pendingRefunds || 0),
+          disputeTickets: Number(response?.disputeTickets || 0),
+          topCategories: Array.isArray(response?.topCategories) ? response.topCategories : [],
+          commissionEarned: Number(response?.commissionEarned || 0),
+          billerWise: Array.isArray(response?.billerWise) ? response.billerWise : [],
+        });
+      } catch (error) {
+        if (!cancelled) {
+          setAdminError(
+            buildErrorMessage(error, "Admin analytics API unavailable. Showing local ledger metrics.")
+          );
+          setAdminMetricsApi(null);
+        }
+      }
+    };
+
+    loadAdminMetrics();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, adminRange]);
+
+  const adminMetrics = adminMetricsApi || localAdminMetrics;
+
+  const handleDiscovery = async (event) => {
     event.preventDefault();
     const identifier = discoveryForm.identifierValue.trim();
 
@@ -478,55 +680,33 @@ const BillPayHub = () => {
       return;
     }
 
-    const matched = bills.find((bill) =>
-      discoveryForm.identifierType === "Mobile Number"
-        ? bill.mobile === identifier
-        : bill.consumerId.toLowerCase() === identifier.toLowerCase()
-    );
-
-    if (matched) {
+    try {
+      const response = await billpayService.discoverBill({
+        identifierType: discoveryForm.identifierType,
+        identifierValue: identifier,
+        preferredCategory: discoveryForm.preferredCategory,
+      });
+      const normalizedBill = normalizeBill(response.bill || {});
+      setBills((current) => {
+        const next = current.filter((bill) => bill.id !== normalizedBill.id);
+        return [normalizedBill, ...next];
+      });
       setDiscoveryResult({
-        status: "found",
-        bill: matched,
-        message: `Pending bill discovered for ${matched.billerName}.`,
+        status: response.status || "found",
+        bill: normalizedBill,
+        message: response.message || `Pending bill discovered for ${normalizedBill.billerName}.`,
       });
       setPayForm((current) => ({
         ...current,
-        billId: matched.id,
-        amount: String(matched.amount),
+        billId: normalizedBill.id,
+        amount: String(normalizedBill.amount || ""),
       }));
-      return;
+      setSyncMessage(`Discovery synced at ${new Date().toLocaleTimeString("en-IN")}.`);
+    } catch (error) {
+      setDiscoveryResult({
+        error: buildErrorMessage(error, "Unable to discover bill right now. Please retry."),
+      });
     }
-
-    const biller = BILLERS.find((item) => item.category === discoveryForm.preferredCategory) || BILLERS[0];
-    const generated = {
-      id: `BILL-${Date.now().toString().slice(-4)}`,
-      nickname: `${discoveryForm.preferredCategory} Auto-Fetch`,
-      billerId: biller.id,
-      billerName: biller.name,
-      category: biller.category,
-      consumerId:
-        discoveryForm.identifierType === "Consumer ID"
-          ? identifier
-          : `${biller.id}-${Math.floor(100000 + Math.random() * 900000)}`,
-      mobile:
-        discoveryForm.identifierType === "Mobile Number"
-          ? identifier
-          : `${Math.floor(9000000000 + Math.random() * 99999999)}`,
-      amount: 500 + Math.floor(Math.random() * 2200),
-      dueDate: relativeDate(5),
-      status: "Due",
-      autopayEnabled: false,
-      familyMember: "Self",
-    };
-
-    setBills((current) => [generated, ...current]);
-    setDiscoveryResult({
-      status: "created",
-      bill: generated,
-      message: "Bill discovered via Bharat Connect directory simulation and added to Saved Bills.",
-    });
-    setPayForm((current) => ({ ...current, billId: generated.id, amount: String(generated.amount) }));
   };
 
   const validateSecurity = () => {
@@ -553,7 +733,80 @@ const BillPayHub = () => {
     return "";
   };
 
-  const handlePayBill = (event) => {
+  const loadRazorpayScript = () =>
+    new Promise((resolve, reject) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => reject(new Error("Unable to load Razorpay checkout script"));
+      document.body.appendChild(script);
+    });
+
+  const createTestSignature = async (orderId, paymentId) => {
+    if (!window.crypto?.subtle || !window.TextEncoder) {
+      throw new Error("Browser does not support secure test signature generation");
+    }
+
+    const encoder = new TextEncoder();
+    const key = await window.crypto.subtle.importKey(
+      "raw",
+      encoder.encode("test_secret"),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const signature = await window.crypto.subtle.sign("HMAC", key, encoder.encode(`${orderId}|${paymentId}`));
+    return Array.from(new Uint8Array(signature))
+      .map((item) => item.toString(16).padStart(2, "0"))
+      .join("");
+  };
+
+  const collectPaymentGatewayResult = async (orderData, amount) => {
+    if (orderData.razorpayKeyId === "test_key") {
+      const paymentId = `pay_test_${Date.now()}`;
+      const signature = await createTestSignature(orderData.orderId, paymentId);
+      return { orderId: orderData.orderId, paymentId, signature };
+    }
+
+    await loadRazorpayScript();
+
+    return new Promise((resolve, reject) => {
+      const razorpay = new window.Razorpay({
+        key: orderData.razorpayKeyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "NilaHub BillPay",
+        description: selectedBill?.nickname || "Utility bill payment",
+        order_id: orderData.orderId,
+        handler: (response) =>
+          resolve({
+            orderId: response.razorpay_order_id,
+            paymentId: response.razorpay_payment_id,
+            signature: response.razorpay_signature,
+          }),
+        modal: {
+          ondismiss: () => reject(new Error("Payment cancelled by user")),
+        },
+        prefill: {
+          contact: selectedBill?.mobile || "",
+        },
+        notes: {
+          billId: selectedBill?.id || "",
+          amount: String(amount),
+        },
+      });
+
+      razorpay.open();
+    });
+  };
+
+  const handlePayBill = async (event) => {
     event.preventDefault();
     setPaymentMessage("");
 
@@ -576,66 +829,49 @@ const BillPayHub = () => {
       return;
     }
 
-    const txnId = `TXN-${Date.now().toString().slice(-6)}`;
-    const billerReference = `BBPS-${selectedBill.billerId}-${Math.floor(100000 + Math.random() * 900000)}`;
-    const receiptId = `RCPT-${txnId.slice(-6)}`;
+    try {
+      const orderResponse = await billpayService.createPaymentOrder({
+        billId: selectedBill.id,
+        amount,
+        method: payForm.method,
+        authMode: payForm.authMode,
+      });
 
-    const inducedFailure = payForm.simulateFailure || amount % 13 === 0;
+      const paymentResult = await collectPaymentGatewayResult(orderResponse, amount);
 
-    const transaction = {
-      id: txnId,
-      billId: selectedBill.id,
-      billerName: selectedBill.billerName,
-      category: selectedBill.category,
-      amount,
-      status: inducedFailure ? "Failed" : "Success",
-      paidAt: new Date().toLocaleString("en-IN"),
-      method: payForm.method,
-      authMode: payForm.authMode,
-      otpUsed: true,
-      amountDeducted: inducedFailure ? amount % 2 === 0 : true,
-      refundStatus: inducedFailure
-        ? amount % 2 === 0
-          ? "Refund initiated - ETA 2 days"
-          : "No deduction detected"
-        : "Not Applicable",
-      billerReference,
-      receiptId,
-      failureReason: inducedFailure ? "Biller acknowledgement timeout" : "",
-    };
+      const verifyResponse = await billpayService.verifyPayment({
+        orderId: paymentResult.orderId,
+        paymentId: paymentResult.paymentId,
+        signature: paymentResult.signature,
+        billId: selectedBill.id,
+        amount,
+        method: payForm.method,
+        authMode: payForm.authMode,
+        otp: payForm.otp,
+        pin: payForm.pin,
+        biometricConfirmed: payForm.biometricConfirmed,
+      });
 
-    setTransactions((current) => [transaction, ...current]);
+      const transactionId = verifyResponse?.transactionId || verifyResponse?.txnId || "TXN";
+      const receiptId = verifyResponse?.receiptId || "Receipt";
+      const billerReference = verifyResponse?.billerReference || "BillerRef";
 
-    if (inducedFailure) {
+      setOfferWallet((current) => ({
+        cashbackBalance: current.cashbackBalance + Math.min(50, Math.round(amount * 0.01)),
+        coins: current.coins + Math.round(amount / 20),
+        monthlyCoupons: current.monthlyCoupons + (amount >= 1000 ? 1 : 0),
+      }));
+
+      await refreshBillpayData({ silent: true });
+
       setPaymentMessage(
-        `${txnId} failed. Amount deducted: ${transaction.amountDeducted ? "Yes" : "No"}. Refund status: ${transaction.refundStatus}.`
+        `${shortCode(transactionId, "TXN")} success. Receipt ${receiptId} generated with biller reference ${billerReference}.`
       );
-      return;
+      setPayForm((current) => ({ ...current, pin: "", otp: "", biometricConfirmed: false }));
+      setSyncMessage(`Payment synced at ${new Date().toLocaleTimeString("en-IN")}.`);
+    } catch (error) {
+      setPaymentMessage(buildErrorMessage(error, "Payment failed. Please retry."));
     }
-
-    setBills((current) =>
-      current.map((bill) => {
-        if (bill.id !== selectedBill.id) {
-          return bill;
-        }
-        return {
-          ...bill,
-          status: "Paid",
-          amount,
-        };
-      })
-    );
-
-    setOfferWallet((current) => ({
-      cashbackBalance: current.cashbackBalance + Math.min(50, Math.round(amount * 0.01)),
-      coins: current.coins + Math.round(amount / 20),
-      monthlyCoupons: current.monthlyCoupons + (amount >= 1000 ? 1 : 0),
-    }));
-
-    setPaymentMessage(
-      `${txnId} success. Receipt ${receiptId} generated with biller reference ${billerReference}. Cashback and coins credited.`
-    );
-    setPayForm((current) => ({ ...current, pin: "", otp: "", biometricConfirmed: false, simulateFailure: false }));
   };
 
   const handleRetryFailed = (txn) => {
@@ -647,32 +883,39 @@ const BillPayHub = () => {
         amount: String(txn.amount),
         method: txn.method,
         authMode: txn.authMode,
-        simulateFailure: false,
       }));
       setActiveTab("Pay Bill");
-      setPaymentMessage(`Retry ready for ${txn.id}. Reconfirm PIN/OTP and submit payment.`);
+      setPaymentMessage(`Retry ready for ${txn.displayId || txn.id}. Reconfirm PIN/OTP and submit payment.`);
     }
   };
 
-  const handleRaiseDispute = (event) => {
+  const handleRaiseDispute = async (event) => {
     event.preventDefault();
     if (!disputeForm.txnId.trim() || !disputeForm.description.trim()) {
       setDisputeMessage("Transaction ID and complaint details are required.");
       return;
     }
 
-    const item = {
-      id: `DSP-${Date.now().toString().slice(-4)}`,
-      txnId: disputeForm.txnId.trim(),
-      type: disputeForm.type,
-      description: disputeForm.description.trim(),
-      status: "Open",
-      createdAt: new Date().toLocaleString("en-IN"),
-    };
+    const typedTxnId = disputeForm.txnId.trim();
+    const matchedTransaction = transactions.find(
+      (txn) => txn.id === typedTxnId || txn.displayId.toLowerCase() === typedTxnId.toLowerCase()
+    );
+    const transactionId = matchedTransaction ? matchedTransaction.id : typedTxnId;
 
-    setDisputes((current) => [item, ...current]);
-    setDisputeForm({ txnId: "", type: DISPUTE_TYPES[0], description: "" });
-    setDisputeMessage(`Complaint ${item.id} raised successfully.`);
+    try {
+      const response = await billpayService.createDispute({
+        transactionId,
+        type: disputeForm.type,
+        description: disputeForm.description.trim(),
+      });
+      const item = normalizeDispute(response?.dispute || {});
+      setDisputes((current) => [item, ...current]);
+      setDisputeForm({ txnId: "", type: DISPUTE_TYPES[0], description: "" });
+      setDisputeMessage(`Complaint ${item.displayId} raised successfully.`);
+      setSyncMessage(`Dispute synced at ${new Date().toLocaleTimeString("en-IN")}.`);
+    } catch (error) {
+      setDisputeMessage(buildErrorMessage(error, "Unable to raise dispute right now."));
+    }
   };
 
   const triggerSupportForTxn = (txnId, reason) => {
@@ -729,7 +972,7 @@ const BillPayHub = () => {
     doc.text("NilaHub BillPay Receipt", 14, 20);
     doc.setFontSize(11);
     doc.text(`Receipt ID: ${txn.receiptId}`, 14, 32);
-    doc.text(`Transaction ID: ${txn.id}`, 14, 40);
+    doc.text(`Transaction ID: ${txn.displayId || txn.id}`, 14, 40);
     doc.text(`Biller Reference: ${txn.billerReference}`, 14, 48);
     doc.text(`Biller: ${txn.billerName}`, 14, 56);
     doc.text(`Category: ${txn.category}`, 14, 64);
@@ -741,38 +984,63 @@ const BillPayHub = () => {
   };
 
   const handleShareReceipt = async (txn) => {
-    const text = `${txn.receiptId} | ${txn.id} | ${txn.billerReference} | ${txn.status}`;
+    const text = `${txn.receiptId} | ${txn.displayId || txn.id} | ${txn.billerReference} | ${txn.status}`;
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
-      setPaymentMessage(`Receipt details for ${txn.id} copied to clipboard.`);
+      setPaymentMessage(`Receipt details for ${txn.displayId || txn.id} copied to clipboard.`);
       return;
     }
     setPaymentMessage(`Share text: ${text}`);
   };
 
-  const toggleAutopayOnBill = (billId) => {
-    setBills((current) =>
-      current.map((bill) =>
-        bill.id === billId
-          ? {
-              ...bill,
-              autopayEnabled: !bill.autopayEnabled,
-            }
-          : bill
-      )
-    );
+  const toggleAutopayOnBill = async (billId) => {
+    const targetBill = bills.find((bill) => bill.id === billId);
+    if (!targetBill) {
+      return;
+    }
+    try {
+      const response = await billpayService.updateBillAutopay(billId, !targetBill.autopayEnabled);
+      const normalizedBill = normalizeBill(response?.bill || {});
+      setBills((current) =>
+        current.map((bill) => (bill.id === normalizedBill.id ? normalizedBill : bill))
+      );
+      setSyncMessage(`Autopay updated at ${new Date().toLocaleTimeString("en-IN")}.`);
+    } catch (error) {
+      setPaymentMessage(buildErrorMessage(error, "Unable to update autopay settings."));
+    }
   };
 
-  const updateMandateStatus = (mandateId, status) => {
-    setMandates((current) => current.map((item) => (item.id === mandateId ? { ...item, status } : item)));
+  const updateMandateStatus = async (mandateId, status) => {
+    try {
+      const response = await billpayService.updateMandate(mandateId, {
+        status,
+        reason: status === "Cancelled" ? "Cancelled by user" : "",
+      });
+      const normalizedMandate = normalizeMandate(response?.mandate || {});
+      setMandates((current) =>
+        current.map((item) => (item.id === normalizedMandate.id ? normalizedMandate : item))
+      );
+      setSyncMessage(`Mandate status synced at ${new Date().toLocaleTimeString("en-IN")}.`);
+    } catch (error) {
+      setPaymentMessage(buildErrorMessage(error, "Unable to update mandate status."));
+    }
   };
 
-  const updateMandateLimit = (mandateId, value) => {
+  const updateMandateLimit = async (mandateId, value) => {
     const maxAmount = Number(value || 0);
     if (!maxAmount) {
       return;
     }
-    setMandates((current) => current.map((item) => (item.id === mandateId ? { ...item, maxAmount } : item)));
+    try {
+      const response = await billpayService.updateMandate(mandateId, { maxAmount });
+      const normalizedMandate = normalizeMandate(response?.mandate || {});
+      setMandates((current) =>
+        current.map((item) => (item.id === normalizedMandate.id ? normalizedMandate : item))
+      );
+      setSyncMessage(`Mandate limit synced at ${new Date().toLocaleTimeString("en-IN")}.`);
+    } catch (error) {
+      setPaymentMessage(buildErrorMessage(error, "Unable to update mandate limit."));
+    }
   };
 
   return (
@@ -805,6 +1073,9 @@ const BillPayHub = () => {
           </button>
         ))}
       </nav>
+      <p className="billpay-footnote">
+        {isSyncing ? "Sync in progress..." : syncMessage}
+      </p>
 
       {activeTab === "Dashboard" ? (
         <section className="billpay-section">
@@ -1172,15 +1443,6 @@ const BillPayHub = () => {
                 </label>
               ) : null}
 
-              <label className="billpay-checkbox">
-                <input
-                  type="checkbox"
-                  checked={payForm.simulateFailure}
-                  onChange={(event) => setPayForm((current) => ({ ...current, simulateFailure: event.target.checked }))}
-                />
-                Simulate failure scenario
-              </label>
-
               <button type="submit">Pay Now</button>
             </form>
 
@@ -1239,7 +1501,7 @@ const BillPayHub = () => {
           <ul className="billpay-list">
             {transactions.map((txn) => (
               <li key={txn.id}>
-                <strong>{txn.id}</strong> | {txn.billerName} | {formatCurrency(txn.amount)} | {txn.status}
+                <strong>{txn.displayId || txn.id}</strong> | {txn.billerName} | {formatCurrency(txn.amount)} | {txn.status}
                 <br />
                 Amount deducted: {txn.amountDeducted ? "Yes" : "No"} | Refund: {txn.refundStatus}
                 <br />
@@ -1269,7 +1531,7 @@ const BillPayHub = () => {
           <ul className="billpay-list">
             {transactions.map((txn) => (
               <li key={`receipt-${txn.id}`}>
-                <strong>{txn.receiptId}</strong> | {txn.id} | {txn.billerReference} | {txn.status}
+                <strong>{txn.receiptId}</strong> | {txn.displayId || txn.id} | {txn.billerReference} | {txn.status}
                 <button type="button" onClick={() => handleDownloadReceipt(txn)}>
                   Download PDF
                 </button>
@@ -1329,7 +1591,7 @@ const BillPayHub = () => {
           <ul className="billpay-list">
             {disputes.map((item) => (
               <li key={item.id}>
-                <strong>{item.id}</strong> | {item.txnId} | {item.type} | {item.status} | {item.createdAt}
+                <strong>{item.displayId || item.id}</strong> | {item.txnId} | {item.type} | {item.status} | {item.createdAt}
                 <br />
                 {item.description}
               </li>
@@ -1444,7 +1706,9 @@ const BillPayHub = () => {
             </article>
           </div>
 
-          <p className="billpay-footnote">View: {adminRange} | Metrics refresh from local transaction ledger.</p>
+          <p className="billpay-footnote">
+            View: {adminRange} | {adminError || "Metrics synced from backend analytics."}
+          </p>
         </section>
       ) : null}
     </div>
