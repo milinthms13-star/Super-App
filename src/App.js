@@ -61,6 +61,7 @@ const Healthcare = React.lazy(() => import("./modules/healthcare/Healthcare"));
 const BusTrainBooking = React.lazy(() => import("./modules/bustrainbooking/BusTrainBooking"));
 const ResumeBuilder = React.lazy(() => import("./modules/resumebuilder/ResumeBuilder"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
+const JobPortal = React.lazy(() => import("./modules/jobportal/JobPortal"));
 const Education = React.lazy(() => import("./modules/education/Education"));
 const TourismMarketplace = React.lazy(() => import("./modules/tourism/TourismMarketplace"));
 const RideSharing = React.lazy(() => import("./modules/ridesharing/RideSharing"));
@@ -1156,6 +1157,7 @@ function AppShell() {
               <Route path="bustrainbooking" element={<BusTrainBooking />} />
               <Route path="resumebuilder" element={<ResumeBuilder />} />
               <Route path="businessservices" element={<BusinessServices />} />
+              <Route path="jobportal" element={<JobPortal />} />
               <Route path="education" element={<Education />} />
               <Route path="tourism" element={<TourismMarketplace />} />
               <Route path="freelancer" element={<FreelancerMarketplace />} />

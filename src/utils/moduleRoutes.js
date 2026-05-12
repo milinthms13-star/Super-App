@@ -19,6 +19,7 @@ export const MODULE_PATHS = {
   bustrainbooking: "/bustrainbooking",
   resumebuilder: "/resumebuilder",
   businessservices: "/businessservices",
+  jobportal: "/jobportal",
   education: "/education",
   tourism: "/tourism",
   skilllearning: "/skilllearning",

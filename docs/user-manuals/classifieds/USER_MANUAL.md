@@ -3,55 +3,120 @@
 > Module: `src/modules/classifieds/Classifieds.js`
 
 ## 1) What this module does
-The Classifieds module lets users create listings, manage listing lifecycle (including scheduling/relisting), manage media, filters, chat, wishlist, and moderation/help interactions.
+Classifieds is a local Kerala marketplace flow with:
+- mobile-first listing discovery
+- category-led browsing
+- district/pincode/nearby filtering
+- listing posting with quality checks
+- trust/safety controls
+- buyer-seller chat
+- seller performance dashboard
+- monetization options
+- admin moderation tools
 
-## 2) Step-by-step user flows
+## 2) Mobile-first discovery flow
+1. Open Classifieds on mobile.
+2. Use sticky top search bar.
+3. Tap category chips for fast narrowing.
+4. Tap `Filters` to open bottom-sheet filters.
+5. Apply district, pincode, nearby, and sort options.
 
-### 2.1 Browse classifieds
-1. Open Classifieds.
-2. Browse categories and listings.
-3. Use filters/sorting tools (if present) to refine results.
+Expected result:
+- Users can see relevant cards quickly without scrolling through long forms first.
 
-### 2.2 Create a new listing
-1. Click **Create listing**.
-2. Select category.
-3. Fill listing form fields.
-4. Upload images.
-5. Preview your listing.
-6. Submit/publish.
+## 3) Category coverage
+Supported high-priority categories:
+- Jobs
+- Vehicles
+- Properties
+- Electronics
+- Home Appliances
+- Services
+- Rentals
+- Pets
+- Used Items
+- Business for Sale
 
-### 2.3 Edit or manage a listing
-1. Open your listings/seller area.
-2. Choose a listing.
-3. Update title/description/price/images.
-4. Save changes.
+## 4) Location-based flow
+1. Use `District` filter.
+2. Add `Pincode` search.
+3. Enable `Only near me`.
+4. Click `Use my location` to auto-apply near-me filters.
+5. Open `Nearby listings` panel for district-local ads.
 
-### 2.4 Bulk actions (if exposed)
-1. Select multiple listings.
-2. Apply bulk action (delete, duplicate, relist, etc.).
+## 5) Posting quality checks
+While creating/editing listing:
+- title suggestions shown per category
+- price guidance shown per category
+- at least one image is required for new listing
+- pincode validation is required (6 digits)
+- duplicate warning appears for same title+location
+- completeness score shown (target 80%+)
+- preview available before publish
 
-### 2.5 Messaging about a listing
-1. Open a listing’s chat entry (if available).
-2. Send messages and attach files (if supported).
+## 6) Trust and safety
+- Verified seller badge is visible in cards/details.
+- Phone + email verification indicator shown for verified sellers.
+- Scam warning banner shown in discovery area.
+- Report listing and reason workflow available.
+- Blocked users list with unblock option is available.
+- Risky categories auto-route to admin approval queue.
 
-### 2.6 Wishlist
-1. Open Wishlist.
-2. Add/remove items from wishlist.
+## 7) Chat improvements
+Chat includes:
+- seller online/last seen status
+- quick replies (for example, “Is this available?”)
+- offer-price quick action
+- share-location quick action
+- block/report controls from listing detail section
 
-### 2.7 Abuse reporting / spam warnings (if available)
-1. When a listing/message appears suspicious, use **Report**.
-2. Follow the prompts for abuse reason.
+## 8) Seller dashboard
+Seller dashboard now shows:
+- total listings
+- active listings
+- expired listings
+- pending approval count
+- views count
+- wishlist saves
+- chat inquiries
+- conversion rate
+- expiring listings with paid relist button
 
-## 3) Troubleshooting
-- If posting fails: confirm required fields are filled and images are valid.
-- If chat fails: ensure you have an active conversation entry and a valid session.
+## 9) Monetization features
+Module supports:
+- featured listings
+- top placement
+- urgent sale badge
+- paid relisting
+- business seller plans
+- local ad banner positioning
 
-## 4) UI sections reference
-- Category browsing
-- Listing form + templates
-- Image lightbox
-- Bulk actions
-- Chat box
-- Notifications/toasts
-- Reviews/response time indicators (if present)
+## 10) Wishlist and saved searches
+Users can:
+- save listings
+- save search filters
+- load/delete saved searches
+- see saved-search alerts for new matches
+- use price alert action from listing detail
 
+## 11) Admin moderation panel
+Admin panel includes:
+- pending approval counters
+- risky-category pending queue
+- reported listings queue
+- spam keyword detection queue
+- banned users list (with unban action)
+- category management input
+- listing expiry control window
+- approve/reject/flag/delete actions
+
+## 12) Troubleshooting
+- If listing submit fails:
+  - check title/description/location
+  - check valid price
+  - check pincode (6 digits)
+  - upload at least one image
+- If listing remains unpublished:
+  - check if category is risky (requires admin approval)
+- If nearby results are empty:
+  - verify district/pincode filters and disable `Only near me` to broaden results

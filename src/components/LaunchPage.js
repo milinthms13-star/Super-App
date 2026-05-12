@@ -106,6 +106,12 @@ const moduleFallbacks = {
     icon: "FaFileAlt",
     isComingSoon: false,
   },
+  jobportal: {
+    title: "NilaJobs",
+    description: "Local + Gulf + IT + gig job portal with verified recruiters, smart apply, resume scoring, and employer dashboard.",
+    icon: "FaBriefcase",
+    isComingSoon: false,
+  },
   businessservices: {
     title: "Business Services Hub",
     description: "Complete business services hub with GST filing, company registration, legal consultation, digital marketing, and the 'Start Your Business in 7 Days' package for Kerala entrepreneurs.",
@@ -215,6 +221,7 @@ const LaunchPage = ({
     NilaCare: "healthcare",
     "NilaTravel Bus/Train": "bustrainbooking",
     "AI Resume Builder": "resumebuilder",
+    "NilaJobs": "jobportal",
     "Business Services Hub": "businessservices",
     "Nila AI Hub": "nilaaihub",
     SwiftRide: "ridesharing",

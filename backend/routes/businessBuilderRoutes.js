@@ -213,16 +213,59 @@ router.post('/invoices', authenticate, async (req, res) => {
       currency,
       notes,
     } = req.body;
+
     if (!customerName || !items || !Array.isArray(items) || !items.length || !dueDate) {
       return res.status(400).json({ success: false, message: 'Missing required invoice fields' });
     }
+
+    const parsedDueDate = new Date(dueDate);
+    if (Number.isNaN(parsedDueDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid dueDate' });
+    }
+
+    // Validate numeric fields early to avoid NaN totals / PDF issues
+    const sanitizedItems = items.map((it, idx) => {
+      const name = it?.name;
+      const quantity = Number(it?.quantity);
+      const unitPrice = Number(it?.unitPrice);
+      const taxRate = Number(it?.taxRate);
+
+      const isValidNumber = (n) => Number.isFinite(n) && !Number.isNaN(n);
+
+      if (!name || typeof name !== 'string') {
+        throw new Error(`Invalid item name at index ${idx}`);
+      }
+      if (!isValidNumber(quantity) || quantity < 0) {
+        throw new Error(`Invalid quantity at index ${idx}`);
+      }
+      if (!isValidNumber(unitPrice) || unitPrice < 0) {
+        throw new Error(`Invalid unitPrice at index ${idx}`);
+      }
+      if (!isValidNumber(taxRate) || taxRate < 0 || taxRate > 100) {
+        throw new Error(`Invalid taxRate at index ${idx}`);
+      }
+
+      return {
+        ...it,
+        name,
+        quantity,
+        unitPrice,
+        taxRate,
+        description: it?.description,
+      };
+    });
 
     const business = await Business.findOne({ userId: req.user._id });
     if (!business) {
       return res.status(404).json({ success: false, message: 'Business not found' });
     }
 
-    const totals = calculateInvoiceTotals(items, discountAmount);
+    const totals = calculateInvoiceTotals(sanitizedItems, discountAmount);
+
+    if (!Number.isFinite(totals.total) || !Number.isFinite(totals.subtotal) || !Number.isFinite(totals.taxAmount)) {
+      return res.status(400).json({ success: false, message: 'Invalid invoice totals calculated' });
+    }
+
     const invoice = new BusinessInvoice({
       businessId: business._id,
       invoiceNumber: generateInvoiceNumber(business),
@@ -238,7 +281,7 @@ router.post('/invoices', authenticate, async (req, res) => {
       total: totals.total,
       currency: currency || 'INR',
       issueDate: new Date(),
-      dueDate: new Date(dueDate),
+      dueDate: parsedDueDate,
       notes,
       status: 'Sent',
       paymentStatus: 'Pending',
@@ -252,7 +295,11 @@ router.post('/invoices', authenticate, async (req, res) => {
     await invoice.save();
     return res.status(201).json({ success: true, invoice });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    const msg = typeof error?.message === 'string' ? error.message : 'Unable to create invoice';
+    if (msg.startsWith('Invalid item') || msg.startsWith('Invalid')) {
+      return res.status(400).json({ success: false, message: msg });
+    }
+    return res.status(500).json({ success: false, message: msg });
   }
 });
 
@@ -310,8 +357,13 @@ router.get('/invoices/:id/pdf', authenticate, async (req, res) => {
 router.post('/mini-apps', authenticate, async (req, res) => {
   try {
     const { displayName, slug, category, branding, businessProfile, configuration } = req.body;
+
     if (!displayName || !slug || !category) {
       return res.status(400).json({ success: false, message: 'Missing required mini app fields' });
+    }
+
+    if (typeof slug !== 'string' || !/^[a-z0-9-]+$/.test(slug)) {
+      return res.status(400).json({ success: false, message: 'Invalid slug format' });
     }
 
     const business = await Business.findOne({ userId: req.user._id });
@@ -339,7 +391,8 @@ router.post('/mini-apps', authenticate, async (req, res) => {
     await miniApp.save();
     return res.status(201).json({ success: true, miniApp });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    const msg = typeof error?.message === 'string' ? error.message : 'Unable to create mini app';
+    return res.status(500).json({ success: false, message: msg });
   }
 });
 

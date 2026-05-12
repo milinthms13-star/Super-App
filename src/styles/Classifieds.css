@@ -1019,6 +1019,195 @@
   font-size: 0.9rem;
 }
 
+.classifieds-mobile-quickbar {
+  display: none;
+}
+
+.classifieds-mobile-search-wrap {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+}
+
+.classifieds-mobile-search-wrap input {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--classifieds-line);
+  background: #fff;
+}
+
+.classifieds-mobile-category-chips {
+  margin-top: 0.45rem;
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+
+.classifieds-inline-button.active {
+  background: var(--classifieds-accent-soft);
+  border-color: rgba(204, 107, 44, 0.35);
+  color: var(--classifieds-accent);
+}
+
+.classifieds-scam-banner {
+  border: 1px solid rgba(181, 58, 54, 0.22);
+  background: #fff5f3;
+  color: #8a231f;
+  border-radius: 14px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.88rem;
+}
+
+.classifieds-filter-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.classifieds-checkbox-inline {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  font-size: 0.86rem;
+  color: var(--classifieds-ink);
+}
+
+.classifieds-listing-media-image {
+  display: inline-block;
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.classifieds-listing-media-posted {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.classifieds-listing-quality-panel,
+.classifieds-preview-card,
+.classifieds-expiry-list,
+.classifieds-spam-queue,
+.classifieds-admin-controls,
+.classifieds-banned-users,
+.classifieds-blocked-users {
+  margin-top: 1rem;
+  padding: 0.95rem;
+  border: 1px solid rgba(20, 33, 61, 0.08);
+  border-radius: 16px;
+  background: #fbfcff;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.classifieds-listing-quality-score strong {
+  display: block;
+}
+
+.classifieds-listing-quality-score span {
+  color: var(--classifieds-muted);
+  font-size: 0.85rem;
+}
+
+.classifieds-listing-quality-block {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.classifieds-listing-quality-block span {
+  color: var(--classifieds-muted);
+  font-size: 0.86rem;
+}
+
+.classifieds-listing-warning {
+  border: 1px solid rgba(181, 58, 54, 0.2);
+  background: #fff2f0;
+  color: #a3392f;
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.84rem;
+}
+
+.classifieds-preview-card h3 {
+  margin: 0;
+}
+
+.classifieds-preview-card p,
+.classifieds-preview-card span {
+  margin: 0;
+  color: var(--classifieds-muted);
+}
+
+.classifieds-expiry-list strong,
+.classifieds-spam-queue strong,
+.classifieds-banned-users strong,
+.classifieds-blocked-users strong {
+  color: var(--classifieds-ink);
+}
+
+.classifieds-expiry-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.5rem 0.55rem;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(20, 33, 61, 0.07);
+}
+
+.classifieds-expiry-item span {
+  color: var(--classifieds-muted);
+  font-size: 0.84rem;
+}
+
+.classifieds-chat-status {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: var(--classifieds-muted);
+  font-size: 0.82rem;
+}
+
+.classifieds-chat-quick-replies {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.classifieds-filter-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  z-index: 2500;
+  display: grid;
+  align-items: end;
+}
+
+.classifieds-filter-sheet {
+  background: #fff;
+  border-radius: 18px 18px 0 0;
+  padding: 1rem;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.classifieds-filter-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.classifieds-filter-sheet-body {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
 @media (max-width: 1200px) {
   .classifieds-layout,
   .classifieds-hero {
@@ -1053,6 +1242,17 @@
     padding-inline: 0.8rem;
   }
 
+  .classifieds-mobile-quickbar {
+    display: block;
+    position: sticky;
+    top: 0.25rem;
+    z-index: 40;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(20, 33, 61, 0.08);
+    border-radius: 14px;
+    padding: 0.65rem;
+  }
+
   .classifieds-hero,
   .classifieds-surface-card,
   .classifieds-detail-card {
@@ -1072,6 +1272,16 @@
   .classifieds-kpi-row,
   .classifieds-listings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .classifieds-filter-card {
+    display: none;
+  }
+
+  .classifieds-listing-card {
+    border-radius: 14px;
+    padding: 0.75rem;
+    gap: 0.6rem;
   }
 }
 

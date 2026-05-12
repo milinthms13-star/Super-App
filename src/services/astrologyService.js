@@ -173,6 +173,19 @@ const normalizeReadingPayload = (payload = {}) => {
   };
 };
 
+const normalizeProfileItem = (item = {}) => ({
+  id: String(item.id || item.name || `profile-${Math.random().toString(36).slice(2)}`),
+  name: String(item.name || "You").trim(),
+  relation: String(item.relation || "Self").trim(),
+  sign: String(item.sign || "aries").trim().toLowerCase(),
+  birthDate: formatDateInputValue(item.birthDate),
+  birthTime: String(item.birthTime || "").trim(),
+  birthPlace: String(item.birthPlace || "").trim(),
+  nakshatra: String(item.nakshatra || "Ashwini").trim(),
+  rashi: String(item.rashi || "Mesha").trim(),
+  lagna: String(item.lagna || "Mesha").trim(),
+});
+
 const normalizeProfilePayload = (payload = {}) => ({
   sign: String(payload.sign || "").trim().toLowerCase(),
   birthDate: formatDateInputValue(payload.birthDate),
@@ -186,6 +199,15 @@ const normalizeProfilePayload = (payload = {}) => ({
           .filter(Boolean)
       : [],
   },
+  notifications: {
+    dailyHoroscope: payload?.notifications?.dailyHoroscope !== false,
+    goodMuhurtam: payload?.notifications?.goodMuhurtam !== false,
+    festivalReminders: payload?.notifications?.festivalReminders !== false,
+    dashaAlerts: payload?.notifications?.dashaAlerts !== false,
+  },
+  familyProfiles: Array.isArray(payload.familyProfiles)
+    ? payload.familyProfiles.map(normalizeProfileItem)
+    : [],
   savedReadings: Array.isArray(payload.savedReadings)
     ? payload.savedReadings.map((reading) => normalizeReadingPayload(reading))
     : [],
@@ -287,6 +309,15 @@ export const astrologyService = {
               .filter(Boolean)
           : [],
       },
+      notifications: {
+        dailyHoroscope: payload?.notifications?.dailyHoroscope !== false,
+        goodMuhurtam: payload?.notifications?.goodMuhurtam !== false,
+        festivalReminders: payload?.notifications?.festivalReminders !== false,
+        dashaAlerts: payload?.notifications?.dashaAlerts !== false,
+      },
+      familyProfiles: Array.isArray(payload.familyProfiles)
+        ? payload.familyProfiles.map(normalizeProfileItem)
+        : [],
     };
 
     try {
@@ -299,6 +330,171 @@ export const astrologyService = {
       return normalizeProfilePayload(response.data.data);
     } catch (error) {
       throw buildServiceError(error, null, "Unable to save your astrology profile.");
+    }
+  },
+
+  async getPanchangam() {
+    const fallback = {
+      tithi: "Shukla Paksha Tritiya",
+      nakshatra: "Revati",
+      yoga: "Rohini",
+      karana: "Bava",
+      sunrise: "06:02 AM",
+      sunset: "06:40 PM",
+      rahuKalam: "10:30 AM - 12:00 PM",
+      yamagandam: "03:00 PM - 04:30 PM",
+      gulika: "07:30 AM - 09:00 AM",
+    };
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/panchangam`);
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to fetch Panchangam details.");
+      }
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, fallback, "Unable to fetch Panchangam details.");
+    }
+  },
+
+  async getFestivalUpdates() {
+    const fallback = [
+      {
+        name: "Vishu",
+        date: "Apr 14",
+        note: "Kerala new year; perfect for family puja and new beginnings.",
+      },
+      {
+        name: "Navaratri",
+        date: "Oct 1 - Oct 10",
+        note: "Focus on protective rituals and strength-building prayers.",
+      },
+      {
+        name: "Karkidaka Vavu",
+        date: "Jul 23",
+        note: "Time for ancestral offerings and spiritual renewal.",
+      },
+    ];
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/festivals`);
+      if (!response.data?.success || !Array.isArray(response.data?.data)) {
+        throw new Error("Unable to fetch festival updates.");
+      }
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, fallback, "Unable to fetch festival updates.");
+    }
+  },
+
+  async getKundliData(profile = {}) {
+    const fallback = {
+      birthChart: {
+        ascendant: profile.lagna || "Mesha",
+        sun: profile.sign || "Aries",
+        moon: profile.nakshatra || "Ashwini",
+        mars: "Gemini",
+        mercury: "Taurus",
+        venus: "Cancer",
+        jupiter: "Leo",
+      },
+      navamsa: {
+        lord: "Sun",
+        balance: "Strong creative support for family and career.",
+      },
+      dasha: {
+        current: "Venus",
+        next: "Mars",
+        summary: "A period of relationship focus with potential growth through discipline.",
+      },
+      planets: [
+        { planet: "Sun", position: "10° Aries" },
+        { planet: "Moon", position: "22° Cancer" },
+        { planet: "Mars", position: "05° Gemini" },
+        { planet: "Mercury", position: "18° Taurus" },
+      ],
+    };
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/astrology/kundli`, { profile });
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to generate Kundli.");
+      }
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, fallback, "Unable to generate Kundli.");
+    }
+  },
+
+  async getCompatibility(sign, partnerSign) {
+    const fallback = {
+      score: 76,
+      summary: "Your signs have strong emotional alignment, with small adjustments needed around timing and finances.",
+      keyMatch: "Rasi Porutham: Sama, Gana Porutham: Maitra, Vasya Porutham: Anuradha",
+    };
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/astrology/compatibility`, {
+        sign,
+        partnerSign,
+      });
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to calculate compatibility.");
+      }
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, fallback, "Unable to calculate compatibility.");
+    }
+  },
+
+  async askAstrologyAssistant(question, sign) {
+    const fallback = {
+      answer:
+        "A balanced routine, a respectful family atmosphere, and small temple offerings help steady current planetary energies.",
+      tips: [
+        "Start the day with a short prayer or breathing exercise.",
+        "Wear copper or green for calm energy this week.",
+      ],
+    };
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/astrology/assistant`, {
+        question,
+        sign,
+      });
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to answer your astrology question.");
+      }
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, fallback, "Unable to answer your astrology question.");
+    }
+  },
+
+  async getConsultants() {
+    const fallback = [
+      {
+        name: "Madhav Acharya",
+        specialty: "Kerala Jathakam, Matchmaking, Remedies",
+        rate: "₹1,200 / 15 min",
+        availability: "Today 4:00 PM - 7:00 PM",
+      },
+      {
+        name: "Priya Nambiar",
+        specialty: "Kundli, Nakshatra counseling, Blessings rituals",
+        rate: "₹950 / 15 min",
+        availability: "Tomorrow 10:00 AM - 1:00 PM",
+      },
+    ];
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/consultants`);
+      if (!response.data?.success || !Array.isArray(response.data?.data)) {
+        throw new Error("Unable to load astrologer profiles.");
+      }
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, fallback, "Unable to load astrologer profiles.");
     }
   },
 };

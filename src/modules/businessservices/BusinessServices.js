@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
+import axios from "axios";
 import "./BusinessServices.css";
+import { BACKEND_BASE_URL } from "../../utils/api";
 
 const SERVICE_CATEGORIES = [
   {
@@ -15,8 +17,8 @@ const SERVICE_CATEGORIES = [
       { id: "income-tax", name: "Income Tax Filing", price: "₹2,500", duration: "7-10 days" },
       { id: "tds-filing", name: "TDS Filing", price: "₹1,000", duration: "3-5 days" },
       { id: "pan-tan", name: "PAN/TAN Application", price: "₹300", duration: "1-2 days" },
-      { id: "accounting", name: "Accounting Support", price: "₹2,000/month", duration: "Monthly" }
-    ]
+      { id: "accounting", name: "Accounting Support", price: "₹2,000/month", duration: "Monthly" },
+    ],
   },
   {
     id: "company-registration",
@@ -31,8 +33,8 @@ const SERVICE_CATEGORIES = [
       { id: "msme", name: "MSME/Udyam Registration", price: "₹1,000", duration: "2-3 days" },
       { id: "fssai", name: "FSSAI License", price: "₹3,500", duration: "7-10 days" },
       { id: "trade-license", name: "Trade License", price: "₹2,000", duration: "5-7 days" },
-      { id: "shops-establishment", name: "Shops & Establishment", price: "₹1,500", duration: "3-5 days" }
-    ]
+      { id: "shops-establishment", name: "Shops & Establishment", price: "₹1,500", duration: "3-5 days" },
+    ],
   },
   {
     id: "legal-consultation",
@@ -47,8 +49,8 @@ const SERVICE_CATEGORIES = [
       { id: "trademark", name: "Trademark Registration", price: "₹8,000", duration: "30-45 days" },
       { id: "consumer-complaint", name: "Consumer Complaint Support", price: "₹2,000", duration: "3-5 days" },
       { id: "legal-consultation", name: "Legal Consultation", price: "₹1,000/hour", duration: "1 hour" },
-      { id: "advocate-booking", name: "Advocate Booking", price: "₹2,000", duration: "As scheduled" }
-    ]
+      { id: "advocate-booking", name: "Advocate Booking", price: "₹2,000", duration: "As scheduled" },
+    ],
   },
   {
     id: "digital-marketing",
@@ -64,9 +66,9 @@ const SERVICE_CATEGORIES = [
       { id: "website-creation", name: "Website/Landing Page", price: "₹8,000", duration: "10-15 days" },
       { id: "seo-service", name: "SEO Service", price: "₹5,000/month", duration: "Monthly" },
       { id: "paid-ads", name: "Paid Ads Support", price: "₹3,000", duration: "5-7 days" },
-      { id: "product-photography", name: "Product Photography", price: "₹2,500", duration: "3-5 days" }
-    ]
-  }
+      { id: "product-photography", name: "Product Photography", price: "₹2,500", duration: "3-5 days" },
+    ],
+  },
 ];
 
 const BUSINESS_STARTER_PACKAGE = {
@@ -82,31 +84,42 @@ const BUSINESS_STARTER_PACKAGE = {
     "Google Business Profile Setup",
     "Basic Website Creation",
     "Social Media Setup",
-    "Business Consultation"
+    "Business Consultation",
   ],
   features: [
     "Complete documentation support",
     "Expert guidance throughout",
     "Priority processing",
     "Post-registration support",
-    "Digital presence setup"
-  ]
+    "Digital presence setup",
+  ],
 };
 
 const ORDER_STATUSES = [
   { id: "submitted", label: "Submitted", color: "#f59e0b", icon: "📝" },
   { id: "under-review", label: "Under Review", color: "#3b82f6", icon: "🔍" },
   { id: "processing", label: "Processing", color: "#8b5cf6", icon: "⚙️" },
-  { id: "completed", label: "Completed", color: "#10b981", icon: "✅" }
+  { id: "completed", label: "Completed", color: "#10b981", icon: "✅" },
 ];
+
+const parseINRToNumber = (priceText = "") => {
+  // accepts strings like "₹2,000/month" or "₹15,000" -> returns 2000/15000
+  const numeric = Number(String(priceText).replace(/[^0-9]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+};
 
 const BusinessServices = () => {
   const [activeSection, setActiveSection] = useState("overview");
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
+
   const [serviceOrders, setServiceOrders] = useState([]);
   const [currentOrder, setCurrentOrder] = useState(null);
+
   const [showOrderForm, setShowOrderForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
   const [orderForm, setOrderForm] = useState({
     name: "",
     email: "",
@@ -116,84 +129,242 @@ const BusinessServices = () => {
     documents: [],
     requirements: "",
     preferredDate: "",
-    budget: ""
+    budget: "",
+    // extra fields for invoice generator
+    address: "",
+    gstin: "",
   });
 
-  const navigationSections = [
-    { id: "overview", label: "Overview", icon: "🏠" },
-    { id: "services", label: "All Services", icon: "📋" },
-    { id: "business-starter", label: "Business Starter", icon: "🚀" },
-    { id: "orders", label: "My Orders", icon: "📦" },
-    { id: "consultation", label: "Consultation", icon: "💬" }
-  ];
+  const navigationSections = useMemo(
+    () => [
+      { id: "overview", label: "Overview", icon: "🏠" },
+      { id: "services", label: "All Services", icon: "📋" },
+      { id: "business-starter", label: "Business Starter", icon: "🚀" },
+      { id: "orders", label: "My Orders", icon: "📦" },
+      { id: "consultation", label: "Consultation", icon: "💬" },
+    ],
+    []
+  );
+
+  const refreshOrders = async () => {
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/business-services/orders/me`);
+      if (response.data?.success && response.data.data?.orders) {
+        setServiceOrders(response.data.data.orders);
+      } else {
+        setServiceOrders([]);
+      }
+    } catch (err) {
+      // keep UI stable; show empty list
+      setServiceOrders([]);
+    }
+  };
+
+  useEffect(() => {
+    void refreshOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleServiceSelect = (category, service) => {
     setSelectedCategory(category);
     setSelectedService(service);
     setShowOrderForm(true);
-  };
-
-  const handleOrderSubmit = () => {
-    const newOrder = {
-      id: Date.now().toString(),
-      service: selectedService,
-      category: selectedCategory,
-      status: "submitted",
-      orderDate: new Date().toISOString(),
-      formData: orderForm,
-      estimatedCompletion: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    };
-
-    setServiceOrders(prev => [...prev, newOrder]);
-    setCurrentOrder(newOrder);
-    setShowOrderForm(false);
-    setOrderForm({
-      name: "",
-      email: "",
-      phone: "",
-      businessName: "",
-      businessType: "",
-      documents: [],
-      requirements: "",
-      preferredDate: "",
-      budget: ""
-    });
+    setSubmitError("");
   };
 
   const handleFileUpload = (files) => {
-    const fileList = Array.from(files).map(file => ({
+    const fileList = Array.from(files).map((file) => ({
+      file,
       name: file.name,
       size: file.size,
       type: file.type,
-      url: URL.createObjectURL(file)
+      url: URL.createObjectURL(file),
     }));
-    setOrderForm(prev => ({ ...prev, documents: [...prev.documents, ...fileList] }));
+
+    setOrderForm((prev) => ({ ...prev, documents: [...prev.documents, ...fileList] }));
   };
 
-  const handleBusinessStarterOrder = () => {
-    const starterOrder = {
-      id: Date.now().toString(),
-      service: BUSINESS_STARTER_PACKAGE,
-      category: { id: "business-starter", name: "Business Starter Package" },
-      status: "submitted",
-      orderDate: new Date().toISOString(),
-      formData: orderForm,
-      estimatedCompletion: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      isStarterPackage: true
-    };
+  const handleOrderSubmit = async () => {
+    if (!selectedService || !selectedCategory) return;
 
-    setServiceOrders(prev => [...prev, starterOrder]);
-    setCurrentOrder(starterOrder);
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("categoryId", selectedCategory.id);
+      formData.append("categoryName", selectedCategory.name || "");
+      formData.append("serviceId", selectedService.id);
+      formData.append("serviceName", selectedService.name || "");
+      formData.append("isStarterPackage", "false");
+
+      formData.append(
+        "pricing",
+        JSON.stringify({
+          priceText: selectedService.price,
+          priceNumber: parseINRToNumber(selectedService.price),
+          durationText: selectedService.duration,
+        })
+      );
+
+      formData.append(
+        "formData",
+        JSON.stringify({
+          name: orderForm.name,
+          email: orderForm.email,
+          phone: orderForm.phone,
+          businessName: orderForm.businessName,
+          businessType: orderForm.businessType,
+          address: orderForm.address,
+          gstin: orderForm.gstin,
+        })
+      );
+
+      formData.append("requirements", orderForm.requirements || "");
+      // backend expects estimatedCompletion as ISO date string (optional)
+      formData.append("estimatedCompletion", orderForm.preferredDate ? `${orderForm.preferredDate}T00:00:00.000Z` : "");
+
+      // Upload documents
+      for (const doc of orderForm.documents) {
+        if (doc?.file) {
+          formData.append("documents", doc.file);
+        }
+      }
+
+      const response = await axios.post(
+        `${BACKEND_BASE_URL}/api/business-services/orders`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Order could not be created.");
+      }
+
+      const order = response.data.data?.order;
+      setCurrentOrder(order);
+      setShowOrderForm(false);
+
+      // reset form
+      setOrderForm({
+        name: "",
+        email: "",
+        phone: "",
+        businessName: "",
+        businessType: "",
+        documents: [],
+        requirements: "",
+        preferredDate: "",
+        budget: "",
+        address: "",
+        gstin: "",
+      });
+
+      await refreshOrders();
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Request failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBusinessStarterOrder = async () => {
+    // Use same backend endpoint, but encode "starter package" as a pseudo service
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      const syntheticCategory = { id: "business-starter", name: "Business Starter Package" };
+      const syntheticService = { id: "business-starter", name: BUSINESS_STARTER_PACKAGE.name, price: BUSINESS_STARTER_PACKAGE.price, duration: "7 days" };
+
+      const formData = new FormData();
+      formData.append("categoryId", syntheticCategory.id);
+      formData.append("categoryName", syntheticCategory.name);
+      formData.append("serviceId", syntheticService.id);
+      formData.append("serviceName", syntheticService.name);
+      formData.append("isStarterPackage", "true");
+
+      formData.append(
+        "pricing",
+        JSON.stringify({
+          priceText: syntheticService.price,
+          priceNumber: parseINRToNumber(syntheticService.price),
+          durationText: syntheticService.duration,
+        })
+      );
+
+      formData.append(
+        "formData",
+        JSON.stringify({
+          name: orderForm.name,
+          email: orderForm.email,
+          phone: orderForm.phone,
+          businessName: orderForm.businessName,
+          businessType: orderForm.businessType,
+          address: orderForm.address,
+          gstin: orderForm.gstin,
+        })
+      );
+
+      formData.append("requirements", orderForm.requirements || "");
+      formData.append("estimatedCompletion", ""); // optional
+
+      // no document uploads for starter unless user adds them
+      for (const doc of orderForm.documents) {
+        if (doc?.file) formData.append("documents", doc.file);
+      }
+
+      const response = await axios.post(
+        `${BACKEND_BASE_URL}/api/business-services/orders`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Order could not be created.");
+      }
+
+      const order = response.data.data?.order;
+      setCurrentOrder(order);
+      await refreshOrders();
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Request failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getStatusColor = (status) => {
-    const statusObj = ORDER_STATUSES.find(s => s.id === status);
+    const statusObj = ORDER_STATUSES.find((s) => s.id === status);
     return statusObj ? statusObj.color : "#6b7280";
   };
 
   const getStatusIcon = (status) => {
-    const statusObj = ORDER_STATUSES.find(s => s.id === status);
+    const statusObj = ORDER_STATUSES.find((s) => s.id === status);
     return statusObj ? statusObj.icon : "❓";
+  };
+
+  const downloadInvoice = async (orderId) => {
+    try {
+      const response = await axios.get(
+        `${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}/invoice/pdf`,
+        { responseType: "blob" }
+      );
+
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `business_service_invoice_${orderId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Invoice download failed.");
+    }
   };
 
   return (
@@ -226,17 +397,20 @@ const BusinessServices = () => {
       </div>
 
       <div className="business-services-nav">
-        {navigationSections.map(section => (
+        {navigationSections.map((section) => (
           <button
             key={section.id}
-            className={`business-services-nav-item ${activeSection === section.id ? 'active' : ''}`}
+            className={`business-services-nav-item ${activeSection === section.id ? "active" : ""}`}
             onClick={() => setActiveSection(section.id)}
+            type="button"
           >
             <span>{section.icon}</span>
             <span>{section.label}</span>
           </button>
         ))}
       </div>
+
+      {submitError ? <div className="app-loading" style={{ color: "#ef4444" }}>{submitError}</div> : null}
 
       <div className="business-services-content">
         {activeSection === "overview" && (
@@ -246,73 +420,59 @@ const BusinessServices = () => {
                 <div className="card-header">
                   <h3>🚀 Start Your Business in 7 Days</h3>
                   <div className="pricing">
-                    <span className="current-price">₹15,000</span>
-                    <span className="original-price">₹25,000</span>
-                    <span className="discount-badge">40% OFF</span>
+                    <span className="current-price">{BUSINESS_STARTER_PACKAGE.price}</span>
+                    <span className="original-price">{BUSINESS_STARTER_PACKAGE.originalPrice}</span>
+                    <span className="discount-badge">{BUSINESS_STARTER_PACKAGE.discount}</span>
                   </div>
                 </div>
                 <p>Get everything you need to start your business: GST, Udyam, Trade License, Logo, Website, and Digital Presence.</p>
                 <div className="package-services">
                   {BUSINESS_STARTER_PACKAGE.services.map((service, i) => (
-                    <span key={i} className="service-item">✓ {service}</span>
+                    <span key={i} className="service-item">
+                      ✓ {service}
+                    </span>
                   ))}
                 </div>
-                <button className="primary-button" onClick={handleBusinessStarterOrder}>
-                  Get Started Now
+                <button className="primary-button" onClick={handleBusinessStarterOrder} disabled={isSubmitting} type="button">
+                  {isSubmitting ? "Placing..." : "Get Started Now"}
                 </button>
               </div>
 
-              <div className="overview-card">
-                <h3>📊 GST & Tax Services</h3>
-                <p>Complete compliance solutions for GST filing, tax returns, and business accounting.</p>
-                <div className="service-highlights">
-                  <span>GST Registration</span>
-                  <span>Monthly Filing</span>
-                  <span>Tax Consultation</span>
+              {[
+                {
+                  title: "📊 GST & Tax Services",
+                  desc: "Complete compliance solutions for GST filing, tax returns, and business accounting.",
+                  highlights: ["GST Registration", "Monthly Filing", "Tax Consultation"],
+                },
+                {
+                  title: "🏢 Company Registration",
+                  desc: "Register your business as proprietorship, partnership, LLP, or private limited company.",
+                  highlights: ["Proprietorship", "LLP Registration", "MSME Registration"],
+                },
+                {
+                  title: "⚖️ Legal Consultation",
+                  desc: "Expert legal advice, agreement drafting, and business law consultation.",
+                  highlights: ["Agreement Drafting", "Legal Notice", "Trademark"],
+                },
+                {
+                  title: "📱 Digital Marketing",
+                  desc: "Build your online presence with logo design, website creation, and social media marketing.",
+                  highlights: ["Logo Design", "Website Creation", "Social Media Setup"],
+                },
+              ].map((card) => (
+                <div key={card.title} className="overview-card">
+                  <h3>{card.title}</h3>
+                  <p>{card.desc}</p>
+                  <div className="service-highlights">
+                    {card.highlights.map((h) => (
+                      <span key={h}>{h}</span>
+                    ))}
+                  </div>
+                  <button className="secondary-button" onClick={() => setActiveSection("services")} type="button">
+                    View All Services
+                  </button>
                 </div>
-                <button className="secondary-button" onClick={() => setActiveSection("services")}>
-                  View All Services
-                </button>
-              </div>
-
-              <div className="overview-card">
-                <h3>🏢 Company Registration</h3>
-                <p>Register your business as proprietorship, partnership, LLP, or private limited company.</p>
-                <div className="service-highlights">
-                  <span>Proprietorship</span>
-                  <span>LLP Registration</span>
-                  <span>MSME Registration</span>
-                </div>
-                <button className="secondary-button" onClick={() => setActiveSection("services")}>
-                  View All Services
-                </button>
-              </div>
-
-              <div className="overview-card">
-                <h3>⚖️ Legal Consultation</h3>
-                <p>Expert legal advice, agreement drafting, and business law consultation.</p>
-                <div className="service-highlights">
-                  <span>Agreement Drafting</span>
-                  <span>Legal Notice</span>
-                  <span>Trademark</span>
-                </div>
-                <button className="secondary-button" onClick={() => setActiveSection("services")}>
-                  View All Services
-                </button>
-              </div>
-
-              <div className="overview-card">
-                <h3>📱 Digital Marketing</h3>
-                <p>Build your online presence with logo design, website creation, and social media marketing.</p>
-                <div className="service-highlights">
-                  <span>Logo Design</span>
-                  <span>Website Creation</span>
-                  <span>Social Media Setup</span>
-                </div>
-                <button className="secondary-button" onClick={() => setActiveSection("services")}>
-                  View All Services
-                </button>
-              </div>
+              ))}
             </div>
           </div>
         )}
@@ -325,7 +485,7 @@ const BusinessServices = () => {
             </div>
 
             <div className="services-categories">
-              {SERVICE_CATEGORIES.map(category => (
+              {SERVICE_CATEGORIES.map((category) => (
                 <div key={category.id} className="category-card">
                   <div className="category-header">
                     <span className="category-icon">{category.icon}</span>
@@ -334,7 +494,7 @@ const BusinessServices = () => {
                   <p>{category.description}</p>
 
                   <div className="category-services">
-                    {category.services.slice(0, 4).map(service => (
+                    {category.services.slice(0, 4).map((service) => (
                       <div key={service.id} className="service-item">
                         <div className="service-info">
                           <h4>{service.name}</h4>
@@ -343,10 +503,7 @@ const BusinessServices = () => {
                             <span className="duration">{service.duration}</span>
                           </div>
                         </div>
-                        <button
-                          className="select-service-btn"
-                          onClick={() => handleServiceSelect(category, service)}
-                        >
+                        <button className="select-service-btn" onClick={() => handleServiceSelect(category, service)} type="button">
                           Select
                         </button>
                       </div>
@@ -359,6 +516,7 @@ const BusinessServices = () => {
                       setSelectedCategory(category);
                       setActiveSection("category-detail");
                     }}
+                    type="button"
                   >
                     View All Services ({category.services.length})
                   </button>
@@ -407,8 +565,8 @@ const BusinessServices = () => {
                 </div>
 
                 <div className="package-actions">
-                  <button className="primary-button" onClick={handleBusinessStarterOrder}>
-                    Order Business Starter Package
+                  <button className="primary-button" onClick={handleBusinessStarterOrder} disabled={isSubmitting} type="button">
+                    {isSubmitting ? "Placing..." : "Order Business Starter Package"}
                   </button>
                   <div className="package-meta">
                     <span>⚡ Processing in 7 days</span>
@@ -433,47 +591,54 @@ const BusinessServices = () => {
                 <span className="empty-icon">📋</span>
                 <h3>No orders yet</h3>
                 <p>Start your business journey by ordering a service</p>
-                <button className="primary-button" onClick={() => setActiveSection("services")}>
+                <button className="primary-button" onClick={() => setActiveSection("services")} type="button">
                   Browse Services
                 </button>
               </div>
             ) : (
               <div className="orders-list">
-                {serviceOrders.map(order => (
-                  <div key={order.id} className="order-card">
+                {serviceOrders.map((order) => (
+                  <div key={order._id || order.id} className="order-card">
                     <div className="order-header">
                       <div className="order-info">
-                        <h4>{order.isStarterPackage ? order.service.name : order.service.name}</h4>
-                        <p>Order #{order.id.slice(-6)}</p>
-                        <p>Ordered on {new Date(order.orderDate).toLocaleDateString()}</p>
+                        <h4>{order.serviceName || order.service?.name || "Business Service"}</h4>
+                        <p>Order #{String(order._id || order.id || "").slice(-6)}</p>
+                        <p>Ordered on {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : "—"}</p>
                       </div>
                       <div className="order-status">
-                        <span
-                          className="status-badge"
-                          style={{ backgroundColor: getStatusColor(order.status) }}
-                        >
-                          {getStatusIcon(order.status)} {ORDER_STATUSES.find(s => s.id === order.status)?.label}
+                        <span className="status-badge" style={{ backgroundColor: getStatusColor(order.status) }}>
+                          {getStatusIcon(order.status)} {ORDER_STATUSES.find((s) => s.id === order.status)?.label || order.status}
                         </span>
                       </div>
                     </div>
 
                     <div className="order-details">
                       <div className="order-meta">
-                        <span>Estimated: {new Date(order.estimatedCompletion).toLocaleDateString()}</span>
-                        <span>Price: {order.isStarterPackage ? order.service.price : order.service.price}</span>
+                        <span>
+                          Estimated:{" "}
+                          {order.estimatedCompletion ? new Date(order.estimatedCompletion).toLocaleDateString() : "—"}
+                        </span>
+                        <span>Price: {order.pricing?.priceText || order.pricing?.priceText || "—"}</span>
                       </div>
 
-                      {order.status === "completed" && (
+                      {order.status === "completed" ? (
                         <div className="order-actions">
-                          <button className="download-btn">📄 Download Documents</button>
-                          <button className="download-btn">🧾 Download Invoice</button>
+                          <button
+                            className="download-btn"
+                            type="button"
+                            onClick={() => downloadInvoice(String(order._id || order.id))}
+                          >
+                            🧾 Download Invoice
+                          </button>
                         </div>
-                      )}
-
-                      {order.status !== "completed" && (
+                      ) : (
                         <div className="order-actions">
-                          <button className="chat-btn">💬 Chat with Consultant</button>
-                          <button className="call-btn">📞 Request Call</button>
+                          <button className="chat-btn" type="button" onClick={() => setSubmitError("Consultant chat/call is not wired yet.")}>
+                            💬 Chat with Consultant
+                          </button>
+                          <button className="call-btn" type="button" onClick={() => setSubmitError("Request call is not wired yet.")}>
+                            📞 Request Call
+                          </button>
                         </div>
                       )}
                     </div>
@@ -492,33 +657,21 @@ const BusinessServices = () => {
             </div>
 
             <div className="consultation-options">
-              <div className="consultation-card">
-                <h3>📞 Quick Consultation</h3>
-                <p>15-minute phone consultation for immediate guidance</p>
-                <div className="consultation-price">₹500</div>
-                <button className="primary-button">Book Now</button>
-              </div>
-
-              <div className="consultation-card">
-                <h3>💼 Business Planning</h3>
-                <p>Comprehensive business plan and strategy consultation</p>
-                <div className="consultation-price">₹2,500</div>
-                <button className="primary-button">Book Now</button>
-              </div>
-
-              <div className="consultation-card">
-                <h3>📊 Financial Consultation</h3>
-                <p>GST, tax, and financial planning advice</p>
-                <div className="consultation-price">₹1,500</div>
-                <button className="primary-button">Book Now</button>
-              </div>
-
-              <div className="consultation-card">
-                <h3>⚖️ Legal Consultation</h3>
-                <p>Legal advice and documentation review</p>
-                <div className="consultation-price">₹2,000</div>
-                <button className="primary-button">Book Now</button>
-              </div>
+              {[
+                { title: "📞 Quick Consultation", desc: "15-minute phone consultation for immediate guidance", price: "₹500" },
+                { title: "💼 Business Planning", desc: "Comprehensive business plan and strategy consultation", price: "₹2,500" },
+                { title: "📊 Financial Consultation", desc: "GST, tax, and financial planning advice", price: "₹1,500" },
+                { title: "⚖️ Legal Consultation", desc: "Legal advice and documentation review", price: "₹2,000" },
+              ].map((c) => (
+                <div key={c.title} className="consultation-card">
+                  <h3>{c.title}</h3>
+                  <p>{c.desc}</p>
+                  <div className="consultation-price">{c.price}</div>
+                  <button className="primary-button" type="button" onClick={() => setSubmitError("Consultation booking not wired yet.")}>
+                    Book Now
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -526,15 +679,17 @@ const BusinessServices = () => {
         {activeSection === "category-detail" && selectedCategory && (
           <div className="business-services-section">
             <div className="section-header">
-              <h2>{selectedCategory.icon} {selectedCategory.name}</h2>
+              <h2>
+                {selectedCategory.icon} {selectedCategory.name}
+              </h2>
               <p>{selectedCategory.description}</p>
-              <button className="back-btn" onClick={() => setActiveSection("services")}>
+              <button className="back-btn" onClick={() => setActiveSection("services")} type="button">
                 ← Back to All Services
               </button>
             </div>
 
             <div className="services-grid">
-              {selectedCategory.services.map(service => (
+              {selectedCategory.services.map((service) => (
                 <div key={service.id} className="service-detail-card">
                   <div className="service-header">
                     <h4>{service.name}</h4>
@@ -543,10 +698,7 @@ const BusinessServices = () => {
                       <span className="duration">{service.duration}</span>
                     </div>
                   </div>
-                  <button
-                    className="primary-button"
-                    onClick={() => handleServiceSelect(selectedCategory, service)}
-                  >
+                  <button className="primary-button" onClick={() => handleServiceSelect(selectedCategory, service)} type="button">
                     Order This Service
                   </button>
                 </div>
@@ -561,7 +713,9 @@ const BusinessServices = () => {
           <div className="modal-content">
             <div className="modal-header">
               <h3>Order {selectedService.name}</h3>
-              <button className="close-btn" onClick={() => setShowOrderForm(false)}>×</button>
+              <button className="close-btn" onClick={() => setShowOrderForm(false)} type="button">
+                ×
+              </button>
             </div>
 
             <div className="order-form">
@@ -571,19 +725,19 @@ const BusinessServices = () => {
                   type="text"
                   placeholder="Full Name"
                   value={orderForm.name}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, name: e.target.value }))}
                 />
                 <input
                   type="email"
                   placeholder="Email Address"
                   value={orderForm.email}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, email: e.target.value }))}
                 />
                 <input
                   type="tel"
                   placeholder="Phone Number"
                   value={orderForm.phone}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, phone: e.target.value }))}
                 />
               </div>
 
@@ -593,11 +747,11 @@ const BusinessServices = () => {
                   type="text"
                   placeholder="Business Name"
                   value={orderForm.businessName}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, businessName: e.target.value }))}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, businessName: e.target.value }))}
                 />
                 <select
                   value={orderForm.businessType}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, businessType: e.target.value }))}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, businessType: e.target.value }))}
                 >
                   <option value="">Select Business Type</option>
                   <option value="proprietorship">Proprietorship</option>
@@ -633,14 +787,13 @@ const BusinessServices = () => {
                 <textarea
                   placeholder="Describe your specific requirements..."
                   value={orderForm.requirements}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, requirements: e.target.value }))}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, requirements: e.target.value }))}
                   rows={4}
                 />
                 <input
                   type="date"
-                  placeholder="Preferred Completion Date"
                   value={orderForm.preferredDate}
-                  onChange={(e) => setOrderForm(prev => ({ ...prev, preferredDate: e.target.value }))}
+                  onChange={(e) => setOrderForm((prev) => ({ ...prev, preferredDate: e.target.value }))}
                 />
               </div>
 
@@ -661,13 +814,15 @@ const BusinessServices = () => {
               </div>
 
               <div className="form-actions">
-                <button className="secondary-button" onClick={() => setShowOrderForm(false)}>
+                <button className="secondary-button" onClick={() => setShowOrderForm(false)} type="button">
                   Cancel
                 </button>
-                <button className="primary-button" onClick={handleOrderSubmit}>
-                  Place Order
+                <button className="primary-button" onClick={handleOrderSubmit} disabled={isSubmitting} type="button">
+                  {isSubmitting ? "Placing..." : "Place Order"}
                 </button>
               </div>
+
+              {submitError ? <div style={{ color: "#ef4444" }}>{submitError}</div> : null}
             </div>
           </div>
         </div>
@@ -682,17 +837,26 @@ const BusinessServices = () => {
             </div>
 
             <div className="order-details">
-              <p><strong>Order ID:</strong> #{currentOrder.id.slice(-6)}</p>
-              <p><strong>Service:</strong> {currentOrder.isStarterPackage ? currentOrder.service.name : currentOrder.service.name}</p>
-              <p><strong>Status:</strong> Submitted</p>
-              <p><strong>Estimated Completion:</strong> {new Date(currentOrder.estimatedCompletion).toLocaleDateString()}</p>
+              <p>
+                <strong>Order ID:</strong> #{String(currentOrder._id || currentOrder.id || "").slice(-6)}
+              </p>
+              <p>
+                <strong>Service:</strong> {currentOrder.serviceName || selectedService?.name || "Business Service"}
+              </p>
+              <p>
+                <strong>Status:</strong> {currentOrder.status || "submitted"}
+              </p>
+              <p>
+                <strong>Estimated Completion:</strong>{" "}
+                {currentOrder.estimatedCompletion ? new Date(currentOrder.estimatedCompletion).toLocaleDateString() : "—"}
+              </p>
             </div>
 
             <div className="confirmation-actions">
-              <button className="primary-button" onClick={() => setCurrentOrder(null)}>
+              <button className="primary-button" onClick={() => { setCurrentOrder(null); setActiveSection("orders"); }} type="button">
                 Track Order
               </button>
-              <button className="secondary-button" onClick={() => setCurrentOrder(null)}>
+              <button className="secondary-button" onClick={() => setCurrentOrder(null)} type="button">
                 Close
               </button>
             </div>

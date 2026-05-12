@@ -393,6 +393,17 @@ const MODULE_CONFIG = [
     emoji: "📄",
   },
   {
+    id: "jobportal",
+    nameKey: "modules.jobportal",
+    fallbackName: "NilaJobs",
+    icon: "jobportal",
+    descriptionKey: "dashboard.moduleDescriptions.jobportal",
+    fallbackDescription: "Local + Gulf + IT + gig job portal with verified recruiters, smart apply, resume scoring, employer dashboard, and instant job alerts.",
+    stats: "Jobs for every skill",
+    gradient: "linear-gradient(135deg, #0F766E 0%, #14B8A6 45%, #2DD4BF 100%)",
+    emoji: "🔎",
+  },
+  {
     id: "businessservices",
     nameKey: "modules.businessservices",
     fallbackName: "Business Services Hub",

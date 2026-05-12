@@ -132,6 +132,9 @@ safeUse('/api/multi-notifications', './routes/multiChannelNotificationRoutes'); 
 // Tax & GST Calculation Routes
 safeUse('/api/tax', './routes/taxCalculationRoutes'); // Tax calculation, GST invoices, IGST/SGST/CGST
 
+// Business Services (orders + docs + invoice PDF)
+app.use('/api/business-services', require('./routes/businessServices'));
+
 // Phase 5E: Carrier Webhook Routes (Real-time tracking updates from courier partners)
 app.use('/webhooks/carrier', require('./routes/carrierWebhookRoutes'));
 

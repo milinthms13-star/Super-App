@@ -58,15 +58,110 @@ const ROLE_MODES = [
   },
 ];
 
+const CORE_CATEGORIES = [
+  "Jobs",
+  "Vehicles",
+  "Properties",
+  "Electronics",
+  "Home Appliances",
+  "Services",
+  "Rentals",
+  "Pets",
+  "Used Items",
+  "Business for Sale",
+];
+
+const KERALA_DISTRICTS = [
+  "All Districts",
+  "Thiruvananthapuram",
+  "Kollam",
+  "Pathanamthitta",
+  "Alappuzha",
+  "Kottayam",
+  "Idukki",
+  "Ernakulam",
+  "Thrissur",
+  "Palakkad",
+  "Malappuram",
+  "Kozhikode",
+  "Wayanad",
+  "Kannur",
+  "Kasaragod",
+];
+
+const RISKY_CATEGORIES = new Set(["Jobs", "Properties", "Rentals", "Business for Sale"]);
+const SPAM_KEYWORDS = ["advance payment", "guaranteed job", "no inspection", "crypto only", "telegram only"];
+
+const TITLE_SUGGESTIONS = {
+  Jobs: ["Need delivery executive - Kochi", "Hiring AC technician - Thrissur"],
+  Vehicles: ["2019 Swift VXI well maintained", "Royal Enfield Classic 350 single owner"],
+  Properties: ["2BHK apartment for sale in Kakkanad", "5 cent plot near NH bypass"],
+  Electronics: ["iPhone 13 128GB with bill", "Dell laptop i5 11th Gen lightly used"],
+  "Home Appliances": ["LG 7kg washing machine in good condition", "Double door fridge urgent sale"],
+  Services: ["Home tuition for Class 8-10", "Electrician available in Ernakulam"],
+  Rentals: ["1BHK rental near Technopark", "Scooter available for monthly rent"],
+  Pets: ["Labrador puppies vaccinated", "Persian cat adoption"],
+  "Used Items": ["Office chair set of 4", "Study table with storage"],
+  "Business for Sale": ["Running bakery for sale in Kozhikode", "Salon with full setup for transfer"],
+};
+
+const PRICE_HINTS = {
+  Jobs: "Salary-based listing. Keep price as monthly salary or CTC (example: 18000).",
+  Vehicles: "Most local used-vehicle listings perform well with realistic price + year model.",
+  Properties: "Mention total price clearly and include area details in description.",
+  Electronics: "Compare recent market listings and keep 5-10% negotiation room.",
+  "Home Appliances": "Condition + age drives price. Add warranty info for better trust.",
+  Services: "Use per-service or monthly retainership pricing for clarity.",
+  Rentals: "Include deposit and monthly rent split in description.",
+  Pets: "Follow legal and ethical compliance; include vaccination details.",
+  "Used Items": "Smaller ticket items sell faster with round-number pricing.",
+  "Business for Sale": "Add monthly turnover/profit details to justify asking price.",
+};
+
+const QUICK_CHAT_REPLIES = [
+  "Is this available?",
+  "Can you share exact location?",
+  "Can you share more photos?",
+];
+
 const DEFAULT_AD_FORM = {
   title: "",
   description: "",
   price: "",
   category: "Electronics",
   location: "",
+  district: "Ernakulam",
+  pincode: "",
   condition: "Used",
   mediaCount: "4",
   plan: "free",
+};
+
+const getExpiryDateFromPosted = (postedDate) => {
+  const posted = new Date(postedDate);
+  if (Number.isNaN(posted.getTime())) {
+    const fallback = new Date();
+    fallback.setDate(fallback.getDate() + 30);
+    return fallback.toISOString().slice(0, 10);
+  }
+  posted.setDate(posted.getDate() + 30);
+  return posted.toISOString().slice(0, 10);
+};
+
+const deriveDistrict = (listing = {}) => {
+  const districtValue = String(listing?.district || "").trim();
+  if (districtValue) {
+    return districtValue;
+  }
+
+  const locationText = String(listing?.location || "").toLowerCase();
+  if (locationText.includes("kochi") || locationText.includes("ernakulam")) return "Ernakulam";
+  if (locationText.includes("trivandrum") || locationText.includes("thiruvananthapuram")) return "Thiruvananthapuram";
+  if (locationText.includes("kozhikode")) return "Kozhikode";
+  if (locationText.includes("thrissur")) return "Thrissur";
+  if (locationText.includes("kannur")) return "Kannur";
+  if (locationText.includes("kollam")) return "Kollam";
+  return "Ernakulam";
 };
 
 const normalizeListing = (listing, index) => ({
@@ -78,12 +173,15 @@ const normalizeListing = (listing, index) => ({
   price: Number(listing?.price || 0),
   category: listing?.category || "Electronics",
   location: listing?.location || "Kerala",
+  district: deriveDistrict(listing),
+  pincode: String(listing?.pincode || ""),
   locality: listing?.locality || listing?.location || "Prime area",
   condition: listing?.condition || "Used",
   seller: listing?.seller || "Trusted Seller",
   sellerRole: listing?.sellerRole || "Seller",
   sellerEmail: listing?.sellerEmail || "",
   posted: listing?.posted || "2026-04-18",
+  expiresAt: listing?.expiresAt || getExpiryDateFromPosted(listing?.posted || "2026-04-18"),
   image: listing?.image || "Ad listing",
   featured: Boolean(listing?.featured),
   urgent: Boolean(listing?.urgent),
@@ -248,6 +346,9 @@ const Classifieds = () => {
   const [searchText, setSearchText] = useState("");
   const [categoryFilter, setCategoryFilter] = useState([]);
   const [locationFilter, setLocationFilter] = useState([]);
+  const [districtFilter, setDistrictFilter] = useState("All Districts");
+  const [pincodeFilter, setPincodeFilter] = useState("");
+  const [nearMeOnly, setNearMeOnly] = useState(false);
   const [conditionFilter, setConditionFilter] = useState([]);
   const [priceFilter, setPriceFilter] = useState([]);
   const [sortBy, setSortBy] = useState("featured");
@@ -292,9 +393,18 @@ const Classifieds = () => {
   const [selectedListingForDuplicate, setSelectedListingForDuplicate] = useState(null);
   const [savedTemplates, setSavedTemplates] = useState([]);
   const [scheduledListings, setScheduledListings] = useState([]);
+  const [mobileFilterSheetOpen, setMobileFilterSheetOpen] = useState(false);
+  const [showListingPreview, setShowListingPreview] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [adminBannedUsers, setAdminBannedUsers] = useState([]);
+  const [customCategoryInput, setCustomCategoryInput] = useState("");
+  const [managedCategories, setManagedCategories] = useState(CORE_CATEGORIES);
+  const [listingExpiryDays, setListingExpiryDays] = useState("30");
   const fileInputRef = useRef(null);
   const trackedViewIdsRef = useRef(new Set());
   const baseRole = getBaseRole(currentUser);
+  const currentUserDistrict = String(currentUser?.district || "Ernakulam");
+  const currentUserPincode = String(currentUser?.pincode || "682001");
 
   const handleSaveSearch = async () => {
     const searchName = prompt("Enter a name for this saved search:");
@@ -307,6 +417,9 @@ const Classifieds = () => {
           searchText,
           categoryFilter,
           locationFilter,
+          districtFilter,
+          pincodeFilter,
+          nearMeOnly,
           conditionFilter,
           priceFilter,
           sortBy,
@@ -394,6 +507,9 @@ const Classifieds = () => {
     setSearchText(search.filters.searchText || "");
     setCategoryFilter(search.filters.categoryFilter || []);
     setLocationFilter(search.filters.locationFilter || []);
+    setDistrictFilter(search.filters.districtFilter || "All Districts");
+    setPincodeFilter(search.filters.pincodeFilter || "");
+    setNearMeOnly(Boolean(search.filters.nearMeOnly));
     setConditionFilter(search.filters.conditionFilter || []);
     setPriceFilter(search.filters.priceFilter || []);
     setSortBy(search.filters.sortBy || "featured");
@@ -523,12 +639,23 @@ const Classifieds = () => {
     : [];
 
   const categories = useMemo(
-    () => [...new Set(listings.map((listing) => listing.category))],
-    [listings]
+    () => Array.from(new Set([...(managedCategories || []), ...listings.map((listing) => listing.category)])),
+    [listings, managedCategories]
   );
 
   const locations = useMemo(
     () => [...new Set(listings.map((listing) => listing.location))],
+    [listings]
+  );
+
+  const districts = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...KERALA_DISTRICTS,
+          ...listings.map((listing) => String(listing?.district || "").trim()).filter(Boolean),
+        ])
+      ),
     [listings]
   );
 
@@ -562,6 +689,15 @@ const Classifieds = () => {
       
       const matchesCategory = categoryFilter.length === 0 || categoryFilter.includes(listing.category);
       const matchesLocation = locationFilter.length === 0 || locationFilter.includes(listing.location);
+      const matchesDistrict = districtFilter === "All Districts" || listing.district === districtFilter;
+      const matchesPincode =
+        !pincodeFilter.trim() || String(listing.pincode || "").includes(pincodeFilter.trim());
+      const matchesNearby =
+        !nearMeOnly ||
+        listing.district === currentUserDistrict ||
+        (String(listing.pincode || "").slice(0, 3) &&
+          String(listing.pincode || "").slice(0, 3) === currentUserPincode.slice(0, 3));
+      const isNotBlocked = !blockedUsers.includes(listing.seller);
       const matchesCondition = conditionFilter.length === 0 || conditionFilter.includes(listing.condition);
       
       const matchesPrice = 
@@ -578,6 +714,10 @@ const Classifieds = () => {
         matchesSearch &&
         matchesCategory &&
         matchesLocation &&
+        matchesDistrict &&
+        matchesPincode &&
+        matchesNearby &&
+        isNotBlocked &&
         matchesCondition &&
         matchesPrice
       );
@@ -609,7 +749,13 @@ const Classifieds = () => {
   }, [
     categoryFilter,
     conditionFilter,
+    currentUserDistrict,
+    currentUserPincode,
+    districtFilter,
+    blockedUsers,
     locationFilter,
+    nearMeOnly,
+    pincodeFilter,
     priceFilter,
     roleVisibleListings,
     searchText,
@@ -627,7 +773,7 @@ const Classifieds = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchText, categoryFilter, locationFilter, conditionFilter, priceFilter, sortBy]);
+  }, [searchText, categoryFilter, locationFilter, districtFilter, pincodeFilter, nearMeOnly, conditionFilter, priceFilter, sortBy]);
 
   useEffect(() => {
     if (!filteredListings.length) {
@@ -654,6 +800,8 @@ const Classifieds = () => {
         price: editingListing.price || "",
         category: editingListing.category || "Electronics",
         location: editingListing.location || "",
+        district: editingListing.district || "Ernakulam",
+        pincode: editingListing.pincode || "",
         condition: editingListing.condition || "Used",
         mediaCount: editingListing.mediaCount || "4",
         plan: editingListing.featured ? "featured" : editingListing.urgent ? "urgent" : "free",
@@ -714,15 +862,30 @@ const Classifieds = () => {
     const totalChats = sellerListings.reduce((sum, listing) => sum + listing.chats, 0);
     const totalFavorites = sellerListings.reduce((sum, listing) => sum + listing.favorites, 0);
     const avgPrice = sellerListings.reduce((sum, listing) => sum + listing.price, 0) / sellerListings.length;
+    const now = new Date();
+    const expiredListings = sellerListings.filter(
+      (listing) => new Date(listing.expiresAt || getExpiryDateFromPosted(listing.posted)).getTime() < now.getTime()
+    );
+    const pendingApproval = sellerListings.filter(
+      (listing) => normalizeModerationStatus(listing) !== "approved"
+    );
 
     return {
       totalListings: sellerListings.length,
       activeListings: sellerListings.filter(l => l.moderationStatus === "approved").length,
+      expiredListings: expiredListings.length,
+      pendingApproval: pendingApproval.length,
       totalViews,
       totalChats,
       totalFavorites,
       avgPrice: Math.round(avgPrice),
       conversionRate: totalViews > 0 ? Math.round((totalChats / totalViews) * 100) : 0,
+      expiringSoonListings: sellerListings.filter((listing) => {
+        const expiryDate = new Date(listing.expiresAt || getExpiryDateFromPosted(listing.posted));
+        const diffDays = Math.round((expiryDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+        return diffDays >= 0 && diffDays <= 3;
+      }),
+      pendingApprovalListings: pendingApproval,
     };
   }, [sellerListings]);
 
@@ -844,6 +1007,71 @@ const Classifieds = () => {
     }),
     [classifiedFavorites.length, listings, reportRecords.length]
   );
+
+  const nearbyListings = useMemo(
+    () =>
+      listings
+        .filter((listing) => listing.district === currentUserDistrict)
+        .sort((first, second) => new Date(second.posted) - new Date(first.posted))
+        .slice(0, 5),
+    [currentUserDistrict, listings]
+  );
+
+  const listingTitleSuggestions = TITLE_SUGGESTIONS[listingForm.category] || [];
+  const listingPriceHint = PRICE_HINTS[listingForm.category] || "Add a realistic market price to improve response rate.";
+  const duplicateDraftWarning = useMemo(() => {
+    const normalizedTitle = String(listingForm.title || "").trim().toLowerCase();
+    if (!normalizedTitle || !sellerListings.length) {
+      return null;
+    }
+    const duplicate = sellerListings.find(
+      (listing) =>
+        String(listing.title || "").trim().toLowerCase() === normalizedTitle &&
+        String(listing.location || "").trim().toLowerCase() ===
+          String(listingForm.location || "").trim().toLowerCase()
+    );
+    return duplicate || null;
+  }, [listingForm.location, listingForm.title, sellerListings]);
+
+  const listingCompletenessScore = useMemo(() => {
+    const checks = [
+      Boolean(listingForm.title.trim()),
+      Boolean(listingForm.description.trim()),
+      Number(listingForm.price || 0) > 0,
+      Boolean(listingForm.category),
+      Boolean(listingForm.location.trim()),
+      Boolean(listingForm.district),
+      /^\d{6}$/.test(String(listingForm.pincode || "")),
+      uploadedImages.length > 0,
+    ];
+    const completed = checks.filter(Boolean).length;
+    return Math.round((completed / checks.length) * 100);
+  }, [listingForm, uploadedImages.length]);
+
+  const riskyCategorySelected = RISKY_CATEGORIES.has(String(listingForm.category));
+  const spamKeywordHits = useMemo(
+    () =>
+      listings.filter((listing) => {
+        const text = `${listing.title} ${listing.description}`.toLowerCase();
+        return SPAM_KEYWORDS.some((keyword) => text.includes(keyword));
+      }),
+    [listings]
+  );
+
+  const adminModerationQueue = useMemo(
+    () => ({
+      pendingApprovals: listings.filter((listing) => normalizeModerationStatus(listing) !== "approved").length,
+      riskyCategoryPending: listings.filter(
+        (listing) =>
+          RISKY_CATEGORIES.has(String(listing.category || "")) &&
+          normalizeModerationStatus(listing) !== "approved"
+      ).length,
+      reportedListings: reportRecords.length,
+      spamKeywordDetections: spamKeywordHits.length,
+    }),
+    [listings, reportRecords.length, spamKeywordHits.length]
+  );
+
   const isBuyerView = activeRole === "buyer";
   const showRoleSwitcher = baseRole !== "buyer";
   const showMarketplaceSignals = trendingCategories.length > 0 || suggestedSearches.length > 0;
@@ -910,6 +1138,87 @@ const Classifieds = () => {
     setStatusMessage(`${listing.title} saved to your wishlist.`);
   };
 
+  const handleUseNearMeFilter = () => {
+    setNearMeOnly(true);
+    setDistrictFilter(currentUserDistrict || "Ernakulam");
+    setPincodeFilter(currentUserPincode || "");
+    addToast("Nearby filter enabled using your profile district.", "success");
+  };
+
+  const handleQuickChatMessage = (message) => {
+    setChatInput(message);
+  };
+
+  const handleOfferPrice = () => {
+    if (!selectedListing) {
+      return;
+    }
+    const offerAmount = Math.round(Number(selectedListing.price || 0) * 0.9);
+    setChatInput(`My offer price is INR ${offerAmount}. Is it negotiable?`);
+  };
+
+  const handleShareLocationInChat = () => {
+    if (!selectedListing) {
+      return;
+    }
+    setChatInput(`Please check location pin: ${selectedListing.location}, ${selectedListing.locality}.`);
+  };
+
+  const handleBlockUser = (sellerName) => {
+    if (!sellerName) {
+      return;
+    }
+
+    setBlockedUsers((current) => Array.from(new Set([...current, sellerName])));
+    setAdminBannedUsers((current) => Array.from(new Set([...current, sellerName])));
+    setStatusMessage(`User ${sellerName} blocked from your marketplace view.`);
+  };
+
+  const handleUnblockUser = (sellerName) => {
+    setBlockedUsers((current) => current.filter((user) => user !== sellerName));
+    setStatusMessage(`${sellerName} removed from blocked users.`);
+  };
+
+  const handleRelistExpired = async (listing) => {
+    if (!listing) {
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const relistDate = new Date();
+      const relistExpiry = new Date();
+      relistExpiry.setDate(relistExpiry.getDate() + Math.max(7, Number(listingExpiryDays || 30)));
+      await updateClassifiedListing(listing.id, {
+        posted: relistDate.toISOString().slice(0, 10),
+        expiresAt: relistExpiry.toISOString().slice(0, 10),
+        moderationStatus: "approved",
+        monetizationPlan: "Paid Relist",
+      });
+      addToast(`Paid relist requested for ${listing.title}.`, "success");
+    } catch (error) {
+      setStatusMessage(error.response?.data?.message || error.message || "Relist failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddCustomCategory = () => {
+    const categoryName = customCategoryInput.trim();
+    if (!categoryName) {
+      return;
+    }
+    setManagedCategories((current) => Array.from(new Set([...current, categoryName])));
+    setCategoryFilter((current) => Array.from(new Set([...current, categoryName])));
+    addToast(`Category "${categoryName}" added to current filters.`, "info");
+    setCustomCategoryInput("");
+  };
+
+  const handleAdminUnban = (sellerName) => {
+    setAdminBannedUsers((current) => current.filter((user) => user !== sellerName));
+    addToast(`${sellerName} removed from banned users list.`, "info");
+  };
+
   const handleListingInputChange = (event) => {
     const { name, value } = event.target;
     setListingForm((currentForm) => ({
@@ -931,6 +1240,33 @@ const Classifieds = () => {
       return;
     }
 
+    if (!/^\d{6}$/.test(String(listingForm.pincode || ""))) {
+      setStatusMessage("Enter a valid 6-digit pincode before publishing.");
+      return;
+    }
+
+    if (!editingListingId && uploadedImages.length === 0) {
+      setStatusMessage("Upload at least one image before publishing.");
+      return;
+    }
+
+    if (duplicateDraftWarning && !editingListingId) {
+      setStatusMessage(
+        `Possible duplicate detected: "${duplicateDraftWarning.title}" already exists in ${duplicateDraftWarning.location}.`
+      );
+      return;
+    }
+
+    if (listingCompletenessScore < 65) {
+      setStatusMessage("Listing completeness is low. Add more details before publishing.");
+      return;
+    }
+
+    const moderationStatus = riskyCategorySelected ? "pending" : "approved";
+    const listingExpiryInDays = Math.max(7, Number(listingExpiryDays || 30));
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + listingExpiryInDays);
+
     setSubmitting(true);
     try {
       if (editingListingId) {
@@ -939,6 +1275,16 @@ const Classifieds = () => {
           ...listingForm,
           price: Number(listingForm.price),
           mediaCount: Number(listingForm.mediaCount),
+          pincode: String(listingForm.pincode || ""),
+          district: listingForm.district || deriveDistrict({ location: listingForm.location }),
+          expiresAt: expiryDate.toISOString().slice(0, 10),
+          moderationStatus,
+          verificationBadges: ["phone", "email"],
+          image: uploadedImages[0]?.name || "Ad listing",
+          mediaGallery:
+            uploadedImages.length > 0
+              ? uploadedImages.map((image) => image.name || "Listing image")
+              : undefined,
         });
         setEditingListingId("");
         setSelectedListingId(updatedListing?.id || "");
@@ -949,10 +1295,26 @@ const Classifieds = () => {
           ...listingForm,
           price: Number(listingForm.price),
           mediaCount: Number(listingForm.mediaCount),
+          pincode: String(listingForm.pincode || ""),
+          district: listingForm.district || deriveDistrict({ location: listingForm.location }),
+          expiresAt: expiryDate.toISOString().slice(0, 10),
+          moderationStatus,
+          featured: listingForm.plan === "featured",
+          urgent: listingForm.plan === "urgent",
+          monetizationPlan: listingForm.plan,
+          verificationBadges: ["phone", "email"],
+          image: uploadedImages[0]?.name || "Ad listing",
+          mediaGallery: uploadedImages.map((image) => image.name || "Listing image"),
         });
         setListingForm(DEFAULT_AD_FORM);
+        setUploadedImages([]);
+        setShowListingPreview(false);
         setSelectedListingId(createdListing?.id || "");
-        setStatusMessage("Ad submitted successfully and stored in the database.");
+        setStatusMessage(
+          moderationStatus === "pending"
+            ? "Ad submitted and moved to admin approval because it is in a risky category."
+            : "Ad submitted successfully and stored in the database."
+        );
       }
     } catch (error) {
       setStatusMessage(
@@ -1072,6 +1434,47 @@ const Classifieds = () => {
             </article>
           </div>
         )}
+      </section>
+
+      <section className="classifieds-mobile-quickbar" aria-label="Mobile quick listing controls">
+        <div className="classifieds-mobile-search-wrap">
+          <input
+            type="text"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search listings in Kerala"
+          />
+          <button
+            type="button"
+            className="classifieds-inline-button"
+            onClick={() => setMobileFilterSheetOpen(true)}
+          >
+            Filters
+          </button>
+        </div>
+        <div className="classifieds-mobile-category-chips">
+          {CORE_CATEGORIES.slice(0, 10).map((category) => (
+            <button
+              key={`chip-${category}`}
+              type="button"
+              className={`classifieds-inline-button ${categoryFilter.includes(category) ? "active" : ""}`}
+              onClick={() =>
+                setCategoryFilter((current) =>
+                  current.includes(category)
+                    ? current.filter((item) => item !== category)
+                    : [...current, category]
+                )
+              }
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="classifieds-scam-banner">
+        <strong>Safety alert:</strong> Never pay advance without verification. Use in-app chat, verify seller
+        phone/email, and report suspicious offers.
       </section>
 
       {/* Toolbar for Priority Set #3 Features */}
@@ -1222,6 +1625,45 @@ const Classifieds = () => {
                 placeholder="Select locations..."
               />
 
+              <label className="classifieds-field">
+                <span>District</span>
+                <select value={districtFilter} onChange={(event) => setDistrictFilter(event.target.value)}>
+                  {districts.map((district) => (
+                    <option key={district} value={district}>
+                      {district}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="classifieds-field">
+                <span>Pincode / local search</span>
+                <input
+                  type="text"
+                  value={pincodeFilter}
+                  maxLength={6}
+                  onChange={(event) => setPincodeFilter(event.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="Search by pincode"
+                />
+              </label>
+
+              <label className="classifieds-field">
+                <span>Nearby options</span>
+                <div className="classifieds-filter-toggle-row">
+                  <label className="classifieds-checkbox-inline">
+                    <input
+                      type="checkbox"
+                      checked={nearMeOnly}
+                      onChange={(event) => setNearMeOnly(event.target.checked)}
+                    />
+                    Only near me
+                  </label>
+                  <button type="button" className="classifieds-inline-button" onClick={handleUseNearMeFilter}>
+                    Use my location
+                  </button>
+                </div>
+              </label>
+
               <MultiSelectFilter
                 label="Condition"
                 options={conditions}
@@ -1310,6 +1752,29 @@ const Classifieds = () => {
                       View matches
                     </button>
                   </div>
+                ))}
+              </div>
+            </article>
+          )}
+
+          {nearbyListings.length > 0 && (
+            <article className="classifieds-surface-card">
+              <div className="classifieds-section-heading">
+                <h2>Nearby listings</h2>
+                <p>Fresh ads from {currentUserDistrict} and nearby localities.</p>
+              </div>
+              <div className="classifieds-mini-list">
+                {nearbyListings.map((listing) => (
+                  <button
+                    key={`${listing.id}-nearby`}
+                    type="button"
+                    className="classifieds-mini-item"
+                    onClick={() => setSelectedListingId(listing.id)}
+                  >
+                    <strong>{listing.title}</strong>
+                    <span>{listing.location} - {listing.district}</span>
+                    <span>{formatPrice(listing.price)} - {getRelativeTimeLabel(listing.posted)}</span>
+                  </button>
                 ))}
               </div>
             </article>
@@ -1510,8 +1975,14 @@ const Classifieds = () => {
                         <span className="classifieds-media-pill">{listing.category}</span>
                         {listing.isOnline ? <span className="classifieds-media-pill live">Live</span> : null}
                       </div>
+                      <span className="classifieds-listing-media-image">{listing.image}</span>
                       <strong className="classifieds-listing-media-title">{listing.title}</strong>
-                      <span className="classifieds-listing-media-location">{listing.location}</span>
+                      <span className="classifieds-listing-media-location">
+                        {listing.location} | {listing.district} {listing.pincode ? `| ${listing.pincode}` : ""}
+                      </span>
+                      <span className="classifieds-listing-media-posted">
+                        Posted: {new Date(listing.posted).toLocaleDateString("en-IN")}
+                      </span>
                     </div>
                     <div className="classifieds-listing-body">
                       <div className="classifieds-listing-badges">
@@ -1523,11 +1994,15 @@ const Classifieds = () => {
                       </div>
                       <h3>{listing.title}</h3>
                       <strong>{formatPrice(listing.price)}</strong>
-                      <p>{listing.category} - {listing.condition} - {listing.location}</p>
+                      <p>
+                        {listing.category} - {listing.condition} - {listing.location} - {listing.district}
+                        {listing.pincode ? ` (${listing.pincode})` : ""}
+                      </p>
                       <div className="classifieds-seller-row">
                         <span className="classifieds-seller-avatar">{getSellerInitials(listing.seller)}</span>
                         <span className="classifieds-seller-name">{listing.seller}</span>
                         {listing.verified ? <span className="classifieds-seller-verified">Verified</span> : null}
+                        {listing.verified ? <span className="classifieds-seller-verified">Phone + Email</span> : null}
                       </div>
                       <div className="classifieds-card-meta">
                         <span>{formatCompactNumber(listing.views)} views</span>
@@ -1604,6 +2079,14 @@ const Classifieds = () => {
                       <span>Active ads</span>
                     </article>
                     <article className="classifieds-stat-card">
+                      <strong>{sellerStats.expiredListings}</strong>
+                      <span>Expired ads</span>
+                    </article>
+                    <article className="classifieds-stat-card">
+                      <strong>{sellerStats.pendingApproval}</strong>
+                      <span>Pending approval</span>
+                    </article>
+                    <article className="classifieds-stat-card">
                       <strong>{formatCompactNumber(sellerStats.totalViews)}</strong>
                       <span>Total views</span>
                     </article>
@@ -1619,7 +2102,29 @@ const Classifieds = () => {
                       <strong>{formatPrice(sellerStats.avgPrice)}</strong>
                       <span>Avg. price</span>
                     </article>
+                    <article className="classifieds-stat-card">
+                      <strong>{formatCompactNumber(sellerStats.totalFavorites)}</strong>
+                      <span>Wishlist saves</span>
+                    </article>
                   </div>
+                  {sellerStats.expiringSoonListings.length > 0 && (
+                    <div className="classifieds-expiry-list">
+                      <strong>Expiring soon</strong>
+                      {sellerStats.expiringSoonListings.slice(0, 3).map((listing) => (
+                        <div key={`exp-${listing.id}`} className="classifieds-expiry-item">
+                          <span>{listing.title} (Expires {new Date(listing.expiresAt).toLocaleDateString("en-IN")})</span>
+                          <button
+                            type="button"
+                            className="classifieds-inline-button"
+                            onClick={() => handleRelistExpired(listing)}
+                            disabled={submitting}
+                          >
+                            Paid relist
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </article>
               )}
 
@@ -1628,6 +2133,44 @@ const Classifieds = () => {
                   <h2>{editingListingId ? "Edit ad" : "Post a new ad"}</h2>
                   <p>{editingListingId ? "Update your existing ad with new details." : "Create a local classified with title, description, price, category, location, media, and promotion plan."}</p>
                 </div>
+
+              <div className="classifieds-listing-quality-panel">
+                <div className="classifieds-listing-quality-score">
+                  <strong>Completeness score: {listingCompletenessScore}%</strong>
+                  <span>Aim for 80%+ to improve reach and trust.</span>
+                </div>
+                {listingTitleSuggestions.length > 0 && (
+                  <div className="classifieds-listing-quality-block">
+                    <strong>Title suggestions</strong>
+                    <div className="classifieds-chip-cloud">
+                      {listingTitleSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          className="classifieds-inline-button"
+                          onClick={() => setListingForm((current) => ({ ...current, title: suggestion }))}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="classifieds-listing-quality-block">
+                  <strong>Price suggestion</strong>
+                  <span>{listingPriceHint}</span>
+                </div>
+                {duplicateDraftWarning ? (
+                  <div className="classifieds-listing-warning">
+                    Similar listing exists: {duplicateDraftWarning.title} ({duplicateDraftWarning.location})
+                  </div>
+                ) : null}
+                {riskyCategorySelected ? (
+                  <div className="classifieds-listing-warning">
+                    This category needs admin approval before it goes live.
+                  </div>
+                ) : null}
+              </div>
 
               <form className="classifieds-form-grid" onSubmit={handleListingSubmit}>
                 <label className="classifieds-field">
@@ -1649,7 +2192,7 @@ const Classifieds = () => {
                 <label className="classifieds-field">
                   <span>Category</span>
                   <select name="category" value={listingForm.category} onChange={handleListingInputChange}>
-                    {["Vehicles", "Electronics", "Real Estate", "Jobs", "Services"].map((category) => (
+                    {categories.map((category) => (
                       <option key={category} value={category}>
                         {category}
                       </option>
@@ -1660,6 +2203,35 @@ const Classifieds = () => {
                 <label className="classifieds-field">
                   <span>Location</span>
                   <input name="location" value={listingForm.location} onChange={handleListingInputChange} />
+                </label>
+
+                <label className="classifieds-field">
+                  <span>District</span>
+                  <select name="district" value={listingForm.district} onChange={handleListingInputChange}>
+                    {districts
+                      .filter((district) => district !== "All Districts")
+                      .map((district) => (
+                        <option key={district} value={district}>
+                          {district}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <label className="classifieds-field">
+                  <span>Pincode</span>
+                  <input
+                    name="pincode"
+                    value={listingForm.pincode}
+                    maxLength={6}
+                    onChange={(event) =>
+                      setListingForm((current) => ({
+                        ...current,
+                        pincode: event.target.value.replace(/[^\d]/g, ""),
+                      }))
+                    }
+                    placeholder="6-digit pincode"
+                  />
                 </label>
 
                 <label className="classifieds-field">
@@ -1688,9 +2260,20 @@ const Classifieds = () => {
                   <span>Promotion plan</span>
                   <select name="plan" value={listingForm.plan} onChange={handleListingInputChange}>
                     <option value="free">Free listing</option>
-                    <option value="featured">Featured ad</option>
-                    <option value="urgent">Urgent tag</option>
-                    <option value="subscription">Seller subscription</option>
+                    <option value="featured">Featured ad (top placement)</option>
+                    <option value="urgent">Urgent sale badge</option>
+                    <option value="subscription">Business seller plan</option>
+                    <option value="paid-relist">Paid relisting</option>
+                  </select>
+                </label>
+
+                <label className="classifieds-field">
+                  <span>Listing expiry window (days)</span>
+                  <select value={listingExpiryDays} onChange={(event) => setListingExpiryDays(event.target.value)}>
+                    <option value="14">14 days</option>
+                    <option value="30">30 days</option>
+                    <option value="45">45 days</option>
+                    <option value="60">60 days</option>
                   </select>
                 </label>
 
@@ -1754,6 +2337,13 @@ const Classifieds = () => {
                 <button type="submit" className="classifieds-primary-button" disabled={submitting}>
                   {submitting ? "Saving..." : editingListingId ? "Update ad" : "Submit ad"}
                 </button>
+                <button
+                  type="button"
+                  className="classifieds-secondary-button"
+                  onClick={() => setShowListingPreview((current) => !current)}
+                >
+                  {showListingPreview ? "Hide preview" : "Preview before publish"}
+                </button>
                 {editingListingId && (
                   <button
                     type="button"
@@ -1767,6 +2357,16 @@ const Classifieds = () => {
                   </button>
                 )}
               </form>
+
+              {showListingPreview ? (
+                <div className="classifieds-preview-card">
+                  <strong>Listing Preview</strong>
+                  <h3>{listingForm.title || "Listing title"}</h3>
+                  <p>{listingForm.category} | {listingForm.condition} | {listingForm.location || "Location"}</p>
+                  <p>{listingForm.description || "Description preview appears here."}</p>
+                  <span>{listingForm.price ? formatPrice(listingForm.price) : "Price pending"}</span>
+                </div>
+              ) : null}
             </article>
             </>
           ) : null}
@@ -1788,7 +2388,10 @@ const Classifieds = () => {
                 </div>
                 <div>
                   <strong>Approval system</strong>
-                  <span>{dashboardStats.reports} reports currently stored for moderation attention.</span>
+                  <span>
+                    {dashboardStats.reports} reports currently stored for moderation attention. Risky categories
+                    route to admin approval automatically.
+                  </span>
                 </div>
               </div>
             </article>
@@ -1811,9 +2414,102 @@ const Classifieds = () => {
                   <strong>Seller Pro</strong>
                   <span>Subscription-led tools for repeat sellers and micro-businesses.</span>
                 </div>
+                <div>
+                  <strong>Local ad banners</strong>
+                  <span>District-targeted banner slots for partners and local businesses.</span>
+                </div>
               </div>
             </article>
           </section>
+
+          {activeRole === "admin" ? (
+            <article className="classifieds-surface-card">
+              <div className="classifieds-section-heading">
+                <h2>Admin moderation panel</h2>
+                <p>Approve/reject queue, spam signals, banned users, category controls, and expiry settings.</p>
+              </div>
+              <div className="classifieds-admin-grid">
+                <div>
+                  <strong>{adminModerationQueue.pendingApprovals}</strong>
+                  <span>Pending approvals</span>
+                </div>
+                <div>
+                  <strong>{adminModerationQueue.riskyCategoryPending}</strong>
+                  <span>Risky category queue</span>
+                </div>
+                <div>
+                  <strong>{adminModerationQueue.reportedListings}</strong>
+                  <span>Reported listings queue</span>
+                </div>
+                <div>
+                  <strong>{adminModerationQueue.spamKeywordDetections}</strong>
+                  <span>Spam keyword detections</span>
+                </div>
+              </div>
+
+              {spamKeywordHits.length > 0 ? (
+                <div className="classifieds-spam-queue">
+                  <strong>Spam keyword matches</strong>
+                  {spamKeywordHits.slice(0, 5).map((listing) => (
+                    <div key={`spam-${listing.id}`} className="classifieds-expiry-item">
+                      <span>{listing.title} ({listing.category})</span>
+                      <button
+                        type="button"
+                        className="classifieds-inline-button"
+                        onClick={() => setSelectedListingId(listing.id)}
+                      >
+                        Review
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="classifieds-admin-controls">
+                <label className="classifieds-field">
+                  <span>Category management</span>
+                  <div className="classifieds-filter-toggle-row">
+                    <input
+                      type="text"
+                      value={customCategoryInput}
+                      onChange={(event) => setCustomCategoryInput(event.target.value)}
+                      placeholder="Add custom category"
+                    />
+                    <button type="button" className="classifieds-inline-button" onClick={handleAddCustomCategory}>
+                      Add
+                    </button>
+                  </div>
+                </label>
+                <label className="classifieds-field">
+                  <span>Listing expiry control (days)</span>
+                  <input
+                    type="number"
+                    min="7"
+                    max="90"
+                    value={listingExpiryDays}
+                    onChange={(event) => setListingExpiryDays(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="classifieds-banned-users">
+                <strong>Banned users list</strong>
+                {adminBannedUsers.length === 0 ? <span>No banned users yet.</span> : null}
+                {adminBannedUsers.map((sellerName) => (
+                  <div key={`ban-${sellerName}`} className="classifieds-expiry-item">
+                    <span>{sellerName}</span>
+                    <button
+                      type="button"
+                      className="classifieds-inline-button"
+                      onClick={() => handleAdminUnban(sellerName)}
+                    >
+                      Unban
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ) : null}
         </div>
 
         <aside className="classifieds-detail-column">
@@ -1830,7 +2526,10 @@ const Classifieds = () => {
                       </span>
                     </div>
                     <h2>{selectedListing.title}</h2>
-                    <p>{selectedListing.location} - {selectedListing.locality}</p>
+                    <p>
+                      {selectedListing.location} - {selectedListing.locality} - {selectedListing.district}
+                      {selectedListing.pincode ? ` (${selectedListing.pincode})` : ""}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -2118,6 +2817,9 @@ const Classifieds = () => {
                   <div className="classifieds-section-heading">
                     <h3>Buyer and seller chat</h3>
                     <p>Message history is loaded from the backend store for this listing.</p>
+                    <span className="classifieds-chat-status">
+                      Seller status: {selectedListing.isOnline ? "Online now" : `Last seen ${getRelativeTimeLabel(selectedListing.posted)}`}
+                    </span>
                   </div>
                   <div className="classifieds-message-list">
                     {selectedMessages.length ? (
@@ -2145,6 +2847,24 @@ const Classifieds = () => {
                       Send
                     </button>
                   </div>
+                  <div className="classifieds-chat-quick-replies">
+                    {QUICK_CHAT_REPLIES.map((reply) => (
+                      <button
+                        key={reply}
+                        type="button"
+                        className="classifieds-inline-button"
+                        onClick={() => handleQuickChatMessage(reply)}
+                      >
+                        {reply}
+                      </button>
+                    ))}
+                    <button type="button" className="classifieds-inline-button" onClick={handleOfferPrice}>
+                      Offer price
+                    </button>
+                    <button type="button" className="classifieds-inline-button" onClick={handleShareLocationInChat}>
+                      Share location
+                    </button>
+                  </div>
                 </section>
 
                 <section className="classifieds-surface-subcard">
@@ -2163,7 +2883,7 @@ const Classifieds = () => {
                     <button
                       type="button"
                       className="classifieds-inline-button"
-                      onClick={() => setStatusMessage(`User blocked for ${selectedListing.title}.`)}
+                      onClick={() => handleBlockUser(selectedListing.seller)}
                     >
                       Block user
                     </button>
@@ -2186,6 +2906,22 @@ const Classifieds = () => {
                     />
                   </label>
                   <p className="classifieds-detail-description">Stored reports for this ad: {selectedReportCount}</p>
+                  <div className="classifieds-blocked-users">
+                    <strong>Blocked users</strong>
+                    {blockedUsers.length === 0 ? <span>No blocked users.</span> : null}
+                    {blockedUsers.map((sellerName) => (
+                      <div key={`blocked-${sellerName}`} className="classifieds-expiry-item">
+                        <span>{sellerName}</span>
+                        <button
+                          type="button"
+                          className="classifieds-inline-button"
+                          onClick={() => handleUnblockUser(sellerName)}
+                        >
+                          Unblock
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </section>
 
                 {leadBoard.length ? (
@@ -2454,6 +3190,59 @@ const Classifieds = () => {
           }}
         />
       )}
+
+      {mobileFilterSheetOpen ? (
+        <div className="classifieds-filter-sheet-overlay" onClick={() => setMobileFilterSheetOpen(false)}>
+          <div className="classifieds-filter-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="classifieds-filter-sheet-header">
+              <strong>Filters</strong>
+              <button type="button" className="classifieds-inline-button" onClick={() => setMobileFilterSheetOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="classifieds-filter-sheet-body">
+              <label className="classifieds-field">
+                <span>District</span>
+                <select value={districtFilter} onChange={(event) => setDistrictFilter(event.target.value)}>
+                  {districts.map((district) => (
+                    <option key={`sheet-${district}`} value={district}>
+                      {district}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="classifieds-field">
+                <span>Pincode</span>
+                <input
+                  type="text"
+                  value={pincodeFilter}
+                  maxLength={6}
+                  onChange={(event) => setPincodeFilter(event.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="6-digit pincode"
+                />
+              </label>
+              <label className="classifieds-checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={nearMeOnly}
+                  onChange={(event) => setNearMeOnly(event.target.checked)}
+                />
+                Only near me
+              </label>
+              <label className="classifieds-field">
+                <span>Sort by</span>
+                <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                  <option value="featured">Featured first</option>
+                  <option value="latest">Latest</option>
+                  <option value="price-low">Price low to high</option>
+                  <option value="price-high">Price high to low</option>
+                  <option value="popular">Most engaged</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
