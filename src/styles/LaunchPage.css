@@ -6,11 +6,11 @@
   --nila-bg-2: #eef1f6;
   --nila-bg-3: #e8edf3;
   --nila-text: #0f1b2e;
-  --nila-text-muted: #4a5d78;
+  --nila-text-muted: #3f526f;
   --nila-green: #0f7c6a;
   --nila-green-deep: #0a4a41;
-  --nila-gold: #e3bd74;
-  --nila-gold-deep: #cb9b48;
+  --nila-gold: #efc978;
+  --nila-gold-deep: #d6a24a;
   --nila-card-shadow: 0 14px 36px rgba(15, 27, 46, 0.1);
 }
 
@@ -1295,6 +1295,25 @@
   .language-control {
     position: static;
     margin-bottom: 0.75rem;
+  }
+
+  .launch-hero-content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .language-control {
+    order: 0;
+  }
+
+  .registration-actions {
+    order: 1;
+    margin-top: 0;
+    margin-bottom: 0.95rem;
+  }
+
+  .launch-hero-grid {
+    order: 2;
   }
 
   .launch-hero h1 {

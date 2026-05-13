@@ -414,6 +414,24 @@ const LaunchPage = ({
               <img src="/logo.svg" alt="NilaHub" className="launch-logo" />
               <p className="launch-eyebrow">{launch.brand}</p>
               <h1>{launch.title}</h1>
+              <div className="registration-actions" aria-label="Registration options">
+                <button
+                  type="button"
+                  className="registration-option login-option"
+                  onClick={() => onSelectRegistrationType("login")}
+                >
+                  <span>{launch.login}</span>
+                  <small>{launch.loginHelp}</small>
+                </button>
+                <button
+                  type="button"
+                  className="registration-option primary-option"
+                  onClick={() => onSelectRegistrationType("user")}
+                >
+                  <span>{launch.user}</span>
+                  <small>{launch.userHelp}</small>
+                </button>
+              </div>
               <p className="launch-tagline">{launch.tagline}</p>
               <p className="launch-intro">{launch.intro}</p>
               <div className="hero-highlights" aria-label="Platform highlights">
@@ -466,24 +484,6 @@ const LaunchPage = ({
             </aside>
           </div>
 
-          <div className="registration-actions" aria-label="Registration options">
-            <button
-              type="button"
-              className="registration-option login-option"
-              onClick={() => onSelectRegistrationType("login")}
-            >
-              <span>{launch.login}</span>
-              <small>{launch.loginHelp}</small>
-            </button>
-            <button
-              type="button"
-              className="registration-option primary-option"
-              onClick={() => onSelectRegistrationType("user")}
-            >
-              <span>{launch.user}</span>
-              <small>{launch.userHelp}</small>
-            </button>
-          </div>
         </div>
       </section>
 
