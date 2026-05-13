@@ -118,6 +118,20 @@ const DEFAULT_MESSAGE_PAGINATION = {
 };
 const EMERGENCY_CALL_STORAGE_KEY = 'malabarbazaar-emergency-call';
 const MESSAGE_OUTBOX_RETRY_LIMIT = 5;
+const LINKUP_THEME_STORAGE_KEY = 'linkup-theme-variant';
+
+const readStoredLinkUpTheme = () => {
+  if (typeof window === 'undefined') {
+    return 'signature';
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(LINKUP_THEME_STORAGE_KEY);
+    return storedValue === 'executive' ? 'executive' : 'signature';
+  } catch (error) {
+    return 'signature';
+  }
+};
 
 const readPendingEmergencyCall = () => {
   if (typeof window === 'undefined') {
@@ -279,6 +293,7 @@ const Messaging = () => {
   const [showChatroomCreation, setShowChatroomCreation] = useState(false);
   const [showChatroomBrowser, setShowChatroomBrowser] = useState(false);
   const [chatroomSearchQuery, setChatroomSearchQuery] = useState('');
+  const [linkupTheme, setLinkupTheme] = useState(() => readStoredLinkUpTheme());
 
 
   const socketRef = useRef(null);
@@ -347,6 +362,22 @@ const Messaging = () => {
       camera: getFamilyPermissionSnapshot(matchingContact?.familyAccess?.camera),
     };
   }, [contacts, currentUser, selectedChat]);
+
+  const handleToggleLinkUpTheme = useCallback(() => {
+    setLinkupTheme((prevTheme) => (prevTheme === 'signature' ? 'executive' : 'signature'));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(LINKUP_THEME_STORAGE_KEY, linkupTheme);
+    } catch (error) {
+      // Ignore storage failures and keep theme switching usable.
+    }
+  }, [linkupTheme]);
 
   const persistOutbox = useCallback((nextQueue) => {
     outboxRef.current = Array.isArray(nextQueue) ? nextQueue : [];
@@ -2460,7 +2491,11 @@ const Messaging = () => {
   };
 
   return (
-    <div className="messaging-container">
+    <div
+      className={`messaging-container linkup-premium ${
+        linkupTheme === 'executive' ? 'linkup-executive' : 'linkup-signature'
+      }`}
+    >
       <div className={`connection-status ${isOnline ? 'online' : 'offline'}`}>
         <span className="status-dot"></span>
         {isOnline ? 'Connected' : 'Disconnected'}
@@ -2534,6 +2569,19 @@ const Messaging = () => {
               </button>
             </div>
             <div className="sidebar-tools">
+              <button
+                className={`theme-variant-btn ${linkupTheme === 'executive' ? 'executive' : ''}`}
+                onClick={handleToggleLinkUpTheme}
+                type="button"
+                aria-pressed={linkupTheme === 'executive'}
+                title={
+                  linkupTheme === 'executive'
+                    ? 'Switch to Signature Premium theme'
+                    : 'Switch to Dark-Gold Executive theme'
+                }
+              >
+                {linkupTheme === 'executive' ? 'Executive' : 'Signature'}
+              </button>
               <NotificationBell
                 notifications={notifications}
                 onClear={handleClearAllNotifications}

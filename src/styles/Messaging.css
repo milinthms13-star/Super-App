@@ -6338,3 +6338,319 @@
   }
 }
 
+/* ==================== LinkUp Premium Redesign Layer ==================== */
+.messaging-container.linkup-premium {
+  --linkup-premium-bg-deep: #071a34;
+  --linkup-premium-bg-mid: #0b2a4f;
+  --linkup-premium-bg-soft: #0f3f66;
+  --linkup-premium-aurora: #14b8a6;
+  --linkup-premium-cyan: #22d3ee;
+  --linkup-premium-gold: #f4c76b;
+  --linkup-premium-surface: rgba(255, 255, 255, 0.9);
+  --linkup-premium-surface-strong: rgba(255, 255, 255, 0.97);
+  --linkup-premium-border: rgba(15, 40, 84, 0.14);
+  --linkup-premium-text: #10233f;
+  --linkup-premium-muted: #566b8d;
+  --linkup-premium-glow: 0 22px 50px rgba(7, 26, 52, 0.2);
+  font-family: "Plus Jakarta Sans", "Manrope", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 8% 6%, rgba(34, 211, 238, 0.2), transparent 28%),
+    radial-gradient(circle at 88% 12%, rgba(20, 184, 166, 0.22), transparent 24%),
+    linear-gradient(165deg, #eaf3ff 0%, #eff8ff 44%, #e8f8f8 100%);
+}
+
+.messaging-container.linkup-premium .messaging-layout {
+  gap: 20px;
+  padding: 20px;
+  grid-template-columns: 360px minmax(0, 1fr);
+}
+
+.messaging-container.linkup-premium .connection-status {
+  margin: 16px 20px 0;
+  border: 1px solid rgba(15, 40, 84, 0.14);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(238, 251, 255, 0.92));
+  box-shadow: 0 14px 28px rgba(7, 26, 52, 0.12);
+}
+
+.messaging-container.linkup-premium .messaging-sidebar,
+.messaging-container.linkup-premium .messaging-main {
+  border-radius: 30px;
+  border: 1px solid var(--linkup-premium-border);
+  box-shadow: var(--linkup-premium-glow);
+  backdrop-filter: blur(16px);
+}
+
+.messaging-container.linkup-premium .messaging-sidebar {
+  background:
+    linear-gradient(162deg, rgba(255, 255, 255, 0.96) 0%, rgba(236, 247, 255, 0.95) 100%);
+}
+
+.messaging-container.linkup-premium .messaging-main {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(242, 252, 255, 0.97) 52%, rgba(237, 252, 249, 0.98) 100%);
+}
+
+.messaging-container.linkup-premium .sidebar-tabs .tab-btn.active,
+.messaging-container.linkup-premium .btn-new-chat,
+.messaging-container.linkup-premium .btn-start-chat,
+.messaging-container.linkup-premium .btn-add-contact,
+.messaging-container.linkup-premium .notification-enable-btn,
+.messaging-container.linkup-premium .unread-badge,
+.messaging-container.linkup-premium .message.sent .message-bubble,
+.messaging-container.linkup-premium .message-input-controls .btn-send,
+.messaging-container.linkup-premium .messaging-empty-action-btn.primary {
+  background: linear-gradient(128deg, var(--linkup-premium-bg-deep) 0%, var(--linkup-premium-bg-mid) 48%, var(--linkup-premium-bg-soft) 100%);
+  color: #ffffff;
+}
+
+.messaging-container.linkup-premium .sidebar-tabs .tab-btn.active,
+.messaging-container.linkup-premium .btn-new-chat,
+.messaging-container.linkup-premium .notification-enable-btn,
+.messaging-container.linkup-premium .messaging-empty-action-btn.primary {
+  box-shadow: 0 14px 28px rgba(11, 42, 79, 0.26);
+}
+
+.messaging-container.linkup-premium .search-input,
+.messaging-container.linkup-premium .chat-item,
+.messaging-container.linkup-premium .contact-item,
+.messaging-container.linkup-premium .user-card,
+.messaging-container.linkup-premium .user-search-result,
+.messaging-container.linkup-premium .invitation-card,
+.messaging-container.linkup-premium .message.received .message-bubble {
+  border: 1px solid rgba(11, 42, 79, 0.1);
+  background: var(--linkup-premium-surface);
+  box-shadow: 0 12px 30px rgba(7, 26, 52, 0.08);
+}
+
+.messaging-container.linkup-premium .chat-item,
+.messaging-container.linkup-premium .contact-item {
+  border-radius: 24px;
+}
+
+.messaging-container.linkup-premium .chat-item.active {
+  border-color: rgba(11, 42, 79, 0.32);
+  background:
+    linear-gradient(130deg, rgba(7, 26, 52, 0.12), rgba(11, 42, 79, 0.06) 46%, rgba(20, 184, 166, 0.07) 100%);
+  box-shadow: 0 18px 32px rgba(7, 26, 52, 0.16);
+}
+
+.messaging-container.linkup-premium .chat-avatar,
+.messaging-container.linkup-premium .contact-avatar,
+.messaging-container.linkup-premium .user-avatar,
+.messaging-container.linkup-premium .chat-header-avatar {
+  border-radius: 16px;
+  color: #edf6ff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(145deg, rgba(7, 26, 52, 0.9), rgba(15, 63, 102, 0.9));
+}
+
+.messaging-container.linkup-premium .chat-title,
+.messaging-container.linkup-premium .contact-details h4,
+.messaging-container.linkup-premium .user-card h4,
+.messaging-container.linkup-premium .chat-header-info h3 {
+  color: var(--linkup-premium-text);
+}
+
+.messaging-container.linkup-premium .chat-preview,
+.messaging-container.linkup-premium .chat-time,
+.messaging-container.linkup-premium .contact-category,
+.messaging-container.linkup-premium .chat-status,
+.messaging-container.linkup-premium .user-card p {
+  color: var(--linkup-premium-muted);
+}
+
+.messaging-container.linkup-premium .chat-window-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(130deg, rgba(7, 26, 52, 0.98) 0%, rgba(11, 42, 79, 0.95) 58%, rgba(15, 63, 102, 0.92) 100%);
+}
+
+.messaging-container.linkup-premium .chat-header-info h3,
+.messaging-container.linkup-premium .chat-header-info p,
+.messaging-container.linkup-premium .chat-status {
+  color: #eff7ff;
+}
+
+.messaging-container.linkup-premium .btn-icon {
+  border: 1px solid rgba(244, 199, 107, 0.36);
+  background: rgba(7, 26, 52, 0.32);
+  color: #f9f5ea;
+}
+
+.messaging-container.linkup-premium .btn-icon:hover,
+.messaging-container.linkup-premium .btn-icon.active {
+  background: rgba(244, 199, 107, 0.2);
+}
+
+.messaging-container.linkup-premium .messages-container {
+  background:
+    radial-gradient(circle at 84% 12%, rgba(20, 184, 166, 0.12), transparent 28%),
+    radial-gradient(circle at 14% 88%, rgba(34, 211, 238, 0.1), transparent 24%),
+    linear-gradient(180deg, #f8fcff 0%, #f5fbff 54%, #eefaf8 100%);
+}
+
+.messaging-container.linkup-premium .message-bubble {
+  border-radius: 20px;
+}
+
+.messaging-container.linkup-premium .message.sent .message-bubble {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 30px rgba(7, 26, 52, 0.24);
+}
+
+.messaging-container.linkup-premium .messaging-empty-state {
+  background:
+    radial-gradient(circle at 8% 10%, rgba(34, 211, 238, 0.16), transparent 30%),
+    radial-gradient(circle at 88% 12%, rgba(20, 184, 166, 0.14), transparent 24%),
+    linear-gradient(180deg, rgba(251, 255, 255, 0.96), rgba(242, 251, 255, 0.98));
+}
+
+.messaging-container.linkup-premium .messaging-empty-shell {
+  width: min(930px, 100%);
+  border-radius: 28px;
+  border: 1px solid rgba(11, 42, 79, 0.16);
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.97), rgba(238, 250, 255, 0.95));
+  box-shadow: 0 26px 48px rgba(7, 26, 52, 0.16);
+  animation: linkupPremiumLift 360ms ease-out;
+}
+
+@keyframes linkupPremiumLift {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.messaging-container.linkup-premium .messaging-empty-hero h2 {
+  color: #0b2342;
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  letter-spacing: -0.02em;
+}
+
+.messaging-container.linkup-premium .messaging-empty-hero p {
+  color: #4a6182;
+}
+
+.messaging-container.linkup-premium .messaging-status-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+}
+
+.messaging-container.linkup-premium .messaging-status-pill {
+  border: 1px solid rgba(11, 42, 79, 0.16);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  color: #14335d;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.messaging-container.linkup-premium .messaging-empty-metrics {
+  margin-top: 1rem;
+  gap: 0.75rem;
+}
+
+.messaging-container.linkup-premium .messaging-empty-metric {
+  border-radius: 18px;
+  border: 1px solid rgba(11, 42, 79, 0.14);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(233, 246, 255, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.messaging-container.linkup-premium .metric-label {
+  color: #4a6385;
+  letter-spacing: 0.06em;
+}
+
+.messaging-container.linkup-premium .messaging-empty-metric strong {
+  color: #0d2e57;
+  font-size: 1.28rem;
+}
+
+.messaging-container.linkup-premium .messaging-empty-action-btn {
+  border: 1px solid rgba(11, 42, 79, 0.18);
+  background: rgba(255, 255, 255, 0.9);
+  color: #143761;
+}
+
+.messaging-container.linkup-premium .messaging-empty-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(11, 42, 79, 0.16);
+}
+
+.messaging-container.linkup-premium .messaging-empty-recent-card,
+.messaging-container.linkup-premium .messaging-insight-card {
+  border: 1px solid rgba(11, 42, 79, 0.14);
+  background: var(--linkup-premium-surface-strong);
+  box-shadow: 0 14px 28px rgba(7, 26, 52, 0.08);
+}
+
+.messaging-container.linkup-premium .recent-unread-count {
+  background: linear-gradient(130deg, #0b2a4f, #0f3f66);
+}
+
+.messaging-container.linkup-premium .messaging-online-dot {
+  background: var(--linkup-premium-aurora);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.16);
+}
+
+.messaging-container.linkup-premium .messaging-inline-link {
+  border-radius: 12px;
+  border: 1px solid rgba(11, 42, 79, 0.14);
+  background: rgba(245, 252, 255, 0.92);
+}
+
+.messaging-container.linkup-premium .messaging-inline-link:hover {
+  border-color: rgba(11, 42, 79, 0.32);
+  background: #ffffff;
+}
+
+.messaging-container.linkup-premium .messaging-insight-card h4 {
+  color: #0f2d56;
+}
+
+.messaging-container.linkup-premium .messaging-insight-empty {
+  color: #667da1;
+}
+
+.messaging-container.linkup-premium .message-input-area {
+  border-top: 1px solid rgba(11, 42, 79, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 252, 255, 0.94));
+}
+
+@media (max-width: 1180px) {
+  .messaging-container.linkup-premium .messaging-layout {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .messaging-container.linkup-premium .messaging-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .messaging-container.linkup-premium .connection-status {
+    margin: 12px 12px 0;
+  }
+
+  .messaging-container.linkup-premium .messaging-empty-shell {
+    padding: 1.1rem;
+  }
+
+  .messaging-container.linkup-premium .messaging-empty-recent-list,
+  .messaging-container.linkup-premium .messaging-empty-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+

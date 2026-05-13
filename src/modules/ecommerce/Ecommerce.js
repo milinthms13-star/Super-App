@@ -64,6 +64,29 @@ const statusCopy = {
   rejected: "Needs Changes",
 };
 
+const QUICK_ADD_TEMPLATES = {
+  starter: {
+    model: "Standard",
+    color: "Classic",
+    styleTheme: "Essential",
+    expiryApplicable: "no",
+  },
+  food: {
+    model: "Fresh",
+    color: "Natural",
+    styleTheme: "Farm-to-Table",
+    expiryApplicable: "yes",
+  },
+  premium: {
+    model: "Premium",
+    color: "Midnight",
+    styleTheme: "Luxury",
+    expiryApplicable: "no",
+  },
+};
+
+const REQUIRED_LISTING_FIELDS = ["name", "category", "description", "image"];
+
 const isReturnedForReview = (product) =>
   product?.approvalStatus === "pending" && Boolean(product?.moderationNote?.trim());
 
@@ -281,6 +304,11 @@ const Ecommerce = ({
   const [sellerListingQuery, setSellerListingQuery] = useState("");
   const [sellerListingStatusFilter, setSellerListingStatusFilter] = useState("all");
   const [sellerListingCategoryFilter, setSellerListingCategoryFilter] = useState("All");
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [selectedQuickAddTemplate, setSelectedQuickAddTemplate] = useState("starter");
+  const [listingPreviewVisible, setListingPreviewVisible] = useState(false);
+  const [bulkActionMessage, setBulkActionMessage] = useState("");
+  const [draftSavedAt, setDraftSavedAt] = useState(null);
   const [productForm, setProductForm] = useState(DEFAULT_PRODUCT_FORM);
   const [editingProductId, setEditingProductId] = useState("");
   const [submitMessage, setSubmitMessage] = useState("");
@@ -1022,6 +1050,39 @@ const Ecommerce = ({
   }, [productForm.subcategory, productFormSubcategories]);
 
   useEffect(() => {
+    if (!productForm.category) {
+      return;
+    }
+
+    const categoryHints = {
+      Electronics: {
+        styleTheme: "Tech",
+        model: productForm.model || "Latest",
+        color: productForm.color || "Graphite",
+      },
+      Groceries: {
+        styleTheme: "Fresh",
+        model: productForm.model || "Pack",
+        color: productForm.color || "Natural",
+        expiryApplicable: "yes",
+      },
+      Fashion: {
+        styleTheme: "Trend",
+        model: productForm.model || "Classic",
+        color: productForm.color || "Midnight",
+      },
+    };
+
+    const hints = categoryHints[productForm.category];
+    if (hints) {
+      setProductForm((currentForm) => ({
+        ...currentForm,
+        ...hints,
+      }));
+    }
+  }, [productForm.category]);
+
+  useEffect(() => {
     if (!productImageFile) {
       setProductImagePreview(resolveProductImageSrc(productForm.image));
       return undefined;
@@ -1126,6 +1187,97 @@ const Ecommerce = ({
     }
   };
 
+  const calculateListingProgress = () => {
+    const completed = REQUIRED_LISTING_FIELDS.filter((field) => {
+      const value = field === "image" ? productImagePreview : productForm[field];
+      return Boolean(String(value || "").trim());
+    }).length;
+
+    return {
+      completed,
+      total: REQUIRED_LISTING_FIELDS.length,
+      percent: Math.round((completed / REQUIRED_LISTING_FIELDS.length) * 100),
+    };
+  };
+
+  const handleOpenQuickAddModal = () => {
+    setSelectedQuickAddTemplate("starter");
+    setShowQuickAddModal(true);
+  };
+
+  const handleCloseQuickAddModal = () => {
+    setShowQuickAddModal(false);
+  };
+
+  const handleApplyQuickAddTemplate = (templateKey) => {
+    const template = QUICK_ADD_TEMPLATES[templateKey];
+    if (!template) return;
+
+    setProductForm((currentForm) => ({
+      ...currentForm,
+      ...template,
+    }));
+    setSubmitMessage(`Template applied: ${templateKey.replace("-", " ")}. Adjust product name, category, and image to finish.`);
+    setShowQuickAddModal(false);
+  };
+
+  const handleSaveDraft = () => {
+    setDraftSavedAt(new Date());
+    setSubmitMessage("Draft saved locally. Continue editing to publish your listing.");
+  };
+
+  const handleTogglePreview = () => {
+    setListingPreviewVisible((currentValue) => !currentValue);
+  };
+
+  const handleDuplicateProduct = (product) => {
+    setEditingProductId("");
+    setProductForm(buildProductFormState(product));
+    setProductImageFile(null);
+    if (productImageInputRef.current) {
+      productImageInputRef.current.value = "";
+    }
+    setSubmitMessage(`Duplicated ${product.name}. Update the listing details and save as a new draft.`);
+    requestAnimationFrame(() => {
+      formPanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      productNameInputRef.current?.focus();
+    });
+  };
+
+  const handleBulkAction = (action) => {
+    setBulkActionMessage(`Bulk action triggered: ${action}. This panel helps you manage many listings faster.`);
+  };
+
+  const getPreviewProduct = () => ({
+    id: "preview",
+    name: productForm.name || "Product preview",
+    businessName: currentBusinessName,
+    category: productForm.category || "Category",
+    subcategory: productForm.subcategory,
+    model: productForm.model,
+    styleTheme: productForm.styleTheme,
+    color: productForm.color,
+    description: productForm.description || "A preview of how this product will appear to shoppers.",
+    image: productImagePreview || productForm.image,
+    price: Number(productForm.price) || 0,
+    mrp: Number(productForm.mrp) || 0,
+    discountAmount: Number(productForm.discountAmount) || 0,
+    discountPercentage: Number(productForm.discountPercentage) || 0,
+    isDiscountActive: Number(productForm.discountAmount || 0) > 0,
+    returnEligible: productForm.returnAllowed === "yes",
+    securePayment: true,
+    verifiedSeller: true,
+    fastDelivery: true,
+    trustedBy: 1200,
+    rating: 4.8,
+    reviews: 28,
+  });
+
+  const productListingProgress = calculateListingProgress();
+
   const handleProductImageChange = (event) => {
     const nextFile = event.target.files?.[0] || null;
     setProductImageFile(nextFile);
@@ -1137,8 +1289,10 @@ const Ecommerce = ({
     }
   };
 
-  const handleCreateOrUpdateProduct = async (event) => {
-    event.preventDefault();
+  const handleCreateOrUpdateProduct = async (event = null) => {
+    if (event?.preventDefault) {
+      event.preventDefault();
+    }
 
     if (!productForm.name.trim()) {
       setSubmitMessage("Enter the product name before saving.");
@@ -1517,6 +1671,40 @@ const Ecommerce = ({
 
   return (
     <div className={`ecommerce-container ${isEntrepreneur ? "seller-mode" : "buyer-mode"}`}>
+      {showQuickAddModal && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="quick-add-modal">
+            <div className="quick-add-header">
+              <h2>Quick Add Listing</h2>
+              <button type="button" className="btn btn-outline" onClick={handleCloseQuickAddModal}>
+                Close
+              </button>
+            </div>
+            <p className="quick-add-copy">Choose a starting template to create a draft faster. This fills price, category, and seller-friendly defaults.</p>
+            <div className="quick-add-grid">
+              {Object.entries(QUICK_ADD_TEMPLATES).map(([key, template]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`quick-add-card ${selectedQuickAddTemplate === key ? "active" : ""}`}
+                  onClick={() => setSelectedQuickAddTemplate(key)}
+                >
+                  <strong>{key.replace("-", " ")}</strong>
+                  <small>{template.styleTheme} style</small>
+                </button>
+              ))}
+            </div>
+            <div className="quick-add-actions">
+              <button type="button" className="btn btn-outline" onClick={handleCloseQuickAddModal}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => handleApplyQuickAddTemplate(selectedQuickAddTemplate)}>
+                Apply template
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="ecommerce-header">
         <h1>GlobeMart</h1>
         <p>
@@ -1644,6 +1832,22 @@ const Ecommerce = ({
               >
                 View analytics
               </button>
+              <button
+                type="button"
+                className="seller-workbench-btn"
+                onClick={handleOpenQuickAddModal}
+              >
+                Quick Add
+              </button>
+            </div>
+            <div className="seller-bulk-actions">
+              <span>Bulk actions</span>
+              <div className="seller-bulk-action-buttons">
+                <button type="button" className="seller-workbench-btn" onClick={() => handleBulkAction("publish")}>Bulk publish</button>
+                <button type="button" className="seller-workbench-btn" onClick={() => handleBulkAction("update stock")}>Bulk stock update</button>
+                <button type="button" className="seller-workbench-btn" onClick={() => handleBulkAction("refresh listings")}>Refresh draft view</button>
+              </div>
+              {bulkActionMessage && <p className="seller-bulk-message">{bulkActionMessage}</p>}
             </div>
             <div className="seller-summary-highlights">
               <button type="button" className="seller-summary-link" onClick={() => scrollToSection(formPanelRef)}>
@@ -1730,6 +1934,49 @@ const Ecommerce = ({
               <span>Step 1: catalog basics</span>
               <span>Step 2: wait for approval</span>
               <span>Step 3: add stock batches</span>
+            </div>
+            <div className="seller-form-progress">
+              <div className="seller-form-progress-header">
+                <div>
+                  <strong>Listing progress</strong>
+                  <p>{productListingProgress.completed}/{productListingProgress.total} required fields complete</p>
+                </div>
+                <button type="button" className="btn btn-outline" onClick={handleTogglePreview}>
+                  {listingPreviewVisible ? "Hide preview" : "Preview listing"}
+                </button>
+              </div>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${productListingProgress.percent}%` }} />
+              </div>
+            </div>
+            <div className={`seller-preview-panel ${listingPreviewVisible ? "visible" : ""}`}>
+              <div className="seller-preview-header">
+                <strong>Shopper preview</strong>
+                <small>How this listing will appear in GlobeMart search results.</small>
+              </div>
+              <div className="seller-preview-body">
+                <div className="seller-preview-image">
+                  {productImagePreview ? (
+                    <img src={productImagePreview} alt={productForm.name || "Product preview"} />
+                  ) : (
+                    <div className="seller-preview-placeholder">Preview image</div>
+                  )}
+                </div>
+                <div className="seller-preview-copy">
+                  <h4>{productForm.name || "Product name"}</h4>
+                  <p>{productForm.description || "A short description helps shoppers decide faster."}</p>
+                  <div className="seller-preview-metadata">
+                    <span>{productForm.category || "Category"}</span>
+                    {productForm.subcategory && <span>{productForm.subcategory}</span>}
+                    {productForm.styleTheme && <span>{productForm.styleTheme}</span>}
+                  </div>
+                  <div className="seller-preview-badges">
+                    <span>Fast delivery</span>
+                    <span>Verified seller</span>
+                    <span>Return eligible</span>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="seller-form-shortcuts" aria-label="Listing templates">
               <button
@@ -1909,6 +2156,25 @@ const Ecommerce = ({
                   </button>
                 )}
               </div>
+
+              <div className="seller-form-footer-mobile">
+                <button type="button" className="btn btn-outline" onClick={handleSaveDraft}>
+                  Save Draft
+                </button>
+                <button type="button" className="btn btn-outline" onClick={handleTogglePreview}>
+                  {listingPreviewVisible ? "Hide preview" : "Preview"}
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => handleCreateOrUpdateProduct()} disabled={submitting}>
+                  {submitting
+                    ? "Saving..."
+                    : editingProductId
+                      ? "Save Product Details"
+                      : "Publish"}
+                </button>
+              </div>
+              {draftSavedAt && (
+                <p className="seller-form-hint">Last saved {draftSavedAt.toLocaleTimeString("en-IN")}</p>
+              )}
             </form>
           </article>
         </section>
@@ -2794,6 +3060,20 @@ const Ecommerce = ({
                         {statusCopy[product.approvalStatus] || product.approvalStatus}
                       </span>
                     </div>
+                    <div className="seller-status-timeline">
+                      {Object.entries(statusCopy).map(([statusKey, statusLabel]) => {
+                        const isActive = product.approvalStatus === statusKey;
+                        const isComplete = product.approvalStatus === "approved" || statusKey === "pending";
+                        return (
+                          <span
+                            key={statusKey}
+                            className={`status-step ${isActive ? "active" : isComplete ? "complete" : ""}`}
+                          >
+                            {statusLabel}
+                          </span>
+                        );
+                      })}
+                    </div>
                     <p className={`availability-note availability-note-${product.isActive ? "active" : "disabled"}`}>
                       {availabilityCopy[String(product.isActive)]}
                     </p>
@@ -2842,6 +3122,13 @@ const Ecommerce = ({
                     <div className="seller-card-actions seller-product-actions">
                       <button type="button" className="btn btn-outline" onClick={() => handleEdit(product)}>
                         Edit Product
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => handleDuplicateProduct(product)}
+                      >
+                        Duplicate
                       </button>
                       <button
                         type="button"
