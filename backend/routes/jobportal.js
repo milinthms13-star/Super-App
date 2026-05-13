@@ -292,7 +292,7 @@ router.put('/jobs/:id', authenticateToken, async (req, res) => {
     }
 
     const candidatePayload = { ...job.toObject(), ...req.body };
-    const { error, value } = postJobValidationSchema.validate(candidatePayload, { abortEarly: true });
+    const { error, value } = postJobValidationSchema.validate(candidatePayload, { abortEarly: true, allowUnknown: true });
     if (error) {
       return res.status(400).json({ success: false, message: error.details[0].message });
     }
