@@ -5,13 +5,20 @@ const devAppDataStore = require('./devAppDataStore');
 // Always use Mongo now that model/routes exist
 const useMongoRealEstate = () => true;
 
+const normalizeLeadStatus = (status = '') => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'site_visit_scheduled') return 'site_visit';
+  if (normalized === 'negotiating') return 'negotiation';
+  return normalized || 'new';
+};
+
 const normalizeRealEstateLead = (lead = {}, index = 0) => ({
   id: String(lead.id || `lead-${index + 1}`),
   name: String(lead.name || 'Buyer').trim(),
   email: String(lead.email || '').trim().toLowerCase(),
   channel: String(lead.channel || 'Enquiry').trim(),
   priority: String(lead.priority || 'Warm').trim(),
-  status: String(lead.status || 'new').trim(),
+  status: normalizeLeadStatus(lead.status),
   message: String(lead.message || '').trim(),
   followUpAt: lead.followUpAt ? new Date(lead.followUpAt).toISOString() : null,
   followUpNote: String(lead.followUpNote || '').trim(),
@@ -101,6 +108,10 @@ const serializeRealEstateProperty = (record, index = 0) => {
     type: plainRecord.type || 'Flat',
     intent: plainRecord.intent || 'sale',
     image: plainRecord.image || 'Property',
+    mediaGallery: Array.isArray(plainRecord.mediaGallery) ? plainRecord.mediaGallery : [],
+    videoTourUrl: plainRecord.videoTourUrl || '',
+    floorPlanUrl: plainRecord.floorPlanUrl || '',
+    brochureUrl: plainRecord.brochureUrl || '',
     bedrooms: Number(plainRecord.bedrooms || 0),
     bathrooms: Number(plainRecord.bathrooms || 0),
     furnishing: plainRecord.furnishing || 'Semi Furnished',
@@ -123,6 +134,33 @@ const serializeRealEstateProperty = (record, index = 0) => {
       plainRecord.description ||
       'Verified listing with strong local demand, transparent pricing, and responsive seller communication.',
     mapLabel: plainRecord.mapLabel || `${plainRecord.location || 'Kerala'} growth corridor`,
+    mapPreviewUrl: plainRecord.mapPreviewUrl || '',
+    mapLocationLat: typeof plainRecord.mapLocationLat === 'number' ? plainRecord.mapLocationLat : null,
+    mapLocationLng: typeof plainRecord.mapLocationLng === 'number' ? plainRecord.mapLocationLng : null,
+    readyToMove: Boolean(plainRecord.readyToMove),
+    underConstruction: Boolean(plainRecord.underConstruction),
+    carpetAreaSqft: typeof plainRecord.carpetAreaSqft === 'number' ? plainRecord.carpetAreaSqft : null,
+    builtUpAreaSqft:
+      typeof plainRecord.builtUpAreaSqft === 'number' ? plainRecord.builtUpAreaSqft : null,
+    landSizeSqft: typeof plainRecord.landSizeSqft === 'number' ? plainRecord.landSizeSqft : null,
+    floorNumber: typeof plainRecord.floorNumber === 'number' ? plainRecord.floorNumber : null,
+    totalFloors: typeof plainRecord.totalFloors === 'number' ? plainRecord.totalFloors : null,
+    parkingSpots: typeof plainRecord.parkingSpots === 'number' ? plainRecord.parkingSpots : null,
+    propertyAgeYears:
+      typeof plainRecord.propertyAgeYears === 'number' ? plainRecord.propertyAgeYears : null,
+    address: plainRecord.address || '',
+    landmark: plainRecord.landmark || '',
+    contactPhone: plainRecord.contactPhone || '',
+    whatsappNumber: plainRecord.whatsappNumber || '',
+    nearbySchoolKm: typeof plainRecord.nearbySchoolKm === 'number' ? plainRecord.nearbySchoolKm : null,
+    nearbyHospitalKm:
+      typeof plainRecord.nearbyHospitalKm === 'number' ? plainRecord.nearbyHospitalKm : null,
+    nearbyMetroKm: typeof plainRecord.nearbyMetroKm === 'number' ? plainRecord.nearbyMetroKm : null,
+    reraNumber: plainRecord.reraNumber || '',
+    titleDeedStatus: plainRecord.titleDeedStatus || 'pending',
+    taxReceipt: Boolean(plainRecord.taxReceipt),
+    buildingPermit: Boolean(plainRecord.buildingPermit),
+    encumbranceCertificate: Boolean(plainRecord.encumbranceCertificate),
     rating: averageRating,
     reviewCount:
       typeof plainRecord.reviewCount === 'number' ? plainRecord.reviewCount : reviews.length,

@@ -10,6 +10,7 @@ const User = require('../models/User');
 const { uploadToS3 } = require('../config/s3');
 const { authenticate } = require('../middleware/auth');
 const { createModerateRateLimiter } = require('../middleware/rateLimiter');
+const subscriptionService = require('../utils/subscriptionService');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -39,6 +40,18 @@ const searchLimiter = createModerateRateLimiter({
 });
 const interestLimiter = createModerateRateLimiter({
   maxRequests: 20,
+  windowMs: 24 * 60 * 60 * 1000,
+});
+const messageLimiter = createModerateRateLimiter({
+  maxRequests: 120,
+  windowMs: 24 * 60 * 60 * 1000,
+});
+const reportLimiter = createModerateRateLimiter({
+  maxRequests: 30,
+  windowMs: 24 * 60 * 60 * 1000,
+});
+const blockLimiter = createModerateRateLimiter({
+  maxRequests: 50,
   windowMs: 24 * 60 * 60 * 1000,
 });
 
@@ -1050,7 +1063,7 @@ router.get('/messages', async (req, res) => {
   }
 });
 
-router.post('/messages', async (req, res) => {
+router.post('/messages', messageLimiter, async (req, res) => {
   try {
     const { toProfileId, content } = req.body;
     if (!mongoose.Types.ObjectId.isValid(toProfileId)) {
@@ -1069,11 +1082,36 @@ router.post('/messages', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Profile not found' });
     }
 
+    const userEmail = req.user?.email;
+    if (!userEmail) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const hasMessagingAccess = await subscriptionService.hasEntitlement(
+      userEmail,
+      'directMessages'
+    );
+    if (!hasMessagingAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Direct messaging requires an active paid subscription',
+      });
+    }
+
     const connected = await isConnectedForMessaging(currentProfile._id, targetProfile._id);
     if (!connected) {
       return res.status(403).json({
         success: false,
         message: 'Messages are available only after an accepted interest',
+      });
+    }
+
+    try {
+      await subscriptionService.consumeEntitlement(userEmail, 'directMessages');
+    } catch (_error) {
+      return res.status(429).json({
+        success: false,
+        message: 'You reached your messaging quota for the current cycle',
       });
     }
 
@@ -1109,7 +1147,7 @@ router.post('/messages', async (req, res) => {
   }
 });
 
-router.post('/profiles/:profileId/block', async (req, res) => {
+router.post('/profiles/:profileId/block', blockLimiter, async (req, res) => {
   try {
     const { profileId } = req.params;
     if (!mongoose.Types.ObjectId.isValid(profileId)) {
@@ -1136,7 +1174,7 @@ router.post('/profiles/:profileId/block', async (req, res) => {
   }
 });
 
-router.post('/profiles/:profileId/report', async (req, res) => {
+router.post('/profiles/:profileId/report', reportLimiter, async (req, res) => {
   try {
     const { profileId } = req.params;
     const reason = normalizeText(req.body.reason);

@@ -15,8 +15,14 @@ jest.mock('../config/s3', () => ({
   uploadToS3: jest.fn(),
 }));
 
+jest.mock('../utils/subscriptionService', () => ({
+  hasEntitlement: jest.fn(),
+  consumeEntitlement: jest.fn(),
+}));
+
 const MatrimonialProfile = require('../models/MatrimonialProfile');
 const User = require('../models/User');
+const subscriptionService = require('../utils/subscriptionService');
 const matrimonialRouter = require('./matrimonial');
 
 const createMockResponse = () => ({
@@ -43,6 +49,8 @@ const getRouteHandler = (method, path) => {
 describe('matrimonial routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    subscriptionService.hasEntitlement.mockResolvedValue(true);
+    subscriptionService.consumeEntitlement.mockResolvedValue({});
   });
 
   test('search defaults to verified profiles and excludes blocked/self matches', async () => {
@@ -433,6 +441,7 @@ describe('matrimonial routes', () => {
       },
       user: {
         _id: 'user-123',
+        email: 'member@example.com',
       },
     };
     const res = createMockResponse();
@@ -444,6 +453,41 @@ describe('matrimonial routes', () => {
     expect(res.body.message).toBe('Messages are available only after an accepted interest');
     expect(currentSave).not.toHaveBeenCalled();
     expect(targetSave).not.toHaveBeenCalled();
+  });
+
+  test('sending a message is forbidden when subscription entitlement is missing', async () => {
+    const handler = getRouteHandler('post', '/messages');
+    subscriptionService.hasEntitlement.mockResolvedValue(false);
+
+    MatrimonialProfile.findOne.mockResolvedValue({
+      _id: '665f4f7e8b69fe10ef2ac889',
+      userId: 'user-123',
+      messages: [],
+      save: jest.fn(),
+    });
+    MatrimonialProfile.findById.mockResolvedValue({
+      _id: '665f4f7e8b69fe10ef2ac890',
+      userId: 'user-456',
+      messages: [],
+      save: jest.fn(),
+    });
+
+    const req = {
+      body: {
+        toProfileId: '665f4f7e8b69fe10ef2ac890',
+        content: 'Hello there',
+      },
+      user: {
+        _id: 'user-123',
+        email: 'member@example.com',
+      },
+    };
+    const res = createMockResponse();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.message).toBe('Direct messaging requires an active paid subscription');
   });
 
   test('reporting a profile records a sanitized open moderation report', async () => {

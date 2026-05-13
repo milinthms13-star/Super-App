@@ -68,6 +68,26 @@ const SubscriptionSchema = new mongoose.Schema(
       enum: ['pending', 'completed', 'failed', 'refunded'],
       default: 'pending',
     },
+    lastPaymentAttemptAt: Date,
+    lastPaymentError: { type: String, default: '' },
+    paymentHistory: [
+      {
+        gateway: String,
+        orderId: String,
+        paymentId: String,
+        status: String,
+        amount: Number,
+        currency: { type: String, default: 'INR' },
+        invoiceNumber: String,
+        invoiceUrl: String,
+        createdAt: Date,
+        verifiedAt: Date,
+        failureReason: String,
+        retryOf: String,
+        refundStatus: String,
+        refundId: String,
+      },
+    ],
 
     // Auto-Renewal
     autoRenew: { type: Boolean, default: true },

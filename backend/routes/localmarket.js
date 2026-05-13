@@ -284,6 +284,13 @@ router.post("/orders/:orderId/review", authenticate, async (req, res) => {
       return res.status(403).json({ success: false, error: "Unauthorized" });
     }
 
+    if (order.review && Number(order.review.rating) > 0) {
+      return res.status(409).json({
+        success: false,
+        error: "Review already submitted for this order",
+      });
+    }
+
     const review = {
       rating,
       comment,
@@ -328,6 +335,16 @@ router.post("/shops/:shopId/review", authenticate, async (req, res) => {
 
     if (!shop) {
       return res.status(404).json({ success: false, error: "Shop not found" });
+    }
+
+    const existingReviewByUser = (Array.isArray(shop.reviews) ? shop.reviews : []).find(
+      (entry) => getComparableId(entry?.userId) === getAuthenticatedUserId(req)
+    );
+    if (existingReviewByUser) {
+      return res.status(409).json({
+        success: false,
+        error: "You have already reviewed this shop",
+      });
     }
 
     const reviews = [

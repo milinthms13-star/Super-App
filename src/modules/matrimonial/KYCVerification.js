@@ -1,28 +1,9 @@
 import React, { useRef, useState } from 'react';
-import axios from 'axios';
-import { API_BASE_URL } from './constants';
-
-const getStoredAuthToken = () =>
-  localStorage.getItem('authToken') ||
-  localStorage.getItem('accessToken') ||
-  localStorage.getItem('token') ||
-  '';
-
-const buildAuthConfig = (extraConfig = {}) => {
-  const token = getStoredAuthToken();
-  const headers = {
-    ...(extraConfig.headers || {}),
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return {
-    ...extraConfig,
-    headers,
-  };
-};
+import {
+  getKYCStatus,
+  uploadKYCDocument,
+  uploadKYCSelfie,
+} from './api.js';
 
 const getProfileId = (profile) => profile?._id || profile?.id || '';
 
@@ -59,23 +40,10 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
     setMessage('');
 
     try {
-      const formData = new FormData();
-      formData.append('document', file);
-      formData.append('documentType', documentType);
-      formData.append('profileId', profileId);
+      const response = await uploadKYCDocument(file, documentType, profileId);
 
-      const response = await axios.post(
-        `${API_BASE_URL}/matrimonial/kyc/upload`,
-        formData,
-        buildAuthConfig({
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        })
-      );
-
-      const nextStatus = response.data?.data?.status || response.data?.status || 'under_review';
-      const nextRiskScore = response.data?.data?.riskScore ?? response.data?.riskScore ?? 0;
+      const nextStatus = response?.data?.status || response?.status || 'under_review';
+      const nextRiskScore = response?.data?.riskScore ?? response?.riskScore ?? 0;
 
       setMessage(`${documentType} uploaded successfully. Status: ${nextStatus}`);
       setKycStatus(nextStatus);
@@ -131,16 +99,12 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
     setMessage('');
 
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/matrimonial/kyc/selfie`,
-        { selfieImage, profileId },
-        buildAuthConfig()
-      );
+      const response = await uploadKYCSelfie(selfieImage, profileId);
 
       const livenessScore =
-        response.data?.data?.livenessScore ?? response.data?.livenessScore ?? 0;
-      const nextRiskScore = response.data?.data?.riskScore ?? response.data?.riskScore ?? 0;
-      const nextStatus = response.data?.data?.status || response.data?.status || 'under_review';
+        response?.data?.livenessScore ?? response?.livenessScore ?? 0;
+      const nextRiskScore = response?.data?.riskScore ?? response?.riskScore ?? 0;
+      const nextStatus = response?.data?.status || response?.status || 'under_review';
 
       setMessage(`Selfie uploaded. Liveness Score: ${livenessScore}%`);
       setSelfieImage(null);
@@ -160,15 +124,10 @@ const KYCVerification = ({ onKYCComplete, currentProfile }) => {
     }
 
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/matrimonial/kyc/status`,
-        buildAuthConfig({
-          params: { profileId },
-        })
-      );
+      const response = await getKYCStatus(profileId);
 
-      const nextStatus = response.data?.data?.status || response.data?.status || 'pending';
-      const nextRiskScore = response.data?.data?.riskScore ?? response.data?.riskScore ?? 0;
+      const nextStatus = response?.data?.status || response?.status || 'pending';
+      const nextRiskScore = response?.data?.riskScore ?? response?.riskScore ?? 0;
 
       setKycStatus(nextStatus);
       setRiskScore(nextRiskScore);

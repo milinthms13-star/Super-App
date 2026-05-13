@@ -35,6 +35,16 @@
   align-items: center;
 }
 
+.lm-role-selector span {
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .lm-role-selector select {
   padding: 8px 12px;
   border: 2px solid #e5e7eb;
@@ -123,6 +133,14 @@
   font-size: 14px;
   cursor: pointer;
   background: white;
+}
+
+.lm-toolbar label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  color: #374151;
 }
 
 /* Shops Grid */
@@ -399,6 +417,11 @@
 .lm-status-delivered {
   background: #dcfce7;
   color: #166534;
+}
+
+.lm-status-cancelled {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .lm-order-items {
@@ -735,6 +758,43 @@
   padding: 40px;
   color: #6b7280;
   font-size: 16px;
+}
+
+.lm-notice {
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.lm-notice-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.lm-notice-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.lm-notice-info {
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+
+.lm-validation-list {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.lm-validation-item {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #7f1d1d;
 }
 
 /* Responsive */

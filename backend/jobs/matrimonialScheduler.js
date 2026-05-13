@@ -4,7 +4,7 @@
  */
 
 const { blueTickService } = require('../utils/blueTickService');
-const { subscriptionService } = require('../utils/subscriptionService');
+const subscriptionService = require('../utils/subscriptionService');
 const MatrimonialProfile = require('../models/MatrimonialProfile');
 const KYC = require('../models/KYC');
 const BlueTick = require('../models/BlueTick');

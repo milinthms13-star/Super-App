@@ -11,8 +11,14 @@ const getAuthHeaders = () => ({
 export const localMarketService = {
   // Shops
   getShops: async (filters = {}) => {
-    const params = new URLSearchParams(filters);
-    const { data } = await axios.get(`${API_BASE_URL}/shops?${params}`, getAuthHeaders());
+    const params = new URLSearchParams(
+      Object.entries(filters || {}).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    );
+    const query = params.toString();
+    const { data } = await axios.get(
+      `${API_BASE_URL}/shops${query ? `?${query}` : ''}`,
+      getAuthHeaders()
+    );
     return data.data;
   },
 
@@ -28,14 +34,30 @@ export const localMarketService = {
 
   // Products
   getShopProducts: async (shopId, category) => {
-    const params = new URLSearchParams({ category });
-    const { data } = await axios.get(`${API_BASE_URL}/shops/${shopId}/products?${params}`, getAuthHeaders());
+    const params = new URLSearchParams(
+      category ? { category } : {}
+    );
+    const query = params.toString();
+    const { data } = await axios.get(
+      `${API_BASE_URL}/shops/${shopId}/products${query ? `?${query}` : ''}`,
+      getAuthHeaders()
+    );
     return data.data;
   },
 
   createProduct: async (shopId, productData) => {
     const { data } = await axios.post(`${API_BASE_URL}/shops/${shopId}/products`, productData, getAuthHeaders());
     return data.data;
+  },
+
+  updateProduct: async (productId, updates) => {
+    const { data } = await axios.put(`${API_BASE_URL}/products/${productId}`, updates, getAuthHeaders());
+    return data.data;
+  },
+
+  deleteProduct: async (productId) => {
+    const { data } = await axios.delete(`${API_BASE_URL}/products/${productId}`, getAuthHeaders());
+    return data;
   },
 
   // Orders

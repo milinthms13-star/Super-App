@@ -13,6 +13,7 @@ const KYC = require('../models/KYC');
 const BlueTick = require('../models/BlueTick');
 const MatrimonialProfile = require('../models/MatrimonialProfile');
 const { authenticate } = require('../middleware/auth');
+const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const logger = require('../utils/logger');
 
 const upload = multer({
@@ -20,6 +21,16 @@ const upload = multer({
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
+});
+
+const kycUploadLimiter = createModerateRateLimiter({
+  maxRequests: 30,
+  windowMs: 60 * 60 * 1000,
+});
+
+const selfieUploadLimiter = createModerateRateLimiter({
+  maxRequests: 20,
+  windowMs: 60 * 60 * 1000,
 });
 
 const KYC_UPLOAD_DIR = path.join(__dirname, '../uploads/matrimonial-kyc');
@@ -30,6 +41,9 @@ const ALLOWED_DOCUMENT_TYPES = new Set([
   'voterId',
   'drivingLicense',
 ]);
+const ALLOWED_KYC_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
+const ALLOWED_KYC_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.pdf']);
+const MAX_SELFIE_BYTES = 3 * 1024 * 1024;
 
 const ensureUploadDirectory = () => {
   if (!fs.existsSync(KYC_UPLOAD_DIR)) {
@@ -50,6 +64,32 @@ const storeLocalUpload = (buffer, originalName, prefix) => {
   const absolutePath = path.join(KYC_UPLOAD_DIR, fileName);
   fs.writeFileSync(absolutePath, buffer);
   return `/uploads/matrimonial-kyc/${fileName}`;
+};
+
+const hasSuspiciousSignature = (buffer) => {
+  if (!buffer || buffer.length < 4) {
+    return true;
+  }
+
+  const headerHex = buffer.subarray(0, 4).toString('hex').toLowerCase();
+  if (headerHex.startsWith('4d5a')) {
+    return true;
+  }
+
+  const preview = buffer.subarray(0, 1024).toString('utf8').toLowerCase();
+  return preview.includes('<script') || preview.includes('javascript:');
+};
+
+const scanFileBufferForMalware = async (buffer) => {
+  if (!buffer || !buffer.length) {
+    return { clean: false, reason: 'Empty file payload' };
+  }
+
+  if (hasSuspiciousSignature(buffer)) {
+    return { clean: false, reason: 'Suspicious file signature detected' };
+  }
+
+  return { clean: true, reason: '' };
 };
 
 const resolveProfileId = async (req, explicitProfileId) => {
@@ -89,10 +129,30 @@ const calculateRiskScore = ({ documentUploaded = false, livenessScore = null }) 
  * POST /api/matrimonial/kyc/upload
  * Upload KYC documents
  */
-router.post('/kyc/upload', authenticate, upload.single('document'), async (req, res) => {
+router.post('/kyc/upload', authenticate, kycUploadLimiter, upload.single('document'), async (req, res) => {
   try {
     const profileId = await resolveProfileId(req, req.body.profileId);
     const documentType = String(req.body.documentType || '');
+    const fileExtension = path.extname(req.file?.originalname || '').toLowerCase();
+    const mimeType = String(req.file?.mimetype || '').toLowerCase();
+
+    if (req.file) {
+      if (!ALLOWED_KYC_MIME_TYPES.has(mimeType) || !ALLOWED_KYC_EXTENSIONS.has(fileExtension)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Only JPG, PNG, and PDF files are allowed for KYC documents',
+        });
+      }
+
+      const scanResult = await scanFileBufferForMalware(req.file.buffer);
+      if (!scanResult.clean) {
+        return res.status(400).json({
+          success: false,
+          message: `KYC upload blocked: ${scanResult.reason}`,
+        });
+      }
+    }
+
     const fileUrl =
       req.body.fileUrl ||
       (req.file
@@ -154,7 +214,7 @@ router.post('/kyc/upload', authenticate, upload.single('document'), async (req, 
  * POST /api/matrimonial/kyc/selfie
  * Upload selfie for liveness verification
  */
-router.post('/kyc/selfie', authenticate, async (req, res) => {
+router.post('/kyc/selfie', authenticate, selfieUploadLimiter, async (req, res) => {
   try {
     const profileId = await resolveProfileId(req, req.body.profileId);
     const selfieImage = String(req.body.selfieImage || '');
@@ -168,6 +228,21 @@ router.post('/kyc/selfie', authenticate, async (req, res) => {
 
     if (!imageBuffer.length) {
       return res.status(400).json({ success: false, message: 'Invalid selfie image payload' });
+    }
+
+    if (imageBuffer.length > MAX_SELFIE_BYTES) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selfie image exceeds max size of 3MB',
+      });
+    }
+
+    const scanResult = await scanFileBufferForMalware(imageBuffer);
+    if (!scanResult.clean) {
+      return res.status(400).json({
+        success: false,
+        message: `Selfie upload blocked: ${scanResult.reason}`,
+      });
     }
 
     let kyc = await KYC.findOne({ profileId });

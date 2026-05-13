@@ -113,6 +113,7 @@ app.use('/api/giftcards', require('./routes/giftcards'));
 app.use('/api/health', require('./routes/health'));
 app.use('/api', require('./routes/healthcare'));
 app.use('/api/localmarket', require('./routes/localmarket'));
+app.use('/api/localservices', require('./routes/localservices'));
 app.use('/api/messaging', require('./routes/messaging'));
 app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));
@@ -193,6 +194,7 @@ safeUse('/api/product-specs', './routes/productSpecificationsRoutes'); // Produc
 app.use('/api/referralprogram', require('./routes/referralprogram'));
 app.use('/api/reminders', require('./routes/reminders'));
 app.use('/api/matrimonial', require('./routes/matrimonial-kyc'));
+app.use('/api/matrimonial', require('./routes/matrimonial-horoscope'));
 app.use('/api/matrimonial', require('./routes/matrimonial-subscription'));
 app.use('/api/matrimonial/admin/analytics', require('./routes/matrimonial-admin-analytics'));
 app.use('/api/matrimonial/referral', require('./routes/matrimonial-referral'));

@@ -19,6 +19,8 @@ const {
   HyperlocalWallet,
   HyperlocalAd,
   HyperlocalAdminConfig,
+  HyperlocalRefund,
+  HyperlocalComplaint,
 } = require('../models/hyperlocal');
 
 const router = express.Router();
@@ -434,11 +436,16 @@ const computeQuote = async (payload, prescriptionAttached = false) => {
       if (coupon.maxDiscount) couponDiscount = Math.min(couponDiscount, coupon.maxDiscount);
     } else if (coupon.type === 'free-delivery') {
       deliveryCharge = 0;
+    } else {
+      throw new Error('Unsupported coupon type.');
     }
   }
 
   const platformFee = config.platformFee || 0;
-  const tax = (subtotal * (selectedItems[0]?.shopTaxPercent || 5)) / 100;
+  const tax = selectedItems.reduce(
+    (sum, item) => sum + ((Number(item.lineTotal || 0) * Number(item.shopTaxPercent || 5)) / 100),
+    0
+  );
   const finalPayable = Math.max(0, subtotal + deliveryCharge + platformFee + tax - couponDiscount);
 
   return {
@@ -683,6 +690,16 @@ router.post('/orders/:orderId/refund-request', authenticate, writeLimiter, async
       ? await HyperlocalOrder.findOne({ orderId: req.params.orderId, userEmail: authEmail })
       : store.orders.find((entry) => entry.orderId === req.params.orderId && entry.userEmail === authEmail);
     if (!order) return res.status(404).json({ success: false, message: 'Order not found.' });
+    if (String(order.refundStatus || '').toLowerCase() === 'pending') {
+      return res.status(409).json({ success: false, message: 'A refund request is already pending for this order.' });
+    }
+
+    if (isMongoReady()) {
+      const existingRefund = await HyperlocalRefund.findOne({ orderId: req.params.orderId, userEmail: order.userEmail, status: 'pending' });
+      if (existingRefund) {
+        return res.status(409).json({ success: false, message: 'A refund request is already pending for this order.' });
+      }
+    }
 
     const refundEntry = {
       refundId: id('HLRF'),
@@ -692,13 +709,15 @@ router.post('/orders/:orderId/refund-request', authenticate, writeLimiter, async
       reason,
       status: 'pending',
       createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    store.refunds.unshift(refundEntry);
     if (isMongoReady()) {
+      await HyperlocalRefund.create(refundEntry);
       order.refundStatus = 'pending';
       await order.save();
     } else {
+      store.refunds.unshift(refundEntry);
       const idx = store.orders.findIndex((entry) => entry.orderId === req.params.orderId);
       if (idx !== -1) store.orders[idx].refundStatus = 'pending';
     }
@@ -713,19 +732,36 @@ router.post('/orders/:orderId/complaint', authenticate, writeLimiter, async (req
   if (!authEmail) return;
   const issue = String(req.body.issue || '').trim();
   if (!issue) return res.status(400).json({ success: false, message: 'Complaint issue is required.' });
-  const sourceOrder = isMongoReady()
-    ? await HyperlocalOrder.findOne({ orderId: req.params.orderId, userEmail: authEmail }).lean()
+  const order = isMongoReady()
+    ? await HyperlocalOrder.findOne({ orderId: req.params.orderId, userEmail: authEmail })
     : store.orders.find((entry) => entry.orderId === req.params.orderId && entry.userEmail === authEmail);
-  if (!sourceOrder) return res.status(404).json({ success: false, message: 'Order not found.' });
+  if (!order) return res.status(404).json({ success: false, message: 'Order not found.' });
   const complaint = {
     complaintId: id('HLCM'),
     orderId: req.params.orderId,
     userEmail: authEmail,
     issue,
     status: 'open',
+    resolutionNote: '',
     createdAt: new Date(),
+    updatedAt: new Date(),
   };
-  store.complaints.unshift(complaint);
+  if (isMongoReady()) {
+    const existingComplaint = await HyperlocalComplaint.findOne({ orderId: req.params.orderId, userEmail: authEmail, status: 'open' });
+    if (existingComplaint) {
+      return res.status(409).json({ success: false, message: 'An open complaint already exists for this order.' });
+    }
+    await HyperlocalComplaint.create(complaint);
+    await HyperlocalOrder.updateOne({ orderId: req.params.orderId }, { $set: { complaintStatus: 'open' } });
+  } else {
+    const existingComplaint = store.complaints.find((entry) => entry.orderId === req.params.orderId && entry.userEmail === authEmail && entry.status === 'open');
+    if (existingComplaint) {
+      return res.status(409).json({ success: false, message: 'An open complaint already exists for this order.' });
+    }
+    store.complaints.unshift(complaint);
+    const idx = store.orders.findIndex((entry) => entry.orderId === req.params.orderId);
+    if (idx !== -1) store.orders[idx].complaintStatus = 'open';
+  }
   return res.status(201).json({ success: true, data: { complaint } });
 });
 
@@ -1277,24 +1313,57 @@ router.get('/admin/analytics', authenticate, verifyAdmin, async (_req, res) => {
   });
 });
 
-router.get('/admin/refunds', authenticate, verifyAdmin, async (_req, res) => res.json({ success: true, data: { refunds: store.refunds } }));
+router.get('/admin/refunds', authenticate, verifyAdmin, async (_req, res) => {
+  const refunds = isMongoReady() ? await HyperlocalRefund.find().sort({ createdAt: -1 }).lean() : store.refunds;
+  return res.json({ success: true, data: { refunds } });
+});
 router.patch('/admin/refunds/:refundId/review', authenticate, verifyAdmin, writeLimiter, async (req, res) => {
   const status = String(req.body.status || '').trim().toLowerCase();
   if (!['approved', 'rejected'].includes(status)) {
     return res.status(400).json({ success: false, message: 'status must be approved or rejected.' });
   }
+  if (isMongoReady()) {
+    const result = await HyperlocalRefund.findOneAndUpdate(
+      { refundId: req.params.refundId },
+      { $set: { status, updatedAt: new Date() } },
+      { new: true }
+    ).lean();
+    if (!result) return res.status(404).json({ success: false, message: 'Refund request not found.' });
+    await HyperlocalOrder.updateOne({ orderId: result.orderId }, { $set: { refundStatus: status } });
+    return res.json({ success: true, message: `Refund ${status}.`, data: { refund: result } });
+  }
   const idx = store.refunds.findIndex((entry) => entry.refundId === req.params.refundId);
   if (idx === -1) return res.status(404).json({ success: false, message: 'Refund request not found.' });
   store.refunds[idx].status = status;
+  store.refunds[idx].updatedAt = new Date();
+  const orderIndex = store.orders.findIndex((entry) => entry.orderId === store.refunds[idx].orderId);
+  if (orderIndex !== -1) store.orders[orderIndex].refundStatus = status;
   return res.json({ success: true, message: `Refund ${status}.`, data: { refund: store.refunds[idx] } });
 });
 
-router.get('/admin/complaints', authenticate, verifyAdmin, async (_req, res) => res.json({ success: true, data: { complaints: store.complaints } }));
+router.get('/admin/complaints', authenticate, verifyAdmin, async (_req, res) => {
+  const complaints = isMongoReady() ? await HyperlocalComplaint.find().sort({ createdAt: -1 }).lean() : store.complaints;
+  return res.json({ success: true, data: { complaints } });
+});
 router.patch('/admin/complaints/:complaintId/resolve', authenticate, verifyAdmin, writeLimiter, async (req, res) => {
+  const resolutionNote = String(req.body.resolutionNote || '').trim();
+  if (isMongoReady()) {
+    const result = await HyperlocalComplaint.findOneAndUpdate(
+      { complaintId: req.params.complaintId },
+      { $set: { status: 'resolved', resolutionNote, updatedAt: new Date() } },
+      { new: true }
+    ).lean();
+    if (!result) return res.status(404).json({ success: false, message: 'Complaint not found.' });
+    await HyperlocalOrder.updateOne({ orderId: result.orderId }, { $set: { complaintStatus: 'resolved' } });
+    return res.json({ success: true, message: 'Complaint resolved.', data: { complaint: result } });
+  }
   const idx = store.complaints.findIndex((entry) => entry.complaintId === req.params.complaintId);
   if (idx === -1) return res.status(404).json({ success: false, message: 'Complaint not found.' });
   store.complaints[idx].status = 'resolved';
-  store.complaints[idx].resolutionNote = String(req.body.resolutionNote || '');
+  store.complaints[idx].resolutionNote = resolutionNote;
+  store.complaints[idx].updatedAt = new Date();
+  const orderIndex = store.orders.findIndex((entry) => entry.orderId === store.complaints[idx].orderId);
+  if (orderIndex !== -1) store.orders[orderIndex].complaintStatus = 'resolved';
   return res.json({ success: true, message: 'Complaint resolved.', data: { complaint: store.complaints[idx] } });
 });
 

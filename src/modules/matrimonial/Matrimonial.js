@@ -20,6 +20,7 @@ import {
   getMatrimonialMessages,
   getMatrimonialProfile,
   moderateMatrimonialProfile,
+  checkSubscriptionEntitlement,
   reportMatrimonialProfile,
   respondToMatrimonialInterest,
   saveMatrimonialProfile,
@@ -33,7 +34,6 @@ import BlueTickBadge from "./BlueTickBadge";
 import HoroscopeMatching from "./HoroscopeMatching";
 import SubscriptionManagement from "./SubscriptionManagement";
 import PaymentGateway from "./PaymentGateway";
-import * as matrimonialAPI from "./matrimonialAPI";
 
 // Debounce hook for search and filters
 const useDebounce = (value, delay) => {
@@ -193,6 +193,33 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
 
     persistOnboardingSeen();
   }, [currentUser, matrimonialProfile, onProfileUpdate]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const syncMessagingEntitlement = async () => {
+      if (!currentUser) {
+        return;
+      }
+
+      try {
+        const response = await checkSubscriptionEntitlement("directMessages");
+        if (isMounted) {
+          setIsPremiumPreview(Boolean(response?.hasAccess));
+        }
+      } catch (_error) {
+        if (isMounted) {
+          setIsPremiumPreview(false);
+        }
+      }
+    };
+
+    syncMessagingEntitlement();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser]);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -491,8 +518,8 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
     `${incomingInterests.length} profile events need your attention`,
     fallbackNotice || null,
     isPremiumPreview
-      ? "Premium preview is active: messaging controls are unlocked while member privacy settings stay enforced"
-      : "Preview premium messaging while member privacy settings remain enforced",
+      ? "Messaging entitlement is active for your account."
+      : "Upgrade to a paid plan to unlock direct messaging.",
   ].filter(Boolean);
 
   const handleInterest = useCallback(async (profile) => {
@@ -1031,18 +1058,14 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
         </div>
         <div className="matrimonial-hero-card">
           <span className="matrimonial-hero-label">Plan Status</span>
-          <strong>{isPremiumPreview ? "Premium Preview" : "Free Member"}</strong>
+          <strong>{isPremiumPreview ? "Paid Member" : "Free Member"}</strong>
           <p>
             {isPremiumPreview
-              ? "Messaging controls are unlocked in this preview while real member privacy settings stay enforced."
-              : "Preview premium messaging while privacy-aware profile visibility stays intact."}
+              ? "Messaging controls are unlocked based on your live subscription entitlement."
+              : "Upgrade your plan to unlock direct messaging and premium contact visibility."}
           </p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setIsPremiumPreview((current) => !current)}
-          >
-            {isPremiumPreview ? "Switch to Free View" : "Preview Premium"}
+          <button type="button" className="btn btn-outline" onClick={() => setActiveTab("subscription")}>
+            Manage Subscription
           </button>
         </div>
       </section>

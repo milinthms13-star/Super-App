@@ -1,20 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { useApp } from '../../contexts/AppContext';
-import { API_BASE_URL } from './constants';
+import React, { useEffect, useState } from "react";
+import { useApp } from "../../contexts/AppContext";
+import {
+  checkUPIPaymentStatus,
+  createRazorpayOrder,
+  createUPIPaymentSession,
+  verifyRazorpayPayment,
+} from "./api.js";
+
+const formatInr = (amount) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(
+    Number(amount || 0)
+  );
 
 const PaymentGateway = ({ subscriptionTier, amount, onSuccess, onCancel }) => {
   const { currentUser } = useApp();
-  const [paymentMethod, setPaymentMethod] = useState('razorpay');
+  const [paymentMethod, setPaymentMethod] = useState("razorpay");
   const [processing, setProcessing] = useState(false);
-  const [message, setMessage] = useState('');
-  const [orderId, setOrderId] = useState(null);
-  const [paymentSession, setPaymentSession] = useState(null);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    // Load Razorpay script
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
     document.head.appendChild(script);
 
@@ -25,196 +31,142 @@ const PaymentGateway = ({ subscriptionTier, amount, onSuccess, onCancel }) => {
 
   const handleRazorpayPayment = async () => {
     setProcessing(true);
-    setMessage('');
+    setMessage("");
 
     try {
-      // Create order on backend
-      const response = await axios.post(
-        `${API_BASE_URL}/api/matrimonial/subscription/payments/razorpay/create`,
-        {
-          subscriptionTier,
-          amount,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
-        }
+      const response = await createRazorpayOrder(
+        subscriptionTier,
+        amount,
+        currentUser?.matrimonialProfileId || ""
       );
+      const { razorpayOrderId, razorpayKeyId } = response || {};
 
-      const { razorpayOrderId, razorpayKeyId } = response.data;
-      setOrderId(razorpayOrderId);
+      if (!razorpayOrderId || !razorpayKeyId) {
+        setMessage("Payment setup is unavailable. Try again later.");
+        setProcessing(false);
+        return;
+      }
 
-      // Open Razorpay checkout
       const options = {
         key: razorpayKeyId,
-        amount: Math.round(amount * 100), // Amount in paise
-        currency: 'INR',
-        name: 'NilaHub Matrimonial',
-        description: `${subscriptionTier} Subscription`,
+        amount: Math.round(Number(amount || 0) * 100),
+        currency: "INR",
+        name: "NilaHub Matrimonial",
+        description: `${subscriptionTier} subscription`,
         order_id: razorpayOrderId,
-        handler: async (response) => {
-          await verifyRazorpayPayment(response);
+        handler: async (rzpResponse) => {
+          try {
+            const verifyResponse = await verifyRazorpayPayment(
+              rzpResponse.razorpay_payment_id,
+              rzpResponse.razorpay_order_id,
+              rzpResponse.razorpay_signature,
+              subscriptionTier
+            );
+            setMessage("Payment successful. Subscription activated.");
+            setProcessing(false);
+            onSuccess?.(verifyResponse);
+          } catch (error) {
+            setMessage(`Payment verification failed: ${error.response?.data?.message || error.message}`);
+            setProcessing(false);
+          }
         },
         prefill: {
-          name: currentUser?.displayName || currentUser?.email,
-          email: currentUser?.email,
-          contact: currentUser?.phone || '',
+          name: currentUser?.displayName || currentUser?.name || currentUser?.email || "",
+          email: currentUser?.email || "",
+          contact: currentUser?.phone || "",
         },
         notes: {
           subscriptionTier,
-          userEmail: currentUser?.email,
+          userEmail: currentUser?.email || "",
         },
         theme: {
-          color: '#FF6B6B',
+          color: "#ff6b6b",
         },
         modal: {
           ondismiss: () => {
+            setMessage("Payment cancelled.");
             setProcessing(false);
-            setMessage('Payment cancelled');
           },
         },
       };
 
-      if (window.Razorpay) {
-        const rzp = new window.Razorpay(options);
-        rzp.open();
-      } else {
-        setMessage('✗ Razorpay failed to load');
+      if (!window.Razorpay) {
+        setMessage("Razorpay failed to load.");
         setProcessing(false);
+        return;
       }
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
     } catch (error) {
-      setMessage(`✗ Payment setup failed: ${error.response?.data?.message || error.message}`);
-      setProcessing(false);
-    }
-  };
-
-  const verifyRazorpayPayment = async (response) => {
-    try {
-      const verifyResponse = await axios.post(
-        `${API_BASE_URL}/api/matrimonial/subscription/payments/razorpay/verify`,
-        {
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_signature: response.razorpay_signature,
-          subscriptionTier,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
-        }
-      );
-
-      setMessage('✓ Payment successful! Subscription activated.');
-      if (onSuccess) {
-        onSuccess(verifyResponse.data);
-      }
-    } catch (error) {
-      setMessage(`✗ Payment verification failed: ${error.response?.data?.message || error.message}`);
-      setProcessing(false);
-    }
-  };
-
-  const handleStripePayment = async () => {
-    setProcessing(true);
-    setMessage('');
-
-    try {
-      // Create Stripe payment session
-      const response = await axios.post(
-        `${API_BASE_URL}/api/matrimonial/subscription/payments/stripe/create`,
-        {
-          subscriptionTier,
-          amount,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
-        }
-      );
-
-      const { clientSecret, sessionId } = response.data;
-      setPaymentSession({ clientSecret, sessionId });
-
-      // Redirect to Stripe checkout (in production)
-      // For now, show a message
-      setMessage('Stripe payment integration ready. Redirect to Stripe Checkout.');
-    } catch (error) {
-      setMessage(`✗ Stripe setup failed: ${error.response?.data?.message || error.message}`);
-      setProcessing(false);
-    }
-  };
-
-  const handleUPIPayment = async () => {
-    setProcessing(true);
-    setMessage('');
-
-    try {
-      // Create UPI payment session
-      const response = await axios.post(
-        `${API_BASE_URL}/api/matrimonial/subscription/payments/upi/create`,
-        {
-          subscriptionTier,
-          amount,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-          },
-        }
-      );
-
-      setMessage('✓ UPI payment initiated. Complete the payment on your phone.');
-      // Start polling for payment status
-      pollUPIStatus(response.data.transactionId);
-    } catch (error) {
-      setMessage(`✗ UPI setup failed: ${error.response?.data?.message || error.message}`);
+      setMessage(`Payment setup failed: ${error.response?.data?.message || error.message}`);
       setProcessing(false);
     }
   };
 
   const pollUPIStatus = async (transactionId) => {
     let attempts = 0;
-    const maxAttempts = 30; // Poll for 5 minutes
+    const maxAttempts = 30;
 
-    const pollInterval = setInterval(async () => {
-      attempts++;
-
+    const intervalId = setInterval(async () => {
+      attempts += 1;
       try {
-        const response = await axios.get(
-          `${API_BASE_URL}/api/matrimonial/subscription/payments/upi/status`,
-          {
-            params: { transactionId },
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem('authToken')}`,
-            },
-          }
-        );
-
-        if (response.data.status === 'success') {
-          clearInterval(pollInterval);
-          setMessage('✓ UPI payment successful! Subscription activated.');
-          if (onSuccess) {
-            onSuccess(response.data);
-          }
+        const statusResponse = await checkUPIPaymentStatus(transactionId);
+        const status = String(statusResponse?.status || "").toLowerCase();
+        if (status === "success") {
+          clearInterval(intervalId);
           setProcessing(false);
-        } else if (response.data.status === 'failed') {
-          clearInterval(pollInterval);
-          setMessage('✗ UPI payment failed');
-          setProcessing(false);
+          setMessage("UPI payment successful. Subscription activated.");
+          onSuccess?.(statusResponse);
+          return;
         }
-      } catch (error) {
-        console.error('Error polling UPI status:', error);
+        if (status === "failed") {
+          clearInterval(intervalId);
+          setProcessing(false);
+          setMessage("UPI payment failed.");
+          return;
+        }
+      } catch (_error) {
+        // Continue polling until timeout.
       }
 
       if (attempts >= maxAttempts) {
-        clearInterval(pollInterval);
-        setMessage('⏰ Payment confirmation timed out. Check your payment status.');
+        clearInterval(intervalId);
         setProcessing(false);
+        setMessage("Payment confirmation timed out. Please check payment history.");
       }
-    }, 10000); // Poll every 10 seconds
+    }, 10000);
+  };
+
+  const handleUPIPayment = async () => {
+    setProcessing(true);
+    setMessage("");
+
+    try {
+      const response = await createUPIPaymentSession(
+        subscriptionTier,
+        amount,
+        currentUser?.matrimonialProfileId || ""
+      );
+      if (!response?.transactionId) {
+        setMessage("UPI setup failed.");
+        setProcessing(false);
+        return;
+      }
+      setMessage("UPI payment initiated. Complete payment in your UPI app.");
+      await pollUPIStatus(response.transactionId);
+    } catch (error) {
+      setMessage(`UPI setup failed: ${error.response?.data?.message || error.message}`);
+      setProcessing(false);
+    }
+  };
+
+  const submitPayment = () => {
+    if (paymentMethod === "upi") {
+      handleUPIPayment();
+      return;
+    }
+    handleRazorpayPayment();
   };
 
   return (
@@ -222,31 +174,28 @@ const PaymentGateway = ({ subscriptionTier, amount, onSuccess, onCancel }) => {
       <div className="payment-header">
         <h2>Complete Your Subscription</h2>
         <p>
-          Tier: <strong>{subscriptionTier}</strong> | Amount:{' '}
-          <strong>₹{amount}/month</strong>
+          Tier: <strong>{subscriptionTier}</strong> | Amount: <strong>{formatInr(amount)}/month</strong>
         </p>
       </div>
 
-      {message && (
-        <div className={`message ${message.startsWith('✓') ? 'success' : 'error'}`}>
+      {message ? (
+        <div className={`message ${message.toLowerCase().includes("failed") ? "error" : "success"}`}>
           {message}
         </div>
-      )}
+      ) : null}
 
       <div className="payment-methods">
         <h3>Select Payment Method</h3>
-
         <div className="method-options">
           <label className="method-option">
             <input
               type="radio"
               value="razorpay"
-              checked={paymentMethod === 'razorpay'}
-              onChange={(e) => setPaymentMethod(e.target.value)}
+              checked={paymentMethod === "razorpay"}
+              onChange={(event) => setPaymentMethod(event.target.value)}
               disabled={processing}
             />
             <div className="method-card razorpay">
-              <div className="method-icon">💳</div>
               <div className="method-name">Razorpay</div>
               <div className="method-details">Cards, Wallets, UPI</div>
             </div>
@@ -255,30 +204,14 @@ const PaymentGateway = ({ subscriptionTier, amount, onSuccess, onCancel }) => {
           <label className="method-option">
             <input
               type="radio"
-              value="stripe"
-              checked={paymentMethod === 'stripe'}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              disabled={processing}
-            />
-            <div className="method-card stripe">
-              <div className="method-icon">🔐</div>
-              <div className="method-name">Stripe</div>
-              <div className="method-details">International Cards</div>
-            </div>
-          </label>
-
-          <label className="method-option">
-            <input
-              type="radio"
               value="upi"
-              checked={paymentMethod === 'upi'}
-              onChange={(e) => setPaymentMethod(e.target.value)}
+              checked={paymentMethod === "upi"}
+              onChange={(event) => setPaymentMethod(event.target.value)}
               disabled={processing}
             />
             <div className="method-card upi">
-              <div className="method-icon">📱</div>
               <div className="method-name">UPI</div>
-              <div className="method-details">Google Pay, PhonePe</div>
+              <div className="method-details">Google Pay, PhonePe, BHIM</div>
             </div>
           </label>
         </div>
@@ -292,68 +225,25 @@ const PaymentGateway = ({ subscriptionTier, amount, onSuccess, onCancel }) => {
         </div>
         <div className="summary-item">
           <span>Duration</span>
-          <span>1 Month</span>
-        </div>
-        <div className="summary-item">
-          <span>Amount</span>
-          <span>₹{amount}</span>
-        </div>
-        <div className="summary-item">
-          <span>Tax (Applicable)</span>
-          <span>Calculated at checkout</span>
+          <span>1 month</span>
         </div>
         <div className="summary-total">
           <span>Total</span>
-          <span>₹{amount}</span>
+          <span>{formatInr(amount)}</span>
         </div>
       </div>
 
       <div className="payment-actions">
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            if (paymentMethod === 'razorpay') handleRazorpayPayment();
-            if (paymentMethod === 'stripe') handleStripePayment();
-            if (paymentMethod === 'upi') handleUPIPayment();
-          }}
-          disabled={processing}
-        >
-          {processing ? '⏳ Processing...' : `Pay ₹${amount}`}
+        <button className="btn btn-primary" onClick={submitPayment} disabled={processing}>
+          {processing ? "Processing..." : `Pay ${formatInr(amount)}`}
         </button>
-
-        <button
-          className="btn btn-outline"
-          onClick={onCancel}
-          disabled={processing}
-        >
+        <button className="btn btn-outline" onClick={onCancel} disabled={processing}>
           Cancel
         </button>
-      </div>
-
-      <div className="payment-security">
-        <h4>🔒 Security & Privacy</h4>
-        <ul>
-          <li>✓ 256-bit SSL encryption</li>
-          <li>✓ PCI-DSS compliant</li>
-          <li>✓ Your payment info is never stored</li>
-          <li>✓ All transactions are verified</li>
-        </ul>
-      </div>
-
-      <div className="payment-terms">
-        <p>
-          By clicking "Pay", you agree to our{' '}
-          <a href="/terms" target="_blank" rel="noopener noreferrer">
-            Terms of Service
-          </a>{' '}
-          and{' '}
-          <a href="/privacy" target="_blank" rel="noopener noreferrer">
-            Privacy Policy
-          </a>
-        </p>
       </div>
     </div>
   );
 };
 
 export default PaymentGateway;
+

@@ -274,6 +274,34 @@ const HyperlocalAdminConfigSchema = new Schema(
   { timestamps: true }
 );
 
+const HyperlocalRefundSchema = new Schema(
+  {
+    refundId: { type: String, required: true, unique: true, index: true },
+    orderId: { type: String, required: true, trim: true, index: true },
+    userEmail: { type: String, required: true, trim: true, lowercase: true, index: true },
+    amount: { type: Number, required: true, min: 0 },
+    reason: { type: String, trim: true, default: '' },
+    status: { type: String, trim: true, default: 'pending' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
+);
+
+const HyperlocalComplaintSchema = new Schema(
+  {
+    complaintId: { type: String, required: true, unique: true, index: true },
+    orderId: { type: String, required: true, trim: true, index: true },
+    userEmail: { type: String, required: true, trim: true, lowercase: true, index: true },
+    issue: { type: String, required: true, trim: true },
+    status: { type: String, trim: true, default: 'open' },
+    resolutionNote: { type: String, trim: true, default: '' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true }
+);
+
 module.exports = {
   HyperlocalShop: mongoose.model('HyperlocalShop', HyperlocalShopSchema),
   HyperlocalAddress: mongoose.model('HyperlocalAddress', HyperlocalAddressSchema),
@@ -284,4 +312,6 @@ module.exports = {
   HyperlocalWallet: mongoose.model('HyperlocalWallet', HyperlocalWalletSchema),
   HyperlocalAd: mongoose.model('HyperlocalAd', HyperlocalAdSchema),
   HyperlocalAdminConfig: mongoose.model('HyperlocalAdminConfig', HyperlocalAdminConfigSchema),
+  HyperlocalRefund: mongoose.model('HyperlocalRefund', HyperlocalRefundSchema),
+  HyperlocalComplaint: mongoose.model('HyperlocalComplaint', HyperlocalComplaintSchema),
 };

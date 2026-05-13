@@ -208,6 +208,15 @@ const classifiedsSavedSearchSchema = Joi.object({
   notificationsEnabled: Joi.boolean().default(true),
 });
 
+const realEstateMediaItemSchema = Joi.object({
+  id: Joi.string().allow('').trim().default(''),
+  type: Joi.string().valid('image', 'video', 'floor-plan', 'brochure', 'map').default('image'),
+  label: Joi.string().allow('').trim().max(120).default(''),
+  url: Joi.string().uri().allow('').trim().default(''),
+  thumbnailUrl: Joi.string().uri().allow('').trim().default(''),
+  order: Joi.number().integer().min(0).default(0),
+});
+
 const realEstateListingSchema = Joi.object({
   title: Joi.string().trim().min(3).max(140).required(),
   intent: Joi.string().valid('sale', 'rent', 'project').default('sale'),
@@ -225,6 +234,36 @@ const realEstateListingSchema = Joi.object({
   featured: Joi.boolean().default(false),
   mediaCount: Joi.number().integer().min(0).max(50).default(0),
   hasVideoTour: Joi.boolean().default(false),
+  mediaGallery: Joi.array().items(realEstateMediaItemSchema).max(40).default([]),
+  videoTourUrl: Joi.string().uri().allow('').trim().max(2000).default(''),
+  floorPlanUrl: Joi.string().uri().allow('').trim().max(2000).default(''),
+  brochureUrl: Joi.string().uri().allow('').trim().max(2000).default(''),
+  mapPreviewUrl: Joi.string().uri().allow('').trim().max(2000).default(''),
+  mapLocationLat: Joi.number().min(-90).max(90).allow(null).default(null),
+  mapLocationLng: Joi.number().min(-180).max(180).allow(null).default(null),
+  carpetAreaSqft: Joi.number().min(0).max(200000).allow(null).default(null),
+  builtUpAreaSqft: Joi.number().min(0).max(200000).allow(null).default(null),
+  landSizeSqft: Joi.number().min(0).max(1000000).allow(null).default(null),
+  floorNumber: Joi.number().integer().min(0).max(200).allow(null).default(null),
+  totalFloors: Joi.number().integer().min(0).max(200).allow(null).default(null),
+  parkingSpots: Joi.number().integer().min(0).max(500).allow(null).default(null),
+  propertyAgeYears: Joi.number().min(0).max(250).allow(null).default(null),
+  address: Joi.string().allow('').trim().max(300).default(''),
+  landmark: Joi.string().allow('').trim().max(160).default(''),
+  contactPhone: Joi.string().allow('').trim().max(30).default(''),
+  whatsappNumber: Joi.string().allow('').trim().max(30).default(''),
+  nearbySchoolKm: Joi.number().min(0).max(100).allow(null).default(null),
+  nearbyHospitalKm: Joi.number().min(0).max(100).allow(null).default(null),
+  nearbyMetroKm: Joi.number().min(0).max(100).allow(null).default(null),
+  readyToMove: Joi.boolean().default(false),
+  underConstruction: Joi.boolean().default(false),
+  reraNumber: Joi.string().allow('').trim().max(80).default(''),
+  titleDeedStatus: Joi.string()
+    .valid('pending', 'verified', 'rejected', 'not-applicable')
+    .default('pending'),
+  taxReceipt: Joi.boolean().default(false),
+  buildingPermit: Joi.boolean().default(false),
+  encumbranceCertificate: Joi.boolean().default(false),
   status: Joi.string().valid('available', 'sold', 'rented').default('available'),
   roleMode: Joi.string().valid('owner', 'agent', 'builder').default('owner'),
 });
@@ -260,7 +299,7 @@ const realEstateModerationSchema = Joi.object({
 
 const realEstateLeadUpdateSchema = Joi.object({
   status: Joi.string()
-    .valid('new', 'contacted', 'site_visit_scheduled', 'negotiating', 'closed', 'lost')
+    .valid('new', 'contacted', 'site_visit', 'negotiation', 'token_paid', 'closed', 'lost')
     .optional(),
   followUpAt: Joi.date().iso().allow(null).optional(),
   followUpNote: Joi.string().allow('').trim().max(300).optional(),
@@ -1001,6 +1040,14 @@ const isRealEstateListingOwner = (listing = {}, user = {}) => {
   );
 };
 
+const normalizeRealEstateLeadStatus = (status = '') => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (normalized === 'site_visit_scheduled') return 'site_visit';
+  if (normalized === 'negotiating') return 'negotiation';
+  if (normalized === 'token') return 'token_paid';
+  return normalized || 'new';
+};
+
 const normalizeRealEstateLeadRecord = (lead = {}, index = 0) => ({
   id: String(lead.id || `realestate-lead-${index + 1}`).trim(),
   name: String(lead.name || 'Buyer').trim(),
@@ -1008,7 +1055,7 @@ const normalizeRealEstateLeadRecord = (lead = {}, index = 0) => ({
   phone: String(lead.phone || '').trim(),
   channel: String(lead.channel || 'Enquiry').trim(),
   priority: String(lead.priority || 'Warm').trim(),
-  status: String(lead.status || 'new').trim(),
+  status: normalizeRealEstateLeadStatus(lead.status),
   message: String(lead.message || '').trim(),
   followUpAt: toIsoDateOrNull(lead.followUpAt),
   followUpNote: String(lead.followUpNote || '').trim(),
@@ -1037,7 +1084,7 @@ const normalizeRealEstateVisitRecord = (visit = {}, index = 0) => ({
 const buildRealEstateLeadUpdate = (lead = {}, payload = {}, now = new Date()) => {
   const normalizedLead = normalizeRealEstateLeadRecord(lead);
   const nextStatus =
-    payload.status !== undefined ? String(payload.status).trim() : normalizedLead.status;
+    payload.status !== undefined ? normalizeRealEstateLeadStatus(payload.status) : normalizedLead.status;
   const nextLead = {
     ...normalizedLead,
     status: nextStatus || 'new',
@@ -3483,6 +3530,22 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
   const ownerId = resolveRealEstateOwnerId(req.user);
   const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
   const numericPriceValue = Number(String(value.priceLabel || '').replace(/[^0-9.]/g, '')) || 0;
+  const mediaGallery = Array.isArray(value.mediaGallery)
+    ? value.mediaGallery
+        .map((media, mediaIndex) => ({
+          id: String(media?.id || `realestate-media-${mediaIndex + 1}`).trim(),
+          type: String(media?.type || 'image').trim(),
+          label: String(media?.label || '').trim(),
+          url: String(media?.url || '').trim(),
+          thumbnailUrl: String(media?.thumbnailUrl || '').trim(),
+          order: Number(media?.order || mediaIndex),
+        }))
+        .filter((media) => media.url)
+    : [];
+  const primaryImage =
+    mediaGallery.find((media) => media.type === 'image' && media.url)?.url ||
+    mediaGallery.find((media) => media.url)?.url ||
+    '';
   const listingPayload = {
     title: value.title,
     price: value.priceLabel,
@@ -3494,7 +3557,7 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
     locality: value.locality || value.location,
     type: value.type,
     intent: value.intent,
-    image: 'Fresh listing',
+    image: primaryImage || 'Fresh listing',
     bedrooms: Number(value.bedrooms || 0),
     bathrooms:
       Number.isFinite(Number(value.bathrooms)) && Number(value.bathrooms) >= 0
@@ -3518,10 +3581,38 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
     featured: isAdmin ? Boolean(value.featured) : false,
     postedOn: now.slice(0, 10),
     possession: value.possession || 'Ready to move',
+    readyToMove: Boolean(value.readyToMove),
+    underConstruction: Boolean(value.underConstruction),
     description:
       value.description ||
       'Freshly posted listing waiting for admin review. Media, map pin, and legal checks can be attached in the next step.',
     mapLabel: `${value.locality || value.location} growth corridor`,
+    mediaGallery,
+    videoTourUrl: value.videoTourUrl,
+    floorPlanUrl: value.floorPlanUrl,
+    brochureUrl: value.brochureUrl,
+    mapPreviewUrl: value.mapPreviewUrl,
+    mapLocationLat: value.mapLocationLat,
+    mapLocationLng: value.mapLocationLng,
+    carpetAreaSqft: value.carpetAreaSqft,
+    builtUpAreaSqft: value.builtUpAreaSqft,
+    landSizeSqft: value.landSizeSqft,
+    floorNumber: value.floorNumber,
+    totalFloors: value.totalFloors,
+    parkingSpots: value.parkingSpots,
+    propertyAgeYears: value.propertyAgeYears,
+    address: value.address,
+    landmark: value.landmark,
+    contactPhone: value.contactPhone,
+    whatsappNumber: value.whatsappNumber,
+    nearbySchoolKm: value.nearbySchoolKm,
+    nearbyHospitalKm: value.nearbyHospitalKm,
+    nearbyMetroKm: value.nearbyMetroKm,
+    reraNumber: value.reraNumber,
+    titleDeedStatus: value.titleDeedStatus,
+    taxReceipt: Boolean(value.taxReceipt),
+    buildingPermit: Boolean(value.buildingPermit),
+    encumbranceCertificate: Boolean(value.encumbranceCertificate),
     rating: 0,
     reviewCount: 0,
     premiumPlan:
@@ -3531,7 +3622,7 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
           ? 'Agent Pro'
           : 'Starter',
     mediaCount: Number(value.mediaCount || 0),
-    hasVideoTour: Boolean(value.hasVideoTour),
+    hasVideoTour: Boolean(value.hasVideoTour || value.videoTourUrl),
     projectUnits: value.intent === 'project' ? 1 : 1,
     leads: [],
     visits: [],
@@ -3623,6 +3714,18 @@ router.patch('/realestate/listings/:listingId', authenticate, async (req, res) =
           : undefined,
       area: value.areaSqft !== undefined ? `${Number(value.areaSqft)} sq ft` : undefined,
       locality: value.locality || undefined,
+      hasVideoTour:
+        value.hasVideoTour !== undefined || value.videoTourUrl !== undefined
+          ? Boolean(value.hasVideoTour || value.videoTourUrl)
+          : undefined,
+      image:
+        value.mediaGallery !== undefined
+          ? (Array.isArray(value.mediaGallery)
+              ? value.mediaGallery.find((media) => String(media?.type || '').trim() === 'image' && media?.url)?.url ||
+                value.mediaGallery.find((media) => media?.url)?.url ||
+                matchedListing.image
+              : matchedListing.image)
+          : undefined,
       updatedAt: new Date(),
     };
 
@@ -3680,6 +3783,16 @@ router.patch('/realestate/listings/:listingId', authenticate, async (req, res) =
             : listing.priceValue,
         area: value.areaSqft !== undefined ? `${Number(value.areaSqft)} sq ft` : listing.area,
         locality: value.locality !== undefined ? value.locality || value.location || listing.location : listing.locality,
+        image:
+          value.mediaGallery !== undefined && Array.isArray(value.mediaGallery)
+            ? value.mediaGallery.find((media) => String(media?.type || '').trim() === 'image' && media?.url)?.url ||
+              value.mediaGallery.find((media) => media?.url)?.url ||
+              listing.image
+            : listing.image,
+        hasVideoTour:
+          value.hasVideoTour !== undefined || value.videoTourUrl !== undefined
+            ? Boolean(value.hasVideoTour || value.videoTourUrl)
+            : listing.hasVideoTour,
         updatedAt: new Date().toISOString(),
       });
 
@@ -3691,6 +3804,8 @@ router.patch('/realestate/listings/:listingId', authenticate, async (req, res) =
         priceValue: updatedListing.priceValue,
         area: updatedListing.area,
         locality: updatedListing.locality,
+        image: updatedListing.image,
+        hasVideoTour: updatedListing.hasVideoTour,
         updatedAt: updatedListing.updatedAt,
       };
     });
@@ -3968,7 +4083,7 @@ router.post('/realestate/listings/:listingId/visits', authenticate, async (req, 
       ? buildRealEstateLeadUpdate(
           lead,
           {
-            status: 'site_visit_scheduled',
+            status: 'site_visit',
             followUpAt: scheduledVisit.scheduledAt,
             followUpNote:
               String(lead.followUpNote || '').trim() || 'Site visit scheduled from the buyer workspace.',

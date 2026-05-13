@@ -103,7 +103,8 @@ const hasEntitlement = async (userEmail, entitlement) => {
     if (!subscription) return false;
 
     const value = subscription.entitlements[entitlement];
-    return value === true || (typeof value === 'number' && value > (subscription[`${entitlement}Used`] || 0));
+    const usedValue = subscription.entitlements?.[`${entitlement}Used`] || 0;
+    return value === true || (typeof value === 'number' && value > usedValue);
   } catch (error) {
     logger.error(`Error checking entitlement: ${error.message}`);
     return false;

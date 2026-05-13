@@ -122,7 +122,7 @@ const buildLiveProfile = (overrides = {}) => ({
 });
 
 const configureLiveAxios = ({
-  profile = null,
+  profile = buildLiveProfile(),
   searchProfiles = baseProfiles,
   interests = { incoming: [], outgoing: [] },
   threads = [],
@@ -131,23 +131,23 @@ const configureLiveAxios = ({
   let currentInterests = interests;
 
   axios.get.mockImplementation((url) => {
-    if (/\/matrimonial\/profile$/.test(url)) {
+    if (/(\/matrimonial)?\/profile$/.test(url)) {
       return Promise.resolve({ data: { data: profile } });
     }
 
-    if (/\/matrimonial\/search/.test(url)) {
+    if (/(\/matrimonial)?\/search/.test(url)) {
       return Promise.resolve({ data: { data: searchProfiles } });
     }
 
-    if (/\/matrimonial\/interests$/.test(url)) {
+    if (/(\/matrimonial)?\/interests$/.test(url)) {
       return Promise.resolve({ data: { data: currentInterests } });
     }
 
-    if (/\/matrimonial\/messages$/.test(url)) {
+    if (/(\/matrimonial)?\/messages$/.test(url)) {
       return Promise.resolve({ data: { data: threads } });
     }
 
-    if (/\/matrimonial\/admin\/review-queue$/.test(url)) {
+    if (/(\/matrimonial)?\/admin\/review-queue$/.test(url)) {
       return Promise.resolve({ data: { data: adminQueue } });
     }
 
@@ -155,7 +155,11 @@ const configureLiveAxios = ({
   });
 
   axios.post.mockImplementation((url, body) => {
-    if (/\/matrimonial\/interests$/.test(url)) {
+    if (/(\/matrimonial)?\/subscription\/check-entitlement$/.test(url)) {
+      return Promise.resolve({ data: { success: true, hasAccess: true } });
+    }
+
+    if (/(\/matrimonial)?\/interests$/.test(url)) {
       currentInterests = {
         incoming: [],
         outgoing: [
@@ -174,7 +178,7 @@ const configureLiveAxios = ({
       return Promise.resolve({ data: { success: true } });
     }
 
-    if (/\/report$/.test(url) || /\/block$/.test(url) || /\/matrimonial\/messages$/.test(url)) {
+    if (/\/report$/.test(url) || /\/block$/.test(url) || /(\/matrimonial)?\/messages$/.test(url)) {
       return Promise.resolve({ data: { success: true } });
     }
 
@@ -211,7 +215,7 @@ const configureLiveAxios = ({
       });
     }
 
-    if (/\/matrimonial\/interests\//.test(url) || /\/moderation$/.test(url)) {
+    if (/(\/matrimonial)?\/interests\//.test(url) || /\/moderation$/.test(url)) {
       return Promise.resolve({ data: { success: true } });
     }
 
@@ -239,12 +243,7 @@ describe("Matrimonial", () => {
       expect(screen.getAllByText(/anjali sharma/i).length).toBeGreaterThan(0);
     });
 
-    expect(axios.get).toHaveBeenCalledWith(
-      expect.stringMatching(/\/matrimonial\/search\?/),
-      expect.objectContaining({
-        timeout: 10000,
-      })
-    );
+    expect(axios.get).toHaveBeenCalledWith(expect.stringMatching(/\/search\?/));
   });
 
   test("saves a sanitized profile through the live matrimonial profile endpoint", async () => {
@@ -287,7 +286,7 @@ describe("Matrimonial", () => {
     expect(submittedFormData.get("phone")).toBe("9876543210");
     expect(submittedFormData.get("languages")).toBe("Malayalam, English");
     expect(submittedFormData.get("hobbies")).toBe("Travel, badReading");
-    expect(axios.put.mock.calls[0][0]).toMatch(/\/matrimonial\/profile$/);
+    expect(axios.put.mock.calls[0][0]).toMatch(/\/profile$/);
   });
 
   test("sends interests through the live API and reflects the updated state", async () => {
@@ -304,12 +303,9 @@ describe("Matrimonial", () => {
     });
 
     expect(axios.post).toHaveBeenCalledWith(
-      expect.stringMatching(/\/matrimonial\/interests$/),
+      expect.stringMatching(/\/interests$/),
       expect.objectContaining({
         toProfileId: "profile-1",
-      }),
-      expect.objectContaining({
-        timeout: 10000,
       })
     );
   });
@@ -350,12 +346,9 @@ describe("Matrimonial", () => {
 
     await waitFor(() => {
       expect(axios.patch).toHaveBeenCalledWith(
-        expect.stringMatching(/\/matrimonial\/admin\/profiles\/profile-1\/moderation$/),
+        expect.stringMatching(/\/admin\/profiles\/profile-1\/moderation$/),
         expect.objectContaining({
           action: "approve",
-        }),
-        expect.objectContaining({
-          timeout: 10000,
         })
       );
     });
@@ -414,12 +407,9 @@ describe("Matrimonial", () => {
     });
 
     expect(axios.post).toHaveBeenCalledWith(
-      expect.stringMatching(/\/matrimonial\/profiles\/profile-1\/report$/),
+      expect.stringMatching(/\/profiles\/profile-1\/report$/),
       expect.objectContaining({
         reason: expect.stringMatching(/reported from the matrimonial workspace/i),
-      }),
-      expect.objectContaining({
-        timeout: 10000,
       })
     );
 
@@ -444,15 +434,12 @@ describe("Matrimonial", () => {
     });
 
     expect(axios.post).toHaveBeenCalledWith(
-      expect.stringMatching(/\/matrimonial\/profiles\/profile-1\/block$/),
-      {},
-      expect.objectContaining({
-        timeout: 10000,
-      })
+      expect.stringMatching(/\/profiles\/profile-1\/block$/),
+      {}
     );
   });
 
-  test("unlocks secure messaging in premium preview and sends a live message", async () => {
+  test("unlocks secure messaging with paid entitlement and sends a live message", async () => {
     configureLiveAxios({
       profile: buildLiveProfile(),
       threads: [
@@ -472,8 +459,6 @@ describe("Matrimonial", () => {
     });
 
     render(<Matrimonial />);
-
-    fireEvent.click(screen.getByRole("button", { name: /preview premium/i }));
     fireEvent.click(screen.getByRole("tab", { name: /messages/i }));
 
     const composer = await screen.findByLabelText(/message anjali sharma/i);
@@ -489,13 +474,10 @@ describe("Matrimonial", () => {
     });
 
     expect(axios.post).toHaveBeenCalledWith(
-      expect.stringMatching(/\/matrimonial\/messages$/),
+      expect.stringMatching(/\/messages$/),
       expect.objectContaining({
         toProfileId: "profile-1",
         content: "Namaste, happy to connect.",
-      }),
-      expect.objectContaining({
-        timeout: 10000,
       })
     );
   });

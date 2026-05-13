@@ -102,6 +102,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-bottom: 24px;
 }
 
 .nila-ai-topic-list button {
@@ -111,6 +112,7 @@
   padding: 10px 16px;
   color: #374151;
   cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 .nila-ai-topic-list button.active,
@@ -118,27 +120,153 @@
   background: #0d9488;
   color: white;
   border-color: transparent;
+  transform: translateY(-1px);
 }
 
-.nila-ai-quick-actions,
-.nila-ai-recommendations {
-  margin-bottom: 32px;
+.nila-ai-error-state,
+.nila-ai-loading-state,
+.nila-ai-flash-state {
+  margin: 16px 0;
+  padding: 14px 18px;
+  border-radius: 16px;
+  font-size: 0.95rem;
 }
 
-.nila-ai-quick-actions h2,
-.nila-ai-recommendations h2 {
-  margin-bottom: 16px;
+.nila-ai-error-state {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+}
+
+.nila-ai-loading-state {
+  background: #ecfeff;
+  border: 1px solid #67e8f9;
+  color: #065f46;
+}
+
+.nila-ai-flash-state {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+}
+
+.nila-ai-chat-panel {
+  margin-top: 28px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 24px;
+  padding: 24px;
+}
+
+.nila-ai-chat-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.nila-ai-chat-panel-header h3 {
+  margin: 0;
+}
+
+.nila-ai-chat-panel-header p {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.nila-ai-chat-history {
+  display: grid;
+  gap: 16px;
+}
+
+.nila-ai-chat-message {
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.nila-ai-chat-message.user {
+  border-color: #c7d2fe;
+  background: #eff6ff;
+}
+
+.nila-ai-chat-message.assistant {
+  border-color: #a5f3fc;
+  background: #ecfeff;
+}
+
+.nila-ai-chat-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.nila-ai-chat-meta strong {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.nila-ai-chat-meta small {
+  color: #64748b;
+}
+
+.nila-ai-chat-message p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.nila-ai-copy-button {
+  margin-top: 12px;
+  background: transparent;
+  border: none;
+  color: #0d9488;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.nila-ai-suggestion-block {
+  margin-top: 22px;
+}
+
+.nila-ai-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.nila-ai-suggestion-button {
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.nila-ai-suggestion-button:hover {
+  background: #f1f5f9;
+  transform: translateY(-1px);
 }
 
 .nila-ai-action-grid,
-.nila-ai-recommendation-grid {
+.nila-ai-recommendation-grid,
+.nila-ai-assistant-grid {
   display: grid;
   gap: 18px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .nila-ai-action-card,
-.nila-ai-recommendation-card {
+.nila-ai-recommendation-card,
+.nila-ai-assistant-card {
   background: #f8fafc;
   border: 1px solid #e5e7eb;
   border-radius: 20px;
@@ -147,14 +275,33 @@
 }
 
 .nila-ai-action-card h3,
-.nila-ai-recommendation-card h3 {
+.nila-ai-recommendation-card h3,
+.nila-ai-assistant-card h3 {
   margin-top: 0;
 }
 
 .nila-ai-action-card p,
-.nila-ai-recommendation-card p {
+.nila-ai-recommendation-card p,
+.nila-ai-assistant-card p {
   margin: 10px 0 0;
   color: #4b5563;
+}
+
+.nila-ai-assistants {
+  margin-bottom: 32px;
+}
+
+.nila-ai-assistants p {
+  margin-bottom: 18px;
+  color: #475569;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  transform: translateY(-2px);
 }
 
 @media (max-width: 900px) {
@@ -162,8 +309,13 @@
     grid-template-columns: 1fr;
   }
 
+  .nila-ai-search-box {
+    grid-template-columns: 1fr;
+  }
+
   .nila-ai-action-grid,
-  .nila-ai-recommendation-grid {
+  .nila-ai-recommendation-grid,
+  .nila-ai-assistant-grid {
     grid-template-columns: 1fr;
   }
 }

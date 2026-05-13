@@ -4,10 +4,8 @@ jest.mock('../models/MatrimonialProfile', () => ({
 }));
 
 jest.mock('../utils/subscriptionService', () => ({
-  subscriptionService: {
-    hasEntitlement: jest.fn(),
-    getUserSubscription: jest.fn(),
-  },
+  hasEntitlement: jest.fn(),
+  getUserSubscription: jest.fn(),
 }));
 
 jest.mock('../utils/blueTickService', () => ({

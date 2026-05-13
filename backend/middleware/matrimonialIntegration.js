@@ -5,8 +5,7 @@
 
 const mongoose = require('mongoose');
 const MatrimonialProfile = require('../models/MatrimonialProfile');
-const { subscriptionService } = require('../utils/subscriptionService');
-const { blueTickService } = require('../utils/blueTickService');
+const subscriptionService = require('../utils/subscriptionService');
 
 const normalizeId = (value) => {
   if (!value) {
