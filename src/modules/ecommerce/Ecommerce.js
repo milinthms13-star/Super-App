@@ -673,6 +673,50 @@ const Ecommerce = ({
     setMarketplaceSort(nextState.sort || "relevance");
   };
 
+  const resetMarketplaceFacets = () => {
+    setMarketplaceSearch("");
+    setSelectedCategory("All");
+    setSelectedSubcategory("All");
+    setSelectedSeller("All Businesses");
+    setMarketplaceMinPrice("");
+    setMarketplaceMaxPrice("");
+    setMarketplaceMinRating("0");
+    setMarketplaceInStockOnly(false);
+    setMarketplaceSort("relevance");
+    setMarketplaceView("products");
+    setSearchAssistantMessage("");
+  };
+
+  const handleApplyMarketplacePreset = (presetKey) => {
+    setMarketplaceView("products");
+
+    if (presetKey === "in-stock") {
+      setMarketplaceInStockOnly(true);
+      setMarketplaceSort("relevance");
+      setSearchAssistantMessage("Showing only in-stock items.");
+      return;
+    }
+
+    if (presetKey === "top-rated") {
+      setMarketplaceMinRating("4");
+      setMarketplaceSort("rating");
+      setSearchAssistantMessage("Top-rated products first.");
+      return;
+    }
+
+    if (presetKey === "budget") {
+      setMarketplaceMinPrice("");
+      setMarketplaceMaxPrice("500");
+      setMarketplaceSort("price-asc");
+      setSearchAssistantMessage("Budget picks under INR 500.");
+      return;
+    }
+
+    if (presetKey === "clear") {
+      resetMarketplaceFacets();
+    }
+  };
+
   const handleApplySmartSearch = (plan = smartSearchPlan) => {
     if (!plan?.searchText && !plan?.canApply) {
       setSearchAssistantMessage("Add a product need first so smart search can help refine it.");
@@ -1467,8 +1511,8 @@ const Ecommerce = ({
       {!isEntrepreneur && (
         <section className="buyer-quick-access" aria-label="Buyer quick actions">
           <div className="buyer-quick-copy">
-            <h2>Start shopping faster</h2>
-            <p>Jump directly to product cards and open advanced shopping tools only when needed.</p>
+            <h2>Shop faster with fewer taps</h2>
+            <p>Use quick presets and voice search to find what you need with minimal typing.</p>
           </div>
           <div className="buyer-quick-actions">
             <button type="button" className="btn btn-primary" onClick={handleJumpToProducts}>
@@ -1482,6 +1526,41 @@ const Ecommerce = ({
               aria-controls="shopper-tools-panel"
             >
               {showShopperTools ? "Hide Shopping Tools" : "Show Shopping Tools"}
+            </button>
+          </div>
+          <div className="buyer-quick-shortcuts" aria-label="Quick shopping presets">
+            <button
+              type="button"
+              className={`quick-preset-btn ${marketplaceInStockOnly ? "active" : ""}`}
+              onClick={() => handleApplyMarketplacePreset("in-stock")}
+            >
+              In-stock only
+            </button>
+            <button
+              type="button"
+              className={`quick-preset-btn ${Number(marketplaceMinRating || 0) >= 4 ? "active" : ""}`}
+              onClick={() => handleApplyMarketplacePreset("top-rated")}
+            >
+              Top rated
+            </button>
+            <button
+              type="button"
+              className={`quick-preset-btn ${
+                marketplaceMinPrice === "" && marketplaceMaxPrice === "500" ? "active" : ""
+              }`}
+              onClick={() => handleApplyMarketplacePreset("budget")}
+            >
+              Under INR 500
+            </button>
+            <button
+              type="button"
+              className={`quick-preset-btn ${listeningKey === "marketplace-search" ? "active" : ""}`}
+              onClick={handleVoiceSearch}
+            >
+              {listeningKey === "marketplace-search" ? "Listening..." : "Voice search"}
+            </button>
+            <button type="button" className="quick-preset-btn" onClick={() => handleApplyMarketplacePreset("clear")}>
+              Reset
             </button>
           </div>
         </section>
@@ -2065,11 +2144,27 @@ const Ecommerce = ({
                       recordEcommerceSearch(marketplaceSearch);
                     }
                   }}
-                  placeholder="Search by product, category, business, or natural shopping intent"
+                  placeholder="Try: chips under 300, top rated chargers, local groceries"
                   className={esSearchResults.loading ? "loading" : ""}
                 />
                 {esSearchResults.loading && <span className="search-spinner">🔍</span>}
                 {esSearchFallback && <span className="search-fallback">Fallback</span>}
+              </div>
+              <div className="marketplace-inline-actions">
+                <button
+                  type="button"
+                  className={`btn btn-outline ${listeningKey === "marketplace-search" ? "voice-live" : ""}`}
+                  onClick={handleVoiceSearch}
+                >
+                  {listeningKey === "marketplace-search"
+                    ? "Stop voice"
+                    : recognitionSupported
+                      ? "Use voice"
+                      : "Voice unavailable"}
+                </button>
+                <button type="button" className="btn btn-primary" onClick={() => handleApplySmartSearch()}>
+                  Quick AI
+                </button>
               </div>
             </label>
 
@@ -2947,17 +3042,7 @@ const Ecommerce = ({
               <button
                 type="button"
                 className="btn btn-outline"
-                onClick={() => {
-                  setMarketplaceSearch("");
-                  setSelectedCategory("All");
-                  setSelectedSubcategory("All");
-                  setSelectedSeller("All Businesses");
-                  setMarketplaceMinPrice("");
-                  setMarketplaceMaxPrice("");
-                  setMarketplaceMinRating("0");
-                  setMarketplaceInStockOnly(false);
-                  setMarketplaceSort("relevance");
-                }}
+                onClick={resetMarketplaceFacets}
               >
                 Clear filters
               </button>

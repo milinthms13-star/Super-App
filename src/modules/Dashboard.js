@@ -754,6 +754,26 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
     .filter(Boolean);
   const cartItemCount = cart.reduce((total, item) => total + Number(item.quantity || 1), 0);
   const undeliveredOrdersCount = orderStats.openCount || 0;
+  const pendingRefundsCount = useMemo(() => {
+    return orders.reduce((total, order) => {
+      const items = Array.isArray(order.items) ? order.items : [];
+      return (
+        total +
+        items.filter(
+          (item) =>
+            item?.returnRequest &&
+            String(item.returnRequest.refundStatus || "").trim().toLowerCase() !== "completed"
+        ).length
+      );
+    }, 0);
+  }, [orders]);
+  const pendingIssueCount = Math.max(0, undeliveredOrdersCount + pendingRefundsCount);
+  const hasPendingIssues = pendingIssueCount > 0;
+  const pendingIssueLabel = pendingRefundsCount > 0 && undeliveredOrdersCount > 0
+    ? `${undeliveredOrdersCount} deliver${undeliveredOrdersCount > 1 ? "ies" : "y"} pending, ${pendingRefundsCount} refund${pendingRefundsCount > 1 ? "s" : ""} pending`
+    : pendingRefundsCount > 0
+      ? `${pendingRefundsCount} refund${pendingRefundsCount > 1 ? "s" : ""} pending`
+      : `${undeliveredOrdersCount} deliver${undeliveredOrdersCount > 1 ? "ies" : "y"} pending`;
   const sellerListingCount = managedProductsPagination.totalItems || 0;
   const sellerListings = managedProducts.filter(
     (product) => product.sellerEmail === currentUser?.email
@@ -971,17 +991,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
           </div>
         ) : (
           <>
-            {!isSeller && (
-              <section className="welcome-section user-welcome-section">
-                <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
-                <h1>{`Good ${dayPeriod}, ${greetingName}`}</h1>
-                <p>
-                  One place for your daily services. You currently have {activeModuleCount}+ modules
-                  available with live order and activity updates.
-                </p>
-              </section>
-            )}
-
             {isSeller && (
               <div className={`welcome-section seller-welcome-section`}>
                 <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
@@ -1059,30 +1068,33 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                     <span className="stat-chip stat-chip-live">Live basket pulse</span>
                   </div>
                 </button>
-                <button
-                  type="button"
-                  className="stat-card stat-card-button"
-                  onClick={handleOrdersCardClick}
-                >
-                  <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
-                  <div className="stat-content">
-                    <h3>{ordersPagination.totalItems || 0}</h3>
-                    <p>{t("dashboard.ordersPlaced", "Orders Placed")}</p>
-                    <span className="stat-chip">Weekly growth</span>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  className="stat-card stat-card-button"
-                  onClick={handleOrdersCardClick}
-                >
-                  <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
-                  <div className="stat-content">
-                    <h3>{undeliveredOrdersCount}</h3>
-                    <p>Orders Not Delivered</p>
-                    <span className="stat-chip stat-chip-attention">Action suggested</span>
-                  </div>
-                </button>
+                {hasPendingIssues ? (
+                  <button
+                    type="button"
+                    className="stat-card stat-card-button"
+                    onClick={handleOrdersCardClick}
+                  >
+                    <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
+                    <div className="stat-content">
+                      <h3>{pendingIssueCount}</h3>
+                      <p>{pendingIssueLabel}</p>
+                      <span className="stat-chip stat-chip-attention">Resolve active issues</span>
+                    </div>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="stat-card stat-card-button"
+                    onClick={handleOrdersCardClick}
+                  >
+                    <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
+                    <div className="stat-content">
+                      <h3>{ordersPagination.totalItems || 0}</h3>
+                      <p>{t("dashboard.ordersPlaced", "Orders Placed")}</p>
+                      <span className="stat-chip">Weekly growth</span>
+                    </div>
+                  </button>
+                )}
               </div>
             )}
 

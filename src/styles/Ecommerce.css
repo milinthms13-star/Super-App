@@ -146,6 +146,38 @@
   gap: 0.65rem;
 }
 
+.buyer-quick-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.quick-preset-btn {
+  border: 1px solid rgba(30, 64, 175, 0.16);
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+  color: #0f2f5f;
+  border-radius: 999px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.quick-preset-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(30, 64, 175, 0.42);
+  box-shadow: 0 10px 16px rgba(17, 70, 160, 0.12);
+}
+
+.quick-preset-btn.active {
+  border-color: rgba(255, 183, 0, 0.55);
+  background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%);
+  color: #8a5a00;
+}
+
 .buyer-mode .filter-section {
   margin-bottom: 1.35rem;
 }
@@ -671,6 +703,80 @@
   background: #ffffff;
   padding: 0.95rem 1rem;
   color: #0f172a;
+}
+
+.es-search-container {
+  position: relative;
+}
+
+.search-spinner {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #355f9a;
+  font-size: 0.92rem;
+}
+
+.search-fallback {
+  position: absolute;
+  right: 2.2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: #fff4cc;
+  color: #7a5700;
+  font-size: 0.67rem;
+  font-weight: 800;
+  padding: 0.17rem 0.45rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.marketplace-inline-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.marketplace-inline-actions .btn {
+  min-height: 38px;
+  padding: 0.5rem 0.85rem;
+}
+
+.marketplace-price-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.marketplace-toggle-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.marketplace-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #1f334f;
+  font-weight: 600;
+}
+
+.marketplace-checkbox input {
+  width: 16px;
+  height: 16px;
+}
+
+.facet-pill {
+  margin-left: 0.35rem;
+  border-radius: 999px;
+  background: rgba(16, 42, 67, 0.09);
+  color: #334155;
+  padding: 0.12rem 0.4rem;
+  font-size: 0.66rem;
+  font-weight: 700;
 }
 
 .marketplace-filter-card input::placeholder {
@@ -1556,6 +1662,18 @@
     width: 100%;
   }
 
+  .buyer-quick-shortcuts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .quick-preset-btn {
+    padding: 0.48rem 0.7rem;
+    font-size: 0.76rem;
+    text-align: center;
+  }
+
   .buyer-mode .filter-section {
     padding: 1rem;
     border-radius: 16px;
@@ -1574,6 +1692,15 @@
   .filter-btn {
     padding: 0.65rem 0.95rem;
     font-size: 0.86rem;
+  }
+
+  .marketplace-inline-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .marketplace-price-range {
+    grid-template-columns: 1fr;
   }
 }
 
