@@ -1,268 +1,263 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useApp } from "../../contexts/AppContext";
+import { tourismService } from "../../services/tourismService";
+import FilterPanel from "./components/FilterPanel";
+import PackageCard from "./components/PackageCard";
+import BookingSheet from "./components/BookingSheet";
+import VendorPanel from "./components/VendorPanel";
+import AdminPanel from "./components/AdminPanel";
+import BookingHistory from "./components/BookingHistory";
+import {
+  FALLBACK_ADMIN_REVIEW_ITEMS,
+  FALLBACK_COUPONS,
+  FALLBACK_PACKAGES,
+  FALLBACK_VENDOR_PIPELINE,
+  HOTEL_CATEGORIES,
+  KERALA_DESTINATIONS,
+  OFFICIAL_LINKS,
+  PACKAGE_CATEGORIES,
+  PAYMENT_OPTIONS,
+  PICKUP_CITIES,
+  TRAVELER_TYPES,
+  formatInr,
+} from "./tourismData";
 import "./TourismMarketplace.css";
 
-const PACKAGE_CATEGORIES = [
-  "All",
-  "Honeymoon",
-  "Houseboat",
-  "Wildlife",
-  "Nature",
-  "Beach",
-  "Pilgrimage",
-  "Wellness",
-  "Family",
-  "Student",
-  "NRI",
-  "Local Experience",
-];
+const DEFAULT_BOOKING_FORM = {
+  customerName: "",
+  customerEmail: "",
+  customerPhone: "",
+  travelerCount: 2,
+  pickupCity: PICKUP_CITIES[0],
+  hotelCategory: HOTEL_CATEGORIES[1],
+  travelDate: "",
+  paymentType: PAYMENT_OPTIONS[0].id,
+  couponCode: "",
+  bookingNote: "",
+};
 
-const TRAVELER_TYPES = ["Any", "Couple", "Family", "Group", "Solo", "Student", "NRI"];
+const DEFAULT_VENDOR_DRAFT = {
+  title: "",
+  destination: "Munnar",
+  category: "Nature",
+  durationDays: 3,
+  startPrice: 12000,
+  imageGalleryText: "",
+  availableDatesText: "",
+  seasonalPricingText: '[{"season":"Peak","startDate":"2026-11-01","endDate":"2027-01-31","price":15000}]',
+};
 
-const KERALA_DESTINATIONS = [
-  "All destinations",
-  "Munnar",
-  "Alleppey",
-  "Thekkady",
-  "Wayanad",
-  "Kovalam",
-  "Varkala",
-  "Kochi",
-  "Kumarakom",
-  "Sabarimala",
-  "Trivandrum",
-  "Kannur",
-];
+const normalizeText = (value = "") => String(value || "").trim();
 
-const TOURISM_PACKAGES = [
-  {
-    id: "pkg-munnar-honeymoon",
-    title: "Munnar Mist Honeymoon",
-    destination: "Munnar",
-    category: "Honeymoon",
-    travelerType: "Couple",
-    durationDays: 3,
-    startPrice: 18500,
-    rating: 4.8,
-    reviews: 124,
-    tags: ["Tea Estate Stay", "Candlelight Dinner", "Private Cab"],
-    itinerary: [
-      "Day 1: Kochi pickup, check-in, sunset viewpoint",
-      "Day 2: Tea museum, Mattupetty dam, romantic dinner",
-      "Day 3: Blossom park, shopping, drop",
-    ],
-    vendor: "HighRange Holidays",
-    availability: "Available this week",
-  },
-  {
-    id: "pkg-alleppey-houseboat",
-    title: "Alleppey Premium Houseboat",
-    destination: "Alleppey",
-    category: "Houseboat",
-    travelerType: "Family",
-    durationDays: 2,
-    startPrice: 14200,
-    rating: 4.7,
-    reviews: 219,
-    tags: ["AC Houseboat", "All Meals", "Backwater Cruise"],
-    itinerary: [
-      "Day 1: Board houseboat, village cruise, dinner on deck",
-      "Day 2: Sunrise canal ride, local market, checkout",
-    ],
-    vendor: "Nila Backwater Trails",
-    availability: "Limited slots",
-  },
-  {
-    id: "pkg-thekkady-wildlife",
-    title: "Thekkady Wildlife Explorer",
-    destination: "Thekkady",
-    category: "Wildlife",
-    travelerType: "Group",
-    durationDays: 2,
-    startPrice: 9900,
-    rating: 4.5,
-    reviews: 88,
-    tags: ["Periyar Safari", "Spice Plantation", "Guide Included"],
-    itinerary: [
-      "Day 1: Check-in, plantation tour, cultural show",
-      "Day 2: Early safari, local lunch, return",
-    ],
-    vendor: "Periyar Trek Co.",
-    availability: "Available",
-  },
-  {
-    id: "pkg-wayanad-nature",
-    title: "Wayanad Nature Retreat",
-    destination: "Wayanad",
-    category: "Nature",
-    travelerType: "Family",
-    durationDays: 3,
-    startPrice: 12800,
-    rating: 4.6,
-    reviews: 162,
-    tags: ["Waterfall Trail", "Campfire", "Resort Stay"],
-    itinerary: [
-      "Day 1: Check-in, tea trail walk, campfire",
-      "Day 2: Edakkal caves, waterfalls, zipline",
-      "Day 3: Organic farm visit, checkout",
-    ],
-    vendor: "Western Ghats Getaways",
-    availability: "Available",
-  },
-  {
-    id: "pkg-kovalam-beach",
-    title: "Kovalam and Varkala Beach Escape",
-    destination: "Kovalam",
-    category: "Beach",
-    travelerType: "Solo",
-    durationDays: 3,
-    startPrice: 11700,
-    rating: 4.4,
-    reviews: 96,
-    tags: ["Beach Stay", "Surf Session", "Sunset Cliff"],
-    itinerary: [
-      "Day 1: Kovalam beach and lighthouse",
-      "Day 2: Varkala cliff, water activities",
-      "Day 3: Local cafe trail, return",
-    ],
-    vendor: "Coastal Routes Kerala",
-    availability: "Available",
-  },
-  {
-    id: "pkg-sabarimala-pilgrim",
-    title: "Sabarimala Pilgrimage Support Trip",
-    destination: "Sabarimala",
-    category: "Pilgrimage",
-    travelerType: "Group",
-    durationDays: 2,
-    startPrice: 6800,
-    rating: 4.7,
-    reviews: 141,
-    tags: ["Darshan Queue Assist", "Group Transport", "Veg Meals"],
-    itinerary: [
-      "Day 1: Pickup, base camp stay, pooja support",
-      "Day 2: Darshan support, return",
-    ],
-    vendor: "Bhakti Travel Desk",
-    availability: "Festival season booking open",
-  },
-  {
-    id: "pkg-ayurveda-wellness",
-    title: "Kumarakom Ayurveda Wellness",
-    destination: "Kumarakom",
-    category: "Wellness",
-    travelerType: "NRI",
-    durationDays: 5,
-    startPrice: 28600,
-    rating: 4.9,
-    reviews: 77,
-    tags: ["Doctor Consultation", "Detox Plan", "Lakeside Resort"],
-    itinerary: [
-      "Day 1: Health assessment and therapy planning",
-      "Day 2-4: Ayurvedic therapies and yoga sessions",
-      "Day 5: Progress review and departure",
-    ],
-    vendor: "Nila Wellness Journeys",
-    availability: "Pre-book 10 days earlier",
-  },
-  {
-    id: "pkg-local-experience",
-    title: "Kerala Local Experience Hub",
-    destination: "Kannur",
-    category: "Local Experience",
-    travelerType: "Group",
-    durationDays: 2,
-    startPrice: 7600,
-    rating: 4.8,
-    reviews: 65,
-    tags: ["Theyyam Visit", "Village Food Trail", "Women-Led Units"],
-    itinerary: [
-      "Day 1: Backwater village walk, toddy food trail",
-      "Day 2: Theyyam performance and handicraft market",
-    ],
-    vendor: "Responsible Roots Kerala",
-    availability: "Weekend departures",
-  },
-];
+const validateBookingForm = (form) => {
+  const errors = {};
+  if (normalizeText(form.customerName).length < 2) {
+    errors.customerName = "Enter a valid name";
+  }
+  if (!/^\S+@\S+\.\S+$/.test(normalizeText(form.customerEmail))) {
+    errors.customerEmail = "Enter a valid email";
+  }
+  if (normalizeText(form.customerPhone).replace(/\D/g, "").length < 10) {
+    errors.customerPhone = "Enter a valid phone number";
+  }
+  if (!normalizeText(form.travelDate)) {
+    errors.travelDate = "Select travel date";
+  }
+  return errors;
+};
 
-const OFFICIAL_LINKS = [
-  {
-    name: "Kerala Tourism",
-    url: "https://www.keralatourism.org/",
-    description: "Official destination and travel information from Kerala Tourism.",
-  },
-  {
-    name: "KTDC",
-    url: "https://www.ktdc.com/",
-    description: "Kerala Tourism Development Corporation packages and stays.",
-  },
-  {
-    name: "Responsible Tourism Mission",
-    url: "https://www.keralatourism.org/responsible-tourism/",
-    description: "Community tourism and local experience initiatives.",
-  },
-  {
-    name: "Kerala Forest Ecotourism",
-    url: "https://www.keralaforestecotourism.com/",
-    description: "Ecotourism references and nature experience booking information.",
-  },
-];
-
-const VENDOR_PIPELINE = [
-  { leadId: "LD-4312", package: "Munnar Mist Honeymoon", traveler: "Anoop K", budget: "INR 20k", status: "New" },
-  { leadId: "LD-4313", package: "Kerala Local Experience Hub", traveler: "Nora M", budget: "INR 12k", status: "Negotiation" },
-  { leadId: "LD-4314", package: "Kumarakom Ayurveda Wellness", traveler: "Riya P", budget: "INR 35k", status: "Confirmed" },
-];
-
-const ADMIN_REVIEW_ITEMS = [
-  { id: "VN-102", vendor: "BlueHill Travels", kyc: "Pending", package: "Wayanad Nature Trek", risk: "Medium" },
-  { id: "VN-203", vendor: "PalmLine Holidays", kyc: "Verified", package: "Varkala Surf Weekend", risk: "Low" },
-  { id: "VN-318", vendor: "Heritage Temple Tours", kyc: "Pending", package: "Pilgrimage Circle", risk: "High" },
-];
-
-const formatInr = (amount = 0) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(amount);
+const parseList = (value = "", separator = ",") =>
+  normalizeText(value)
+    .split(separator)
+    .map((item) => normalizeText(item))
+    .filter(Boolean);
 
 const TourismMarketplace = () => {
+  const { currentUser } = useApp();
   const [activeTab, setActiveTab] = useState("marketplace");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedDestination, setSelectedDestination] = useState("All destinations");
   const [selectedTravelerType, setSelectedTravelerType] = useState("Any");
+  const [selectedHotelCategory, setSelectedHotelCategory] = useState("all");
   const [maxBudget, setMaxBudget] = useState(30000);
   const [maxDays, setMaxDays] = useState(6);
   const [searchText, setSearchText] = useState("");
   const [selectedPackageId, setSelectedPackageId] = useState("");
-  const [bookingNote, setBookingNote] = useState("");
+  const [bookingForm, setBookingForm] = useState(DEFAULT_BOOKING_FORM);
+  const [bookingErrors, setBookingErrors] = useState({});
 
   const [customRequest, setCustomRequest] = useState({
     travelerName: "",
     phone: "",
     travelerType: "Family",
     destination: "Munnar",
+    pickupCity: PICKUP_CITIES[0],
+    hotelCategory: HOTEL_CATEGORIES[1],
     startDate: "",
     days: 3,
     estimatedBudget: 15000,
     preferences: "",
   });
 
+  const [dataState, setDataState] = useState({
+    packages: FALLBACK_PACKAGES,
+    reviews: [],
+    bookings: [],
+    leads: FALLBACK_VENDOR_PIPELINE,
+    vendors: FALLBACK_ADMIN_REVIEW_ITEMS,
+    coupons: FALLBACK_COUPONS,
+    complaints: [],
+    adminQueues: {
+      packageApprovalQueue: [],
+      vendorApprovalQueue: [],
+      kycQueue: [],
+      riskFlags: [],
+      refundApprovalQueue: [],
+      complaints: [],
+      featuredPackages: [],
+    },
+  });
+
+  const [wishlist, setWishlist] = useState([]);
+  const [compareIds, setCompareIds] = useState([]);
+  const [reviewDrafts, setReviewDrafts] = useState({});
+  const [vendorDraft, setVendorDraft] = useState(DEFAULT_VENDOR_DRAFT);
+  const [toasts, setToasts] = useState([]);
+  const [loadingState, setLoadingState] = useState({
+    boot: true,
+    bookingSubmit: false,
+    bookingRefresh: false,
+    reviewSubmit: false,
+    vendorMutate: false,
+    adminMutate: false,
+    customSubmit: false,
+  });
+
+  const currentUserEmail = normalizeText(currentUser?.email).toLowerCase();
+  const currentUserRole = normalizeText(currentUser?.role || currentUser?.registrationType).toLowerCase();
+  const vendorId = normalizeText(currentUser?.tourismVendorId || currentUser?.businessId || "vendor-highrange");
+
+  const canManageVendor = ["business", "entrepreneur", "vendor", "admin"].includes(currentUserRole);
+  const canManageAdmin = ["admin"].includes(currentUserRole);
+
+  const pushToast = (message, type = "success") => {
+    const nextToast = { id: `${Date.now()}-${Math.random()}`, message, type };
+    setToasts((current) => [nextToast, ...current].slice(0, 5));
+    setTimeout(() => {
+      setToasts((current) => current.filter((toast) => toast.id !== nextToast.id));
+    }, 3500);
+  };
+
+  const setLoading = (key, value) => {
+    setLoadingState((current) => ({ ...current, [key]: value }));
+  };
+
+  const loadBootstrap = useCallback(async () => {
+    setLoading("boot", true);
+    try {
+      const response = await tourismService.getBootstrap({
+        email: currentUserEmail || undefined,
+        vendorId: canManageVendor ? vendorId : undefined,
+      });
+      setDataState((current) => ({
+        ...current,
+        packages: Array.isArray(response.packages) && response.packages.length ? response.packages : FALLBACK_PACKAGES,
+        reviews: Array.isArray(response.reviews) ? response.reviews : [],
+        bookings: Array.isArray(response.bookings) ? response.bookings : [],
+        leads: Array.isArray(response.leads) && response.leads.length ? response.leads : FALLBACK_VENDOR_PIPELINE,
+        vendors: Array.isArray(response.vendors) ? response.vendors : [],
+        coupons: Array.isArray(response.coupons) && response.coupons.length ? response.coupons : FALLBACK_COUPONS,
+        complaints: Array.isArray(response.complaints) ? response.complaints : [],
+      }));
+    } catch (error) {
+      pushToast("Loaded fallback tourism data (backend unavailable).", "info");
+    } finally {
+      setLoading("boot", false);
+    }
+  }, [canManageVendor, currentUserEmail, vendorId]);
+
+  const loadBookings = useCallback(async () => {
+    if (!currentUserEmail) {
+      return;
+    }
+    setLoading("bookingRefresh", true);
+    try {
+      const bookings = await tourismService.getBookings({ email: currentUserEmail });
+      setDataState((current) => ({ ...current, bookings }));
+    } catch (error) {
+      pushToast("Unable to refresh booking history right now.", "error");
+    } finally {
+      setLoading("bookingRefresh", false);
+    }
+  }, [currentUserEmail]);
+
+  const loadVendorData = useCallback(async () => {
+    if (!canManageVendor) {
+      return;
+    }
+    try {
+      const [packages, leads] = await Promise.all([
+        tourismService.getVendorPackages(vendorId),
+        tourismService.getVendorLeads(vendorId),
+      ]);
+      setDataState((current) => ({
+        ...current,
+        packages: Array.isArray(packages) && packages.length ? packages : current.packages,
+        leads: Array.isArray(leads) ? leads : current.leads,
+      }));
+    } catch (error) {
+      pushToast("Vendor data loaded from cached view.", "info");
+    }
+  }, [canManageVendor, vendorId]);
+
+  const loadAdminQueues = useCallback(async () => {
+    if (!canManageAdmin) {
+      return;
+    }
+    try {
+      const adminQueues = await tourismService.getAdminQueues();
+      setDataState((current) => ({ ...current, adminQueues }));
+    } catch (error) {
+      pushToast("Admin queues unavailable. Showing current records.", "info");
+    }
+  }, [canManageAdmin]);
+
+  useEffect(() => {
+    loadBootstrap();
+  }, [loadBootstrap]);
+
+  useEffect(() => {
+    if (activeTab === "history") {
+      loadBookings();
+    }
+    if (activeTab === "vendor") {
+      loadVendorData();
+    }
+    if (activeTab === "admin") {
+      loadAdminQueues();
+    }
+  }, [activeTab, loadAdminQueues, loadBookings, loadVendorData]);
+
   const filteredPackages = useMemo(() => {
-    return TOURISM_PACKAGES.filter((pkg) => {
+    return dataState.packages.filter((pkg) => {
+      if (String(pkg.approvalStatus || "approved").toLowerCase() !== "approved") {
+        return false;
+      }
+
       const matchesCategory = selectedCategory === "All" || pkg.category === selectedCategory;
       const matchesDestination =
         selectedDestination === "All destinations" || pkg.destination === selectedDestination;
       const matchesTravelerType =
         selectedTravelerType === "Any" || pkg.travelerType === selectedTravelerType;
-      const matchesBudget = pkg.startPrice <= Number(maxBudget || 0);
-      const matchesDays = pkg.durationDays <= Number(maxDays || 0);
+      const matchesBudget = Number(pkg.startPrice || 0) <= Number(maxBudget || 0);
+      const matchesDays = Number(pkg.durationDays || 0) <= Number(maxDays || 0);
+      const matchesHotel = selectedHotelCategory === "all" || pkg.hotelCategory === selectedHotelCategory;
       const text = searchText.trim().toLowerCase();
       const matchesText =
         !text ||
-        pkg.title.toLowerCase().includes(text) ||
-        pkg.destination.toLowerCase().includes(text) ||
-        pkg.tags.some((tag) => tag.toLowerCase().includes(text));
+        String(pkg.title || "").toLowerCase().includes(text) ||
+        String(pkg.destination || "").toLowerCase().includes(text) ||
+        (pkg.tags || []).some((tag) => String(tag).toLowerCase().includes(text));
 
       return (
         matchesCategory &&
@@ -270,14 +265,29 @@ const TourismMarketplace = () => {
         matchesTravelerType &&
         matchesBudget &&
         matchesDays &&
+        matchesHotel &&
         matchesText
       );
     });
-  }, [maxBudget, maxDays, searchText, selectedCategory, selectedDestination, selectedTravelerType]);
+  }, [
+    dataState.packages,
+    maxBudget,
+    maxDays,
+    searchText,
+    selectedCategory,
+    selectedDestination,
+    selectedHotelCategory,
+    selectedTravelerType,
+  ]);
 
   const selectedPackage = useMemo(
-    () => TOURISM_PACKAGES.find((pkg) => pkg.id === selectedPackageId) || null,
-    [selectedPackageId]
+    () => dataState.packages.find((pkg) => pkg.id === selectedPackageId) || null,
+    [dataState.packages, selectedPackageId]
+  );
+
+  const comparePackages = useMemo(
+    () => dataState.packages.filter((pkg) => compareIds.includes(pkg.id)),
+    [compareIds, dataState.packages]
   );
 
   const handleCustomRequestChange = (field, value) => {
@@ -287,20 +297,247 @@ const TourismMarketplace = () => {
     }));
   };
 
-  const handleSubmitCustomRequest = (event) => {
+  const handleSubmitCustomRequest = async (event) => {
     event.preventDefault();
-    alert("Custom request submitted. Vendor matching will start in the next step.");
+    setLoading("customSubmit", true);
+    setTimeout(() => {
+      setLoading("customSubmit", false);
+      pushToast("Custom request submitted. Vendor matching started.");
+      setCustomRequest((current) => ({ ...current, preferences: "" }));
+    }, 500);
   };
 
-  const handleBookingConfirm = () => {
+  const toggleWishlist = (packageId) => {
+    setWishlist((current) => {
+      if (current.includes(packageId)) {
+        pushToast("Removed from wishlist.", "info");
+        return current.filter((item) => item !== packageId);
+      }
+      pushToast("Saved to wishlist.");
+      return [...current, packageId];
+    });
+  };
+
+  const toggleCompare = (packageId) => {
+    setCompareIds((current) => {
+      if (current.includes(packageId)) {
+        return current.filter((item) => item !== packageId);
+      }
+      if (current.length >= 3) {
+        pushToast("You can compare up to 3 packages at once.", "info");
+        return current;
+      }
+      return [...current, packageId];
+    });
+  };
+
+  const handleAskAgentOnWhatsApp = (pkg) => {
+    const phone = normalizeText(pkg.whatsappNumber || pkg.emergencyContact || "+919876500000").replace(/[^\d]/g, "");
+    const text = encodeURIComponent(`Hi, I need details for ${pkg.title} (${pkg.destination}) from NilaTravel.`);
+    window.open(`https://wa.me/${phone}?text=${text}`, "_blank", "noopener,noreferrer");
+  };
+
+  const handleBookingFormChange = (field, value) => {
+    setBookingForm((current) => ({ ...current, [field]: value }));
+    setBookingErrors((current) => ({ ...current, [field]: "" }));
+  };
+
+  const resetBookingSheet = () => {
+    setSelectedPackageId("");
+    setBookingForm(DEFAULT_BOOKING_FORM);
+    setBookingErrors({});
+  };
+
+  const handleBookingConfirm = async () => {
     if (!selectedPackage) {
       return;
     }
 
-    alert(`Booking request sent for ${selectedPackage.title}. A travel agent will contact you shortly.`);
-    setSelectedPackageId("");
-    setBookingNote("");
+    const validationErrors = validateBookingForm(bookingForm);
+    if (Object.keys(validationErrors).length > 0) {
+      setBookingErrors(validationErrors);
+      pushToast("Please fix booking form fields before submitting.", "error");
+      return;
+    }
+
+    setLoading("bookingSubmit", true);
+    try {
+      const booking = await tourismService.createBooking({
+        packageId: selectedPackage.id,
+        ...bookingForm,
+      });
+      setDataState((current) => ({
+        ...current,
+        bookings: [booking, ...current.bookings],
+      }));
+      pushToast(`Booking submitted for ${selectedPackage.title}. Status: ${booking.bookingStatus}`);
+      resetBookingSheet();
+      setActiveTab("history");
+    } catch (error) {
+      pushToast(error?.response?.data?.message || "Booking submission failed. Try again.", "error");
+    } finally {
+      setLoading("bookingSubmit", false);
+    }
   };
+
+  const handleSubmitReview = async (packageId) => {
+    const draft = reviewDrafts[packageId] || { rating: 5, comment: "" };
+    if (normalizeText(draft.comment).length < 3) {
+      pushToast("Review comment should be at least 3 characters.", "error");
+      return;
+    }
+    setLoading("reviewSubmit", true);
+    try {
+      const reviewerName = normalizeText(currentUser?.name || "Traveler");
+      await tourismService.submitReview({
+        packageId,
+        reviewerName,
+        rating: Number(draft.rating || 5),
+        comment: normalizeText(draft.comment),
+      });
+      pushToast("Review submitted successfully.");
+      setReviewDrafts((current) => ({ ...current, [packageId]: { rating: 5, comment: "" } }));
+      await loadBootstrap();
+    } catch (error) {
+      pushToast("Unable to submit review right now.", "error");
+    } finally {
+      setLoading("reviewSubmit", false);
+    }
+  };
+
+  const createVendorPayload = () => {
+    let seasonalPricing = [];
+    try {
+      seasonalPricing = JSON.parse(vendorDraft.seasonalPricingText || "[]");
+      if (!Array.isArray(seasonalPricing)) {
+        seasonalPricing = [];
+      }
+    } catch (error) {
+      seasonalPricing = [];
+    }
+
+    return {
+      vendorId,
+      title: normalizeText(vendorDraft.title),
+      destination: normalizeText(vendorDraft.destination),
+      category: normalizeText(vendorDraft.category),
+      durationDays: Number(vendorDraft.durationDays || 3),
+      startPrice: Number(vendorDraft.startPrice || 10000),
+      imageGallery: parseList(vendorDraft.imageGalleryText, "\n"),
+      availableDates: parseList(vendorDraft.availableDatesText, ","),
+      seasonalPricing,
+      inclusions: ["Hotel stay", "Local transfer"],
+      exclusions: ["Personal expenses"],
+      cancellationPolicy: "Free cancellation up to 72 hours before trip start.",
+      childPricing: "Below 5 years complimentary.",
+      gstAndServiceCharge: "5% GST + 2% service charge",
+      tags: ["New listing"],
+      itinerary: ["Day 1: Arrival and check-in", "Day 2: Sightseeing", "Day 3: Checkout"],
+      mapHighlights: "Local highlights available on booking",
+    };
+  };
+
+  const handleCreateVendorPackage = async () => {
+    const payload = createVendorPayload();
+    if (!payload.title || !payload.destination) {
+      pushToast("Package title and destination are required.", "error");
+      return;
+    }
+    setLoading("vendorMutate", true);
+    try {
+      await tourismService.createVendorPackage(payload);
+      pushToast("Package created and sent for admin approval.");
+      setVendorDraft(DEFAULT_VENDOR_DRAFT);
+      await loadVendorData();
+      await loadAdminQueues();
+    } catch (error) {
+      pushToast(error?.response?.data?.message || "Unable to create package.", "error");
+    } finally {
+      setLoading("vendorMutate", false);
+    }
+  };
+
+  const handleUpdateVendorPackage = async (pkg) => {
+    setLoading("vendorMutate", true);
+    try {
+      await tourismService.updateVendorPackage(pkg.id, {
+        vendorId,
+        startPrice: Number(pkg.startPrice || 0) + 500,
+      });
+      pushToast("Package updated. Re-approval may be required.");
+      await loadVendorData();
+      await loadAdminQueues();
+    } catch (error) {
+      pushToast("Unable to update package right now.", "error");
+    } finally {
+      setLoading("vendorMutate", false);
+    }
+  };
+
+  const handleDeleteVendorPackage = async (packageId) => {
+    setLoading("vendorMutate", true);
+    try {
+      await tourismService.deleteVendorPackage(packageId, vendorId);
+      pushToast("Package deleted.");
+      await loadVendorData();
+      await loadAdminQueues();
+    } catch (error) {
+      pushToast("Unable to delete package right now.", "error");
+    } finally {
+      setLoading("vendorMutate", false);
+    }
+  };
+
+  const handleVendorLeadStatusUpdate = async (leadId, status) => {
+    setLoading("vendorMutate", true);
+    try {
+      await tourismService.updateVendorLead(leadId, { vendorId, status });
+      pushToast(`Lead moved to ${status}.`);
+      await loadVendorData();
+    } catch (error) {
+      pushToast("Unable to update lead status.", "error");
+    } finally {
+      setLoading("vendorMutate", false);
+    }
+  };
+
+  const handleAdminVendorUpdate = async (vendorIdArg, payload) => {
+    setLoading("adminMutate", true);
+    try {
+      await tourismService.updateAdminVendor(vendorIdArg, payload);
+      pushToast(`Vendor ${payload.approvalStatus}.`);
+      await loadBootstrap();
+      await loadAdminQueues();
+    } catch (error) {
+      pushToast("Unable to update vendor approval.", "error");
+    } finally {
+      setLoading("adminMutate", false);
+    }
+  };
+
+  const handleAdminPackageUpdate = async (packageId, payload) => {
+    setLoading("adminMutate", true);
+    try {
+      await tourismService.updateAdminPackage(packageId, payload);
+      pushToast(`Package ${payload.approvalStatus}.`);
+      await loadBootstrap();
+      await loadAdminQueues();
+    } catch (error) {
+      pushToast("Unable to update package approval.", "error");
+    } finally {
+      setLoading("adminMutate", false);
+    }
+  };
+
+  const vendorAccessMessage = "Vendor workspace requires business/vendor role login.";
+  const adminAccessMessage = "Admin controls require admin role.";
+
+  const bookingHistory = useMemo(() => dataState.bookings, [dataState.bookings]);
+  const vendorPackages = useMemo(
+    () => dataState.packages.filter((pkg) => String(pkg.vendorId) === vendorId),
+    [dataState.packages, vendorId]
+  );
+  const vendorLeads = useMemo(() => dataState.leads, [dataState.leads]);
 
   return (
     <div className="tourism-shell">
@@ -313,57 +550,36 @@ const TourismMarketplace = () => {
             vendor and admin workflows built for a Kerala-first travel ecosystem.
           </p>
           <div className="tourism-hero-actions">
-            <button
-              type="button"
-              className="tourism-primary-button"
-              onClick={() => setActiveTab("marketplace")}
-            >
+            <button type="button" className="tourism-primary-button" onClick={() => setActiveTab("marketplace")}>
               Explore Packages
             </button>
-            <button
-              type="button"
-              className="tourism-secondary-button"
-              onClick={() => setActiveTab("custom")}
-            >
+            <button type="button" className="tourism-secondary-button" onClick={() => setActiveTab("custom")}>
               Request Custom Trip
             </button>
           </div>
           <div className="tourism-hero-tags">
-            <span>Advance or full payment options</span>
-            <span>Verified vendor workflows</span>
-            <span>Emergency support visibility</span>
-            <span>Kerala local experience hub</span>
+            <span>Advance/full payment booking flow</span>
+            <span>Verified vendor + KYC controls</span>
+            <span>Emergency support and insurance</span>
+            <span>Admin moderation and refund governance</span>
           </div>
         </div>
       </section>
 
       <section className="tourism-nav">
-        <button
-          type="button"
-          className={`tourism-nav-item ${activeTab === "marketplace" ? "active" : ""}`}
-          onClick={() => setActiveTab("marketplace")}
-        >
+        <button type="button" className={`tourism-nav-item ${activeTab === "marketplace" ? "active" : ""}`} onClick={() => setActiveTab("marketplace")}>
           Marketplace
         </button>
-        <button
-          type="button"
-          className={`tourism-nav-item ${activeTab === "custom" ? "active" : ""}`}
-          onClick={() => setActiveTab("custom")}
-        >
+        <button type="button" className={`tourism-nav-item ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}>
+          Booking History
+        </button>
+        <button type="button" className={`tourism-nav-item ${activeTab === "custom" ? "active" : ""}`} onClick={() => setActiveTab("custom")}>
           Custom Trip Desk
         </button>
-        <button
-          type="button"
-          className={`tourism-nav-item ${activeTab === "vendor" ? "active" : ""}`}
-          onClick={() => setActiveTab("vendor")}
-        >
+        <button type="button" className={`tourism-nav-item ${activeTab === "vendor" ? "active" : ""}`} onClick={() => setActiveTab("vendor")}>
           Vendor Workspace
         </button>
-        <button
-          type="button"
-          className={`tourism-nav-item ${activeTab === "admin" ? "active" : ""}`}
-          onClick={() => setActiveTab("admin")}
-        >
+        <button type="button" className={`tourism-nav-item ${activeTab === "admin" ? "active" : ""}`} onClick={() => setActiveTab("admin")}>
           Admin Controls
         </button>
       </section>
@@ -372,135 +588,168 @@ const TourismMarketplace = () => {
         <section className="tourism-section">
           <div className="tourism-section-heading">
             <h2>Kerala Package Discovery</h2>
-            <p>Search by destination, budget, days, and traveler type to find matching packages.</p>
+            <p>Search by destination, budget, days, traveler type, and hotel category.</p>
           </div>
-
           <div className="tourism-search-grid">
-            <aside className="tourism-filters">
-              <label className="tourism-field">
-                <span>Search package</span>
-                <input
-                  type="text"
-                  placeholder="Munnar, houseboat, wellness"
-                  value={searchText}
-                  onChange={(event) => setSearchText(event.target.value)}
-                />
-              </label>
-
-              <label className="tourism-field">
-                <span>Category</span>
-                <select
-                  value={selectedCategory}
-                  onChange={(event) => setSelectedCategory(event.target.value)}
-                >
-                  {PACKAGE_CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="tourism-field">
-                <span>Destination</span>
-                <select
-                  value={selectedDestination}
-                  onChange={(event) => setSelectedDestination(event.target.value)}
-                >
-                  {KERALA_DESTINATIONS.map((destination) => (
-                    <option key={destination} value={destination}>
-                      {destination}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="tourism-field">
-                <span>Traveler type</span>
-                <select
-                  value={selectedTravelerType}
-                  onChange={(event) => setSelectedTravelerType(event.target.value)}
-                >
-                  {TRAVELER_TYPES.map((travelerType) => (
-                    <option key={travelerType} value={travelerType}>
-                      {travelerType}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="tourism-field">
-                <span>Max budget: {formatInr(maxBudget)}</span>
-                <input
-                  type="range"
-                  min="5000"
-                  max="50000"
-                  step="500"
-                  value={maxBudget}
-                  onChange={(event) => setMaxBudget(Number(event.target.value))}
-                />
-              </label>
-
-              <label className="tourism-field">
-                <span>Max duration: {maxDays} days</span>
-                <input
-                  type="range"
-                  min="1"
-                  max="10"
-                  step="1"
-                  value={maxDays}
-                  onChange={(event) => setMaxDays(Number(event.target.value))}
-                />
-              </label>
-            </aside>
+            <FilterPanel
+              searchText={searchText}
+              setSearchText={setSearchText}
+              selectedCategory={selectedCategory}
+              setSelectedCategory={setSelectedCategory}
+              selectedDestination={selectedDestination}
+              setSelectedDestination={setSelectedDestination}
+              selectedTravelerType={selectedTravelerType}
+              setSelectedTravelerType={setSelectedTravelerType}
+              maxBudget={maxBudget}
+              setMaxBudget={setMaxBudget}
+              maxDays={maxDays}
+              setMaxDays={setMaxDays}
+              selectedHotelCategory={selectedHotelCategory}
+              setSelectedHotelCategory={setSelectedHotelCategory}
+              packageCategories={PACKAGE_CATEGORIES}
+              destinations={KERALA_DESTINATIONS}
+              travelerTypes={TRAVELER_TYPES}
+              hotelCategories={HOTEL_CATEGORIES}
+            />
 
             <div className="tourism-results">
               <div className="tourism-results-header">
                 <h3>{filteredPackages.length} packages found</h3>
-                <span>Compare itinerary, inclusions, and vendor reliability before booking.</span>
+                <span>Wishlist, compare, reviews, coupons, and direct WhatsApp support included.</span>
               </div>
 
-              <div className="tourism-packages-grid">
-                {filteredPackages.map((pkg) => (
-                  <article key={pkg.id} className="tourism-package-card">
-                    <div className="tourism-package-top">
-                      <span className="tourism-chip">{pkg.category}</span>
-                      <span className="tourism-rating">
-                        {pkg.rating} ({pkg.reviews} reviews)
-                      </span>
+              {loadingState.boot ? (
+                <div className="tourism-skeleton-grid">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={`skeleton-${index}`} className="tourism-package-skeleton" />
+                  ))}
+                </div>
+              ) : (
+                <div className="tourism-packages-grid">
+                  {filteredPackages.map((pkg) => (
+                    <div key={pkg.id}>
+                      <PackageCard
+                        pkg={pkg}
+                        isWishlisted={wishlist.includes(pkg.id)}
+                        isCompared={compareIds.includes(pkg.id)}
+                        onToggleWishlist={toggleWishlist}
+                        onToggleCompare={toggleCompare}
+                        onAskAgent={handleAskAgentOnWhatsApp}
+                        onBook={setSelectedPackageId}
+                      />
+                      <div className="tourism-review-card">
+                        <label className="tourism-field">
+                          <span>Rate package</span>
+                          <select
+                            value={reviewDrafts[pkg.id]?.rating || 5}
+                            onChange={(event) =>
+                              setReviewDrafts((current) => ({
+                                ...current,
+                                [pkg.id]: {
+                                  ...(current[pkg.id] || {}),
+                                  rating: Number(event.target.value),
+                                },
+                              }))
+                            }
+                          >
+                            {[5, 4, 3, 2, 1].map((score) => (
+                              <option key={score} value={score}>
+                                {score}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="tourism-field">
+                          <span>Review</span>
+                          <textarea
+                            rows="2"
+                            value={reviewDrafts[pkg.id]?.comment || ""}
+                            onChange={(event) =>
+                              setReviewDrafts((current) => ({
+                                ...current,
+                                [pkg.id]: {
+                                  ...(current[pkg.id] || {}),
+                                  comment: event.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="tourism-secondary-button"
+                          onClick={() => handleSubmitReview(pkg.id)}
+                          disabled={loadingState.reviewSubmit}
+                        >
+                          {loadingState.reviewSubmit ? "Submitting..." : "Submit Review"}
+                        </button>
+                      </div>
                     </div>
-                    <h4>{pkg.title}</h4>
-                    <p className="tourism-card-meta">
-                      {pkg.destination} | {pkg.durationDays} days | {pkg.travelerType}
-                    </p>
-                    <p className="tourism-card-price">From {formatInr(pkg.startPrice)}</p>
-                    <div className="tourism-tags">
-                      {pkg.tags.map((tag) => (
-                        <span key={tag}>{tag}</span>
-                      ))}
-                    </div>
-                    <div className="tourism-card-footer">
-                      <span>{pkg.availability}</span>
-                      <button
-                        type="button"
-                        className="tourism-primary-button"
-                        onClick={() => setSelectedPackageId(pkg.id)}
-                      >
-                        View and Book
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
-              {filteredPackages.length === 0 && (
+              {!filteredPackages.length && !loadingState.boot && (
                 <div className="tourism-empty-state">
                   No packages match the current filters. Try increasing budget or changing destination.
                 </div>
               )}
+
+              {dataState.coupons.length ? (
+                <div className="tourism-panel">
+                  <h3>Coupons & Offers</h3>
+                  <div className="tourism-tags">
+                    {dataState.coupons.map((coupon) => (
+                      <span key={coupon.code}>
+                        {coupon.code}: {coupon.description}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {comparePackages.length >= 2 ? (
+                <div className="tourism-panel">
+                  <h3>Compare Packages</h3>
+                  <div className="tourism-table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Package</th>
+                          <th>Price</th>
+                          <th>Days</th>
+                          <th>Hotel</th>
+                          <th>Vendor</th>
+                          <th>Cancellation</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {comparePackages.map((pkg) => (
+                          <tr key={`compare-${pkg.id}`}>
+                            <td>{pkg.title}</td>
+                            <td>{formatInr(pkg.startPrice)}</td>
+                            <td>{pkg.durationDays}</td>
+                            <td>{pkg.hotelCategory}</td>
+                            <td>{pkg.vendor}</td>
+                            <td>{pkg.cancellationPolicy}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
+      )}
+
+      {activeTab === "history" && (
+        <BookingHistory
+          bookings={bookingHistory}
+          loading={loadingState.bookingRefresh}
+          onRefresh={loadBookings}
+        />
       )}
 
       {activeTab === "custom" && (
@@ -509,7 +758,6 @@ const TourismMarketplace = () => {
             <h2>Custom Package Request</h2>
             <p>Tell us your plan and get proposals from verified Kerala travel agencies.</p>
           </div>
-
           <form className="tourism-custom-form" onSubmit={handleSubmitCustomRequest}>
             <label className="tourism-field">
               <span>Traveler name</span>
@@ -520,7 +768,6 @@ const TourismMarketplace = () => {
                 onChange={(event) => handleCustomRequestChange("travelerName", event.target.value)}
               />
             </label>
-
             <label className="tourism-field">
               <span>Phone</span>
               <input
@@ -530,7 +777,6 @@ const TourismMarketplace = () => {
                 onChange={(event) => handleCustomRequestChange("phone", event.target.value)}
               />
             </label>
-
             <label className="tourism-field">
               <span>Traveler type</span>
               <select
@@ -544,7 +790,6 @@ const TourismMarketplace = () => {
                 ))}
               </select>
             </label>
-
             <label className="tourism-field">
               <span>Destination focus</span>
               <select
@@ -558,7 +803,32 @@ const TourismMarketplace = () => {
                 ))}
               </select>
             </label>
-
+            <label className="tourism-field">
+              <span>Pickup city</span>
+              <select
+                value={customRequest.pickupCity}
+                onChange={(event) => handleCustomRequestChange("pickupCity", event.target.value)}
+              >
+                {PICKUP_CITIES.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="tourism-field">
+              <span>Hotel category</span>
+              <select
+                value={customRequest.hotelCategory}
+                onChange={(event) => handleCustomRequestChange("hotelCategory", event.target.value)}
+              >
+                {HOTEL_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="tourism-field">
               <span>Preferred start date</span>
               <input
@@ -567,7 +837,6 @@ const TourismMarketplace = () => {
                 onChange={(event) => handleCustomRequestChange("startDate", event.target.value)}
               />
             </label>
-
             <label className="tourism-field">
               <span>Trip duration (days)</span>
               <input
@@ -578,7 +847,6 @@ const TourismMarketplace = () => {
                 onChange={(event) => handleCustomRequestChange("days", Number(event.target.value))}
               />
             </label>
-
             <label className="tourism-field tourism-field-wide">
               <span>Estimated budget (INR)</span>
               <input
@@ -591,23 +859,25 @@ const TourismMarketplace = () => {
                 }
               />
             </label>
-
             <label className="tourism-field tourism-field-wide">
               <span>Preferences</span>
               <textarea
                 rows="4"
-                placeholder="Include hotel type, food preference, local experiences, guide language, pickup city"
+                placeholder="Include food preference, local experiences, guide language, child requirements"
                 value={customRequest.preferences}
                 onChange={(event) => handleCustomRequestChange("preferences", event.target.value)}
               />
             </label>
-
             <div className="tourism-custom-actions tourism-field-wide">
-              <button type="submit" className="tourism-primary-button">
-                Submit Request
+              <button type="submit" className="tourism-primary-button" disabled={loadingState.customSubmit}>
+                {loadingState.customSubmit ? "Submitting..." : "Submit Request"}
               </button>
-              <button type="button" className="tourism-secondary-button">
-                Chat With Agent
+              <button
+                type="button"
+                className="tourism-secondary-button"
+                onClick={() => handleAskAgentOnWhatsApp({ title: "Custom trip request", destination: customRequest.destination })}
+              >
+                Ask Agent on WhatsApp
               </button>
             </div>
           </form>
@@ -627,154 +897,54 @@ const TourismMarketplace = () => {
       )}
 
       {activeTab === "vendor" && (
-        <section className="tourism-section">
-          <div className="tourism-section-heading">
-            <h2>Vendor Workspace</h2>
-            <p>Manage packages, availability calendar, leads, KYC, and commission tracking.</p>
-          </div>
-
-          <div className="tourism-workspace-grid">
-            <div className="tourism-panel">
-              <h3>Quick Vendor Actions</h3>
-              <ul>
-                <li>Register travel agency and upload KYC documents.</li>
-                <li>Create package with itinerary, hotel, cab, and guide options.</li>
-                <li>Set seasonal pricing and block dates on availability calendar.</li>
-                <li>Respond to custom package requests within SLA.</li>
-              </ul>
-              <button type="button" className="tourism-primary-button">
-                Add New Package
-              </button>
-            </div>
-
-            <div className="tourism-panel">
-              <h3>Lead Management</h3>
-              <div className="tourism-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Lead</th>
-                      <th>Package</th>
-                      <th>Traveler</th>
-                      <th>Budget</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {VENDOR_PIPELINE.map((row) => (
-                      <tr key={row.leadId}>
-                        <td>{row.leadId}</td>
-                        <td>{row.package}</td>
-                        <td>{row.traveler}</td>
-                        <td>{row.budget}</td>
-                        <td>{row.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </section>
+        <VendorPanel
+          canManageVendor={canManageVendor}
+          vendorAccessMessage={vendorAccessMessage}
+          vendorPackages={vendorPackages}
+          vendorLeads={vendorLeads}
+          vendorDraft={vendorDraft}
+          setVendorDraft={setVendorDraft}
+          onCreatePackage={handleCreateVendorPackage}
+          onUpdatePackage={handleUpdateVendorPackage}
+          onDeletePackage={handleDeleteVendorPackage}
+          onLeadStatusUpdate={handleVendorLeadStatusUpdate}
+          vendorBusy={loadingState.vendorMutate}
+        />
       )}
 
       {activeTab === "admin" && (
-        <section className="tourism-section">
-          <div className="tourism-section-heading">
-            <h2>Admin Controls</h2>
-            <p>Approve vendors, moderate packages, monitor fraud, and control refund workflows.</p>
-          </div>
-
-          <div className="tourism-workspace-grid">
-            <div className="tourism-panel">
-              <h3>Platform Controls</h3>
-              <ul>
-                <li>Vendor approval queue and KYC verification.</li>
-                <li>Package moderation for pricing and itinerary quality.</li>
-                <li>Featured package slots and commission slabs.</li>
-                <li>Complaint handling, refund governance, and fraud checks.</li>
-              </ul>
-              <div className="tourism-admin-badges">
-                <span>Base commission: 8%</span>
-                <span>Featured listing: INR 2,499/month</span>
-                <span>Escalation SLA: 24 hours</span>
-              </div>
-            </div>
-
-            <div className="tourism-panel">
-              <h3>Review Queue</h3>
-              <div className="tourism-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Vendor</th>
-                      <th>KYC</th>
-                      <th>Package</th>
-                      <th>Risk</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ADMIN_REVIEW_ITEMS.map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.id}</td>
-                        <td>{row.vendor}</td>
-                        <td>{row.kyc}</td>
-                        <td>{row.package}</td>
-                        <td>{row.risk}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </section>
+        <AdminPanel
+          canManageAdmin={canManageAdmin}
+          adminAccessMessage={adminAccessMessage}
+          adminQueues={dataState.adminQueues}
+          onVendorUpdate={handleAdminVendorUpdate}
+          onPackageUpdate={handleAdminPackageUpdate}
+          adminBusy={loadingState.adminMutate}
+        />
       )}
 
-      {selectedPackage && (
-        <section className="tourism-booking-sheet" aria-live="polite">
-          <div className="tourism-booking-card">
-            <div className="tourism-booking-header">
-              <h3>{selectedPackage.title}</h3>
-              <button
-                type="button"
-                className="tourism-close-button"
-                onClick={() => setSelectedPackageId("")}
-              >
-                Close
-              </button>
+      <BookingSheet
+        selectedPackage={selectedPackage}
+        bookingForm={bookingForm}
+        bookingErrors={bookingErrors}
+        bookingSubmitting={loadingState.bookingSubmit}
+        onBookingFormChange={handleBookingFormChange}
+        onClose={resetBookingSheet}
+        onSubmitBooking={handleBookingConfirm}
+      />
+
+      {toasts.length > 0 ? (
+        <div className="tourism-toast-stack">
+          {toasts.map((toast) => (
+            <div key={toast.id} className={`tourism-toast tourism-toast-${toast.type}`}>
+              {toast.message}
             </div>
-            <p className="tourism-card-meta">
-              {selectedPackage.destination} | {selectedPackage.durationDays} days | {selectedPackage.vendor}
-            </p>
-            <ul className="tourism-itinerary-list">
-              {selectedPackage.itinerary.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-            <label className="tourism-field">
-              <span>Booking note (optional)</span>
-              <textarea
-                rows="3"
-                value={bookingNote}
-                onChange={(event) => setBookingNote(event.target.value)}
-                placeholder="Add pickup preference, room type, meal plan, or special requirements"
-              />
-            </label>
-            <div className="tourism-booking-actions">
-              <button type="button" className="tourism-primary-button" onClick={handleBookingConfirm}>
-                Pay Advance and Request Booking
-              </button>
-              <button type="button" className="tourism-secondary-button">
-                Pay Full Amount
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 };
 
 export default TourismMarketplace;
+

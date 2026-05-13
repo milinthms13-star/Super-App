@@ -554,6 +554,21 @@ const NilaAIHub = () => {
           <h2>{t('nilaaihub.recommendations.title')}</h2>
           <p>{t('nilaaihub.recommendations.subtitle')}</p>
         </div>
+        {isLoadingRecommendations && (
+          <div className="nila-ai-loading-state" role="status">
+            {t('nilaaihub.loading')}
+          </div>
+        )}
+        {recommendationsError && (
+          <div className="nila-ai-error-state" role="alert">
+            {recommendationsError}
+          </div>
+        )}
+        {!isLoadingRecommendations && !recommendationsError && activeRecommendations.length === 0 && (
+          <div className="nila-ai-flash-state" role="status">
+            {t('nilaaihub.empty')}
+          </div>
+        )}
         <div className="nila-ai-recommendation-grid">
           {activeRecommendations.map((item, index) => (
             <div key={`${item.title}-${index}`} className="nila-ai-recommendation-card">

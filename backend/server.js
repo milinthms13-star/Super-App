@@ -336,6 +336,7 @@ app.use('/api/jobportal', require('./routes/jobportal'));
 app.use('/api/matrimonial', require('./routes/matrimonial'));
 app.use('/api/flashsales', require('./routes/flashsales'));
 app.use('/api/support', require('./routes/support'));
+app.use('/api/tourism', require('./routes/tourism'));
 
 // Phase 5A: Enhanced Authentication Routes (OTP, Social Login, Biometric, Sessions, Guest Checkout)
 safeUse('/api/auth/otp', './routes/otpAuthRoutes');
