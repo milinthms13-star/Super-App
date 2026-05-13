@@ -20200,3 +20200,7 @@
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:13:00:130"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:14:00:140"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:14:00:140"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:15:00:150"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mCleaned up 0 expired messages\u001b[39m","timestamp":"2026-05-13 22:15:00:150"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:16:00:160"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:16:00:160"}

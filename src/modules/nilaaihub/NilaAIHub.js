@@ -148,6 +148,8 @@ const NilaAIHub = () => {
   };
 
   const fetchRecommendations = async (token) => {
+    setIsLoadingRecommendations(true);
+    setRecommendationsError("");
     try {
       const url = token
         ? "/api/ecommerce/recommendations/personalized?limit=6"
@@ -163,10 +165,15 @@ const NilaAIHub = () => {
       const items = response.data?.data;
       if (Array.isArray(items) && items.length > 0) {
         setRecommendations(items);
+      } else {
+        setRecommendations([]);
       }
     } catch (fetchError) {
       console.warn("Recommendation fetch failed:", fetchError?.response?.data || fetchError.message);
+      setRecommendationsError(t('nilaaihub.error'));
       setRecommendations(DEFAULT_RECOMMENDATIONS);
+    } finally {
+      setIsLoadingRecommendations(false);
     }
   };
 
