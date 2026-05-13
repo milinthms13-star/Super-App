@@ -113,7 +113,7 @@ describe("FoodDelivery", () => {
       );
     });
 
-    expect(await screen.findByText(/paneer tikka burger x 1/i)).toBeInTheDocument();
+    expect(await screen.findByText("Paneer Tikka Burger")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /checkout/i })).toBeInTheDocument();
   });
 
@@ -134,8 +134,6 @@ describe("FoodDelivery", () => {
   });
 
   test("checks out and appends the order to my orders", async () => {
-    const alertSpy = jest.spyOn(window, "alert").mockImplementation(() => {});
-
     render(<FoodDelivery />);
 
     fireEvent.click(await screen.findByRole("button", { name: /view menu/i }));
@@ -153,20 +151,22 @@ describe("FoodDelivery", () => {
     });
 
     expect(await screen.findByText(/order order-1/i)).toBeInTheDocument();
-    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/checkout successful/i));
-    alertSpy.mockRestore();
+    expect(await screen.findByText(/checkout successful/i)).toBeInTheDocument();
   });
 
   test("switches between customer, restaurant, rider, and admin workspaces", async () => {
     render(<FoodDelivery />);
 
     expect(await screen.findByRole("button", { name: /customer/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /restaurant partner/i }));
     fireEvent.click(screen.getByRole("button", { name: /restaurant ops/i }));
     expect(screen.getByRole("heading", { name: /restaurant workspace/i })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /delivery partner/i }));
     fireEvent.click(screen.getByRole("button", { name: /delivery ops/i }));
     expect(screen.getByRole("heading", { name: /delivery workspace/i })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /administrator/i }));
     fireEvent.click(screen.getByRole("button", { name: /admin ops/i }));
     expect(screen.getByRole("heading", { name: /admin workspace/i })).toBeInTheDocument();
   });

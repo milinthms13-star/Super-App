@@ -1,53 +1,82 @@
-# Maps (Driver Map) User Manual (Front-End)
+# Maps User Manual (Front-End)
 
-> Module: `src/modules/maps/DriverMap.js`
+> Module: `src/modules/maps/DriverMap.js`  
+> Product name in UI: **Driver Navigation**
 
 ## 1) What this module does
-Driver Map visualizes locations on a map and supports driver-related workflows such as:
-- viewing current/nearby positions
-- monitoring available routes/requests (if integrated)
-- selecting locations on the map
+DriverMap provides a driver navigation + live tracking UI:
+- Shows an interactive map (Leaflet + OpenStreetMap tiles)
+- Tracks driver GPS live (Start GPS / Stop Tracking)
+- Draws a simple route line (straight polyline demo)
+- Displays ride info:
+  - pickup coordinates
+  - dropoff coordinates
+  - estimated distance
+- Allows driver status updates:
+  - Pickup Arrived
+  - Trip Done
 
-## 2) Entry point
-1. Login.
-2. Open **Maps / Driver Map** from navigation.
-3. The module typically displays a map view.
+**Access control:** If the current user is not a driver (`currentUser.role !== 'driver'`), the module shows **“Driver access only”**.
 
-## 3) Step-by-step user flows
+## 2) Entry point in the app
+1. Open **Maps → Driver Navigation** (this module).
 
-### 3.1 View map and positions
-1. Open Driver Map.
-2. Wait for map tiles to load.
-3. Confirm markers/icons appear on the map.
+## 3) Map loading behavior
+- The module loads Leaflet assets dynamically (CDN).
+- If the map is unavailable, the UI won’t render the tracking UI (only the access error is shown when role is not driver).
 
-Expected result:
-- Map shows relevant markers (driver/request/shop location as supported).
+## 4) Pickup & dropoff coordinates (demo)
+Pickup/dropoff are loaded from URL query parameters:
+- `pickup` (default: `Infopark`)
+- `dropoff` (default: `Lulu Mall`)
 
-### 3.2 Select a marker / location
-1. Click a map marker.
-2. Review details displayed for that marker.
-3. If actions exist, click the action button.
+These are mapped to demo coordinates using internal mock locations. (In a production build, these would come from real geocoding.)
 
-Expected result:
-- Details panel opens and selected item becomes active.
+## 5) Driver tracking controls
+Use the buttons under the map:
 
-### 3.3 Follow an assigned route (if supported)
-1. When route/assignment is available, select it from UI.
-2. Review the route path on the map.
-3. Confirm navigation/route state (if provided).
+### 5.1 Start GPS
+1. Click **Start GPS**.
+2. The module starts browser geolocation watch:
+   - updates driver position
+   - updates driver marker on the map
+   - pans the map to follow the driver
+   - sends position to backend via `rideSharingService.updateLocation(lat, lng)`
 
-Expected result:
-- Route visualization or status changes appear.
+Status text updates to reflect live tracking or GPS errors:
+- “Live GPS tracking started”
+- If GPS fails: “GPS error - using mock location”
+- If backend sync fails: “Tracking active (backend sync failed)”
 
-## 4) Troubleshooting (UI-level)
-- Map not loading:
-  - Check permissions (location/network).
-  - Refresh and retry.
-- Markers not visible:
-  - Verify you’re logged in and the module is enabled for your role.
-  - Check that location services are allowed.
+### 5.2 Stop Tracking
+- Click **Stop Tracking** to clear geolocation watch and stop live updates.
 
-## 5) UI sections reference
-- Map canvas
-- Marker list/details panel (if present)
-- Route/assignment controls (if present)
+## 6) Route drawing
+- Click **Show Route** to draw a route line that includes:
+  - pickup → current driver position → dropoff
+
+Expected behavior (demo):
+- A blue polyline is drawn and the map zooms to fit the polyline bounds.
+
+## 7) Ride status actions
+Use these buttons to update driver trip state (UI status changes; backend integration depends on app wiring):
+- **Pickup Arrived**
+  - sets status to: “Arrived at pickup - waiting for passenger”
+- **Trip Done**
+  - sets status to: “Trip completed - ready for next ride”
+
+## 8) Ride info panel
+Below the map, the UI shows:
+- Pickup lat/lng (formatted to 4 decimals)
+- Dropoff lat/lng (formatted to 4 decimals)
+- Approx distance estimate:
+  - computed from latitude delta and an approximate km conversion
+
+## 9) Troubleshooting
+- You see “Driver access only”:
+  - ensure the logged-in user has `role = driver`
+- GPS tracking doesn’t move the marker:
+  - grant location permissions to the browser
+  - check device GPS availability
+- Route doesn’t look correct:
+  - this build draws a demo straight-line polyline; real routing requires a directions service

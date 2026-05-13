@@ -1,52 +1,77 @@
 # Gulf Services User Manual (Front-End)
 
-> Module: `src/modules/gulfservices/GulfServices.js`
+> Module: `src/modules/gulfservices/GulfServices.js`  
+> Product name in UI: **Gulf Services** (Complete Gulf Support Hub)
 
 ## 1) What this module does
-Gulf Services provides a hub for region-focused services. Depending on enabled features and user role, it typically lets you browse available services and request/engage them through module workflows.
+Gulf Services is a Gulf-support hub for Kerala families with Gulf connections. It provides:
+- **Visa Assistance & Tracking** (visit, employment, family, renewal)
+- **Gulf Jobs & Interview Support** (verified recruiter-style job listing cards)
+- Document-focused support overview
+- Travel, medical/PCC, returnee, and NRI service guidance
 
-## 2) Entry point
-1. Login.
-2. Open **Gulf Services** from navigation.
-3. The module typically loads on a hub/home view or services listing.
+## 2) Entry point in the app
+1. Open **Gulf Services** from main navigation/menu.
 
-## 3) Step-by-step user flows
+## 3) Hero: start the journey
+In the top hero:
+- You can choose quick actions:
+  - **Start Visa Support**
+  - **Explore Gulf Jobs**
+- A right-side summary explains key value areas:
+  - Visa Reminders
+  - Verified Recruiters
+  - Attestation Tracking
 
-### 3.1 Browse services
-1. Open Gulf Services.
-2. Browse service cards/tiles/categories.
-3. Use search/filter options if present.
-4. Open a service to view details.
+## 4) Quick action cards
+You’ll see a grid of “quick action” tiles, each with a short subtitle. These represent:
+- Visa Assistance
+- Gulf Jobs
+- Document Attestation
+- Travel Support
+- Medical & PCC
+- Returnee Help
 
-Expected result:
-- Service detail page displays description, pricing/terms (if supported), and actions.
+## 5) Main panel: Visa + Jobs
+The module is split into two columns.
 
-### 3.2 Request or start a service
-1. On the service detail page, click **Request**, **Get started**, or the primary action button.
-2. Fill required fields (contact details, requirements, date/time if applicable).
-3. Submit the request.
+### 5.1 Left column: Visa Assistance & Tracking
+Read the list of supported steps:
+- Visit visa processing and support
+- Employment visa guidance and document review
+- Family visa assistance and sponsor coordination
+- Renewal reminders and status updates
 
-Expected result:
-- Submission confirmation appears and the request is visible in your activity/history (if available).
+### 5.2 Right column: Gulf Jobs & Interview Support
+This column includes:
+1. A country selector with buttons:
+   - UAE, Saudi Arabia, Qatar, Oman, Kuwait, Bahrain
+2. A Gulf job list that updates when you change the country
 
-### 3.3 Track request status (if supported)
-1. Open **My Requests / Activity** section.
-2. Select a request to view status.
-3. Follow any next steps indicated by status.
+Each job card shows:
+- title (category opportunities in selected country)
+- company (demo list)
+- summary text (verified recruiter style)
 
-Expected result:
-- Status transitions (pending/approved/in-progress/completed) are visible.
+## 6) Support features overview
+A “Ready for every Gulf need” section lists major services:
+- Travel Support (flights, insurance, forex, SIM setup)
+- Document Attestation (MEA/embassy/HRD tracking + delivery)
+- Medical & PCC (GAMCA medical + PCC guidance)
+- Returnee Support (re-entry jobs, business setup, NRI services)
+- NRI Services (bank account support, money transfer links, legal consult, property management)
+- Emergency & Alerts (expiry reminders, document vault, Gulf SOS support)
 
-## 4) Troubleshooting (UI-level)
-- Service submission fails:
-  - Verify login/session.
-  - Ensure required fields are filled.
-  - Refresh and try again.
-- No services appear:
-  - Try clearing filters/search and reloading.
+## 7) Troubleshooting
+- Country selection doesn’t change jobs:
+  - click a different country button again; job cards are generated from internal state
+- Expectation mismatch:
+  - this module currently presents job/visa content as UI cards and guidance (demo-style) rather than a full transactional booking flow.
 
-## 5) UI sections reference
-- Services listing/cards
-- Service detail pages
-- Request/submit forms
-- My Requests / activity tracking
+## 8) UI sections reference (quick)
+- Hero with Start Visa Support / Explore Gulf Jobs actions
+- Quick action tiles grid
+- Two-column panel:
+  - Visa Assistance & Tracking
+  - Country selector + Gulf Jobs list
+- Support features overview grid

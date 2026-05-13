@@ -3,56 +3,76 @@
 > Module: `src/modules/sos/*` (SOS / Emergency Alerts)
 
 ## 1) What this module does
-The SOS module enables a user to trigger an **emergency alert** and share the current context (e.g., live location/trip context when available) to the emergency workflow.
+The **SOS** module enables you to trigger an **emergency alert** and share the current context (e.g., live location/trip context when available) to the emergency workflow.
 
 Typical outcomes:
-- An SOS alert is triggered.
-- Emergency escalation/notifications are shown in the UI.
-- If SOS is triggered during an active ride/trip, the alert is tied to that trip context.
+- An SOS alert is triggered
+- The UI shows escalation/acknowledgement status
+- If SOS is triggered during an active ride/trip, the alert is linked to that trip context
 
 ## 2) Entry point in the app
 1. Open the app and navigate to the **SOS** screen/panel.
-2. If the app has a global quick-action, you can also access SOS from there.
+2. If your app provides global quick actions, you may also access SOS from there.
 
-## 3) Step-by-step user flow
+## 3) Main screen layout (what you see)
 
-### 3.1 Trigger SOS
+### 3.1 SOS trigger area
+- An emergency prompt/message
+- A **Trigger SOS** button
+
+### 3.2 SOS status / escalation area
+- Status indicators (e.g., ongoing / acknowledged / escalated)
+- Any waiting timer or next-step instructions
+
+### 3.3 Optional trip-context banner
+- If SOS is launched from an active trip/ride screen, you may see a banner showing trip context
+
+## 4) Step-by-step user flows
+
+### 4.1 Trigger SOS (manual SOS)
 1. Open **SOS**.
-2. Confirm your emergency intent (UI typically shows an emergency prompt/message).
+2. Read/confirm the emergency prompt (if the UI asks you to confirm intent).
 3. Click **Trigger SOS**.
 
 Expected result:
-- The UI shows an SOS state message such as:
+- The UI shows a message such as:
   - `SOS alert triggered for emergency support.`
-- The UI shows an escalation/notification message such as:
+- The UI then shows escalation messages such as:
   - `SOS alert escalated to emergency workflow.`
 
-### 3.2 Use SOS during an active trip (if applicable)
-If your SOS is available from the ride/trip screen:
+### 4.2 Trigger SOS during an active trip (if your UI supports it)
 1. Start a trip / ensure an active trip is running.
-2. Open the **active trip actions**.
+2. Open the **active trip actions** area.
 3. Click **SOS**.
 
 Expected result:
 - The SOS alert is tied to the active trip context.
-- Emergency workflow/notifications are shown.
+- Escalation/status messages appear in the SOS area.
 
-### 3.3 View SOS status
-After triggering SOS:
-- Check the SOS status area (e.g., ongoing / acknowledged / escalated).
-- Follow any on-screen instructions or waiting timer.
+### 4.3 View SOS status after triggering
+1. After triggering SOS, check the SOS status section.
+2. Follow any on-screen instructions (for example: wait/confirm/acknowledge).
 
-## 4) Troubleshooting (UI-level)
+Expected result:
+- You can see the current state (pending/acknowledged/escalated or similar).
+
+## 5) Troubleshooting (UI-level)
+
 - SOS button does not respond:
-  - Ensure you are logged in.
+  - Ensure you’re logged in.
   - Check internet connectivity.
-  - Retry after closing/reopening the SOS panel.
+  - Close and reopen the SOS panel and retry.
+
 - SOS triggers but no escalation message appears:
-  - Refresh the screen.
-  - Re-check app permissions (location/notifications) if the app requests them.
+  - Refresh the screen and check again.
+  - Verify app permissions that SOS may rely on (location/notifications).
+  - Retry the action if needed (only if it is safe to do so).
 
-## 5) UI sections reference
-- SOS trigger button / emergency prompt
+- SOS context missing (e.g., no trip/location details):
+  - Ensure location/trip context is available in the app when you trigger SOS.
+  - Confirm required permissions are granted.
+
+## 6) UI sections reference
+- SOS trigger button + emergency prompt
 - SOS status + escalation notifications
-- (Optional) trip-context banner when SOS is triggered from ride/trip screens
-
+- Optional trip-context banner (when SOS is triggered from ride/trip screens)

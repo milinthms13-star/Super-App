@@ -69,7 +69,7 @@ Manual overrides were applied where explicit go-live ratings already exist in pr
 | finance | 3.2 | Early-stage |
 | freelancer | 3.2 | Early-stage |
 | gulfservices | 3.2 | Early-stage |
-| healthcare | 3.2 | Early-stage |
+| healthcare | 8.0 | Complete |
 | hotelbooking | 3.2 | Early-stage |
 | hyperlocal | 3.2 | Early-stage |
 | localservices | 3.2 | Early-stage |

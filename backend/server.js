@@ -10,6 +10,7 @@ const compression = require('compression');
 
 const connectDB = require('./config/db');
 const { connectRedis, closeRedis } = require('./config/redis');
+const { initializeClassifiedsIndexes } = require('./config/classifiedsIndexes');
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -110,6 +111,7 @@ app.use('/api/diary', require('./routes/diary'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/giftcards', require('./routes/giftcards'));
 app.use('/api/health', require('./routes/health'));
+app.use('/api', require('./routes/healthcare'));
 app.use('/api/localmarket', require('./routes/localmarket'));
 app.use('/api/messaging', require('./routes/messaging'));
 app.use('/api/invitations', require('./routes/invitations'));
@@ -134,6 +136,7 @@ safeUse('/api/tax', './routes/taxCalculationRoutes'); // Tax calculation, GST in
 
 // Business Services (orders + docs + invoice PDF)
 app.use('/api/business-services', require('./routes/businessServices'));
+app.use('/api/devadarshan', require('./routes/devadarshan'));
 
 // Phase 5E: Carrier Webhook Routes (Real-time tracking updates from courier partners)
 app.use('/webhooks/carrier', require('./routes/carrierWebhookRoutes'));
@@ -320,6 +323,10 @@ app.use('/api/voice-input', require('./routes/voiceInput'));
 // Astrology module routes
 app.use('/api/astrology', require('./routes/astrology'));
 app.use('/api/billpay', require('./routes/billpay'));
+app.use('/api/finance', require('./routes/finance'));
+app.use('/api/freelancer', require('./routes/freelancer'));
+app.use('/api/gulfservices', require('./routes/gulfservices'));
+app.use('/api/hyperlocal', require('./routes/hyperlocal'));
 
 // Job Portal routes
 app.use('/api/jobportal', require('./routes/jobportal'));
@@ -514,6 +521,11 @@ const bootstrap = async () => {
   try {
     databaseConnectedAtStartup = await connectDB();
     await connectRedis();
+
+    // Initialize database indexes for optimal performance
+    if (databaseConnectedAtStartup) {
+      await initializeClassifiedsIndexes();
+    }
 
     if (databaseConnectedAtStartup) {
       startBackgroundServices();

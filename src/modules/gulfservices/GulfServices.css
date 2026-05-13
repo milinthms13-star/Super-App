@@ -68,14 +68,47 @@
   color: #0f172a;
 }
 
-.gulf-services-grid {
+.gulf-services-tabbar {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 20px;
+}
+
+.gulf-services-tab {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gulf-services-tab.active {
+  background: #0ea5e9;
+  color: #ffffff;
+  border-color: #0ea5e9;
+}
+
+.gulf-services-grid,
+.gulf-services-trust-grid,
+.gulf-services-job-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 18px;
+}
+
+.gulf-services-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   margin-bottom: 32px;
 }
 
-.gulf-services-card {
+.gulf-services-card,
+.gulf-services-job-card,
+.gulf-services-action-card,
+.gulf-services-job-detail {
   padding: 24px;
   background: #ffffff;
   border-radius: 22px;
@@ -83,14 +116,38 @@
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
 }
 
-.gulf-services-card h3 {
+.gulf-services-card-featured {
+  padding: 28px;
+  background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+  color: #ffffff;
+}
+
+.gulf-services-card h3,
+.gulf-services-action-card h3,
+.gulf-services-job-card strong,
+.gulf-services-job-detail h3 {
   margin-bottom: 12px;
   font-size: 1.1rem;
 }
 
-.gulf-services-card p {
+.gulf-services-card p,
+.gulf-services-action-card p,
+.gulf-services-job-card p,
+.gulf-services-job-detail p {
   color: #475569;
   line-height: 1.7;
+}
+
+.gulf-services-action-card {
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gulf-services-action-card:hover {
+  transform: translateY(-2px);
+  border-color: #0ea5e9;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
 }
 
 .gulf-services-panel {
@@ -108,22 +165,34 @@
   border: 1px solid #e2e8f0;
 }
 
-.gulf-services-panel h2 {
+.gulf-services-panel h2,
+.gulf-services-panel-left h2,
+.gulf-services-panel-right h2 {
   margin-bottom: 18px;
 }
 
-.gulf-services-panel ul {
-  list-style: disc;
-  padding-left: 20px;
-  color: #475569;
-  line-height: 1.8;
+.gulf-services-country-selector,
+.gulf-services-job-filters,
+.gulf-services-salary-range,
+.gulf-services-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
 }
 
 .gulf-services-country-selector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
   margin-bottom: 18px;
+}
+
+.gulf-services-country-selector button,
+.gulf-services-job-filters select,
+.gulf-services-job-filters input,
+.gulf-services-form input,
+.gulf-services-form select,
+.gulf-services-form textarea {
+  min-width: 0;
+  width: 100%;
 }
 
 .gulf-services-country-selector button {
@@ -143,65 +212,465 @@
   border-color: #0ea5e9;
 }
 
-.gulf-services-job-list {
+.gulf-services-job-card,
+.gulf-services-action-card {
+  padding: 20px;
+  background: #f8fafc;
+}
+
+.gulf-services-job-card.selected,
+.gulf-services-action-card:hover {
+  border-color: #0ea5e9;
+  background: #eff6ff;
+}
+
+.gulf-services-job-card button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.gulf-services-job-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+  color: #475569;
+}
+
+.gulf-services-form {
   display: grid;
   gap: 14px;
 }
 
-.gulf-services-job-card {
-  padding: 18px 20px;
-  border-radius: 18px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-}
-
-.gulf-services-job-card strong {
-  display: block;
-  margin-bottom: 8px;
+.gulf-services-form label {
+  display: grid;
+  gap: 8px;
   color: #0f172a;
 }
 
-.gulf-services-job-card span {
-  display: inline-block;
-  margin-bottom: 10px;
-  color: #2563eb;
-  font-weight: 600;
+.gulf-services-form input,
+.gulf-services-form textarea,
+.gulf-services-form select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
-.gulf-services-job-card p {
-  color: #475569;
-  line-height: 1.75;
+.gulf-services-form textarea {
+  min-height: 120px;
 }
 
-.gulf-services-features {
-  margin-bottom: 48px;
+.gulf-services-trust-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 32px;
 }
 
-.gulf-services-features h2 {
+.gulf-services-recruiter-card {
+  min-height: 140px;
+}
+
+.gulf-services-tracking-result {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 18px;
+  margin-top: 18px;
+}
+
+.gulf-services-dashboard-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.gulf-services-dashboard-summary div {
+  background: #f8fafc;
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.gulf-services-notice {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  margin-bottom: 32px;
+  background: #eff6ff;
+  border-radius: 24px;
+  border: 1px solid #dbeafe;
+}
+
+.gulf-services-notice-actions {
+  justify-content: flex-start;
+}
+
+.gulf-services-toast {
+  margin: 18px 0;
+  padding: 16px 20px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 18px;
+  color: #0369a1;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background: #0ea5e9;
+  color: #ffffff;
+}
+
+.btn-secondary {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #0ea5e9;
+  border: 1.5px solid #0ea5e9;
+}
+
+.btn-outline:hover {
+  background: #eff6ff;
+}
+
+.btn:focus-visible,
+.gulf-services-tab:focus-visible,
+.gulf-services-country-selector button:focus-visible,
+.gulf-services-job-card button:focus-visible,
+.gulf-services-action-card:focus-visible,
+.gulf-services-modal-close:focus-visible,
+.gulf-services-form input:focus-visible,
+.gulf-services-form textarea:focus-visible,
+.gulf-services-form select:focus-visible {
+  outline: 3px solid #0369a1;
+  outline-offset: 2px;
+}
+
+/* Modal Styles */
+.gulf-services-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.5);
+  z-index: 999;
+}
+
+.gulf-services-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.gulf-services-modal-content {
+  position: relative;
+  background: #ffffff;
+  border-radius: 28px;
+  padding: 36px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px rgba(15, 23, 42, 0.2);
+}
+
+.gulf-services-modal-large {
+  max-width: 1000px;
+}
+
+.gulf-services-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: #f1f5f9;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.gulf-services-modal-close:hover {
+  background: #0ea5e9;
+  color: #ffffff;
+}
+
+.gulf-services-modal-content h2 {
+  margin-bottom: 24px;
+  font-size: 1.6rem;
+}
+
+.gulf-services-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
   margin-bottom: 20px;
 }
 
-.gulf-services-features-grid {
+.gulf-services-form-grid label.full-width,
+.gulf-services-form-grid input[type="file"],
+.gulf-services-form-grid textarea {
+  grid-column: 1 / -1;
+}
+
+.gulf-services-form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.gulf-services-form-actions .btn {
+  flex: 1;
+  min-width: 140px;
+  justify-content: center;
+}
+
+/* Modal Grid for Jobs */
+.gulf-services-modal-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 18px;
+  grid-template-columns: 300px 1fr;
+  gap: 24px;
 }
 
-.gulf-services-features-grid article {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+.gulf-services-modal-filters {
+  display: grid;
+  gap: 14px;
+}
+
+.gulf-services-modal-filters h3 {
+  margin-bottom: 12px;
+}
+
+.gulf-services-modal-filters label {
+  display: grid;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.gulf-services-modal-jobs {
+  display: grid;
+  gap: 24px;
+}
+
+.gulf-services-job-detail-modal {
+  background: #f8fafc;
+  padding: 24px;
   border-radius: 20px;
-  padding: 22px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
 }
 
-.gulf-services-features-grid h3 {
-  margin-bottom: 10px;
+.gulf-services-job-detail-modal h3 {
+  font-size: 1.3rem;
+  margin-bottom: 12px;
 }
 
-.gulf-services-features-grid p {
-  color: #475569;
-  line-height: 1.75;
+.gulf-services-company {
+  color: #64748b;
+  margin-bottom: 18px;
+}
+
+.gulf-services-job-details {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.gulf-services-recruiter-info {
+  background: #eff6ff;
+  padding: 16px;
+  border-radius: 14px;
+  border-left: 4px solid #0ea5e9;
+  margin-top: 16px;
+}
+
+/* Timeline */
+.gulf-services-timeline {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.gulf-services-timeline-entry {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border-left: 4px solid #0ea5e9;
+}
+
+.gulf-services-timeline-status {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.gulf-services-timeline-date {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+/* Fraud Banner */
+.gulf-services-fraud-banner {
+  background: #fef2f2;
+  border: 2px solid #fecaca;
+  border-radius: 20px;
+  padding: 28px;
+  margin: 32px 0;
+  text-align: center;
+}
+
+.gulf-services-fraud-banner h3 {
+  color: #dc2626;
+  margin-bottom: 12px;
+}
+
+.gulf-services-fraud-banner p {
+  color: #7f1d1d;
+  margin-bottom: 18px;
+}
+
+.gulf-services-fraud-warning {
+  background: #fef2f2;
+  border-left: 4px solid #dc2626;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  color: #7f1d1d;
+}
+
+/* Trust Section */
+.gulf-services-trust-section {
+  margin: 48px 0;
+}
+
+.gulf-services-trust-section h2 {
+  margin-bottom: 24px;
+  font-size: 1.6rem;
+}
+
+.gulf-services-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.gulf-services-trust-grid .gulf-services-card {
+  border-color: #dbeafe;
+  background: #f0f9ff;
+}
+
+.gulf-services-trust-grid .gulf-services-card strong {
+  color: #0369a1;
+  display: block;
+  margin-bottom: 12px;
+}
+
+/* Recruiter Card Enhanced */
+.gulf-services-recruiter-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.gulf-services-recruiter-header strong {
+  flex: 1;
+}
+
+.gulf-services-badge-verified {
+  background: #dcfce7;
+  color: #166534;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* Action Card with Icons */
+.gulf-services-action-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.gulf-services-icon {
+  font-size: 2rem;
+  margin-bottom: 12px;
+}
+
+/* Emergency Card */
+.gulf-services-card-emergency {
+  border-color: #fed7aa;
+  background: #fffbeb;
+}
+
+.gulf-services-card-emergency h2 {
+  color: #d97706;
+}
+
+/* Tag for Urgent */
+.gulf-services-tag-urgent {
+  background: #fed7aa;
+  color: #92400e;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Job Card Header */
+.gulf-services-job-card-header {
+  display: flex;
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.gulf-services-job-card-header strong {
+  flex: 1;
 }
 
 @media (max-width: 900px) {
@@ -211,5 +680,164 @@
 
   .gulf-services-panel {
     grid-template-columns: 1fr;
+  }
+
+  .gulf-services-hero-summary,
+  .gulf-services-card,
+  .gulf-services-job-detail,
+  .gulf-services-notice {
+    padding: 20px;
+  }
+
+  .gulf-services-job-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-form-grid label,
+  .gulf-services-form-grid input,
+  .gulf-services-form-grid select,
+  .gulf-services-form-grid textarea {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Mobile Responsiveness - Updated per requirements */
+@media (max-width: 600px) {
+  .gulf-services-page {
+    padding: 18px 14px;
+  }
+
+  .gulf-services-hero h1 {
+    font-size: 1.8rem;
+  }
+
+  .gulf-services-hero-actions {
+    flex-direction: column;
+  }
+
+  .gulf-services-hero-actions .btn {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .gulf-services-card,
+  .gulf-services-panel-left,
+  .gulf-services-panel-right,
+  .gulf-services-modal-content {
+    padding: 18px;
+  }
+
+  .gulf-services-country-selector {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 8px;
+  }
+
+  .gulf-services-country-selector button {
+    white-space: nowrap;
+  }
+
+  .gulf-services-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-trust-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-job-list {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-job-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-modal-filters {
+    order: 2;
+  }
+
+  .gulf-services-modal-jobs {
+    order: 1;
+  }
+
+  .gulf-services-form-actions {
+    flex-direction: column;
+  }
+
+  .gulf-services-form-actions .btn {
+    width: 100%;
+  }
+
+  .gulf-services-modal {
+    padding: 12px;
+  }
+
+  .gulf-services-modal-content {
+    border-radius: 20px;
+    padding: 20px;
+    max-height: 95vh;
+  }
+
+  .gulf-services-modal-close {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+    top: 12px;
+    right: 12px;
+  }
+
+  .gulf-services-fraud-banner {
+    padding: 18px;
+  }
+
+  .gulf-services-notice {
+    padding: 18px;
+  }
+
+  .gulf-services-notice-actions {
+    flex-direction: column;
+  }
+
+  .gulf-services-notice-actions .btn {
+    width: 100%;
+  }
+
+  .gulf-services-dashboard-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .gulf-services-recruiter-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .gulf-services-hero {
+    padding: 0;
+  }
+
+  .gulf-services-hero-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-job-detail,
+  .gulf-services-job-detail-modal {
+    padding: 18px;
   }
 }

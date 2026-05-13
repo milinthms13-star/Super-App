@@ -3,60 +3,91 @@
 > Module: `src/modules/reporting/` (reporting dashboard/components)
 
 ## 1) What this module does
-Reporting provides insights and summaries for platform activity. It typically lets users:
-- view reports (by date range/status/category)
-- filter and drill into report details
-- export/download reports if supported
-- monitor KPIs relevant to your role
+**Reporting** provides insights and summaries for platform activity. Depending on your role/MVP scope, it typically lets you:
+- View report dashboards (high-level KPIs)
+- Filter reports by date range, status, category, module, and/or other dimensions
+- Drill into report details (breakdowns and underlying records)
+- Export/download reports (if supported)
 
 ## 2) Entry point
 1. Login.
 2. Open **Reporting** from navigation.
-3. The module typically loads a reports overview/dashboard.
+3. The module loads a reports overview/dashboard.
 
-## 3) Step-by-step user flows
+## 3) Main screen layout (what you see)
 
-### 3.1 View reports dashboard
-1. Open the Reporting module.
-2. Review the default report cards/charts.
-3. Check for summary values (counts, totals, statuses).
+### 3.1 Dashboard overview
+- Summary cards/tiles (counts, totals, status highlights)
+- Charts/visual indicators (if enabled)
 
-Expected result:
-- The dashboard shows current report metrics.
+### 3.2 Filter controls
+Common filter inputs (depending on your UI):
+- Date range (from/to)
+- Status (e.g., open/closed/active)
+- Category/type
+- Module/service
+- Optional search field
 
-### 3.2 Filter and run a report
-1. Locate filters (date range, status, category, module).
-2. Select your desired criteria.
-3. Click **Apply** / **Run** / **Search**.
+### 3.3 Report results area
+- Tables, lists, and/or charts showing the filtered results
 
-Expected result:
-- Charts/tables update to reflect new filters.
+## 4) Step-by-step user flows
 
-### 3.3 Drill into details
-1. Click a chart/table row/card to open details.
-2. Review the item list or breakdown.
-
-Expected result:
-- Detailed view appears with deeper metrics/records.
-
-### 3.4 Export/download (if supported)
-1. Find Export/Download button.
-2. Choose format (CSV/JSON/PDF if available).
-3. Confirm export.
+### 4.1 View reports dashboard
+1. Open **Reporting**.
+2. Review the default dashboard tiles and charts.
+3. Check summary values (counts, totals, status breakdowns).
 
 Expected result:
-- A file is generated/downloaded.
+- Dashboard reflects current default filters (or “all”).
 
-## 4) Troubleshooting (UI-level)
+### 4.2 Filter and run a report
+1. Locate the filter controls.
+2. Select your criteria:
+   - Date range
+   - Status/category/module (as available)
+3. Click **Apply / Run / Search** (exact label depends on your UI).
+
+Expected result:
+- Charts/tables refresh based on your selected criteria.
+
+### 4.3 Drill into report details
+1. Click a chart element (bar/segment) or a table row/card.
+2. Open the details view.
+
+Expected result:
+- You see a deeper breakdown of the selected report item (records, metrics, and metadata).
+
+### 4.4 Export/download (if supported)
+1. Find the **Export / Download** button.
+2. Select:
+   - Scope (current results / filtered results / all results—if your UI offers scope)
+   - Format (CSV/JSON/PDF if available)
+3. Confirm the export.
+
+Expected result:
+- A file is generated and downloaded (or an export job is initiated).
+
+## 5) Troubleshooting (UI-level)
+
 - Reports don’t update after filtering:
-  - Confirm required filter fields aren’t empty.
-  - Retry with a simpler filter set.
-- Empty charts/tables:
-  - Expand date range.
-  - Check status/category selection.
+  - Confirm required filter fields are not empty.
+  - Try a simpler filter set (e.g., only date range).
+  - Refresh and re-run the report.
 
-## 5) UI sections reference
-- Reports overview dashboard
+- Empty charts/tables:
+  - Expand the date range.
+  - Reset filters to broader values.
+  - Verify the selected status/category actually has matching data.
+
+- Export fails or download doesn’t start:
+  - Retry export once the results area shows data.
+  - Check pop-up/download permissions in your browser.
+  - If your UI shows an error message, try exporting a smaller scope first.
+
+## 6) UI sections reference
+- Reports overview dashboard (KPI cards + charts)
 - Filter controls
-- Report detail tables/charts
+- Report results (tables/lists/charts)
+- Report detail view
 - Export/download actions (if present)

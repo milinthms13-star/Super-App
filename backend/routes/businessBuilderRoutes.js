@@ -39,6 +39,23 @@ router.get('/businesses', async (req, res) => {
   }
 });
 
+router.get('/businesses/me', async (req, res) => {
+  try {
+    const businesses = await businessBuilderService.getBusinesses(req.user.id);
+    const business = Array.isArray(businesses) && businesses.length > 0 ? businesses[0] : null;
+    res.json({
+      success: true,
+      data: business,
+      business
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 router.get('/businesses/:businessId', async (req, res) => {
   try {
     const business = await businessBuilderService.getBusinessById(req.params.businessId, req.user.id);

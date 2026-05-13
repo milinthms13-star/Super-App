@@ -20,6 +20,7 @@ const DeliveryPartnerDashboard = () => {
   const [orders, setOrders] = useState([]);
   const [statusMessage, setStatusMessage] = useState('');
   const [sosMessage, setSosMessage] = useState('Need assistance on this delivery.');
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   const refreshRiderOrders = async () => {
     try {
@@ -40,8 +41,38 @@ const DeliveryPartnerDashboard = () => {
   };
 
   useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setRiderProfile((currentProfile) => ({
+            ...currentProfile,
+            currentLat: String(position.coords.latitude),
+            currentLng: String(position.coords.longitude),
+          }));
+        },
+        () => {
+          setStatusMessage('Unable to access GPS location. Please update location manually.');
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
+    }
+
     refreshRiderOrders();
   }, []);
+
+  useEffect(() => {
+    if (!autoRefresh) {
+      return undefined;
+    }
+
+    const poll = window.setInterval(() => {
+      refreshRiderOrders();
+    }, 20000);
+
+    return () => {
+      window.clearInterval(poll);
+    };
+  }, [autoRefresh]);
 
   const handleProfileSave = async () => {
     try {
@@ -214,6 +245,14 @@ const DeliveryPartnerDashboard = () => {
           }
         />
         <button onClick={handleAvailabilitySave}>Update Availability</button>
+        <label>
+          <input
+            type="checkbox"
+            checked={autoRefresh}
+            onChange={(event) => setAutoRefresh(event.target.checked)}
+          />
+          Auto refresh orders
+        </label>
         <button onClick={refreshRiderOrders}>Refresh Orders</button>
       </div>
 

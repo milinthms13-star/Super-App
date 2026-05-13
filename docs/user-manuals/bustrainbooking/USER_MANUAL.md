@@ -1,62 +1,134 @@
-# Bus & Train Booking User Manual (Front-End)
+# Bus & Train Booking Hub User Manual (Front-End)
 
-> Module: `src/modules/bustrainbooking/BusTrainBooking.js`
+> Module: `src/modules/bustrainbooking/BusTrainBooking.js`  
+> Product name in UI: **NilaTravel — Bus & Train Booking Hub**
 
 ## 1) What this module does
-The Bus & Train Booking module helps users search for bus/train routes, choose schedules, and complete ticket booking (subject to availability and enabled payment options).
+This hub helps you:
+- Search and book **buses or trains** (demo redirects to official portals)
+- Check **PNR status**
+- Check **live train status** by train number (demo alert)
+- Get **travel support** via WhatsApp + guides
 
-## 2) Entry point
-1. Login.
-2. Open **Bus/Train Booking** from navigation.
-3. The module typically opens on a search form or booking landing screen.
+## 2) Entry point in the app
+1. Open **Bus & Train Booking Hub** from main navigation/menu.
 
-## 3) Step-by-step user flows
+## 3) Main navigation (inside the module)
+You’ll see an internal tab bar with:
+- 🔍 **Search & Book**
+- 🎫 **PNR Status**
+- 📍 **Live Status**
+- 🛟 **Travel Support**
 
-### 3.1 Search schedules
-1. Enter your **origin** location.
-2. Enter your **destination** location.
-3. Select **date** (and optionally time/class/filters if provided).
-4. Click **Search**.
+## 4) Search & Book (core flow)
+### 4.1 Choose booking type
+1. Go to **Search & Book**.
+2. Choose:
+   - 🚌 **Bus**
+   - 🚂 **Train**
 
-Expected result:
-- Matching buses/trains appear with time, duration, and pricing.
+The origin/destination selector changes depending on the booking type.
 
-### 3.2 Select an option
-1. Review available schedules.
-2. Click **Select** for your preferred time/option.
-3. Confirm the route details (and seats/classes if applicable).
+### 4.2 Fill search form
+On the Search & Book screen:
 
-Expected result:
-- Booking form or passenger/checkout step opens.
+Common fields:
+- **From** (dropdown)
+- **To** (dropdown)
 
-### 3.3 Complete booking
-1. Fill required passenger details (name/age/contact, etc.).
-2. Review price breakdown and terms.
-3. Submit booking request.
-4. Confirm payment method if payment is part of the flow.
+For all types:
+- **Travel Date** (date picker with min = today)
+- **Passengers** (1 to 6)
 
-Expected result:
-- Booking confirmation is displayed and appears under bookings/history.
+If booking type is **Train**:
+- **Class Preference** (All Classes / 1A / 2A / 3A / SL / CC)
 
-### 3.4 View upcoming bookings / history
-1. Open “My Bookings” / “History” tab (if present).
-2. Select a booking to view details.
+### 4.3 Run search
+1. Click **🔍 Search Buses** or **🔍 Search Trains**.
+2. You’ll see results below.
 
-Expected result:
-- Status, ticket/confirmation data, and schedule info are shown.
+## 5) Booking actions from results
+### 5.1 Bus results actions
+For each bus card, you can:
+- **Book Now**
+- **Official Booking** (recommended official portal redirect)
 
-## 4) Troubleshooting (UI-level)
-- No results:
-  - Verify origin/destination and date.
-  - Try changing filters or using broader criteria.
-- Booking fails:
-  - Ensure you’re logged in.
-  - Re-check required passenger fields.
-  - Try again after verifying payment/network.
+Expected behavior (demo):
+- The UI shows an alert and conceptually redirects to:
+  - KSRTC Swift for government buses
+  - other official portals for private buses
 
-## 5) UI sections reference
-- Search form
-- Schedule/results list
-- Seat/class selection (if present)
-- Passenger/checkout form
-- Bookings/history view
+### 5.2 Train results actions
+For each train card:
+- You see available classes (with fare and seats).
+- Click **Book {class}** (e.g., “Book 3A”)
+
+You also have general actions:
+- **Book on IRCTC**
+- **WhatsApp Support**
+
+Expected behavior (demo):
+- The UI shows an alert (in the real app, it would redirect to IRCTC).
+
+## 6) PNR Status
+1. Open **PNR Status** tab.
+2. Enter **PNR number**:
+   - expects a **10-digit PNR**
+3. Click **Check PNR Status**.
+
+Expected behavior:
+- If PNR is empty, the UI alerts “Please enter a valid PNR number”.
+- Otherwise it shows a demo message for checking the PNR via official IRCTC systems.
+
+## 7) Live Train Status
+1. Open **Live Status** tab.
+2. Enter **Train number** (e.g., 12623).
+3. Click **Check Live Status**.
+
+Expected behavior (demo):
+- If train number is empty, the UI alerts.
+- Otherwise it shows an alert stating that the real app would fetch live location/delay info.
+
+UI feature cards you should expect:
+- 📍 Current Location
+- ⏰ Delay Information
+- 🚉 Next Station
+- 📊 Running Status
+
+## 8) Travel Support & Assistance
+1. Open **Travel Support** tab.
+2. Use:
+   - 🎫 **Booking Assistance** → **WhatsApp Support**
+   - 🔄 **Cancellation & Refund** → “Cancellation Guide” button (currently demo)
+   - 👥 **Senior Citizen Help** → “Senior Support” button (currently demo)
+   - 📞 **Emergency Contact** → “Call Support” button (currently demo)
+
+Also review the “Important Travel Information” notes:
+- Train bookings: use official IRCTC portal
+- Bus bookings: KSRTC Swift for government, private operators for additional services
+- Cancellation/refund: check operator policies
+- Carry valid ID proof
+
+## 9) Troubleshooting
+- Search shows no results:
+  - try changing From/To values (filters are basic string matches in demo)
+- PNR check blocked:
+  - enter a 10-digit PNR
+- Train status blocked:
+  - enter a train number like “12623”
+- Support buttons:
+  - WhatsApp Support opens a demo alert; other buttons are informational in this build.
+
+## 10) UI sections reference (quick)
+- Search & Book:
+  - bus/train toggle
+  - from/to selectors
+  - travel date, passengers
+  - bus cards + “Book Now” / “Official Booking”
+  - train cards + class options + “Book on IRCTC” / “WhatsApp Support”
+- PNR Status:
+  - PNR input + check action
+- Live Status:
+  - train number input + check action
+- Travel Support:
+  - WhatsApp assistance + guides

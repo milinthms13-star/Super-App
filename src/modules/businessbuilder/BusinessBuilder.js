@@ -15,16 +15,12 @@ const BUSINESS_TYPES = [
   "Other",
 ];
 
-const MINIAPP_CATEGORIES = [
-  "Retail",
-  "Service",
-  "Food",
-  "Education",
-  "Health",
-  "Travel",
-  "Beauty",
-  "Fitness",
-  "Other",
+const MINIAPP_TYPES = [
+  "Business Card",
+  "Product Showcase",
+  "Service Booking",
+  "Store Locator",
+  "Contact Form",
 ];
 
 const WIZARD_STEPS = [
@@ -186,9 +182,9 @@ const INITIAL_INVOICE_FORM = {
 };
 
 const INITIAL_MINIAPP_FORM = {
-  displayName: "",
+  appName: "",
   slug: "",
-  category: "Retail",
+  appType: "Business Card",
   description: "",
   email: "",
   phone: "",
@@ -452,6 +448,8 @@ const BusinessBuilder = () => {
   const [documentPreview, setDocumentPreview] = useState("");
   const [generatedDocuments, setGeneratedDocuments] = useState(() => loadFromStorage(STORAGE_KEYS.generatedDocs, []));
 
+  const [businesses, setBusinesses] = useState([]);
+  const [activeBusinessId, setActiveBusinessId] = useState("");
   const [invoices, setInvoices] = useState([]);
   const [miniApps, setMiniApps] = useState([]);
   const [statusMessage, setStatusMessage] = useState("");
@@ -461,7 +459,7 @@ const BusinessBuilder = () => {
     const fetchDashboardData = async () => {
       setLoading(true);
       try {
-        await Promise.all([fetchBusiness(), fetchInvoices(), fetchMiniApps()]);
+        await fetchBusiness();
       } finally {
         setLoading(false);
       }
@@ -469,6 +467,14 @@ const BusinessBuilder = () => {
 
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    const fetchDependentData = async () => {
+      await Promise.all([fetchInvoices(), fetchMiniApps()]);
+    };
+
+    fetchDependentData();
+  }, [activeBusinessId]);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEYS.launchForm, JSON.stringify(launchForm));
@@ -494,25 +500,37 @@ const BusinessBuilder = () => {
     window.localStorage.setItem(STORAGE_KEYS.schemeProfile, JSON.stringify(schemeProfile));
   }, [schemeProfile]);
 
+  const applyBusinessToForm = (business = {}) => {
+    const address = business.address || {};
+    setBusinessForm({
+      businessName: business.businessName || "",
+      businessType: business.businessType || "Retail",
+      phone: business.phone || "",
+      email: business.email || "",
+      website: business.website || "",
+      gstin: business.gstin || "",
+      addressStreet: address.street || "",
+      addressCity: address.city || "",
+      addressState: address.state || "",
+      addressPincode: address.pincode || "",
+      primaryColor: business.primaryColor || "#0f766e",
+      secondaryColor: business.secondaryColor || "#10b981",
+    });
+  };
+
   const fetchBusiness = async () => {
     try {
-      const response = await axios.get("/api/business-builder/businesses/me");
+      const response = await axios.get("/api/business-builder/businesses");
       if (response.data?.success) {
-        const address = response.data.business.address || {};
-        setBusinessForm({
-          businessName: response.data.business.businessName || "",
-          businessType: response.data.business.businessType || "Retail",
-          phone: response.data.business.phone || "",
-          email: response.data.business.email || "",
-          website: response.data.business.website || "",
-          gstin: response.data.business.gstin || "",
-          addressStreet: address.street || "",
-          addressCity: address.city || "",
-          addressState: address.state || "",
-          addressPincode: address.pincode || "",
-          primaryColor: response.data.business.primaryColor || "#0f766e",
-          secondaryColor: response.data.business.secondaryColor || "#10b981",
-        });
+        const list = Array.isArray(response.data.data) ? response.data.data : [];
+        setBusinesses(list);
+        if (list.length > 0) {
+          const selected = list.find((business) => business.businessId === activeBusinessId) || list[0];
+          setActiveBusinessId(selected.businessId);
+          applyBusinessToForm(selected);
+        } else {
+          setActiveBusinessId("");
+        }
       }
     } catch (error) {
       // no-op for first-time users
@@ -521,9 +539,11 @@ const BusinessBuilder = () => {
 
   const fetchInvoices = async () => {
     try {
-      const response = await axios.get("/api/business-builder/invoices");
+      const response = await axios.get("/api/business-builder/invoices", {
+        params: activeBusinessId ? { businessId: activeBusinessId } : {},
+      });
       if (response.data?.success) {
-        setInvoices(response.data.invoices || []);
+        setInvoices(Array.isArray(response.data.data) ? response.data.data : []);
       }
     } catch (error) {
       setInvoices([]);
@@ -532,9 +552,11 @@ const BusinessBuilder = () => {
 
   const fetchMiniApps = async () => {
     try {
-      const response = await axios.get("/api/business-builder/mini-apps");
+      const response = await axios.get("/api/business-builder/mini-apps", {
+        params: activeBusinessId ? { businessId: activeBusinessId } : {},
+      });
       if (response.data?.success) {
-        setMiniApps(response.data.miniApps || []);
+        setMiniApps(Array.isArray(response.data.data) ? response.data.data : []);
       }
     } catch (error) {
       setMiniApps([]);
@@ -600,7 +622,7 @@ const BusinessBuilder = () => {
   const handleSaveBusiness = async (event) => {
     event.preventDefault();
     try {
-      const response = await axios.post("/api/business-builder/businesses", {
+      const payload = {
         businessName: businessForm.businessName,
         businessType: businessForm.businessType,
         phone: businessForm.phone,
@@ -616,8 +638,16 @@ const BusinessBuilder = () => {
         },
         primaryColor: businessForm.primaryColor,
         secondaryColor: businessForm.secondaryColor,
-      });
+      };
+      const response = activeBusinessId
+        ? await axios.put(`/api/business-builder/businesses/${activeBusinessId}`, payload)
+        : await axios.post("/api/business-builder/businesses", payload);
       if (response.data?.success) {
+        const savedBusiness = response.data.data;
+        if (savedBusiness?.businessId) {
+          setActiveBusinessId(savedBusiness.businessId);
+        }
+        await fetchBusiness();
         showStatus("Business profile saved successfully.");
       }
     } catch (error) {
@@ -627,23 +657,39 @@ const BusinessBuilder = () => {
 
   const handleCreateInvoice = async (event) => {
     event.preventDefault();
+    if (!activeBusinessId) {
+      showStatus("Create and save a business profile before creating invoices.");
+      return;
+    }
     try {
       const payload = {
-        customerName: invoiceForm.customerName,
-        customerPhone: invoiceForm.customerPhone,
-        customerEmail: invoiceForm.customerEmail,
-        customerGSTIN: invoiceForm.customerGSTIN,
-        customerAddress: invoiceForm.customerAddress,
+        businessId: activeBusinessId,
+        customer: {
+          name: invoiceForm.customerName,
+          phone: invoiceForm.customerPhone,
+          email: invoiceForm.customerEmail,
+          gstin: invoiceForm.customerGSTIN,
+          address: invoiceForm.customerAddress,
+        },
         dueDate: invoiceForm.dueDate,
-        discountAmount: Number(invoiceForm.discountAmount || 0),
-        currency: invoiceForm.currency,
+        discount: Number(invoiceForm.discountAmount || 0),
         notes: invoiceForm.notes,
-        items: invoiceForm.items,
+        items: invoiceForm.items.map((item) => {
+          const quantity = Number(item.quantity || 0);
+          const unitPrice = Number(item.unitPrice || 0);
+          return {
+            description: String(item.description || item.name || "Item").trim(),
+            quantity,
+            unitPrice,
+            total: quantity * unitPrice,
+            hsnCode: "",
+          };
+        }),
       };
       const response = await axios.post("/api/business-builder/invoices", payload);
       if (response.data?.success) {
         setInvoiceForm(INITIAL_INVOICE_FORM);
-        fetchInvoices();
+        await fetchInvoices();
         showStatus("Invoice created successfully.");
       }
     } catch (error) {
@@ -653,34 +699,37 @@ const BusinessBuilder = () => {
 
   const handleCreateMiniApp = async (event) => {
     event.preventDefault();
+    if (!activeBusinessId) {
+      showStatus("Create and save a business profile before launching a mini app.");
+      return;
+    }
     try {
       const payload = {
-        displayName: miniAppForm.displayName,
+        businessId: activeBusinessId,
+        appName: miniAppForm.appName,
         slug: miniAppForm.slug,
-        category: miniAppForm.category,
+        appType: miniAppForm.appType,
+        appDescription: miniAppForm.description,
         branding: {
-          logo: "",
           primaryColor: miniAppForm.primaryColor,
           secondaryColor: miniAppForm.secondaryColor,
-          description: miniAppForm.description,
         },
-        businessProfile: {
-          email: miniAppForm.email,
-          phone: miniAppForm.phone,
-          address: miniAppForm.address,
-          website: miniAppForm.website,
-        },
-        configuration: {
-          language: "en",
-          enableChat: true,
-          enableReviews: true,
-          enablePayments: true,
+        content: {
+          heroTitle: miniAppForm.appName,
+          heroSubtitle: miniAppForm.description,
+          aboutText: miniAppForm.description,
+          contactInfo: {
+            email: miniAppForm.email,
+            phone: miniAppForm.phone,
+            address: miniAppForm.address,
+            website: miniAppForm.website,
+          },
         },
       };
       const response = await axios.post("/api/business-builder/mini-apps", payload);
       if (response.data?.success) {
         setMiniAppForm(INITIAL_MINIAPP_FORM);
-        fetchMiniApps();
+        await fetchMiniApps();
         showStatus("Mini app created successfully.");
       }
     } catch (error) {
@@ -1332,6 +1381,28 @@ const BusinessBuilder = () => {
           </p>
 
           <form className="form-grid" onSubmit={handleSaveBusiness}>
+            {businesses.length > 1 ? (
+              <label className="full-width">
+                Select business profile
+                <select
+                  value={activeBusinessId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    setActiveBusinessId(nextId);
+                    const selected = businesses.find((business) => business.businessId === nextId);
+                    if (selected) {
+                      applyBusinessToForm(selected);
+                    }
+                  }}
+                >
+                  {businesses.map((business) => (
+                    <option key={business.businessId} value={business.businessId}>
+                      {business.businessName} ({business.businessType})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label>
               Business name
               <input
@@ -1562,14 +1633,17 @@ const BusinessBuilder = () => {
             ) : (
               <div className="invoice-list">
                 {invoices.map((invoice) => (
-                  <div className="invoice-card" key={invoice._id}>
+                  <div className="invoice-card" key={invoice.invoiceId || invoice._id}>
                     <div>
                       <strong>{invoice.invoiceNumber}</strong>
-                      <p>{invoice.customerName}</p>
-                      <p>{invoice.currency} {invoice.total?.toFixed(2)}</p>
+                      <p>{invoice?.customer?.name || "Customer"}</p>
+                      <p>{formatINR(invoice.totalAmount)}</p>
                     </div>
                     <div className="invoice-card-actions">
-                      <button type="button" onClick={() => downloadPdf(invoice._id, invoice.invoiceNumber)}>
+                      <button
+                        type="button"
+                        onClick={() => downloadPdf(invoice.invoiceId || invoice._id, invoice.invoiceNumber)}
+                      >
                         Download PDF
                       </button>
                       <span className="invoice-status">{invoice.status}</span>
@@ -1593,8 +1667,8 @@ const BusinessBuilder = () => {
             <label>
               App display name
               <input
-                value={miniAppForm.displayName}
-                onChange={(event) => handleMiniAppChange("displayName", event.target.value)}
+                value={miniAppForm.appName}
+                onChange={(event) => handleMiniAppChange("appName", event.target.value)}
                 required
               />
             </label>
@@ -1608,14 +1682,14 @@ const BusinessBuilder = () => {
               />
             </label>
             <label>
-              Category
+              App type
               <select
-                value={miniAppForm.category}
-                onChange={(event) => handleMiniAppChange("category", event.target.value)}
+                value={miniAppForm.appType}
+                onChange={(event) => handleMiniAppChange("appType", event.target.value)}
               >
-                {MINIAPP_CATEGORIES.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
+                {MINIAPP_TYPES.map((appType) => (
+                  <option key={appType} value={appType}>
+                    {appType}
                   </option>
                 ))}
               </select>
@@ -1684,9 +1758,9 @@ const BusinessBuilder = () => {
             ) : (
               <div className="miniapp-grid">
                 {miniApps.map((app) => (
-                  <div key={app._id} className="miniapp-card">
-                    <strong>{app.displayName}</strong>
-                    <p>{app.category} - {app.status}</p>
+                  <div key={app.miniAppId || app._id} className="miniapp-card">
+                    <strong>{app.appName}</strong>
+                    <p>{app.appType} - {app.status}</p>
                     <p>/{app.slug}</p>
                   </div>
                 ))}

@@ -1,915 +1,667 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
+import { getStoredAuthToken } from "../../utils/auth";
+import { jobPortalApi } from "./services/jobPortalApi";
+import {
+  APPLICATION_STATUS_OPTIONS,
+  CAREER_TIP_RESPONSES,
+  GOVERNMENT_PORTAL_LINKS,
+  JOB_TYPE_OPTIONS,
+  KERALA_DISTRICTS,
+  QUICK_FILTERS,
+} from "./data/jobPortalConstants";
+import JobCard from "./components/JobCard";
+import JobDetailsModal from "./components/JobDetailsModal";
+import ProfileBuilder from "./components/ProfileBuilder";
+import PostJobForm from "./components/PostJobForm";
+import EmployerDashboard from "./components/EmployerDashboard";
+import AIAssistant from "./components/AIAssistant";
+import ApplicationsBoard from "./components/ApplicationsBoard";
 import "./JobPortal.css";
 
-const JOB_CATEGORIES = {
-  local: {
-    name: "Local Jobs",
-    icon: "🏪",
-    subcategories: [
-      "Shops", "Hospitals", "Hotels", "Supermarkets", "Delivery Jobs",
-      "Office Staff", "Driver Jobs", "Sales Jobs", "Helper Jobs"
-    ]
-  },
-  gulf: {
-    name: "Gulf Jobs",
-    icon: "✈️",
-    countries: ["UAE", "Qatar", "Saudi", "Kuwait", "Oman", "Bahrain"],
-    categories: [
-      "Nurse", "Electrician", "Plumber", "Driver", "Accountant",
-      "Civil Engineer", "Hotel Staff", "IT Professional", "Teacher"
-    ]
-  },
-  it: {
-    name: "IT Jobs",
-    icon: "💻",
-    types: ["Remote Jobs", "Startup Jobs", "Developer Jobs"],
-    skills: [
-      "UI/UX Designer", "QA Engineer", "DevOps Engineer", "AI/ML Engineer",
-      "Angular Developer", ".NET Developer", "React Developer", "Node.js Developer"
-    ]
-  },
-  gig: {
-    name: "Gig Jobs",
-    icon: "💼",
-    types: [
-      "Freelancers", "Daily Wage", "Event Workers", "Home Services",
-      "Part-time Work", "Student Jobs", "Temporary Staffing"
-    ]
-  }
+const INITIAL_PROFILE_FORM = {
+  fullName: "",
+  email: "",
+  phone: "",
+  skills: "",
+  experience: "",
+  expectedSalary: "",
+  preferredLocations: "",
+  availability: "immediate",
+  gulfReady: false,
 };
 
-const SAMPLE_JOBS = [
-  {
-    id: 1,
-    title: "Senior React Developer",
-    company: "TechCorp Solutions",
-    location: "Kochi, Kerala",
-    type: "it",
-    subtype: "Remote Jobs",
-    salary: "₹8-12 LPA",
-    experience: "3-5 years",
-    skills: ["React", "JavaScript", "Node.js"],
-    posted: "2 days ago",
-    urgent: true,
-    verified: true,
-    description: "Looking for an experienced React developer to join our growing team...",
-    benefits: ["Remote Work", "Health Insurance", "Flexible Hours"]
-  },
-  {
-    id: 2,
-    title: "Registered Nurse",
-    company: "Al Zahra Hospital",
-    location: "Dubai, UAE",
-    type: "gulf",
-    subtype: "UAE",
-    salary: "AED 8,000-12,000/month",
-    experience: "2+ years",
-    skills: ["Nursing", "Patient Care", "Medical Records"],
-    posted: "1 day ago",
-    urgent: false,
-    verified: true,
-    description: "Excellent opportunity for nurses in Dubai with competitive salary...",
-    benefits: ["Free Accommodation", "Flight Tickets", "Medical Insurance"]
-  },
-  {
-    id: 3,
-    title: "Delivery Rider",
-    company: "Nila Hyperlocal",
-    location: "Trivandrum, Kerala",
-    type: "local",
-    subtype: "Delivery Jobs",
-    salary: "₹15,000-25,000/month",
-    experience: "Fresher",
-    skills: ["Bike Riding", "Local Area Knowledge"],
-    posted: "3 hours ago",
-    urgent: true,
-    verified: true,
-    description: "Join our delivery team and earn while helping local businesses...",
-    benefits: ["Incentives", "Fuel Allowance", "Flexible Hours"]
-  },
-  {
-    id: 4,
-    title: "Freelance Graphic Designer",
-    company: "Various Clients",
-    location: "Remote",
-    type: "gig",
-    subtype: "Freelancers",
-    salary: "₹500-2,000/project",
-    experience: "1-3 years",
-    skills: ["Photoshop", "Illustrator", "Figma"],
-    posted: "1 week ago",
-    urgent: false,
-    verified: false,
-    description: "Create stunning visuals for various clients and businesses...",
-    benefits: ["Flexible Schedule", "Multiple Projects", "Portfolio Building"]
-  }
-];
+const INITIAL_JOB_FORM = {
+  title: "",
+  company: "",
+  location: "",
+  district: "",
+  type: "",
+  subtype: "",
+  salary: "",
+  experience: "",
+  skills: "",
+  benefits: "",
+  description: "",
+  requirements: "",
+  jobType: "",
+  workMode: "",
+  contactEmail: "",
+  contactPhone: "",
+  companyWebsite: "",
+  isUrgent: false,
+  isFeatured: false,
+  agencyLicenseNumber: "",
+  visaType: "",
+  accommodationProvided: false,
+  contractTerms: "",
+  medicalInsuranceProvided: false,
+  returnTicketProvided: false,
+  overtimePolicy: "",
+  warningNotes: "",
+};
+
+const normalizeStatus = (value = "") => {
+  const lowered = String(value || "").toLowerCase();
+  if (lowered === "interviewed") return "Interview";
+  if (lowered === "hired") return "Selected";
+  if (lowered === "shortlisted") return "Shortlisted";
+  if (lowered === "rejected") return "Rejected";
+  if (lowered === "viewed") return "Viewed";
+  return "Applied";
+};
 
 const JobPortal = () => {
   const { user } = useApp();
+  const token = getStoredAuthToken();
+  const isAuthenticated = Boolean(token);
+  const currentEmail = String(user?.email || "").toLowerCase();
+
   const [activeTab, setActiveTab] = useState("home");
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterLocation, setFilterLocation] = useState("");
-  const [filterSalary, setFilterSalary] = useState("");
-  const [filterExperience, setFilterExperience] = useState("");
-  const [jobs, setJobs] = useState(SAMPLE_JOBS);
-  const [appliedJobs, setAppliedJobs] = useState([]);
-  const [savedJobs, setSavedJobs] = useState([]);
-  const [showJobDetails, setShowJobDetails] = useState(null);
-  const [showProfileBuilder, setShowProfileBuilder] = useState(false);
-  const [showEmployerDashboard, setShowEmployerDashboard] = useState(false);
-  const [showPostJob, setShowPostJob] = useState(false);
-  const [showApplications, setShowApplications] = useState(false);
-  const [showAIAssistant, setShowAIAssistant] = useState(false);
-  const [userProfile, setUserProfile] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    phone: "",
-    resume: null,
-    skills: [],
-    experience: "",
-    expectedSalary: "",
-    languages: ["English"],
-    portfolio: "",
-    videoIntro: null,
-    voiceResume: null,
-    availability: "immediate",
-    gulfReady: false
-  });
-
-  const [employerProfile, setEmployerProfile] = useState({
-    companyName: "",
-    industry: "",
-    location: "",
-    website: "",
-    description: "",
-    contactEmail: "",
-    contactPhone: "",
-    isVerified: false
-  });
-
-  const [newJob, setNewJob] = useState({
-    title: "",
-    company: "",
+  const [jobs, setJobs] = useState([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState("");
+  const [filters, setFilters] = useState({
+    q: "",
     location: "",
     type: "",
-    subtype: "",
-    salary: "",
-    experience: "",
-    skills: "",
-    description: "",
-    benefits: "",
-    requirements: "",
-    isUrgent: false,
-    isFeatured: false
+    district: "",
+    quickFilter: "all",
   });
 
-  const [aiAssistant, setAiAssistant] = useState({
-    isOpen: false,
-    messages: [
-      {
-        type: "bot",
-        content: "Hi! I'm your AI Career Assistant. I can help you with resume optimization, interview preparation, salary negotiation, and career guidance. What would you like to know?"
-      }
-    ],
-    currentMessage: ""
-  });
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [jobModalOpen, setJobModalOpen] = useState(false);
+  const [applySubmitting, setApplySubmitting] = useState(false);
 
-  // Load data from localStorage or API
-  useEffect(() => {
-    const savedProfile = localStorage.getItem('jobSeekerProfile');
-    if (savedProfile) {
-      setUserProfile(JSON.parse(savedProfile));
-    }
+  const [applications, setApplications] = useState([]);
+  const [applicationsLoading, setApplicationsLoading] = useState(false);
+  const [savedJobs, setSavedJobs] = useState([]);
+  const [savedLoading, setSavedLoading] = useState(false);
 
-    const savedEmployerProfile = localStorage.getItem('employerProfile');
-    if (savedEmployerProfile) {
-      setEmployerProfile(JSON.parse(savedEmployerProfile));
-    }
+  const [profileForm, setProfileForm] = useState(INITIAL_PROFILE_FORM);
+  const [profileFiles, setProfileFiles] = useState({ resume: null, videoIntro: null, voiceResume: null });
+  const [profileSaving, setProfileSaving] = useState(false);
 
-    const savedAppliedJobs = localStorage.getItem('appliedJobs');
-    if (savedAppliedJobs) {
-      setAppliedJobs(JSON.parse(savedAppliedJobs));
-    }
+  const [employerProfile, setEmployerProfile] = useState(null);
+  const [employerDashboard, setEmployerDashboard] = useState(null);
+  const [employerLoading, setEmployerLoading] = useState(false);
+  const [applicationsByJob, setApplicationsByJob] = useState({});
+  const [selectedEmployerJobId, setSelectedEmployerJobId] = useState("");
+  const [updatingApplicationId, setUpdatingApplicationId] = useState("");
 
-    const savedSavedJobs = localStorage.getItem('savedJobs');
-    if (savedSavedJobs) {
-      setSavedJobs(JSON.parse(savedSavedJobs));
-    }
+  const [postJobForm, setPostJobForm] = useState(INITIAL_JOB_FORM);
+  const [postJobErrors, setPostJobErrors] = useState({});
+  const [postingJob, setPostingJob] = useState(false);
+
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantMessages, setAssistantMessages] = useState([
+    {
+      id: "boot",
+      role: "bot",
+      content: "Career Tips Assistant is ready. Ask for resume, interview, or Gulf job safety guidance.",
+    },
+  ]);
+
+  const [toasts, setToasts] = useState([]);
+
+  const pushToast = useCallback((type, message) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setToasts((current) => [{ id, type, message }, ...current].slice(0, 4));
+    window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3500);
   }, []);
 
-  // Save data to localStorage
-  useEffect(() => {
-    localStorage.setItem('jobSeekerProfile', JSON.stringify(userProfile));
-  }, [userProfile]);
-
-  useEffect(() => {
-    localStorage.setItem('employerProfile', JSON.stringify(employerProfile));
-  }, [employerProfile]);
-
-  useEffect(() => {
-    localStorage.setItem('appliedJobs', JSON.stringify(appliedJobs));
-  }, [appliedJobs]);
-
-  useEffect(() => {
-    localStorage.setItem('savedJobs', JSON.stringify(savedJobs));
-  }, [savedJobs]);
-
-  const filteredJobs = useMemo(() => {
-    return jobs.filter(job => {
-      const matchesSearch = !searchQuery ||
-        job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      const matchesLocation = !filterLocation ||
-        job.location.toLowerCase().includes(filterLocation.toLowerCase());
-
-      const matchesSalary = !filterSalary ||
-        job.salary.toLowerCase().includes(filterSalary.toLowerCase());
-
-      const matchesExperience = !filterExperience ||
-        job.experience.toLowerCase().includes(filterExperience.toLowerCase());
-
-      return matchesSearch && matchesLocation && matchesSalary && matchesExperience;
-    });
-  }, [jobs, searchQuery, filterLocation, filterSalary, filterExperience]);
-
-  const handleApplyJob = useCallback((jobId) => {
-    if (!appliedJobs.includes(jobId)) {
-      setAppliedJobs(prev => [...prev, jobId]);
-      alert("Application submitted successfully! We'll notify you of any updates.");
+  const loadJobs = useCallback(async () => {
+    setJobsLoading(true);
+    setJobsError("");
+    try {
+      const params = {
+        q: filters.q || undefined,
+        location: filters.location || undefined,
+        type: filters.type || undefined,
+        district: filters.district || undefined,
+        quickFilter: filters.quickFilter !== "all" ? filters.quickFilter : undefined,
+      };
+      const response = await jobPortalApi.getJobs(params);
+      setJobs(Array.isArray(response?.data) ? response.data : []);
+    } catch (error) {
+      setJobs([]);
+      setJobsError(error?.response?.data?.message || "Unable to load jobs.");
+    } finally {
+      setJobsLoading(false);
     }
-  }, [appliedJobs]);
+  }, [filters]);
 
-  const handleSaveJob = useCallback((jobId) => {
-    if (!savedJobs.includes(jobId)) {
-      setSavedJobs(prev => [...prev, jobId]);
-    } else {
-      setSavedJobs(prev => prev.filter(id => id !== jobId));
+  const loadApplications = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setApplicationsLoading(true);
+    try {
+      const response = await jobPortalApi.getMyApplications();
+      setApplications(Array.isArray(response?.data) ? response.data : []);
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to load applications.");
+    } finally {
+      setApplicationsLoading(false);
     }
-  }, [savedJobs]);
+  }, [isAuthenticated, pushToast]);
 
-  const handleProfileUpdate = useCallback((field, value) => {
-    setUserProfile(prev => ({ ...prev, [field]: value }));
-  }, []);
+  const loadSavedJobs = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setSavedLoading(true);
+    try {
+      const response = await jobPortalApi.getSavedJobs();
+      setSavedJobs(Array.isArray(response?.data) ? response.data : []);
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to load saved jobs.");
+    } finally {
+      setSavedLoading(false);
+    }
+  }, [isAuthenticated, pushToast]);
 
-  const calculateResumeScore = useCallback(() => {
+  const loadProfile = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const response = await jobPortalApi.getProfile();
+      const profile = response?.data || {};
+      setProfileForm({
+        fullName: profile.fullName || user?.name || "",
+        email: profile.email || currentEmail || "",
+        phone: profile.phone || "",
+        skills: Array.isArray(profile.skills) ? profile.skills.join(", ") : "",
+        experience: profile.experience || "",
+        expectedSalary: profile.expectedSalary || "",
+        preferredLocations: Array.isArray(profile.preferredLocations) ? profile.preferredLocations.join(", ") : "",
+        availability: profile.availability || "immediate",
+        gulfReady: Boolean(profile.gulfReady),
+      });
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to load profile.");
+    }
+  }, [currentEmail, isAuthenticated, pushToast, user?.name]);
+
+  const loadEmployerData = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setEmployerLoading(true);
+    try {
+      const [profileRes, dashboardRes] = await Promise.all([
+        jobPortalApi.getEmployerProfile(),
+        jobPortalApi.getEmployerDashboard(),
+      ]);
+      setEmployerProfile(profileRes?.data || null);
+      setEmployerDashboard(dashboardRes?.data || null);
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to load employer dashboard.");
+    } finally {
+      setEmployerLoading(false);
+    }
+  }, [isAuthenticated, pushToast]);
+
+  useEffect(() => {
+    loadJobs();
+  }, [loadJobs]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    loadApplications();
+    loadSavedJobs();
+    loadProfile();
+  }, [isAuthenticated, loadApplications, loadProfile, loadSavedJobs]);
+
+  useEffect(() => {
+    if (activeTab === "employer") {
+      loadEmployerData();
+    }
+  }, [activeTab, loadEmployerData]);
+
+  const savedJobIds = useMemo(
+    () => new Set(savedJobs.map((job) => String(job?._id || job?.id || ""))),
+    [savedJobs]
+  );
+  const appliedJobIds = useMemo(
+    () => new Set(applications.map((application) => String(application?.jobId?._id || application?.jobId || ""))),
+    [applications]
+  );
+
+  const resumeScore = useMemo(() => {
     let score = 0;
-    if (userProfile.resume) score += 20;
-    if (userProfile.skills.length > 0) score += 20;
-    if (userProfile.experience) score += 20;
-    if (userProfile.portfolio) score += 15;
-    if (userProfile.videoIntro) score += 15;
-    if (userProfile.languages.length > 1) score += 10;
+    if (profileForm.fullName) score += 15;
+    if (profileForm.email) score += 10;
+    if (profileForm.phone) score += 10;
+    if (profileForm.skills) score += 20;
+    if (profileForm.experience) score += 15;
+    if (profileForm.expectedSalary) score += 10;
+    if (profileForm.preferredLocations) score += 10;
+    if (profileFiles.resume) score += 10;
     return Math.min(score, 100);
-  }, [userProfile]);
+  }, [profileFiles.resume, profileForm]);
 
-  const handlePostJob = useCallback(() => {
-    if (!newJob.title || !newJob.company || !newJob.location) {
-      alert("Please fill in all required fields");
+  const openJobDetails = async (jobId) => {
+    try {
+      const response = await jobPortalApi.getJob(jobId);
+      setSelectedJob(response?.data || null);
+      setJobModalOpen(true);
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to load job details.");
+    }
+  };
+
+  const toggleSaveJob = async (jobId) => {
+    if (!isAuthenticated) {
+      pushToast("error", "Login required to save jobs.");
       return;
     }
+    try {
+      if (savedJobIds.has(String(jobId))) {
+        await jobPortalApi.removeSavedJob(jobId);
+        pushToast("success", "Removed from saved jobs.");
+      } else {
+        await jobPortalApi.saveJob(jobId);
+        pushToast("success", "Job saved.");
+      }
+      loadSavedJobs();
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to update saved jobs.");
+    }
+  };
 
-    const job = {
-      ...newJob,
-      id: Date.now(),
-      postedBy: user?.id || 'employer',
-      posted: "Just now",
-      verified: employerProfile.isVerified,
-      skills: newJob.skills.split(',').map(s => s.trim()),
-      benefits: newJob.benefits.split(',').map(b => b.trim()),
-      applicationCount: 0,
-      viewCount: 0
-    };
+  const applyForJob = async (jobId, payload = null) => {
+    if (!isAuthenticated) {
+      pushToast("error", "Login required to apply.");
+      return;
+    }
+    setApplySubmitting(true);
+    try {
+      const formData = new FormData();
+      if (payload?.coverLetter) formData.append("coverLetter", payload.coverLetter);
+      if (payload?.expectedSalary) formData.append("expectedSalary", payload.expectedSalary);
+      if (payload?.availability) formData.append("availability", payload.availability);
+      if (payload?.resumeFile) formData.append("resume", payload.resumeFile);
+      await jobPortalApi.applyJob(jobId, formData);
+      pushToast("success", "Application submitted successfully.");
+      loadApplications();
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to submit application.");
+    } finally {
+      setApplySubmitting(false);
+    }
+  };
 
-    setJobs(prev => [job, ...prev]);
-    setNewJob({
-      title: "",
-      company: "",
-      location: "",
-      type: "",
-      subtype: "",
-      salary: "",
-      experience: "",
-      skills: "",
-      description: "",
-      benefits: "",
-      requirements: "",
-      isUrgent: false,
-      isFeatured: false
-    });
-    setShowPostJob(false);
-    alert("Job posted successfully!");
-  }, [newJob, employerProfile.isVerified, user]);
+  const reportFakeJob = async (jobId, reason) => {
+    if (!isAuthenticated) {
+      pushToast("error", "Login required to report jobs.");
+      return;
+    }
+    if (!String(reason || "").trim()) {
+      pushToast("error", "Please add a reason before reporting.");
+      return;
+    }
+    try {
+      await jobPortalApi.reportJob(jobId, { reason });
+      pushToast("success", "Report submitted to moderation.");
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to report this job.");
+    }
+  };
 
-  const handleAIAssistantMessage = useCallback(() => {
-    if (!aiAssistant.currentMessage.trim()) return;
+  const updateProfileField = (field, value) => setProfileForm((current) => ({ ...current, [field]: value }));
 
-    const userMessage = {
-      type: "user",
-      content: aiAssistant.currentMessage
-    };
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    if (!isAuthenticated) {
+      pushToast("error", "Login required.");
+      return;
+    }
+    setProfileSaving(true);
+    try {
+      const formData = new FormData();
+      Object.entries(profileForm).forEach(([key, value]) => {
+        if (typeof value === "boolean") formData.append(key, String(value));
+        else formData.append(key, value || "");
+      });
+      if (profileFiles.resume) formData.append("resume", profileFiles.resume);
+      if (profileFiles.videoIntro) formData.append("videoIntro", profileFiles.videoIntro);
+      if (profileFiles.voiceResume) formData.append("voiceResume", profileFiles.voiceResume);
+      await jobPortalApi.updateProfile(formData);
+      setProfileFiles({ resume: null, videoIntro: null, voiceResume: null });
+      pushToast("success", "Profile updated.");
+      loadProfile();
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to update profile.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
-    setAiAssistant(prev => ({
-      ...prev,
-      messages: [...prev.messages, userMessage],
-      currentMessage: ""
-    }));
+  const validatePostJob = (form) => {
+    const errors = {};
+    if (!form.title.trim()) errors.title = "Title is required.";
+    if (!form.company.trim()) errors.company = "Company name is required.";
+    if (!form.location.trim()) errors.location = "Location is required.";
+    if (!form.type) errors.type = "Job type is required.";
+    if (!form.subtype.trim()) errors.subtype = "Subtype is required.";
+    if (!form.salary.trim()) errors.salary = "Salary is required.";
+    if (!form.experience.trim()) errors.experience = "Experience is required.";
+    if (!form.description.trim() || form.description.trim().length < 30) errors.description = "Description must be at least 30 characters.";
+    if (!/^\S+@\S+\.\S+$/.test(form.contactEmail || "")) errors.contactEmail = "Valid contact email is required.";
+    if (!/^\+?[0-9][0-9\s-]{7,14}$/.test(form.contactPhone || "")) errors.contactPhone = "Valid contact phone is required.";
+    if (form.type === "gulf") {
+      if (!form.agencyLicenseNumber.trim()) errors.agencyLicenseNumber = "License number is required for Gulf jobs.";
+      if (!form.visaType.trim()) errors.visaType = "Visa type is required for Gulf jobs.";
+      if (!form.contractTerms.trim()) errors.contractTerms = "Contract terms are required for Gulf jobs.";
+    }
+    return errors;
+  };
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        "Based on your profile, I recommend focusing on React and Node.js skills for better job opportunities.",
-        "Your resume score could be improved by adding more quantifiable achievements.",
-        "For Gulf jobs, consider getting IELTS certification and relevant work experience.",
-        "Remote IT jobs are growing rapidly. Consider upskilling in cloud technologies like AWS or Azure.",
-        "Networking is key! Connect with professionals on LinkedIn in your target industry."
-      ];
+  const handlePostJob = async (event) => {
+    event.preventDefault();
+    if (!isAuthenticated) {
+      pushToast("error", "Login required.");
+      return;
+    }
+    const nextErrors = validatePostJob(postJobForm);
+    setPostJobErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    setPostingJob(true);
+    try {
+      await jobPortalApi.createJob(postJobForm);
+      pushToast("success", "Job posted successfully.");
+      setPostJobForm({ ...INITIAL_JOB_FORM, contactEmail: postJobForm.contactEmail, contactPhone: postJobForm.contactPhone });
+      loadJobs();
+      loadEmployerData();
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to post this job.");
+    } finally {
+      setPostingJob(false);
+    }
+  };
 
-      const aiResponse = {
-        type: "bot",
-        content: responses[Math.floor(Math.random() * responses.length)]
-      };
+  const loadApplicationsForEmployerJob = async (jobId) => {
+    try {
+      const response = await jobPortalApi.getJobApplications(jobId);
+      const list = Array.isArray(response?.data) ? response.data : [];
+      setApplicationsByJob((current) => ({ ...current, [jobId]: list }));
+      setSelectedEmployerJobId(jobId);
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to load applicants.");
+    }
+  };
 
-      setAiAssistant(prev => ({
-        ...prev,
-        messages: [...prev.messages, aiResponse]
-      }));
-    }, 1000);
-  }, [aiAssistant.currentMessage]);
+  const updateApplicantStatus = async (applicationId, status) => {
+    try {
+      setUpdatingApplicationId(applicationId);
+      await jobPortalApi.updateApplicationStatus(applicationId, { status });
+      if (selectedEmployerJobId) {
+        await loadApplicationsForEmployerJob(selectedEmployerJobId);
+      }
+      loadEmployerData();
+      pushToast("success", `Application moved to ${status}.`);
+    } catch (error) {
+      pushToast("error", error?.response?.data?.message || "Unable to update application status.");
+    } finally {
+      setUpdatingApplicationId("");
+    }
+  };
 
-  const renderHomeScreen = () => (
-    <div className="job-portal-home">
-      <div className="job-portal-hero">
-        <h1>Find Your Dream Job</h1>
-        <p>Local + Gulf + IT + Gig Jobs in One Place</p>
-        <div className="search-section">
-          <input
-            type="text"
-            placeholder="Search jobs, skills, companies..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="search-input"
-          />
-          <button className="search-btn" onClick={() => setShowAIAssistant(true)}>
-            🤖 AI Assistant
+  const sendAssistantMessage = () => {
+    const question = String(assistantInput || "").trim();
+    if (!question) return;
+    const userMessage = { id: `u-${Date.now()}`, role: "user", content: question };
+    const answer = CAREER_TIP_RESPONSES[(assistantMessages.length + question.length) % CAREER_TIP_RESPONSES.length];
+    const botMessage = { id: `b-${Date.now() + 1}`, role: "bot", content: answer };
+    setAssistantMessages((current) => [...current, userMessage, botMessage]);
+    setAssistantInput("");
+  };
+
+  return (
+    <div className="jp-shell">
+      <header className="jp-topbar">
+        <div>
+          <h1>Job Portal</h1>
+          <p>Live jobs, real applications, employer moderation and Gulf safety checks.</p>
+        </div>
+        <div className="jp-topbar-actions">
+          <button type="button" className="jp-btn jp-btn-muted" onClick={() => setAssistantOpen(true)}>
+            Career Tips Assistant
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="quick-filters">
-        <button className="filter-btn active">All Jobs</button>
-        <button className="filter-btn">Remote Jobs</button>
-        <button className="filter-btn">Gulf Jobs</button>
-        <button className="filter-btn">Urgent Hiring</button>
-        <button className="filter-btn">High Salary</button>
-      </div>
-
-      <div className="job-categories-grid">
-        {Object.entries(JOB_CATEGORIES).map(([key, category]) => (
-          <div
-            key={key}
-            className="category-card"
-            onClick={() => setSelectedCategory(key)}
+      <nav className="jp-nav" aria-label="Job portal navigation">
+        {[
+          { id: "home", label: "Home" },
+          { id: "applications", label: "Applications" },
+          { id: "saved", label: "Saved Jobs" },
+          { id: "profile", label: "Profile" },
+          { id: "employer", label: "Employer" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`jp-nav-tab ${activeTab === tab.id ? "active" : ""}`}
+            onClick={() => setActiveTab(tab.id)}
           >
-            <div className="category-icon">{category.icon}</div>
-            <h3>{category.name}</h3>
-            <p>{category.subcategories?.length || category.countries?.length || category.types?.length || 0} options available</p>
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      <main className="jp-content">
+        {activeTab === "home" ? (
+          <>
+            <section className="jp-panel">
+              <div className="jp-filter-grid">
+                <input
+                  value={filters.q}
+                  onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))}
+                  placeholder="Search title, company, skills..."
+                  aria-label="Search jobs"
+                />
+                <input
+                  value={filters.location}
+                  onChange={(event) => setFilters((current) => ({ ...current, location: event.target.value }))}
+                  placeholder="Location"
+                  aria-label="Filter by location"
+                />
+                <select
+                  value={filters.type}
+                  onChange={(event) => setFilters((current) => ({ ...current, type: event.target.value }))}
+                  aria-label="Filter by job type"
+                >
+                  <option value="">All job types</option>
+                  {JOB_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={filters.district}
+                  onChange={(event) => setFilters((current) => ({ ...current, district: event.target.value }))}
+                  aria-label="Filter by district"
+                >
+                  <option value="">All districts</option>
+                  {KERALA_DISTRICTS.map((district) => (
+                    <option key={district} value={district}>{district}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="jp-quick-filters">
+                {QUICK_FILTERS.map((quickFilter) => (
+                  <button
+                    key={quickFilter.id}
+                    type="button"
+                    className={`jp-chip-btn ${filters.quickFilter === quickFilter.id ? "active" : ""}`}
+                    onClick={() => setFilters((current) => ({ ...current, quickFilter: quickFilter.id }))}
+                  >
+                    {quickFilter.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="jp-panel">
+              <h2>Live Job Listings</h2>
+              {jobsLoading ? <p>Loading jobs...</p> : null}
+              {jobsError ? <p className="jp-error-text">{jobsError}</p> : null}
+              {!jobsLoading && !jobsError && jobs.length === 0 ? <p>No jobs found for current filters.</p> : null}
+              <div className="jp-job-grid">
+                {jobs.map((job) => {
+                  const jobId = String(job?._id || job?.id || "");
+                  return (
+                    <JobCard
+                      key={jobId}
+                      job={job}
+                      isSaved={savedJobIds.has(jobId)}
+                      hasApplied={appliedJobIds.has(jobId)}
+                      onOpen={openJobDetails}
+                      onSaveToggle={toggleSaveJob}
+                      onApply={(id) => applyForJob(id, {})}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="jp-panel">
+              <h2>Free Government Job Portals</h2>
+              <ul className="jp-link-list">
+                {GOVERNMENT_PORTAL_LINKS.map((link) => (
+                  <li key={link.url}>
+                    <a href={link.url} target="_blank" rel="noreferrer">{link.label}</a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </>
+        ) : null}
+
+        {activeTab === "applications" ? (
+          <ApplicationsBoard applications={applications} loading={applicationsLoading} />
+        ) : null}
+
+        {activeTab === "saved" ? (
+          <section className="jp-panel">
+            <div className="jp-panel-head">
+              <h2>Saved Jobs</h2>
+              <p>Track shortlisted opportunities here.</p>
+            </div>
+            {savedLoading ? <p>Loading saved jobs...</p> : null}
+            {!savedLoading && savedJobs.length === 0 ? <p>No saved jobs yet.</p> : null}
+            <div className="jp-job-grid">
+              {savedJobs.map((job) => {
+                const jobId = String(job?._id || job?.id || "");
+                return (
+                  <JobCard
+                    key={jobId}
+                    job={job}
+                    isSaved
+                    hasApplied={appliedJobIds.has(jobId)}
+                    onOpen={openJobDetails}
+                    onSaveToggle={toggleSaveJob}
+                    onApply={(id) => applyForJob(id, {})}
+                  />
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "profile" ? (
+          <ProfileBuilder
+            profileForm={profileForm}
+            onChange={updateProfileField}
+            onFileChange={(field, file) => setProfileFiles((current) => ({ ...current, [field]: file }))}
+            onSubmit={saveProfile}
+            saving={profileSaving}
+            resumeScore={resumeScore}
+          />
+        ) : null}
+
+        {activeTab === "employer" ? (
+          <>
+            <PostJobForm
+              form={postJobForm}
+              errors={postJobErrors}
+              onChange={(field, value) => setPostJobForm((current) => ({ ...current, [field]: value }))}
+              onSubmit={handlePostJob}
+              saving={postingJob}
+              employerVerified={Boolean(employerProfile?.isVerified)}
+            />
+            <EmployerDashboard
+              dashboard={employerDashboard}
+              loading={employerLoading}
+              selectedJobId={selectedEmployerJobId}
+              onSelectJob={loadApplicationsForEmployerJob}
+              applicationsByJob={applicationsByJob}
+              updatingApplicationId={updatingApplicationId}
+              onUpdateStatus={updateApplicantStatus}
+            />
+          </>
+        ) : null}
+      </main>
+
+      {jobModalOpen ? (
+        <JobDetailsModal
+          open={jobModalOpen}
+          job={selectedJob}
+          hasApplied={appliedJobIds.has(String(selectedJob?._id || selectedJob?.id || ""))}
+          onClose={() => setJobModalOpen(false)}
+          onApply={applyForJob}
+          onSaveToggle={toggleSaveJob}
+          isSaved={savedJobIds.has(String(selectedJob?._id || selectedJob?.id || ""))}
+          onReportFakeJob={reportFakeJob}
+          submitting={applySubmitting}
+        />
+      ) : null}
+
+      {assistantOpen ? (
+        <AIAssistant
+          messages={assistantMessages}
+          input={assistantInput}
+          onInputChange={setAssistantInput}
+          onSend={sendAssistantMessage}
+          onClose={() => setAssistantOpen(false)}
+        />
+      ) : null}
+
+      <div className="jp-toast-stack" role="status" aria-live="polite">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`jp-toast jp-toast-${toast.type}`}>
+            {toast.message}
           </div>
         ))}
       </div>
 
-      <div className="featured-jobs">
-        <h2>Featured Jobs</h2>
-        <div className="jobs-grid">
-          {filteredJobs.slice(0, 6).map(job => (
-            <div key={job.id} className="job-card" onClick={() => setShowJobDetails(job)}>
-              <div className="job-header">
-                <h4>{job.title}</h4>
-                {job.verified && <span className="verified-badge">✓ Verified</span>}
-                {job.urgent && <span className="urgent-badge">⚡ Urgent</span>}
-              </div>
-              <p className="company">{job.company}</p>
-              <p className="location">📍 {job.location}</p>
-              <p className="salary">💰 {job.salary}</p>
-              <div className="job-actions">
-                <button
-                  className={`save-btn ${savedJobs.includes(job.id) ? 'saved' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); handleSaveJob(job.id); }}
-                >
-                  {savedJobs.includes(job.id) ? '❤️ Saved' : '🤍 Save'}
-                </button>
-                <button
-                  className={`apply-btn ${appliedJobs.includes(job.id) ? 'applied' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); handleApplyJob(job.id); }}
-                  disabled={appliedJobs.includes(job.id)}
-                >
-                  {appliedJobs.includes(job.id) ? '✅ Applied' : 'Apply Now'}
-                </button>
-              </div>
-            </div>
-          ))}
+      {!isAuthenticated ? (
+        <div className="jp-auth-hint">
+          Login to apply, save jobs, track applications, and use employer tools.
         </div>
-      </div>
-    </div>
-  );
+      ) : null}
 
-  const renderCategoryView = () => {
-    if (!selectedCategory) return null;
-
-    const category = JOB_CATEGORIES[selectedCategory];
-    const categoryJobs = filteredJobs.filter(job => job.type === selectedCategory);
-
-    return (
-      <div className="category-view">
-        <div className="category-header">
-          <button className="back-btn" onClick={() => setSelectedCategory(null)}>← Back</button>
-          <h2>{category.icon} {category.name}</h2>
+      {activeTab === "applications" && applications.length > 0 ? (
+        <div className="jp-status-footer">
+          Status legend: {APPLICATION_STATUS_OPTIONS.join(" | ")}. Current top status:{" "}
+          {normalizeStatus(applications[0]?.status)}
         </div>
-
-        <div className="subcategories">
-          {category.subcategories && (
-            <div className="subcategory-grid">
-              {category.subcategories.map(sub => (
-                <button key={sub} className="subcategory-btn">{sub}</button>
-              ))}
-            </div>
-          )}
-
-          {category.countries && (
-            <div className="countries-grid">
-              {category.countries.map(country => (
-                <button key={country} className="country-btn">🇦🇪 {country}</button>
-              ))}
-            </div>
-          )}
-
-          {category.types && (
-            <div className="types-grid">
-              {category.types.map(type => (
-                <button key={type} className="type-btn">{type}</button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="category-jobs">
-          <h3>Available Jobs</h3>
-          <div className="jobs-list">
-            {categoryJobs.map(job => (
-              <div key={job.id} className="job-list-item" onClick={() => setShowJobDetails(job)}>
-                <div className="job-info">
-                  <h4>{job.title}</h4>
-                  <p>{job.company} • {job.location}</p>
-                  <p>{job.salary} • {job.experience}</p>
-                </div>
-                <div className="job-meta">
-                  <span className="posted">{job.posted}</span>
-                  {job.urgent && <span className="urgent">Urgent</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderProfileBuilder = () => (
-    <div className="profile-builder">
-      <div className="profile-header">
-        <h2>Build Your Profile</h2>
-        <div className="resume-score">
-          <div className="score-circle">
-            <span>{calculateResumeScore()}%</span>
-          </div>
-          <p>Resume Score</p>
-        </div>
-      </div>
-
-      <div className="profile-form">
-        <div className="form-section">
-          <h3>Basic Information</h3>
-          <input
-            type="text"
-            placeholder="Full Name"
-            value={userProfile.name}
-            onChange={(e) => handleProfileUpdate('name', e.target.value)}
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={userProfile.email}
-            onChange={(e) => handleProfileUpdate('email', e.target.value)}
-          />
-          <input
-            type="tel"
-            placeholder="Phone"
-            value={userProfile.phone}
-            onChange={(e) => handleProfileUpdate('phone', e.target.value)}
-          />
-        </div>
-
-        <div className="form-section">
-          <h3>Resume & Documents</h3>
-          <input
-            type="file"
-            accept=".pdf,.doc,.docx"
-            onChange={(e) => handleProfileUpdate('resume', e.target.files[0])}
-          />
-          <input
-            type="file"
-            accept="video/*"
-            onChange={(e) => handleProfileUpdate('videoIntro', e.target.files[0])}
-          />
-          <input
-            type="file"
-            accept="audio/*"
-            onChange={(e) => handleProfileUpdate('voiceResume', e.target.files[0])}
-          />
-        </div>
-
-        <div className="form-section">
-          <h3>Skills & Experience</h3>
-          <input
-            type="text"
-            placeholder="Skills (comma separated)"
-            value={userProfile.skills.join(', ')}
-            onChange={(e) => handleProfileUpdate('skills', e.target.value.split(', '))}
-          />
-          <select
-            value={userProfile.experience}
-            onChange={(e) => handleProfileUpdate('experience', e.target.value)}
-          >
-            <option value="">Select Experience</option>
-            <option value="Fresher">Fresher</option>
-            <option value="0-1 years">0-1 years</option>
-            <option value="1-3 years">1-3 years</option>
-            <option value="3-5 years">3-5 years</option>
-            <option value="5+ years">5+ years</option>
-          </select>
-          <input
-            type="text"
-            placeholder="Expected Salary"
-            value={userProfile.expectedSalary}
-            onChange={(e) => handleProfileUpdate('expectedSalary', e.target.value)}
-          />
-        </div>
-
-        <div className="form-section">
-          <h3>Availability</h3>
-          <select
-            value={userProfile.availability}
-            onChange={(e) => handleProfileUpdate('availability', e.target.value)}
-          >
-            <option value="immediate">Immediate Joiner</option>
-            <option value="part-time">Part-time Only</option>
-            <option value="remote">Remote Only</option>
-            <option value="gulf-ready">Gulf Ready</option>
-          </select>
-          <label>
-            <input
-              type="checkbox"
-              checked={userProfile.gulfReady}
-              onChange={(e) => handleProfileUpdate('gulfReady', e.target.checked)}
-            />
-            Ready for Gulf Jobs
-          </label>
-        </div>
-
-        <button className="save-profile-btn">Save Profile</button>
-      </div>
-    </div>
-  );
-
-  const renderJobDetails = () => {
-    if (!showJobDetails) return null;
-
-    const job = showJobDetails;
-    return (
-      <div className="job-details-modal">
-        <div className="modal-content">
-          <div className="modal-header">
-            <h2>{job.title}</h2>
-            <button className="close-btn" onClick={() => setShowJobDetails(null)}>×</button>
-          </div>
-
-          <div className="job-details-content">
-            <div className="job-meta">
-              <p className="company">🏢 {job.company}</p>
-              <p className="location">📍 {job.location}</p>
-              <p className="salary">💰 {job.salary}</p>
-              <p className="experience">👨‍💼 {job.experience}</p>
-            </div>
-
-            <div className="job-description">
-              <h3>Job Description</h3>
-              <p>{job.description}</p>
-            </div>
-
-            <div className="job-requirements">
-              <h3>Requirements</h3>
-              <div className="skills-list">
-                {job.skills.map(skill => (
-                  <span key={skill} className="skill-tag">{skill}</span>
-                ))}
-              </div>
-            </div>
-
-            <div className="job-benefits">
-              <h3>Benefits</h3>
-              <ul>
-                {job.benefits.map(benefit => (
-                  <li key={benefit}>{benefit}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="job-actions">
-              <button
-                className={`apply-btn ${appliedJobs.includes(job.id) ? 'applied' : ''}`}
-                onClick={() => handleApplyJob(job.id)}
-                disabled={appliedJobs.includes(job.id)}
-              >
-                {appliedJobs.includes(job.id) ? '✅ Applied' : '🚀 Apply Now'}
-              </button>
-              <button
-                className={`save-btn ${savedJobs.includes(job.id) ? 'saved' : ''}`}
-                onClick={() => handleSaveJob(job.id)}
-              >
-                {savedJobs.includes(job.id) ? '❤️ Saved' : '🤍 Save Job'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderEmployerDashboard = () => (
-    <div className="employer-dashboard">
-      <div className="dashboard-header">
-        <h2>Employer Dashboard</h2>
-        <button className="post-job-btn" onClick={() => setShowPostJob(true)}>+ Post New Job</button>
-      </div>
-
-      <div className="dashboard-stats">
-        <div className="stat-card">
-          <h3>{jobs.filter(job => job.postedBy === (user?.id || 'employer')).length}</h3>
-          <p>Active Jobs</p>
-        </div>
-        <div className="stat-card">
-          <h3>{appliedJobs.length * 3}</h3>
-          <p>Total Applications</p>
-        </div>
-        <div className="stat-card">
-          <h3>{Math.floor(appliedJobs.length * 0.3)}</h3>
-          <p>Shortlisted</p>
-        </div>
-        <div className="stat-card">
-          <h3>{Math.floor(appliedJobs.length * 0.1)}</h3>
-          <p>Hired</p>
-        </div>
-      </div>
-
-      <div className="posted-jobs">
-        <h3>Your Posted Jobs</h3>
-        <div className="jobs-table">
-          {jobs.filter(job => job.postedBy === (user?.id || 'employer')).slice(0, 3).map(job => (
-            <div key={job.id} className="job-row">
-              <div className="job-info">
-                <h4>{job.title}</h4>
-                <p>{job.location} • {job.applicationCount || Math.floor(Math.random() * 20)} applications</p>
-              </div>
-              <div className="job-status">
-                <span className="status active">Active</span>
-              </div>
-              <div className="job-actions">
-                <button className="view-btn">View</button>
-                <button className="edit-btn">Edit</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderPostJob = () => (
-    <div className="profile-builder">
-      <div className="profile-header">
-        <h2>Post New Job</h2>
-      </div>
-
-      <div className="profile-form">
-        <div className="form-section">
-          <h3>Job Details</h3>
-          <input
-            type="text"
-            placeholder="Job Title"
-            value={newJob.title}
-            onChange={(e) => setNewJob(prev => ({ ...prev, title: e.target.value }))}
-          />
-          <input
-            type="text"
-            placeholder="Company Name"
-            value={newJob.company}
-            onChange={(e) => setNewJob(prev => ({ ...prev, company: e.target.value }))}
-          />
-          <input
-            type="text"
-            placeholder="Location"
-            value={newJob.location}
-            onChange={(e) => setNewJob(prev => ({ ...prev, location: e.target.value }))}
-          />
-          <select
-            value={newJob.type}
-            onChange={(e) => setNewJob(prev => ({ ...prev, type: e.target.value }))}
-          >
-            <option value="">Select Job Type</option>
-            <option value="local">Local Jobs</option>
-            <option value="gulf">Gulf Jobs</option>
-            <option value="it">IT Jobs</option>
-            <option value="gig">Gig Jobs</option>
-          </select>
-          <input
-            type="text"
-            placeholder="Subtype (e.g., Remote Jobs, UAE, etc.)"
-            value={newJob.subtype}
-            onChange={(e) => setNewJob(prev => ({ ...prev, subtype: e.target.value }))}
-          />
-        </div>
-
-        <div className="form-section">
-          <h3>Compensation & Requirements</h3>
-          <input
-            type="text"
-            placeholder="Salary Range"
-            value={newJob.salary}
-            onChange={(e) => setNewJob(prev => ({ ...prev, salary: e.target.value }))}
-          />
-          <input
-            type="text"
-            placeholder="Experience Required"
-            value={newJob.experience}
-            onChange={(e) => setNewJob(prev => ({ ...prev, experience: e.target.value }))}
-          />
-          <input
-            type="text"
-            placeholder="Required Skills (comma separated)"
-            value={newJob.skills}
-            onChange={(e) => setNewJob(prev => ({ ...prev, skills: e.target.value }))}
-          />
-        </div>
-
-        <div className="form-section">
-          <h3>Job Description & Benefits</h3>
-          <textarea
-            placeholder="Job Description"
-            value={newJob.description}
-            onChange={(e) => setNewJob(prev => ({ ...prev, description: e.target.value }))}
-            rows="4"
-          />
-          <input
-            type="text"
-            placeholder="Benefits (comma separated)"
-            value={newJob.benefits}
-            onChange={(e) => setNewJob(prev => ({ ...prev, benefits: e.target.value }))}
-          />
-        </div>
-
-        <div className="form-section">
-          <h3>Additional Options</h3>
-          <label>
-            <input
-              type="checkbox"
-              checked={newJob.isUrgent}
-              onChange={(e) => setNewJob(prev => ({ ...prev, isUrgent: e.target.checked }))}
-            />
-            Mark as Urgent Hiring
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={newJob.isFeatured}
-              onChange={(e) => setNewJob(prev => ({ ...prev, isFeatured: e.target.checked }))}
-            />
-            Featured Job Listing
-          </label>
-        </div>
-
-        <div className="job-actions">
-          <button className="save-profile-btn" onClick={handlePostJob}>Post Job</button>
-          <button className="save-profile-btn" onClick={() => setShowPostJob(false)} style={{ background: '#666' }}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderAIAssistant = () => (
-    <div className="job-details-modal">
-      <div className="modal-content" style={{ maxWidth: '600px' }}>
-        <div className="modal-header">
-          <h2>🤖 AI Career Assistant</h2>
-          <button className="close-btn" onClick={() => setShowAIAssistant(false)}>×</button>
-        </div>
-
-        <div className="ai-chat-messages" style={{ maxHeight: '400px', overflowY: 'auto', padding: '1rem' }}>
-          {aiAssistant.messages.map((msg, index) => (
-            <div key={index} className={`ai-message ${msg.type}`} style={{
-              marginBottom: '1rem',
-              padding: '0.75rem',
-              borderRadius: '10px',
-              background: msg.type === 'bot' ? '#f0f0f0' : '#667eea',
-              color: msg.type === 'bot' ? '#333' : 'white',
-              textAlign: msg.type === 'bot' ? 'left' : 'right'
-            }}>
-              {msg.content}
-            </div>
-          ))}
-        </div>
-
-        <div className="ai-chat-input" style={{ padding: '1rem', borderTop: '1px solid #e9ecef' }}>
-          <input
-            type="text"
-            placeholder="Ask me anything about your career..."
-            value={aiAssistant.currentMessage}
-            onChange={(e) => setAiAssistant(prev => ({ ...prev, currentMessage: e.target.value }))}
-            onKeyPress={(e) => e.key === 'Enter' && handleAIAssistantMessage()}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              border: '1px solid #ddd',
-              borderRadius: '25px',
-              marginRight: '0.5rem'
-            }}
-          />
-          <button
-            onClick={handleAIAssistantMessage}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#667eea',
-              color: 'white',
-              border: 'none',
-              borderRadius: '25px',
-              cursor: 'pointer'
-            }}
-          >
-            Send
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="job-portal-shell">
-      <div className="job-portal-nav">
-        <button
-          className={`nav-tab ${activeTab === 'home' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('home'); setSelectedCategory(null); setShowProfileBuilder(false); setShowEmployerDashboard(false); setShowPostJob(false); }}
-        >
-          🏠 Home
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'jobs' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('jobs'); setSelectedCategory(null); setShowProfileBuilder(false); setShowEmployerDashboard(false); setShowPostJob(false); }}
-        >
-          💼 Jobs
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'applications' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('applications'); setShowProfileBuilder(false); setShowEmployerDashboard(false); setShowPostJob(false); }}
-        >
-          📋 Applications
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'profile' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('profile'); setShowProfileBuilder(true); setShowEmployerDashboard(false); setShowPostJob(false); }}
-        >
-          👤 Profile
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'employer' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('employer'); setShowEmployerDashboard(true); setShowProfileBuilder(false); setShowPostJob(false); }}
-        >
-          🏢 Employer
-        </button>
-      </div>
-
-      <div className="job-portal-content">
-        {activeTab === 'home' && !selectedCategory && !showProfileBuilder && !showEmployerDashboard && !showPostJob && renderHomeScreen()}
-        {selectedCategory && renderCategoryView()}
-        {showProfileBuilder && renderProfileBuilder()}
-        {showEmployerDashboard && renderEmployerDashboard()}
-        {showPostJob && renderPostJob()}
-      </div>
-
-      {showJobDetails && renderJobDetails()}
-      {showAIAssistant && renderAIAssistant()}
+      ) : null}
     </div>
   );
 };

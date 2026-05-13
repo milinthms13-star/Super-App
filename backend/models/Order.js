@@ -24,6 +24,32 @@ const OrderSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    total: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    taxAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    paymentMethod: {
+      type: String,
+      trim: true,
+      default: 'unknown',
+    },
+    paymentGateway: {
+      type: String,
+      trim: true,
+      default: 'none',
+    },
+    userId: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true,
+    },
     deliveryFee: {
       type: Number,
       required: true,

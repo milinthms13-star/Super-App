@@ -168,43 +168,6 @@ const CAREER_RESOURCES = [
   },
 ];
 
-const STORAGE_PREFIX = "education";
-
-const getStorageKey = (currentUser, suffix) => {
-  const userId = currentUser?.id || currentUser?.email || "guest";
-  return `${STORAGE_PREFIX}:${suffix}:${userId}`;
-};
-
-const readList = (key) => {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) {
-      return [];
-    }
-
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    return [];
-  }
-};
-
-const writeList = (key, values) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(key, JSON.stringify(values));
-  } catch (error) {
-    // Ignore local storage quota failures and keep UI functional.
-  }
-};
-
 const normalizeStringList = (values = []) =>
   [...new Set((Array.isArray(values) ? values : [])
     .map((value) => String(value || "").trim())
@@ -216,29 +179,11 @@ const normalizeEducationState = (state = {}) => ({
   joinedGroups: normalizeStringList(state.joinedGroups),
 });
 
-const readEducationStateFromStorage = ({
-  enrollmentStorageKey,
-  scholarshipStorageKey,
-  communityStorageKey,
-}) =>
-  normalizeEducationState({
-    enrolledCourseIds: readList(enrollmentStorageKey),
-    appliedScholarships: readList(scholarshipStorageKey),
-    joinedGroups: readList(communityStorageKey),
-  });
-
-const writeEducationStateToStorage = (
-  {
-    enrollmentStorageKey,
-    scholarshipStorageKey,
-    communityStorageKey,
-  },
-  state
-) => {
-  const normalizedState = normalizeEducationState(state);
-  writeList(enrollmentStorageKey, normalizedState.enrolledCourseIds);
-  writeList(scholarshipStorageKey, normalizedState.appliedScholarships);
-  writeList(communityStorageKey, normalizedState.joinedGroups);
+const parseCourseAmount = (price) => {
+  const raw = String(price || '')
+    .replace(/[^0-9.]/g, '')
+    .trim();
+  return Number(raw || 0);
 };
 
 const buildStudyAssistantResponse = (query) => {
@@ -277,36 +222,26 @@ const Education = () => {
   const [appliedScholarships, setAppliedScholarships] = useState([]);
   const [statusMessage, setStatusMessage] = useState("");
   const [syncInProgress, setSyncInProgress] = useState(false);
-
-  const enrollmentStorageKey = useMemo(() => getStorageKey(currentUser, "enrollments"), [currentUser]);
-  const scholarshipStorageKey = useMemo(() => getStorageKey(currentUser, "scholarships"), [currentUser]);
-  const communityStorageKey = useMemo(() => getStorageKey(currentUser, "community"), [currentUser]);
-  const localStateKeys = useMemo(
-    () => ({
-      enrollmentStorageKey,
-      scholarshipStorageKey,
-      communityStorageKey,
-    }),
-    [communityStorageKey, enrollmentStorageKey, scholarshipStorageKey]
-  );
+  const [paymentInProgress, setPaymentInProgress] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+  const isAuthenticated = Boolean(currentUser?.id || currentUser?.email);
 
   const applyEducationState = useCallback((nextState) => {
     const normalizedState = normalizeEducationState(nextState);
     setEnrolledCourseIds(normalizedState.enrolledCourseIds);
     setAppliedScholarships(normalizedState.appliedScholarships);
     setJoinedGroups(normalizedState.joinedGroups);
-    writeEducationStateToStorage(localStateKeys, normalizedState);
     return normalizedState;
-  }, [localStateKeys]);
+  }, []);
 
   useEffect(() => {
-    const localState = readEducationStateFromStorage(localStateKeys);
-    setEnrolledCourseIds(localState.enrolledCourseIds);
-    setAppliedScholarships(localState.appliedScholarships);
-    setJoinedGroups(localState.joinedGroups);
-
     const shouldSyncFromBackend = Boolean(currentUser?.id || currentUser?.email) && typeof apiCall === "function";
     if (!shouldSyncFromBackend) {
+      applyEducationState({
+        enrolledCourseIds: [],
+        appliedScholarships: [],
+        joinedGroups: [],
+      });
       return undefined;
     }
 
@@ -321,8 +256,8 @@ const Education = () => {
           applyEducationState(remoteState);
         }
       } catch (error) {
-        if (isMounted && localState.enrolledCourseIds.length === 0) {
-          setStatusMessage("Education progress loaded locally. Account sync will resume when backend is available.");
+        if (isMounted) {
+          setStatusMessage("Unable to load your education progress from the account.");
         }
       } finally {
         if (isMounted) {
@@ -336,33 +271,26 @@ const Education = () => {
     return () => {
       isMounted = false;
     };
-  }, [apiCall, applyEducationState, currentUser?.email, currentUser?.id, localStateKeys]);
+  }, [apiCall, applyEducationState, currentUser?.email, currentUser?.id]);
 
   const persistEducationState = useCallback(async (nextState, successMessage = "") => {
-    const normalizedState = applyEducationState(nextState);
     const shouldSyncToBackend = Boolean(currentUser?.id || currentUser?.email) && typeof apiCall === "function";
 
     if (!shouldSyncToBackend) {
-      if (successMessage) {
-        setStatusMessage(successMessage);
-      }
+      setStatusMessage("Sign in to save education progress.");
       return;
     }
 
     setSyncInProgress(true);
     try {
-      const response = await apiCall("/app-data/education/state", "PATCH", normalizedState);
-      const syncedState = normalizeEducationState(response?.data?.state || response?.state || normalizedState);
+      const response = await apiCall("/app-data/education/state", "PATCH", normalizeEducationState(nextState));
+      const syncedState = normalizeEducationState(response?.data?.state || response?.state || {});
       applyEducationState(syncedState);
       if (successMessage) {
         setStatusMessage(successMessage);
       }
     } catch (error) {
-      if (successMessage) {
-        setStatusMessage(`${successMessage} Saved locally; account sync pending.`);
-      } else {
-        setStatusMessage("Saved locally; account sync pending.");
-      }
+      setStatusMessage("Unable to save education progress right now.");
     } finally {
       setSyncInProgress(false);
     }
@@ -404,11 +332,151 @@ const Education = () => {
     setAiResponse(buildStudyAssistantResponse(aiQuery));
   };
 
-  const handleTuitionBooking = () => {
-    setStatusMessage(`Tuition request submitted for ${selectedSubject}. A tutor will contact you soon.`);
+  const loadRazorpayScript = () => new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('Razorpay can only be loaded in the browser.'));
+      return;
+    }
+
+    if (window.Razorpay) {
+      resolve(window.Razorpay);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(window.Razorpay);
+    script.onerror = () => reject(new Error('Unable to load Razorpay checkout script.'));
+    document.body.appendChild(script);
+  });
+
+  const verifyRazorpayPayment = async ({ razorpay_payment_id, razorpay_order_id, razorpay_signature }) => {
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      throw new Error('Missing Razorpay verification details.');
+    }
+
+    const verificationResponse = await apiCall('/checkout/verify-razorpay', 'POST', {
+      paymentId: razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    });
+
+    if (!verificationResponse?.data?.success) {
+      throw new Error('Payment verification failed.');
+    }
+
+    return verificationResponse.data;
   };
 
-  const handleCourseEnroll = (course) => {
+  const openRazorpayCheckout = async (paymentDetails, courseTitle, nextState) => {
+    setPaymentError('');
+    setPaymentInProgress(true);
+
+    if (!paymentDetails || paymentDetails.gateway !== 'razorpay') {
+      setPaymentInProgress(false);
+      throw new Error('Unsupported payment gateway.');
+    }
+
+    const Razorpay = await loadRazorpayScript();
+    if (!Razorpay) {
+      setPaymentInProgress(false);
+      throw new Error('Razorpay checkout library failed to load.');
+    }
+
+    return new Promise((resolve, reject) => {
+      const options = {
+        key: paymentDetails.razorpayKeyId,
+        amount: Math.round((paymentDetails.amount || 0) * 100),
+        currency: paymentDetails.currency || 'INR',
+        order_id: paymentDetails.razorpayOrderId,
+        name: `Education Enrollment: ${courseTitle}`,
+        description: `Pay for ${courseTitle}`,
+        prefill: {
+          email: currentUser?.email || '',
+          name: currentUser?.name || currentUser?.fullName || '',
+        },
+        notes: paymentDetails.notes || {},
+        handler: async (response) => {
+          try {
+            await verifyRazorpayPayment(response);
+            setStatusMessage(`Payment successful for ${courseTitle}. Enrollment is confirmed.`);
+            applyEducationState(nextState);
+            resolve(response);
+          } catch (verifyError) {
+            setPaymentError(verifyError.message || 'Payment verification failed.');
+            reject(verifyError);
+          } finally {
+            setPaymentInProgress(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentInProgress(false);
+            setStatusMessage('Payment was cancelled. Your enrollment is pending.');
+            reject(new Error('Payment cancelled.'));
+          },
+        },
+      };
+
+      const checkout = new Razorpay(options);
+      checkout.open();
+    });
+  };
+
+  const persistEducationAction = async (endpoint, payload, nextState, successMessage) => {
+    const normalizedState = applyEducationState(nextState);
+    const shouldSyncToBackend = isAuthenticated && typeof apiCall === 'function';
+
+    if (!shouldSyncToBackend) {
+      setStatusMessage(successMessage || 'Saved locally. Sign in to sync with your account.');
+      return;
+    }
+
+    setSyncInProgress(true);
+    try {
+      const response = await apiCall(endpoint, 'POST', payload);
+      const syncedState = normalizeEducationState(response?.data?.state || response?.state || normalizedState);
+      applyEducationState(syncedState);
+      setStatusMessage(successMessage);
+    } catch (error) {
+      applyEducationState(normalizedState);
+      setStatusMessage(`${successMessage} Saved locally; account sync pending.`);
+    } finally {
+      setSyncInProgress(false);
+    }
+  };
+
+  const handleTuitionBooking = async () => {
+    const successMessage = `Tuition request submitted for ${selectedSubject}. A tutor will contact you soon.`;
+    const nextState = {
+      enrolledCourseIds,
+      appliedScholarships,
+      joinedGroups,
+    };
+
+    if (!isAuthenticated || typeof apiCall !== 'function') {
+      setStatusMessage(successMessage);
+      return;
+    }
+
+    setSyncInProgress(true);
+    try {
+      await apiCall('/app-data/education/tuition', 'POST', {
+        subject: selectedSubject,
+        details: `Tuition request from ${currentUser?.email || 'guest'} for ${selectedSubject}`,
+      });
+      applyEducationState(nextState);
+      setStatusMessage(successMessage);
+    } catch (error) {
+      applyEducationState(nextState);
+      setStatusMessage(`${successMessage} Saved locally; account sync pending.`);
+    } finally {
+      setSyncInProgress(false);
+    }
+  };
+
+  const handleCourseEnroll = async (course) => {
     if (enrolledCourseIds.includes(course.id)) {
       setStatusMessage(`You are already enrolled in ${course.title}.`);
       return;
@@ -419,10 +487,43 @@ const Education = () => {
       appliedScholarships,
       joinedGroups,
     };
-    void persistEducationState(nextState, `${course.title} added to My Learning.`);
+
+    if (!isAuthenticated || typeof apiCall !== 'function') {
+      void persistEducationState(nextState, `${course.title} added to My Learning.`);
+      return;
+    }
+
+    const amount = parseCourseAmount(course.price);
+    setSyncInProgress(true);
+    setPaymentError('');
+
+    try {
+      const response = await apiCall('/app-data/education/enroll', 'POST', {
+        courseId: course.id,
+        courseTitle: course.title,
+        amount,
+        paymentMethod: 'upi',
+        paymentGateway: 'razorpay',
+      });
+
+      if (response?.data?.paymentDetails && amount > 0) {
+        setStatusMessage(`Starting payment for ${course.title}.`);
+        await openRazorpayCheckout(response.data.paymentDetails, course.title, nextState);
+      } else {
+        applyEducationState(nextState);
+        setStatusMessage(`${course.title} added to My Learning.`);
+      }
+    } catch (error) {
+      applyEducationState(nextState);
+      const message = error?.message || 'Unable to enroll right now.';
+      setStatusMessage(`${course.title} added locally. ${message}`);
+      setPaymentError(message);
+    } finally {
+      setSyncInProgress(false);
+    }
   };
 
-  const handleScholarshipApply = (scholarshipName) => {
+  const handleScholarshipApply = async (scholarshipName) => {
     if (appliedScholarships.includes(scholarshipName)) {
       setStatusMessage(`You have already applied for ${scholarshipName}.`);
       return;
@@ -433,10 +534,21 @@ const Education = () => {
       appliedScholarships: [...appliedScholarships, scholarshipName],
       joinedGroups,
     };
-    void persistEducationState(nextState, `Application draft created for ${scholarshipName}.`);
+
+    if (!isAuthenticated || typeof apiCall !== 'function') {
+      void persistEducationState(nextState, `Application draft created for ${scholarshipName}.`);
+      return;
+    }
+
+    await persistEducationAction(
+      '/app-data/education/scholarship',
+      { scholarshipName },
+      nextState,
+      `Application draft created for ${scholarshipName}.`
+    );
   };
 
-  const handleJoinCommunityGroup = (groupTitle) => {
+  const handleJoinCommunityGroup = async (groupTitle) => {
     if (joinedGroups.includes(groupTitle)) {
       setStatusMessage(`You are already a member of ${groupTitle}.`);
       return;
@@ -447,7 +559,18 @@ const Education = () => {
       appliedScholarships,
       joinedGroups: [...joinedGroups, groupTitle],
     };
-    void persistEducationState(nextState, `You have joined ${groupTitle}.`);
+
+    if (!isAuthenticated || typeof apiCall !== 'function') {
+      void persistEducationState(nextState, `You have joined ${groupTitle}.`);
+      return;
+    }
+
+    await persistEducationAction(
+      '/app-data/education/group',
+      { groupTitle },
+      nextState,
+      `You have joined ${groupTitle}.`
+    );
   };
 
   return (
@@ -461,6 +584,17 @@ const Education = () => {
       {syncInProgress && (
         <section className="education-sync-banner" role="status" aria-live="polite">
           Syncing education progress...
+        </section>
+      )}
+      {paymentInProgress && (
+        <section className="education-sync-banner" role="status" aria-live="polite">
+          Completing payment...
+        </section>
+      )}
+      {paymentError && (
+        <section className="education-status-banner education-status-error" role="alert" aria-live="assertive">
+          <p>{paymentError}</p>
+          <button type="button" className="education-status-dismiss" onClick={() => setPaymentError("")}>Dismiss</button>
         </section>
       )}
 

@@ -1,302 +1,47 @@
 import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
+import { useApp } from "../../contexts/AppContext";
 import "./BusinessServices.css";
 import { BACKEND_BASE_URL } from "../../utils/api";
 
-const SERVICE_CATEGORIES = [
-  {
-    id: "gst-services",
-    name: "GST Registration / Filing",
-    icon: "📊",
-    description: "GST registration, monthly filing, and compliance assistance for growing businesses.",
-    services: [
-      { id: "gst-registration", name: "GST Registration", price: "₹1,500", duration: "3-5 days" },
-      { id: "gst-filing-basic", name: "GST Filing Basic", price: "₹499", duration: "2-3 days" },
-      { id: "gst-filing-standard", name: "GST Filing Standard", price: "₹1,499", duration: "2-3 days" },
-      { id: "gst-filing-premium", name: "GST Filing Premium", price: "₹2,499", duration: "2-3 days" },
-      { id: "gst-return-correction", name: "GST Return Correction", price: "₹999", duration: "3-5 days" },
-    ],
-  },
-  {
-    id: "company-registration",
-    name: "Company Registration",
-    icon: "🏢",
-    description: "Entity registration for proprietorships, partnerships, LLPs, and private limited companies.",
-    services: [
-      { id: "proprietorship", name: "Proprietorship Registration", price: "₹2,500", duration: "5-7 days" },
-      { id: "partnership", name: "Partnership Firm Registration", price: "₹5,000", duration: "7-10 days" },
-      { id: "llp", name: "LLP Registration", price: "₹15,000", duration: "15-20 days" },
-      { id: "private-limited", name: "Private Limited Company Registration", price: "₹25,000", duration: "20-25 days" },
-    ],
-  },
-  {
-    id: "msme-udyam",
-    name: "MSME / Udyam Registration",
-    icon: "🧾",
-    description: "MSME/Udyam registration and scheme assistance for small and medium enterprises.",
-    services: [
-      { id: "msme-registration", name: "MSME / Udyam Registration", price: "₹1,000", duration: "2-3 days" },
-      { id: "scheme-assistance", name: "Government Scheme Assistance", price: "₹2,500", duration: "5-7 days" },
-    ],
-  },
-  {
-    id: "trademark",
-    name: "Trademark Registration",
-    icon: "®️",
-    description: "Brand protection with trademark search, filing, and post-registration support.",
-    services: [
-      { id: "trademark-registration", name: "Trademark Registration", price: "₹8,000", duration: "30-45 days" },
-      { id: "trademark-search", name: "Trademark Search & Opinion", price: "₹3,500", duration: "3-5 days" },
-    ],
-  },
-  {
-    id: "legal-consultation",
-    name: "Legal Consultation",
-    icon: "⚖️",
-    description: "Legal advice for agreements, notices, contract review, and compliance queries.",
-    services: [
-      { id: "business-agreement", name: "Business Agreement Drafting", price: "₹3,500", duration: "3-5 days" },
-      { id: "legal-notice", name: "Legal Notice Drafting", price: "₹2,500", duration: "2-3 days" },
-      { id: "company-law-consultation", name: "Company Law Consultation", price: "₹2,000/hour", duration: "1 hour" },
-    ],
-  },
-  {
-    id: "accounting-bookkeeping",
-    name: "Accounting & Bookkeeping",
-    icon: "📒",
-    description: "Accounting, bookkeeping, TDS filing, and financial reporting for businesses.",
-    services: [
-      { id: "monthly-bookkeeping", name: "Monthly Bookkeeping", price: "₹4,000/month", duration: "Monthly" },
-      { id: "income-tax-filing", name: "Income Tax Filing", price: "₹2,500", duration: "7-10 days" },
-      { id: "tds-filing", name: "TDS Filing", price: "₹1,000", duration: "3-5 days" },
-    ],
-  },
-  {
-    id: "digital-marketing",
-    name: "Digital Marketing",
-    icon: "📱",
-    description: "Branding, social media, SEO, and advertising services to grow your visibility.",
-    services: [
-      { id: "logo-design", name: "Logo Design", price: "₹3,000", duration: "5-7 days" },
-      { id: "social-media-setup", name: "Social Media Setup", price: "₹1,999", duration: "3-5 days" },
-      { id: "seo-service", name: "SEO Service", price: "₹5,000/month", duration: "Monthly" },
-    ],
-  },
-  {
-    id: "webapp-development",
-    name: "Website / App Development",
-    icon: "💻",
-    description: "Create websites, landing pages, and mobile-ready apps with expert support.",
-    services: [
-      { id: "website-basic", name: "Website Basic", price: "₹8,000", duration: "10-15 days" },
-      { id: "website-pro", name: "Website Pro", price: "₹15,000", duration: "15-20 days" },
-      { id: "app-mvp", name: "App MVP Development", price: "₹45,000", duration: "30-45 days" },
-    ],
-  },
-  {
-    id: "loan-funding",
-    name: "Loan / Funding Documentation",
-    icon: "💰",
-    description: "Loan, subsidy, and funding documentation support for business owners.",
-    services: [
-      { id: "mudra-loan-docs", name: "Mudra Loan Documentation", price: "₹3,500", duration: "5-7 days" },
-      { id: "pmegpsupport", name: "PMEGP Scheme Documentation", price: "₹4,500", duration: "7-10 days" },
-      { id: "loan-proposal", name: "Loan & Funding Proposal", price: "₹5,500", duration: "7-10 days" },
-    ],
-  },
-  {
-    id: "business-planning",
-    name: "Business Plan / Pitch Deck Support",
-    icon: "📊",
-    description: "Investor-ready business plans, pitch decks, and proposal documents.",
-    services: [
-      { id: "business-plan", name: "Business Plan Preparation", price: "₹4,999", duration: "7-10 days" },
-      { id: "pitch-deck", name: "Pitch Deck Design", price: "₹6,999", duration: "7-10 days" },
-      { id: "proposal-draft", name: "Proposal / Tender Drafting", price: "₹3,500", duration: "5-7 days" },
-    ],
-  },
-];
-
-const SERVICE_DETAILS = {
-  "gst-registration": {
-    overview: "GST registration service with document preparation, filing, and follow-up support.",
-    included: [
-      "GST application filing",
-      "Form GST REG-06 preparation",
-      "Help with documents and registration certificate",
-      "Dedicated CA consultant review",
-    ],
-    requiredDocuments: ["PAN card", "Aadhaar card", "Business address proof", "Bank statement"],
-    timeline: [
-      "Request submitted",
-      "Documents pending",
-      "Under review",
-      "Application filed",
-      "GSTIN issued",
-    ],
-    packages: [
-      {
-        tier: "Basic",
-        price: "₹1,500",
-        description: "GST registration with application filing and confirmation.",
-        features: ["Form submission", "Document review", "3-day support"],
-      },
-      {
-        tier: "Standard",
-        price: "₹2,500",
-        description: "GST registration with follow-up and personalized onboarding.",
-        features: ["Basic package", "GST orientation", "5-day support"],
-      },
-      {
-        tier: "Premium",
-        price: "₹3,999",
-        description: "End-to-end registration with priority support and filing advisory.",
-        features: ["Standard package", "Priority review", "10-day support"],
-      },
-    ],
-    consultant: {
-      name: "CA Arjun Menon",
-      title: "GST & Compliance Specialist",
-      rating: 4.9,
-      reviews: 74,
-      experience: "10 years",
-    },
-    vendor: {
-      name: "Sahyog Business Partners",
-      title: "GST Service Partner",
-      rating: 4.8,
-      reviews: 120,
-      responseTime: "Within 24 hours",
-      location: "Pan-India",
-      type: "Verified GST Partner",
-      highlights: ["Priority support", "Expert documentation team", "Trusted by 600+ businesses"],
-    },
-    faqs: [
-      { question: "How long does GST registration take?", answer: "Most applications are processed within 3-5 business days." },
-      { question: "Can I apply without a business address proof?", answer: "You need a valid local address proof to complete the registration." },
-    ],
-    refundPolicy: "Full refund if the application is rejected by GST authorities before filing. Otherwise, service fees are non-refundable.",
-  },
-  "gst-filing-basic": {
-    overview: "Standard GST filing support for your monthly returns with validation checks.",
-    included: ["GSTR-1 review", "GSTR-3B filing", "Compliance checklist", "Return status update"],
-    requiredDocuments: ["Sales invoices", "Purchase invoices", "Bank statement"],
-    timeline: ["Request submitted", "Document review", "Filing completed", "Confirmation received"],
-    packages: [
-      { tier: "Basic", price: "₹499", description: "Basic tax return filing for small businesses.", features: ["GSTR-1 summary", "GSTR-3B filing"] },
-      { tier: "Standard", price: "₹1,499", description: "Detailed filing with tax advisory and support.", features: ["Basic package", "Tax review", "Compliance guidance"] },
-      { tier: "Premium", price: "₹2,499", description: "CA-assisted filing with follow-up and query handling.", features: ["Standard package", "CA review", "3 months support"] },
-    ],
-    consultant: { name: "CA Nisha Reddy", title: "Tax Advisory Lead", rating: 4.8, reviews: 58, experience: "8 years" },
-    faqs: [
-      { question: "Can you file for a previous month?", answer: "Yes, we can assist with delayed filings for an additional fee." },
-      { question: "Do you support composition scheme?", answer: "Yes, we can file GST returns for composition taxpayers." },
-    ],
-    refundPolicy: "If filing is rejected due to our error, we will refund the service fee after reviewing the case.",
-  },
-  "trademark-registration": {
-    overview: "Trademark application filing to protect your brand in India.",
-    included: ["Trademark search", "Application filing", "Document preparation", "Status monitoring"],
-    requiredDocuments: ["Logo design file", "Business PAN", "Authorization letter"],
-    timeline: ["Request submitted", "Search completed", "Application filed", "Examination report", "Trademark granted"],
-    packages: [
-      { tier: "Basic", price: "₹8,000", description: "Single-class trademark filing.", features: ["Search report", "Application filing"] },
-      { tier: "Standard", price: "₹12,000", description: "Trademark filing with objection support.", features: ["Basic package", "Exam report handling"] },
-      { tier: "Premium", price: "₹18,000", description: "End-to-end trademark filing with priority processing.", features: ["Standard package", "Priority support", "Post-registration support"] },
-    ],
-    consultant: { name: "Adv. Meera Suresh", title: "IP & Trademark Advisor", rating: 4.7, reviews: 42, experience: "9 years" },
-    faqs: [
-      { question: "How many classes can I file in?", answer: "The basic package covers one class. We can quote for additional classes separately." },
-      { question: "Will I get a certificate?", answer: "Yes, you will receive a trademark registration certificate upon grant." },
-    ],
-    refundPolicy: "Refund available only if the application is not filed. No refund after formal filing with the Registry.",
-  },
-  "business-plan": {
-    overview: "Create an investor-ready business plan and financial model for your startup.",
-    included: ["Executive summary", "Market analysis", "Financial projections", "Go-to-market plan"],
-    requiredDocuments: ["Business idea summary", "Revenue model", "Current financial data"],
-    timeline: ["Request submitted", "Draft created", "Review meeting", "Final delivery"],
-    packages: [
-      { tier: "Basic", price: "₹4,999", description: "Standard business plan with key sections.", features: ["Plan document", "1 revision"] },
-      { tier: "Standard", price: "₹7,999", description: "Detailed plan with financial forecasts.", features: ["Basic package", "Financial model", "2 revisions"] },
-      { tier: "Premium", price: "₹12,999", description: "Investor pitch-ready plan with deck and strategy.", features: ["Standard package", "Pitch deck", "3 revisions"] },
-    ],
-    consultant: { name: "Shruti Raj", title: "Startup Strategy Consultant", rating: 4.9, reviews: 29, experience: "11 years" },
-    faqs: [
-      { question: "Can you help with investor presentations?", answer: "Yes, the premium package includes a pitch deck." },
-      { question: "Do you support SaaS and service businesses?", answer: "Yes, we tailor the plan for your industry." },
-    ],
-    refundPolicy: "Refunds are available before the first draft is delivered. After draft delivery, fees are non-refundable.",
-  },
-};
-
-const BUSINESS_STARTER_PACKAGE = {
-  name: "Start Your Business in 7 Days",
-  price: "₹15,000",
-  originalPrice: "₹25,000",
-  discount: "40% OFF",
-  services: [
-    "GST Registration",
-    "MSME / Udyam Registration",
-    "Trade License",
-    "Professional Logo Design",
-    "Google Business Profile Setup",
-    "Basic Website Creation",
-    "Social Media Setup",
-    "Business Consultation",
-  ],
-  features: [
-    "Complete documentation support",
-    "Priority handling by experts",
-    "Digital setup starter kit",
-    "Post-registration handholding",
-  ],
-};
-
-const DEFAULT_SERVICE_DETAILS = {
-  overview: "A complete business service designed to help you grow with expert support and trusted delivery.",
-  included: ["Service planning", "Documentation support", "Consultant review", "Post-delivery guidance"],
-  requiredDocuments: ["PAN card", "Aadhaar card", "Business proof"],
-  timeline: ["Request submitted", "Documents pending", "Under review", "Work in progress", "Completed"],
-  packages: [
-    { tier: "Basic", price: "₹2,499", description: "Essential support to get started.", features: ["Core service", "Standard support"] },
-    { tier: "Standard", price: "₹4,999", description: "Extended support with advisor input.", features: ["Basic package", "Priority support"] },
-    { tier: "Premium", price: "₹7,999", description: "Full-service delivery with expert consultation.", features: ["Standard package", "Fast-track delivery"] },
-  ],
-  consultant: { name: "Expert Consultant", title: "Business Specialist", rating: 4.8, reviews: 21, experience: "8 years" },
-  vendor: {
-    name: "Trusted Partner Network",
-    title: "Verified Service Marketplace",
-    rating: 4.7,
-    reviews: 320,
-    responseTime: "Same-day response",
-    location: "Nationwide",
-    type: "Marketplace Partner",
-    highlights: ["Same-day response", "Verified service delivery", "Dedicated account support"],
-  },
-  faqs: [
-    { question: "How long does this service take?", answer: "Delivery times vary by service, typically 5-15 days." },
-    { question: "Can I chat before booking?", answer: "Yes, use the chat before booking button on the service detail page." },
-  ],
-  refundPolicy: "Refunds depend on the service stage. Contact support for detailed policy.",
-};
-
 const ORDER_STATUSES = [
   { id: "submitted", label: "Request submitted", color: "#f59e0b", icon: "📝" },
-  { id: "documents-pending", label: "Documents pending", color: "#f97316", icon: "📎" },
   { id: "under-review", label: "Under review", color: "#3b82f6", icon: "🔍" },
-  { id: "assigned-to-expert", label: "Assigned to expert", color: "#8b5cf6", icon: "👩‍💼" },
-  { id: "work-in-progress", label: "Work in progress", color: "#0ea5e9", icon: "⚙️" },
-  { id: "approval-pending", label: "Customer approval pending", color: "#facc15", icon: "⏳" },
-  { id: "invoice-generated", label: "Invoice generated", color: "#14b8a6", icon: "🧾" },
+  { id: "processing", label: "Processing", color: "#0ea5e9", icon: "⚙️" },
   { id: "completed", label: "Completed", color: "#10b981", icon: "✅" },
 ];
 
-const getServiceDetails = (serviceId) => SERVICE_DETAILS[serviceId] || DEFAULT_SERVICE_DETAILS;
+const ORDER_STATUS_ALIASES = {
+  "documents-pending": "submitted",
+  "assigned-to-expert": "under-review",
+  "work-in-progress": "processing",
+  "approval-pending": "processing",
+  "invoice-generated": "completed",
+};
 
 const parseINRToNumber = (priceText = "") => {
   const numeric = Number(String(priceText).replace(/[^0-9]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const normalizeOrderStatus = (status) => {
+  const normalized = String(status || "").trim();
+  if (ORDER_STATUSES.some((item) => item.id === normalized)) return normalized;
+  return ORDER_STATUS_ALIASES[normalized] || "submitted";
+};
+
+const getMissingRequiredFields = (formValues = {}) => {
+  const requiredFields = [
+    { key: "name", label: "full name" },
+    { key: "email", label: "email address" },
+    { key: "phone", label: "phone number" },
+    { key: "businessName", label: "business name" },
+    { key: "businessType", label: "business type" },
+  ];
+
+  return requiredFields
+    .filter((item) => !String(formValues[item.key] || "").trim())
+    .map((item) => item.label);
 };
 
 const BusinessServices = () => {
@@ -310,6 +55,8 @@ const BusinessServices = () => {
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [catalog, setCatalog] = useState(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
 
   const [orderForm, setOrderForm] = useState({
     name: "",
@@ -326,6 +73,11 @@ const BusinessServices = () => {
     address: "",
     gstin: "",
   });
+  const { currentUser } = useApp();
+  const [selectedPaymentGateway, setSelectedPaymentGateway] = useState("razorpay");
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState("");
+  const [paymentError, setPaymentError] = useState("");
 
   const navigationSections = useMemo(
     () => [
@@ -337,6 +89,37 @@ const BusinessServices = () => {
     ],
     []
   );
+
+  const launchJourney = [
+    {
+      id: "brief",
+      title: "Share Your Business Brief",
+      desc: "Tell us what you want to launch and upload basic documents in one guided step.",
+    },
+    {
+      id: "match",
+      title: "Get Matched With Experts",
+      desc: "We route your request to the right compliance, legal, and growth specialists.",
+    },
+    {
+      id: "go-live",
+      title: "Track Progress to Go-Live",
+      desc: "Monitor timeline updates and receive invoice + completion artifacts in one place.",
+    },
+  ];
+
+  const launchTrust = [
+    "No local memory dependencies",
+    "DB-backed order tracking",
+    "Expert-led business launch",
+    "Transparent package pricing",
+  ];
+
+  const serviceCategories = catalog?.categories || [];
+  const serviceDetailsMap = catalog?.serviceDetails || {};
+  const defaultServiceDetails = catalog?.defaultServiceDetails || {};
+  const starterPackage = catalog?.starterPackage || null;
+  const consultationOptions = catalog?.consultationOptions || [];
 
   const refreshOrders = async () => {
     try {
@@ -357,6 +140,26 @@ const BusinessServices = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const fetchCatalog = async () => {
+      setCatalogLoading(true);
+      try {
+        const response = await axios.get(`${BACKEND_BASE_URL}/api/business-services/catalog`);
+        if (!response.data?.success || !response.data?.data?.catalog) {
+          throw new Error("Catalog is not available.");
+        }
+        setCatalog(response.data.data.catalog);
+      } catch (err) {
+        setSubmitError(err?.response?.data?.message || err?.message || "Unable to load business services catalog.");
+        setCatalog(null);
+      } finally {
+        setCatalogLoading(false);
+      }
+    };
+
+    void fetchCatalog();
+  }, []);
+
   const handleOpenServiceDetail = (category, service) => {
     setSelectedCategory(category);
     setSelectedService(service);
@@ -371,6 +174,36 @@ const BusinessServices = () => {
     setSubmitError("");
   };
 
+  const openBusinessStarterOrderForm = () => {
+    if (!starterPackage) {
+      setSubmitError("Business starter package is not available in DB catalog.");
+      return;
+    }
+    const starterCategory = { id: "business-starter", name: "Business Starter Package" };
+    const starterService = {
+      id: "business-starter",
+      name: starterPackage.name,
+      price: starterPackage.price,
+      duration: "7 days",
+    };
+    handleServiceSelect(starterCategory, starterService);
+  };
+
+  const openConsultationOrderForm = (typeLabel) => {
+    const consultationCategory =
+      serviceCategories.find((category) => category.id === "legal-consultation") || {
+        id: "legal-consultation",
+        name: "Legal Consultation",
+      };
+    const consultationService = {
+      id: "company-law-consultation",
+      name: `${typeLabel} Consultation`,
+      price: "â‚¹500",
+      duration: "1 hour",
+    };
+    handleServiceSelect(consultationCategory, consultationService);
+  };
+
   const handleFileUpload = (files) => {
     const fileList = Array.from(files).map((file) => ({
       file,
@@ -383,9 +216,128 @@ const BusinessServices = () => {
     setOrderForm((prev) => ({ ...prev, documents: [...prev.documents, ...fileList] }));
   };
 
+  const loadRazorpayScript = () =>
+    new Promise((resolve, reject) => {
+      if (window.Razorpay) {
+        return resolve(true);
+      }
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => reject(new Error("Unable to load Razorpay checkout script."));
+      document.head.appendChild(script);
+    });
+
+  const verifyBusinessServicePayment = async (orderId, paymentId, payload) => {
+    setPaymentLoading(true);
+    setPaymentError("");
+    setPaymentMessage("Verifying payment...");
+
+    try {
+      const response = await axios.post(
+        `${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}/payments/verify`,
+        {
+          paymentId,
+          ...payload,
+        }
+      );
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Verification failed.");
+      }
+
+      setPaymentMessage("Payment completed successfully.");
+      setCurrentOrder(response.data.data?.order || currentOrder);
+      await refreshOrders();
+    } catch (err) {
+      setPaymentError(err?.response?.data?.message || err?.message || "Payment verification failed.");
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const openRazorpayCheckout = async (paymentData, orderId) => {
+    try {
+      await loadRazorpayScript();
+
+      const options = {
+        key: paymentData.razorpayKeyId,
+        amount: Math.round(paymentData.amount * 100),
+        currency: "INR",
+        name: "Business Services Order",
+        description: `Payment for order #${String(orderId).slice(-6)}`,
+        order_id: paymentData.gatewayOrderId,
+        handler: async (response) => {
+          await verifyBusinessServicePayment(orderId, paymentData.paymentId, {
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+          });
+        },
+        prefill: {
+          name: currentUser?.name || orderForm.name || "",
+          email: currentUser?.email || orderForm.email || "",
+          contact: currentUser?.phone || orderForm.phone || "",
+        },
+        notes: {
+          orderId,
+          serviceName: currentOrder?.serviceName || selectedService?.name || "Business Service",
+        },
+      };
+
+      if (!window.Razorpay) {
+        throw new Error("Razorpay checkout is unavailable.");
+      }
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", (error) => {
+        setPaymentError(error.error?.description || "Razorpay payment failed.");
+        setPaymentLoading(false);
+      });
+      rzp.open();
+    } catch (error) {
+      setPaymentError(error?.message || "Unable to open payment checkout.");
+      setPaymentLoading(false);
+    }
+  };
+
+  const initializeOrderPayment = async (orderId) => {
+    setPaymentLoading(true);
+    setPaymentError("");
+    setPaymentMessage("Initializing payment...");
+
+    try {
+      const response = await axios.post(
+        `${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}/payments/initiate`,
+        {
+          gateway: selectedPaymentGateway,
+          paymentMethod: "upi",
+        }
+      );
+
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to initiate payment.");
+      }
+
+      const paymentData = response.data.data;
+      setPaymentMessage("Payment initialized. Opening checkout...");
+
+      if (paymentData.gateway === "razorpay") {
+        await openRazorpayCheckout(paymentData, orderId);
+      } else {
+        setPaymentMessage("Payment initialized. Follow the gateway instructions to complete the payment.");
+      }
+    } catch (error) {
+      setPaymentError(error?.response?.data?.message || error?.message || "Unable to start payment.");
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
   const selectedServiceDetails = useMemo(
-    () => (selectedService ? getServiceDetails(selectedService.id) : null),
-    [selectedService]
+    () => (selectedService ? serviceDetailsMap[selectedService.id] || defaultServiceDetails : null),
+    [selectedService, serviceDetailsMap, defaultServiceDetails]
   );
 
   const requiredDocuments = selectedServiceDetails?.requiredDocuments || [];
@@ -400,29 +352,61 @@ const BusinessServices = () => {
     (pkg) => pkg.tier === orderForm.packageTier
   );
 
-  const serviceVendor = selectedServiceDetails?.vendor || DEFAULT_SERVICE_DETAILS.vendor;
+  const serviceVendor = selectedServiceDetails?.vendor || {};
+
+  const createInteractionRequest = async ({
+    interactionType,
+    orderId = "",
+    categoryId = "",
+    serviceId = "",
+    notes = "",
+    metadata = {},
+  }) => {
+    try {
+      await axios.post(`${BACKEND_BASE_URL}/api/business-services/interactions`, {
+        interactionType,
+        orderId,
+        categoryId,
+        serviceId,
+        notes,
+        metadata,
+      });
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Unable to submit interaction request.");
+    }
+  };
 
   const handleOrderSubmit = async () => {
     if (!selectedService || !selectedCategory) return;
+
+    const missingFields = getMissingRequiredFields(orderForm);
+    if (missingFields.length > 0) {
+      setSubmitError(`Please provide: ${missingFields.join(", ")}.`);
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError("");
 
     try {
+      const isStarterPackage = selectedService.id === "business-starter" || selectedCategory.id === "business-starter";
+      const effectivePackageTier = isStarterPackage ? "Starter" : orderForm.packageTier;
+      const effectivePrice = selectedPackageDetails?.price || selectedService.price;
+
       const formData = new FormData();
       formData.append("categoryId", selectedCategory.id);
       formData.append("categoryName", selectedCategory.name || "");
       formData.append("serviceId", selectedService.id);
       formData.append("serviceName", selectedService.name || "");
-      formData.append("isStarterPackage", "false");
+      formData.append("isStarterPackage", String(isStarterPackage));
 
       formData.append(
         "pricing",
         JSON.stringify({
-          priceText: selectedPackageDetails?.price || selectedService.price,
-          priceNumber: parseINRToNumber(selectedPackageDetails?.price || selectedService.price),
+          priceText: effectivePrice,
+          priceNumber: parseINRToNumber(effectivePrice),
           durationText: selectedService.duration,
-          packageTier: orderForm.packageTier,
+          packageTier: effectivePackageTier,
         })
       );
 
@@ -439,12 +423,10 @@ const BusinessServices = () => {
         })
       );
 
-      formData.append("packageTier", orderForm.packageTier);
+      formData.append("packageTier", effectivePackageTier);
       formData.append("requirements", orderForm.requirements || "");
-      // backend expects estimatedCompletion as ISO date string (optional)
       formData.append("estimatedCompletion", orderForm.preferredDate ? `${orderForm.preferredDate}T00:00:00.000Z` : "");
 
-      // Upload documents
       for (const doc of orderForm.documents) {
         if (doc?.file) {
           formData.append("documents", doc.file);
@@ -465,13 +447,13 @@ const BusinessServices = () => {
       setCurrentOrder(order);
       setShowOrderForm(false);
 
-      // reset form
       setOrderForm({
         name: "",
         email: "",
         phone: "",
         businessName: "",
         businessType: "",
+        packageTier: "Standard",
         documents: [],
         requirements: "",
         preferredDate: "",
@@ -488,79 +470,15 @@ const BusinessServices = () => {
     }
   };
 
-  const handleBusinessStarterOrder = async () => {
-    // Use same backend endpoint, but encode "starter package" as a pseudo service
-    setIsSubmitting(true);
-    setSubmitError("");
-
-    try {
-      const syntheticCategory = { id: "business-starter", name: "Business Starter Package" };
-      const syntheticService = { id: "business-starter", name: BUSINESS_STARTER_PACKAGE.name, price: BUSINESS_STARTER_PACKAGE.price, duration: "7 days" };
-
-      const formData = new FormData();
-      formData.append("categoryId", syntheticCategory.id);
-      formData.append("categoryName", syntheticCategory.name);
-      formData.append("serviceId", syntheticService.id);
-      formData.append("serviceName", syntheticService.name);
-      formData.append("isStarterPackage", "true");
-
-      formData.append(
-        "pricing",
-        JSON.stringify({
-          priceText: syntheticService.price,
-          priceNumber: parseINRToNumber(syntheticService.price),
-          durationText: syntheticService.duration,
-        })
-      );
-
-      formData.append(
-        "formData",
-        JSON.stringify({
-          name: orderForm.name,
-          email: orderForm.email,
-          phone: orderForm.phone,
-          businessName: orderForm.businessName,
-          businessType: orderForm.businessType,
-          address: orderForm.address,
-          gstin: orderForm.gstin,
-        })
-      );
-
-      formData.append("requirements", orderForm.requirements || "");
-      formData.append("estimatedCompletion", ""); // optional
-
-      // no document uploads for starter unless user adds them
-      for (const doc of orderForm.documents) {
-        if (doc?.file) formData.append("documents", doc.file);
-      }
-
-      const response = await axios.post(
-        `${BACKEND_BASE_URL}/api/business-services/orders`,
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
-
-      if (!response.data?.success) {
-        throw new Error(response.data?.message || "Order could not be created.");
-      }
-
-      const order = response.data.data?.order;
-      setCurrentOrder(order);
-      await refreshOrders();
-    } catch (err) {
-      setSubmitError(err?.response?.data?.message || err?.message || "Request failed.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const getStatusColor = (status) => {
-    const statusObj = ORDER_STATUSES.find((s) => s.id === status);
+    const normalizedStatus = normalizeOrderStatus(status);
+    const statusObj = ORDER_STATUSES.find((s) => s.id === normalizedStatus);
     return statusObj ? statusObj.color : "#6b7280";
   };
 
   const getStatusIcon = (status) => {
-    const statusObj = ORDER_STATUSES.find((s) => s.id === status);
+    const normalizedStatus = normalizeOrderStatus(status);
+    const statusObj = ORDER_STATUSES.find((s) => s.id === normalizedStatus);
     return statusObj ? statusObj.icon : "❓";
   };
 
@@ -591,13 +509,25 @@ const BusinessServices = () => {
     <div className="business-services-shell">
       <div className="business-services-hero">
         <div className="business-services-hero-copy">
-          <h1>Business Services Hub</h1>
-          <p>Complete business solutions from registration to marketing. Start, manage, and grow your business with expert support.</p>
+          <span className="launch-eyebrow">Launch-ready Business OS</span>
+          <h1>Launch Your Business Faster With One Unified Service Desk</h1>
+          <p>
+            From registration to compliance to launch support, manage your full business setup journey in one
+            DB-backed flow with expert help at every step.
+          </p>
+          <div className="launch-cta-row">
+            <button className="primary-button launch-primary" onClick={openBusinessStarterOrderForm} type="button">
+              Launch In 7 Days
+            </button>
+            <button className="secondary-button launch-secondary" onClick={() => setActiveSection("services")} type="button">
+              Explore Services
+            </button>
+          </div>
           <div className="business-services-hero-tags">
-            <span>🏢 Business Registration</span>
-            <span>📊 GST & Tax Services</span>
-            <span>⚖️ Legal Consultation</span>
-            <span>📱 Digital Marketing</span>
+            <span>Business Registration</span>
+            <span>GST & Tax Services</span>
+            <span>Legal Consultation</span>
+            <span>Digital Marketing</span>
           </div>
         </div>
         <div className="business-services-hero-stats">
@@ -607,11 +537,15 @@ const BusinessServices = () => {
           </div>
           <div className="stat-card">
             <span className="stat-number">98%</span>
-            <span className="stat-label">Success Rate</span>
+            <span className="stat-label">Client Satisfaction</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-number">7 Days</span>
+            <span className="stat-label">Starter Go-Live Target</span>
           </div>
           <div className="stat-card">
             <span className="stat-number">24/7</span>
-            <span className="stat-label">Support</span>
+            <span className="stat-label">Order Visibility</span>
           </div>
         </div>
       </div>
@@ -633,28 +567,51 @@ const BusinessServices = () => {
       {submitError ? <div className="app-loading" style={{ color: "#ef4444" }}>{submitError}</div> : null}
 
       <div className="business-services-content">
-        {activeSection === "overview" && (
+        {catalogLoading ? (
           <div className="business-services-section">
+            <div className="empty-orders">
+              <h3>Loading services catalog...</h3>
+            </div>
+          </div>
+        ) : null}
+
+        {!catalogLoading && !catalog ? (
+          <div className="business-services-section">
+            <div className="empty-orders">
+              <h3>Business services catalog is not configured in DB</h3>
+              <p>Please seed `business_services_catalog` and reload.</p>
+            </div>
+          </div>
+        ) : null}
+
+        {!catalogLoading && catalog && activeSection === "overview" && (
+          <div className="business-services-section">
+            <div className="launch-trust-strip">
+              {launchTrust.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+
             <div className="overview-grid">
               <div className="overview-card business-starter-highlight">
                 <div className="card-header">
                   <h3>🚀 Start Your Business in 7 Days</h3>
                   <div className="pricing">
-                    <span className="current-price">{BUSINESS_STARTER_PACKAGE.price}</span>
-                    <span className="original-price">{BUSINESS_STARTER_PACKAGE.originalPrice}</span>
-                    <span className="discount-badge">{BUSINESS_STARTER_PACKAGE.discount}</span>
+                    <span className="current-price">{starterPackage?.price || "—"}</span>
+                    <span className="original-price">{starterPackage?.originalPrice || "—"}</span>
+                    <span className="discount-badge">{starterPackage?.discount || "—"}</span>
                   </div>
                 </div>
                 <p>Get everything you need to start your business: GST, Udyam, Trade License, Logo, Website, and Digital Presence.</p>
                 <div className="package-services">
-                  {BUSINESS_STARTER_PACKAGE.services.map((service, i) => (
+                  {(starterPackage?.services || []).map((service, i) => (
                     <span key={i} className="service-item">
                       ✓ {service}
                     </span>
                   ))}
                 </div>
-                <button className="primary-button" onClick={handleBusinessStarterOrder} disabled={isSubmitting} type="button">
-                  {isSubmitting ? "Placing..." : "Get Started Now"}
+                <button className="primary-button" onClick={openBusinessStarterOrderForm} type="button">
+                  Get Started Now
                 </button>
               </div>
 
@@ -694,6 +651,16 @@ const BusinessServices = () => {
                 </div>
               ))}
             </div>
+
+            <div className="launch-journey-grid">
+              {launchJourney.map((item, index) => (
+                <div key={item.id} className="launch-journey-card">
+                  <span className="launch-step-number">0{index + 1}</span>
+                  <h4>{item.title}</h4>
+                  <p>{item.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -705,7 +672,7 @@ const BusinessServices = () => {
             </div>
 
             <div className="services-categories">
-              {SERVICE_CATEGORIES.map((category) => (
+              {serviceCategories.map((category) => (
                 <div key={category.id} className="category-card">
                   <div className="category-header">
                     <span className="category-icon">{category.icon}</span>
@@ -761,11 +728,11 @@ const BusinessServices = () => {
             <div className="business-starter-detail">
               <div className="package-overview">
                 <div className="package-header">
-                  <h3>{BUSINESS_STARTER_PACKAGE.name}</h3>
+                  <h3>{starterPackage?.name || "Business Starter Package"}</h3>
                   <div className="package-pricing">
-                    <span className="current-price">{BUSINESS_STARTER_PACKAGE.price}</span>
-                    <span className="original-price">{BUSINESS_STARTER_PACKAGE.originalPrice}</span>
-                    <span className="discount">{BUSINESS_STARTER_PACKAGE.discount}</span>
+                    <span className="current-price">{starterPackage?.price || "—"}</span>
+                    <span className="original-price">{starterPackage?.originalPrice || "—"}</span>
+                    <span className="discount">{starterPackage?.discount || "—"}</span>
                   </div>
                 </div>
 
@@ -773,7 +740,7 @@ const BusinessServices = () => {
                   <div className="services-included">
                     <h4>Services Included:</h4>
                     <ul>
-                      {BUSINESS_STARTER_PACKAGE.services.map((service, i) => (
+                      {(starterPackage?.services || []).map((service, i) => (
                         <li key={i}>{service}</li>
                       ))}
                     </ul>
@@ -782,7 +749,7 @@ const BusinessServices = () => {
                   <div className="package-features">
                     <h4>Additional Benefits:</h4>
                     <ul>
-                      {BUSINESS_STARTER_PACKAGE.features.map((feature, i) => (
+                      {(starterPackage?.features || []).map((feature, i) => (
                         <li key={i}>{feature}</li>
                       ))}
                     </ul>
@@ -790,8 +757,8 @@ const BusinessServices = () => {
                 </div>
 
                 <div className="package-actions">
-                  <button className="primary-button" onClick={handleBusinessStarterOrder} disabled={isSubmitting} type="button">
-                    {isSubmitting ? "Placing..." : "Order Business Starter Package"}
+                  <button className="primary-button" onClick={openBusinessStarterOrderForm} type="button">
+                    Order Business Starter Package
                   </button>
                   <div className="package-meta">
                     <span>⚡ Processing in 7 days</span>
@@ -832,7 +799,7 @@ const BusinessServices = () => {
                       </div>
                       <div className="order-status">
                         <span className="status-badge" style={{ backgroundColor: getStatusColor(order.status) }}>
-                          {getStatusIcon(order.status)} {ORDER_STATUSES.find((s) => s.id === order.status)?.label || order.status}
+                          {getStatusIcon(order.status)} {ORDER_STATUSES.find((s) => s.id === normalizeOrderStatus(order.status))?.label || normalizeOrderStatus(order.status)}
                         </span>
                       </div>
                     </div>
@@ -844,11 +811,12 @@ const BusinessServices = () => {
                           {order.estimatedCompletion ? new Date(order.estimatedCompletion).toLocaleDateString() : "—"}
                         </span>
                         <span>Price: {order.pricing?.priceText || "—"}</span>
+                        <span>Payment: {order.paymentStatus === "paid" ? "Paid" : "Pending"}</span>
                       </div>
 
                       <div className="order-timeline">
                         {ORDER_STATUSES.map((step, index) => {
-                          const currentIndex = ORDER_STATUSES.findIndex((status) => status.id === order.status);
+                          const currentIndex = ORDER_STATUSES.findIndex((status) => status.id === normalizeOrderStatus(order.status));
                           const isActive = currentIndex >= index;
                           return (
                             <div key={step.id} className={`timeline-step ${isActive ? "active" : ""}`}>
@@ -860,13 +828,52 @@ const BusinessServices = () => {
                       </div>
 
                       <div className="order-actions">
-                        <button className="chat-btn" type="button" onClick={() => setSubmitError("Consultant chat/call is not wired yet.")}>
+                        <button
+                          className="chat-btn"
+                          type="button"
+                          onClick={async () => {
+                            await createInteractionRequest({
+                              interactionType: "chat-request",
+                              orderId: String(order._id || order.id || ""),
+                              categoryId: order.categoryId || "",
+                              serviceId: order.serviceId || "",
+                              notes: `Chat request for order #${String(order._id || order.id || "").slice(-6)}.`,
+                            });
+                            openConsultationOrderForm("Order Follow-up");
+                          }}
+                        >
                           💬 Chat with Consultant
                         </button>
-                        <button className="call-btn" type="button" onClick={() => setSubmitError("Request call is not wired yet.")}>
+                        <button
+                          className="call-btn"
+                          type="button"
+                          onClick={async () => {
+                            await createInteractionRequest({
+                              interactionType: "call-request",
+                              orderId: String(order._id || order.id || ""),
+                              categoryId: order.categoryId || "",
+                              serviceId: order.serviceId || "",
+                              notes: `Call request for order #${String(order._id || order.id || "").slice(-6)}.`,
+                            });
+                            setOrderForm((prev) => ({
+                              ...prev,
+                              requirements: `Please call me regarding order #${String(order._id || order.id || "").slice(-6)}.`,
+                            }));
+                            openConsultationOrderForm("Callback Request");
+                          }}
+                        >
                           📞 Request Call
                         </button>
-                        {(order.status === "completed" || order.status === "invoice-generated") && (
+                        {order.paymentStatus !== "paid" && (
+                          <button
+                            className="primary-button"
+                            type="button"
+                            onClick={() => initializeOrderPayment(order._id || order.id)}
+                          >
+                            💳 Pay Now
+                          </button>
+                        )}
+                        {normalizeOrderStatus(order.status) === "completed" && (
                           <button
                             className="download-btn"
                             type="button"
@@ -892,17 +899,25 @@ const BusinessServices = () => {
             </div>
 
             <div className="consultation-options">
-              {[
-                { title: "📞 Quick Consultation", desc: "15-minute phone consultation for immediate guidance", price: "₹500" },
-                { title: "💼 Business Planning", desc: "Comprehensive business plan and strategy consultation", price: "₹2,500" },
-                { title: "📊 Financial Consultation", desc: "GST, tax, and financial planning advice", price: "₹1,500" },
-                { title: "⚖️ Legal Consultation", desc: "Legal advice and documentation review", price: "₹2,000" },
-              ].map((c) => (
+              {consultationOptions.map((c) => (
                 <div key={c.title} className="consultation-card">
                   <h3>{c.title}</h3>
                   <p>{c.desc}</p>
                   <div className="consultation-price">{c.price}</div>
-                  <button className="primary-button" type="button" onClick={() => setSubmitError("Consultation booking not wired yet.")}>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={async () => {
+                      await createInteractionRequest({
+                        interactionType: "consultation-request",
+                        categoryId: "legal-consultation",
+                        serviceId: "company-law-consultation",
+                        notes: `Consultation request: ${c.title}`,
+                        metadata: { title: c.title, price: c.price },
+                      });
+                      openConsultationOrderForm(c.title.replace(/^[^A-Za-z0-9]+/, ""));
+                    }}
+                  >
                     Book Now
                   </button>
                 </div>
@@ -1009,7 +1024,19 @@ const BusinessServices = () => {
                   <p>{selectedServiceDetails?.consultant?.title}</p>
                   <p>{selectedServiceDetails?.consultant?.experience} experience</p>
                   <p>⭐ {selectedServiceDetails?.consultant?.rating} ({selectedServiceDetails?.consultant?.reviews} reviews)</p>
-                  <button className="chat-btn" type="button" onClick={() => setSubmitError("Chat before booking is not wired yet.")}>
+                  <button
+                    className="chat-btn"
+                    type="button"
+                    onClick={async () => {
+                      await createInteractionRequest({
+                        interactionType: "chat-request",
+                        categoryId: selectedCategory?.id || "",
+                        serviceId: selectedService?.id || "",
+                        notes: `Pre-booking chat request for ${selectedService?.name || "service"}.`,
+                      });
+                      openConsultationOrderForm(selectedService?.name || "Pre-booking");
+                    }}
+                  >
                     💬 Chat before booking
                   </button>
                 </div>
@@ -1032,7 +1059,22 @@ const BusinessServices = () => {
                       ))}
                     </ul>
                   )}
-                  <button className="secondary-button" type="button" onClick={() => setSubmitError("Vendor contact is not available yet.")}>View Vendor Profile</button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={async () => {
+                      await createInteractionRequest({
+                        interactionType: "vendor-contact-request",
+                        categoryId: selectedCategory?.id || "",
+                        serviceId: selectedService?.id || "",
+                        notes: `Vendor contact requested for ${selectedService?.name || "service"}.`,
+                        metadata: { vendorName: serviceVendor.name || "" },
+                      });
+                      window.location.href = "mailto:support@nilahub.com?subject=Business%20Services%20Vendor%20Contact";
+                    }}
+                  >
+                    Contact Vendor
+                  </button>
                 </div>
 
                 <div className="detail-card package-grid">
@@ -1246,13 +1288,42 @@ const BusinessServices = () => {
                 <strong>Service:</strong> {currentOrder.serviceName || selectedService?.name || "Business Service"}
               </p>
               <p>
-                <strong>Status:</strong> {currentOrder.status || "submitted"}
+                <strong>Status:</strong> {normalizeOrderStatus(currentOrder.status || "submitted")}
               </p>
               <p>
                 <strong>Estimated Completion:</strong>{" "}
                 {currentOrder.estimatedCompletion ? new Date(currentOrder.estimatedCompletion).toLocaleDateString() : "—"}
               </p>
+              <p>
+                <strong>Payment:</strong> {currentOrder.paymentStatus === "paid" ? "Paid" : "Pending"}
+              </p>
+              <div className="payment-method-row">
+                <label htmlFor="paymentGateway">Payment gateway</label>
+                <select
+                  id="paymentGateway"
+                  value={selectedPaymentGateway}
+                  onChange={(e) => setSelectedPaymentGateway(e.target.value)}
+                >
+                  <option value="razorpay">Razorpay</option>
+                  <option value="stripe">Stripe</option>
+                </select>
+              </div>
+              {paymentMessage ? <p className="payment-message">{paymentMessage}</p> : null}
+              {paymentError ? <p className="payment-error">{paymentError}</p> : null}
             </div>
+
+            {currentOrder.paymentStatus !== "paid" && (
+              <div className="payment-actions">
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => initializeOrderPayment(currentOrder._id || currentOrder.id)}
+                  disabled={paymentLoading}
+                >
+                  {paymentLoading ? "Processing payment..." : "Pay Now"}
+                </button>
+              </div>
+            )}
 
             <div className="confirmation-actions">
               <button className="primary-button" onClick={() => { setCurrentOrder(null); setActiveSection("orders"); }} type="button">
@@ -1269,4 +1340,14 @@ const BusinessServices = () => {
   );
 };
 
+export const __private__ = {
+  parseINRToNumber,
+  normalizeOrderStatus,
+  getMissingRequiredFields,
+};
+
 export default BusinessServices;
+
+
+
+

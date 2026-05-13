@@ -42,9 +42,26 @@ describe('Business Builder API', () => {
   };
 
   beforeAll(async () => {
+    if (mongoose.connection.readyState !== 1) {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error('MongoDB connection timeout in businessBuilder.test'));
+        }, 30000);
+        mongoose.connection.once('connected', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        mongoose.connection.once('error', (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+      });
+    }
+
     // Create test user
     testUser = new User({
       username: 'testbusinessuser',
+      name: 'Test Business User',
       email: 'testbusiness@example.com',
       password: 'hashedpassword',
       phone: '9876543210',
@@ -64,11 +81,16 @@ describe('Business Builder API', () => {
   });
 
   afterAll(async () => {
-    await Business.deleteMany({ userId: testUser._id });
-    await Invoice.deleteMany({ userId: testUser._id });
-    await MiniApp.deleteMany({ userId: testUser._id });
-    await User.findByIdAndDelete(testUser._id);
-    await mongoose.connection.close();
+    if (mongoose.connection.readyState === 1 && testUser?._id) {
+      await Business.deleteMany({ userId: testUser._id });
+      await Invoice.deleteMany({ userId: testUser._id });
+      await MiniApp.deleteMany({ userId: testUser._id });
+      await User.findByIdAndDelete(testUser._id);
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.close();
+    }
   });
 
   describe('Business CRUD Operations', () => {

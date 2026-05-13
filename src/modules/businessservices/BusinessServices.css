@@ -1,19 +1,27 @@
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Manrope:wght@400;500;600;700&display=swap");
+
 .business-services-shell {
-  --business-services-ink: #1e293b;
-  --business-services-muted: #64748b;
-  --business-services-border: #e2e8f0;
+  --business-services-ink: #132038;
+  --business-services-muted: #4e627f;
+  --business-services-border: #d5deec;
   --business-services-surface: #ffffff;
-  --business-services-surface-alt: #f8fafc;
-  --business-services-primary: #2563eb;
-  --business-services-primary-dark: #1d4ed8;
-  --business-services-accent: #059669;
-  --business-services-danger: #dc2626;
-  --business-services-success: #10b981;
-  --business-services-warning: #f59e0b;
+  --business-services-surface-alt: #f7faff;
+  --business-services-primary: #005ecb;
+  --business-services-primary-dark: #09459f;
+  --business-services-accent: #0ea572;
+  --business-services-danger: #c93333;
+  --business-services-success: #089d68;
+  --business-services-warning: #c98700;
+  --business-services-highlight: #ffede2;
+  font-family: "Manrope", "Segoe UI", sans-serif;
   max-width: 1480px;
   margin: 0 auto;
   padding: 2rem 1rem 3rem;
   color: var(--business-services-ink);
+  background:
+    radial-gradient(circle at 10% -10%, rgba(0, 94, 203, 0.14), transparent 34%),
+    radial-gradient(circle at 95% 5%, rgba(201, 135, 0, 0.12), transparent 24%),
+    linear-gradient(180deg, #f8fbff 0%, #fdf9f4 100%);
 }
 
 .business-services-hero,
@@ -28,13 +36,58 @@
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr);
   gap: 1.5rem;
-  padding: 1.75rem;
+  padding: 2rem;
   background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 35%),
-    linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    linear-gradient(140deg, rgba(0, 94, 203, 0.14), rgba(255, 237, 226, 0.65)),
+    linear-gradient(20deg, #ffffff 0%, #f2f8ff 100%);
+  overflow: hidden;
+  position: relative;
+  animation: launchFadeIn 0.7s ease-out both;
+}
+
+.business-services-hero::after {
+  content: "";
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  right: -120px;
+  top: -120px;
+  background: rgba(14, 165, 114, 0.2);
+  pointer-events: none;
+}
+
+.launch-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(0, 94, 203, 0.12);
+  color: var(--business-services-primary-dark);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.launch-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.3rem;
+}
+
+.launch-primary {
+  box-shadow: 0 10px 24px rgba(0, 94, 203, 0.28);
+}
+
+.launch-secondary {
+  border-width: 2px;
 }
 
 .business-services-hero-copy h1 {
+  font-family: "Sora", "Manrope", sans-serif;
   margin: 0;
   line-height: 1.15;
   font-size: clamp(2rem, 3vw, 3.3rem);
@@ -61,23 +114,27 @@
 .business-services-hero-tags span {
   padding: 0.45rem 0.8rem;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.12);
-  color: var(--business-services-primary-dark);
+  background: rgba(19, 32, 56, 0.08);
+  color: var(--business-services-ink);
   font-size: 0.88rem;
+  font-weight: 600;
 }
 
 .business-services-hero-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
   gap: 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 .stat-card {
   text-align: center;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.8);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 14px;
   border: 1px solid var(--business-services-border);
+  animation: launchSlideUp 0.6s ease-out both;
 }
 
 .stat-number {
@@ -91,6 +148,24 @@
 .stat-label {
   font-size: 0.9rem;
   color: var(--business-services-muted);
+}
+
+.launch-trust-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1.2rem;
+}
+
+.launch-trust-strip span {
+  border: 1px solid var(--business-services-border);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.45rem 0.7rem;
+  text-align: center;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--business-services-primary-dark);
 }
 
 .business-services-nav {
@@ -1114,6 +1189,68 @@
   border-top: 1px solid var(--business-services-border);
 }
 
+.launch-journey-grid {
+  margin-top: 1.4rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.launch-journey-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%);
+  border: 1px solid var(--business-services-border);
+  border-radius: 16px;
+  padding: 1rem;
+  min-height: 160px;
+  animation: launchSlideUp 0.65s ease-out both;
+}
+
+.launch-step-number {
+  display: inline-block;
+  margin-bottom: 0.55rem;
+  color: var(--business-services-primary-dark);
+  font-family: "Sora", "Manrope", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.launch-journey-card h4 {
+  margin: 0 0 0.5rem;
+  font-family: "Sora", "Manrope", sans-serif;
+  font-size: 1rem;
+  color: var(--business-services-ink);
+}
+
+.launch-journey-card p {
+  margin: 0;
+  color: var(--business-services-muted);
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+
+@keyframes launchFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes launchSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 1200px) {
   .business-services-nav {
     grid-template-columns: repeat(2, 1fr);
@@ -1124,6 +1261,10 @@
   }
 
   .package-services-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .launch-journey-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1140,6 +1281,11 @@
 
   .business-services-hero-copy h1 {
     max-width: none;
+  }
+
+  .launch-cta-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .business-services-nav {
@@ -1183,5 +1329,9 @@
 
   .confirmation-actions {
     flex-direction: column;
+  }
+
+  .business-services-hero-stats {
+    grid-template-columns: 1fr;
   }
 }

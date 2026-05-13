@@ -103,6 +103,10 @@ const DEFAULT_APP_DATA = {
   registrationApplications: [],
   registeredAccounts: [],
   userEducation: {},
+  userEducationOrders: {},
+  userEducationRequests: {},
+  userEducationScholarships: {},
+  userEducationGroups: {},
   moduleData: DEFAULT_MODULE_DATA,
 };
 

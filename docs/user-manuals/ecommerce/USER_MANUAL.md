@@ -3,63 +3,178 @@
 > Module: `src/modules/ecommerce/Ecommerce.js`
 
 ## 1) What this module does
-The Ecommerce module provides the shopping experience including catalog browsing, cart, orders, returns, payments/wallet, and seller/vendor features (depending on role/subscription).
+Ecommerce provides:
+- **Marketplace shopping** (product discovery, search, filters, recommendations)
+- **Favorites** and **saved searches**
+- **Voice + smart search** assistant behaviors (when enabled)
+- **Flash sales** with optional PWA notifications
+- **Cart**, **Orders**, **Returns**
+- **Product reviews**
+- **Subscriptions**, **Wallet**
+- **Refill reminders** (schedule/dismiss per product)
+- Seller/vendor experience (depending on role/subscription):
+  - Catalog: create/update products
+  - Inventory batches: set stock, price/MRP, discounts, expiry, return policy
+  - Seller orders: advance fulfillment status / sync tracking
+  - Seller return requests: update return-request status
+  - Seller analytics (component shown via SellerAnalytics)
 
-## 2) Entry point
-1. Open the Ecommerce screen from the app navigation.
-2. The module UI typically starts on a product listing/home area.
+## 2) Entry point in the app
+1. Open the **Ecommerce** module from app navigation.
+2. The UI starts in the marketplace/product discovery view.
 
-## 3) Step-by-step user flows
+## 3) Marketplace shopping workflow (shopper)
+### 3.1 Discover products
+You can browse the marketplace catalog using:
+- Marketplace search text
+- Category / subcategory filters
+- Seller/business filter
+- Price min/max
+- Minimum rating
+- In-stock only toggle
+- Sort options (relevance, price low/high, discount, rating, etc.)
 
-### 3.1 Browse products
-1. Open the Ecommerce module.
-2. Browse product cards/listing.
-3. Use product filters/search (if present in UI).
+There’s also a **smart search plan** feature that can apply a refined search state.
 
 Expected result:
-- Products appear as cards with images, title, price, and actions.
+- Products are shown as product cards.
+- If remote search is used, the results may show an offline/fallback mode when remote search fails.
 
-### 3.2 Add items to cart
-1. Click **Add to cart** (or equivalent) on a product.
-2. If prompted, choose variants/options (size/color) if the product supports them.
+### 3.2 Use suggestions / smart search
+Typical assistant-driven actions:
+- Apply **Smart Search** (updates the marketplace filters and refreshes the catalog)
+- Click **suggestions** (applies a saved “shortcut” search state)
+- Use **voice search** (if supported by the device hook)
+
+### 3.3 Flash sales and notifications
+If flash sales are active:
+- You may see flash-sale countdown behavior
+- If PWA notification permission is granted, the module can trigger notifications like “Flash sale ending soon”.
+
+### 3.4 Quick view and chat actions
+From product cards you may have:
+- **Quick View** (opens a modal/panel)
+- **Copy product summary for chat** (writes product share message to clipboard when available)
+
+### 3.5 Favorites and saved searches
+You can:
+- Switch marketplace view to **Favorites**
+- Save the current search/filters as a **GlobeMart shortcut** (saved search)
+- Load/apply saved searches quickly later
 
 Expected result:
-- Cart updates and reflects the new quantity.
+- Loading a saved search applies the stored filters and refreshes the marketplace.
 
-### 3.3 Update cart
-1. Open **Cart** page.
-2. Adjust quantity for items.
-3. Remove items if needed.
+## 4) Cart, Orders, Returns, Reviews (shopper)
+Use the module’s dedicated screens/components:
 
-### 3.4 Checkout & place order
-1. Open Cart.
-2. Proceed to checkout.
-3. Choose delivery/payment method.
-4. Confirm order.
+### 4.1 Cart
+- Update item quantities
+- Proceed to checkout
 
-### 3.5 View your orders
-1. Open **Orders** page from the module navigation.
-2. Select an order to view status and details.
+### 4.2 Orders
+- View order status and details per order
 
-### 3.6 Returns / refunds flow
-1. Open **Returns** page.
-2. Select an eligible order.
-3. Choose return reason.
-4. Submit return request.
+### 4.3 Returns
+- Submit return requests for eligible orders
+- Track return status updates
 
-### 3.7 Wallet / payment status (if applicable)
-1. Open **Wallet** page.
-2. Review balance, transactions, or payment history.
+### 4.4 Reviews
+- View and add product reviews (where supported by UI)
 
-## 4) Troubleshooting (UI-level)
-- If checkout fails: verify login/session, confirm payment method selection, and retry.
-- If cart doesn’t update: refresh the page and re-check quantities.
+## 5) Wallet and Subscriptions
+### 5.1 Wallet
+- Review wallet/balance related details and payment status (depending on backend wiring)
 
-## 5) UI sections reference
-- Product listing/cards
+### 5.2 Subscriptions
+- Manage active subscriptions and related fulfillment/ordering options
+
+## 6) Refills (schedule reminders)
+For refill-related products:
+- Use the **schedule refill** action to create a reminder
+- You’ll see reminder timing feedback (displayed as UI messages)
+- You may also be able to dismiss the refill reminder
+
+## 7) Seller / business experience (role-based)
+If you are an entrepreneur/business user, the module exposes seller tools.
+
+### 7.1 Manage products (catalog)
+Seller workflow includes:
+- Create a new product in the catalog (image upload supported)
+- Edit existing product details
+- Products can be:
+  - waiting for approval (pending)
+  - approved
+  - rejected/needs changes (status depends on moderation)
+
+Expected behavior:
+- New products are created and sent back for admin approval.
+- Editing uses an update route and updates moderation status accordingly.
+
+### 7.2 Manage inventory batches for products
+After a product is available, manage inventory batches:
+- Add stock batch:
+  - batch label
+  - stock quantity
+  - selling price, MRP
+  - dispatch location
+  - discount setup (amount/percentage + optional start/end dates)
+  - manufacturing/expiry dates (if expiryApplicable)
+  - return policy:
+    - returnAllowed
+    - returnWindowDays (required if returns are enabled)
+
+Validation behavior (enforced by UI):
+- MRP must be >= price
+- Discount end date cannot be earlier than start date
+- Expiry date cannot be earlier than manufacturing date
+- Expiry date is required if expiryApplicable is enabled
+
+### 7.3 Enable/disable product availability
+- Toggle product availability to hide/show in storefront
+- Batch availability can also be toggled:
+  - enable/disable a batch
+
+### 7.4 Seller orders: advance fulfillment
+In the seller orders area:
+- For each seller segment/order step, you can:
+  - advance to next status
+  - configure manual tracking fields (provider/trackingNumber/shipmentId)
+  - sync status when configured
+
+### 7.5 Seller returns: update return request status
+For returned items in seller orders:
+- Use the return-request update handler from UI
+- Keep an eye on seller-return-request count indicators (computed from returned items)
+
+## 8) Notifications and PWA behavior
+If notification permission is granted:
+- The module can run flash-sale ending notifications.
+If permission isn’t granted:
+- Flash-sale notifications won’t trigger.
+
+## 9) Troubleshooting
+- Remote search seems slow/unavailable:
+  - results may fall back to local/mock listing mode
+- Voice search not working:
+  - voice hook may not be available on your device
+- Smart search doesn’t apply:
+  - ensure there’s a searchText/plan input (the UI blocks “no input” smart search)
+- Product creation blocked:
+  - required fields:
+    - product name
+    - category
+  - image and payload creation follow the form’s validations
+- Inventory batch blocked:
+  - check price/MRP, dates ordering, expiry requirements, and return window days rules
+
+## 10) UI sections reference (quick)
+- Marketplace discovery: filters + smart search + favorites + flash sale
+- Quick view + share product to chat
 - Cart
-- Checkout
 - Orders
 - Returns
-- Wallet / payment-related components
-
+- Reviews
+- Wallet
+- Subscriptions
+- Seller catalog + inventory batches + seller orders + return updates

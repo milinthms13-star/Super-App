@@ -1,67 +1,106 @@
-# Hotel Booking User Manual (Front-End)
+# HotelBooking User Manual (Front-End)
 
-> Module: `src/modules/hotelbooking/HotelBooking.js`
+> Module: `src/modules/hotelbooking/HotelBooking.js`  
+> Product name in UI: **NilaStay — Kerala Hotel & Homestay Booking**
 
 ## 1) What this module does
-Hotel Booking helps users search for hotels, select dates/locations, and complete hotel booking requests (subject to availability and enabled payment options).
+HotelBooking helps you:
+- Find hotels/homestays/resorts in Kerala using filters (location, dates, guests, budget)
+- Browse property cards with rating, amenities, and verified badge
+- Request booking and contact properties via WhatsApp / call (demo actions)
+- View your **My Bookings**
+- Become a **Partner** (list your property, featured listing, business benefits)
+- Access **Admin Panel** (manage verification/commissions/bookings) in this build
 
-## 2) Entry point
-1. Login.
-2. Open **Hotel Booking** from app navigation.
-3. The module typically loads on a search/start screen.
+## 2) Entry point in the app
+1. Open **HotelBooking / NilaStay** from main navigation/menu.
 
-## 3) Step-by-step user flows
+## 3) Internal navigation (tabs)
+Inside the module you’ll see tabs:
+- 🔍 **Find Hotels**
+- 📋 **My Bookings**
+- 🏨 **Partner Hotels**
+- ⚙️ **Admin Panel**
 
-### 3.1 Search hotels
-1. Open the Hotel Booking module.
-2. Enter:
-   - destination/location (or select from suggestions)
-   - check-in date
-   - check-out date
-   - (optional) number of guests/room preferences
-3. Click **Search**.
+## 4) Find Hotels (search + filters)
+### 4.1 Set filters
+On the **Find Hotels** screen, fill:
+- 📍 **Location** (Kerala locations dropdown)
+- 📅 **Dates**
+  - Check-in
+  - Check-out
+- 👥 **Guests** (1 to 20)
+- 💰 **Budget (₹/night)** slider (up to 20,000)
+- 🏠 **Property Type** checkboxes (Hotel, Homestay, Resort, Lodge, Villa, etc.)
+- ✨ **Amenities** checkboxes (WiFi, AC, Parking, Pool, Restaurant, Spa, Pet Friendly, etc.)
+- Sorting:
+  - Sort by **Rating**
+  - **Price: Low to High**
+  - **Price: High to Low**
 
-Expected result:
-- Hotel options appear with price, availability, and basic details.
+### 4.2 View results
+Results are displayed as property cards showing:
+- Name
+- Verified status (✓ Verified)
+- Rating + review count
+- Location, type, price per night
+- Short description
+- Up to 4 amenities as tags
+- Images (first image shown)
 
-### 3.2 View hotel details
-1. Click a hotel card/listing.
-2. Review:
-   - room types and rates (if shown)
-   - amenities
-   - cancellation/house rules (if available)
+## 5) Request booking / contact
+From each hotel card you can trigger demo actions:
+- **Request Booking**  
+- **WhatsApp** (opens chat with the property WhatsApp number)
+- **Call** (initiates phone call to the property phone number)
 
-Expected result:
-- Hotel detail page shows more information and booking actions.
+Expected behavior (demo):
+- The UI shows an alert that booking/contact would be handled via booking form + WhatsApp/call in a full implementation.
 
-### 3.3 Select room and book
-1. Choose a room/rate option (if supported).
-2. Confirm guest count/preferences.
-3. Proceed to booking/checkout step.
-4. Submit booking request (and payment if integrated).
+## 6) My Bookings
+In **My Bookings** you can see booking history cards such as:
+- Property name
+- Status (e.g., Confirmed)
+- Dates, guests, and total amount
+- Actions:
+  - **View Details**
+  - **Contact Hotel**
 
-Expected result:
-- Booking confirmation is shown and appears in “My Bookings” if enabled.
+## 7) Partner With Us
+In **Partner Hotels** you can see partner options:
+1. **Hotel Registration**
+   - Free basic listing
+   - Direct customer contact
+   - Commission: 10% per booking
+   - WhatsApp booking integration
+2. **Featured Listing**
+   - Premium visibility
+   - ₹299/month
+   - Analytics dashboard
+3. **Business Benefits**
+   - Reach Kerala tourists
+   - No booking fees (for hotels)
+   - Verified reviews system
 
-### 3.4 View bookings
-1. Open **My Bookings** / **Bookings** (if present).
-2. Select a booking to see status/details.
+These are informational/demo CTAs in this build.
 
-Expected result:
-- Status, booking reference, and relevant details are visible.
+## 8) Admin Panel
+In **Admin Panel** (admin build) you can view:
+- Dashboard stats (Total Hotels, Active Bookings, monthly revenue, commission earned)
+- Hotel verification queue (example “Pending approvals: X hotels”)
+- Commission management (current rate example: 10%)
+- Booking management (today’s bookings)
 
-## 4) Troubleshooting (UI-level)
-- Search returns nothing:
-  - Adjust dates or location.
-  - Try fewer filters (if any).
-- Booking submission fails:
-  - Verify login.
-  - Confirm all required fields (guest/room selection).
-  - Retry after network recovery.
+## 9) Troubleshooting
+- No properties found:
+  - loosen filters (remove amenities/types, increase budget, change location)
+- Booking/contact buttons:
+  - actions are demo alerts in this build; confirm WhatsApp/call integrations exist in production.
+- My Bookings empty:
+  - bookings may not be created in this demo; use Request Booking actions.
 
-## 5) UI sections reference
-- Search form
-- Hotel cards/listing
-- Hotel detail + room/rate selection
-- Booking confirmation
-- My Bookings view
+## 10) UI sections reference (quick)
+- Find Hotels: filters + property cards + Request Booking / WhatsApp / Call
+- My Bookings: booking history cards + actions
+- Partner Hotels: registration + featured + benefits info
+- Admin Panel: stats + verification queue + commission/booking management

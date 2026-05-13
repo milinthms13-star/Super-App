@@ -9,7 +9,17 @@
   margin: 0 0 8px;
 }
 
-.devadarshan-hub p {
+..devadarshan-hub p {
   margin: 0;
   opacity: 0.8;
+}
+
+.devadarshan-note {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 4px solid #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.95rem;
+  line-height: 1.4;
 }

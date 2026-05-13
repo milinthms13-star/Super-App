@@ -76,7 +76,7 @@ const ImageLightbox = ({ images = [], initialIndex = 0, onClose }) => {
         <div className={`lightbox-image-wrapper ${isZoomed ? 'zoomed' : ''}`}>
           <img
             src={currentImage.data || currentImage.url || currentImage}
-            alt={`Image ${currentIndex + 1}`}
+            alt={`Photo ${currentIndex + 1} of ${images.length}`}
             className="lightbox-image"
             onClick={() => setIsZoomed(!isZoomed)}
           />

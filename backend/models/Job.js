@@ -28,6 +28,14 @@ const jobSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  salaryMin: {
+    type: Number,
+    default: 0
+  },
+  salaryMax: {
+    type: Number,
+    default: 0
+  },
   experience: {
     type: String,
     required: true
@@ -94,6 +102,41 @@ const jobSchema = new mongoose.Schema({
     type: String,
     enum: ['onsite', 'remote', 'hybrid']
   },
+  district: {
+    type: String
+  },
+  visaType: {
+    type: String
+  },
+  accommodationProvided: {
+    type: Boolean,
+    default: false
+  },
+  contractTerms: {
+    type: String
+  },
+  gulfSafetyChecklist: {
+    agencyLicenseNumber: {
+      type: String,
+      trim: true
+    },
+    medicalInsuranceProvided: {
+      type: Boolean,
+      default: false
+    },
+    returnTicketProvided: {
+      type: Boolean,
+      default: false
+    },
+    overtimePolicy: {
+      type: String,
+      trim: true
+    },
+    warningNotes: {
+      type: String,
+      trim: true
+    }
+  },
   postedAt: {
     type: Date,
     default: Date.now
@@ -112,6 +155,24 @@ const jobSchema = new mongoose.Schema({
   },
   tags: [{
     type: String
+  }],
+  reports: [{
+    reportedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    reason: {
+      type: String,
+      trim: true
+    },
+    details: {
+      type: String,
+      trim: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
   }]
 }, {
   timestamps: true

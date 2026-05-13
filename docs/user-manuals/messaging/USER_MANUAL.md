@@ -1,61 +1,150 @@
 # Messaging User Manual (Front-End)
 
-> Module: `src/modules/messaging/Messaging.js`
+> Module: `src/modules/messaging/Messaging.js`  
+> Product name in UI: **LinkUp Messaging** (chat, calls, files, groups, notifications, privacy controls)
 
 ## 1) What this module does
-Messaging provides chatrooms, contact lists, message composition, file upload, emoji picker, mentions, message search/pagination, read receipts, and notification controls.
+Messaging is a real-time communication workspace with:
+- Direct **chats** and **chatrooms / groups**
+- **Chat list** + **chat window** (message thread)
+- **Contacts** browsing with filters (all / blocked / favorites / family)
+- **Voice/video/audio call windows** (emergency and regular calls)
+- **File upload** inside chats
+- **AI Smart Replies / suggestions**
+- Notification center (bell) + optional desktop/pwa notifications
+- Privacy & visibility controls:
+  - visibility settings
+  - contact means settings
+  - scheduled/block/family access management
+- Optional end-to-end style **encryption status** display (per chat, backend-driven)
 
-## 2) Step-by-step user flows
+## 2) Entry point in the app
+1. Open **Messaging / LinkUp** from main navigation/menu.
 
-### 2.1 Start or open a chatroom
-1. Open Messaging.
-2. Select a chatroom from the chat list.
-3. The chat panel loads the thread.
+## 3) Main areas (internal UI)
+Depending on what’s active, the module shows:
+- **Chat List** (your chats)
+- **Chat Window** (messages for selected chat)
+- **Contacts List** (browse/filter who you can connect/chat with)
+- **Call Window** (when a call is incoming/active)
+- **Settings / Visibility** and other management panels (via internal tabs)
 
-### 2.2 Create a new chatroom
-1. Click **Create chatroom**.
-2. Choose members/contacts.
-3. Name the chatroom.
-4. Save/confirm creation.
+## 4) Start a conversation (direct chat / invitations)
+### 4.1 Send an invitation (connect)
+1. Go to **Contacts**.
+2. Find a user and send an invitation.
+3. The recipient can accept/reject from their side.
 
-### 2.3 Send a message
-1. Open a chatroom.
-2. Type your message in the input box.
+Expected behavior:
+- After acceptance, you can chat.
+- Pending invitations are tracked and displayed.
+
+### 4.2 Accept / reject invitations
+When you have pending invitations:
+- **Accept**: opens access to chat and reloads contacts/chats
+- **Reject**: marks invitation rejected (and reloads the invitation list)
+
+## 5) View chats (Chat List)
+In the chat list you can see for each conversation:
+- chat title (group name or other participant name)
+- preview of the last message
+- last activity time
+- unread count
+- online indicator for the other participant
+
+The chat list supports real-time updates via socket events:
+- new messages received
+- message updates/deletions
+- read status updates (seen)
+
+## 6) Open a chat and send messages
+1. Select a chat from the chat list.
+2. In the chat window:
+   - type a message
+   - optionally attach a file using **FileUpload**
+   - optionally request/insert AI Smart Replies
+
 3. Click **Send**.
 
-### 2.4 Attach a file (if supported)
-1. In the compose area, choose **Upload file**.
-2. Select a file.
-3. Send when upload completes.
+Validation:
+- If the message draft is empty, the UI asks you to type a message.
 
-### 2.5 Use emoji and mentions
-1. Click emoji picker.
-2. Select emoji.
-3. For mentions, type `@` and pick a suggestion.
+Expected behavior:
+- Messages are sent to backend.
+- If the network is offline or backend is delayed, the UI can retry queued outbox messages automatically.
 
-### 2.6 Search messages
-1. Use **Message search**.
-2. Enter keywords.
-3. Select results and navigate pages/threads.
+## 7) Message history + pagination
+When you open/scroll for older messages:
+- the module loads messages by pages (default page size 20)
+- it can append older messages when requested
 
-### 2.7 Read receipts / visibility settings
-1. Open notification/read receipt panel.
-2. Configure visibility settings as per UI.
+Cleared chats:
+- If you clear chats, the UI keeps track of clear timestamps and filters messages accordingly.
 
-### 2.8 Manage contacts
-1. Open Contacts list.
-2. Add/remove contacts as allowed.
+## 8) Calls (incoming/active/ended/declined)
+When a call invitation arrives:
+- the module opens a call experience (CallWindow)
+- notifications are also generated (including desktop notification when permitted)
 
-## 3) Troubleshooting
-- If messages don’t send: refresh, verify connection, and re-open the chatroom.
-- If file uploads fail: validate file size/type and retry.
+Call lifecycle (UI behavior):
+- **Incoming call**: shown in messaging UI + optional desktop notification
+- **Accepted**: active call window opens
+- **Declined**: call window closes and a notification is added
+- **Ended**: call window closes when the active/incoming call ends
 
-## 4) UI sections reference
-- Chatroom browser/list
-- Chatroom creation
-- Chat window/thread
-- File upload
-- Emoji picker / mention suggestions
-- Message pagination/search
-- Read receipts/notification panel
+### Emergency calls
+The module supports emergency call events:
+- if an emergency call event is triggered, it can reopen the relevant chat context for the caller
 
+## 9) Chatrooms / groups
+If your workspace uses chatrooms:
+- navigate to chatrooms section
+- browse your rooms
+- select a chatroom to view messages (same messaging experience as direct chats)
+
+## 10) Contacts & filters
+Use the contacts filters to view:
+- **All**
+- **Blocked**
+- **Favorites**
+- **Family** contacts (family permission-aware behavior may apply)
+
+## 11) Notifications
+The messaging module loads notifications from backend and displays them in the UI (bell panel).
+You can enable desktop/pwa notifications:
+- via **Enable notifications** action
+
+If browser permission is not granted:
+- notifications won’t trigger desktop popups, but in-app notifications still work.
+
+## 12) Privacy, visibility, and access controls
+Messaging includes multiple management panels:
+- **Visibility Settings**
+- **Contact Means Settings**
+- **Scheduled Block Manager**
+- **Family Access Manager**
+These controls affect who can reach you and what contact actions are allowed (exact enforcement is backend-driven).
+
+## 13) Encryption status (per chat)
+When a chat is selected:
+- the module checks encryption status for that chat
+- UI reflects whether encryption is enabled for the selected conversation (based on backend response)
+
+## 14) Troubleshooting
+- Messages don’t send:
+  - check network connectivity (online/offline)
+  - wait for queued outbox retry (the module flushes outbox on reconnect)
+- No chats load:
+  - ensure user is logged in and apiCall is functional
+- Notifications don’t appear:
+  - verify browser permission in notification settings
+- Call issues:
+  - confirm socket connection is working and call event payload contains the correct chat id
+
+## 15) UI sections reference (quick)
+- Chat list: conversation selection + unread preview
+- Chat window: compose + send messages, files, AI hints
+- Contacts: browse and send invitations
+- Call window: manage call lifecycle + emergency calls
+- Chatrooms panels: group chat browsing/selection
+- Settings: visibility/contact means + scheduled block + family access

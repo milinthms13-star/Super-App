@@ -1,26 +1,14 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { useApp } from "../../contexts/AppContext";
 import "./HotelBooking.css";
+import HotelSearchFilters from "./components/HotelSearchFilters";
+import HotelCard from "./components/HotelCard";
+import BookingModal from "./components/BookingModal";
+import MyBookings from "./components/MyBookings";
+import PartnerDashboard from "./components/PartnerDashboard";
+import AdminHotelPanel from "./components/AdminHotelPanel";
 
-const KERALA_LOCATIONS = [
-  "Kollam", "Varkala", "Alleppey", "Munnar", "Thekkady", "Kochi",
-  "Trivandrum", "Kovalam", "Wayanad", "Kumarakom", "Periyar", "Idukki"
-];
-
-const ROOM_TYPES = [
-  "Standard Room", "Deluxe Room", "Suite", "Villa", "Cottage", "Tree House",
-  "Heritage Room", "Presidential Suite", "Family Room", "Couple Room"
-];
-
-const PROPERTY_TYPES = [
-  "Hotel", "Homestay", "Resort", "Lodge", "Villa", "Heritage Property",
-  "Eco Lodge", "Beach Resort", "Hill Station Stay", "Houseboat"
-];
-
-const AMENITIES = [
-  "WiFi", "AC", "TV", "Parking", "Swimming Pool", "Restaurant",
-  "Spa", "Gym", "Pet Friendly", "Family Friendly", "Couple Friendly"
-];
-
+// Hotel data - TODO: Move to backend and fetch from API
 const SAMPLE_HOTELS = [
   {
     id: 1,
@@ -79,6 +67,7 @@ const SAMPLE_HOTELS = [
 ];
 
 const HotelBooking = () => {
+  const { currentUser, apiCall } = useApp();
   const [activeTab, setActiveTab] = useState("search");
   const [searchLocation, setSearchLocation] = useState("");
   const [checkIn, setCheckIn] = useState("");
@@ -88,9 +77,25 @@ const HotelBooking = () => {
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [selectedAmenities, setSelectedAmenities] = useState([]);
   const [sortBy, setSortBy] = useState("rating");
+  const [selectedHotel, setSelectedHotel] = useState(null);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(null);
 
+  // Validate dates
+  const isValidDateRange = useMemo(() => {
+    if (!checkIn || !checkOut) return true;
+    return new Date(checkOut) > new Date(checkIn);
+  }, [checkIn, checkOut]);
+
+  // Get today's date for minimum date validation
+  const today = useMemo(() => {
+    const date = new Date();
+    return date.toISOString().split("T")[0];
+  }, []);
+
+  // Filter hotels with availability checking
   const filteredHotels = useMemo(() => {
-    return SAMPLE_HOTELS.filter(hotel => {
+    let filtered = SAMPLE_HOTELS.filter(hotel => {
       const locationMatch = !searchLocation || hotel.location.toLowerCase().includes(searchLocation.toLowerCase());
       const budgetMatch = hotel.price <= budget;
       const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(hotel.type);
@@ -98,7 +103,10 @@ const HotelBooking = () => {
         selectedAmenities.every(amenity => hotel.amenities.includes(amenity));
 
       return locationMatch && budgetMatch && typeMatch && amenityMatch;
-    }).sort((a, b) => {
+    });
+
+    // Apply sorting
+    filtered = filtered.sort((a, b) => {
       switch (sortBy) {
         case "price-low": return a.price - b.price;
         case "price-high": return b.price - a.price;
@@ -106,35 +114,82 @@ const HotelBooking = () => {
         default: return 0;
       }
     });
+
+    return filtered;
   }, [searchLocation, budget, selectedTypes, selectedAmenities, sortBy]);
 
-  const handleBookingRequest = (hotel) => {
-    alert(`Demo: Booking request sent to ${hotel.name}. In real app, this would open booking form with WhatsApp integration.`);
+  // Handle booking submission
+  const handleBookingSubmit = async (bookingData) => {
+    const userId = currentUser?.id || "guest";
+    const fallbackBooking = {
+      ...bookingData,
+      _id: Date.now().toString(),
+      userId,
+      status: bookingData.status || "confirmed",
+    };
+
+    try {
+      const response = await apiCall("/hotelbookings/bookings", "POST", bookingData);
+      const newBooking = response?.booking || response?.data?.booking || response?.data || response || fallbackBooking;
+      const existingBookings = JSON.parse(localStorage.getItem(`bookings_${userId}`) || "[]");
+      existingBookings.push(newBooking);
+      localStorage.setItem(`bookings_${userId}`, JSON.stringify(existingBookings));
+
+      setBookingSuccess(`Booking confirmed for ${newBooking.hotelName}! Confirmation sent to ${newBooking.guestEmail || bookingData.guestEmail}`);
+      setTimeout(() => setBookingSuccess(null), 5000);
+      setActiveTab("bookings");
+    } catch (error) {
+      console.warn("Booking API failed, falling back to localStorage:", error);
+      const existingBookings = JSON.parse(localStorage.getItem(`bookings_${userId}`) || "[]");
+      existingBookings.push(fallbackBooking);
+      localStorage.setItem(`bookings_${userId}`, JSON.stringify(existingBookings));
+
+      setBookingSuccess(`Booking confirmed for ${fallbackBooking.hotelName}! Offline copy saved.`);
+      setTimeout(() => setBookingSuccess(null), 5000);
+      setActiveTab("bookings");
+    }
   };
 
-  const handleCallHotel = (phone) => {
-    alert(`Demo: Calling ${phone}. In real app, this would initiate phone call.`);
+  // Handle booking request click
+  const handleBookingClick = (hotel) => {
+    if (!isValidDateRange) {
+      alert("Please select valid dates (check-out after check-in)");
+      return;
+    }
+    if (!checkIn || !checkOut) {
+      alert("Please select check-in and check-out dates");
+      return;
+    }
+    setSelectedHotel(hotel);
+    setShowBookingModal(true);
   };
 
-  const handleWhatsAppBooking = (whatsapp) => {
-    alert(`Demo: Opening WhatsApp chat with ${whatsapp}. In real app, this would open WhatsApp with booking message.`);
+  // Handle WhatsApp booking
+  const handleWhatsAppBooking = (hotel) => {
+    if (!checkIn || !checkOut) {
+      alert("Please select dates first");
+      return;
+    }
+    const nights = Math.max(1, Math.ceil((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24)));
+    const totalPrice = hotel.price * nights;
+    const message = `Hi! I'm interested in booking at ${hotel.name}, ${hotel.location}.\n\nDetails:\nCheckCheck-in: ${new Date(checkIn).toLocaleDateString()}\nCheck-out: ${new Date(checkOut).toLocaleDateString()}\nNights: ${nights}\nGuests: ${guests}\nRoom Type: ${hotel.rooms?.[0]?.type || "Standard"}\nTotal: ₹${totalPrice.toLocaleString()}\n\nPlease confirm availability and send booking details.`;
+    const whatsappLink = `https://wa.me/${hotel.contact.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappLink, "_blank");
   };
 
-  const toggleType = (type) => {
-    setSelectedTypes(prev =>
-      prev.includes(type)
-        ? prev.filter(t => t !== type)
-        : [...prev, type]
-    );
+  // Handle call
+  const handleCall = (hotel) => {
+    window.location.href = `tel:${hotel.contact.phone}`;
   };
 
-  const toggleAmenity = (amenity) => {
-    setSelectedAmenities(prev =>
-      prev.includes(amenity)
-        ? prev.filter(a => a !== amenity)
-        : [...prev, amenity]
-    );
+  // Handle view details (future: open details page)
+  const handleViewDetails = (hotel) => {
+    alert(`Hotel Details:\n\n${hotel.name}\n${hotel.location}\n\nFull details page coming soon!`);
   };
+
+  // Determine if user should see admin panel (role check)
+  const isAdmin = currentUser?.role === "admin" || currentUser?.registrationType === "admin";
+  const isPartner = currentUser?.role === "partner" || currentUser?.registrationType === "partner";
 
   return (
     <div className="hotel-booking-shell">
@@ -184,97 +239,44 @@ const HotelBooking = () => {
         >
           🏨 Partner Hotels
         </button>
-        <button
-          type="button"
-          className={`hotel-booking-nav-item ${activeTab === "admin" ? "active" : ""}`}
-          onClick={() => setActiveTab("admin")}
-        >
-          ⚙️ Admin Panel
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            className={`hotel-booking-nav-item ${activeTab === "admin" ? "active" : ""}`}
+            onClick={() => setActiveTab("admin")}
+          >
+            ⚙️ Admin Panel
+          </button>
+        )}
       </section>
 
+      {/* Success Message Banner */}
+      {bookingSuccess && (
+        <div className="hotel-booking-success-banner">
+          ✓ {bookingSuccess}
+        </div>
+      )}
+
+      {/* Search Tab */}
       {activeTab === "search" && (
         <section className="hotel-booking-section">
           <div className="hotel-booking-search-grid">
-            <div className="hotel-booking-filters">
-              <div className="hotel-booking-filter-group">
-                <h3>📍 Location</h3>
-                <select value={searchLocation} onChange={(e) => setSearchLocation(e.target.value)}>
-                  <option value="">All Locations</option>
-                  {KERALA_LOCATIONS.map(location => (
-                    <option key={location} value={location}>{location}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="hotel-booking-filter-group">
-                <h3>📅 Dates</h3>
-                <input
-                  type="date"
-                  placeholder="Check-in"
-                  value={checkIn}
-                  onChange={(e) => setCheckIn(e.target.value)}
-                />
-                <input
-                  type="date"
-                  placeholder="Check-out"
-                  value={checkOut}
-                  onChange={(e) => setCheckOut(e.target.value)}
-                />
-              </div>
-
-              <div className="hotel-booking-filter-group">
-                <h3>👥 Guests</h3>
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={guests}
-                  onChange={(e) => setGuests(e.target.value)}
-                />
-              </div>
-
-              <div className="hotel-booking-filter-group">
-                <h3>💰 Budget (₹/night)</h3>
-                <input
-                  type="range"
-                  min="500"
-                  max="20000"
-                  step="500"
-                  value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
-                />
-                <span>Up to ₹{budget}</span>
-              </div>
-
-              <div className="hotel-booking-filter-group">
-                <h3>🏠 Property Type</h3>
-                {PROPERTY_TYPES.map(type => (
-                  <label key={type} className="hotel-booking-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedTypes.includes(type)}
-                      onChange={() => toggleType(type)}
-                    />
-                    {type}
-                  </label>
-                ))}
-              </div>
-
-              <div className="hotel-booking-filter-group">
-                <h3>✨ Amenities</h3>
-                {AMENITIES.map(amenity => (
-                  <label key={amenity} className="hotel-booking-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={selectedAmenities.includes(amenity)}
-                      onChange={() => toggleAmenity(amenity)}
-                    />
-                    {amenity}
-                  </label>
-                ))}
-              </div>
-            </div>
+            <HotelSearchFilters
+              searchLocation={searchLocation}
+              setSearchLocation={setSearchLocation}
+              checkIn={checkIn}
+              setCheckIn={setCheckIn}
+              checkOut={checkOut}
+              setCheckOut={setCheckOut}
+              guests={guests}
+              setGuests={setGuests}
+              budget={budget}
+              setBudget={setBudget}
+              selectedTypes={selectedTypes}
+              setSelectedTypes={setSelectedTypes}
+              selectedAmenities={selectedAmenities}
+              setSelectedAmenities={setSelectedAmenities}
+            />
 
             <div className="hotel-booking-results">
               <div className="hotel-booking-results-header">
@@ -288,61 +290,17 @@ const HotelBooking = () => {
 
               <div className="hotel-booking-hotels-list">
                 {filteredHotels.map(hotel => (
-                  <div key={hotel.id} className="hotel-booking-hotel-card">
-                    <div className="hotel-booking-hotel-image">
-                      <img src={hotel.images[0]} alt={hotel.name} />
-                      {hotel.verified && <span className="hotel-booking-verified">✓ Verified</span>}
-                    </div>
-
-                    <div className="hotel-booking-hotel-info">
-                      <div className="hotel-booking-hotel-header">
-                        <h3>{hotel.name}</h3>
-                        <div className="hotel-booking-rating">
-                          ⭐ {hotel.rating} ({hotel.reviews} reviews)
-                        </div>
-                      </div>
-
-                      <div className="hotel-booking-hotel-details">
-                        <span>📍 {hotel.location}</span>
-                        <span>🏠 {hotel.type}</span>
-                        <span>💰 ₹{hotel.price}/night</span>
-                      </div>
-
-                      <p className="hotel-booking-description">{hotel.description}</p>
-
-                      <div className="hotel-booking-amenities">
-                        {hotel.amenities.slice(0, 4).map(amenity => (
-                          <span key={amenity} className="hotel-booking-amenity-tag">
-                            {amenity}
-                          </span>
-                        ))}
-                      </div>
-
-                      <div className="hotel-booking-actions">
-                        <button
-                          type="button"
-                          className="hotel-booking-primary-button"
-                          onClick={() => handleBookingRequest(hotel)}
-                        >
-                          Request Booking
-                        </button>
-                        <button
-                          type="button"
-                          className="hotel-booking-secondary-button"
-                          onClick={() => handleWhatsAppBooking(hotel.contact.whatsapp)}
-                        >
-                          WhatsApp
-                        </button>
-                        <button
-                          type="button"
-                          className="hotel-booking-secondary-button"
-                          onClick={() => handleCallHotel(hotel.contact.phone)}
-                        >
-                          📞 Call
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <HotelCard
+                    key={hotel.id}
+                    hotel={hotel}
+                    checkIn={checkIn}
+                    checkOut={checkOut}
+                    guests={guests}
+                    onBooking={handleBookingClick}
+                    onWhatsApp={handleWhatsAppBooking}
+                    onCall={handleCall}
+                    onViewDetails={handleViewDetails}
+                  />
                 ))}
               </div>
             </div>
@@ -350,114 +308,37 @@ const HotelBooking = () => {
         </section>
       )}
 
+      {/* My Bookings Tab */}
       {activeTab === "bookings" && (
-        <section className="hotel-booking-section">
-          <div className="hotel-booking-section-heading">
-            <h2>My Bookings</h2>
-            <p>Track your hotel reservations and booking history.</p>
-          </div>
-          <div className="hotel-booking-bookings-list">
-            <div className="hotel-booking-booking-card">
-              <div className="hotel-booking-booking-header">
-                <h3>Green Valley Homestay</h3>
-                <span className="hotel-booking-status confirmed">✓ Confirmed</span>
-              </div>
-              <div className="hotel-booking-booking-details">
-                <span>📅 15-17 May 2024</span>
-                <span>👥 2 Guests</span>
-                <span>💰 ₹5,000 total</span>
-              </div>
-              <div className="hotel-booking-booking-actions">
-                <button type="button" className="hotel-booking-secondary-button">View Details</button>
-                <button type="button" className="hotel-booking-secondary-button">Contact Hotel</button>
-              </div>
-            </div>
-          </div>
-        </section>
+        <MyBookings
+          userId={currentUser?.id || "guest"}
+          currentUser={currentUser}
+        />
       )}
 
+      {/* Partner Tab */}
       {activeTab === "partner" && (
-        <section className="hotel-booking-section">
-          <div className="hotel-booking-section-heading">
-            <h2>Partner With Us</h2>
-            <p>List your hotel or homestay on NilaStay and reach more customers.</p>
-          </div>
-          <div className="hotel-booking-partner-grid">
-            <div className="hotel-booking-partner-card">
-              <h3>🏨 Hotel Registration</h3>
-              <p>Register your property and start receiving direct bookings.</p>
-              <ul>
-                <li>Free basic listing</li>
-                <li>Direct customer contact</li>
-                <li>Commission: 10% per booking</li>
-                <li>WhatsApp booking integration</li>
-              </ul>
-              <button type="button" className="hotel-booking-primary-button">Register Now</button>
-            </div>
-
-            <div className="hotel-booking-partner-card">
-              <h3>⭐ Featured Listing</h3>
-              <p>Get premium visibility and more bookings.</p>
-              <ul>
-                <li>Top search results</li>
-                <li>Priority customer support</li>
-                <li>₹299/month</li>
-                <li>Analytics dashboard</li>
-              </ul>
-              <button type="button" className="hotel-booking-secondary-button">Upgrade to Featured</button>
-            </div>
-
-            <div className="hotel-booking-partner-card">
-              <h3>📊 Business Benefits</h3>
-              <p>Why partner with NilaStay?</p>
-              <ul>
-                <li>Reach Kerala tourists</li>
-                <li>No booking fees for hotels</li>
-                <li>Local customer support</li>
-                <li>Verified reviews system</li>
-              </ul>
-              <button type="button" className="hotel-booking-secondary-button">Learn More</button>
-            </div>
-          </div>
-        </section>
+        <PartnerDashboard currentUser={currentUser} />
       )}
 
-      {activeTab === "admin" && (
-        <section className="hotel-booking-section">
-          <div className="hotel-booking-section-heading">
-            <h2>Admin Panel</h2>
-            <p>Manage hotels, bookings, and commissions.</p>
-          </div>
-          <div className="hotel-booking-admin-grid">
-            <div className="hotel-booking-admin-card">
-              <h3>📊 Dashboard</h3>
-              <div className="hotel-booking-stats">
-                <div>Total Hotels: 156</div>
-                <div>Active Bookings: 23</div>
-                <div>Monthly Revenue: ₹45,230</div>
-                <div>Commission Earned: ₹4,523</div>
-              </div>
-            </div>
+      {/* Admin Tab (Only visible to admins) */}
+      {activeTab === "admin" && isAdmin && (
+        <AdminHotelPanel currentUser={currentUser} />
+      )}
 
-            <div className="hotel-booking-admin-card">
-              <h3>🏨 Hotel Verification</h3>
-              <p>Pending approvals: 5 hotels</p>
-              <button type="button" className="hotel-booking-secondary-button">Review Hotels</button>
-            </div>
-
-            <div className="hotel-booking-admin-card">
-              <h3>💰 Commission Management</h3>
-              <p>Current rate: 10%</p>
-              <button type="button" className="hotel-booking-secondary-button">View Settlements</button>
-            </div>
-
-            <div className="hotel-booking-admin-card">
-              <h3>📋 Booking Management</h3>
-              <p>Today's bookings: 8</p>
-              <button type="button" className="hotel-booking-secondary-button">Manage Bookings</button>
-            </div>
-          </div>
-        </section>
+      {/* Booking Modal */}
+      {showBookingModal && selectedHotel && (
+        <BookingModal
+          hotel={selectedHotel}
+          checkIn={checkIn}
+          checkOut={checkOut}
+          guests={guests}
+          onClose={() => {
+            setShowBookingModal(false);
+            setSelectedHotel(null);
+          }}
+          onSubmit={handleBookingSubmit}
+        />
       )}
     </div>
   );

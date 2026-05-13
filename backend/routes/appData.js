@@ -40,11 +40,19 @@ const {
 } = require('../utils/realEstateStore');
 const { listRestaurants } = require('../utils/restaurantStore');
 const User = require('../models/User');
+const Order = require('../models/Order');
+const EducationState = require('../models/EducationState');
+const EducationEnrollment = require('../models/EducationEnrollment');
+const EducationScholarshipApplication = require('../models/EducationScholarshipApplication');
+const EducationCommunityMembership = require('../models/EducationCommunityMembership');
+const EducationTuitionRequest = require('../models/EducationTuitionRequest');
+const CheckoutService = require('../services/CheckoutService');
 const devAuthStore = require('../utils/devAuthStore');
 const { deleteGridFSFile, uploadBufferToGridFS } = require('../utils/gridfs');
 const { ADMIN_EMAIL } = require('../config/constants');
 const { validatePhone } = require('../utils/validators');
 const { sendEmailViaGmail, hasGmailDeliveryConfig } = require('../config/gmail');
+const logger = require('../config/logger');
 
 const router = express.Router();
 const upload = multer({
@@ -280,6 +288,35 @@ const educationStateSchema = Joi.object({
   enrolledCourseIds: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
   appliedScholarships: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
   joinedGroups: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
+});
+
+const educationEnrollmentSchema = Joi.object({
+  courseId: Joi.string().trim().required(),
+  courseTitle: Joi.string().trim().default(''),
+  amount: Joi.number().min(0).default(0),
+  paymentMethod: Joi.string().trim().default('none'),
+  paymentGateway: Joi.string().trim().default('none'),
+});
+
+const educationScholarshipSchema = Joi.object({
+  scholarshipName: Joi.string().trim().required(),
+});
+
+const educationGroupJoinSchema = Joi.object({
+  groupTitle: Joi.string().trim().required(),
+});
+
+const educationTuitionRequestSchema = Joi.object({
+  subject: Joi.string().trim().required(),
+  details: Joi.string().allow('').trim().default(''),
+});
+
+const educationPaymentConfirmSchema = Joi.object({
+  paymentId: Joi.string().trim().required(),
+  razorpay_order_id: Joi.string().trim().allow('').default(''),
+  razorpay_payment_id: Joi.string().trim().allow('').default(''),
+  razorpay_signature: Joi.string().trim().allow('').default(''),
+  stripePaymentIntentId: Joi.string().trim().allow('').default(''),
 });
 
 const slugifyCategoryName = (value = '') =>
@@ -593,28 +630,46 @@ const normalizeEducationState = (state = {}) => {
   };
 };
 
-const getUserEducationStateFromFile = async (userEmail) => {
-  const currentData = await devAppDataStore.readAppData();
+const buildEducationRecordId = (prefix) =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const getOrCreateEducationState = async (userEmail) => {
   const normalizedEmail = normalizeEmailAddress(userEmail);
-  return normalizeEducationState(currentData.userEducation?.[normalizedEmail]);
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  let stateDoc = await EducationState.findOne({ userEmail: normalizedEmail });
+  if (!stateDoc) {
+    stateDoc = await EducationState.create({
+      userEmail: normalizedEmail,
+      enrolledCourseIds: [],
+      appliedScholarships: [],
+      joinedGroups: [],
+    });
+  }
+
+  return stateDoc;
+};
+
+const getUserEducationStateFromDB = async (userEmail) => {
+  const stateDoc = await getOrCreateEducationState(userEmail);
+  return normalizeEducationState(stateDoc || {});
 };
 
 const updateUserEducationState = async (userEmail, updater) => {
-  const normalizedEmail = normalizeEmailAddress(userEmail);
-  const nextData = await devAppDataStore.updateAppData(async (currentData) => {
-    const currentState = normalizeEducationState(currentData.userEducation?.[normalizedEmail]);
-    const nextState = normalizeEducationState(await updater(currentState));
+  const stateDoc = await getOrCreateEducationState(userEmail);
+  if (!stateDoc) {
+    return normalizeEducationState();
+  }
 
-    return {
-      ...currentData,
-      userEducation: {
-        ...(currentData.userEducation || {}),
-        [normalizedEmail]: nextState,
-      },
-    };
-  });
-
-  return normalizeEducationState(nextData.userEducation?.[normalizedEmail]);
+  const currentState = normalizeEducationState(stateDoc);
+  const nextState = normalizeEducationState(await updater(currentState));
+  stateDoc.enrolledCourseIds = nextState.enrolledCourseIds;
+  stateDoc.appliedScholarships = nextState.appliedScholarships;
+  stateDoc.joinedGroups = nextState.joinedGroups;
+  await stateDoc.save();
+  return normalizeEducationState(stateDoc);
 };
 
 const getClassifiedPublicInteractionGuard = (listing = {}, user = {}) => {
@@ -1381,7 +1436,7 @@ router.get('/public', async (req, res) => {
 
 router.get('/education/state', authenticate, async (req, res) => {
   try {
-    const state = await getUserEducationStateFromFile(
+    const state = await getUserEducationStateFromDB(
       req.user?.email || req.user?.id || req.user?._id
     );
     return res.json({
@@ -1426,6 +1481,372 @@ router.patch('/education/state', authenticate, async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to save education state.',
+      error: saveError.message,
+    });
+  }
+});
+
+router.post('/education/enroll', authenticate, async (req, res) => {
+  const { error, value } = educationEnrollmentSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+    const amount = Number(value.amount || 0);
+    const paymentGateway = value.paymentGateway || 'razorpay';
+    const paymentMethod = value.paymentMethod || 'upi';
+    const now = new Date();
+    const currentState = await getUserEducationStateFromDB(userIdentifier);
+
+    if ((currentState.enrolledCourseIds || []).includes(value.courseId)) {
+      return res.json({
+        success: true,
+        data: {
+          state: currentState,
+          alreadyEnrolled: true,
+        },
+      });
+    }
+
+    if (amount > 0) {
+      const activePending = await EducationEnrollment.findOne({
+        userEmail,
+        courseId: value.courseId,
+        status: { $in: ['payment_pending', 'payment_verification_pending'] },
+      })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      if (activePending) {
+        return res.status(409).json({
+          success: false,
+          message: 'Payment is already pending for this course. Complete or retry payment.',
+          data: { enrollment: activePending, state: currentState },
+        });
+      }
+    }
+
+    const enrollment = await EducationEnrollment.create({
+      enrollmentId: buildEducationRecordId('education-enroll'),
+      userEmail,
+      courseId: value.courseId,
+      courseTitle: value.courseTitle || 'Course Enrollment',
+      amount,
+      paymentMethod,
+      paymentGateway,
+      status: amount > 0 ? 'payment_pending' : 'enrolled',
+      enrolledAt: amount > 0 ? null : now,
+    });
+
+    if (amount <= 0) {
+      const state = await updateUserEducationState(userIdentifier, (stateInput) => ({
+        ...stateInput,
+        enrolledCourseIds: [...new Set([...(stateInput.enrolledCourseIds || []), value.courseId])],
+      }));
+
+      return res.json({
+        success: true,
+        data: {
+          state,
+          enrollment,
+          order: null,
+          paymentDetails: null,
+          requiresPayment: false,
+        },
+      });
+    }
+
+    const order = new Order({
+      customerEmail: req.user?.email || '',
+      customerName: req.user?.name || req.user?.fullName || '',
+      amount,
+      subtotal: amount,
+      total: amount,
+      taxAmount: 0,
+      deliveryFee: 0,
+      deliveryAddress: 'Education course purchase',
+      items: [
+        {
+          courseId: value.courseId,
+          title: value.courseTitle || 'Course Enrollment',
+          price: amount,
+          module: 'education',
+          enrollmentId: enrollment.enrollmentId,
+        },
+      ],
+      paymentMethod,
+      paymentGateway,
+      status: 'Pending Payment',
+      userId: String(req.user?.id || req.user?._id || ''),
+    });
+
+    await order.save();
+    const orderInfo = { orderId: order._id.toString(), status: order.status, amount: order.total || order.amount };
+    const paymentDetails = await CheckoutService.initializePayment(order._id, String(req.user?.id || req.user?._id || ''), paymentGateway);
+
+    enrollment.orderId = order._id.toString();
+    enrollment.paymentRecordId = String(paymentDetails?.paymentId || '');
+    await enrollment.save();
+
+    return res.json({
+      success: true,
+      data: {
+        state: currentState,
+        enrollment,
+        order: orderInfo,
+        paymentDetails,
+        requiresPayment: true,
+      },
+    });
+  } catch (saveError) {
+    logger.error('education enroll error:', saveError);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to enroll in education course.',
+      error: saveError.message,
+    });
+  }
+});
+
+router.post('/education/enroll/:enrollmentId/confirm-payment', authenticate, async (req, res) => {
+  const { error, value } = educationPaymentConfirmSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+    const enrollmentId = String(req.params.enrollmentId || '').trim();
+
+    const enrollment = await EducationEnrollment.findOne({
+      enrollmentId,
+      userEmail,
+    });
+
+    if (!enrollment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Enrollment record not found.',
+      });
+    }
+
+    if (enrollment.status === 'enrolled') {
+      const state = await getUserEducationStateFromDB(userIdentifier);
+      return res.json({
+        success: true,
+        data: { state, enrollment, alreadyConfirmed: true },
+      });
+    }
+
+    if (!['payment_pending', 'payment_verification_pending', 'payment_failed'].includes(enrollment.status)) {
+      return res.status(409).json({
+        success: false,
+        message: `Enrollment cannot be confirmed from status "${enrollment.status}".`,
+      });
+    }
+
+    const paymentRecordId = value.paymentId || enrollment.paymentRecordId;
+    if (!paymentRecordId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment record id is required for confirmation.',
+      });
+    }
+
+    const paymentVerification = await CheckoutService.verifyPayment(paymentRecordId, {
+      razorpay_order_id: value.razorpay_order_id,
+      razorpay_payment_id: value.razorpay_payment_id,
+      razorpay_signature: value.razorpay_signature,
+      stripePaymentIntentId: value.stripePaymentIntentId,
+    });
+
+    const state = await updateUserEducationState(userIdentifier, (currentState) => ({
+      ...currentState,
+      enrolledCourseIds: [...new Set([...(currentState.enrolledCourseIds || []), enrollment.courseId])],
+    }));
+
+    enrollment.status = 'enrolled';
+    enrollment.paymentRecordId = String(paymentRecordId);
+    enrollment.paymentVerifiedAt = new Date();
+    enrollment.enrolledAt = new Date();
+    enrollment.errorReason = '';
+    await enrollment.save();
+
+    return res.json({
+      success: true,
+      data: {
+        state,
+        enrollment,
+        paymentVerification,
+      },
+    });
+  } catch (confirmError) {
+    logger.error('education payment confirmation error:', confirmError);
+    return res.status(400).json({
+      success: false,
+      message: confirmError.message || 'Payment confirmation failed.',
+    });
+  }
+});
+
+router.post('/education/scholarship', authenticate, async (req, res) => {
+  const { error, value } = educationScholarshipSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+    const stateBefore = await getUserEducationStateFromDB(userIdentifier);
+    if ((stateBefore.appliedScholarships || []).includes(value.scholarshipName)) {
+      return res.json({
+        success: true,
+        data: {
+          state: stateBefore,
+          alreadyApplied: true,
+        },
+      });
+    }
+
+    const state = await updateUserEducationState(userIdentifier, (currentState) => ({
+      ...currentState,
+      appliedScholarships: [...new Set([...(currentState.appliedScholarships || []), value.scholarshipName])],
+    }));
+
+    const scholarshipRecord = await EducationScholarshipApplication.create({
+      applicationId: buildEducationRecordId('education-scholarship'),
+      userEmail,
+      scholarshipName: value.scholarshipName,
+      status: 'submitted',
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        state,
+        scholarship: scholarshipRecord,
+      },
+    });
+  } catch (saveError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to save scholarship application.',
+      error: saveError.message,
+    });
+  }
+});
+
+router.post('/education/group', authenticate, async (req, res) => {
+  const { error, value } = educationGroupJoinSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+    const stateBefore = await getUserEducationStateFromDB(userIdentifier);
+    if ((stateBefore.joinedGroups || []).includes(value.groupTitle)) {
+      return res.json({
+        success: true,
+        data: {
+          state: stateBefore,
+          alreadyJoined: true,
+        },
+      });
+    }
+
+    const state = await updateUserEducationState(userIdentifier, (currentState) => ({
+      ...currentState,
+      joinedGroups: [...new Set([...(currentState.joinedGroups || []), value.groupTitle])],
+    }));
+
+    const groupRecord = await EducationCommunityMembership.create({
+      membershipId: buildEducationRecordId('education-group'),
+      userEmail,
+      groupTitle: value.groupTitle,
+      status: 'joined',
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        state,
+        group: groupRecord,
+      },
+    });
+  } catch (saveError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to join community group.',
+      error: saveError.message,
+    });
+  }
+});
+
+router.post('/education/tuition', authenticate, async (req, res) => {
+  const { error, value } = educationTuitionRequestSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+
+    const tuitionRecord = await EducationTuitionRequest.create({
+      requestId: buildEducationRecordId('education-tuition'),
+      userEmail,
+      subject: value.subject,
+      details: value.details,
+      status: 'submitted',
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        tuitionRequest: tuitionRecord,
+      },
+    });
+  } catch (saveError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to submit tuition request.',
       error: saveError.message,
     });
   }

@@ -9,12 +9,12 @@ const AutoRelist = ({
   const [enabled, setEnabled] = useState(currentConfig.enabled || false);
   const [autoRelistDelay, setAutoRelistDelay] = useState(currentConfig.autoRelistDelay || 7);
   const [maxRelists, setMaxRelists] = useState(currentConfig.maxRelists || 5);
-  const [currentRelists, setCurrentRelists] = useState(currentConfig.currentRelists || 0);
+  const [currentRelists, _setCurrentRelists] = useState(currentConfig.currentRelists || 0);
   const [adjustPrice, setAdjustPrice] = useState(currentConfig.adjustPrice || false);
   const [priceAdjustmentType, setPriceAdjustmentType] = useState(currentConfig.priceAdjustmentType || 'fixed');
   const [priceAdjustmentValue, setPriceAdjustmentValue] = useState(currentConfig.priceAdjustmentValue || 0);
   const [notifyMe, setNotifyMe] = useState(currentConfig.notifyMe !== false);
-  const [relistHistory, setRelistHistory] = useState(currentConfig.relistHistory || []);
+  const [relistHistory, _setRelistHistory] = useState(currentConfig.relistHistory || []);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 

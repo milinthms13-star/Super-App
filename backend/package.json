@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "test": "jest",
     "test:watch": "jest --watch",
+    "seed:business-services-catalog": "node scripts/seedBusinessServicesCatalog.js",
     "seed:phase6": "node seeds/phase6Indexes.js",
     "seed:phase7": "node seeds/phase7Indexes.js",
     "seed:phase8": "node seeds/phase8Indexes.js",

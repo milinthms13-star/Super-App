@@ -22,8 +22,19 @@ import ScheduledPosting from "./ScheduledPosting";
 import BulkImport from "./BulkImport";
 import QuickDuplicate from "./QuickDuplicate";
 
-// Map component - using a simple fallback for demonstration
+// Map component - uses environment variable for API key
 const MapComponent = ({ location, latitude = 0, longitude = 0 }) => {
+  const mapsApiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
+  
+  if (!mapsApiKey) {
+    console.warn('Google Maps API key not configured. Maps will not display.');
+    return (
+      <div className="classifieds-map-container" style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+        <p>Map unavailable - API key not configured</p>
+      </div>
+    );
+  }
+
   return (
     <div className="classifieds-map-container">
       <iframe
@@ -31,7 +42,7 @@ const MapComponent = ({ location, latitude = 0, longitude = 0 }) => {
         width="100%"
         height="300"
         style={{ border: "1px solid #ddd", borderRadius: "8px" }}
-        src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyDummyKey&q=${encodeURIComponent(location)}`}
+        src={`https://www.google.com/maps/embed/v1/place?key=${mapsApiKey}&q=${encodeURIComponent(location)}`}
         allowFullScreen=""
         loading="lazy"
         referrerPolicy="no-referrer-when-downgrade"

@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const Joi = require('joi');
 const Job = require('../models/Job');
 const JobApplication = require('../models/JobApplication');
 const JobSeekerProfile = require('../models/JobSeekerProfile');
 const EmployerProfile = require('../models/EmployerProfile');
+const JobSavedJob = require('../models/JobSavedJob');
+const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
@@ -44,6 +47,61 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+const APPLICATION_STATUSES = ['Applied', 'Viewed', 'Shortlisted', 'Interview', 'Selected', 'Rejected'];
+const PHONE_REGEX = /^\+?[0-9][0-9\s-]{7,14}$/;
+const LICENSE_REGEX = /^[A-Za-z0-9/-]{5,30}$/;
+
+const normalizeArrayField = (value = '') =>
+  Array.isArray(value)
+    ? value.map((item) => String(item || '').trim()).filter(Boolean)
+    : String(value || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+const parseSalaryNumbers = (salaryText = '') => {
+  const matches = String(salaryText || '')
+    .replace(/,/g, '')
+    .match(/\d+(\.\d+)?/g);
+  if (!matches || !matches.length) return { salaryMin: 0, salaryMax: 0 };
+  const numbers = matches.map((item) => Number(item)).filter(Number.isFinite);
+  if (!numbers.length) return { salaryMin: 0, salaryMax: 0 };
+  return {
+    salaryMin: Math.min(...numbers),
+    salaryMax: Math.max(...numbers),
+  };
+};
+
+const postJobValidationSchema = Joi.object({
+  title: Joi.string().trim().min(3).max(140).required(),
+  company: Joi.string().trim().min(2).max(140).required(),
+  location: Joi.string().trim().min(2).max(140).required(),
+  district: Joi.string().trim().allow('').max(80),
+  type: Joi.string().valid('local', 'gulf', 'it', 'gig').required(),
+  subtype: Joi.string().trim().min(2).max(120).required(),
+  salary: Joi.string().trim().min(3).max(80).required(),
+  experience: Joi.string().trim().min(2).max(80).required(),
+  description: Joi.string().trim().min(30).max(4000).required(),
+  requirements: Joi.string().trim().allow('').max(2000),
+  benefits: Joi.string().allow(''),
+  skills: Joi.string().allow(''),
+  jobType: Joi.string().valid('fulltime', 'parttime', 'contract', 'freelance', 'temporary').allow(''),
+  workMode: Joi.string().valid('onsite', 'remote', 'hybrid').allow(''),
+  contactEmail: Joi.string().email().required(),
+  contactPhone: Joi.string().pattern(PHONE_REGEX).required(),
+  companyWebsite: Joi.string().uri().allow(''),
+  isUrgent: Joi.boolean().default(false),
+  isFeatured: Joi.boolean().default(false),
+  visaType: Joi.string().allow('').max(80),
+  accommodationProvided: Joi.boolean().default(false),
+  contractTerms: Joi.string().allow('').max(2000),
+  agencyLicenseNumber: Joi.string().allow('').max(40),
+  medicalInsuranceProvided: Joi.boolean().default(false),
+  returnTicketProvided: Joi.boolean().default(false),
+  overtimePolicy: Joi.string().allow('').max(300),
+  warningNotes: Joi.string().allow('').max(500),
+});
+
 // Job Routes
 
 // Get all jobs with filters
@@ -53,9 +111,11 @@ router.get('/jobs', async (req, res) => {
       type,
       subtype,
       location,
-      salary,
       experience,
       skills,
+      district,
+      quickFilter,
+      q,
       page = 1,
       limit = 20,
       sort = '-postedAt'
@@ -66,11 +126,25 @@ router.get('/jobs', async (req, res) => {
     if (type) query.type = type;
     if (subtype) query.subtype = subtype;
     if (location) query.location = { $regex: location, $options: 'i' };
+    if (district) query.district = { $regex: district, $options: 'i' };
     if (experience) query.experience = experience;
     if (skills) {
       const skillsArray = skills.split(',').map(s => s.trim());
       query.skills = { $in: skillsArray };
     }
+    if (q) {
+      query.$or = [
+        { title: { $regex: q, $options: 'i' } },
+        { company: { $regex: q, $options: 'i' } },
+        { description: { $regex: q, $options: 'i' } },
+        { location: { $regex: q, $options: 'i' } }
+      ];
+    }
+
+    if (quickFilter === 'remote') query.workMode = 'remote';
+    if (quickFilter === 'gulf') query.type = 'gulf';
+    if (quickFilter === 'urgent') query.isUrgent = true;
+    if (quickFilter === 'high-salary') query.salaryMax = { $gte: 75000 };
 
     const jobs = await Job.find(query)
       .populate('postedBy', 'name email')
@@ -137,11 +211,57 @@ router.post('/jobs', authenticateToken, upload.array('documents', 5), async (req
       return res.status(403).json({ success: false, message: 'Job posting limit reached' });
     }
 
+    const { error, value } = postJobValidationSchema.validate(req.body, { abortEarly: true });
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    if (value.type === 'gulf') {
+      if (!employerProfile.isVerified) {
+        return res.status(403).json({
+          success: false,
+          message: 'Gulf jobs require verified employer/agency KYC.'
+        });
+      }
+
+      if (!LICENSE_REGEX.test(String(value.agencyLicenseNumber || '').trim())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Valid Gulf agency license number is required for Gulf jobs.'
+        });
+      }
+
+      if (!String(value.visaType || '').trim() || !String(value.contractTerms || '').trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Visa type and contract terms are required for Gulf jobs.'
+        });
+      }
+    }
+
+    const salaryNumbers = parseSalaryNumbers(value.salary);
+
     const jobData = {
-      ...req.body,
+      ...value,
       postedBy: req.user.id,
-      skills: req.body.skills ? req.body.skills.split(',').map(s => s.trim()) : [],
-      benefits: req.body.benefits ? req.body.benefits.split(',').map(b => b.trim()) : []
+      skills: normalizeArrayField(value.skills),
+      benefits: normalizeArrayField(value.benefits),
+      contactEmail: String(value.contactEmail || '').trim().toLowerCase(),
+      contactPhone: String(value.contactPhone || '').trim(),
+      salaryMin: salaryNumbers.salaryMin,
+      salaryMax: salaryNumbers.salaryMax,
+      isVerified: Boolean(employerProfile.isVerified),
+      gulfSafetyChecklist: {
+        agencyLicenseNumber: String(value.agencyLicenseNumber || '').trim(),
+        medicalInsuranceProvided: Boolean(value.medicalInsuranceProvided),
+        returnTicketProvided: Boolean(value.returnTicketProvided),
+        overtimePolicy: String(value.overtimePolicy || '').trim(),
+        warningNotes:
+          String(value.warningNotes || '').trim() ||
+          (value.type === 'gulf'
+            ? 'Never pay recruitment charges in cash. Verify offer letter and visa details before travel.'
+            : '')
+      }
     };
 
     const job = new Job(jobData);
@@ -171,12 +291,49 @@ router.put('/jobs/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
+    const candidatePayload = { ...job.toObject(), ...req.body };
+    const { error, value } = postJobValidationSchema.validate(candidatePayload, { abortEarly: true });
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+    const employerProfile = await EmployerProfile.findOne({ userId: req.user.id });
+    if (value.type === 'gulf') {
+      if (!employerProfile?.isVerified) {
+        return res.status(403).json({
+          success: false,
+          message: 'Gulf jobs require verified employer/agency KYC.'
+        });
+      }
+      if (!LICENSE_REGEX.test(String(value.agencyLicenseNumber || '').trim())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Valid Gulf agency license number is required for Gulf jobs.'
+        });
+      }
+    }
+    const salaryNumbers = parseSalaryNumbers(value.salary);
+
     const updatedJob = await Job.findByIdAndUpdate(
       req.params.id,
       {
-        ...req.body,
-        skills: req.body.skills ? req.body.skills.split(',').map(s => s.trim()) : job.skills,
-        benefits: req.body.benefits ? req.body.benefits.split(',').map(b => b.trim()) : job.benefits
+        ...value,
+        skills: normalizeArrayField(value.skills),
+        benefits: normalizeArrayField(value.benefits),
+        contactEmail: String(value.contactEmail || '').trim().toLowerCase(),
+        contactPhone: String(value.contactPhone || '').trim(),
+        salaryMin: salaryNumbers.salaryMin,
+        salaryMax: salaryNumbers.salaryMax,
+        gulfSafetyChecklist: {
+          agencyLicenseNumber: String(value.agencyLicenseNumber || '').trim(),
+          medicalInsuranceProvided: Boolean(value.medicalInsuranceProvided),
+          returnTicketProvided: Boolean(value.returnTicketProvided),
+          overtimePolicy: String(value.overtimePolicy || '').trim(),
+          warningNotes:
+            String(value.warningNotes || '').trim() ||
+            (value.type === 'gulf'
+              ? 'Never pay recruitment charges in cash. Verify offer letter and visa details before travel.'
+              : '')
+        }
       },
       { new: true }
     );
@@ -309,10 +466,33 @@ router.put('/applications/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
+    const statusMap = {
+      applied: 'Applied',
+      viewed: 'Viewed',
+      shortlisted: 'Shortlisted',
+      interview: 'Interview',
+      interviewed: 'Interview',
+      selected: 'Selected',
+      hired: 'Selected',
+      rejected: 'Rejected'
+    };
+    const requestedStatus = String(req.body.status || '').trim();
+    const normalizedStatus =
+      APPLICATION_STATUSES.includes(requestedStatus)
+        ? requestedStatus
+        : statusMap[requestedStatus.toLowerCase()];
+
+    if (!normalizedStatus) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Allowed: ${APPLICATION_STATUSES.join(', ')}`
+      });
+    }
+
     const updatedApplication = await JobApplication.findByIdAndUpdate(
       req.params.id,
       {
-        status: req.body.status,
+        status: normalizedStatus,
         notes: req.body.notes,
         interviewScheduled: req.body.interviewScheduled,
         interviewNotes: req.body.interviewNotes,
@@ -336,7 +516,13 @@ router.get('/profile', authenticateToken, async (req, res) => {
   try {
     let profile = await JobSeekerProfile.findOne({ userId: req.user.id });
     if (!profile) {
-      profile = new JobSeekerProfile({ userId: req.user.id });
+      const account = await User.findById(req.user.id).lean();
+      profile = new JobSeekerProfile({
+        userId: req.user.id,
+        fullName: account?.name || req.user.name || 'Job Seeker',
+        email: account?.email || req.user.email || 'unknown@example.com',
+        phone: account?.phone || ''
+      });
       await profile.save();
     }
     res.json({ success: true, data: profile });
@@ -418,7 +604,16 @@ router.get('/employer/profile', authenticateToken, async (req, res) => {
   try {
     let profile = await EmployerProfile.findOne({ userId: req.user.id });
     if (!profile) {
-      profile = new EmployerProfile({ userId: req.user.id });
+      const account = await User.findById(req.user.id).lean();
+      profile = new EmployerProfile({
+        userId: req.user.id,
+        companyName: account?.businessName || account?.name || 'My Company',
+        companyType: 'sme',
+        location: account?.location || 'Kerala',
+        contactEmail: account?.email || req.user.email || 'unknown@example.com',
+        contactPhone: account?.phone || '',
+        industry: account?.profession || 'General',
+      });
       await profile.save();
     }
     res.json({ success: true, data: profile });
@@ -487,6 +682,92 @@ router.get('/my-applications', authenticateToken, async (req, res) => {
   }
 });
 
+router.post('/jobs/:id/report', authenticateToken, async (req, res) => {
+  try {
+    const reason = String(req.body.reason || '').trim();
+    const details = String(req.body.details || '').trim();
+    if (!reason) {
+      return res.status(400).json({ success: false, message: 'Reason is required.' });
+    }
+
+    const updated = await Job.findByIdAndUpdate(
+      req.params.id,
+      {
+        $push: {
+          reports: {
+            reportedBy: req.user.id,
+            reason,
+            details,
+            createdAt: new Date(),
+          },
+        },
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Job not found.' });
+    }
+
+    return res.status(201).json({ success: true, message: 'Report submitted for moderation.' });
+  } catch (error) {
+    console.error('Error reporting job:', error);
+    return res.status(500).json({ success: false, message: 'Error reporting job' });
+  }
+});
+
+// Saved jobs (Job seeker)
+router.get('/saved-jobs', authenticateToken, async (req, res) => {
+  try {
+    const saved = await JobSavedJob.find({ userId: req.user.id })
+      .populate({
+        path: 'jobId',
+        select: 'title company location salary salaryMin salaryMax type subtype isUrgent isVerified postedAt workMode district isActive',
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const jobs = saved
+      .filter((entry) => entry.jobId && entry.jobId.isActive !== false)
+      .map((entry) => ({ ...entry.jobId, savedAt: entry.createdAt }));
+
+    res.json({ success: true, data: jobs });
+  } catch (error) {
+    console.error('Error loading saved jobs:', error);
+    res.status(500).json({ success: false, message: 'Error loading saved jobs' });
+  }
+});
+
+router.post('/saved-jobs/:jobId', authenticateToken, async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.jobId).select('_id isActive');
+    if (!job || !job.isActive) {
+      return res.status(404).json({ success: false, message: 'Job not found or inactive' });
+    }
+
+    const saved = await JobSavedJob.findOneAndUpdate(
+      { userId: req.user.id, jobId: req.params.jobId },
+      { $setOnInsert: { userId: req.user.id, jobId: req.params.jobId } },
+      { upsert: true, new: true }
+    );
+
+    res.status(201).json({ success: true, data: saved });
+  } catch (error) {
+    console.error('Error saving job:', error);
+    res.status(500).json({ success: false, message: 'Error saving job' });
+  }
+});
+
+router.delete('/saved-jobs/:jobId', authenticateToken, async (req, res) => {
+  try {
+    await JobSavedJob.deleteOne({ userId: req.user.id, jobId: req.params.jobId });
+    res.json({ success: true, message: 'Saved job removed.' });
+  } catch (error) {
+    console.error('Error removing saved job:', error);
+    res.status(500).json({ success: false, message: 'Error removing saved job' });
+  }
+});
+
 // Get my jobs (Employer)
 router.get('/my-jobs', authenticateToken, async (req, res) => {
   try {
@@ -497,6 +778,64 @@ router.get('/my-jobs', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching jobs:', error);
     res.status(500).json({ success: false, message: 'Error fetching jobs' });
+  }
+});
+
+// Employer dashboard analytics and latest activity
+router.get('/employer/dashboard', authenticateToken, async (req, res) => {
+  try {
+    const myJobs = await Job.find({ postedBy: req.user.id, isActive: true })
+      .sort('-postedAt')
+      .lean();
+    const jobIds = myJobs.map((job) => job._id);
+    const applications = jobIds.length
+      ? await JobApplication.find({ jobId: { $in: jobIds } })
+          .populate('jobId', 'title company location')
+          .populate('applicantId', 'name email')
+          .sort('-appliedAt')
+          .lean()
+      : [];
+
+    const statusCount = applications.reduce(
+      (acc, item) => {
+        const normalized = String(item.status || '').toLowerCase();
+        if (normalized === 'applied') acc.applied += 1;
+        else if (normalized === 'viewed') acc.viewed += 1;
+        else if (normalized === 'shortlisted') acc.shortlisted += 1;
+        else if (normalized === 'interview') acc.interview += 1;
+        else if (normalized === 'selected' || normalized === 'hired') acc.selected += 1;
+        else if (normalized === 'rejected') acc.rejected += 1;
+        return acc;
+      },
+      { applied: 0, viewed: 0, shortlisted: 0, interview: 0, selected: 0, rejected: 0 }
+    );
+
+    const jobApplicationCountById = applications.reduce((acc, item) => {
+      const id = String(item.jobId?._id || item.jobId || '');
+      acc[id] = (acc[id] || 0) + 1;
+      return acc;
+    }, {});
+
+    const jobsWithStats = myJobs.map((job) => ({
+      ...job,
+      applicationCount: jobApplicationCountById[String(job._id)] || 0,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        stats: {
+          activeJobs: myJobs.length,
+          totalApplications: applications.length,
+          ...statusCount,
+        },
+        jobs: jobsWithStats,
+        applications: applications.slice(0, 100),
+      },
+    });
+  } catch (error) {
+    console.error('Error loading employer dashboard:', error);
+    res.status(500).json({ success: false, message: 'Error loading employer dashboard' });
   }
 });
 

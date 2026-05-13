@@ -30,7 +30,8 @@ This folder contains step-by-step **user manuals for each front-end module** in 
 - [matrimonial](./matrimonial/USER_MANUAL.md)
 - [messaging](./messaging/USER_MANUAL.md)
 - [nilaaihub](./nilaaihub/USER_MANUAL.md)
-- [personaldiary](./mydiary/USER_MANUAL.md) *(repo maps this to `docs/user-manuals/mydiary`)*
+- [personaldiary](./personaldiary/USER_MANUAL.md) *(repo maps this to `docs/user-manuals/mydiary`)*
+- [jobportal](./jobportal/USER_MANUAL.md)
 - [quicklinks](./quicklinks/USER_MANUAL.md)
 - [realestate](./realestate/USER_MANUAL.md)
 - [reminderalert](./reminderalert/USER_MANUAL.md)
@@ -42,11 +43,3 @@ This folder contains step-by-step **user manuals for each front-end module** in 
 - [sos](./sos/USER_MANUAL.md)
 - [support](./support/USER_MANUAL.md)
 - [tourism](./tourism/USER_MANUAL.md)
-
-
-
-
-
-
-
-

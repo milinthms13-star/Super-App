@@ -12,12 +12,26 @@ const PAYMENT_OPTIONS = [
   { value: "card", label: "Card" },
 ];
 
+const USER_ROLES = [
+  { id: "customer", label: "Customer" },
+  { id: "restaurant", label: "Restaurant Partner" },
+  { id: "rider", label: "Delivery Partner" },
+  { id: "admin", label: "Administrator" },
+];
+
 const VIEWS = [
   { id: "customer", label: "Customer" },
   { id: "restaurant", label: "Restaurant Ops" },
   { id: "rider", label: "Delivery Ops" },
   { id: "admin", label: "Admin Ops" },
 ];
+
+const ROLE_VIEW_MAP = {
+  customer: ["customer"],
+  restaurant: ["restaurant"],
+  rider: ["rider"],
+  admin: ["admin"],
+};
 
 const ISSUE_OPTIONS = [
   { value: "late_delivery", label: "Late delivery" },
@@ -88,10 +102,49 @@ const FoodDelivery = () => {
   const [checkoutMessage, setCheckoutMessage] = useState("");
   const [trackingByOrderId, setTrackingByOrderId] = useState({});
   const [disputeDrafts, setDisputeDrafts] = useState({});
+  const [userRole, setUserRole] = useState("customer");
+  const [toastMessages, setToastMessages] = useState([]);
+  const [loadingRestaurants, setLoadingRestaurants] = useState(false);
+  const [loadingRestaurant, setLoadingRestaurant] = useState(false);
+  const [updatingCart, setUpdatingCart] = useState(false);
+  const [clearingCart, setClearingCart] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [trackingLoadingByOrderId, setTrackingLoadingByOrderId] = useState({});
+
+  const canAccessView = (viewId) => ROLE_VIEW_MAP[userRole]?.includes(viewId);
+
+  const addToast = (message, type = "info") => {
+    const toast = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      message,
+      type,
+    };
+    setToastMessages((current) => [toast, ...current]);
+    window.setTimeout(() => {
+      setToastMessages((current) => current.filter((item) => item.id !== toast.id));
+    }, 4200);
+  };
+
+  const clearToasts = () => setToastMessages([]);
+
+  const handleRoleChange = (nextRole) => {
+    setUserRole(nextRole);
+    if (!ROLE_VIEW_MAP[nextRole].includes(activeView)) {
+      setActiveView(nextRole);
+    }
+  };
 
   const loadRestaurants = async () => {
-    const restaurantList = await foodDeliveryService.getRestaurants();
-    setRestaurants(restaurantList);
+    setLoadingRestaurants(true);
+    try {
+      const restaurantList = await foodDeliveryService.getRestaurants();
+      setRestaurants(restaurantList);
+    } catch (error) {
+      console.error("Failed to load restaurants:", error);
+      addToast("Unable to load restaurant list. Try again later.", "error");
+    } finally {
+      setLoadingRestaurants(false);
+    }
   };
 
   const loadOrders = async () => {
@@ -100,6 +153,7 @@ const FoodDelivery = () => {
       setOrders(orderList);
     } catch (error) {
       console.error("Failed to load food orders:", error);
+      addToast("Unable to load your orders.", "error");
     }
   };
 
@@ -217,7 +271,13 @@ const FoodDelivery = () => {
 
   const getDraftForItem = (item) => customizationDrafts[item.id] || buildDefaultCustomizationDraft(item);
 
+  const cartCount = cart.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const cartTotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+  const activeRestaurantName = selectedRestaurant?.name || "";
+  const isCartReady = cart.length > 0;
+
   const openRestaurant = async (restaurant) => {
+    setLoadingRestaurant(true);
     try {
       const [restaurantMenu, serverCart] = await Promise.all([
         foodDeliveryService.getMenu(restaurant.id),
@@ -244,7 +304,9 @@ const FoodDelivery = () => {
       loadRecommendations(restaurant.id, serverCart.items || []);
     } catch (error) {
       console.error("Failed to load restaurant details:", error);
-      alert("Unable to load this restaurant right now.");
+      addToast("Unable to open this restaurant right now.", "error");
+    } finally {
+      setLoadingRestaurant(false);
     }
   };
 
@@ -274,6 +336,7 @@ const FoodDelivery = () => {
     }
 
     const draft = overrideDraft || getDraftForItem(item);
+    setUpdatingCart(true);
 
     try {
       const existingItem = cart.find((cartItem) => sameSelection(cartItem, item.id, draft));
@@ -294,23 +357,66 @@ const FoodDelivery = () => {
         ...currentDrafts,
         [item.id]: buildDefaultCustomizationDraft(item),
       }));
+      addToast(`${item.name} added to cart.`, "success");
     } catch (error) {
       console.error("Cart update error:", error);
-      alert(error.response?.data?.message || "Unable to update cart right now.");
+      addToast(error.response?.data?.message || "Unable to update cart right now.", "error");
+    } finally {
+      setUpdatingCart(false);
+    }
+  };
+
+  const handleUpdateCartQuantity = async (cartItem, nextQuantity) => {
+    if (!selectedRestaurant) {
+      return;
+    }
+
+    const updatedQuantity = Number(nextQuantity);
+    const options = {
+      variantId: cartItem.selectedVariant?.id || undefined,
+      addonIds: cartItem.selectedAddons?.map((addon) => addon.id) || [],
+      specialInstructions: cartItem.specialInstructions || "",
+    };
+
+    if (updatedQuantity < 0) {
+      return;
+    }
+
+    setUpdatingCart(true);
+    try {
+      const updatedCart = await foodDeliveryService.addToCart(
+        selectedRestaurant.id,
+        cartItem.id,
+        updatedQuantity,
+        options
+      );
+      setCart(updatedCart.items || []);
+      setRestaurantCartId(updatedCart.restaurantId || selectedRestaurant.id);
+      const action = updatedQuantity === 0 ? "removed from" : "updated in";
+      addToast(`${cartItem.name} ${action} cart.`, "success");
+    } catch (error) {
+      console.error("Cart quantity update error:", error);
+      addToast(error.response?.data?.message || "Unable to update cart quantity.", "error");
+    } finally {
+      setUpdatingCart(false);
     }
   };
 
   const handleClearCart = async () => {
+    setClearingCart(true);
     if (!restaurantCartId) {
       setCart([]);
       setCheckoutSummary(null);
+      setClearingCart(false);
       return;
     }
 
     try {
       await foodDeliveryService.clearCart(restaurantCartId);
+      addToast("Cart cleared.", "info");
     } catch (error) {
       console.error("Cart clear error:", error);
+      addToast(error.response?.data?.message || "Unable to clear cart.", "error");
     } finally {
       setCart([]);
       setRestaurantCartId(null);
@@ -322,20 +428,22 @@ const FoodDelivery = () => {
       setScheduledFor("");
       setRewardPointsToRedeem("0");
       setReferralCode("");
+      setClearingCart(false);
     }
   };
 
   const handleCheckout = async () => {
     if (!selectedRestaurant || cart.length === 0) {
-      alert("Cart is empty");
+      addToast("Add items to cart before checkout.", "warn");
       return;
     }
 
     if (checkoutSummary && checkoutSummary.isValid === false) {
-      alert(checkoutSummary.validationMessage || "Checkout is not ready yet.");
+      addToast(checkoutSummary.validationMessage || "Checkout is not ready yet.", "warn");
       return;
     }
 
+    setCheckingOut(true);
     try {
       const order = await foodDeliveryService.checkout(selectedRestaurant.id, {
         cart,
@@ -359,10 +467,12 @@ const FoodDelivery = () => {
       setReferralCode("");
       setOrders((currentOrders) => [order, ...currentOrders]);
       loadRewards();
-      alert(`Checkout successful! Total: ${formatInr(order.total)}`);
+      addToast(`Checkout successful! Total: ${formatInr(order.total)}`, "success");
     } catch (error) {
       console.error("Checkout error:", error);
-      alert(`Checkout failed: ${error.response?.data?.message || error.message || "Unknown error"}`);
+      addToast(`Checkout failed: ${error.response?.data?.message || error.message || "Unknown error"}`, "error");
+    } finally {
+      setCheckingOut(false);
     }
   };
 
@@ -373,28 +483,54 @@ const FoodDelivery = () => {
         currentOrders.map((order) => (order.id === updatedOrder.id ? updatedOrder : order))
       );
       loadRewards();
+      addToast(`Order ${updatedOrder.id} cancelled.`, "info");
     } catch (error) {
       console.error("Order cancellation error:", error);
-      alert(error.response?.data?.message || "Unable to cancel this order.");
+      addToast(error.response?.data?.message || "Unable to cancel this order.", "error");
     }
   };
 
-  const handleLoadTracking = async (orderId) => {
+  const fetchOrderTracking = async (orderId, suppressToast = false) => {
+    setTrackingLoadingByOrderId((current) => ({ ...current, [orderId]: true }));
     try {
       const tracking = await foodDeliveryService.getOrderTracking(orderId);
       setTrackingByOrderId((currentTracking) => ({
         ...currentTracking,
         [orderId]: tracking,
       }));
+      if (!suppressToast) {
+        addToast(`Tracking updated for order ${orderId}.`, "info");
+      }
     } catch (error) {
-      alert(error.response?.data?.message || "Unable to load order tracking.");
+      addToast(error.response?.data?.message || "Unable to load order tracking.", "error");
+    } finally {
+      setTrackingLoadingByOrderId((current) => ({ ...current, [orderId]: false }));
     }
   };
+
+  const handleLoadTracking = (orderId) => fetchOrderTracking(orderId, false);
+
+  useEffect(() => {
+    const trackedOrderIds = Object.keys(trackingByOrderId);
+    if (trackedOrderIds.length === 0) {
+      return undefined;
+    }
+
+    const interval = window.setInterval(() => {
+      trackedOrderIds.forEach((orderId) => {
+        fetchOrderTracking(orderId, true);
+      });
+    }, 20000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [trackingByOrderId]);
 
   const handleCreateDispute = async (orderId) => {
     const draft = disputeDrafts[orderId] || {};
     if (!draft.issueType || !draft.description) {
-      alert("Choose an issue type and add a short description.");
+      addToast("Choose an issue type and add a short description.", "warn");
       return;
     }
 
@@ -415,8 +551,9 @@ const FoodDelivery = () => {
         ...currentDrafts,
         [orderId]: { issueType: "", description: "" },
       }));
+      addToast("Issue submitted. Our operations team will review it.", "info");
     } catch (error) {
-      alert(error.response?.data?.message || "Unable to raise an issue for this order.");
+      addToast(error.response?.data?.message || "Unable to raise an issue for this order.", "error");
     }
   };
 
@@ -472,7 +609,7 @@ const FoodDelivery = () => {
 
   const renderCustomerView = () => (
     <>
-      <div className="fd-controls">
+      <div className="fd-controls fd-rolebar">
         <input
           placeholder="Search restaurants..."
           value={searchTerm}
@@ -498,154 +635,204 @@ const FoodDelivery = () => {
         </div>
       )}
 
-      <div className="fd-restaurants-grid">
-        {filteredRestaurants.map((restaurant) => (
-          <div key={restaurant.id} className="fd-restaurant-card">
-            <div className="fd-restaurant-image">{restaurant.imageLabel}</div>
-            <h3>{restaurant.name}</h3>
-            <div className="fd-stats">
-              <span>Rating {restaurant.rating}</span>
-              <span>{restaurant.deliveryTime}</span>
+      <div className="fd-customer-layout">
+        <main className="fd-customer-main">
+          {loadingRestaurants ? (
+            <div className="fd-panelhead">Loading restaurants...</div>
+          ) : (
+            <div className="fd-restaurants-grid">
+              {filteredRestaurants.map((restaurant) => (
+                <div key={restaurant.id} className="fd-restaurant-card">
+                  <div className="fd-restaurant-image">{restaurant.imageLabel}</div>
+                  <h3>{restaurant.name}</h3>
+                  <div className="fd-stats">
+                    <span>Rating {restaurant.rating}</span>
+                    <span>{restaurant.deliveryTime}</span>
+                  </div>
+                  <button onClick={() => openRestaurant(restaurant)}>
+                    View Menu
+                  </button>
+                </div>
+              ))}
             </div>
-            <button onClick={() => openRestaurant(restaurant)}>View Menu</button>
-          </div>
-        ))}
-      </div>
+          )}
 
-      {selectedRestaurant && (
-        <div className="fd-menu">
-          <button onClick={() => setSelectedRestaurant(null)}>Back</button>
-          <h2>{selectedRestaurant.name}</h2>
+          {selectedRestaurant && (
+            <div className="fd-menu">
+              <div className="fooddelivery-panelhead">
+                <button onClick={() => setSelectedRestaurant(null)}>Back to restaurants</button>
+                <h2>{selectedRestaurant.name}</h2>
+                {loadingRestaurant && <span>Loading menu...</span>}
+              </div>
 
-          {recommendations.length > 0 && (
-            <div className="fd-cart-summary">
-              <h3>Recommended for this order</h3>
+              {recommendations.length > 0 && (
+                <div className="fd-cart-summary">
+                  <h3>Recommended for this order</h3>
+                  <div className="fd-menu-grid">
+                    {recommendations.map((item) => (
+                      <div key={item.id} className="fd-menu-item">
+                        <strong>{item.name}</strong>
+                        <div>{formatInr(item.price)}</div>
+                        <button
+                          onClick={() =>
+                            handleAddToCart(item, {
+                              variantId:
+                                item.variants?.find((variant) => variant.available !== false)?.id || "",
+                              addonIds: [],
+                              specialInstructions: "",
+                            })
+                          }
+                          disabled={updatingCart}
+                        >
+                          Add Suggested
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="fd-menu-grid">
-                {recommendations.map((item) => (
+                {menu.map((item) => (
                   <div key={item.id} className="fd-menu-item">
-                    <strong>{item.name}</strong>
+                    <span>{item.name}</span>
                     <div>{formatInr(item.price)}</div>
-                    <button
-                      onClick={() =>
-                        handleAddToCart(item, {
-                          variantId: item.variants?.find((variant) => variant.available !== false)?.id || "",
-                          addonIds: [],
-                          specialInstructions: "",
-                        })
-                      }
-                    >
-                      Add Suggested
+                    <div>Prep: {item.prepTime || 0} mins</div>
+                    {renderMenuCustomization(item)}
+                    <button onClick={() => handleAddToCart(item)} disabled={updatingCart}>
+                      Add
                     </button>
                   </div>
                 ))}
               </div>
             </div>
           )}
+        </main>
 
-          <div className="fd-menu-grid">
-            {menu.map((item) => (
-              <div key={item.id} className="fd-menu-item">
-                <span>{item.name}</span>
-                <div>{formatInr(item.price)}</div>
-                <div>Prep: {item.prepTime || 0} mins</div>
-                {renderMenuCustomization(item)}
-                <button onClick={() => handleAddToCart(item)}>Add</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {cart.length > 0 && (
-        <div className="fd-cart-summary">
-          <div>
-            Cart: {formatInr(cart.reduce((sum, item) => sum + item.price * item.quantity, 0))}
-            {" "}
-            ({cart.reduce((sum, item) => sum + item.quantity, 0)} qty) -
-            {" "}
-            {restaurantCartId && restaurants.find((restaurant) => restaurant.id === restaurantCartId)?.name}
-          </div>
-
-          <div>
-            {cart.map((item) => (
-              <div key={item.lineItemKey || item.id}>
-                {item.name} x {item.quantity}
-                {item.selectedVariant?.name ? ` • ${item.selectedVariant.name}` : ""}
-                {item.selectedAddons?.length ? ` • ${item.selectedAddons.map((addon) => addon.name).join(", ")}` : ""}
-                {item.specialInstructions ? ` • ${item.specialInstructions}` : ""}
-              </div>
-            ))}
-          </div>
-
-          <div className="fd-controls">
-            <input
-              placeholder="Promo code"
-              value={couponCode}
-              onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-            />
-            <input
-              placeholder="Referral code"
-              value={referralCode}
-              onChange={(event) => setReferralCode(event.target.value.toUpperCase())}
-            />
-            <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
-              {PAYMENT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Tip"
-              value={tipAmount}
-              onChange={(event) => setTipAmount(event.target.value)}
-            />
-            <input
-              type="datetime-local"
-              value={scheduledFor}
-              onChange={(event) => setScheduledFor(event.target.value)}
-            />
-            <input
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Redeem points"
-              value={rewardPointsToRedeem}
-              onChange={(event) => setRewardPointsToRedeem(event.target.value)}
-            />
-          </div>
-
-          {checkoutSummary && (
-            <div>
-              <div>Subtotal: {formatInr(checkoutSummary.subtotal)}</div>
-              <div>Discount: {formatInr(checkoutSummary.discountAmount)}</div>
-              <div>Delivery Fee: {formatInr(checkoutSummary.deliveryCharge)}</div>
-              <div>Platform Fee: {formatInr(checkoutSummary.platformFee)}</div>
-              <div>GST: {formatInr(checkoutSummary.taxAmount)}</div>
-              <div>Tip: {formatInr(checkoutSummary.tipAmount)}</div>
-              <div>Wallet Used: {formatInr(checkoutSummary.walletUsed)}</div>
-              <div>Total: {formatInr(checkoutSummary.totalAmount)}</div>
-              <div>Payable Now: {formatInr(checkoutSummary.payableAmount)}</div>
-              <div>ETA Strategy: {checkoutSummary.etaSnapshot?.routeStrategy || "balanced"}</div>
-              <div>ETA: {checkoutSummary.etaSnapshot?.totalMinutes || 0} mins</div>
-              {checkoutSummary.isScheduled && (
-                <div>Scheduled Window: {checkoutSummary.scheduledWindowLabel}</div>
-              )}
+        {isCartReady && (
+          <aside className="fd-sticky-cart">
+            <div className="fooddelivery-panelhead">
               <div>
-                Rewards: Redeem {checkoutSummary.loyalty?.pointsRedeemed || 0} / Earn {checkoutSummary.loyalty?.pointsEarned || 0}
+                <h3>Cart</h3>
+                <p>{cartCount} item{cartCount === 1 ? "" : "s"} • {formatInr(cartTotal)}</p>
+                <p>{activeRestaurantName}</p>
               </div>
+              <button type="button" onClick={handleClearCart} disabled={clearingCart || !isCartReady}>
+                Clear
+              </button>
             </div>
-          )}
 
-          {checkoutMessage && <div>{checkoutMessage}</div>}
+            <div className="fd-cart-items">
+              {cart.map((item) => (
+                <div key={item.lineItemKey || item.id} className="fd-cart-item">
+                  <div>
+                    <strong>{item.name}</strong>
+                    <div>
+                      {item.selectedVariant?.name ? `${item.selectedVariant.name} • ` : ""}
+                      {item.selectedAddons?.length
+                        ? item.selectedAddons.map((addon) => addon.name).join(", ")
+                        : ""}
+                    </div>
+                    {item.specialInstructions && <div>{item.specialInstructions}</div>}
+                  </div>
+                  <div className="fd-quantity-controls">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateCartQuantity(item, item.quantity - 1)}
+                      disabled={updatingCart || item.quantity <= 0}
+                    >
+                      -
+                    </button>
+                    <span>{item.quantity}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateCartQuantity(item, item.quantity + 1)}
+                      disabled={updatingCart}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-          <button onClick={handleCheckout}>Checkout</button>
-          <button onClick={handleClearCart}>Clear</button>
-        </div>
-      )}
+            <div className="fd-controls fd-form-row">
+              <input
+                placeholder="Promo code"
+                value={couponCode}
+                onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+              />
+              <input
+                placeholder="Referral code"
+                value={referralCode}
+                onChange={(event) => setReferralCode(event.target.value.toUpperCase())}
+              />
+            </div>
+            <div className="fd-controls fd-form-row">
+              <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                {PAYMENT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="Tip"
+                value={tipAmount}
+                onChange={(event) => setTipAmount(event.target.value)}
+              />
+            </div>
+            <div className="fd-controls fd-form-row">
+              <input
+                type="datetime-local"
+                value={scheduledFor}
+                onChange={(event) => setScheduledFor(event.target.value)}
+              />
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="Redeem points"
+                value={rewardPointsToRedeem}
+                onChange={(event) => setRewardPointsToRedeem(event.target.value)}
+              />
+            </div>
+
+            {checkoutSummary && (
+              <div className="fd-cart-summary">
+                <div>Subtotal: {formatInr(checkoutSummary.subtotal)}</div>
+                <div>Discount: {formatInr(checkoutSummary.discountAmount)}</div>
+                <div>Delivery Fee: {formatInr(checkoutSummary.deliveryCharge)}</div>
+                <div>Platform Fee: {formatInr(checkoutSummary.platformFee)}</div>
+                <div>GST: {formatInr(checkoutSummary.taxAmount)}</div>
+                <div>Tip: {formatInr(checkoutSummary.tipAmount)}</div>
+                <div>Wallet Used: {formatInr(checkoutSummary.walletUsed)}</div>
+                <div>Total: {formatInr(checkoutSummary.totalAmount)}</div>
+                <div>Payable Now: {formatInr(checkoutSummary.payableAmount)}</div>
+                <div>ETA Strategy: {checkoutSummary.etaSnapshot?.routeStrategy || "balanced"}</div>
+                <div>ETA: {checkoutSummary.etaSnapshot?.totalMinutes || 0} mins</div>
+                {checkoutSummary.isScheduled && (
+                  <div>Scheduled Window: {checkoutSummary.scheduledWindowLabel}</div>
+                )}
+                <div>
+                  Rewards: Redeem {checkoutSummary.loyalty?.pointsRedeemed || 0} / Earn {checkoutSummary.loyalty?.pointsEarned || 0}
+                </div>
+              </div>
+            )}
+
+            {checkoutMessage && <div>{checkoutMessage}</div>}
+
+            <div className="fd-controls">
+              <button onClick={handleCheckout} disabled={checkingOut || !isCartReady}>
+                {checkingOut ? "Processing…" : "Checkout"}
+              </button>
+            </div>
+          </aside>
+        )}
+      </div>
 
       <div className="orders-list">
         <h2>My Orders</h2>
@@ -727,19 +914,47 @@ const FoodDelivery = () => {
   return (
     <div className="food-delivery">
       <div className="fd-header">
-        <h1>Feastly - Food Delivery</h1>
-        <div className="fd-controls">
-          {VIEWS.map((view) => (
+        <div>
+          <h1>Feastly - Food Delivery</h1>
+          <p className="fooddelivery-chip">Role: {USER_ROLES.find((item) => item.id === userRole)?.label}</p>
+        </div>
+        <div className="fd-controls fd-role-selector">
+          {USER_ROLES.map((role) => (
             <button
-              key={view.id}
-              onClick={() => setActiveView(view.id)}
+              key={role.id}
+              className={userRole === role.id ? "fooddelivery-rolebtn active" : "fooddelivery-rolebtn"}
+              onClick={() => handleRoleChange(role.id)}
               type="button"
             >
-              {view.label}
+              {role.label}
             </button>
           ))}
         </div>
       </div>
+
+      <div className="fd-controls fd-rolebar">
+        {VIEWS.map((view) => (
+          <button
+            key={view.id}
+            className={canAccessView(view.id) ? "fooddelivery-primary" : "fooddelivery-secondary"}
+            onClick={() => canAccessView(view.id) && setActiveView(view.id)}
+            type="button"
+            disabled={!canAccessView(view.id)}
+          >
+            {view.label}
+          </button>
+        ))}
+      </div>
+
+      {toastMessages.length > 0 && (
+        <div className="fd-toast-area" role="status" aria-live="polite">
+          {toastMessages.map((toast) => (
+            <div key={toast.id} className={`fd-toast fd-toast-${toast.type}`}>
+              {toast.message}
+            </div>
+          ))}
+        </div>
+      )}
 
       {activeView === "customer" && renderCustomerView()}
       {activeView === "restaurant" && <RestaurantDashboard />}

@@ -259,6 +259,100 @@
   transform: none;
 }
 
+.fd-toast-area {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 20;
+}
+
+.fd-toast {
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(112, 78, 30, 0.16);
+  color: var(--food-text);
+  box-shadow: 0 12px 24px rgba(107, 68, 27, 0.12);
+}
+
+.fd-toast-info {
+  border-color: rgba(34, 122, 73, 0.18);
+}
+
+.fd-toast-success {
+  border-color: rgba(34, 122, 73, 0.34);
+  background: rgba(34, 122, 73, 0.06);
+}
+
+.fd-toast-error {
+  border-color: rgba(176, 75, 44, 0.22);
+  background: rgba(176, 75, 44, 0.06);
+}
+
+.fd-toast-warn {
+  border-color: rgba(173, 76, 29, 0.22);
+  background: rgba(173, 76, 29, 0.06);
+}
+
+.fd-customer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.fd-customer-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fd-sticky-cart {
+  position: sticky;
+  top: 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(112, 78, 30, 0.12);
+  border-radius: 24px;
+  padding: 1rem;
+  box-shadow: var(--food-shadow);
+}
+
+.fd-cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.fd-cart-item {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(112, 78, 30, 0.1);
+}
+
+.fd-quantity-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.fd-quantity-controls button {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 14px;
+}
+
+@media (max-width: 900px) {
+  .fd-customer-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .fooddelivery-status {
   margin: 0;
   padding: 0.9rem 1rem;

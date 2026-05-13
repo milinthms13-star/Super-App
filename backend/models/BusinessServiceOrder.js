@@ -53,6 +53,11 @@ const businessServiceOrderSchema = new mongoose.Schema(
     },
 
     adminNotes: { type: String, default: '', trim: true },
+    paymentStatus: { type: String, default: 'pending', trim: true, index: true },
+    paymentGateway: { type: String, default: '', trim: true },
+    paymentMethod: { type: String, default: '', trim: true },
+    paymentRecordId: { type: String, default: '', trim: true },
+    paymentDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
 
     // audit trail for status transitions
     history: [

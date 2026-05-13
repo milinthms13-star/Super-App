@@ -1,202 +1,337 @@
 .hyperlocal-page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 20px;
   display: grid;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 16px;
+  color: #0f172a;
 }
 
 .hyperlocal-hero,
 .hyperlocal-panel,
-.hyperlocal-card {
-  background: linear-gradient(145deg, #f8fcff, #edf7ff);
-  border: 1px solid #c8def0;
+.hyperlocal-card,
+.hyperlocal-empty-card,
+.hyperlocal-summary-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
   border-radius: 16px;
 }
 
 .hyperlocal-hero {
+  padding: 18px;
   display: grid;
-  gap: 0.9rem;
-  padding: 1rem;
+  gap: 14px;
+  background: linear-gradient(135deg, #f0f9ff, #f8fafc);
 }
 
 .hyperlocal-kicker {
   margin: 0;
-  color: #0b5e8e;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-size: 0.8rem;
+  color: #0c4a6e;
   text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
 }
 
 .hyperlocal-hero h1 {
-  margin: 0.15rem 0 0.35rem;
-  color: #0d2742;
-  font-size: clamp(1.35rem, 2.6vw, 2rem);
+  margin: 4px 0;
+  font-size: clamp(1.45rem, 2.4vw, 2.3rem);
 }
 
 .hyperlocal-subtitle {
   margin: 0;
-  color: #355169;
+  color: #334155;
 }
 
 .hyperlocal-hero-tools {
   display: grid;
-  gap: 0.75rem;
-}
-
-.hyperlocal-hero-tools input,
-.hyperlocal-form input,
-.hyperlocal-form select,
-.hyperlocal-form textarea {
-  width: 100%;
-  border: 1px solid #bad4e8;
-  border-radius: 12px;
-  background: #fff;
-  padding: 0.7rem 0.8rem;
-  color: #163047;
+  gap: 10px;
 }
 
 .hyperlocal-chip-row {
   display: flex;
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 0.5rem;
 }
 
 .hyperlocal-chip-row button,
-.hyperlocal-chip-row span {
+.hyperlocal-chip {
   border-radius: 999px;
-  border: 1px solid #b5d5e8;
-  background: #fff;
-  color: #1c3d57;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.86rem;
+  border: 1px solid #94a3b8;
+  background: #ffffff;
+  padding: 6px 12px;
+  color: #0f172a;
+  font-weight: 600;
 }
 
 .hyperlocal-chip-row button.active {
-  background: linear-gradient(135deg, #1677b0, #20b4b8);
-  border-color: transparent;
-  color: #fff;
+  background: #0ea5e9;
+  border-color: #0ea5e9;
+  color: #ffffff;
 }
 
 .hyperlocal-section {
   display: grid;
-  gap: 0.8rem;
+  gap: 12px;
 }
 
 .hyperlocal-section-header h2,
 .hyperlocal-panel h2,
 .hyperlocal-panel h3 {
   margin: 0;
-  color: #0f2d47;
 }
 
 .hyperlocal-section-header p {
-  margin: 0.2rem 0 0;
-  color: #49647c;
+  margin: 4px 0 0;
+  color: #475569;
+}
+
+.hyperlocal-shop-toolbar {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 10px;
 }
 
 .hyperlocal-card-grid {
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
 }
 
 .hyperlocal-card {
-  padding: 0.9rem;
-}
-
-.hyperlocal-card h3 {
-  margin: 0 0 0.2rem;
-  color: #10324d;
+  padding: 14px;
+  display: grid;
+  gap: 8px;
 }
 
 .hyperlocal-card p {
-  margin: 0.25rem 0;
-  color: #47637b;
-  font-size: 0.92rem;
-}
-
-.hyperlocal-inline-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.65rem;
-}
-
-.hyperlocal-inline-actions button,
-.hyperlocal-form button,
-.hyperlocal-list button {
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #1570a8, #1cb5b8);
-  color: #fff;
-  cursor: pointer;
-  font-weight: 600;
-  padding: 0.55rem 0.8rem;
+  margin: 0;
+  color: #334155;
 }
 
 .hyperlocal-dual-grid {
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
 }
 
 .hyperlocal-panel {
-  padding: 1rem;
+  padding: 16px;
   display: grid;
-  gap: 0.7rem;
+  gap: 12px;
 }
 
 .hyperlocal-form {
   display: grid;
-  gap: 0.65rem;
+  gap: 10px;
 }
 
-.hyperlocal-form label {
-  display: grid;
-  gap: 0.35rem;
-  color: #20425e;
-  font-size: 0.92rem;
-  font-weight: 600;
+.hyperlocal-form input,
+.hyperlocal-form select,
+.hyperlocal-form textarea,
+.hyperlocal-shop-toolbar input,
+.hyperlocal-shop-toolbar select {
+  width: 100%;
+  border: 1px solid #94a3b8;
+  border-radius: 10px;
+  padding: 10px 11px;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.hyperlocal-inline-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hyperlocal-inline-actions button,
+.hyperlocal-form button,
+.hyperlocal-secondary-btn,
+.hyperlocal-link-btn,
+.hyperlocal-sticky-checkout button {
+  border: 1px solid #0b5f90;
+  background: #0369a1;
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.hyperlocal-secondary-btn,
+.hyperlocal-link-btn {
+  background: #ffffff;
+  color: #0b5f90;
+}
+
+.hyperlocal-inline-actions button:disabled,
+.hyperlocal-form button:disabled,
+.hyperlocal-secondary-btn:disabled,
+.hyperlocal-sticky-checkout button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .hyperlocal-checkbox {
-  display: flex !important;
+  display: flex;
+  gap: 8px;
   align-items: center;
-  gap: 0.5rem;
 }
 
-.hyperlocal-checkbox input {
-  width: auto;
+.hyperlocal-tag {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-size: 0.78rem;
+}
+
+.hyperlocal-status,
+.hyperlocal-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 600;
 }
 
 .hyperlocal-status {
-  margin: 0;
-  border-radius: 12px;
-  background: #e6f7ec;
-  border: 1px solid #b8e4c6;
-  color: #1d6b3d;
-  padding: 0.65rem 0.75rem;
-  font-weight: 600;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  color: #166534;
+}
+
+.hyperlocal-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.hyperlocal-empty-card,
+.hyperlocal-summary-card {
+  padding: 12px;
+}
+
+.hyperlocal-empty-card {
+  color: #475569;
+}
+
+.hyperlocal-summary-card p {
+  margin: 0 0 6px;
+  color: #1e293b;
+}
+
+.hyperlocal-total {
+  font-size: 1.05rem;
+  font-weight: 700;
 }
 
 .hyperlocal-list {
   margin: 0;
-  padding-left: 1.05rem;
-  color: #304d65;
+  padding-left: 18px;
+  color: #334155;
+  display: grid;
+  gap: 8px;
 }
 
 .hyperlocal-list li {
-  margin: 0.3rem 0;
+  line-height: 1.45;
+}
+
+.hyperlocal-muted {
+  margin: 0;
+  color: #64748b;
+}
+
+.hyperlocal-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.hyperlocal-skeleton-card {
+  height: 115px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #e2e8f0 20%, #f8fafc 50%, #e2e8f0 80%);
+  background-size: 200% 100%;
+  animation: hyperlocalSkeleton 1.4s linear infinite;
+}
+
+@keyframes hyperlocalSkeleton {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.hyperlocal-sticky-checkout {
+  display: none;
+}
+
+.hyperlocal-form input:focus-visible,
+.hyperlocal-form select:focus-visible,
+.hyperlocal-form textarea:focus-visible,
+.hyperlocal-shop-toolbar input:focus-visible,
+.hyperlocal-shop-toolbar select:focus-visible,
+.hyperlocal-inline-actions button:focus-visible,
+.hyperlocal-form button:focus-visible,
+.hyperlocal-chip-row button:focus-visible,
+.hyperlocal-link-btn:focus-visible,
+.hyperlocal-secondary-btn:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+@media (max-width: 860px) {
+  .hyperlocal-page {
+    padding: 14px;
+  }
+
+  .hyperlocal-shop-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .hyperlocal-skeleton-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
   .hyperlocal-page {
-    padding: 0.75rem;
+    padding: 12px;
+    gap: 12px;
   }
 
   .hyperlocal-panel,
-  .hyperlocal-hero,
-  .hyperlocal-card {
-    border-radius: 14px;
+  .hyperlocal-card,
+  .hyperlocal-hero {
+    padding: 12px;
+  }
+
+  .hyperlocal-inline-actions {
+    flex-direction: column;
+  }
+
+  .hyperlocal-inline-actions button,
+  .hyperlocal-secondary-btn,
+  .hyperlocal-link-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .hyperlocal-sticky-checkout {
+    display: block;
+    position: sticky;
+    bottom: 8px;
+    z-index: 8;
+  }
+
+  .hyperlocal-sticky-checkout button {
+    width: 100%;
+    box-shadow: 0 12px 22px rgba(2, 6, 23, 0.25);
   }
 }

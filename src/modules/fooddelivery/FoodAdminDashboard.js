@@ -17,8 +17,10 @@ const FoodAdminDashboard = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchAdminData = useCallback(async (filters = {}) => {
+    setIsRefreshing(true);
     try {
       const [dashboardData, orderData, auditEntries] = await Promise.all([
         foodDeliveryService.getAdminDashboard(),
@@ -34,8 +36,11 @@ const FoodAdminDashboard = () => {
       setDashboard(dashboardData);
       setOrders(orderData);
       setAuditLog(auditEntries);
+      setStatusMessage('');
     } catch (error) {
       setStatusMessage(error.response?.data?.message || 'Unable to load admin food delivery data.');
+    } finally {
+      setIsRefreshing(false);
     }
   }, [showUnassignedOnly, statusFilter]);
 
@@ -45,6 +50,16 @@ const FoodAdminDashboard = () => {
     };
 
     run();
+  }, [fetchAdminData]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      fetchAdminData();
+    }, 30000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
   }, [fetchAdminData]);
 
   const handleDisputeStatus = async (orderId, disputeId, nextStatus) => {
@@ -82,7 +97,9 @@ const FoodAdminDashboard = () => {
           />
           Unassigned only
         </label>
-        <button onClick={() => fetchAdminData()}>Refresh</button>
+        <button onClick={() => fetchAdminData()} disabled={isRefreshing}>
+          {isRefreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
       </div>
 
       {statusMessage && <p>{statusMessage}</p>}

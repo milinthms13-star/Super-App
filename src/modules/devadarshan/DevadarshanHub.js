@@ -1,17 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
-import "../../styles/DevadarshanHub.css";
-
-const STORAGE_KEYS = {
-  temples: "devadarshan_temples_v2",
-  bookings: "devadarshan_bookings_v2",
-  donations: "devadarshan_donations_v2",
-  favorites: "devadarshan_favorites_v2",
-  profile: "devadarshan_profile_v2",
-  family: "devadarshan_family_v2",
-  notifications: "devadarshan_notifications_v2",
-  calendarNotify: "devadarshan_calendar_notify_v2",
-  liveSaved: "devadarshan_live_saved_v2",
-};
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { useApp } from "../../contexts/AppContext";
+import "./DevadarshanHub.css";
+import { BACKEND_BASE_URL } from "../../utils/api";
 
 const NAKSHATRAS = [
   "Ashwathi",
@@ -57,137 +48,6 @@ const EVENT_TYPES = [
   "Shivaratri",
   "Navaratri",
   "Temple Special Pooja",
-];
-
-const TEMPLE_SEED = [
-  {
-    id: "tmp-padmanabha",
-    name: "Sree Padmanabhaswamy Temple",
-    district: "Thiruvananthapuram",
-    deity: "Lord Vishnu",
-    templeType: "Ancient Temple",
-    timings: "03:30 AM - 12:00 PM, 05:00 PM - 07:20 PM",
-    contact: "+91 471 2450 233",
-    officialContact: "admin@padmanabha-temple.org",
-    festivals: ["Alpashy Festival", "Painkuni Festival", "Ekadashi"],
-    photos: ["Sanctum Entrance", "East Fort View"],
-    mapUrl: "https://maps.google.com/?q=Padmanabhaswamy+Temple",
-    rules: "No mobile phones inside sanctum. Men in mundu, women in traditional attire.",
-    dressCode: "Traditional Kerala attire mandatory",
-    distanceKm: 3,
-    popularity: 5,
-    verified: true,
-    liveDarshanUrl: "https://www.youtube.com/results?search_query=padmanabhaswamy+temple+live",
-    poojas: [
-      { name: "Archana", price: 50, prasadamSupported: true },
-      { name: "Pushpanjali", price: 75, prasadamSupported: true },
-      { name: "Neyvilakku", price: 100, prasadamSupported: false },
-    ],
-  },
-  {
-    id: "tmp-ganapathy-kottarakara",
-    name: "Kottarakkara Mahaganapathy Temple",
-    district: "Kollam",
-    deity: "Lord Ganesha",
-    templeType: "Maha Ganapathy Temple",
-    timings: "04:00 AM - 11:00 AM, 05:00 PM - 08:00 PM",
-    contact: "+91 474 2450 022",
-    officialContact: "office@kottarakaraganapathy.in",
-    festivals: ["Vinayaka Chaturthi", "Pradosham", "Ulsavam"],
-    photos: ["Main Sreekovil", "Temple Deepasthambham"],
-    mapUrl: "https://maps.google.com/?q=Kottarakkara+Mahaganapathy+Temple",
-    rules: "Queue discipline mandatory. Outside food not allowed.",
-    dressCode: "Decent traditional wear",
-    distanceKm: 27,
-    popularity: 4,
-    verified: true,
-    liveDarshanUrl: "https://www.youtube.com/results?search_query=kottarakkara+mahaganapathy+temple+live",
-    poojas: [
-      { name: "Ganapathy Homam", price: 600, prasadamSupported: true },
-      { name: "Archana", price: 50, prasadamSupported: true },
-      { name: "Neyvilakku", price: 120, prasadamSupported: false },
-    ],
-  },
-  {
-    id: "tmp-guruvayur",
-    name: "Guruvayur Sri Krishna Temple",
-    district: "Thrissur",
-    deity: "Lord Krishna",
-    templeType: "Krishna Temple",
-    timings: "03:00 AM - 01:00 PM, 04:30 PM - 09:30 PM",
-    contact: "+91 487 2556 333",
-    officialContact: "info@guruvayurdevaswom.nic.in",
-    festivals: ["Guruvayur Ekadashi", "Krishnashtami", "Ulsavam"],
-    photos: ["Temple Entrance", "Dwajasthambam"],
-    mapUrl: "https://maps.google.com/?q=Guruvayur+Temple",
-    rules: "Darshan queue tokens may be required during peak season.",
-    dressCode: "Traditional strict dress code",
-    distanceKm: 92,
-    popularity: 5,
-    verified: true,
-    liveDarshanUrl: "https://www.youtube.com/results?search_query=guruvayur+live+darshan",
-    poojas: [
-      { name: "Pushpanjali", price: 100, prasadamSupported: true },
-      { name: "Palpayasam", price: 80, prasadamSupported: true },
-      { name: "Special Darshan", price: 500, prasadamSupported: false },
-    ],
-  },
-  {
-    id: "tmp-ettumanoor",
-    name: "Ettumanoor Mahadeva Temple",
-    district: "Kottayam",
-    deity: "Lord Shiva",
-    templeType: "Mahadeva Temple",
-    timings: "04:00 AM - 12:00 PM, 05:00 PM - 08:00 PM",
-    contact: "+91 481 2532 555",
-    officialContact: "ettumanoordevaswom@kerala.gov.in",
-    festivals: ["Ezharaponnana", "Shivaratri", "Pradosham"],
-    photos: ["Temple Front", "Festival Procession"],
-    mapUrl: "https://maps.google.com/?q=Ettumanoor+Mahadeva+Temple",
-    rules: "Photography restricted inside temple premises.",
-    dressCode: "Mundu / saree preferred",
-    distanceKm: 61,
-    popularity: 4,
-    verified: true,
-    liveDarshanUrl: "https://www.youtube.com/results?search_query=ettumanoor+mahadeva+temple+live",
-    poojas: [
-      { name: "Mrityunjaya Homam", price: 900, prasadamSupported: true },
-      { name: "Archana", price: 40, prasadamSupported: true },
-      { name: "Rudrabhishekam", price: 1200, prasadamSupported: false },
-    ],
-  },
-  {
-    id: "tmp-chottanikkara",
-    name: "Chottanikkara Bhagavathy Temple",
-    district: "Ernakulam",
-    deity: "Bhagavathy",
-    templeType: "Devi Temple",
-    timings: "04:00 AM - 12:00 PM, 04:00 PM - 08:00 PM",
-    contact: "+91 484 2711 037",
-    officialContact: "helpdesk@chottanikkaratemple.in",
-    festivals: ["Makom Thozhal", "Navaratri", "Pradosham"],
-    photos: ["Temple Gopuram", "Deeparadhana View"],
-    mapUrl: "https://maps.google.com/?q=Chottanikkara+Temple",
-    rules: "Separate queue for women/elderly during special days.",
-    dressCode: "Traditional attire encouraged",
-    distanceKm: 74,
-    popularity: 5,
-    verified: true,
-    liveDarshanUrl: "https://www.youtube.com/results?search_query=chottanikkara+live",
-    poojas: [
-      { name: "Archana", price: 60, prasadamSupported: true },
-      { name: "Pushpanjali", price: 120, prasadamSupported: true },
-      { name: "Neyvilakku", price: 150, prasadamSupported: false },
-    ],
-  },
-];
-
-const FESTIVAL_SEED = [
-  { id: "evt-001", templeId: "tmp-guruvayur", title: "Guruvayur Ekadashi", type: "Ekadashi", date: "2026-11-20", details: "Full-day special pooja, deepam, and bhajanam." },
-  { id: "evt-002", templeId: "tmp-ettumanoor", title: "Shivaratri Special", type: "Shivaratri", date: "2026-02-15", details: "All-night Shiva pooja and cultural programs." },
-  { id: "evt-003", templeId: "tmp-chottanikkara", title: "Navaratri Utsavam", type: "Navaratri", date: "2026-10-10", details: "Nine-day pooja, vidyarambham support." },
-  { id: "evt-004", templeId: "tmp-padmanabha", title: "Painkuni Festival", type: "Ulsavam", date: "2026-03-25", details: "Traditional procession and special offerings." },
-  { id: "evt-005", templeId: "tmp-ganapathy-kottarakara", title: "Pradosham Pooja", type: "Pradosham", date: "2026-06-03", details: "Evening special pooja with prasadam." },
 ];
 
 const INITIAL_PROFILE = {
@@ -253,15 +113,6 @@ const SECTION_ORDER = [
   { id: "admin", label: "Admin" },
 ];
 
-const parseStorage = (value, fallback) => {
-  try {
-    if (!value) return fallback;
-    return JSON.parse(value);
-  } catch (error) {
-    return fallback;
-  }
-};
-
 const generateId = (prefix) => `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`;
 const formatINR = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
 
@@ -280,7 +131,7 @@ const downloadText = (filename, content) => {
 const DevadarshanHub = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [searchTemple, setSearchTemple] = useState("");
-  const [selectedTempleId, setSelectedTempleId] = useState(TEMPLE_SEED[0].id);
+  const [selectedTempleId, setSelectedTempleId] = useState("");
 
   const [districtFilter, setDistrictFilter] = useState("All");
   const [deityFilter, setDeityFilter] = useState("All");
@@ -290,69 +141,75 @@ const DevadarshanHub = () => {
   const [distanceFilter, setDistanceFilter] = useState(200);
   const [minPopularity, setMinPopularity] = useState(1);
 
-  const [temples, setTemples] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.temples), TEMPLE_SEED)
-  );
-  const [bookings, setBookings] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.bookings), [])
-  );
-  const [donations, setDonations] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.donations), [])
-  );
-  const [favoriteTempleIds, setFavoriteTempleIds] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.favorites), [])
-  );
-  const [profile, setProfile] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.profile), INITIAL_PROFILE)
-  );
-  const [familyMembers, setFamilyMembers] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.family), [])
-  );
-  const [notifications, setNotifications] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.notifications), [])
-  );
-  const [notifyEventIds, setNotifyEventIds] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.calendarNotify), [])
-  );
-  const [savedLiveTempleIds, setSavedLiveTempleIds] = useState(() =>
-    parseStorage(window.localStorage.getItem(STORAGE_KEYS.liveSaved), [])
-  );
+  const [temples, setTemples] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [donations, setDonations] = useState([]);
+  const [favoriteTempleIds, setFavoriteTempleIds] = useState([]);
+  const [profile, setProfile] = useState(INITIAL_PROFILE);
+  const [familyMembers, setFamilyMembers] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [notifyEventIds, setNotifyEventIds] = useState([]);
+  const [savedLiveTempleIds, setSavedLiveTempleIds] = useState([]);
 
-  const [festivalEvents, setFestivalEvents] = useState(FESTIVAL_SEED);
+  const [festivalEvents, setFestivalEvents] = useState([]);
   const [bookingForm, setBookingForm] = useState(INITIAL_BOOKING_FORM);
   const [donationForm, setDonationForm] = useState(INITIAL_DONATION_FORM);
   const [familyForm, setFamilyForm] = useState({ name: "", nakshatra: "" });
   const [adminTempleForm, setAdminTempleForm] = useState(INITIAL_ADMIN_TEMPLE_FORM);
   const [adminEventForm, setAdminEventForm] = useState(INITIAL_ADMIN_EVENT_FORM);
+  const { currentUser } = useApp();
   const [statusMessage, setStatusMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [selectedPaymentGateway, setSelectedPaymentGateway] = useState("razorpay");
+
+  const apiBase = `${BACKEND_BASE_URL}/api/devadarshan`;
+
+  const refreshBootstrap = useCallback(async () => {
+    const response = await axios.get(`${apiBase}/bootstrap`);
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || "Unable to load Devadarshan data.");
+    }
+
+    const data = response.data.data || {};
+    setTemples(Array.isArray(data.temples) ? data.temples : []);
+    setFestivalEvents(Array.isArray(data.festivalEvents) ? data.festivalEvents : []);
+    setBookings(Array.isArray(data.bookings) ? data.bookings : []);
+    setDonations(Array.isArray(data.donations) ? data.donations : []);
+    setFavoriteTempleIds(Array.isArray(data.favoriteTempleIds) ? data.favoriteTempleIds : []);
+    setNotifyEventIds(Array.isArray(data.notifyEventIds) ? data.notifyEventIds : []);
+    setSavedLiveTempleIds(Array.isArray(data.savedLiveTempleIds) ? data.savedLiveTempleIds : []);
+    setProfile(data.profile || INITIAL_PROFILE);
+    setFamilyMembers(Array.isArray(data.familyMembers) ? data.familyMembers : []);
+    setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+  }, [apiBase]);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.temples, JSON.stringify(temples));
-  }, [temples]);
+    let mounted = true;
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        await refreshBootstrap();
+      } catch (error) {
+        if (mounted) {
+          setStatusMessage(error?.response?.data?.message || error?.message || "Unable to sync Devadarshan data.");
+        }
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, [refreshBootstrap]);
+
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.bookings, JSON.stringify(bookings));
-  }, [bookings]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.donations, JSON.stringify(donations));
-  }, [donations]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.favorites, JSON.stringify(favoriteTempleIds));
-  }, [favoriteTempleIds]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile));
-  }, [profile]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.family, JSON.stringify(familyMembers));
-  }, [familyMembers]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.notifications, JSON.stringify(notifications));
-  }, [notifications]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.calendarNotify, JSON.stringify(notifyEventIds));
-  }, [notifyEventIds]);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEYS.liveSaved, JSON.stringify(savedLiveTempleIds));
-  }, [savedLiveTempleIds]);
+    if (!temples.some((temple) => temple.id === selectedTempleId)) {
+      setSelectedTempleId(temples[0]?.id || "");
+    }
+  }, [selectedTempleId, temples]);
 
   const showStatus = (message) => {
     setStatusMessage(message);
@@ -394,7 +251,11 @@ const DevadarshanHub = () => {
       const popularityMatch = temple.popularity >= Number(minPopularity);
       const textMatch =
         !query ||
-        `${temple.name} ${temple.district} ${temple.deity}`.toLowerCase().includes(query);
+        `${temple.name} ${temple.district} ${temple.deity} ${temple.festivals.join(" ")} ${temple.poojas
+          .map((pooja) => pooja.name)
+          .join(" ")} ${temple.rules} ${temple.officialContact}`
+          .toLowerCase()
+          .includes(query);
       return (
         districtMatch &&
         deityMatch &&
@@ -476,33 +337,166 @@ const DevadarshanHub = () => {
     { id: "vazhipadu", title: "Vazhipadu Booking", value: `${upcomingBookings.length} active bookings`, action: () => setActiveSection("booking") },
     { id: "events", title: "Temple Events", value: `${festivalEvents.length} events listed`, action: () => setActiveSection("calendar") },
     { id: "live", title: "Live Pooja", value: `${temples.filter((item) => item.liveDarshanUrl).length} temples live-ready`, action: () => setActiveSection("live") },
-    { id: "my-bookings", title: "My Bookings", value: `${bookings.length} total records`, action: () => setActiveSection("my") },
+    { id: "my-bookings", title: "My Bookings", value: `${bookings.length + donations.length} total records`, action: () => setActiveSection("my") },
     { id: "notifications", title: "Notifications", value: `${notifications.length} updates`, action: () => setActiveSection("dashboard") },
   ];
 
-  const toggleFavoriteTemple = (templeId) => {
-    setFavoriteTempleIds((current) =>
-      current.includes(templeId)
-        ? current.filter((item) => item !== templeId)
-        : [templeId, ...current]
-    );
+  const handleApiError = (error, fallbackMessage) => {
+    showStatus(error?.response?.data?.message || error?.message || fallbackMessage);
   };
 
-  const toggleEventNotification = (eventId) => {
-    const enabled = notifyEventIds.includes(eventId);
-    const next = enabled
-      ? notifyEventIds.filter((id) => id !== eventId)
-      : [eventId, ...notifyEventIds];
-    setNotifyEventIds(next);
-    showStatus(enabled ? "Festival reminder removed." : "Festival reminder enabled.");
+  const toggleFavoriteTemple = async (templeId) => {
+    try {
+      const response = await axios.post(`${apiBase}/preferences/favorites/${encodeURIComponent(templeId)}/toggle`);
+      if (!response.data?.success) throw new Error(response.data?.message || "Unable to update favorites.");
+      setFavoriteTempleIds(response.data.data?.favoriteTempleIds || []);
+    } catch (error) {
+      handleApiError(error, "Unable to update favorites.");
+    }
   };
 
-  const toggleLiveSaved = (templeId) => {
-    const enabled = savedLiveTempleIds.includes(templeId);
-    setSavedLiveTempleIds((current) =>
-      enabled ? current.filter((id) => id !== templeId) : [templeId, ...current]
+  const toggleEventNotification = async (eventId) => {
+    try {
+      const response = await axios.post(`${apiBase}/preferences/events/${encodeURIComponent(eventId)}/toggle`);
+      if (!response.data?.success) throw new Error(response.data?.message || "Unable to update reminders.");
+      const enabled = Boolean(response.data.data?.enabled);
+      setNotifyEventIds(response.data.data?.notifyEventIds || []);
+      showStatus(enabled ? "Festival reminder enabled." : "Festival reminder removed.");
+    } catch (error) {
+      handleApiError(error, "Unable to update reminders.");
+    }
+  };
+
+  const toggleLiveSaved = async (templeId) => {
+    try {
+      const response = await axios.post(`${apiBase}/preferences/live/${encodeURIComponent(templeId)}/toggle`);
+      if (!response.data?.success) throw new Error(response.data?.message || "Unable to update live list.");
+      const enabled = Boolean(response.data.data?.enabled);
+      setSavedLiveTempleIds(response.data.data?.savedLiveTempleIds || []);
+      showStatus(enabled ? "Live darshan saved." : "Live darshan removed from saved list.");
+    } catch (error) {
+      handleApiError(error, "Unable to update live list.");
+    }
+  };
+
+  const cancelBooking = async (bookingId) => {
+    try {
+      setIsSaving(true);
+      const response = await axios.patch(`${apiBase}/bookings/${encodeURIComponent(bookingId)}/cancel`);
+      if (!response.data?.success) throw new Error(response.data?.message || "Unable to cancel booking.");
+      await refreshBootstrap();
+      showStatus("Booking cancelled. Contact temple for refund details.");
+    } catch (error) {
+      handleApiError(error, "Unable to cancel booking.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const loadRazorpayScript = () =>
+    new Promise((resolve, reject) => {
+      if (window.Razorpay) {
+        resolve();
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Unable to load Razorpay checkout script."));
+      document.body.appendChild(script);
+    });
+
+  const verifyBookingPayment = async (bookingId, paymentId, payload) => {
+    const response = await axios.post(
+      `${apiBase}/bookings/${encodeURIComponent(bookingId)}/payments/verify`,
+      {
+        paymentId,
+        ...payload,
+      }
     );
-    showStatus(enabled ? "Live darshan removed from saved list." : "Live darshan saved.");
+
+    if (!response.data?.success) {
+      throw new Error(response.data?.message || "Payment verification failed.");
+    }
+  };
+
+  const openRazorpayCheckout = async (paymentData, bookingId) => {
+    await loadRazorpayScript();
+    if (!window.Razorpay) {
+      throw new Error("Razorpay checkout is unavailable.");
+    }
+
+    const options = {
+      key: paymentData.razorpayKeyId,
+      amount: Math.round(Number(paymentData.amount || 0) * 100),
+      currency: paymentData.currency || "INR",
+      name: "Devadarshan",
+      description: `Pooja booking ${bookingId}`,
+      order_id: paymentData.gatewayOrderId,
+      handler: async (result) => {
+        try {
+          await verifyBookingPayment(bookingId, paymentData.paymentId, {
+            razorpay_payment_id: result.razorpay_payment_id,
+            razorpay_order_id: result.razorpay_order_id,
+            razorpay_signature: result.razorpay_signature,
+          });
+          await refreshBootstrap();
+          showStatus("Payment verified. Booking confirmed.");
+        } catch (error) {
+          handleApiError(error, "Payment verification failed.");
+        } finally {
+          setIsSaving(false);
+        }
+      },
+      prefill: {
+        name: bookingForm.devoteeName || currentUser?.name || "",
+        email: currentUser?.email || "",
+        contact: profile.phone || "",
+      },
+      theme: { color: "#2563eb" },
+    };
+
+    const gateway = new window.Razorpay(options);
+    gateway.on("payment.failed", () => {
+      setIsSaving(false);
+      showStatus("Razorpay payment failed.");
+    });
+    gateway.open();
+  };
+
+  const markBookingPaid = async (bookingId) => {
+    try {
+      setIsSaving(true);
+      const booking = bookings.find((item) => item.id === bookingId);
+      if (!booking) {
+        throw new Error("Booking not found.");
+      }
+
+      const response = await axios.post(
+        `${apiBase}/bookings/${encodeURIComponent(bookingId)}/payments/initiate`,
+        {
+          gateway: selectedPaymentGateway,
+          paymentMethod: booking.paymentMethod || "upi",
+        }
+      );
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to start payment.");
+      }
+
+      const paymentData = response.data.data;
+      if (paymentData.gateway === "razorpay") {
+        await openRazorpayCheckout(paymentData, bookingId);
+        return;
+      }
+
+      showStatus("Payment initialized. Complete payment in your configured gateway flow.");
+      setIsSaving(false);
+    } catch (error) {
+      setIsSaving(false);
+      handleApiError(error, "Unable to start payment.");
+    }
   };
 
   const createReceiptText = (record, type) => {
@@ -542,212 +536,176 @@ const DevadarshanHub = () => {
     downloadText(`${record.receiptNumber}.txt`, text);
   };
 
-  const handleBookingSubmit = (event) => {
+  const handleBookingSubmit = async (event) => {
     event.preventDefault();
-    const temple = temples.find((item) => item.id === bookingForm.templeId);
-    if (!temple) {
-      showStatus("Select a valid temple.");
-      return;
-    }
-    if (!bookingForm.devoteeName.trim() || !bookingForm.bookingDate) {
-      showStatus("Enter devotee name and booking date.");
-      return;
-    }
-    if (!availablePoojaNames.includes(bookingForm.poojaType)) {
-      showStatus("Selected pooja is not available for this temple.");
-      return;
-    }
+    try {
+      setIsSaving(true);
+      const response = await axios.post(`${apiBase}/bookings`, bookingForm);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Booking could not be created.");
+      }
 
-    const pooja = temple.poojas.find((item) => item.name === bookingForm.poojaType);
-    const quantity = Number(bookingForm.quantity || 1);
-    const amount = (pooja?.price || 0) * Math.max(quantity, 1);
-    const booking = {
-      id: generateId("BK"),
-      templeId: temple.id,
-      templeName: temple.name,
-      poojaType: bookingForm.poojaType,
-      devoteeName: bookingForm.devoteeName.trim(),
-      familyMember: bookingForm.familyMember,
-      nakshatra: bookingForm.nakshatra,
-      bookingDate: bookingForm.bookingDate,
-      quantity,
-      amount,
-      prasadamOption: bookingForm.prasadamOption,
-      deliveryMode: bookingForm.deliveryMode,
-      deliveryAddress: bookingForm.deliveryMode === "Local Delivery" ? bookingForm.deliveryAddress : "",
-      notes: bookingForm.notes,
-      paymentMethod: bookingForm.paymentMethod,
-      paymentStatus: "Paid",
-      transactionRef: generateId("TXN"),
-      receiptNumber: generateId("RCPT"),
-      adminApprovalStatus: temple.verified ? "Auto Approved (Verified Temple)" : "Pending Admin Approval",
-      status: temple.verified ? "Confirmed" : "Pending Approval",
-      createdAt: new Date().toISOString(),
-    };
-
-    setBookings((current) => [booking, ...current]);
-    setNotifications((current) => [
-      {
-        id: generateId("NTF"),
-        message: `Booking ${booking.id} confirmed for ${booking.poojaType} at ${temple.name}.`,
-        createdAt: new Date().toISOString(),
-      },
-      ...current,
-    ]);
-    showStatus(`Booking ${booking.id} completed. Receipt ${booking.receiptNumber} generated.`);
-    setBookingForm((current) => ({
-      ...INITIAL_BOOKING_FORM,
-      templeId: current.templeId,
-      poojaType: temple.poojas[0]?.name || "Archana",
-      paymentMethod: "UPI",
-    }));
+      const createdBooking = response.data.data?.booking;
+      await refreshBootstrap();
+      showStatus(`Booking ${createdBooking?.id || ""} created. Receipt ${createdBooking?.receiptNumber || ""} is ready.`);
+      setBookingForm((current) => ({
+        ...INITIAL_BOOKING_FORM,
+        templeId: current.templeId || selectedTemple?.id || "",
+        poojaType: selectedTemple?.poojas?.[0]?.name || "Archana",
+        paymentMethod: "UPI",
+      }));
+    } catch (error) {
+      handleApiError(error, "Unable to create booking.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDonationSubmit = (event) => {
+  const handleDonationSubmit = async (event) => {
     event.preventDefault();
-    const temple = temples.find((item) => item.id === donationForm.templeId);
-    const amount = Number(donationForm.amount || 0);
-    if (!temple || amount <= 0) {
-      showStatus("Select temple and valid donation amount.");
-      return;
+    try {
+      setIsSaving(true);
+      const response = await axios.post(`${apiBase}/donations`, donationForm);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Donation could not be processed.");
+      }
+      await refreshBootstrap();
+      showStatus("Donation completed and receipt generated.");
+      setDonationForm((current) => ({ ...INITIAL_DONATION_FORM, templeId: current.templeId }));
+    } catch (error) {
+      handleApiError(error, "Unable to complete donation.");
+    } finally {
+      setIsSaving(false);
     }
-
-    const donation = {
-      id: generateId("DN"),
-      templeId: temple.id,
-      templeName: temple.name,
-      category: donationForm.category,
-      amount,
-      purpose: donationForm.purpose,
-      paymentMethod: donationForm.paymentMethod,
-      transactionRef: generateId("TXN"),
-      receiptNumber: generateId("DRCPT"),
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-    setDonations((current) => [donation, ...current]);
-    setNotifications((current) => [
-      {
-        id: generateId("NTF"),
-        message: `Donation ${donation.receiptNumber} received for ${donation.category}.`,
-        createdAt: new Date().toISOString(),
-      },
-      ...current,
-    ]);
-    showStatus("Donation completed and receipt generated.");
-    setDonationForm((current) => ({ ...INITIAL_DONATION_FORM, templeId: current.templeId }));
   };
 
-  const addFamilyMember = (event) => {
+  const addFamilyMember = async (event) => {
     event.preventDefault();
-    if (!familyForm.name.trim() || !familyForm.nakshatra) {
-      showStatus("Enter family member name and nakshatra.");
-      return;
+    try {
+      setIsSaving(true);
+      const response = await axios.post(`${apiBase}/family`, familyForm);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to add family member.");
+      }
+      setFamilyMembers(response.data.data?.familyMembers || []);
+      setFamilyForm({ name: "", nakshatra: "" });
+      await refreshBootstrap();
+      showStatus("Family star profile updated.");
+    } catch (error) {
+      handleApiError(error, "Unable to add family member.");
+    } finally {
+      setIsSaving(false);
     }
-    setFamilyMembers((current) => [
-      { id: generateId("FM"), name: familyForm.name.trim(), nakshatra: familyForm.nakshatra },
-      ...current,
-    ]);
-    setFamilyForm({ name: "", nakshatra: "" });
-    showStatus("Family star profile updated.");
   };
 
-  const removeFamilyMember = (id) => {
-    setFamilyMembers((current) => current.filter((item) => item.id !== id));
+  const removeFamilyMember = async (id) => {
+    try {
+      setIsSaving(true);
+      const response = await axios.delete(`${apiBase}/family/${encodeURIComponent(id)}`);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to remove family member.");
+      }
+      setFamilyMembers(response.data.data?.familyMembers || []);
+    } catch (error) {
+      handleApiError(error, "Unable to remove family member.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const saveProfile = (event) => {
+  const saveProfile = async (event) => {
     event.preventDefault();
-    showStatus("Personal devotional preferences saved.");
+    try {
+      setIsSaving(true);
+      const response = await axios.post(`${apiBase}/profile`, profile);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to save profile.");
+      }
+      setProfile(response.data.data?.profile || profile);
+      showStatus("Personal devotional preferences saved.");
+    } catch (error) {
+      handleApiError(error, "Unable to save profile.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const addTempleFromAdmin = (event) => {
+  const addTempleFromAdmin = async (event) => {
     event.preventDefault();
-    if (!adminTempleForm.name.trim() || !adminTempleForm.district.trim() || !adminTempleForm.deity.trim()) {
-      showStatus("Temple name, district, and deity are required.");
-      return;
+    try {
+      setIsSaving(true);
+      const payload = {
+        ...adminTempleForm,
+        poojaPrice: Number(adminTempleForm.poojaPrice || 50),
+      };
+      const response = await axios.post(`${apiBase}/admin/temples`, payload);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to add temple.");
+      }
+      setAdminTempleForm(INITIAL_ADMIN_TEMPLE_FORM);
+      await refreshBootstrap();
+      showStatus("Temple added in pending verification state.");
+    } catch (error) {
+      handleApiError(error, "Unable to add temple.");
+    } finally {
+      setIsSaving(false);
     }
-
-    const newTemple = {
-      id: generateId("TMP"),
-      name: adminTempleForm.name.trim(),
-      district: adminTempleForm.district.trim(),
-      deity: adminTempleForm.deity.trim(),
-      templeType: "Temple",
-      timings: adminTempleForm.timings || "04:00 AM - 12:00 PM, 05:00 PM - 08:00 PM",
-      contact: adminTempleForm.contact || "Not updated",
-      officialContact: adminTempleForm.contact || "Not updated",
-      festivals: ["Temple Special Pooja"],
-      photos: ["Temple Photo"],
-      mapUrl: "https://maps.google.com",
-      rules: "Follow temple rules and queue discipline.",
-      dressCode: adminTempleForm.dressCode || "Traditional attire preferred",
-      distanceKm: 99,
-      popularity: 3,
-      verified: false,
-      liveDarshanUrl: "https://www.youtube.com",
-      poojas: [],
-    };
-
-    if (adminTempleForm.poojaName && Number(adminTempleForm.poojaPrice) > 0) {
-      newTemple.poojas.push({
-        name: adminTempleForm.poojaName,
-        price: Number(adminTempleForm.poojaPrice),
-        prasadamSupported: true,
-      });
-    } else {
-      newTemple.poojas.push({
-        name: "Archana",
-        price: 50,
-        prasadamSupported: true,
-      });
-    }
-
-    setTemples((current) => [newTemple, ...current]);
-    setAdminTempleForm(INITIAL_ADMIN_TEMPLE_FORM);
-    showStatus("Temple added in pending verification state.");
   };
 
-  const addEventFromAdmin = (event) => {
+  const addEventFromAdmin = async (event) => {
     event.preventDefault();
-    if (!adminEventForm.templeId || !adminEventForm.title.trim() || !adminEventForm.date) {
-      showStatus("Temple, event title, and date are required.");
-      return;
+    try {
+      setIsSaving(true);
+      const response = await axios.post(`${apiBase}/admin/events`, adminEventForm);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to publish event.");
+      }
+      setAdminEventForm(INITIAL_ADMIN_EVENT_FORM);
+      await refreshBootstrap();
+      showStatus("Event calendar updated.");
+    } catch (error) {
+      handleApiError(error, "Unable to publish event.");
+    } finally {
+      setIsSaving(false);
     }
-    const newEvent = {
-      id: generateId("EVT"),
-      templeId: adminEventForm.templeId,
-      title: adminEventForm.title.trim(),
-      type: adminEventForm.type,
-      date: adminEventForm.date,
-      details: adminEventForm.details || "Temple event update",
-    };
-    setFestivalEvents((current) => [newEvent, ...current]);
-    setAdminEventForm(INITIAL_ADMIN_EVENT_FORM);
-    showStatus("Event calendar updated.");
   };
 
-  const toggleTempleVerification = (templeId) => {
-    setTemples((current) =>
-      current.map((temple) =>
-        temple.id === templeId ? { ...temple, verified: !temple.verified } : temple
-      )
-    );
+  const toggleTempleVerification = async (templeId) => {
+    try {
+      setIsSaving(true);
+      const response = await axios.patch(`${apiBase}/admin/temples/${encodeURIComponent(templeId)}/verify`);
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to update verification.");
+      }
+      await refreshBootstrap();
+    } catch (error) {
+      handleApiError(error, "Unable to update verification.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const updateBookingStatus = (bookingId, status) => {
-    setBookings((current) =>
-      current.map((item) => {
-        if (item.id !== bookingId) return item;
-        return {
-          ...item,
-          status,
-          adminApprovalStatus: status === "Confirmed" ? "Approved by Admin" : item.adminApprovalStatus,
-        };
-      })
-    );
+  const updateBookingStatus = async (bookingId, status) => {
+    try {
+      setIsSaving(true);
+      const response = await axios.patch(`${apiBase}/admin/bookings/${encodeURIComponent(bookingId)}/status`, { status });
+      if (!response.data?.success) {
+        throw new Error(response.data?.message || "Unable to update booking status.");
+      }
+      await refreshBootstrap();
+    } catch (error) {
+      handleApiError(error, "Unable to update booking status.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const templeById = (templeId) => temples.find((item) => item.id === templeId);
+  const isAdminView =
+    currentUser?.role === "admin" ||
+    String(currentUser?.email || "").trim().toLowerCase() === "mgdhanyamohan@gmail.com";
+
+  const headerSections = isAdminView ? SECTION_ORDER : SECTION_ORDER.filter((section) => section.id !== "admin");
 
   return (
     <div className="devadarshan-page">
@@ -764,7 +722,7 @@ const DevadarshanHub = () => {
             type="text"
             value={searchTemple}
             onChange={(event) => setSearchTemple(event.target.value)}
-            placeholder="Search by temple, district, deity..."
+            placeholder="Search by temple, district, deity, festival, pooja..."
           />
           <button type="button" onClick={() => setActiveSection("booking")}>
             Quick Book Vazhipadu
@@ -774,7 +732,7 @@ const DevadarshanHub = () => {
           </button>
         </div>
         <nav className="devadarshan-nav">
-          {SECTION_ORDER.map((section) => (
+          {headerSections.map((section) => (
             <button
               key={section.id}
               type="button"
@@ -788,6 +746,8 @@ const DevadarshanHub = () => {
       </header>
 
       {statusMessage ? <p className="devadarshan-status">{statusMessage}</p> : null}
+      {isLoading ? <p className="devadarshan-status">Syncing Devadarshan data from DB...</p> : null}
+      {!isLoading && isSaving ? <p className="devadarshan-status">Saving updates...</p> : null}
 
       {activeSection === "dashboard" && (
         <section className="devadarshan-section">
@@ -875,6 +835,9 @@ const DevadarshanHub = () => {
                   <button type="button" onClick={() => { setSelectedTempleId(temple.id); setActiveSection("booking"); }}>
                     Book Vazhipadu
                   </button>
+                  <button type="button" className="secondary" onClick={() => setSelectedTempleId(temple.id)}>
+                    View Details
+                  </button>
                   <button type="button" className="secondary" onClick={() => toggleFavoriteTemple(temple.id)}>
                     {favoriteTempleIds.includes(temple.id) ? "Remove Favourite" : "Save Favourite"}
                   </button>
@@ -882,6 +845,30 @@ const DevadarshanHub = () => {
                 </div>
               </article>
             ))}
+          </div>
+          <div className="devadarshan-details">
+            <article className="devadarshan-panel">
+              <h3>Selected Temple Details</h3>
+              <p><strong>Temple:</strong> {selectedTemple?.name}</p>
+              <p><strong>District:</strong> {selectedTemple?.district}</p>
+              <p><strong>Deity:</strong> {selectedTemple?.deity}</p>
+              <p><strong>Timings:</strong> {selectedTemple?.timings}</p>
+              <p><strong>Contact:</strong> {selectedTemple?.contact}</p>
+              <p><strong>Official contact:</strong> {selectedTemple?.officialContact}</p>
+              <p><strong>Verified:</strong> {selectedTemple?.verified ? "Yes" : "No"}</p>
+              <p><strong>Festivals:</strong> {selectedTemple?.festivals.join(", ")}</p>
+              <p><strong>Photos:</strong> {selectedTemple?.photos.join(" | ")}</p>
+              {selectedTemple?.liveDarshanUrl ? (
+                <p>
+                  <a href={selectedTemple.liveDarshanUrl} target="_blank" rel="noreferrer">Open live darshan</a>
+                </p>
+              ) : (
+                <p>No live darshan available for this temple.</p>
+              )}
+              <p><strong>Rules:</strong> {selectedTemple?.rules}</p>
+              <p><strong>Dress code:</strong> {selectedTemple?.dressCode}</p>
+              <button type="button" onClick={() => setActiveSection("booking")}>Book this Temple</button>
+            </article>
           </div>
         </section>
       )}
@@ -982,10 +969,17 @@ const DevadarshanHub = () => {
                   </select>
                 </label>
                 <label>
+                  Payment Gateway
+                  <select value={selectedPaymentGateway} onChange={(event) => setSelectedPaymentGateway(event.target.value)}>
+                    <option value="razorpay">Razorpay</option>
+                    <option value="stripe">Stripe</option>
+                  </select>
+                </label>
+                <label>
                   Notes
                   <textarea rows={2} value={bookingForm.notes} onChange={(event) => setBookingForm((current) => ({ ...current, notes: event.target.value }))} />
                 </label>
-                <button type="submit">Confirm Booking + Payment</button>
+                <button type="submit" disabled={isSaving}>Confirm Booking + Payment</button>
               </form>
             </article>
 
@@ -996,6 +990,7 @@ const DevadarshanHub = () => {
               <p><strong>Official contact:</strong> {selectedTemple?.officialContact}</p>
               <p><strong>Receipt:</strong> Generated after payment confirmation</p>
               <p><strong>Admin approval:</strong> Auto for verified temples, manual for pending temples</p>
+              <p className="devadarshan-note">Payments are processed via backend gateway integration. Configure active Razorpay/Stripe credentials in backend for production.</p>
               <h4>Available Poojas & Rates</h4>
               <ul className="devadarshan-list">
                 {selectedTemplePoojas.map((pooja) => (
@@ -1103,8 +1098,18 @@ const DevadarshanHub = () => {
                 <ul className="devadarshan-list">
                   {upcomingBookings.map((entry) => (
                     <li key={entry.id}>
-                      {entry.bookingDate} | {entry.templeName} | {entry.poojaType} | {entry.status}
+                      {entry.bookingDate} | {entry.templeName} | {entry.poojaType} | {entry.paymentStatus} | {entry.status}
                       <button type="button" className="inline-btn" onClick={() => downloadReceipt(entry, "BOOKING")}>Receipt</button>
+                      {entry.paymentStatus === "Pending" && (
+                        <button type="button" className="inline-btn" onClick={() => markBookingPaid(entry.id)} disabled={isSaving}>
+                          Pay Now
+                        </button>
+                      )}
+                      {entry.status !== "Cancelled" && (
+                        <button type="button" className="inline-btn" onClick={() => cancelBooking(entry.id)}>
+                          Cancel
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -1116,7 +1121,19 @@ const DevadarshanHub = () => {
                 <ul className="devadarshan-list">
                   {completedBookings.map((entry) => (
                     <li key={entry.id}>
-                      {entry.id} | {entry.templeName} | {entry.poojaType} | {formatINR(entry.amount)}
+                      {entry.id} | {entry.templeName} | {entry.poojaType} | {formatINR(entry.amount)} | {entry.paymentStatus}
+                      <button type="button" className="inline-btn" onClick={() => downloadReceipt(entry, "BOOKING")}>Receipt</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <h3>Donation History</h3>
+              {donations.length === 0 ? <p>No donations yet.</p> : (
+                <ul className="devadarshan-list">
+                  {donations.map((item) => (
+                    <li key={item.id}>
+                      {item.createdAt} | {item.templeName} | {item.category} | {formatINR(item.amount)}
+                      <button type="button" className="inline-btn" onClick={() => downloadReceipt(item, "DONATION")}>Receipt</button>
                     </li>
                   ))}
                 </ul>
@@ -1247,105 +1264,111 @@ const DevadarshanHub = () => {
       {activeSection === "admin" && (
         <section className="devadarshan-section">
           <h2>Admin Temple Management</h2>
-          <div className="devadarshan-grid">
-            <article className="devadarshan-panel">
-              <h3>Add / Update Temple</h3>
-              <form className="devadarshan-form" onSubmit={addTempleFromAdmin}>
-                <label>
-                  Temple name
-                  <input type="text" value={adminTempleForm.name} onChange={(event) => setAdminTempleForm((current) => ({ ...current, name: event.target.value }))} />
-                </label>
-                <label>
-                  District
-                  <input type="text" value={adminTempleForm.district} onChange={(event) => setAdminTempleForm((current) => ({ ...current, district: event.target.value }))} />
-                </label>
-                <label>
-                  Deity
-                  <input type="text" value={adminTempleForm.deity} onChange={(event) => setAdminTempleForm((current) => ({ ...current, deity: event.target.value }))} />
-                </label>
-                <label>
-                  Contact
-                  <input type="text" value={adminTempleForm.contact} onChange={(event) => setAdminTempleForm((current) => ({ ...current, contact: event.target.value }))} />
-                </label>
-                <label>
-                  Timings
-                  <input type="text" value={adminTempleForm.timings} onChange={(event) => setAdminTempleForm((current) => ({ ...current, timings: event.target.value }))} />
-                </label>
-                <label>
-                  Dress code
-                  <input type="text" value={adminTempleForm.dressCode} onChange={(event) => setAdminTempleForm((current) => ({ ...current, dressCode: event.target.value }))} />
-                </label>
-                <label>
-                  Pooja name
-                  <input type="text" value={adminTempleForm.poojaName} onChange={(event) => setAdminTempleForm((current) => ({ ...current, poojaName: event.target.value }))} />
-                </label>
-                <label>
-                  Pooja price
-                  <input type="number" min="1" value={adminTempleForm.poojaPrice} onChange={(event) => setAdminTempleForm((current) => ({ ...current, poojaPrice: event.target.value }))} />
-                </label>
-                <button type="submit">Add Temple</button>
-              </form>
-            </article>
+          {isAdminView ? (
+            <div className="devadarshan-grid">
+              <article className="devadarshan-panel">
+                <h3>Add / Update Temple</h3>
+                <form className="devadarshan-form" onSubmit={addTempleFromAdmin}>
+                  <label>
+                    Temple name
+                    <input type="text" value={adminTempleForm.name} onChange={(event) => setAdminTempleForm((current) => ({ ...current, name: event.target.value }))} />
+                  </label>
+                  <label>
+                    District
+                    <input type="text" value={adminTempleForm.district} onChange={(event) => setAdminTempleForm((current) => ({ ...current, district: event.target.value }))} />
+                  </label>
+                  <label>
+                    Deity
+                    <input type="text" value={adminTempleForm.deity} onChange={(event) => setAdminTempleForm((current) => ({ ...current, deity: event.target.value }))} />
+                  </label>
+                  <label>
+                    Contact
+                    <input type="text" value={adminTempleForm.contact} onChange={(event) => setAdminTempleForm((current) => ({ ...current, contact: event.target.value }))} />
+                  </label>
+                  <label>
+                    Timings
+                    <input type="text" value={adminTempleForm.timings} onChange={(event) => setAdminTempleForm((current) => ({ ...current, timings: event.target.value }))} />
+                  </label>
+                  <label>
+                    Dress code
+                    <input type="text" value={adminTempleForm.dressCode} onChange={(event) => setAdminTempleForm((current) => ({ ...current, dressCode: event.target.value }))} />
+                  </label>
+                  <label>
+                    Pooja name
+                    <input type="text" value={adminTempleForm.poojaName} onChange={(event) => setAdminTempleForm((current) => ({ ...current, poojaName: event.target.value }))} />
+                  </label>
+                  <label>
+                    Pooja price
+                    <input type="number" min="1" value={adminTempleForm.poojaPrice} onChange={(event) => setAdminTempleForm((current) => ({ ...current, poojaPrice: event.target.value }))} />
+                  </label>
+                  <button type="submit">Add Temple</button>
+                </form>
+              </article>
 
-            <article className="devadarshan-panel">
-              <h3>Festival / Event Update</h3>
-              <form className="devadarshan-form" onSubmit={addEventFromAdmin}>
-                <label>
-                  Temple
-                  <select value={adminEventForm.templeId} onChange={(event) => setAdminEventForm((current) => ({ ...current, templeId: event.target.value }))}>
-                    <option value="">Select temple</option>
-                    {temples.map((temple) => <option key={temple.id} value={temple.id}>{temple.name}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Event title
-                  <input type="text" value={adminEventForm.title} onChange={(event) => setAdminEventForm((current) => ({ ...current, title: event.target.value }))} />
-                </label>
-                <label>
-                  Event type
-                  <select value={adminEventForm.type} onChange={(event) => setAdminEventForm((current) => ({ ...current, type: event.target.value }))}>
-                    {EVENT_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Date
-                  <input type="date" value={adminEventForm.date} onChange={(event) => setAdminEventForm((current) => ({ ...current, date: event.target.value }))} />
-                </label>
-                <label>
-                  Details
-                  <textarea rows={2} value={adminEventForm.details} onChange={(event) => setAdminEventForm((current) => ({ ...current, details: event.target.value }))} />
-                </label>
-                <button type="submit">Publish Event</button>
-              </form>
-            </article>
+              <article className="devadarshan-panel">
+                <h3>Festival / Event Update</h3>
+                <form className="devadarshan-form" onSubmit={addEventFromAdmin}>
+                  <label>
+                    Temple
+                    <select value={adminEventForm.templeId} onChange={(event) => setAdminEventForm((current) => ({ ...current, templeId: event.target.value }))}>
+                      <option value="">Select temple</option>
+                      {temples.map((temple) => <option key={temple.id} value={temple.id}>{temple.name}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    Event title
+                    <input type="text" value={adminEventForm.title} onChange={(event) => setAdminEventForm((current) => ({ ...current, title: event.target.value }))} />
+                  </label>
+                  <label>
+                    Event type
+                    <select value={adminEventForm.type} onChange={(event) => setAdminEventForm((current) => ({ ...current, type: event.target.value }))}>
+                      {EVENT_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    Date
+                    <input type="date" value={adminEventForm.date} onChange={(event) => setAdminEventForm((current) => ({ ...current, date: event.target.value }))} />
+                  </label>
+                  <label>
+                    Details
+                    <textarea rows={2} value={adminEventForm.details} onChange={(event) => setAdminEventForm((current) => ({ ...current, details: event.target.value }))} />
+                  </label>
+                  <button type="submit">Publish Event</button>
+                </form>
+              </article>
 
+              <article className="devadarshan-panel">
+                <h3>Booking Approvals & Reports</h3>
+                <ul className="devadarshan-list">
+                  {bookings.length === 0 ? <li>No bookings yet.</li> : bookings.map((booking) => (
+                    <li key={booking.id}>
+                      {booking.id} | {booking.templeName} | {booking.poojaType} | {booking.status}
+                      <button type="button" className="inline-btn" onClick={() => updateBookingStatus(booking.id, "Confirmed")}>Approve</button>
+                      <button type="button" className="inline-btn" onClick={() => updateBookingStatus(booking.id, "Completed")}>Mark Complete</button>
+                      <button type="button" className="inline-btn" onClick={() => updateBookingStatus(booking.id, "Cancelled")}>Cancel</button>
+                    </li>
+                  ))}
+                </ul>
+                <h4>Donation report</h4>
+                <p>Total donations: {formatINR(donations.reduce((sum, item) => sum + Number(item.amount), 0))}</p>
+                <h4>Temple verification</h4>
+                <ul className="devadarshan-list">
+                  {temples.map((temple) => (
+                    <li key={temple.id}>
+                      {temple.name} | {temple.verified ? "Verified" : "Pending"}
+                      <button type="button" className="inline-btn" onClick={() => toggleTempleVerification(temple.id)}>
+                        Toggle
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            </div>
+          ) : (
             <article className="devadarshan-panel">
-              <h3>Booking Approvals & Reports</h3>
-              <ul className="devadarshan-list">
-                {bookings.length === 0 ? <li>No bookings yet.</li> : bookings.map((booking) => (
-                  <li key={booking.id}>
-                    {booking.id} | {booking.templeName} | {booking.poojaType} | {booking.status}
-                    <button type="button" className="inline-btn" onClick={() => updateBookingStatus(booking.id, "Confirmed")}>Approve</button>
-                    <button type="button" className="inline-btn" onClick={() => updateBookingStatus(booking.id, "Completed")}>Mark Complete</button>
-                    <button type="button" className="inline-btn" onClick={() => updateBookingStatus(booking.id, "Cancelled")}>Cancel</button>
-                  </li>
-                ))}
-              </ul>
-              <h4>Donation report</h4>
-              <p>Total donations: {formatINR(donations.reduce((sum, item) => sum + Number(item.amount), 0))}</p>
-              <h4>Temple verification</h4>
-              <ul className="devadarshan-list">
-                {temples.map((temple) => (
-                  <li key={temple.id}>
-                    {temple.name} | {temple.verified ? "Verified" : "Pending"}
-                    <button type="button" className="inline-btn" onClick={() => toggleTempleVerification(temple.id)}>
-                      Toggle
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <p>Admin access is required to manage temples, events, and booking approvals.</p>
             </article>
-          </div>
+          )}
         </section>
       )}
 
@@ -1366,3 +1389,8 @@ const DevadarshanHub = () => {
 };
 
 export default DevadarshanHub;
+export const __private__ = {
+  generateId,
+  formatINR,
+  DONATION_CATEGORIES,
+};
