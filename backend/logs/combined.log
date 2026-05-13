@@ -20154,3 +20154,49 @@
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 21:55:00:550"}
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: getaddrinfo ENOTFOUND redis-13041.crce296.us-east-1-6.ec2.cloud.redislabs.com\u001b[39m","timestamp":"2026-05-13 21:55:00:550"}
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: getaddrinfo ENOTFOUND redis-13041.crce296.us-east-1-6.ec2.cloud.redislabs.com\u001b[39m","timestamp":"2026-05-13 21:55:00:550"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:56:00:560"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:56:00:560"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:57:00:570"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:58:00:580"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:58:00:580"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:59:00:590"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mStarting overdue queue escalation...\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mStarting suspension auto-unlock check...\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mChecking for pending appeals...\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mEscalated 0 overdue items\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"heapPercentage":"97.19","heapTotal":"173.23 MB","heapUsed":"168.37 MB","level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mMemory pressure detected:\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mAll delta sync states cleared\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mEmergency: Cleared delta sync states\u001b[39m","statesCleared":0,"timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mStarting spam detection scan...\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mStarting harassment detection scan...\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mChecking appeal backlog...\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mAuto-unlocked 0 suspended users\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mExecuted 0 retention policies\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mCleaned up 0 expired messages\u001b[39m","timestamp":"2026-05-13 22:00:00:00"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:01:00:10"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:02:00:20"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:02:00:20"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:03:00:30"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:04:00:40"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:04:00:40"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:05:00:50"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mCleaned up 0 expired messages\u001b[39m","timestamp":"2026-05-13 22:05:00:50"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:06:00:60"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:06:00:60"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:07:00:70"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:08:00:80"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:08:00:80"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:09:00:90"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:10:00:100"}
+{"heapPercentage":"86.00","heapTotal":"172.29 MB","heapUsed":"148.18 MB","level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mMemory pressure detected:\u001b[39m","timestamp":"2026-05-13 22:10:00:100"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:10:00:100"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mCleaned up 0 expired messages\u001b[39m","timestamp":"2026-05-13 22:10:00:100"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:11:00:110"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 22:12:01:121"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 22:12:01:121"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 22:12:01:121"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:13:00:130"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 22:14:00:140"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 22:14:00:140"}

@@ -4488,3 +4488,11 @@
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 21:20:29:2029"}
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 21:20:29:2029"}
 {"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 21:20:29:2029"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 21:55:00:550"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 21:55:00:550"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 21:55:00:550"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: getaddrinfo ENOTFOUND redis-13041.crce296.us-east-1-6.ec2.cloud.redislabs.com\u001b[39m","timestamp":"2026-05-13 21:55:00:550"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: getaddrinfo ENOTFOUND redis-13041.crce296.us-east-1-6.ec2.cloud.redislabs.com\u001b[39m","timestamp":"2026-05-13 21:55:00:550"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 22:12:01:121"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 22:12:01:121"}
+{"level":"\u001b[31merror\u001b[39m","message":"\u001b[31mEcommerce order queue error: read ECONNRESET\u001b[39m","timestamp":"2026-05-13 22:12:01:121"}

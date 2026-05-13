@@ -109,6 +109,8 @@ const NilaAIHub = () => {
   const [recommendations, setRecommendations] = useState(DEFAULT_RECOMMENDATIONS);
   const [suggestedActions, setSuggestedActions] = useState([]);
   const [flashMessage, setFlashMessage] = useState("");
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+  const [recommendationsError, setRecommendationsError] = useState("");
 
   const getStoredAuthToken = () =>
     window.localStorage.getItem("authToken") || window.localStorage.getItem("token") || "";
@@ -381,24 +383,12 @@ const NilaAIHub = () => {
     <div className="nila-ai-page">
       <header className="nila-ai-hero">
         <div className="nila-ai-hero-text">
-          <span className="nila-ai-badge">Nila AI Hub</span>
-          <h1>{t("nilaaihub.title", "AI Ecosystem & Digital Assistant")}</h1>
-          <p>
-            {t(
-              "nilaaihub.subtitle",
-              "A conversational AI companion to help with services, travel, loans, jobs, documents, and daily planning."
-            )}
-          </p>
+          <span className="nila-ai-badge">{t('nilaaihub.badge')}</span>
+          <h1>{t('nilaaihub.hero.title')}</h1>
+          <p>{t('nilaaihub.hero.subtitle')}</p>
           <div className="nila-ai-actions">
             <button className="btn btn-primary" type="button" onClick={handleStartChat}>
-              {t("nilaaihub.startChat", "Start AI Chat")}
-            </button>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => document.querySelector('.nila-ai-search-card')?.scrollIntoView({ behavior: 'smooth' })}
-            >
-              {t("nilaaihub.exploreRecommendations", "Explore Recommendations")}
+              {t('nilaaihub.getStarted')}
             </button>
           </div>
         </div>
@@ -414,19 +404,19 @@ const NilaAIHub = () => {
 
       <section className="nila-ai-search-panel">
         <div className="nila-ai-search-card">
-          <h2>{t("nilaaihub.quickSearchTitle", "Ask Nila Anything")}</h2>
-          <p>{t("nilaaihub.quickSearchSubtitle", "Type your question or select a topic to get tailored guidance.")}</p>
+          <h2>{t('nilaaihub.search.title')}</h2>
+          <p>{t('nilaaihub.search.subtitle')}</p>
           <div className="nila-ai-search-box">
             <input
               ref={chatInputRef}
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("nilaaihub.searchPlaceholder", "What can Nila help you with today?")}
-              aria-label={t("nilaaihub.searchAriaLabel", "AI search input")}
+              placeholder={t('nilaaihub.search.placeholder')}
+              aria-label={t('nilaaihub.search.placeholder')}
             />
             <button className="btn btn-primary" type="button" onClick={handleQuerySubmit}>
-              {t("nilaaihub.searchButton", "Ask Now")}
+              {t('nilaaihub.search.button')}
             </button>
           </div>
           {error && (
@@ -436,23 +426,26 @@ const NilaAIHub = () => {
           )}
           {flashMessage && <div className="nila-ai-flash-state">{flashMessage}</div>}
           <div className="nila-ai-topic-list">
-            {TOPICS.map((topic) => (
-              <button
-                key={topic}
-                type="button"
-                className={topic === activeTopic ? "active" : ""}
-                onClick={() => setQueryForTopic(topic)}
-              >
-                {t(`nilaaihub.topic.${topic}`, topic)}
-              </button>
-            ))}
+            {TOPICS.map((topic) => {
+              const topicSlug = topic.toLowerCase().replace(/\s+/g, '').replace(/[^a-z]/g, '');
+              return (
+                <button
+                  key={topic}
+                  type="button"
+                  className={topic === activeTopic ? "active" : ""}
+                  onClick={() => setQueryForTopic(topic)}
+                >
+                  {t(`nilaaihub.topic.${topicSlug}`, topic)}
+                </button>
+              );
+            })}
           </div>
 
           <div className="nila-ai-chat-panel">
             <div className="nila-ai-chat-panel-header">
               <div>
-                <h3>{t("nilaaihub.chatPanelTitle", "AI Chat Assistant")}</h3>
-                <p>{t("nilaaihub.chatPanelSubtitle", "Ask follow-up questions, save your conversation, or choose a suggested action.")}</p>
+                <h3>{t('nilaaihub.chat.title')}</h3>
+                <p>{t('nilaaihub.chat.subtitle')}</p>
               </div>
               <button className="btn btn-secondary" type="button" onClick={handleSaveConversation}>
                 {t("nilaaihub.saveChat", "Save Chat")}
@@ -510,23 +503,26 @@ const NilaAIHub = () => {
       <section className="nila-ai-quick-actions">
         <h2>{t("nilaaihub.actionsTitle", "Instant AI Actions")}</h2>
         <div className="nila-ai-action-grid">
-          {QUICK_ACTIONS.map((action) => (
-            <article
-              key={action.title}
-              className="nila-ai-action-card clickable"
-              role="button"
-              tabIndex={0}
-              onClick={() => handleQuickAction(action)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  handleQuickAction(action);
-                }
-              }}
-            >
-              <h3>{t(`nilaaihub.action.${action.title}`, action.title)}</h3>
-              <p>{t(`nilaaihub.action.${action.title}.subtitle`, action.subtitle)}</p>
-            </article>
-          ))}
+          {QUICK_ACTIONS.map((action) => {
+            const actionSlug = action.title.toLowerCase().replace(/\s+/g, '');
+            return (
+              <article
+                key={action.title}
+                className="nila-ai-action-card clickable"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleQuickAction(action)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    handleQuickAction(action);
+                  }
+                }}
+              >
+                <h3>{t(`nilaaihub.quickActions.${actionSlug}.title`, action.title)}</h3>
+                <p>{t(`nilaaihub.quickActions.${actionSlug}.subtitle`, action.subtitle)}</p>
+              </article>
+            );
+          })}
         </div>
       </section>
 
@@ -534,24 +530,22 @@ const NilaAIHub = () => {
         <h2>{t("nilaaihub.assistantsTitle", "Assistants for Every Need")}</h2>
         <p>{t("nilaaihub.assistantsSubtitle", "Choose a dedicated assistant for loans, Gulf services, jobs, health, and travel.")}</p>
         <div className="nila-ai-assistant-grid">
-          {ASSISTANTS.map((assistant) => (
-            <div key={assistant.title} className="nila-ai-assistant-card">
-              <h3>{t(`nilaaihub.assistant.${assistant.title}`, assistant.title)}</h3>
-              <p>{t(`nilaaihub.assistant.${assistant.title}.description`, assistant.description)}</p>
-            </div>
-          ))}
+          {ASSISTANTS.map((assistant) => {
+            const assistantSlug = assistant.title.toLowerCase().replace(/\s+/g, '').replace(/[^a-z]/g, '');
+            return (
+              <div key={assistant.title} className="nila-ai-assistant-card">
+                <h3>{t(`nilaaihub.assistants.${assistantSlug}.title`, assistant.title)}</h3>
+                <p>{t(`nilaaihub.assistants.${assistantSlug}.description`, assistant.description)}</p>
+              </div>
+            );
+          })}
         </div>
       </section>
 
       <section className="nila-ai-recommendations">
         <div>
-          <h2>{t("nilaaihub.recommendationsTitle", "AI-Powered Recommendations")}</h2>
-          <p>
-            {t(
-              "nilaaihub.recommendationsSubtitle",
-              "Smart suggestions for service bundles, growth ideas, financial support, and travel readiness."
-            )}
-          </p>
+          <h2>{t('nilaaihub.recommendations.title')}</h2>
+          <p>{t('nilaaihub.recommendations.subtitle')}</p>
         </div>
         <div className="nila-ai-recommendation-grid">
           {activeRecommendations.map((item, index) => (
