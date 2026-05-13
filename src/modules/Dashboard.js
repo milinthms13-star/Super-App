@@ -693,6 +693,8 @@ const normalizeEnabledModuleIds = (modules) => {
     .filter(Boolean);
 };
 
+const FAVORITE_MODULES_STORAGE_PREFIX = "nilahub:dashboard:favorites";
+
 const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) => {
     // Real-time analytics state
     const [dashboardAnalytics, setDashboardAnalytics] = useState(null);
@@ -736,6 +738,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
   const [isLoading, setIsLoading] = useState(process.env.NODE_ENV !== "test");
   const [moduleSearch, setModuleSearch] = useState("");
   const [activeModuleCategory, setActiveModuleCategory] = useState("all");
+  const [favoriteModuleIds, setFavoriteModuleIds] = useState([]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "test") {
@@ -748,6 +751,47 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
 
   const isSeller =
     currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
+  const favoriteModulesStorageKey = useMemo(() => {
+    const identity = String(currentUser?.email || currentUser?.id || "guest").trim().toLowerCase();
+    return `${FAVORITE_MODULES_STORAGE_PREFIX}:${identity}`;
+  }, [currentUser?.email, currentUser?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const storedValue = window.localStorage.getItem(favoriteModulesStorageKey);
+      if (!storedValue) {
+        setFavoriteModuleIds([]);
+        return;
+      }
+
+      const parsed = JSON.parse(storedValue);
+      const normalized = Array.isArray(parsed)
+        ? parsed.map((id) => String(id || "").trim().toLowerCase()).filter(Boolean)
+        : [];
+      setFavoriteModuleIds([...new Set(normalized)]);
+    } catch {
+      setFavoriteModuleIds([]);
+    }
+  }, [favoriteModulesStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        favoriteModulesStorageKey,
+        JSON.stringify([...new Set(favoriteModuleIds)])
+      );
+    } catch {
+      // Ignore localStorage failures gracefully.
+    }
+  }, [favoriteModuleIds, favoriteModulesStorageKey]);
   const businessName = currentUser?.businessName?.trim() || currentUser?.name || "Your Business";
   const subscribedCategoryIds = (currentUser?.selectedBusinessCategories || [])
     .map((category) => category?.id)
@@ -879,6 +923,37 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
     });
   };
 
+  const toggleModuleFavorite = (moduleId) => {
+    const normalizedId = String(moduleId || "").trim().toLowerCase();
+    if (!normalizedId) {
+      return;
+    }
+
+    setFavoriteModuleIds((currentIds) =>
+      currentIds.includes(normalizedId)
+        ? currentIds.filter((id) => id !== normalizedId)
+        : [...currentIds, normalizedId]
+    );
+  };
+
+  const isFavoriteModule = (moduleId) =>
+    favoriteModuleIds.includes(String(moduleId || "").trim().toLowerCase());
+
+  const handleModuleCardActivation = (card) => {
+    if (card.cardType === "external") {
+      openExternalLink(card.url);
+      return;
+    }
+    handleModuleNavigation(card.id);
+  };
+
+  const handleModuleCardKeyDown = (event, card) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleModuleCardActivation(card);
+    }
+  };
+
   const filteredModules = MODULE_CONFIG
     .map((module) => ({
       ...module,
@@ -914,17 +989,45 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "hyperlocal" ||
         subscribedCategoryIds.includes(module.id)
     );
-  const visibleCards = [
-    ...filteredModules.map((module) => ({ ...module, cardType: "module" })),
-    ...customLinks.map((link) => ({
-      id: link.id,
-      name: link.title,
-      description: link.description || link.url,
-      icon: "external",
-      cardType: "external",
-      url: link.url,
-    })),
-  ];
+  const visibleCards = useMemo(
+    () => [
+      ...filteredModules.map((module) => ({ ...module, cardType: "module" })),
+      ...customLinks.map((link) => ({
+        id: link.id,
+        name: link.title,
+        description: link.description || link.url,
+        icon: "external",
+        cardType: "external",
+        url: link.url,
+      })),
+    ],
+    [customLinks, filteredModules]
+  );
+  const favoriteModuleCards = useMemo(() => {
+    const favoriteLookup = new Set(favoriteModuleIds);
+    return visibleCards.filter(
+      (card) => card.cardType === "module" && favoriteLookup.has(String(card.id || "").trim().toLowerCase())
+    );
+  }, [favoriteModuleIds, visibleCards]);
+  const prioritizedVisibleCards = useMemo(() => {
+    if (isSeller) {
+      return visibleCards;
+    }
+
+    const favoriteLookup = new Set(favoriteModuleIds);
+    return [...visibleCards].sort((leftCard, rightCard) => {
+      const leftFavorite =
+        leftCard.cardType === "module" &&
+        favoriteLookup.has(String(leftCard.id || "").trim().toLowerCase());
+      const rightFavorite =
+        rightCard.cardType === "module" &&
+        favoriteLookup.has(String(rightCard.id || "").trim().toLowerCase());
+      if (leftFavorite !== rightFavorite) {
+        return leftFavorite ? -1 : 1;
+      }
+      return String(leftCard.name || "").localeCompare(String(rightCard.name || ""));
+    });
+  }, [isSeller, favoriteModuleIds, visibleCards]);
   const activeModuleCount = visibleCards.filter((card) => card.cardType === "module").length;
   const normalizedSearch = moduleSearch.trim().toLowerCase();
   const getModuleCategory = (card) => MODULE_CATEGORY_MAP[card.id] || "core";
@@ -944,7 +1047,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
   );
   const visibleCardsForDisplay = useMemo(
     () =>
-      visibleCards.filter((card) => {
+      prioritizedVisibleCards.filter((card) => {
         const searchMatch =
           !normalizedSearch ||
           String(card.name || "")
@@ -957,8 +1060,9 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
           activeModuleCategory === "all" || getModuleCategory(card) === activeModuleCategory;
         return searchMatch && categoryMatch;
       }),
-    [activeModuleCategory, normalizedSearch, visibleCards]
+    [activeModuleCategory, normalizedSearch, prioritizedVisibleCards]
   );
+  const cardsForGridDisplay = isSeller ? visibleCards : visibleCardsForDisplay;
 
   // Example: show analytics data at the top (customize as needed)
   return (
@@ -1153,6 +1257,24 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       <div className={!isSeller ? "dashboard-main-grid" : ""}>
         <div className="modules-section" ref={exploreServicesRef}>
           <h2 className="section-title-polished">{isSeller ? "My Business Categories" : t("dashboard.exploreServices", "Explore Our Services")}</h2>
+          {!isSeller && favoriteModuleCards.length > 0 && (
+            <div className="favorite-modules-strip" aria-label="Favorite modules quick access">
+              <span className="favorite-modules-label">Favorites</span>
+              <div className="favorite-modules-list">
+                {favoriteModuleCards.slice(0, 8).map((module) => (
+                  <button
+                    key={`favorite-${module.id}`}
+                    type="button"
+                    className="favorite-module-chip"
+                    onClick={() => handleModuleNavigation(module.id)}
+                  >
+                    <Icon type={module.icon} className="favorite-module-chip-icon" />
+                    <span>{module.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {!isSeller && (
             <div className="module-discovery-tools" aria-label="Module discovery tools">
               <input
@@ -1184,18 +1306,37 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
             </div>
           )}
           <div className="modules-grid">
-            {(isSeller ? visibleCards : visibleCardsForDisplay).map((module) => (
-              <button
-                type="button"
+            {cardsForGridDisplay.map((module) => {
+              const showFavoriteToggle = !isSeller && module.cardType === "module";
+              const isFavorite = showFavoriteToggle && isFavoriteModule(module.id);
+              return (
+              <article
+                role="button"
+                tabIndex={0}
                 className={`module-card polished micro-glow ${isSeller ? "seller-module-card" : ""}`}
                 key={module.id}
-                onClick={() =>
-                  module.cardType === "external"
-                    ? openExternalLink(module.url)
-                    : handleModuleNavigation(module.id)
-                }
+                onClick={() => handleModuleCardActivation(module)}
+                onKeyDown={(event) => handleModuleCardKeyDown(event, module)}
                 style={{ background: module.gradient }}
               >
+                {showFavoriteToggle && (
+                  <button
+                    type="button"
+                    className={`module-card-favorite ${isFavorite ? "active" : ""}`}
+                    aria-label={
+                      isFavorite
+                        ? `Remove ${module.name} from favorites`
+                        : `Add ${module.name} to favorites`
+                    }
+                    title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleModuleFavorite(module.id);
+                    }}
+                  >
+                    {isFavorite ? "Fav" : "+"}
+                  </button>
+                )}
                 <div className="module-hero-overlay" />
                 <div className="module-stats-badge">{module.stats}</div>
                 <div className="module-icon">
@@ -1210,8 +1351,9 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                       ? "Open Workspace"
                       : t("common.explore", "Explore")}
                 </span>
-              </button>
-            ))}
+              </article>
+            );
+            })}
           </div>
           {isSeller && visibleCards.length === 0 && (
             <div className="recent-orders seller-empty-dashboard">
@@ -1429,3 +1571,4 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
 };
 
 export default Dashboard;
+

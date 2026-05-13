@@ -267,6 +267,59 @@ p, span, label, button {
   position: relative;
 }
 
+.favorite-modules-strip {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 215, 0, 0.28);
+  background: linear-gradient(135deg, rgba(255, 249, 224, 0.95), rgba(244, 250, 255, 0.95));
+}
+
+.favorite-modules-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7a5600;
+}
+
+.favorite-modules-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.favorite-module-chip {
+  border: 1px solid rgba(24, 62, 111, 0.14);
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 999px;
+  padding: 0.42rem 0.72rem;
+  color: #173b66;
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.favorite-module-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(24, 62, 111, 0.34);
+  box-shadow: 0 10px 18px rgba(18, 48, 92, 0.1);
+}
+
+.favorite-module-chip-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .module-card {
   background-color: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(15px);
@@ -283,6 +336,38 @@ p, span, label, button {
   overflow: hidden;
   min-width: 0;
   will-change: transform, box-shadow, filter;
+}
+
+.module-card-favorite {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(8, 19, 38, 0.55);
+  color: #ffd666;
+  font-size: 1rem;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 4;
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.module-card-favorite:hover {
+  transform: scale(1.06);
+  background: rgba(8, 19, 38, 0.72);
+  box-shadow: 0 8px 18px rgba(4, 15, 30, 0.35);
+}
+
+.module-card-favorite.active {
+  background: rgba(255, 201, 61, 0.95);
+  border-color: rgba(255, 234, 163, 0.95);
+  color: #4a2d00;
 }
 
 .module-card::after {
@@ -308,6 +393,11 @@ p, span, label, button {
 
 .module-card:active {
   transform: translateY(-8px) scale(0.99);
+}
+
+.module-card:focus-visible {
+  outline: 3px solid rgba(255, 215, 0, 0.65);
+  outline-offset: 2px;
 }
 
 .module-hero-overlay {

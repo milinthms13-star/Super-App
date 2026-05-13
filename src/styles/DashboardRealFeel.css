@@ -201,6 +201,31 @@
   gap: 0.55rem;
 }
 
+.dashboard-container-compact .favorite-modules-strip {
+  margin-bottom: 0.75rem;
+  padding: 0.68rem 0.72rem;
+  border-radius: 12px;
+  gap: 0.45rem;
+}
+
+.dashboard-container-compact .favorite-modules-label {
+  font-size: 0.68rem;
+}
+
+.dashboard-container-compact .favorite-modules-list {
+  gap: 0.4rem;
+}
+
+.dashboard-container-compact .favorite-module-chip {
+  padding: 0.28rem 0.5rem;
+  font-size: 0.72rem;
+}
+
+.dashboard-container-compact .favorite-module-chip-icon {
+  width: 13px;
+  height: 13px;
+}
+
 .dashboard-container-compact .module-search-input {
   width: 100%;
   border-radius: 12px;
@@ -274,6 +299,14 @@
   min-height: 158px;
   padding: 0.75rem;
   border-radius: 14px;
+}
+
+.dashboard-container-compact .module-card-favorite {
+  top: 0.48rem;
+  left: 0.48rem;
+  width: 25px;
+  height: 25px;
+  font-size: 0.85rem;
 }
 
 .dashboard-container-compact .module-card h3 {
