@@ -20116,3 +20116,22 @@
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:38:00:380"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:38:00:380"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:39:00:390"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:40:00:400"}
+{"heapPercentage":"95.23","heapTotal":"170.98 MB","heapUsed":"162.83 MB","level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mMemory pressure detected:\u001b[39m","timestamp":"2026-05-13 21:40:00:400"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mAll delta sync states cleared\u001b[39m","timestamp":"2026-05-13 21:40:00:400"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mEmergency: Cleared delta sync states\u001b[39m","statesCleared":0,"timestamp":"2026-05-13 21:40:00:400"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:40:00:400"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mCleaned up 0 expired messages\u001b[39m","timestamp":"2026-05-13 21:40:00:400"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:41:00:410"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:42:00:420"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:42:00:420"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:43:00:430"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:44:00:440"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:44:00:440"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mCleaned up 0 expired messages\u001b[39m","timestamp":"2026-05-13 21:45:00:450"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:45:00:450"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:46:00:460"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:46:00:460"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:47:00:470"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:48:00:480"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:48:00:480"}

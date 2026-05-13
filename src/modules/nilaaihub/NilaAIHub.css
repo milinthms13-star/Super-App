@@ -121,6 +121,59 @@
   color: white;
   border-color: transparent;
   transform: translateY(-1px);
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.12);
+}
+
+.nila-ai-topic-list button:focus {
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.18);
+}
+
+.nila-ai-action-card.clickable:focus,
+.nila-ai-action-card.clickable:hover {
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
+  background: #e0f2f1;
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.18);
+  transform: translateY(-2px);
+}
+
+.nila-ai-action-card.clickable:active {
+  background: #b2dfdb;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.12);
+}
+
+.nila-ai-chat-panel {
+  overflow-x: auto;
+}
+
+.nila-ai-chat-history {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+@media (max-width: 600px) {
+  .nila-ai-page {
+    padding: 8px;
+  }
+  .nila-ai-search-card,
+  .nila-ai-chat-panel {
+    padding: 12px;
+    border-radius: 14px;
+  }
+  .nila-ai-action-card,
+  .nila-ai-recommendation-card,
+  .nila-ai-assistant-card {
+    padding: 12px;
+    border-radius: 14px;
+  }
+  .nila-ai-chat-history {
+    max-height: 180px;
+  }
+}
 }
 
 .nila-ai-error-state,

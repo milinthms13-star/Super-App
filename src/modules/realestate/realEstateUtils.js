@@ -305,8 +305,6 @@ const REQUIRED_FORM_FIELDS = {
   location: (value) => String(value || "").trim().length >= 2,
   type: (value) => String(value || "").trim().length >= 2,
   areaSqft: (value) => Number(value || 0) >= 100,
-  address: (value) => String(value || "").trim().length >= 5,
-  contactPhone: (value) => String(value || "").replace(/\D/g, "").length >= 10,
 };
 
 export const validateListingForm = (formValues = {}) => {
@@ -404,4 +402,3 @@ export const buildListingPayloadFromForm = (form, roleMode) => ({
   description: String(form.description || "").trim(),
   roleMode,
 });
-
