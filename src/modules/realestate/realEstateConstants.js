@@ -104,7 +104,7 @@ export const DEFAULT_LISTING_FORM = {
   bedrooms: "2",
   bathrooms: "2",
   furnishing: "Semi Furnished",
-  areaSqft: "",
+  areaSqft: "1200",
   carpetAreaSqft: "",
   builtUpAreaSqft: "",
   landSizeSqft: "",
@@ -288,4 +288,3 @@ export const SUBSCRIPTION_PLANS = [
   { id: "agent-pro", name: "Agent Pro", amountInr: 2999, featuredCredits: 15, listingLimit: 999, durationDays: 30 },
   { id: "builder-pro", name: "Builder Pro", amountInr: 4999, featuredCredits: 35, listingLimit: 999, durationDays: 30 },
 ];
-

@@ -20136,3 +20136,10 @@
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:48:00:480"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:48:00:480"}
 {"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:49:00:490"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mFlushing stale batches...\u001b[39m","timestamp":"2026-05-13 21:50:00:500"}
+{"heapPercentage":"96.34","heapTotal":"171.23 MB","heapUsed":"164.96 MB","level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mMemory pressure detected:\u001b[39m","timestamp":"2026-05-13 21:50:00:500"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mAll delta sync states cleared\u001b[39m","timestamp":"2026-05-13 21:50:00:500"}
+{"level":"\u001b[33mwarn\u001b[39m","message":"\u001b[33mEmergency: Cleared delta sync states\u001b[39m","statesCleared":0,"timestamp":"2026-05-13 21:50:00:500"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:50:00:500"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mCleaned up 0 expired messages\u001b[39m","timestamp":"2026-05-13 21:50:00:500"}
+{"level":"\u001b[32minfo\u001b[39m","message":"\u001b[32mProcessed 0 scheduled messages\u001b[39m","timestamp":"2026-05-13 21:51:00:510"}
