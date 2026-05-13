@@ -1,30 +1,28 @@
-@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Sora:wght@700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap");
 
 :root {
-  --nila-bg-1: #f7f8f3;
-  --nila-bg-2: #fafbf8;
-  --nila-bg-3: #f1f5ef;
-  --nila-text: #18211f;
-  --nila-text-muted: #53615d;
+  --nila-bg-1: #f2f6f4;
+  --nila-bg-2: #eef5f2;
+  --nila-bg-3: #e8f0eb;
+  --nila-text: #13211d;
+  --nila-text-muted: #4d6159;
   --nila-green: #1f7a53;
-  --nila-green-deep: #15563d;
-  --nila-gold: #f2c94c;
-  --nila-gold-deep: #e7b72b;
-  --nila-card-shadow: 0 8px 24px rgba(24, 33, 31, 0.08);
+  --nila-green-deep: #124836;
+  --nila-gold: #f2c35d;
+  --nila-gold-deep: #e2ab39;
+  --nila-card-shadow: 0 14px 36px rgba(19, 33, 29, 0.08);
 }
 
 .launch-page {
   min-height: calc(100vh - 70px);
-  min-height: 650px;
-  display: grid;
-  grid-template-rows: minmax(360px, auto) auto;
+  overflow-x: clip;
   overflow-y: auto;
   background: linear-gradient(180deg, var(--nila-bg-1) 0%, var(--nila-bg-2) 45%, var(--nila-bg-3) 100%);
   color: var(--nila-text);
   position: relative;
   isolation: isolate;
-  font-family: "Poppins", "General Sans", "Satoshi", "Segoe UI", sans-serif;
+  font-family: "Outfit", "General Sans", "Satoshi", "Segoe UI", sans-serif;
 }
 
 .launch-page::before {
@@ -107,14 +105,124 @@
   position: relative;
   z-index: 2;
   width: 100%;
-  max-width: 980px;
+  max-width: 1180px;
   margin: 0 auto;
   color: #ffffff;
-  padding: 1.2rem;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(8, 27, 25, 0.28) 0%, rgba(8, 27, 25, 0.1) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(2px);
+  padding: 1.4rem;
+  border-radius: 24px;
+  background: linear-gradient(125deg, rgba(7, 27, 25, 0.58) 0%, rgba(7, 27, 25, 0.2) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 28px 56px rgba(8, 21, 20, 0.34);
+  backdrop-filter: blur(6px);
+}
+
+.launch-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1.15rem;
+  align-items: stretch;
+}
+
+.launch-hero-main {
+  position: relative;
+}
+
+.hero-spotlight-panel {
+  border-radius: 18px;
+  padding: 1rem;
+  border: 1px solid rgba(242, 195, 93, 0.35);
+  background:
+    radial-gradient(circle at 88% 10%, rgba(242, 195, 93, 0.2), transparent 42%),
+    radial-gradient(circle at 6% 95%, rgba(31, 122, 83, 0.26), transparent 48%),
+    linear-gradient(135deg, rgba(5, 31, 28, 0.8) 0%, rgba(5, 31, 28, 0.56) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 30px rgba(0, 0, 0, 0.24);
+}
+
+.hero-spotlight-kicker {
+  margin: 0;
+  text-transform: uppercase;
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.hero-spotlight-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.hero-spotlight-metric {
+  border-radius: 12px;
+  padding: 0.65rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.hero-spotlight-metric strong {
+  display: block;
+  font-family: "Space Grotesk", "Outfit", sans-serif;
+  font-size: 1rem;
+  color: #f9deb2;
+}
+
+.hero-spotlight-metric span {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.82);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hero-spotlight-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.hero-spotlight-item {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+  padding: 0.58rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+
+.hero-spotlight-icon-wrap {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(242, 195, 93, 0.4);
+  background: rgba(242, 195, 93, 0.14);
+  color: var(--nila-gold);
+  flex-shrink: 0;
+}
+
+.hero-spotlight-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.hero-spotlight-item h3 {
+  margin: 0;
+  font-size: 0.84rem;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.hero-spotlight-item p {
+  margin: 0.2rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .language-control {
@@ -214,11 +322,11 @@
   font-size: clamp(2.2rem, 4.8vw, 3.7rem);
   line-height: 1.08;
   max-width: none;
-  white-space: nowrap;
-  font-family: "Sora", "Poppins", "Segoe UI", sans-serif;
+  white-space: normal;
+  font-family: "Space Grotesk", "Outfit", "Segoe UI", sans-serif;
   color: #ffffff;
   font-weight: 900;
-  letter-spacing: -1px;
+  letter-spacing: -1.2px;
   text-shadow: 0 5px 20px rgba(0, 0, 0, 0.36), 0 1px 2px rgba(0, 0, 0, 0.18);
   background: linear-gradient(135deg, #ffffff 0%, var(--nila-gold) 100%);
   -webkit-background-clip: text;
@@ -293,7 +401,8 @@
 
 .hero-proof-strip {
   margin-top: 0.95rem;
-  display: inline-grid;
+  display: grid;
+  width: fit-content;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.5rem;
   padding: 0.55rem;
@@ -421,8 +530,7 @@
 }
 
 .launch-features,
-.ecosystem-flow,
-.trust-indicators,
+.launch-compact-overview,
 .launch-cta {
   max-width: 1180px;
   width: 100%;
@@ -433,6 +541,12 @@
 
 .launch-features {
   background: linear-gradient(180deg, #f7f8f3 0%, #fafbf8 100%);
+}
+
+.launch-compact-overview {
+  padding-top: 1rem;
+  padding-bottom: 2rem;
+  background: linear-gradient(180deg, #fafbf8 0%, #f4f8f3 100%);
 }
 
 .launch-section-heading {
@@ -466,12 +580,12 @@
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1.05rem;
+  gap: 0.9rem;
 }
 
 .feature-card {
-  min-height: 126px;
-  padding: 1.42rem;
+  min-height: 108px;
+  padding: 1.1rem;
   background: linear-gradient(135deg, #ffffff 0%, #fafbf8 100%);
   border: 1.5px solid #dce6de;
   border-radius: 22px;
@@ -514,8 +628,8 @@
 }
 
 .feature-icon {
-  width: 2.8rem;
-  height: 2.8rem;
+  width: 2.4rem;
+  height: 2.4rem;
   color: var(--nila-green);
   margin-bottom: 0.8rem;
   transition: all 0.3s ease;
@@ -568,6 +682,132 @@
   outline-offset: 2px;
 }
 
+.compact-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.compact-block {
+  min-height: 150px;
+  border-radius: 18px;
+  border: 1.5px solid rgba(31, 122, 83, 0.2);
+  background:
+    radial-gradient(circle at 100% 0, rgba(242, 195, 93, 0.2), transparent 40%),
+    linear-gradient(135deg, #ffffff 0%, #f2f8f4 100%);
+  box-shadow: var(--nila-card-shadow);
+  padding: 1rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.compact-block:hover {
+  transform: translateY(-3px);
+  border-color: rgba(31, 122, 83, 0.35);
+  box-shadow: 0 20px 34px rgba(19, 33, 29, 0.14);
+}
+
+.compact-block h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  letter-spacing: -0.2px;
+}
+
+.compact-block p {
+  margin: 0;
+  color: var(--nila-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.compact-role-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.compact-role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.38rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #0f5239;
+  border: 1px solid rgba(31, 122, 83, 0.2);
+  background: rgba(31, 122, 83, 0.08);
+}
+
+.compact-role-icon {
+  width: 0.82rem;
+  height: 0.82rem;
+}
+
+.compact-pillar-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.compact-pillar-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: flex-start;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(31, 122, 83, 0.14);
+  padding: 0.42rem;
+}
+
+.compact-pillar-icon {
+  width: 1.7rem;
+  height: 1.7rem;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--nila-green) 0%, #2e9f72 100%);
+}
+
+.compact-pillar-svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.compact-pillar-item strong {
+  display: block;
+  font-size: 0.82rem;
+}
+
+.compact-pillar-item span {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--nila-text-muted);
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+
+.compact-trust-strip {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.compact-trust-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.35rem 0.58rem;
+  font-size: 0.76rem;
+  color: #13553b;
+  background: rgba(31, 122, 83, 0.1);
+  border: 1px solid rgba(31, 122, 83, 0.16);
+}
+
 .feature-card.coming-soon {
   opacity: 0.65;
   cursor: not-allowed;
@@ -587,7 +827,7 @@
 .feature-card h3 {
   margin: 0 0 0.45rem;
   color: var(--nila-text);
-  font-size: 1.08rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: -0.2px;
   position: relative;
@@ -597,8 +837,8 @@
 .feature-card p {
   margin: 0;
   color: var(--nila-text-muted);
-  line-height: 1.5;
-  font-size: 0.9rem;
+  line-height: 1.45;
+  font-size: 0.84rem;
   flex-grow: 1;
   position: relative;
   z-index: 2;
@@ -935,7 +1175,16 @@
     overflow: visible;
   }
 
+  .launch-hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-spotlight-panel {
+    order: 2;
+  }
+
   .registration-actions,
+  .compact-overview-grid,
   .feature-grid,
   .trust-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -962,7 +1211,6 @@
   }
 
   .hero-proof-strip {
-    display: grid;
     width: 100%;
   }
 }
@@ -975,7 +1223,7 @@
   .launch-hero {
     align-items: flex-start;
     min-height: auto;
-    padding-top: 1.25rem;
+    padding: 1.15rem 0.9rem 1.4rem;
     background-position: 58% center;
   }
 
@@ -991,7 +1239,6 @@
 
   .launch-hero h1 {
     font-size: 2.2rem;
-    white-space: normal;
   }
 
   .launch-intro {
@@ -1014,17 +1261,38 @@
     min-width: 0;
   }
 
+  .hero-spotlight-metrics {
+    grid-template-columns: 1fr;
+  }
+
   .registration-option {
     min-height: 74px;
   }
 
   .registration-actions,
-  .feature-grid,
+  .compact-overview-grid,
   .trust-grid {
     grid-template-columns: 1fr;
   }
 
+  .feature-grid {
+    display: flex;
+    gap: 0.7rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.4rem;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .feature-card {
+    min-width: min(84vw, 320px);
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
   .launch-features,
+  .launch-compact-overview,
   .ecosystem-flow,
   .trust-indicators,
   .launch-cta {

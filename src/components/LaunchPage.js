@@ -18,6 +18,14 @@ import {
   FaUser,
   FaBriefcase,
   FaCheckCircle,
+  FaHotel,
+  FaHeartbeat,
+  FaBus,
+  FaFileAlt,
+  FaBuilding,
+  FaRocket,
+  FaShieldAlt,
+  FaGlobeAsia,
 } from "react-icons/fa";
 
 const iconMap = {
@@ -37,6 +45,14 @@ const iconMap = {
   FaUser,
   FaBriefcase,
   FaCheckCircle,
+  FaHotel,
+  FaHeartbeat,
+  FaBus,
+  FaFileAlt,
+  FaBuilding,
+  FaRocket,
+  FaShieldAlt,
+  FaGlobeAsia,
 };
 
 const moduleFallbacks = {
@@ -188,6 +204,33 @@ const heroProofPoints = [
   { value: "Trusted", label: "Experience" },
 ];
 
+const launchPillars = [
+  {
+    icon: "FaRocket",
+    title: "Faster Start",
+    description: "Open modules in one tap with guided onboarding for users and businesses.",
+  },
+  {
+    icon: "FaShieldAlt",
+    title: "Trust Built-In",
+    description: "Verified flows, role-based access, and moderation support across categories.",
+  },
+  {
+    icon: "FaGlobeAsia",
+    title: "Kerala to Global",
+    description: "Built for local growth while staying ready for Gulf and global expansion.",
+  },
+];
+
+const trustReasons = [
+  "Multi-Service Platform",
+  "AI-Powered Features",
+  "Secure Authentication",
+  "Real-Time Infrastructure",
+  "Verified Ecosystem",
+  "Global Ready",
+];
+
 const openExternalLink = (url) => {
   window.open(url, "_blank", "noopener,noreferrer");
 };
@@ -273,6 +316,14 @@ const LaunchPage = ({
     })),
   ];
 
+  const activeModuleCount = featureCards.filter(
+    (feature) => feature.type === "module" && !feature.isComingSoon
+  ).length;
+  const externalLinkCount = featureCards.filter((feature) => feature.type === "external").length;
+  const spotlightModules = featureCards
+    .filter((feature) => feature.type === "module" && !feature.isComingSoon)
+    .slice(0, 4);
+
   const renderIcon = (iconName, className = "feature-icon") => {
     const IconComponent = iconMap[iconName];
     return IconComponent ? <IconComponent className={className} /> : null;
@@ -304,26 +355,61 @@ const LaunchPage = ({
               ))}
             </select>
           </div>
-          <img src="/logo.svg" alt="NilaHub" className="launch-logo" />
-          <p className="launch-eyebrow">{launch.brand}</p>
-          <h1>{launch.title}</h1>
-          <p className="launch-tagline">{launch.tagline}</p>
-          <p className="launch-intro">{launch.intro}</p>
-          <div className="hero-highlights" aria-label="Platform highlights">
-            {heroHighlights.map((item) => (
-              <span key={item} className="hero-highlight-pill">
-                <FaCheckCircle className="hero-highlight-icon" aria-hidden="true" />
-                {item}
-              </span>
-            ))}
-          </div>
-          <div className="hero-proof-strip" aria-label="Quick platform proof">
-            {heroProofPoints.map((point) => (
-              <div className="hero-proof-item" key={point.label}>
-                <span className="hero-proof-value">{point.value}</span>
-                <span className="hero-proof-label">{point.label}</span>
+          <div className="launch-hero-grid">
+            <div className="launch-hero-main">
+              <img src="/logo.svg" alt="NilaHub" className="launch-logo" />
+              <p className="launch-eyebrow">{launch.brand}</p>
+              <h1>{launch.title}</h1>
+              <p className="launch-tagline">{launch.tagline}</p>
+              <p className="launch-intro">{launch.intro}</p>
+              <div className="hero-highlights" aria-label="Platform highlights">
+                {heroHighlights.map((item) => (
+                  <span key={item} className="hero-highlight-pill">
+                    <FaCheckCircle className="hero-highlight-icon" aria-hidden="true" />
+                    {item}
+                  </span>
+                ))}
               </div>
-            ))}
+              <div className="hero-proof-strip" aria-label="Quick platform proof">
+                {heroProofPoints.map((point) => (
+                  <div className="hero-proof-item" key={point.label}>
+                    <span className="hero-proof-value">{point.value}</span>
+                    <span className="hero-proof-label">{point.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <aside className="hero-spotlight-panel" aria-label="Launch overview">
+              <p className="hero-spotlight-kicker">Platform at a glance</p>
+              <div className="hero-spotlight-metrics">
+                <div className="hero-spotlight-metric">
+                  <strong>{activeModuleCount}+</strong>
+                  <span>Live modules</span>
+                </div>
+                <div className="hero-spotlight-metric">
+                  <strong>{ecosystemRoles.length}</strong>
+                  <span>Role journeys</span>
+                </div>
+                <div className="hero-spotlight-metric">
+                  <strong>{externalLinkCount}</strong>
+                  <span>Custom links</span>
+                </div>
+              </div>
+              <div className="hero-spotlight-list">
+                {spotlightModules.map((feature) => (
+                  <div key={feature.key} className="hero-spotlight-item">
+                    <span className="hero-spotlight-icon-wrap">
+                      {feature.icon ? renderIcon(feature.icon, "hero-spotlight-icon") : null}
+                    </span>
+                    <div>
+                      <h3>{feature.title}</h3>
+                      <p>{feature.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </aside>
           </div>
 
           <div className="registration-actions" aria-label="Registration options">
@@ -386,78 +472,48 @@ const LaunchPage = ({
         </div>
       </section>
 
-      <section className="ecosystem-flow" aria-labelledby="flow-heading">
-        <div className="flow-container">
-          <h2 id="flow-heading" className="flow-title">
-            How NilaHub Works
-          </h2>
-          <p className="flow-subtitle">One platform connecting every role in your ecosystem</p>
-          <div className="flow-visualization">
-            <div className="flow-track">
-              {ecosystemRoles.map((role, index) => (
-                <React.Fragment key={role.label}>
-                  <div className="flow-item">
-                    <div className="flow-step">{renderIcon(role.icon, "flow-step-icon")}</div>
-                    <div className="flow-text">{role.label}</div>
-                  </div>
-                  {index < ecosystemRoles.length - 1 ? (
-                    <div className="flow-connector" aria-hidden="true">
-                      <span className="flow-line" />
-                      <span className="flow-arrow" />
-                    </div>
-                  ) : null}
-                </React.Fragment>
+      <section className="launch-compact-overview" aria-labelledby="compact-overview-heading">
+        <div className="launch-section-heading">
+          <p>Quick Overview</p>
+          <h2 id="compact-overview-heading">How NilaHub Works in One View</h2>
+          <span className="section-subtitle">Everything important, without long scrolling.</span>
+        </div>
+        <div className="compact-overview-grid">
+          <article className="compact-block">
+            <h3>Role Flow</h3>
+            <p>One platform connecting all key participants.</p>
+            <div className="compact-role-pills">
+              {ecosystemRoles.map((role) => (
+                <span className="compact-role-pill" key={role.label}>
+                  {renderIcon(role.icon, "compact-role-icon")}
+                  {role.label}
+                </span>
               ))}
             </div>
-          </div>
-          <p className="flow-conclusion">All connected. All earning. All growing together.</p>
+          </article>
+          <article className="compact-block">
+            <h3>Launch Advantage</h3>
+            <p>Built to convert faster and scale confidently.</p>
+            <div className="compact-pillar-list">
+              {launchPillars.map((pillar) => (
+                <div className="compact-pillar-item" key={pillar.title}>
+                  <span className="compact-pillar-icon">{renderIcon(pillar.icon, "compact-pillar-svg")}</span>
+                  <div>
+                    <strong>{pillar.title}</strong>
+                    <span>{pillar.description}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
         </div>
-      </section>
-
-      <section className="trust-indicators" aria-labelledby="trust-heading">
-        <div className="trust-container">
-          <h2 id="trust-heading" className="trust-title">
-            Why Choose NilaHub
-          </h2>
-          <p className="section-subtitle">Designed to feel simple for users and strong for growth.</p>
-          <div className="trust-grid">
-            <div className="trust-item">
-              <span className="trust-check">
-                <FaCheckCircle aria-hidden="true" />
-              </span>
-              <span className="trust-text">Multi-Service Platform</span>
-            </div>
-            <div className="trust-item">
-              <span className="trust-check">
-                <FaCheckCircle aria-hidden="true" />
-              </span>
-              <span className="trust-text">AI-Powered Features</span>
-            </div>
-            <div className="trust-item">
-              <span className="trust-check">
-                <FaCheckCircle aria-hidden="true" />
-              </span>
-              <span className="trust-text">Secure Authentication</span>
-            </div>
-            <div className="trust-item">
-              <span className="trust-check">
-                <FaCheckCircle aria-hidden="true" />
-              </span>
-              <span className="trust-text">Real-Time Infrastructure</span>
-            </div>
-            <div className="trust-item">
-              <span className="trust-check">
-                <FaCheckCircle aria-hidden="true" />
-              </span>
-              <span className="trust-text">Verified Ecosystem</span>
-            </div>
-            <div className="trust-item">
-              <span className="trust-check">
-                <FaCheckCircle aria-hidden="true" />
-              </span>
-              <span className="trust-text">Global Ready</span>
-            </div>
-          </div>
+        <div className="compact-trust-strip" aria-label="Why choose NilaHub">
+          {trustReasons.map((reason) => (
+            <span className="compact-trust-pill" key={reason}>
+              <FaCheckCircle aria-hidden="true" />
+              {reason}
+            </span>
+          ))}
         </div>
       </section>
 
