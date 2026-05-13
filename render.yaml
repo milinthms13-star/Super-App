@@ -9,3 +9,73 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      - key: AUTH_STORAGE
+        value: mongodb
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: BACKEND_URL
+        value: https://super-app-api.onrender.com
+      - key: DATABASE_URL
+        sync: false
+      - key: EMAIL_FROM
+        value: maalu9198@gmail.com
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PASS
+        sync: false
+      - key: EMAIL_PORT
+        value: 587
+      - key: EMAIL_SECURE
+        value: false
+      - key: EMAIL_SERVICE
+        value: gmail-api
+      - key: EMAIL_USER
+        value: maalu9198@gmail.com
+      - key: FRONTEND_URL
+        value: https://super-app-7j9x.onrender.com
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REFRESH_TOKEN
+        sync: false
+      - key: GMAIL_USER
+        value: maalu9198@gmail.com
+      - key: GOOGLE_CALLBACK_URL
+        value: https://super-app-api.onrender.com/api/auth/google/callback
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PORT
+        value: 5000
+      - key: REACT_APP_FIREBASE_API_KEY
+        sync: false
+      - key: REACT_APP_FIREBASE_APP_ID
+        value: 1:344793228028:web:8aecb242cfd77801866d79
+      - key: REACT_APP_FIREBASE_AUTH_DOMAIN
+        value: superapp-b6ab5.firebaseapp.com
+      - key: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+        value: 344793228028
+      - key: REACT_APP_FIREBASE_PROJECT_ID
+        value: superapp-b6ab5
+      - key: REACT_APP_FIREBASE_STORAGE_BUCKET
+        value: superapp-b6ab5.firebasestorage.app
+      - key: REDIS_URL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        value: +17623443854

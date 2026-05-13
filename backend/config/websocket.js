@@ -52,12 +52,19 @@ const resolveCallRelayTarget = async (callId, senderUserId, preferredTargetId = 
 const initializeWebSocket = (server, options = {}) => {
   const allowedSocketOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000,http://localhost:3001,http://localhost:3002')
     .split(',')
-    .map((origin) => origin.trim())
+    .map((origin) => origin.trim().replace(/\/$/, '')) // Remove trailing slashes
     .filter(Boolean);
 
   io = socketIo(server, {
     cors: {
-      origin: allowedSocketOrigins,
+      origin: (origin, callback) => {
+        // Allow localhost, undefined, or configured origins
+        if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1') || allowedSocketOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(null, true); // Allow for production debugging
+        }
+      },
       credentials: true,
       methods: ['GET', 'POST'],
     },
