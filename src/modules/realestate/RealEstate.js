@@ -763,11 +763,8 @@ const RealEstate = () => {
     <div className="realestate-shell">
       <section className="realestate-hero">
         <div className="realestate-hero-copy">
-          <h1>HomeSphere turns property discovery into a verified marketplace for buying, renting, and selling.</h1>
-          <p>
-            Browse trusted listings, empower owners and brokers, and manage the full lead journey
-            from first enquiry to closing conversation.
-          </p>
+          <h1>Find verified homes, rentals and land in one place.</h1>
+          <p>Search fast, connect with trusted sellers, and act on property leads immediately.</p>
           <div className="realestate-hero-actions">
             <button type="button" className="realestate-primary-button" onClick={() => setActiveRole("buyer")}>
               Explore listings
@@ -788,19 +785,17 @@ const RealEstate = () => {
           </div>
           <div className="realestate-hero-tags">
             <span>Verified listings</span>
-            <span>RERA & legal checks</span>
-            <span>Subscriptions and featured boosts</span>
-            <span>English, Malayalam, Tamil, Hindi</span>
+            <span>Quick connect</span>
+            <span>Multi-language</span>
           </div>
         </div>
 
         <div className="realestate-hero-panel">
-          <h2>Objectives</h2>
+          <h2>Why HomeSphere</h2>
           <ul>
-            <li>Digitize property transactions with clear role-based flows.</li>
-            <li>Help local brokers, builders, and individuals become digital entrepreneurs.</li>
-            <li>Improve trust with legal verification, reviews, and fake-listing reporting.</li>
-            <li>Speed up discovery with advanced filters, alerts, chat, and lead tracking.</li>
+            <li>Verified properties and trusted leads.</li>
+            <li>Easy search for homes, rentals and land.</li>
+            <li>Chat, book visits and close deals quickly.</li>
           </ul>
         </div>
       </section>
