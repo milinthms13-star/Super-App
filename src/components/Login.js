@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { getTranslation } from "../data/translations";
 import useVoice from "../hooks/useVoice";
@@ -27,7 +27,7 @@ const Login = ({
   const [devOtp, setDevOtp] = useState("");
   const [registrationOtpChannel, setRegistrationOtpChannel] = useState("email");
   const [needsUsernameSetup, setNeedsUsernameSetup] = useState(false);
-  const [authMethod, setAuthMethod] = useState("email"); // default to email so tests land on Verify flow quickly
+  const [authMethod, setAuthMethod] = useState(registrationType === "login" ? null : "email");
   const [deviceToken, setDeviceToken] = useState("");
   const [setupUsername, setSetupUsername] = useState("");
   const [setupUsernameStatus, setSetupUsernameStatus] = useState(null); // 'available', 'taken', 'checking', null
@@ -35,7 +35,9 @@ const Login = ({
   const [verifiedUser, setVerifiedUser] = useState(null);
   const [verifiedToken, setVerifiedToken] = useState(null);
   const [mpinPassword, setMpinPassword] = useState("");
-  const [loginStep, setLoginStep] = useState("input"); // "method", "input", "verify"
+  const [loginStep, setLoginStep] = useState(() =>
+    registrationType === "login" ? "method" : "input"
+  ); // "method", "input", "verify"
   const [voiceAssistantActive, setVoiceAssistantActive] = useState(false);
   const {
     recognitionSupported,
@@ -105,6 +107,17 @@ const Login = ({
     () => businessCategories.filter((category) => registrationForm.selectedBusinessCategories.includes(category.id)),
     [businessCategories, registrationForm.selectedBusinessCategories]
   );
+
+  useEffect(() => {
+    if (registrationType === "login") {
+      setLoginStep("method");
+      setAuthMethod(null);
+      setOtpSent(false);
+    } else {
+      setLoginStep("input");
+      setAuthMethod("email");
+    }
+  }, [registrationType]);
 
   const totalRegistrationFee = selectedCategoryRecords.reduce(
     (total, category) => total + Number(category.fee || 0),
@@ -848,7 +861,7 @@ const Login = ({
             <>
               {/* Google Auth Section (moved to top) */}
               {!otpSent && !needsUsernameSetup && (
-                <div className="form-google-section">
+                <div className="form-social-section">
                   <button
                     type="button"
                     className="btn btn-google"

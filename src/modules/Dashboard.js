@@ -620,6 +620,49 @@ const MODULE_CONFIG = [
   },
 ];
 
+const MODULE_CATEGORY_META = [
+  { id: "all", label: "All" },
+  { id: "core", label: "Core" },
+  { id: "travel", label: "Travel" },
+  { id: "business", label: "Business" },
+  { id: "utility", label: "Utility" },
+];
+
+const MODULE_CATEGORY_MAP = {
+  ecommerce: "core",
+  messaging: "core",
+  classifieds: "core",
+  realestate: "core",
+  localmarket: "core",
+  socialmedia: "core",
+  matrimonial: "core",
+  tourism: "travel",
+  hotelbooking: "travel",
+  bustrainbooking: "travel",
+  ridesharing: "travel",
+  gulfservices: "travel",
+  hyperlocal: "travel",
+  businessbuilder: "business",
+  businessservices: "business",
+  freelancer: "business",
+  jobportal: "business",
+  skilllearning: "business",
+  resumebuilder: "business",
+  education: "business",
+  finance: "utility",
+  billpay: "utility",
+  fooddelivery: "utility",
+  healthcare: "utility",
+  devadarshan: "utility",
+  localservices: "utility",
+  reminderalert: "utility",
+  sosalert: "utility",
+  astrology: "utility",
+  quicklinks: "utility",
+  diary: "utility",
+  external: "utility",
+};
+
 const openExternalLink = (url = "") => {
   if (!url) {
     return;
@@ -691,6 +734,8 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
   const listingsRef = useRef(null);
   const exploreServicesRef = useRef(null);
   const [isLoading, setIsLoading] = useState(process.env.NODE_ENV !== "test");
+  const [moduleSearch, setModuleSearch] = useState("");
+  const [activeModuleCategory, setActiveModuleCategory] = useState("all");
 
   useEffect(() => {
     if (process.env.NODE_ENV === "test") {
@@ -861,6 +906,39 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
     })),
   ];
   const activeModuleCount = visibleCards.filter((card) => card.cardType === "module").length;
+  const normalizedSearch = moduleSearch.trim().toLowerCase();
+  const getModuleCategory = (card) => MODULE_CATEGORY_MAP[card.id] || "core";
+  const userCategoryCounts = useMemo(
+    () =>
+      MODULE_CATEGORY_META.reduce((acc, category) => {
+        if (category.id === "all") {
+          acc[category.id] = visibleCards.length;
+          return acc;
+        }
+        acc[category.id] = visibleCards.filter(
+          (card) => getModuleCategory(card) === category.id
+        ).length;
+        return acc;
+      }, {}),
+    [visibleCards]
+  );
+  const visibleCardsForDisplay = useMemo(
+    () =>
+      visibleCards.filter((card) => {
+        const searchMatch =
+          !normalizedSearch ||
+          String(card.name || "")
+            .toLowerCase()
+            .includes(normalizedSearch) ||
+          String(card.description || "")
+            .toLowerCase()
+            .includes(normalizedSearch);
+        const categoryMatch =
+          activeModuleCategory === "all" || getModuleCategory(card) === activeModuleCategory;
+        return searchMatch && categoryMatch;
+      }),
+    [activeModuleCategory, normalizedSearch, visibleCards]
+  );
 
   // Example: show analytics data at the top (customize as needed)
   return (
@@ -1071,8 +1149,38 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       <div className={!isSeller ? "dashboard-main-grid" : ""}>
         <div className="modules-section" ref={exploreServicesRef}>
           <h2 className="section-title-polished">{isSeller ? "My Business Categories" : t("dashboard.exploreServices", "Explore Our Services")}</h2>
+          {!isSeller && (
+            <div className="module-discovery-tools" aria-label="Module discovery tools">
+              <input
+                type="search"
+                className="module-search-input"
+                placeholder="Search modules..."
+                value={moduleSearch}
+                onChange={(event) => setModuleSearch(event.target.value)}
+                aria-label="Search modules"
+              />
+              <div className="module-category-tabs" role="tablist" aria-label="Module categories">
+                {MODULE_CATEGORY_META.map((category) => {
+                  const isActive = activeModuleCategory === category.id;
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      className={`module-category-tab ${isActive ? "active" : ""}`}
+                      onClick={() => setActiveModuleCategory(category.id)}
+                    >
+                      <span>{category.label}</span>
+                      <small>{userCategoryCounts[category.id] || 0}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="modules-grid">
-            {visibleCards.map((module) => (
+            {(isSeller ? visibleCards : visibleCardsForDisplay).map((module) => (
               <button
                 type="button"
                 className={`module-card polished micro-glow ${isSeller ? "seller-module-card" : ""}`}
@@ -1107,12 +1215,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
               <p>Your seller account does not have any active subscribed categories visible right now.</p>
             </div>
           )}
-          {!isSeller && visibleCards.length === 0 && (
+          {!isSeller && visibleCardsForDisplay.length === 0 && (
             <div className="recent-orders seller-empty-dashboard">
-              <h2>No Enabled Services Found</h2>
+              <h2>No matching modules</h2>
               <p>
-                No service modules are currently visible. If modules are enabled in admin, refresh once
-                or re-open the dashboard.
+                Try a different search term or switch category to find the service you need.
               </p>
             </div>
           )}

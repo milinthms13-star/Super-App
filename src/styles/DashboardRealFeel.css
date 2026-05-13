@@ -155,6 +155,18 @@
   gap: 1rem;
 }
 
+.dashboard-container-compact .quick-actions-section {
+  order: 1;
+}
+
+.dashboard-container-compact .modules-section {
+  order: 2;
+}
+
+.dashboard-container-compact .recent-orders-compact {
+  order: 3;
+}
+
 .dashboard-container-compact .modules-section,
 .dashboard-container-compact .quick-actions-section,
 .dashboard-container-compact .recent-orders-compact,
@@ -181,6 +193,61 @@
 .dashboard-container-compact .modules-section h2,
 .dashboard-container-compact .recent-orders h2 {
   margin-bottom: 0.7rem;
+}
+
+.dashboard-container-compact .module-discovery-tools {
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.dashboard-container-compact .module-search-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(22, 54, 98, 0.18);
+  padding: 0.58rem 0.72rem;
+  font-size: 0.86rem;
+  color: #17335d;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.dashboard-container-compact .module-search-input:focus {
+  outline: none;
+  border-color: #1d4f9d;
+  box-shadow: 0 0 0 3px rgba(29, 79, 157, 0.14);
+}
+
+.dashboard-container-compact .module-category-tabs {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+
+.dashboard-container-compact .module-category-tab {
+  border: 1px solid rgba(22, 54, 98, 0.14);
+  background: rgba(255, 255, 255, 0.85);
+  color: #22406b;
+  border-radius: 999px;
+  padding: 0.3rem 0.58rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dashboard-container-compact .module-category-tab small {
+  font-size: 0.68rem;
+  opacity: 0.8;
+}
+
+.dashboard-container-compact .module-category-tab.active {
+  background: linear-gradient(135deg, #1d4f9d, #127a6a);
+  color: #ffffff;
+  border-color: transparent;
 }
 
 .dashboard-container-compact .quick-actions-grid {
