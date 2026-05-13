@@ -198,12 +198,6 @@ const heroHighlights = [
   "Simple start, powerful growth path",
 ];
 
-const heroProofPoints = [
-  { value: "10+", label: "Services" },
-  { value: "Real-Time", label: "Platform" },
-  { value: "Trusted", label: "Experience" },
-];
-
 const launchPillars = [
   {
     icon: "FaRocket",
@@ -230,6 +224,47 @@ const trustReasons = [
   "Verified Ecosystem",
   "Global Ready",
 ];
+
+const featureCategoryConfig = [
+  { id: "core", label: "Core", subtitle: "Daily essentials for your superapp life." },
+  { id: "travel", label: "Travel", subtitle: "Trips, stays, mobility, and location services." },
+  { id: "business", label: "Business", subtitle: "Work, growth, hiring, and professional tools." },
+  { id: "utility", label: "Utility", subtitle: "Payments, reminders, safety, and support systems." },
+];
+
+const moduleCategoryMap = {
+  ecommerce: "core",
+  messaging: "core",
+  classifieds: "core",
+  realestate: "core",
+  socialmedia: "core",
+  matrimonial: "core",
+  localmarket: "core",
+  localservices: "core",
+  hyperlocal: "travel",
+  tourism: "travel",
+  hotelbooking: "travel",
+  bustrainbooking: "travel",
+  ridesharing: "travel",
+  gulfservices: "travel",
+  businessbuilder: "business",
+  businessservices: "business",
+  freelancer: "business",
+  jobportal: "business",
+  skilllearning: "business",
+  education: "business",
+  resumebuilder: "business",
+  nilaaihub: "business",
+  finance: "utility",
+  billpay: "utility",
+  fooddelivery: "utility",
+  healthcare: "utility",
+  reminderalert: "utility",
+  sosalert: "utility",
+  devadarshan: "utility",
+  astrology: "utility",
+  mydiary: "utility",
+};
 
 const openExternalLink = (url) => {
   window.open(url, "_blank", "noopener,noreferrer");
@@ -316,6 +351,20 @@ const LaunchPage = ({
     })),
   ];
 
+  const resolveFeatureCategory = (feature) => {
+    if (feature.type === "external") {
+      return "utility";
+    }
+    return moduleCategoryMap[feature.moduleId] || "core";
+  };
+
+  const groupedFeatureCards = featureCategoryConfig
+    .map((category) => ({
+      ...category,
+      items: featureCards.filter((feature) => resolveFeatureCategory(feature) === category.id),
+    }))
+    .filter((category) => category.items.length > 0);
+
   const activeModuleCount = featureCards.filter(
     (feature) => feature.type === "module" && !feature.isComingSoon
   ).length;
@@ -323,6 +372,11 @@ const LaunchPage = ({
   const spotlightModules = featureCards
     .filter((feature) => feature.type === "module" && !feature.isComingSoon)
     .slice(0, 4);
+  const heroProofPoints = [
+    { value: `${Math.max(activeModuleCount, 18)}+`, label: "Modules" },
+    { value: "Real-Time", label: "Platform" },
+    { value: "Trusted", label: "Experience" },
+  ];
 
   const renderIcon = (iconName, className = "feature-icon") => {
     const IconComponent = iconMap[iconName];
@@ -440,34 +494,45 @@ const LaunchPage = ({
           <span className="section-subtitle">Choose any module to enter directly.</span>
         </div>
 
-        <div className="feature-grid">
-          {featureCards.map((feature) => (
-            <button
-              type="button"
-              className={`feature-card ${feature.isComingSoon ? "coming-soon" : ""}`}
-              key={feature.key}
-              onClick={() =>
-                !feature.isComingSoon &&
-                (feature.type === "external"
-                  ? openExternalLink(feature.url)
-                  : onSelectRegistrationType(
-                      "login",
-                      feature.moduleId || moduleMapping[feature.title]
-                    ))
-              }
-              disabled={feature.isComingSoon}
-            >
-              {feature.icon && renderIcon(feature.icon)}
-              <h3>{feature.title}</h3>
-              <p>{feature.description}</p>
-              {feature.isComingSoon ? (
-                <span className="coming-soon-badge">Coming Soon</span>
-              ) : feature.type === "external" ? (
-                <span className="feature-card-link-badge">Open link</span>
-              ) : (
-                <span className="feature-card-cta">Explore</span>
-              )}
-            </button>
+        <div className="feature-groups">
+          {groupedFeatureCards.map((group) => (
+            <article className={`feature-group feature-group-${group.id}`} key={group.id}>
+              <header className="feature-group-header">
+                <h3>{group.label}</h3>
+                <span>{group.items.length} modules</span>
+              </header>
+              <p className="feature-group-subtitle">{group.subtitle}</p>
+              <div className="feature-grid" data-group={group.id}>
+                {group.items.map((feature) => (
+                  <button
+                    type="button"
+                    className={`feature-card ${feature.isComingSoon ? "coming-soon" : ""}`}
+                    key={feature.key}
+                    onClick={() =>
+                      !feature.isComingSoon &&
+                      (feature.type === "external"
+                        ? openExternalLink(feature.url)
+                        : onSelectRegistrationType(
+                            "login",
+                            feature.moduleId || moduleMapping[feature.title]
+                          ))
+                    }
+                    disabled={feature.isComingSoon}
+                  >
+                    {feature.icon ? renderIcon(feature.icon) : <FaGlobeAsia className="feature-icon" />}
+                    <h3>{feature.title}</h3>
+                    <p>{feature.description}</p>
+                    {feature.isComingSoon ? (
+                      <span className="coming-soon-badge">Coming Soon</span>
+                    ) : feature.type === "external" ? (
+                      <span className="feature-card-link-badge">Open link</span>
+                    ) : (
+                      <span className="feature-card-cta">Explore</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </article>
           ))}
         </div>
       </section>
