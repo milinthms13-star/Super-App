@@ -1091,6 +1091,41 @@ const Ecommerce = ({
     }));
   };
 
+  const handleApplySellerProductPreset = (presetKey) => {
+    if (presetKey === "starter-template") {
+      setProductForm((currentForm) => ({
+        ...currentForm,
+        model: currentForm.model || "Standard",
+        color: currentForm.color || "Standard",
+        styleTheme: currentForm.styleTheme || "Everyday",
+        expiryApplicable: currentForm.expiryApplicable || "no",
+      }));
+      setSubmitMessage("Starter template applied. Add product name, category, and image to continue.");
+      return;
+    }
+
+    if (presetKey === "food-template") {
+      setProductForm((currentForm) => ({
+        ...currentForm,
+        styleTheme: "Fresh",
+        expiryApplicable: "yes",
+      }));
+      setSubmitMessage("Food template applied. Remember to include expiry details in inventory batches.");
+      return;
+    }
+
+    if (presetKey === "clear-optional") {
+      setProductForm((currentForm) => ({
+        ...currentForm,
+        model: "",
+        color: "",
+        styleTheme: "",
+      }));
+      setSubmitMessage("Optional style fields cleared.");
+      return;
+    }
+  };
+
   const handleProductImageChange = (event) => {
     const nextFile = event.target.files?.[0] || null;
     setProductImageFile(nextFile);
@@ -1584,6 +1619,32 @@ const Ecommerce = ({
                 <small>approved listings</small>
               </div>
             </div>
+            <div className="seller-workbench-actions" aria-label="Seller workspace quick actions">
+              <button type="button" className="seller-workbench-btn primary" onClick={() => scrollToSection(formPanelRef)}>
+                Add new listing
+              </button>
+              <button
+                type="button"
+                className="seller-workbench-btn"
+                onClick={() => scrollToSection(sellerListingsSectionRef)}
+              >
+                Manage listings
+              </button>
+              <button
+                type="button"
+                className="seller-workbench-btn"
+                onClick={() => scrollToSection(sellerOrdersSectionRef)}
+              >
+                Process orders
+              </button>
+              <button
+                type="button"
+                className="seller-workbench-btn"
+                onClick={() => scrollToSection(sellerAnalyticsSectionRef)}
+              >
+                View analytics
+              </button>
+            </div>
             <div className="seller-summary-highlights">
               <button type="button" className="seller-summary-link" onClick={() => scrollToSection(formPanelRef)}>
                 {pendingProductCount} awaiting review
@@ -1669,6 +1730,36 @@ const Ecommerce = ({
               <span>Step 1: catalog basics</span>
               <span>Step 2: wait for approval</span>
               <span>Step 3: add stock batches</span>
+            </div>
+            <div className="seller-form-shortcuts" aria-label="Listing templates">
+              <button
+                type="button"
+                className="seller-shortcut-btn"
+                onClick={() => handleApplySellerProductPreset("starter-template")}
+              >
+                Starter template
+              </button>
+              <button
+                type="button"
+                className="seller-shortcut-btn"
+                onClick={() => handleApplySellerProductPreset("food-template")}
+              >
+                Food template
+              </button>
+              <button
+                type="button"
+                className="seller-shortcut-btn"
+                onClick={() => handleApplySellerProductPreset("clear-optional")}
+              >
+                Clear optional fields
+              </button>
+              <button
+                type="button"
+                className="seller-shortcut-btn"
+                onClick={() => productNameInputRef.current?.focus()}
+              >
+                Focus product name
+              </button>
             </div>
 
             <form className="seller-product-form" onSubmit={handleCreateOrUpdateProduct}>

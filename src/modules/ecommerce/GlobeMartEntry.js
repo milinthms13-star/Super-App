@@ -584,23 +584,26 @@ const GlobeMartEntry = ({
   const renderStepBody = () => {
     if (currentStep === 0) {
       return (
-        <div className="globemart-step-grid">
-          <label><span>Full Name</span><input value={formState.account.fullName} onChange={onInput("account", "fullName")} /></label>
-          <label><span>Business Name</span><input value={formState.account.businessName} onChange={onInput("account", "businessName")} /></label>
-          <label><span>Email</span><input type="email" value={formState.account.email} onChange={onInput("account", "email")} /></label>
-          <label><span>Mobile Number</span><input value={formState.account.mobile} onChange={onInput("account", "mobile")} /></label>
-          <label><span>Password</span><input type="password" value={formState.account.password} onChange={onInput("account", "password")} /></label>
-          <label>
-            <span>Business Type</span>
-            <select value={formState.account.businessType} onChange={onInput("account", "businessType")}>
-              {BUSINESS_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
-          </label>
-          <label><span>Country</span><input value={formState.account.country} onChange={onInput("account", "country")} /></label>
-          <label><span>State</span><input value={formState.account.state} onChange={onInput("account", "state")} /></label>
-          <label><span>City</span><input value={formState.account.city} onChange={onInput("account", "city")} /></label>
-          <label><span>Preferred Currency</span><input value={formState.account.preferredCurrency} onChange={onInput("account", "preferredCurrency")} /></label>
-          <label><span>Referral Code (optional)</span><input value={formState.account.referralCode} onChange={onInput("account", "referralCode")} /></label>
+        <div className="globemart-step-stack">
+          <p className="globemart-step-note">Most fields are prefilled from your profile. Update only what changed.</p>
+          <div className="globemart-step-grid">
+            <label><span>Full Name</span><input value={formState.account.fullName} onChange={onInput("account", "fullName")} /></label>
+            <label><span>Business Name</span><input value={formState.account.businessName} onChange={onInput("account", "businessName")} /></label>
+            <label><span>Email</span><input type="email" value={formState.account.email} onChange={onInput("account", "email")} /></label>
+            <label><span>Mobile Number</span><input value={formState.account.mobile} onChange={onInput("account", "mobile")} /></label>
+            <label><span>Password</span><input type="password" value={formState.account.password} onChange={onInput("account", "password")} /></label>
+            <label>
+              <span>Business Type</span>
+              <select value={formState.account.businessType} onChange={onInput("account", "businessType")}>
+                {BUSINESS_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </label>
+            <label><span>Country</span><input value={formState.account.country} onChange={onInput("account", "country")} /></label>
+            <label><span>State</span><input value={formState.account.state} onChange={onInput("account", "state")} /></label>
+            <label><span>City</span><input value={formState.account.city} onChange={onInput("account", "city")} /></label>
+            <label><span>Preferred Currency</span><input value={formState.account.preferredCurrency} onChange={onInput("account", "preferredCurrency")} /></label>
+            <label><span>Referral Code (optional)</span><input value={formState.account.referralCode} onChange={onInput("account", "referralCode")} /></label>
+          </div>
         </div>
       );
     }
@@ -777,48 +780,94 @@ const GlobeMartEntry = ({
   }
 
   if (entryMode === "seller-registration") {
+    const activeStep = WIZARD_STEPS[currentStep];
+    const remainingSteps = Math.max(0, WIZARD_STEPS.length - currentStep - 1);
+
     return (
       <section className="globemart-entry-shell" aria-label="GlobeMart seller onboarding wizard">
-        <div className="globemart-entry-card globemart-entry-card-wide">
-          <h2>GlobeMart Seller Onboarding Wizard</h2>
-          <p>Structured in 3 layers: Identity & Compliance, Operations, and Billing setup.</p>
-          {renderLayerCards()}
-          <div className="globemart-wizard-progress">
-            <div className="globemart-progress-header">
-              <strong>Step {currentStep + 1} of {WIZARD_STEPS.length}</strong>
-              <span>{WIZARD_STEPS[currentStep].label}</span>
+        <div className="globemart-entry-card globemart-entry-card-wide globemart-onboarding-shell">
+          <div className="globemart-onboarding-header">
+            <div>
+              <span className="globemart-onboarding-kicker">Seller onboarding</span>
+              <h2>GlobeMart Seller Onboarding Wizard</h2>
+              <p>Complete identity, operations, and billing in one guided flow designed for quick setup.</p>
             </div>
-            <div className="globemart-progress-track" role="progressbar" aria-valuenow={progressPercent}>
-              <span style={{ width: `${progressPercent}%` }} />
-            </div>
-            <div className="globemart-step-pills">
-              {WIZARD_STEPS.map((step, index) => (
-                <button
-                  key={step.id}
-                  type="button"
-                  className={`globemart-step-pill ${index === currentStep ? "active" : index < currentStep ? "done" : ""}`}
-                  onClick={() => setCurrentStep(index)}
-                >
-                  {index + 1}. {step.label}
-                </button>
-              ))}
+            <div className="globemart-onboarding-badges" aria-label="Onboarding highlights">
+              <span>3 layers</span>
+              <span>7 guided steps</span>
+              <span>Secure verification</span>
             </div>
           </div>
-          <form className="globemart-registration-form" onSubmit={onSubmit}>
-            {renderStepBody()}
-            {registrationError ? <p className="globemart-entry-error" role="alert">{registrationError}</p> : null}
-            <div className="globemart-entry-actions">
-              {currentStep > 0 ? <button type="button" className="btn btn-outline" onClick={onBack}>Back</button> : null}
-              {!isLastStep ? (
-                <button type="button" className="btn btn-primary" onClick={onNext}>Save and Continue</button>
-              ) : (
-                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? "Submitting..." : "Review and Submit"}
-                </button>
-              )}
-              <button type="button" className="btn btn-outline" onClick={() => setEntryMode("")}>Cancel</button>
+
+          <div className="globemart-onboarding-layout">
+            <div className="globemart-onboarding-main">
+              {renderLayerCards()}
+              <div className="globemart-wizard-progress">
+                <div className="globemart-progress-header">
+                  <strong>Step {currentStep + 1} of {WIZARD_STEPS.length}</strong>
+                  <span>{activeStep.label}</span>
+                </div>
+                <div className="globemart-progress-track" role="progressbar" aria-valuenow={progressPercent}>
+                  <span style={{ width: `${progressPercent}%` }} />
+                </div>
+                <div className="globemart-step-pills">
+                  {WIZARD_STEPS.map((step, index) => (
+                    <button
+                      key={step.id}
+                      type="button"
+                      className={`globemart-step-pill ${index === currentStep ? "active" : index < currentStep ? "done" : ""}`}
+                      onClick={() => setCurrentStep(index)}
+                    >
+                      {index + 1}. {step.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <form className="globemart-registration-form" onSubmit={onSubmit}>
+                {renderStepBody()}
+                {registrationError ? <p className="globemart-entry-error" role="alert">{registrationError}</p> : null}
+                <div className="globemart-entry-actions">
+                  {currentStep > 0 ? <button type="button" className="btn btn-outline" onClick={onBack}>Back</button> : null}
+                  {!isLastStep ? (
+                    <button type="button" className="btn btn-primary" onClick={onNext}>Save and Continue</button>
+                  ) : (
+                    <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                      {isSubmitting ? "Submitting..." : "Review and Submit"}
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-outline" onClick={() => setEntryMode("")}>Cancel</button>
+                </div>
+              </form>
             </div>
-          </form>
+
+            <aside className="globemart-onboarding-aside" aria-label="Onboarding guide">
+              <div className="globemart-onboarding-aside-card">
+                <span className="globemart-onboarding-aside-label">Progress</span>
+                <strong>{progressPercent}%</strong>
+                <p>{remainingSteps} step{remainingSteps === 1 ? "" : "s"} remaining</p>
+              </div>
+              <div className="globemart-onboarding-aside-card">
+                <span className="globemart-onboarding-aside-label">Current focus</span>
+                <strong>{activeStep.label}</strong>
+                <p>Complete required fields only and continue. You can refine details later.</p>
+              </div>
+              <div className="globemart-onboarding-aside-card">
+                <span className="globemart-onboarding-aside-label">Selected plan</span>
+                <strong>{selectedPlan.name}</strong>
+                <p>
+                  Registration {formatCurrency(selectedPlan.registrationFee)} | Transaction{" "}
+                  {selectedPlan.transactionFee}
+                </p>
+              </div>
+              <div className="globemart-onboarding-aside-card">
+                <span className="globemart-onboarding-aside-label">Activation tip</span>
+                <p>
+                  Keep KYC and bank proof references ready to finish identity and payouts quickly.
+                </p>
+              </div>
+            </aside>
+          </div>
         </div>
       </section>
     );
@@ -842,3 +891,4 @@ GlobeMartEntry.propTypes = {
 };
 
 export default GlobeMartEntry;
+
