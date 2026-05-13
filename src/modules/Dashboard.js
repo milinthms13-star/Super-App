@@ -14,6 +14,7 @@ import "../styles/Phase6bComponentPolish.css";
 import "../styles/PlatformPolish.css";
 import "../styles/DashboardFinalPolish.css";
 import "../styles/DashboardRealFeel.css";
+import "../styles/DashboardUXRefinement.css";
 
 const normalizeOrderStatus = (status) => {
   const normalizedStatus = String(status || "").trim().toLowerCase();
@@ -694,10 +695,80 @@ const normalizeEnabledModuleIds = (modules) => {
 };
 
 const FAVORITE_MODULES_STORAGE_PREFIX = "nilahub:dashboard:favorites";
+const MODULE_VALUE_BADGE_BY_ID = {
+  ecommerce: "Time-saving",
+  messaging: "Live updates",
+  classifieds: "Fresh leads",
+  realestate: "Smart discovery",
+  ridesharing: "Fast booking",
+  fooddelivery: "Quick reorder",
+  healthcare: "Priority care",
+  billpay: "Due reminders",
+  finance: "Decision support",
+};
+
+const formatRelativeUpdateTime = (input) => {
+  if (!input) {
+    return "just now";
+  }
+
+  const dateValue = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(dateValue.getTime())) {
+    return "just now";
+  }
+
+  const delta = Date.now() - dateValue.getTime();
+  const minutes = Math.max(0, Math.floor(delta / 60000));
+
+  if (minutes < 1) {
+    return "just now";
+  }
+
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
+const inferActivityModuleFromFeed = (activity = {}) => {
+  const directModule =
+    String(activity.moduleId || activity.module || activity.targetModule || "")
+      .trim()
+      .toLowerCase();
+  if (directModule) {
+    return directModule;
+  }
+
+  const title = `${activity.title || ""} ${activity.subtitle || ""}`.toLowerCase();
+  if (title.includes("globemart") || title.includes("shop") || title.includes("product")) {
+    return "ecommerce";
+  }
+  if (title.includes("linkup") || title.includes("chat") || title.includes("message")) {
+    return "messaging";
+  }
+  if (title.includes("ride") || title.includes("swift")) {
+    return "ridesharing";
+  }
+  if (title.includes("home") || title.includes("property")) {
+    return "realestate";
+  }
+  if (title.includes("food")) {
+    return "fooddelivery";
+  }
+  return "";
+};
 
 const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) => {
     // Real-time analytics state
     const [dashboardAnalytics, setDashboardAnalytics] = useState(null);
+    const [dashboardAnalyticsUpdatedAt, setDashboardAnalyticsUpdatedAt] = useState(null);
     const wsClientRef = useRef(null);
     // Setup WebSocket for real-time dashboard updates
     useEffect(() => {
@@ -707,7 +778,13 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       wsClientRef.current = wsClient;
       wsClient.connect(token).catch(() => {});
       const unsub = wsClient.on('dashboard:update', (data) => {
-        setDashboardAnalytics(data.dashboardData || data);
+        const nextDashboardAnalytics = data.dashboardData || data;
+        setDashboardAnalytics(nextDashboardAnalytics);
+        setDashboardAnalyticsUpdatedAt(
+          nextDashboardAnalytics?.updatedAt ||
+            nextDashboardAnalytics?.timestamp ||
+            new Date()
+        );
       });
       return () => {
         unsub && unsub();
@@ -738,7 +815,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
   const [isLoading, setIsLoading] = useState(process.env.NODE_ENV !== "test");
   const [moduleSearch, setModuleSearch] = useState("");
   const [activeModuleCategory, setActiveModuleCategory] = useState("all");
+  const [activeModuleSignalFilter, setActiveModuleSignalFilter] = useState("all");
+  const [moduleSortMode, setModuleSortMode] = useState("recommended");
   const [favoriteModuleIds, setFavoriteModuleIds] = useState([]);
+  const [showFavoriteManager, setShowFavoriteManager] = useState(false);
+  const [showMomentumLegend, setShowMomentumLegend] = useState(false);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "test") {
@@ -860,37 +941,94 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         id: activity.id || `nearby-${index}`,
         title: activity.title || "Platform activity updated",
         detail: activity.subtitle || "Fresh engagement detected",
+        moduleId: inferActivityModuleFromFeed(activity),
       }));
     }
 
     return [
-      { id: "market-1", title: "GlobeMart", detail: "18 new product drops in your city" },
-      { id: "linkup-1", title: "LinkUp", detail: "3 conversations resumed in the last hour" },
-      { id: "rides-1", title: "SwiftRide", detail: "Driver availability up 12% nearby" },
-      { id: "homes-1", title: "HomeSphere", detail: "5 matching rental listings added" },
+      {
+        id: "market-1",
+        title: "GlobeMart",
+        detail: "18 new product drops in your city",
+        moduleId: "ecommerce",
+      },
+      {
+        id: "linkup-1",
+        title: "LinkUp",
+        detail: "3 conversations resumed in the last hour",
+        moduleId: "messaging",
+      },
+      {
+        id: "rides-1",
+        title: "SwiftRide",
+        detail: "Driver availability up 12% nearby",
+        moduleId: "ridesharing",
+      },
+      {
+        id: "homes-1",
+        title: "HomeSphere",
+        detail: "5 matching rental listings added",
+        moduleId: "realestate",
+      },
     ];
   }, [mockData]);
   const aiSuggestions = useMemo(() => {
     const suggestions = [];
 
+    if (hasPendingIssues) {
+      suggestions.push({
+        id: "resolve-issues",
+        title: "Resolve pending delivery and refund issues",
+        detail: pendingIssueLabel,
+        moduleId: "orders",
+      });
+    }
+
     if (cartItemCount > 0) {
-      suggestions.push(`You have ${cartItemCount} cart item${cartItemCount > 1 ? "s" : ""}. Bundle checkout can reduce delivery costs.`);
+      suggestions.push({
+        id: "finish-cart",
+        title: `Complete checkout for ${cartItemCount} cart item${cartItemCount > 1 ? "s" : ""}`,
+        detail: "Bundle checkout can reduce delivery costs and speed up dispatch.",
+        moduleId: "ecommerce",
+      });
     }
 
-    if (undeliveredOrdersCount > 0) {
-      suggestions.push(`${undeliveredOrdersCount} order${undeliveredOrdersCount > 1 ? "s" : ""} still active. Turn on real-time tracking alerts.`);
+    if ((ordersPagination.totalItems || 0) > 0) {
+      suggestions.push({
+        id: "track-orders",
+        title: "Track active orders with live status",
+        detail: `${undeliveredOrdersCount} order${undeliveredOrdersCount === 1 ? "" : "s"} currently active.`,
+        moduleId: "orders",
+      });
     }
 
-    if (Number(enabledModules?.length || 0) > 6) {
-      suggestions.push("Pin top modules to quick actions for faster daily flow.");
+    if (favoriteModuleIds.length < 3) {
+      suggestions.push({
+        id: "pin-favorites",
+        title: "Pin your top modules for faster access",
+        detail: "Use Favorites to keep your daily workflows one tap away.",
+        moduleId: "",
+      });
     }
 
     if (!suggestions.length) {
-      suggestions.push("Engagement is stable. Explore one new module today to improve discovery signals.");
+      suggestions.push({
+        id: "explore-modules",
+        title: "Explore one new module today",
+        detail: "Fresh usage signals help unlock more relevant recommendations.",
+        moduleId: "",
+      });
     }
 
     return suggestions.slice(0, 3);
-  }, [cartItemCount, enabledModules, undeliveredOrdersCount]);
+  }, [
+    cartItemCount,
+    favoriteModuleIds.length,
+    hasPendingIssues,
+    ordersPagination.totalItems,
+    pendingIssueLabel,
+    undeliveredOrdersCount,
+  ]);
   const currentHour = new Date().getHours();
   const dayPeriod = currentHour < 12 ? "morning" : currentHour < 18 ? "afternoon" : "evening";
   const greetingName = (currentUser?.name || "there").split(" ")[0];
@@ -1009,6 +1147,13 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       (card) => card.cardType === "module" && favoriteLookup.has(String(card.id || "").trim().toLowerCase())
     );
   }, [favoriteModuleIds, visibleCards]);
+
+  useEffect(() => {
+    if (favoriteModuleCards.length === 0 && showFavoriteManager) {
+      setShowFavoriteManager(false);
+    }
+  }, [favoriteModuleCards.length, showFavoriteManager]);
+
   const prioritizedVisibleCards = useMemo(() => {
     if (isSeller) {
       return visibleCards;
@@ -1028,9 +1173,42 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       return String(leftCard.name || "").localeCompare(String(rightCard.name || ""));
     });
   }, [isSeller, favoriteModuleIds, visibleCards]);
+
   const activeModuleCount = visibleCards.filter((card) => card.cardType === "module").length;
+  const favoriteModuleCount = favoriteModuleCards.length;
   const normalizedSearch = moduleSearch.trim().toLowerCase();
   const getModuleCategory = (card) => MODULE_CATEGORY_MAP[card.id] || "core";
+  const enabledModuleLookup = useMemo(
+    () => new Set(normalizedEnabledModuleIds),
+    [normalizedEnabledModuleIds]
+  );
+
+  const getModuleValueBadge = (moduleId) =>
+    MODULE_VALUE_BADGE_BY_ID[moduleId] ||
+    (MODULE_CATEGORY_MAP[moduleId] === "business"
+      ? "Growth-ready"
+      : MODULE_CATEGORY_MAP[moduleId] === "travel"
+        ? "Time-saving"
+        : MODULE_CATEGORY_MAP[moduleId] === "utility"
+          ? "Daily essential"
+          : "Live updates");
+
+  const getModuleContextLine = (moduleCard, isFavorite) => {
+    if (moduleCard.cardType === "external") {
+      return "Shared custom shortcut";
+    }
+    if (isFavorite) {
+      return "Pinned as favorite";
+    }
+    if (enabledModuleLookup.has(moduleCard.id)) {
+      return "Enabled on platform";
+    }
+    if (subscribedCategoryIds.includes(moduleCard.id)) {
+      return "From your category subscriptions";
+    }
+    return "Recommended for your profile";
+  };
+
   const userCategoryCounts = useMemo(
     () =>
       MODULE_CATEGORY_META.reduce((acc, category) => {
@@ -1045,9 +1223,21 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       }, {}),
     [visibleCards]
   );
-  const visibleCardsForDisplay = useMemo(
-    () =>
-      prioritizedVisibleCards.filter((card) => {
+
+  const moduleSignalCounts = useMemo(() => {
+    const baseModuleCards = prioritizedVisibleCards.filter((card) => card.cardType === "module");
+    const favoriteLookup = new Set(favoriteModuleIds);
+    return {
+      all: baseModuleCards.length,
+      favorites: baseModuleCards.filter((card) => favoriteLookup.has(String(card.id || "").trim().toLowerCase())).length,
+      enabled: baseModuleCards.filter((card) => enabledModuleLookup.has(card.id)).length,
+      subscriptions: baseModuleCards.filter((card) => subscribedCategoryIds.includes(card.id)).length,
+    };
+  }, [enabledModuleLookup, favoriteModuleIds, prioritizedVisibleCards, subscribedCategoryIds]);
+
+  const visibleCardsForDisplay = useMemo(() => {
+    const favoriteLookup = new Set(favoriteModuleIds);
+    const filteredCards = prioritizedVisibleCards.filter((card) => {
         const searchMatch =
           !normalizedSearch ||
           String(card.name || "")
@@ -1058,35 +1248,116 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
             .includes(normalizedSearch);
         const categoryMatch =
           activeModuleCategory === "all" || getModuleCategory(card) === activeModuleCategory;
-        return searchMatch && categoryMatch;
-      }),
-    [activeModuleCategory, normalizedSearch, prioritizedVisibleCards]
-  );
+        const signalMatch =
+          activeModuleSignalFilter === "all" ||
+          (activeModuleSignalFilter === "favorites" &&
+            favoriteLookup.has(String(card.id || "").trim().toLowerCase())) ||
+          (activeModuleSignalFilter === "enabled" && enabledModuleLookup.has(card.id)) ||
+          (activeModuleSignalFilter === "subscriptions" && subscribedCategoryIds.includes(card.id));
+        return searchMatch && categoryMatch && signalMatch;
+      });
+
+    if (moduleSortMode === "az") {
+      return [...filteredCards].sort((leftCard, rightCard) =>
+        String(leftCard.name || "").localeCompare(String(rightCard.name || ""))
+      );
+    }
+
+    return filteredCards;
+  }, [
+    activeModuleCategory,
+    activeModuleSignalFilter,
+    enabledModuleLookup,
+    favoriteModuleIds,
+    moduleSortMode,
+    normalizedSearch,
+    prioritizedVisibleCards,
+    subscribedCategoryIds,
+  ]);
+
   const cardsForGridDisplay = isSeller ? visibleCards : visibleCardsForDisplay;
+  const sellerAnalyticsSnapshot = {
+    successRate: Number(dashboardAnalytics?.successRate?.successRate || 0),
+    failedDeliveries: Number(dashboardAnalytics?.successRate?.failedDeliveries || 0),
+    pendingDeliveries: Number(dashboardAnalytics?.successRate?.pendingDeliveries || 0),
+    openFulfillments: Number(dashboardAnalytics?.successRate?.pendingDeliveries || sellerFulfillmentPendingCount || 0),
+  };
+  const sellerAtRiskActions = sellerAnalyticsSnapshot.failedDeliveries + sellerAnalyticsSnapshot.pendingDeliveries;
+  const nextBestAction = (() => {
+    if (hasPendingIssues) {
+      return {
+        title: "Resolve pending issues",
+        description: pendingIssueLabel,
+        cta: "Resolve pending issues",
+        action: () => handleOrdersCardClick(),
+      };
+    }
+
+    if ((ordersPagination.totalItems || 0) > 0) {
+      return {
+        title: "Keep deliveries on schedule",
+        description: "Track recent orders and enable live updates for timely handoffs.",
+        cta: "Track orders",
+        action: () => handleOrdersCardClick(),
+      };
+    }
+
+    return {
+      title: "Discover services that fit your day",
+      description: "Explore enabled modules and pin favorites for a faster workflow.",
+      cta: "Explore modules",
+      action: () =>
+        exploreServicesRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        }),
+    };
+  })();
 
   // Example: show analytics data at the top (customize as needed)
   return (
     <div className={`dashboard-container ${!isSeller ? "dashboard-container-compact" : ""}`}>
-        {isSeller && dashboardAnalytics && (
-          <div className="dashboard-analytics-bar">
-            <strong>Real-Time Analytics:</strong>
-            <span> Success Rate: {dashboardAnalytics.successRate?.successRate ?? '-'}% </span>
-            <span> Total Deliveries: {dashboardAnalytics.successRate?.totalDeliveries ?? '-'} </span>
-            <span> Failed: {dashboardAnalytics.successRate?.failedDeliveries ?? '-'} </span>
-            <span> Pending: {dashboardAnalytics.successRate?.pendingDeliveries ?? '-'} </span>
-          </div>
+        {isSeller && (
+          <section className="dashboard-analytics-panel" aria-label="Seller real-time analytics">
+            <div className="dashboard-analytics-panel-header">
+              <strong>Real-Time Analytics</strong>
+              <span>
+                Last updated {formatRelativeUpdateTime(dashboardAnalyticsUpdatedAt)}
+              </span>
+            </div>
+            <div className="dashboard-analytics-cards">
+              <article className="dashboard-analytics-card">
+                <h4>Success rate</h4>
+                <p>{sellerAnalyticsSnapshot.successRate}%</p>
+              </article>
+              <article className="dashboard-analytics-card">
+                <h4>Open fulfillments</h4>
+                <p>{sellerAnalyticsSnapshot.openFulfillments}</p>
+              </article>
+              <article className="dashboard-analytics-card attention">
+                <h4>Failed / pending actions</h4>
+                <p>{sellerAtRiskActions}</p>
+              </article>
+            </div>
+          </section>
         )}
         {isLoading ? (
-          <div className="premium-loading">
+          <div className="premium-loading dashboard-section-skeletons">
             <div className="loading-shimmer">
               <div className="shimmer-card welcome-shimmer"></div>
-              <div className="shimmer-grid">
+              <div className="shimmer-grid dashboard-kpi-skeleton-grid">
                 <div className="shimmer-card stat-shimmer"></div>
                 <div className="shimmer-card stat-shimmer"></div>
                 <div className="shimmer-card stat-shimmer"></div>
                 <div className="shimmer-card stat-shimmer"></div>
               </div>
-              <div className="shimmer-grid">
+              <div className="shimmer-grid dashboard-workspace-skeleton-grid">
+                <div className="shimmer-card module-shimmer"></div>
+                <div className="shimmer-card module-shimmer"></div>
+                <div className="shimmer-card module-shimmer"></div>
+              </div>
+              <div className="shimmer-grid dashboard-module-skeleton-grid">
+                <div className="shimmer-card module-shimmer"></div>
                 <div className="shimmer-card module-shimmer"></div>
                 <div className="shimmer-card module-shimmer"></div>
                 <div className="shimmer-card module-shimmer"></div>
@@ -1168,38 +1439,71 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   <span className="stat-icon"><Icon type="cart" className="stat-icon-svg" /></span>
                   <div className="stat-content">
                     <h3>{cartItemCount}</h3>
-                    <p>{t("dashboard.itemsInCart", "Items in Cart")}</p>
+                    <p>Cart items</p>
                     <span className="stat-chip stat-chip-live">Live basket pulse</span>
                   </div>
                 </button>
-                {hasPendingIssues ? (
-                  <button
-                    type="button"
-                    className="stat-card stat-card-button"
-                    onClick={handleOrdersCardClick}
-                  >
-                    <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
-                    <div className="stat-content">
-                      <h3>{pendingIssueCount}</h3>
-                      <p>{pendingIssueLabel}</p>
-                      <span className="stat-chip stat-chip-attention">Resolve active issues</span>
-                    </div>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="stat-card stat-card-button"
-                    onClick={handleOrdersCardClick}
-                  >
-                    <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
-                    <div className="stat-content">
-                      <h3>{ordersPagination.totalItems || 0}</h3>
-                      <p>{t("dashboard.ordersPlaced", "Orders Placed")}</p>
-                      <span className="stat-chip">Weekly growth</span>
-                    </div>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={handleOrdersCardClick}
+                >
+                  <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{pendingIssueCount}</h3>
+                    <p>Pending delivery/refund issues</p>
+                    <span className="stat-chip stat-chip-attention">
+                      {hasPendingIssues ? "Resolve active issues" : "All clear right now"}
+                    </span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={handleOrdersCardClick}
+                >
+                  <span className="stat-icon"><Icon type="orders" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{ordersPagination.totalItems || 0}</h3>
+                    <p>Orders placed</p>
+                    <span className="stat-chip">History and tracking</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="stat-card stat-card-button"
+                  onClick={() =>
+                    exploreServicesRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                  }
+                >
+                  <span className="stat-icon"><Icon type="user" className="stat-icon-svg" /></span>
+                  <div className="stat-content">
+                    <h3>{favoriteModuleCount}</h3>
+                    <p>Favorites</p>
+                    <span className="stat-chip">Quick launch set</span>
+                  </div>
+                </button>
               </div>
+            )}
+
+            {!isSeller && (
+              <section className="next-best-action-card" aria-label="Next best action">
+                <div className="next-best-action-copy">
+                  <p className="next-best-action-kicker">Next Best Action</p>
+                  <h3>{nextBestAction.title}</h3>
+                  <p>{nextBestAction.description}</p>
+                </div>
+                <button
+                  type="button"
+                  className="next-best-action-button"
+                  onClick={nextBestAction.action}
+                >
+                  {nextBestAction.cta}
+                </button>
+              </section>
             )}
 
             {!isSeller && (
@@ -1216,8 +1520,26 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                 </div>
                 <div className="workspace-realfeel-grid">
                   <article className="workspace-realfeel-card workspace-realfeel-card-trend">
-                    <h3>Momentum Pulse</h3>
+                    <div className="workspace-card-title-row">
+                      <h3>Momentum Pulse</h3>
+                      <button
+                        type="button"
+                        className="workspace-legend-toggle"
+                        onClick={() => setShowMomentumLegend((currentValue) => !currentValue)}
+                        aria-expanded={showMomentumLegend}
+                        aria-controls="momentum-pulse-legend"
+                      >
+                        Legend
+                      </button>
+                    </div>
                     <p>Engagement trend across your recent platform activity.</p>
+                    {showMomentumLegend && (
+                      <div id="momentum-pulse-legend" className="workspace-legend-tooltip">
+                        <span><strong>Low:</strong> needs attention</span>
+                        <span><strong>Mid:</strong> stable activity</span>
+                        <span><strong>High:</strong> strong momentum</span>
+                      </div>
+                    )}
                     <div className="workspace-trend-bars" aria-hidden="true">
                       {trendSeries.map((value, index) => (
                         <span
@@ -1233,8 +1555,19 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                     <ul className="workspace-list">
                       {nearbyActivity.map((activity) => (
                         <li key={activity.id}>
-                          <strong>{activity.title}</strong>
-                          <span>{activity.detail}</span>
+                          <button
+                            type="button"
+                            className="workspace-list-action"
+                            onClick={() =>
+                              activity.moduleId
+                                ? handleModuleNavigation(activity.moduleId)
+                                : undefined
+                            }
+                            disabled={!activity.moduleId}
+                          >
+                            <strong>{activity.title}</strong>
+                            <span>{activity.detail}</span>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -1242,10 +1575,21 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   <article className="workspace-realfeel-card">
                     <h3>AI Suggestions</h3>
                     <ul className="workspace-list">
-                      {aiSuggestions.map((suggestion, index) => (
-                        <li key={`suggestion-${index}`}>
-                          <strong>Suggestion {index + 1}</strong>
-                          <span>{suggestion}</span>
+                      {aiSuggestions.map((suggestion) => (
+                        <li key={suggestion.id}>
+                          <button
+                            type="button"
+                            className="workspace-list-action"
+                            onClick={() =>
+                              suggestion.moduleId
+                                ? handleModuleNavigation(suggestion.moduleId)
+                                : undefined
+                            }
+                            disabled={!suggestion.moduleId}
+                          >
+                            <strong>{suggestion.title}</strong>
+                            <span>{suggestion.detail}</span>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -1259,7 +1603,17 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
           <h2 className="section-title-polished">{isSeller ? "My Business Categories" : t("dashboard.exploreServices", "Explore Our Services")}</h2>
           {!isSeller && favoriteModuleCards.length > 0 && (
             <div className="favorite-modules-strip" aria-label="Favorite modules quick access">
-              <span className="favorite-modules-label">Favorites</span>
+              <div className="favorite-modules-header">
+                <span className="favorite-modules-label">Favorites</span>
+                <button
+                  type="button"
+                  className="favorite-manage-btn"
+                  onClick={() => setShowFavoriteManager((currentValue) => !currentValue)}
+                  aria-expanded={showFavoriteManager}
+                >
+                  {showFavoriteManager ? "Close" : "Manage"}
+                </button>
+              </div>
               <div className="favorite-modules-list">
                 {favoriteModuleCards.slice(0, 8).map((module) => (
                   <button
@@ -1273,18 +1627,89 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   </button>
                 ))}
               </div>
+              {showFavoriteManager && (
+                <div className="favorite-manager-panel" role="region" aria-label="Manage favorite modules">
+                  {favoriteModuleCards.map((module) => (
+                    <div key={`favorite-manage-${module.id}`} className="favorite-manager-item">
+                      <button
+                        type="button"
+                        className="favorite-manager-open"
+                        onClick={() => handleModuleNavigation(module.id)}
+                      >
+                        <Icon type={module.icon} className="favorite-module-chip-icon" />
+                        <span>{module.name}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="favorite-manager-remove"
+                        onClick={() => toggleModuleFavorite(module.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {!isSeller && (
             <div className="module-discovery-tools" aria-label="Module discovery tools">
-              <input
-                type="search"
-                className="module-search-input"
-                placeholder="Search modules..."
-                value={moduleSearch}
-                onChange={(event) => setModuleSearch(event.target.value)}
-                aria-label="Search modules"
-              />
+              <div className="module-discovery-top-row">
+                <input
+                  type="search"
+                  className="module-search-input"
+                  placeholder="Search modules..."
+                  value={moduleSearch}
+                  onChange={(event) => setModuleSearch(event.target.value)}
+                  aria-label="Search modules"
+                />
+                <div className="module-sort-toggle" role="group" aria-label="Sort modules">
+                  <button
+                    type="button"
+                    className={`module-sort-btn ${moduleSortMode === "recommended" ? "active" : ""}`}
+                    onClick={() => setModuleSortMode("recommended")}
+                  >
+                    Recommended
+                  </button>
+                  <button
+                    type="button"
+                    className={`module-sort-btn ${moduleSortMode === "az" ? "active" : ""}`}
+                    onClick={() => setModuleSortMode("az")}
+                  >
+                    A-Z
+                  </button>
+                </div>
+              </div>
+              <div className="module-signal-filters" role="group" aria-label="Module signal filters">
+                <button
+                  type="button"
+                  className={`module-signal-filter ${activeModuleSignalFilter === "all" ? "active" : ""}`}
+                  onClick={() => setActiveModuleSignalFilter("all")}
+                >
+                  All <small>{moduleSignalCounts.all}</small>
+                </button>
+                <button
+                  type="button"
+                  className={`module-signal-filter ${activeModuleSignalFilter === "favorites" ? "active" : ""}`}
+                  onClick={() => setActiveModuleSignalFilter("favorites")}
+                >
+                  Favorites <small>{moduleSignalCounts.favorites}</small>
+                </button>
+                <button
+                  type="button"
+                  className={`module-signal-filter ${activeModuleSignalFilter === "enabled" ? "active" : ""}`}
+                  onClick={() => setActiveModuleSignalFilter("enabled")}
+                >
+                  Enabled <small>{moduleSignalCounts.enabled}</small>
+                </button>
+                <button
+                  type="button"
+                  className={`module-signal-filter ${activeModuleSignalFilter === "subscriptions" ? "active" : ""}`}
+                  onClick={() => setActiveModuleSignalFilter("subscriptions")}
+                >
+                  Subscribed <small>{moduleSignalCounts.subscriptions}</small>
+                </button>
+              </div>
               <div className="module-category-tabs" role="tablist" aria-label="Module categories">
                 {MODULE_CATEGORY_META.map((category) => {
                   const isActive = activeModuleCategory === category.id;
@@ -1309,6 +1734,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
             {cardsForGridDisplay.map((module) => {
               const showFavoriteToggle = !isSeller && module.cardType === "module";
               const isFavorite = showFavoriteToggle && isFavoriteModule(module.id);
+              const moduleContextLine = getModuleContextLine(module, isFavorite);
+              const moduleValueBadge =
+                module.cardType === "module"
+                  ? getModuleValueBadge(module.id)
+                  : "External shortcut";
               return (
               <article
                 role="button"
@@ -1344,11 +1774,15 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                 </div>
                 <h3>{module.name}</h3>
                 <p>{module.description}</p>
+                <p className="module-context-note">{moduleContextLine}</p>
                 <span className="module-badge">
+                  {moduleValueBadge}
+                </span>
+                <span className="module-action-hint">
                   {module.cardType === "external"
-                    ? "Open Link"
+                    ? "Open link"
                     : isSeller
-                      ? "Open Workspace"
+                      ? "Open workspace"
                       : t("common.explore", "Explore")}
                 </span>
               </article>
@@ -1367,6 +1801,29 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
               <p>
                 Try a different search term or switch category to find the service you need.
               </p>
+              <div className="empty-state-actions">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setModuleSearch("")}
+                >
+                  Clear search
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setActiveModuleCategory("all")}
+                >
+                  Switch to All categories
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => handleModuleNavigation("messaging")}
+                >
+                  Ask admin to enable access
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1440,9 +1897,32 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   ))}
                 </div>
               ) : (
-                <p className="no-orders">
-                  {t("dashboard.noOrders", "No orders yet. Start shopping!")}
-                </p>
+                <div className="dashboard-empty-orders">
+                  <p className="no-orders">
+                    {t("dashboard.noOrders", "No orders yet. Start shopping!")}
+                  </p>
+                  <div className="empty-state-actions">
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() => handleModuleNavigation("ecommerce")}
+                    >
+                      Explore shopping
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={() =>
+                        exploreServicesRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        })
+                      }
+                    >
+                      Explore modules
+                    </button>
+                  </div>
+                </div>
               )}
             {ordersPagination.hasNextPage && (
               <button type="button" className="btn btn-outline" onClick={loadMoreOrders}>
@@ -1460,6 +1940,30 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
           </>
         )}
       </div>
+
+      {!isSeller && (
+        <div className="dashboard-mobile-cta-bar" role="region" aria-label="Quick actions">
+          <button
+            type="button"
+            className="dashboard-mobile-cta-btn primary"
+            onClick={nextBestAction.action}
+          >
+            {nextBestAction.cta}
+          </button>
+          <button
+            type="button"
+            className="dashboard-mobile-cta-btn"
+            onClick={() =>
+              exploreServicesRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              })
+            }
+          >
+            Explore modules
+          </button>
+        </div>
+      )}
 
       {isSeller && (
         <div className="recent-orders seller-listings-section" ref={listingsRef}>

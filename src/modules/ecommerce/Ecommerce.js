@@ -346,6 +346,16 @@ const Ecommerce = ({
     entryMode === "seller" ? true : entryMode === "buyer" ? false : isNativeEntrepreneur;
   const currentBusinessName = currentUser?.businessName?.trim() || currentUser?.name || "Your Business";
 
+  const cartCount = cart.reduce((total, item) => total + (Number(item.quantity) || 0), 0);
+  const cartTotal = cart.reduce(
+    (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+    0
+  );
+
+  const navigateToCart = () => {
+    window.location.href = "/cart";
+  };
+
   // Handle keyboard navigation for quick view modal
   useEffect(() => {
     if (!quickViewProduct) return;
@@ -737,6 +747,31 @@ const Ecommerce = ({
       setMarketplaceMaxPrice("500");
       setMarketplaceSort("price-asc");
       setSearchAssistantMessage("Budget picks under INR 500.");
+      return;
+    }
+
+    if (presetKey === "best-deals") {
+      setMarketplaceMinPrice("");
+      setMarketplaceMaxPrice("");
+      setMarketplaceSort("discount");
+      setMarketplaceInStockOnly(true);
+      setSearchAssistantMessage("Best deals with highest discounts first.");
+      return;
+    }
+
+    if (presetKey === "fast-delivery") {
+      setMarketplaceSearch("fast delivery");
+      setMarketplaceInStockOnly(true);
+      setMarketplaceSort("relevance");
+      setSearchAssistantMessage("Fast-delivery products available now.");
+      return;
+    }
+
+    if (presetKey === "nearby") {
+      setMarketplaceSearch("local groceries");
+      setMarketplaceSort("relevance");
+      setMarketplaceInStockOnly(true);
+      setSearchAssistantMessage("Local GlobeMart sellers near you.");
       return;
     }
 
@@ -1785,7 +1820,32 @@ const Ecommerce = ({
             <button type="button" className="quick-preset-btn" onClick={() => handleApplyMarketplacePreset("clear")}>
               Reset
             </button>
+            <button type="button" className="quick-preset-btn" onClick={() => handleApplyMarketplacePreset("best-deals") }>
+              Best deals
+            </button>
+            <button type="button" className="quick-preset-btn" onClick={() => handleApplyMarketplacePreset("fast-delivery") }>
+              Fast delivery
+            </button>
+            <button type="button" className="quick-preset-btn" onClick={() => handleApplyMarketplacePreset("nearby") }>
+              Nearby sellers
+            </button>
           </div>
+          {cartCount > 0 && (
+            <div className="buyer-cart-summary" aria-label="Cart summary">
+              <div>
+                <strong>{cartCount} item{cartCount === 1 ? "" : "s"} in cart</strong>
+                <p>Approx. INR {formatCurrency(cartTotal)} · ready to checkout</p>
+              </div>
+              <div className="buyer-cart-actions">
+                <button type="button" className="btn btn-outline" onClick={navigateToCart}>
+                  View cart
+                </button>
+                <button type="button" className="btn btn-primary" onClick={navigateToCart}>
+                  Checkout now
+                </button>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

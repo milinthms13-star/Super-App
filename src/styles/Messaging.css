@@ -6675,31 +6675,31 @@
 }
 
 .messaging-container.linkup-premium .theme-variant-btn.executive {
-  border-color: rgba(249, 221, 153, 0.4);
-  background: linear-gradient(125deg, #2a1f0f 0%, #3a2a14 48%, #1f1610 100%);
-  color: #f9dd99;
-  box-shadow: 0 12px 24px rgba(27, 20, 11, 0.26);
+  border-color: rgba(212, 175, 55, 0.52);
+  background: linear-gradient(125deg, #10131a 0%, #1b212b 48%, #0b0d12 100%);
+  color: #f1d184;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.34);
 }
 
 /* ==================== LinkUp Dark-Gold Executive Variant ==================== */
 .messaging-container.linkup-premium.linkup-executive {
-  --linkup-exec-gold: #f6cf8b;
-  --linkup-exec-gold-strong: #ffdfac;
-  --linkup-exec-gold-soft: #b88d4a;
-  --linkup-exec-ink: #0f1118;
-  --linkup-exec-panel: rgba(20, 17, 13, 0.88);
-  --linkup-exec-panel-strong: rgba(12, 10, 8, 0.94);
-  --linkup-exec-muted: #c7b48b;
+  --linkup-exec-gold: #d4af37;
+  --linkup-exec-gold-strong: #f3d98b;
+  --linkup-exec-gold-soft: #a8892a;
+  --linkup-exec-ink: #0b0d10;
+  --linkup-exec-panel: rgba(17, 20, 26, 0.9);
+  --linkup-exec-panel-strong: rgba(10, 12, 16, 0.95);
+  --linkup-exec-muted: #bda86d;
   background:
-    radial-gradient(circle at 8% 8%, rgba(246, 207, 139, 0.2), transparent 22%),
-    radial-gradient(circle at 92% 14%, rgba(165, 124, 59, 0.24), transparent 24%),
-    linear-gradient(165deg, #0f1118 0%, #17141a 44%, #1f1a14 100%);
+    radial-gradient(circle at 8% 8%, rgba(212, 175, 55, 0.2), transparent 22%),
+    radial-gradient(circle at 92% 14%, rgba(212, 175, 55, 0.16), transparent 24%),
+    linear-gradient(165deg, #090b0f 0%, #10141b 44%, #141a22 100%);
 }
 
 .messaging-container.linkup-premium.linkup-executive .connection-status {
-  border: 1px solid rgba(246, 207, 139, 0.3);
-  background: linear-gradient(120deg, rgba(26, 20, 14, 0.88), rgba(40, 31, 22, 0.9));
-  color: #f4e7c7;
+  border: 1px solid rgba(212, 175, 55, 0.32);
+  background: linear-gradient(120deg, rgba(14, 17, 22, 0.9), rgba(20, 24, 31, 0.92));
+  color: #f2ddb1;
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
 }
 
@@ -6708,23 +6708,23 @@
 }
 
 .messaging-container.linkup-premium.linkup-executive .messaging-sidebar {
-  background: linear-gradient(165deg, rgba(16, 13, 10, 0.92), rgba(25, 19, 14, 0.9));
-  border-color: rgba(246, 207, 139, 0.24);
+  background: linear-gradient(165deg, rgba(12, 15, 20, 0.93), rgba(18, 23, 30, 0.92));
+  border-color: rgba(212, 175, 55, 0.24);
 }
 
 .messaging-container.linkup-premium.linkup-executive .messaging-main {
-  background: linear-gradient(175deg, rgba(15, 14, 18, 0.94) 0%, rgba(20, 17, 13, 0.9) 100%);
-  border-color: rgba(246, 207, 139, 0.2);
+  background: linear-gradient(175deg, rgba(10, 13, 18, 0.95) 0%, rgba(16, 20, 27, 0.92) 100%);
+  border-color: rgba(212, 175, 55, 0.22);
 }
 
 .messaging-container.linkup-premium.linkup-executive .sidebar-tabs .tab-btn {
   background: rgba(255, 255, 255, 0.04);
-  color: #d8c8a6;
+  color: #d9c58a;
 }
 
 .messaging-container.linkup-premium.linkup-executive .sidebar-tabs .tab-btn:hover {
-  background: rgba(246, 207, 139, 0.12);
-  color: #f5ddb0;
+  background: rgba(212, 175, 55, 0.12);
+  color: #f2de9f;
 }
 
 .messaging-container.linkup-premium.linkup-executive .sidebar-tabs .tab-btn.active,
@@ -6735,8 +6735,8 @@
 .messaging-container.linkup-premium.linkup-executive .unread-badge,
 .messaging-container.linkup-premium.linkup-executive .message.sent .message-bubble,
 .messaging-container.linkup-premium.linkup-executive .messaging-empty-action-btn.primary {
-  background: linear-gradient(130deg, #3f2b14 0%, #6f4b1f 48%, #2b1d12 100%);
-  color: #ffe7bb;
+  background: linear-gradient(130deg, #2b2f36 0%, #3a414b 48%, #1a1f26 100%);
+  color: #f6dfa0;
 }
 
 .messaging-container.linkup-premium.linkup-executive .search-input,
@@ -6746,23 +6746,23 @@
 .messaging-container.linkup-premium.linkup-executive .user-search-result,
 .messaging-container.linkup-premium.linkup-executive .invitation-card,
 .messaging-container.linkup-premium.linkup-executive .message.received .message-bubble {
-  border: 1px solid rgba(246, 207, 139, 0.22);
-  background: rgba(31, 24, 17, 0.9);
+  border: 1px solid rgba(212, 175, 55, 0.24);
+  background: rgba(20, 24, 31, 0.9);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
 }
 
 .messaging-container.linkup-premium.linkup-executive .chat-item.active {
-  border-color: rgba(255, 223, 172, 0.46);
-  background: linear-gradient(130deg, rgba(90, 62, 28, 0.48), rgba(37, 29, 20, 0.9));
+  border-color: rgba(212, 175, 55, 0.5);
+  background: linear-gradient(130deg, rgba(212, 175, 55, 0.2), rgba(24, 29, 37, 0.92));
 }
 
 .messaging-container.linkup-premium.linkup-executive .chat-avatar,
 .messaging-container.linkup-premium.linkup-executive .contact-avatar,
 .messaging-container.linkup-premium.linkup-executive .user-avatar,
 .messaging-container.linkup-premium.linkup-executive .chat-header-avatar {
-  background: linear-gradient(140deg, #6f4b1f, #2a1d12);
-  color: #ffe1af;
-  border-color: rgba(255, 223, 172, 0.3);
+  background: linear-gradient(140deg, #3b424d, #171d25);
+  color: #f4d98a;
+  border-color: rgba(212, 175, 55, 0.32);
 }
 
 .messaging-container.linkup-premium.linkup-executive .chat-title,
@@ -6772,7 +6772,7 @@
 .messaging-container.linkup-premium.linkup-executive .chat-header-info h3,
 .messaging-container.linkup-premium.linkup-executive .chat-header-info p,
 .messaging-container.linkup-premium.linkup-executive .chat-status {
-  color: #f9e6c1;
+  color: #f4deaa;
 }
 
 .messaging-container.linkup-premium.linkup-executive .chat-preview,
@@ -6784,70 +6784,70 @@
 .messaging-container.linkup-premium.linkup-executive .no-results,
 .messaging-container.linkup-premium.linkup-executive .no-contacts,
 .messaging-container.linkup-premium.linkup-executive .section-title {
-  color: #c6b38f;
+  color: #b8a670;
 }
 
 .messaging-container.linkup-premium.linkup-executive .chat-window-header {
-  background: linear-gradient(140deg, #110f16 0%, #1e1712 58%, #352717 100%);
-  border-bottom: 1px solid rgba(246, 207, 139, 0.2);
+  background: linear-gradient(140deg, #0a0d12 0%, #141920 58%, #1c242e 100%);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.22);
 }
 
 .messaging-container.linkup-premium.linkup-executive .btn-icon {
-  border-color: rgba(246, 207, 139, 0.34);
-  color: #ffe7bd;
-  background: rgba(246, 207, 139, 0.08);
+  border-color: rgba(212, 175, 55, 0.36);
+  color: #f4da97;
+  background: rgba(212, 175, 55, 0.09);
 }
 
 .messaging-container.linkup-premium.linkup-executive .btn-icon:hover,
 .messaging-container.linkup-premium.linkup-executive .btn-icon.active {
-  background: rgba(246, 207, 139, 0.2);
+  background: rgba(212, 175, 55, 0.22);
 }
 
 .messaging-container.linkup-premium.linkup-executive .messages-container {
   background:
-    radial-gradient(circle at 86% 14%, rgba(246, 207, 139, 0.12), transparent 26%),
-    radial-gradient(circle at 12% 84%, rgba(149, 111, 54, 0.2), transparent 25%),
-    linear-gradient(180deg, #15141a 0%, #1b1816 56%, #231d15 100%);
+    radial-gradient(circle at 86% 14%, rgba(212, 175, 55, 0.14), transparent 26%),
+    radial-gradient(circle at 12% 84%, rgba(212, 175, 55, 0.1), transparent 25%),
+    linear-gradient(180deg, #0f1218 0%, #151a22 56%, #1b212c 100%);
 }
 
 .messaging-container.linkup-premium.linkup-executive .message-bubble p,
 .messaging-container.linkup-premium.linkup-executive .message-meta {
-  color: #f6ecd8;
+  color: #efddb8;
 }
 
 .messaging-container.linkup-premium.linkup-executive .message.received .message-bubble p,
 .messaging-container.linkup-premium.linkup-executive .message.received .message-meta {
-  color: #ead8b5;
+  color: #dec894;
 }
 
 .messaging-container.linkup-premium.linkup-executive .message-input-area {
-  border-top: 1px solid rgba(246, 207, 139, 0.18);
-  background: linear-gradient(180deg, rgba(22, 18, 14, 0.94), rgba(31, 24, 17, 0.95));
+  border-top: 1px solid rgba(212, 175, 55, 0.2);
+  background: linear-gradient(180deg, rgba(13, 16, 22, 0.94), rgba(18, 22, 30, 0.95));
 }
 
 .messaging-container.linkup-premium.linkup-executive .message-input,
 .messaging-container.linkup-premium.linkup-executive .message-textarea,
 .messaging-container.linkup-premium.linkup-executive .search-input {
-  background: rgba(12, 11, 10, 0.58);
-  color: #f7e8c9;
-  border-color: rgba(246, 207, 139, 0.24);
+  background: rgba(7, 9, 13, 0.58);
+  color: #f3da99;
+  border-color: rgba(212, 175, 55, 0.26);
 }
 
 .messaging-container.linkup-premium.linkup-executive .message-input::placeholder,
 .messaging-container.linkup-premium.linkup-executive .message-textarea::placeholder,
 .messaging-container.linkup-premium.linkup-executive .search-input::placeholder {
-  color: rgba(220, 197, 154, 0.72);
+  color: rgba(220, 192, 121, 0.72);
 }
 
 .messaging-container.linkup-premium.linkup-executive .messaging-empty-state {
   background:
-    radial-gradient(circle at 10% 10%, rgba(246, 207, 139, 0.16), transparent 28%),
-    linear-gradient(180deg, rgba(18, 16, 14, 0.94), rgba(28, 23, 18, 0.95));
+    radial-gradient(circle at 10% 10%, rgba(212, 175, 55, 0.16), transparent 28%),
+    linear-gradient(180deg, rgba(10, 13, 18, 0.94), rgba(16, 20, 27, 0.95));
 }
 
 .messaging-container.linkup-premium.linkup-executive .messaging-empty-shell {
-  border-color: rgba(246, 207, 139, 0.26);
-  background: linear-gradient(155deg, rgba(30, 24, 18, 0.94), rgba(20, 17, 13, 0.95));
+  border-color: rgba(212, 175, 55, 0.28);
+  background: linear-gradient(155deg, rgba(18, 22, 30, 0.94), rgba(12, 15, 20, 0.95));
   box-shadow: 0 26px 50px rgba(0, 0, 0, 0.42);
 }
 
@@ -6855,7 +6855,7 @@
 .messaging-container.linkup-premium.linkup-executive .messaging-empty-recent h3,
 .messaging-container.linkup-premium.linkup-executive .messaging-insight-card h4,
 .messaging-container.linkup-premium.linkup-executive .recent-copy strong {
-  color: #ffe7bb;
+  color: #f2d891;
 }
 
 .messaging-container.linkup-premium.linkup-executive .messaging-empty-hero p,
@@ -6863,7 +6863,7 @@
 .messaging-container.linkup-premium.linkup-executive .recent-copy p,
 .messaging-container.linkup-premium.linkup-executive .recent-meta,
 .messaging-container.linkup-premium.linkup-executive .messaging-insight-empty {
-  color: #cfba92;
+  color: #bca56d;
 }
 
 .messaging-container.linkup-premium.linkup-executive .messaging-status-pill,
@@ -6871,13 +6871,13 @@
 .messaging-container.linkup-premium.linkup-executive .messaging-empty-recent-card,
 .messaging-container.linkup-premium.linkup-executive .messaging-insight-card,
 .messaging-container.linkup-premium.linkup-executive .messaging-inline-link {
-  border-color: rgba(246, 207, 139, 0.24);
-  background: rgba(33, 26, 19, 0.86);
-  color: #f7e6c2;
+  border-color: rgba(212, 175, 55, 0.26);
+  background: rgba(19, 23, 30, 0.86);
+  color: #f1d898;
 }
 
 .messaging-container.linkup-premium.linkup-executive .messaging-inline-link:hover {
-  border-color: rgba(255, 223, 172, 0.48);
-  background: rgba(45, 34, 23, 0.96);
+  border-color: rgba(212, 175, 55, 0.5);
+  background: rgba(26, 31, 40, 0.96);
 }
 
