@@ -5,12 +5,6 @@ import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
 import { formatCurrency } from "../utils/ecommerceHelpers";
 import { getPathForModule } from "../utils/moduleRoutes";
-import EnhancedHeroSection from "../components/EnhancedHeroSection";
-import EcosystemVisualization from "../components/EcosystemVisualization";
-import PersonalizedActivityFeed from "../components/PersonalizedActivityFeed";
-import RecommendedServices from "../components/RecommendedServices";
-import EngagementScore from "../components/EngagementScore";
-import ScrollAnimationObserver from "../components/ScrollAnimationObserver";
 import "../styles/DashboardEnhanced.css";
 import "../styles/AdvancedAnimations.css";
 import "../styles/Phase6Enhancements.css";
@@ -820,12 +814,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
     });
   };
 
-  const handleEnabledModulesClick = () => {
-    exploreServicesRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  };
   const filteredModules = MODULE_CONFIG
     .map((module) => ({
       ...module,
@@ -877,7 +865,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
   // Example: show analytics data at the top (customize as needed)
   return (
     <div className={`dashboard-container ${!isSeller ? "dashboard-container-compact" : ""}`}>
-        {dashboardAnalytics && (
+        {isSeller && dashboardAnalytics && (
           <div className="dashboard-analytics-bar">
             <strong>Real-Time Analytics:</strong>
             <span> Success Rate: {dashboardAnalytics.successRate?.successRate ?? '-'}% </span>
@@ -906,24 +894,14 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         ) : (
           <>
             {!isSeller && (
-              <>
-                <EnhancedHeroSection
-                  currentUser={currentUser}
-                  isSeller={isSeller}
-                  enabledModules={enabledModules}
-                  onEnabledModulesClick={handleEnabledModulesClick}
-                />
-                <EcosystemVisualization />
-                <ScrollAnimationObserver>
-                  <PersonalizedActivityFeed currentUser={currentUser} />
-                </ScrollAnimationObserver>
-                <ScrollAnimationObserver threshold={0.15}>
-                  <RecommendedServices currentUser={currentUser} />
-                </ScrollAnimationObserver>
-                <ScrollAnimationObserver threshold={0.2}>
-                  <EngagementScore currentUser={currentUser} />
-                </ScrollAnimationObserver>
-              </>
+              <section className="welcome-section user-welcome-section">
+                <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
+                <h1>{`Good ${dayPeriod}, ${greetingName}`}</h1>
+                <p>
+                  One place for your daily services. You currently have {activeModuleCount}+ modules
+                  available with live order and activity updates.
+                </p>
+              </section>
             )}
 
             {isSeller && (
@@ -1142,46 +1120,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
 
         {!isSeller && (
           <>
-            <div className="notifications-section">
-              <h2>{t("dashboard.notifications", "Quick Updates")}</h2>
-              <div className="notification-cards">
-                {cartItemCount > 0 && (
-                  <div className="notification-card notification-card-cart">
-                    <div className="notification-badge">
-                      <Icon type="cart" className="notification-icon" />
-                    </div>
-                    <div className="notification-content">
-                      <p className="notification-label">Items in Cart</p>
-                      <p className="notification-value">{cartItemCount} items</p>
-                    </div>
-                    <button 
-                      type="button"
-                      className="notification-action"
-                      onClick={() => handleModuleNavigation("ecommerce")}
-                    >
-                      View
-                    </button>
-                  </div>
-                )}
-                <div className="notification-card notification-card-orders">
-                  <div className="notification-badge">
-                    <Icon type="orders" className="notification-icon" />
-                  </div>
-                  <div className="notification-content">
-                    <p className="notification-label">Active Orders</p>
-                    <p className="notification-value">{undeliveredOrdersCount || 0} pending</p>
-                  </div>
-                  <button 
-                    type="button"
-                    className="notification-action"
-                    onClick={handleOrdersCardClick}
-                  >
-                    View
-                  </button>
-                </div>
-              </div>
-            </div>
-
             <div className="quick-actions-section">
               <h3>{t("dashboard.quickActions", "Quick Actions")}</h3>
               <div className="quick-actions-grid">

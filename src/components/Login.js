@@ -218,14 +218,14 @@ const Login = ({
     setOtp("");
     setOtpSent(false);
     clearMessages();
-    
+
     if (method === "gmail") {
       const authIntent = isLoginFlow ? "login" : "register";
       window.location.href = `${API_BASE_URL}/auth/google?authIntent=${authIntent}`;
-    } else {
-      // Show input field for email, phone, or mpin
-      setLoginStep("input");
+      return;
     }
+
+    setLoginStep("input");
   };
 
   const updateEmail = (value) => {
@@ -849,10 +849,16 @@ const Login = ({
               {/* Google Auth Section (moved to top) */}
               {!otpSent && !needsUsernameSetup && (
                 <div className="form-google-section">
-                  <a href={`${API_BASE_URL}/auth/google?authIntent=register`} className="btn btn-google">
+                  <button
+                    type="button"
+                    className="btn btn-google"
+                    onClick={() => handleSelectAuthMethod("gmail")}
+                    disabled={loading}
+                    aria-label={isLoginFlow ? "Continue with Gmail" : "Sign up with Gmail"}
+                  >
                     <img src="/google-icon.svg" alt="Google" width="20" height="20" />
-                    Continue with Google
-                  </a>
+                    {isLoginFlow ? "Continue with Gmail" : "Sign up with Gmail"}
+                  </button>
                   <div className="form-divider">OR</div>
                 </div>
               )}

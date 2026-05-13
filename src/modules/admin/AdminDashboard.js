@@ -433,7 +433,11 @@ const AdminDashboard = ({
               <div className="admin-list-item" key={category.id}>
                 <div>
                   <strong>{category.name}</strong>
-                  <span>{enabledModules.includes(category.id) ? t("admin.visibleOnPlatform", "Visible on the platform") : t("admin.hiddenOnPlatform", "Hidden on the platform")}</span>
+                  <span>
+                    {enabledModules.includes(category.id)
+                      ? t("admin.visibleOnPlatform", "Visible on the platform")
+                      : t("admin.hiddenOnPlatform", "Hidden on the platform")}
+                  </span>
                 </div>
                 <label className="toggle-switch" htmlFor={`toggle-${category.id}`}>
                   <input
@@ -446,6 +450,69 @@ const AdminDashboard = ({
                 </label>
               </div>
             ))}
+          </div>
+
+          {/* Ensure fixed module list is shown even if business categories are missing some modules (e.g., astrology) */}
+          <div className="admin-list" style={{ marginTop: 16 }}>
+            {[
+              "ecommerce",
+              "messaging",
+              "classifieds",
+              "realestate",
+              "socialmedia",
+              "matrimonial",
+              "localmarket",
+              "localservices",
+              "hyperlocal",
+              "tourism",
+              "hotelbooking",
+              "bustrainbooking",
+              "ridesharing",
+              "gulfservices",
+              "businessbuilder",
+              "businessservices",
+              "freelancer",
+              "jobportal",
+              "skilllearning",
+              "education",
+              "nilaaihub",
+              "finance",
+              "billpay",
+              "fooddelivery",
+              "healthcare",
+              "reminderalert",
+              "sosalert",
+              "devadarshan",
+              "astrology",
+              "mydiary",
+            ].map((moduleId) => {
+              const name = moduleId
+                .replace(/([a-z])([A-Z])/g, "$1 $2")
+                .replace(/-/g, " ")
+                .replace(/\b\w/g, (c) => c.toUpperCase());
+
+              return (
+                <div className="admin-list-item" key={moduleId}>
+                  <div>
+                    <strong>{name}</strong>
+                    <span>
+                      {enabledModules.includes(moduleId)
+                        ? t("admin.visibleOnPlatform", "Visible on the platform")
+                        : t("admin.hiddenOnPlatform", "Hidden on the platform")}
+                    </span>
+                  </div>
+                  <label className="toggle-switch" htmlFor={`toggle-${moduleId}`}>
+                    <input
+                      id={`toggle-${moduleId}`}
+                      type="checkbox"
+                      checked={enabledModules.includes(moduleId)}
+                      onChange={() => onToggleModule(moduleId)}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
