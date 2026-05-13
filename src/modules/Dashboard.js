@@ -1083,14 +1083,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                     <span className="stat-chip stat-chip-attention">Action suggested</span>
                   </div>
                 </button>
-                <div className="stat-card">
-                  <span className="stat-icon"><Icon type="user" className="stat-icon-svg" /></span>
-                  <div className="stat-content">
-                    <h3>{currentUser.name}</h3>
-                    <p>{t("dashboard.loggedIn", "Logged In")}</p>
-                    <span className="stat-chip">Unified account</span>
-                  </div>
-                </div>
               </div>
             )}
 

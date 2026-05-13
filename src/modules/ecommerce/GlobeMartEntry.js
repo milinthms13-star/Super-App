@@ -292,21 +292,49 @@ const GlobeMartEntry = ({
 
   const renderEntryModeSelection = () => (
     <section className="globemart-entry-shell" aria-label="GlobeMart entry choice">
-      <div className="globemart-entry-card globemart-entry-card-wide">
-        <h2>Choose your GlobeMart path</h2>
-        <p>Select how you'd like to use GlobeMart today.</p>
+      <div className="globemart-entry-card globemart-entry-card-wide globemart-entry-hero">
+        <div className="globemart-entry-headline">
+          <span className="globemart-entry-kicker">GlobeMart onboarding</span>
+          <h2>Choose your GlobeMart path</h2>
+          <p>Select how you would like to use GlobeMart today and continue instantly.</p>
+        </div>
+        <div className="globemart-entry-badges" aria-label="Onboarding highlights">
+          <span>Fast setup</span>
+          <span>Secure access</span>
+          <span>Mobile ready</span>
+        </div>
         <div className="globemart-entry-choice-grid">
-          <div className="globemart-entry-choice-card">
-            <strong>Buyer access</strong>
-            <p>Browse stores, place orders, and manage your deliveries.</p>
-            <button type="button" className="btn btn-primary" onClick={openBuyerPage}>
+          <article className="globemart-entry-choice-card globemart-entry-choice-buyer">
+            <div className="globemart-entry-choice-top">
+              <span className="globemart-entry-choice-icon" aria-hidden="true">B</span>
+              <div>
+                <strong>Buyer access</strong>
+                <p>Browse stores, place orders, and manage deliveries from one dashboard.</p>
+              </div>
+            </div>
+            <ul className="globemart-entry-list" aria-label="Buyer features">
+              <li>Discover products and offers quickly</li>
+              <li>Track orders and returns in real time</li>
+              <li>Save favorites and reorder faster</li>
+            </ul>
+            <button type="button" className="globemart-entry-cta globemart-entry-cta-buyer" onClick={openBuyerPage}>
               Continue as Buyer
             </button>
-          </div>
-          <div className="globemart-entry-choice-card">
-            <strong>Seller access</strong>
-            <p>List products, manage your shop, and onboard as a GlobeMart seller.</p>
-            <button type="button" className="btn btn-secondary" onClick={openSellerFlow}>
+          </article>
+          <article className="globemart-entry-choice-card globemart-entry-choice-seller">
+            <div className="globemart-entry-choice-top">
+              <span className="globemart-entry-choice-icon" aria-hidden="true">S</span>
+              <div>
+                <strong>Seller access</strong>
+                <p>List products, manage your shop, and onboard as a GlobeMart seller.</p>
+              </div>
+            </div>
+            <ul className="globemart-entry-list" aria-label="Seller features">
+              <li>Launch your storefront with guided steps</li>
+              <li>Control inventory, pricing, and payouts</li>
+              <li>Access seller analytics and growth tools</li>
+            </ul>
+            <button type="button" className="globemart-entry-cta globemart-entry-cta-seller" onClick={openSellerFlow}>
               Continue as Seller
             </button>
             {sellerRegistration?.registeredAt ? (
@@ -318,7 +346,7 @@ const GlobeMartEntry = ({
                 New seller? You will be guided through seller registration after choosing Seller.
               </p>
             ) : null}
-          </div>
+          </article>
         </div>
       </div>
     </section>

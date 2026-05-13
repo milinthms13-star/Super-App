@@ -5,6 +5,7 @@ import useVoice from "../hooks/useVoice";
 import { API_BASE_URL } from "../utils/api";
 
 import "../styles/Login.css";
+import "../styles/LoginPremium.css";
 
 const ADMIN_EMAIL = "mgdhanyamohan@gmail.com";
 const OTP_REQUEST_TIMEOUT_MS = 45000;
@@ -850,10 +851,13 @@ const Login = ({
           <p className="login-kicker">{headerKicker}</p>
           <h1>NilaHub</h1>
           <p className="login-subtitle">{loginSubtitle}</p>
+      
         </div>
 
         <form
-          className={`login-form ${isLoginFlow ? "login-form-compact" : ""}`}
+          className={`login-form ${isLoginFlow ? "login-form-compact" : ""} ${
+            isLoginFlow ? "login-form-login" : "login-form-signup"
+          }`}
           onSubmit={needsUsernameSetup ? handleSetUsername : (otpSent ? handleVerifyOtp : handleSendOtp)}
         >
           {/* Registration/Admin Flow */}
@@ -927,7 +931,7 @@ const Login = ({
                       <p className="helper-text" style={{ color: "#FF9500" }}>Checking availability...</p>
                     )}
                     {usernameCheckStatus === "available" && (
-                      <p className="helper-text" style={{ color: "#4CAF50" }}>✓ Username is available</p>
+                      <p className="helper-text" style={{ color: "#4CAF50" }}>Username is available</p>
                     )}
                     {usernameCheckStatus === "taken" && (
                       <p className="helper-text" style={{ color: "#F44336" }}>✗ {usernameError}</p>
@@ -1061,10 +1065,10 @@ const Login = ({
                     <div className="username-status checking">Checking availability...</div>
                   )}
                   {setupUsernameStatus === "available" && (
-                    <div className="username-status available">✓ Username is available</div>
+                    <div className="username-status available">Username is available</div>
                   )}
                   {setupUsernameStatus === "taken" && (
-                    <div className="username-status taken">✗ Username is taken</div>
+                    <div className="username-status taken">Username is taken</div>
                   )}
                   {setupUsernameError && (
                     <div className="username-error">{setupUsernameError}</div>

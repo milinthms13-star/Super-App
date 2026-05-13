@@ -1,0 +1,225 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap");
+
+:root {
+  --auth-bg-1: #091428;
+  --auth-bg-2: #0f2748;
+  --auth-bg-3: #0e5b51;
+  --auth-gold: #f3c978;
+  --auth-gold-deep: #d8a74d;
+  --auth-text: #102443;
+  --auth-muted: #5f7086;
+}
+
+.login-container {
+  font-family: "Manrope", "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(243, 201, 120, 0.22), transparent 32%),
+    radial-gradient(circle at 10% 92%, rgba(34, 156, 132, 0.2), transparent 36%),
+    linear-gradient(135deg, var(--auth-bg-1), var(--auth-bg-2) 48%, var(--auth-bg-3));
+}
+
+.login-card {
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.97), rgba(245, 249, 255, 0.96));
+  box-shadow: 0 26px 60px rgba(6, 17, 32, 0.28);
+  padding: 1.35rem;
+}
+
+.login-card-compact {
+  max-width: 700px;
+  border-radius: 22px;
+}
+
+.login-header {
+  margin-bottom: 1rem;
+}
+
+.login-header h1 {
+  font-family: "Plus Jakarta Sans", "Manrope", sans-serif;
+  font-size: clamp(2rem, 4vw, 2.45rem);
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, #0f2343 0%, var(--auth-gold-deep) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.login-kicker {
+  letter-spacing: 0.08em;
+}
+
+.login-subtitle {
+  color: var(--auth-muted);
+  font-size: 0.92rem;
+}
+
+.auth-meta-strip {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.auth-meta-strip span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 36, 67, 0.12);
+  background: rgba(16, 36, 67, 0.05);
+  color: #1f406a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.3rem 0.58rem;
+}
+
+.login-form {
+  gap: 0.75rem;
+}
+
+.login-form-signup .form-manual-section,
+.login-form-login {
+  border-radius: 14px;
+  border: 1px solid rgba(16, 36, 67, 0.1);
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  padding: 0.8rem;
+}
+
+.form-group label span {
+  color: #17345d;
+  font-weight: 700;
+}
+
+.form-input {
+  border-radius: 12px;
+  border: 1px solid rgba(16, 36, 67, 0.16);
+  background: #ffffff;
+  color: var(--auth-text);
+}
+
+.form-input:focus {
+  border-color: #2a67b8;
+  box-shadow: 0 0 0 3px rgba(42, 103, 184, 0.14);
+}
+
+.login-methods-grid {
+  gap: 0.6rem;
+}
+
+.login-method-card {
+  border-radius: 14px;
+  border: 1px solid rgba(16, 36, 67, 0.14);
+  background: linear-gradient(145deg, #ffffff, #f4f8ff);
+}
+
+.login-method-card.selected {
+  border-color: #245fae;
+  box-shadow: 0 10px 20px rgba(36, 95, 174, 0.22);
+}
+
+.trust-indicators {
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: rgba(16, 36, 67, 0.04);
+}
+
+.btn {
+  border-radius: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.btn-primary {
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, #1d4f9d 0%, #0f7a6a 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(17, 63, 127, 0.26);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #22406b 0%, #0b675a 100%);
+}
+
+.btn-outline {
+  border: 1px solid rgba(16, 36, 67, 0.24);
+  color: #1d4068;
+  background: #ffffff;
+}
+
+.login-footer {
+  margin-top: 0.85rem;
+}
+
+.security-info {
+  color: var(--auth-muted);
+}
+
+@media (max-width: 900px) {
+  .login-card {
+    max-width: 620px;
+  }
+}
+
+@media (max-width: 640px) {
+  .login-container {
+    align-items: flex-start;
+    padding: 0.65rem;
+    overflow-y: auto;
+  }
+
+  .login-container.login-flow {
+    align-items: flex-start;
+    padding: 0.65rem;
+    overflow-y: auto;
+  }
+
+  .login-card,
+  .login-card-compact {
+    border-radius: 16px;
+    padding: 0.9rem;
+    max-height: none;
+  }
+
+  .login-topbar {
+    margin-bottom: 0.75rem;
+  }
+
+  .login-logo {
+    height: 46px;
+  }
+
+  .login-header h1 {
+    font-size: 1.85rem;
+  }
+
+  .login-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .auth-meta-strip {
+    justify-content: flex-start;
+    gap: 0.35rem;
+  }
+
+  .auth-meta-strip span {
+    font-size: 0.68rem;
+  }
+
+  .login-form-signup .form-manual-section,
+  .login-form-login {
+    padding: 0.65rem;
+  }
+
+  .form-actions {
+    gap: 0.55rem;
+  }
+
+  .form-actions .btn {
+    min-height: 44px;
+  }
+
+  .login-methods-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
