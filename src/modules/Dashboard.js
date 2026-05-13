@@ -19,6 +19,7 @@ import "../styles/Phase6bPolishRefinements.css";
 import "../styles/Phase6bComponentPolish.css";
 import "../styles/PlatformPolish.css";
 import "../styles/DashboardFinalPolish.css";
+import "../styles/DashboardRealFeel.css";
 
 const normalizeOrderStatus = (status) => {
   const normalizedStatus = String(status || "").trim().toLowerCase();
@@ -787,6 +788,9 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
 
     return suggestions.slice(0, 3);
   }, [cartItemCount, enabledModules, undeliveredOrdersCount]);
+  const currentHour = new Date().getHours();
+  const dayPeriod = currentHour < 12 ? "morning" : currentHour < 18 ? "afternoon" : "evening";
+  const greetingName = (currentUser?.name || "there").split(" ")[0];
 
   const handleModuleNavigation = (moduleId) => {
     if (typeof onModuleChange === "function") {
@@ -868,6 +872,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       url: link.url,
     })),
   ];
+  const activeModuleCount = visibleCards.filter((card) => card.cardType === "module").length;
 
   // Example: show analytics data at the top (customize as needed)
   return (
@@ -1033,6 +1038,58 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
               </div>
             )}
 
+            {!isSeller && (
+              <section className="workspace-realfeel" aria-label="Live workspace overview">
+                <div className="workspace-realfeel-header">
+                  <p className="workspace-kicker">Today&apos;s Workspace</p>
+                  <h2>
+                    Good {dayPeriod}, {greetingName}
+                  </h2>
+                  <p>
+                    Your dashboard is synced with live platform signals and {activeModuleCount}+ active
+                    service modules.
+                  </p>
+                </div>
+                <div className="workspace-realfeel-grid">
+                  <article className="workspace-realfeel-card workspace-realfeel-card-trend">
+                    <h3>Momentum Pulse</h3>
+                    <p>Engagement trend across your recent platform activity.</p>
+                    <div className="workspace-trend-bars" aria-hidden="true">
+                      {trendSeries.map((value, index) => (
+                        <span
+                          key={`trend-${index}`}
+                          className="workspace-trend-bar"
+                          style={{ height: `${Math.max(18, value)}%` }}
+                        />
+                      ))}
+                    </div>
+                  </article>
+                  <article className="workspace-realfeel-card">
+                    <h3>Nearby Activity</h3>
+                    <ul className="workspace-list">
+                      {nearbyActivity.map((activity) => (
+                        <li key={activity.id}>
+                          <strong>{activity.title}</strong>
+                          <span>{activity.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                  <article className="workspace-realfeel-card">
+                    <h3>AI Suggestions</h3>
+                    <ul className="workspace-list">
+                      {aiSuggestions.map((suggestion, index) => (
+                        <li key={`suggestion-${index}`}>
+                          <strong>Suggestion {index + 1}</strong>
+                          <span>{suggestion}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                </div>
+              </section>
+            )}
+
       <div className={!isSeller ? "dashboard-main-grid" : ""}>
         <div className="modules-section" ref={exploreServicesRef}>
           <h2 className="section-title-polished">{isSeller ? "My Business Categories" : t("dashboard.exploreServices", "Explore Our Services")}</h2>
@@ -1102,7 +1159,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                       className="notification-action"
                       onClick={() => handleModuleNavigation("ecommerce")}
                     >
-                      →
+                      View
                     </button>
                   </div>
                 )}
@@ -1119,7 +1176,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                     className="notification-action"
                     onClick={handleOrdersCardClick}
                   >
-                    →
+                    View
                   </button>
                 </div>
               </div>
@@ -1133,7 +1190,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   className="quick-action-btn quick-action-shop"
                   onClick={() => handleModuleNavigation("ecommerce")}
                 >
-                  <span className="qa-icon">🛍️</span>
+                  <span className="qa-icon"><Icon type="ecommerce" className="qa-icon-svg" /></span>
                   <span className="qa-label">Shop</span>
                   <span className="qa-meta">Trending deals</span>
                 </button>
@@ -1142,7 +1199,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   className="quick-action-btn quick-action-messages"
                   onClick={() => handleModuleNavigation("messaging")}
                 >
-                  <span className="qa-icon">💬</span>
+                  <span className="qa-icon"><Icon type="messaging" className="qa-icon-svg" /></span>
                   <span className="qa-label">Messages</span>
                   <span className="qa-meta">Unread first</span>
                 </button>
@@ -1151,7 +1208,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   className="quick-action-btn quick-action-browse"
                   onClick={() => handleModuleNavigation("classifieds")}
                 >
-                  <span className="qa-icon">🔍</span>
+                  <span className="qa-icon"><Icon type="classifieds" className="qa-icon-svg" /></span>
                   <span className="qa-label">Browse</span>
                   <span className="qa-meta">New listings</span>
                 </button>
@@ -1160,7 +1217,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   className="quick-action-btn quick-action-food"
                   onClick={() => handleModuleNavigation("fooddelivery")}
                 >
-                  <span className="qa-icon">🍽️</span>
+                  <span className="qa-icon"><Icon type="fooddelivery" className="qa-icon-svg" /></span>
                   <span className="qa-label">Food</span>
                   <span className="qa-meta">Nearby kitchens</span>
                 </button>
