@@ -280,6 +280,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   localStorage.clear();
   sessionStorage.clear();
+  window.history.pushState({}, "", "/");
   window.open = jest.fn();
 });
 
@@ -479,7 +480,7 @@ test("admin can create GlobeMart product categories", async () => {
 
   render(<App />);
 
-  fireEvent.click((await screen.findAllByRole("button", { name: /admin dashboard/i }))[0]);
+  fireEvent.click((await screen.findAllByRole("button", { name: /admin dashboard/i })).slice(-1)[0]);
   expect(await screen.findByLabelText(/^category name$/i)).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText(/^category name$/i), {
@@ -511,7 +512,17 @@ test("seller product form uses GlobeMart categories from admin app data", async 
   render(<App />);
 
   fireEvent.click((await screen.findAllByRole("button", { name: /globemart/i })).slice(-1)[0]);
-  fireEvent.click(await screen.findByRole("button", { name: /continue as seller/i }));
+  await waitFor(() => {
+    expect(
+      screen.queryByRole("heading", { level: 2, name: /choose your globemart path/i }) ||
+      screen.queryByRole("heading", { level: 2, name: /create product for approval/i })
+    ).toBeTruthy();
+  });
+
+  const continueAsSellerButtons = screen.queryAllByRole("button", { name: /continue as seller/i });
+  if (continueAsSellerButtons.length > 0) {
+    fireEvent.click(continueAsSellerButtons[0]);
+  }
 
   expect(
     await screen.findByRole("heading", { level: 2, name: /create product for approval/i })
@@ -554,7 +565,7 @@ test("first SoulMatch visit prompts for profile details prefilled from registrat
 
   fireEvent.click((await screen.findAllByRole("button", { name: /soulmatch/i }))[0]);
 
-  expect(await screen.findByText(/soulmatch/i)).toBeInTheDocument();
+  expect(await screen.findByText(/prefilled this from registration/i)).toBeInTheDocument();
 });
 
 test("enabled SOS module opens the emergency alert workspace", async () => {

@@ -2,6 +2,15 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ChatWindow from './ChatWindow';
 
+jest.mock('./utils', () => {
+  const actual = jest.requireActual('./utils');
+  return {
+    ...actual,
+    checkFamilyAutoAccess: jest.fn().mockResolvedValue(false),
+    canSeeReadReceipts: jest.fn().mockResolvedValue(false),
+  };
+});
+
 jest.mock('../../contexts/AppContext', () => ({
   useApp: () => ({
     currentUser: {

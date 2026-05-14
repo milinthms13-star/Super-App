@@ -1,6 +1,22 @@
+
 import React, { useEffect, useMemo, useState } from "react";
 import { financeApi } from "./financeApi";
 import "./FinanceHub.css";
+
+// Subcomponents
+import LoanMarketplaceTab from "./components/LoanMarketplaceTab";
+import EligibilityTab from "./components/EligibilityTab";
+import EmiCalculatorTab from "./components/EmiCalculatorTab";
+import ApplyLeadTab from "./components/ApplyLeadTab";
+import TrackingDashTab from "./components/TrackingDashTab";
+import SchemesTab from "./components/SchemesTab";
+import AuditLogsPanel from "./components/AuditLogsPanel";
+import AdminMetricsPanel from "./components/AdminMetricsPanel";
+
+// Service modules
+import { calculateEmi, buildEmiSchedule, exportEmiScheduleCsv } from "./services/financeMath";
+import { getLeadFormErrors, getEligibilityFormErrors } from "./services/financeValidation";
+import { normalizeRoleTokens, hasAnyRole } from "./services/roleAccess";
 
 const SOUTH_KERALA_DISTRICTS = [
   "Kollam",
@@ -81,152 +97,6 @@ const GOVERNMENT_SCHEMES = [
     id: "women-entrepreneur",
     name: "Women Entrepreneur Schemes",
     categoryHint: "women",
-    eligibility: "Women-led startups and small enterprises.",
-    maxAmount: "Varies by lender and scheme",
-    documents: "KYC, ownership proof, project report, bank statement.",
-    benefit: "Interest rebates and lower margin in select programs.",
-  },
-  {
-    id: "scst-schemes",
-    name: "SC/ST Finance Schemes",
-    categoryHint: "business",
-    eligibility: "Eligible SC/ST applicants with approved business proposal.",
-    maxAmount: "Varies by state and institution",
-    documents: "Category proof, KYC, project report, local approvals.",
-    benefit: "Priority lending and subsidy-linked opportunities.",
-  },
-  {
-    id: "minority-finance",
-    name: "Minority Finance Schemes",
-    categoryHint: "personal",
-    eligibility: "Eligible minority applicants as per scheme rules.",
-    maxAmount: "Varies by institution",
-    documents: "Identity, income proof, category certificate, bank records.",
-    benefit: "Concessional rates and livelihood-focused support.",
-  },
-  {
-    id: "kerala-subsidy",
-    name: "Kerala Subsidy Schemes",
-    categoryHint: "agriculture",
-    eligibility: "State-defined segments including women, MSME and agriculture.",
-    maxAmount: "Scheme specific",
-    documents: "Local body approvals, KYC, business/agri records, quotations.",
-    benefit: "State subsidy and district support facilitation.",
-  },
-];
-
-const INITIAL_ELIGIBILITY_FORM = {
-  fullName: "",
-  phone: "",
-  district: "Trivandrum",
-  loanCategory: "business",
-  age: "30",
-  monthlyIncome: "",
-  requiredAmount: "",
-  existingEmi: "0",
-  monthlyExpenses: "",
-  employmentType: "salaried",
-  employmentStabilityMonths: "12",
-  cibilScore: "720",
-  collateralAvailable: false,
-  businessVintageMonths: "0",
-  hasGstItr: false,
-};
-
-const INITIAL_EMI_FORM = {
-  principal: "",
-  annualInterest: "",
-  tenureMonths: "36",
-  processingFeeType: "percentage",
-  processingFeeValue: "1.2",
-  prepaymentAmount: "0",
-  prepaymentMonth: "0",
-};
-
-const INITIAL_OFFER_COMPARE = [
-  { lender: "Offer A", interest: "10.5", processingFee: "1.2" },
-  { lender: "Offer B", interest: "11.8", processingFee: "0.8" },
-  { lender: "Offer C", interest: "12.4", processingFee: "0.5" },
-];
-
-const INITIAL_LEAD_FORM = {
-  fullName: "",
-  phone: "",
-  district: "Trivandrum",
-  loanCategory: "business",
-  amount: "",
-  institutionId: "",
-  callbackWindow: "today-evening",
-  documentNotes: "",
-  preferredInterestRate: "12",
-  preferredTenureMonths: "36",
-  whatsappOptIn: true,
-  consentPrivacy: false,
-  consentKyc: false,
-  consentDisclaimer: false,
-};
-
-const INITIAL_ASSIGNMENT_FORM = {
-  leadId: "",
-  consultantId: "",
-  consultantName: "Primary Consultant",
-  consultantPhone: "",
-};
-
-const INITIAL_STATUS_FORM = {
-  leadId: "",
-  status: "in_review",
-  note: "",
-};
-
-const INITIAL_COMMISSION_FORM = {
-  leadId: "",
-  actualAmount: "",
-  status: "eligible",
-};
-
-const formatCurrency = (value) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-
-const normalizeRoleTokens = (user = {}) => {
-  const roleSet = new Set();
-  [user.role, user.registrationType, ...(Array.isArray(user.roles) ? user.roles : [])].forEach((value) => {
-    const normalized = String(value || "").trim().toLowerCase();
-    if (normalized) roleSet.add(normalized);
-  });
-  return roleSet;
-};
-
-const hasAnyRole = (roleTokens, roles = []) =>
-  roles.some((role) => roleTokens.has(String(role || "").trim().toLowerCase()));
-
-const calculateMonthlyEmi = (principal, annualInterest, tenureMonths) => {
-  const p = Number(principal || 0);
-  const n = Number(tenureMonths || 0);
-  const r = Number(annualInterest || 0) / 12 / 100;
-
-  if (!p || !n) {
-    return 0;
-  }
-
-  if (r === 0) {
-    return p / n;
-  }
-
-  const numerator = p * r * Math.pow(1 + r, n);
-  const denominator = Math.pow(1 + r, n) - 1;
-  return denominator ? numerator / denominator : 0;
-};
-
-const buildEmiSchedule = ({
-  principal,
-  annualInterest,
-  tenureMonths,
-  prepaymentAmount = 0,
   prepaymentMonth = 0,
 }) => {
   const monthlyEmi = calculateMonthlyEmi(principal, annualInterest, tenureMonths);
@@ -930,478 +800,40 @@ const FinanceHub = () => {
         ))}
       </section>
 
+
       {activeTab === "loans" ? (
-        <section className="finance-section">
-          <div className="finance-section-header">
-            <h2>Loan & Institution Marketplace</h2>
-            <p>Collapsible summary cards first, detailed info on demand.</p>
-          </div>
-
-          <div className="finance-chip-row">
-            <button type="button" onClick={() => setSelectedCategory("all")}>
-              All
-            </button>
-            {LOAN_CATEGORIES.map((category) => (
-              <button key={category.id} type="button" onClick={() => setSelectedCategory(category.id)}>
-                {category.title}
-              </button>
-            ))}
-          </div>
-
-          <div className="finance-card-grid">
-            {filteredLoanCategories.map((category) => (
-              <details key={category.id} className="finance-card">
-                <summary>
-                  <strong>{category.title}</strong>
-                </summary>
-                <p>{category.summary}</p>
-              </details>
-            ))}
-          </div>
-
-          <div className="finance-section-header">
-            <h3>Institution Listings</h3>
-            <p>Real onboarding fields with verified badges, fees, turnaround and ratings.</p>
-          </div>
-
-          {institutionLoadState.loading ? <p>Loading institutions...</p> : null}
-          {institutionLoadState.error ? <p className="finance-error">{institutionLoadState.error}</p> : null}
-
-          <div className="finance-card-grid">
-            {filteredInstitutions.map((institution) => (
-              <details key={institution._id} className="finance-card">
-                <summary className="finance-card-summary">
-                  <span>{institution.name}</span>
-                  {institution.verifiedPartner ? <span className="finance-verified">Verified Partner</span> : null}
-                </summary>
-                <p>
-                  <strong>Type:</strong> {institution.type}
-                </p>
-                <p>
-                  <strong>Branch:</strong> {institution.branchAddress}
-                </p>
-                <p>
-                  <strong>Contact:</strong> {institution.contactPerson?.name} ({institution.contactPerson?.phone})
-                </p>
-                <p>
-                  <strong>Service Districts:</strong> {(institution.serviceDistricts || []).join(", ")}
-                </p>
-                <p>
-                  <strong>Approval Time:</strong> {institution.approvalTime?.minDays}-{institution.approvalTime?.maxDays} days
-                </p>
-                <p>
-                  <strong>Processing Fee:</strong> {institution.processingFee?.value}
-                  {institution.processingFee?.type === "percentage" ? "%" : " INR"}
-                </p>
-                <p>
-                  <strong>Commission Model:</strong> {institution.commissionModel?.type} {institution.commissionModel?.value}
-                </p>
-                <p>
-                  <strong>Rating:</strong> {institution.ratings?.average} ({institution.ratings?.totalReviews} reviews)
-                </p>
-              </details>
-            ))}
-          </div>
-        </section>
+        <LoanMarketplaceTab
+          institutions={institutions}
+          categories={LOAN_CATEGORIES}
+          filters={{ selectedCategory, filteredLoanCategories, filteredInstitutions, institutionLoadState }}
+          onFilterChange={{ setSelectedCategory }}
+        />
       ) : null}
 
       {activeTab === "eligibility" ? (
-        <section className="finance-section">
-          <div className="finance-section-header">
-            <h2>Enhanced Eligibility Checker</h2>
-            <p>Age, EMI burden, expenses, CIBIL, stability, collateral and GST/ITR aware scoring.</p>
-          </div>
-
-          <form className="finance-form" onSubmit={handleEligibilitySubmit}>
-            <label>
-              Name
-              <input
-                type="text"
-                value={eligibilityForm.fullName}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, fullName: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Phone
-              <input
-                type="tel"
-                value={eligibilityForm.phone}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, phone: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Loan Category
-              <select
-                value={eligibilityForm.loanCategory}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, loanCategory: event.target.value }))
-                }
-              >
-                {LOAN_CATEGORIES.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              District
-              <select
-                value={eligibilityForm.district}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, district: event.target.value }))
-                }
-              >
-                {SOUTH_KERALA_DISTRICTS.map((district) => (
-                  <option key={district} value={district}>
-                    {district}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Age
-              <input
-                type="number"
-                value={eligibilityForm.age}
-                onChange={(event) => setEligibilityForm((current) => ({ ...current, age: event.target.value }))}
-              />
-            </label>
-            <label>
-              Monthly Income (INR)
-              <input
-                type="number"
-                value={eligibilityForm.monthlyIncome}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, monthlyIncome: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Required Amount (INR)
-              <input
-                type="number"
-                value={eligibilityForm.requiredAmount}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, requiredAmount: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Existing EMI (INR)
-              <input
-                type="number"
-                value={eligibilityForm.existingEmi}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, existingEmi: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Monthly Expenses (INR)
-              <input
-                type="number"
-                value={eligibilityForm.monthlyExpenses}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, monthlyExpenses: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Employment Type
-              <select
-                value={eligibilityForm.employmentType}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, employmentType: event.target.value }))
-                }
-              >
-                <option value="salaried">Salaried</option>
-                <option value="self-employed">Self-employed</option>
-                <option value="business-owner">Business Owner</option>
-                <option value="freelancer">Freelancer</option>
-              </select>
-            </label>
-            <label>
-              Employment Stability (months)
-              <input
-                type="number"
-                value={eligibilityForm.employmentStabilityMonths}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({
-                    ...current,
-                    employmentStabilityMonths: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              CIBIL Score
-              <input
-                type="number"
-                value={eligibilityForm.cibilScore}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, cibilScore: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Business Vintage (months)
-              <input
-                type="number"
-                value={eligibilityForm.businessVintageMonths}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, businessVintageMonths: event.target.value }))
-                }
-              />
-            </label>
-            <label className="finance-consent">
-              <input
-                type="checkbox"
-                checked={eligibilityForm.collateralAvailable}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, collateralAvailable: event.target.checked }))
-                }
-              />
-              Collateral Available
-            </label>
-            <label className="finance-consent">
-              <input
-                type="checkbox"
-                checked={eligibilityForm.hasGstItr}
-                onChange={(event) =>
-                  setEligibilityForm((current) => ({ ...current, hasGstItr: event.target.checked }))
-                }
-              />
-              GST / ITR Available
-            </label>
-            <button type="submit" disabled={eligibilityState.loading}>
-              {eligibilityState.loading ? "Checking..." : "Check Eligibility"}
-            </button>
-          </form>
-
-          {eligibilityState.error ? <p className="finance-error">{eligibilityState.error}</p> : null}
-          {eligibilityState.result?.result ? (
-            <div className="finance-result">
-              <p>
-                <strong>Approval Probability:</strong> {eligibilityState.result.result.approvalProbability}% (
-                {eligibilityState.result.result.probabilityLabel})
-              </p>
-              <p>
-                <strong>Score:</strong> {eligibilityState.result.result.score}/100
-              </p>
-              <p>
-                <strong>FOIR:</strong> {eligibilityState.result.result.foir}%
-              </p>
-              <p>
-                <strong>Estimated New EMI:</strong> {formatCurrency(eligibilityState.result.result.estimatedNewEmi)}
-              </p>
-              <p>
-                <strong>Best Matching Products:</strong>{" "}
-                {(eligibilityState.result.result.bestMatchingLoanProducts || []).join(", ")}
-              </p>
-              <p>
-                <strong>Improvement Guide:</strong>{" "}
-                {(eligibilityState.result.result.improvementTips || []).join(" | ")}
-              </p>
-              <p>
-                <strong>Potential Rejection Reasons:</strong>{" "}
-                {(eligibilityState.result.result.rejectionReasons || []).join(" | ") || "None"}
-              </p>
-              <p>
-                <strong>Matching Institutions:</strong>{" "}
-                {(eligibilityState.result.matchingInstitutions || []).map((item) => item.name).join(", ")}
-              </p>
-            </div>
-          ) : null}
-        </section>
+        <EligibilityTab
+          form={eligibilityForm}
+          onChange={setEligibilityForm}
+          onSubmit={handleEligibilitySubmit}
+          state={eligibilityState}
+          categories={LOAN_CATEGORIES}
+          districts={SOUTH_KERALA_DISTRICTS}
+          formatCurrency={formatCurrency}
+        />
       ) : null}
 
       {activeTab === "emi" ? (
-        <section className="finance-section">
-          <div className="finance-section-header">
-            <h2>Advanced EMI Calculator</h2>
-            <p>Monthly + yearly breakdown, processing fee, prepayment, compare offers and CSV export.</p>
-          </div>
-
-          <form className="finance-form" onSubmit={handleEmiCalculation}>
-            <label>
-              Principal (INR)
-              <input
-                type="number"
-                value={emiForm.principal}
-                onChange={(event) => setEmiForm((current) => ({ ...current, principal: event.target.value }))}
-              />
-            </label>
-            <label>
-              Annual Interest (%)
-              <input
-                type="number"
-                step="0.01"
-                value={emiForm.annualInterest}
-                onChange={(event) =>
-                  setEmiForm((current) => ({ ...current, annualInterest: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Tenure (months)
-              <input
-                type="number"
-                value={emiForm.tenureMonths}
-                onChange={(event) =>
-                  setEmiForm((current) => ({ ...current, tenureMonths: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Processing Fee Type
-              <select
-                value={emiForm.processingFeeType}
-                onChange={(event) =>
-                  setEmiForm((current) => ({ ...current, processingFeeType: event.target.value }))
-                }
-              >
-                <option value="percentage">Percentage (%)</option>
-                <option value="flat">Flat (INR)</option>
-              </select>
-            </label>
-            <label>
-              Processing Fee Value
-              <input
-                type="number"
-                step="0.01"
-                value={emiForm.processingFeeValue}
-                onChange={(event) =>
-                  setEmiForm((current) => ({ ...current, processingFeeValue: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Prepayment Amount (INR)
-              <input
-                type="number"
-                value={emiForm.prepaymentAmount}
-                onChange={(event) =>
-                  setEmiForm((current) => ({ ...current, prepaymentAmount: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Prepayment Month
-              <input
-                type="number"
-                value={emiForm.prepaymentMonth}
-                onChange={(event) =>
-                  setEmiForm((current) => ({ ...current, prepaymentMonth: event.target.value }))
-                }
-              />
-            </label>
-            <button type="submit">Calculate EMI</button>
-          </form>
-
-          <div className="finance-section-header">
-            <h3>Compare 3 Loan Offers</h3>
-          </div>
-          <div className="finance-card-grid">
-            {offerCompare.map((offer, index) => (
-              <article key={`offer-${index}`} className="finance-card">
-                <label>
-                  Lender
-                  <input
-                    type="text"
-                    value={offer.lender}
-                    onChange={(event) =>
-                      setOfferCompare((current) =>
-                        current.map((item, offerIndex) =>
-                          offerIndex === index ? { ...item, lender: event.target.value } : item
-                        )
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  Interest %
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={offer.interest}
-                    onChange={(event) =>
-                      setOfferCompare((current) =>
-                        current.map((item, offerIndex) =>
-                          offerIndex === index ? { ...item, interest: event.target.value } : item
-                        )
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  Processing Fee %
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={offer.processingFee}
-                    onChange={(event) =>
-                      setOfferCompare((current) =>
-                        current.map((item, offerIndex) =>
-                          offerIndex === index ? { ...item, processingFee: event.target.value } : item
-                        )
-                      )
-                    }
-                  />
-                </label>
-              </article>
-            ))}
-          </div>
-
-          {emiState.error ? <p className="finance-error">{emiState.error}</p> : null}
-          {emiState.result ? (
-            <div className="finance-result">
-              <p>
-                <strong>Monthly EMI:</strong> {formatCurrency(emiState.result.monthlyEmi)}
-              </p>
-              <p>
-                <strong>Total Interest:</strong> {formatCurrency(emiState.result.totalInterest)}
-              </p>
-              <p>
-                <strong>Processing Fee:</strong> {formatCurrency(emiState.result.processingFeeAmount)}
-              </p>
-              <p>
-                <strong>Total Payable:</strong> {formatCurrency(emiState.result.grandTotal)}
-              </p>
-              <button
-                type="button"
-                onClick={() => downloadScheduleCsv(emiState.result.schedule, leadForm.fullName || "finance")}
-              >
-                Download EMI Schedule
-              </button>
-
-              <h4>Yearly Breakdown</h4>
-              <ul className="finance-list">
-                {emiState.yearly.map((year) => (
-                  <li key={`year-${year.year}`}>
-                    Year {year.year}: Interest {formatCurrency(year.interest)} | Principal{" "}
-                    {formatCurrency(year.principal)} | Prepayment {formatCurrency(year.prepayment)}
-                  </li>
-                ))}
-              </ul>
-
-              <h4>Offer Comparison</h4>
-              <ul className="finance-list">
-                {emiState.offers
-                  .sort((a, b) => a.totalPayable - b.totalPayable)
-                  .map((offer) => (
-                    <li key={offer.lender}>
-                      {offer.lender}: EMI {formatCurrency(offer.monthlyEmi)} | Total {formatCurrency(offer.totalPayable)}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          ) : null}
-        </section>
+        <EmiCalculatorTab
+          form={emiForm}
+          onChange={fn => setEmiForm(fn)}
+          onCalculate={handleEmiCalculation}
+          state={emiState}
+          offerCompare={offerCompare}
+          setOfferCompare={setOfferCompare}
+          downloadScheduleCsv={downloadScheduleCsv}
+          leadForm={leadForm}
+          formatCurrency={formatCurrency}
+        />
       ) : null}
 
       {activeTab === "apply" ? (
