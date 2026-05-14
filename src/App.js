@@ -30,6 +30,7 @@ import "./App.css";
 
 const Dashboard = React.lazy(() => import("./modules/Dashboard"));
 const AdminDashboard = React.lazy(() => import("./modules/admin/AdminDashboard"));
+const AdminModuleSubscriptionScreen = React.lazy(() => import("./modules/admin/AdminModuleSubscriptionScreen"));
 const GlobeMartEntry = React.lazy(() => import("./modules/ecommerce/GlobeMartEntry"));
 const Ecommerce = React.lazy(() => import("./modules/ecommerce/Ecommerce"));
 const CartPage = React.lazy(() => import("./modules/ecommerce/CartPage"));
@@ -875,19 +876,6 @@ function AppShell() {
     []
   );
 
-  const handleUpdateCategoryFee = useCallback(async (categoryId, nextFee) => {
-    const response = await axios.put(
-      `${API_BASE_URL}/app-data/business-categories/${categoryId}/fee`,
-      { fee: nextFee }
-    );
-
-    if (!response.data?.success) {
-      throw new Error("Fee update failed.");
-    }
-
-    setBusinessCategories(response.data.data?.businessCategories || []);
-  }, []);
-
   const handleToggleModule = useCallback(async (moduleId) => {
     const response = await axios.patch(
       `${API_BASE_URL}/app-data/enabled-modules/${moduleId}`,
@@ -1122,12 +1110,21 @@ function AppShell() {
                       globeMartCategories={globeMartCategories}
                       registrationApplications={registrationApplications}
                       onReviewRegistration={handleReviewRegistration}
-                      onUpdateCategoryFee={handleUpdateCategoryFee}
                       onCreateGlobeMartCategory={handleCreateGlobeMartCategory}
                       onAddGlobeMartSubcategory={handleAddGlobeMartSubcategory}
                       enabledModules={enabledModules}
                       onToggleModule={handleToggleModule}
                     />
+                  ) : (
+                    <Navigate to={MODULE_PATHS.dashboard} replace />
+                  )
+                }
+              />
+              <Route
+                path="admin-dashboard/subscriptions"
+                element={
+                  isAdminUser ? (
+                    <AdminModuleSubscriptionScreen />
                   ) : (
                     <Navigate to={MODULE_PATHS.dashboard} replace />
                   )

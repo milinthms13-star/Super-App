@@ -269,41 +269,21 @@ const SocialMedia = () => {
       </div>
 
       <div className="socialmedia-layout">
-        <div className="sidebar">
-          <div className="sidebar-header">
-            <h2>VibeHub</h2>
-            <div className="online-count">
-              {onlineUsers.size} online
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
+        <div className="main-content">
+          <div className="socialmedia-topnav">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
-                className={`nav-item ${activeTab === tab.id ? "active" : ""}`}
+                className={`topnav-item ${activeTab === tab.id ? "active" : ""}`}
                 onClick={() => setActiveTab(tab.id)}
               >
-                <span className="icon">{tab.icon}</span>
-                <span>{tab.label}</span>
+                {tab.label}
               </button>
             ))}
-          </nav>
-
-          <div className="sidebar-profile">
-            <div className="profile-card">
-              <img
-                src={getAvatarSrc(currentUser?.avatar, currentUser?.name || "You")}
-                alt={currentUser?.name || "Current user"}
-              />
-              <h4>{currentUser?.name || "VibeHub User"}</h4>
-              <p className="email">{currentUser?.email || "guest@vibehub.local"}</p>
-              <button className="profile-btn">View Profile</button>
-            </div>
           </div>
-        </div>
 
-        <div className="main-content">{renderContent()}</div>
+          {renderContent()}
+        </div>
 
         <div className="right-sidebar">
           <div className="widget">

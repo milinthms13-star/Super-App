@@ -8,10 +8,37 @@
 
 .socialmedia-layout {
   display: grid;
-  grid-template-columns: 250px 1fr 300px;
+  grid-template-columns: 1fr 300px;
   height: 100%;
   gap: 20px;
   padding: 20px;
+}
+
+.socialmedia-topnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.topnav-item {
+  padding: 10px 14px;
+  border: none;
+  border-radius: 999px;
+  background: #f1f5fb;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.topnav-item:hover {
+  background: #e2e8f0;
+}
+
+.topnav-item.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
 }
 
 /* Sidebar */

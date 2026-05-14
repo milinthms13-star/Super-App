@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import useI18n from "../../hooks/useI18n";
 import "./AdminDashboard.css";
@@ -94,13 +95,13 @@ const AdminDashboard = ({
   globeMartCategories,
   registrationApplications,
   onReviewRegistration,
-  onUpdateCategoryFee,
   onCreateGlobeMartCategory,
   onAddGlobeMartSubcategory,
   enabledModules,
   onToggleModule,
 }) => {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const {
     managedProducts,
     moderateProduct,
@@ -340,13 +341,22 @@ const AdminDashboard = ({
   return (
     <div className="admin-dashboard">
       <section className="admin-hero">
-        <h1>{t("admin.title", "Admin Dashboard")}</h1>
-        <p>
-          {t(
-            "admin.subtitle",
-            "Manage predefined business categories, platform functionality visibility, and incoming registration requests."
-          )}
-        </p>
+        <div className="admin-hero-copy">
+          <h1>{t("admin.title", "Admin Dashboard")}</h1>
+          <p>
+            {t(
+              "admin.subtitle",
+              "Manage predefined business categories, platform functionality visibility, and incoming registration requests."
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="admin-button"
+          onClick={() => navigate("/admin-dashboard/subscriptions")}
+        >
+          Manage Module Subscriptions
+        </button>
       </section>
 
       <section className="admin-stats">
@@ -384,39 +394,6 @@ const AdminDashboard = ({
       </section>
 
       <section className="admin-grid">
-        <div className="admin-panel">
-          <div className="admin-panel-header">
-            <h2>{t("admin.categoryFeesTitle", "Business Category Fees")}</h2>
-            <p>
-              {t(
-                "admin.categoryFeesSubtitle",
-                "These business categories are used on the admin page and entrepreneur registration form."
-              )}
-            </p>
-          </div>
-
-          <div className="admin-list">
-            {businessCategories.map((category) => (
-              <div className="admin-list-item" key={category.id}>
-                <div>
-                  <strong>{category.name}</strong>
-                  <span>{category.requiresFoodLicense ? t("admin.foodLicenceRequired", "Food licence required") : t("admin.standardCompliance", "Standard compliance")}</span>
-                </div>
-                <label className="fee-field" htmlFor={`fee-${category.id}`}>
-                  <span>{t("common.fee", "Fee")}</span>
-                  <input
-                    id={`fee-${category.id}`}
-                    type="number"
-                    min="0"
-                    value={category.fee}
-                    onChange={(event) => onUpdateCategoryFee(category.id, Number(event.target.value))}
-                  />
-                </label>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div className="admin-panel">
           <div className="admin-panel-header">
             <h2>{t("admin.functionalityTitle", "Enable/Disable Functionalities")}</h2>

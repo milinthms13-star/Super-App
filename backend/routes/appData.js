@@ -85,6 +85,80 @@ const ensureUploadsFolder = (subfolder) => {
 
 const buildSkillRecordId = (prefix) => `${prefix}-${crypto.randomUUID()}`;
 
+// Module ID normalization mapping (matches frontend moduleRoutes.js)
+const MODULE_ID_ALIASES = {
+  quicklink: "quicklinks",
+  "quick-links": "quicklinks",
+  mydiary: "diary",
+  personaldiary: "diary",
+  map: "maps",
+  loans: "finance",
+  financehub: "finance",
+  freelancers: "freelancer",
+  worklink: "freelancer",
+  nilaworks: "freelancer",
+  proconnect: "freelancer",
+  skillhub: "skilllearning",
+  skills: "skilllearning",
+  learning: "skilllearning",
+  skillearning: "skilllearning",
+  careerhub: "skilllearning",
+  utility: "billpay",
+  utilities: "billpay",
+  bbps: "billpay",
+  billpayment: "billpay",
+  utilityhub: "billpay",
+  hyperlocaldelivery: "hyperlocal",
+  "hyperlocal-delivery": "hyperlocal",
+  deliveryhub: "hyperlocal",
+  instamart: "hyperlocal",
+  dunzo: "hyperlocal",
+  templebooking: "devadarshan",
+  eventbooking: "devadarshan",
+  hallbooking: "devadarshan",
+  vazhipadu: "devadarshan",
+  poojalink: "devadarshan",
+  blessinghub: "devadarshan",
+  localservice: "localservices",
+  "gulf-services": "gulfservices",
+  gulfservice: "gulfservices",
+  "nila-ai-hub": "nilaaihub",
+  nilaai: "nilaaihub",
+  aiassistant: "nilaaihub",
+  ai: "nilaaihub",
+  nilahub: "nilaaihub",
+  tourismmarketplace: "tourism",
+  tourismhub: "tourism",
+  travel: "tourism",
+  travelhub: "tourism",
+  nilatravel: "tourism",
+  localservicesmarket: "localservices",
+  eventservice: "localservices",
+  caterers: "localservices",
+  decorators: "localservices",
+  photographers: "localservices",
+  "business-builder": "businessbuilder",
+};
+
+const normalizeModuleId = (moduleId = "") => {
+  const normalizedId = String(moduleId || "").trim().toLowerCase();
+  return MODULE_ID_ALIASES[normalizedId] || normalizedId;
+};
+
+const normalizeEnabledModules = (moduleIds = []) => {
+  if (!Array.isArray(moduleIds)) {
+    return [];
+  }
+  // Deduplicate and normalize all module IDs
+  return Array.from(
+    new Set(
+      moduleIds
+        .map((moduleId) => normalizeModuleId(moduleId))
+        .filter(Boolean)
+    )
+  );
+};
+
 // Fetch registered accounts from MongoDB instead of app-data.json
 const getRegisteredAccountsFromDB = async () => {
   try {
@@ -1545,7 +1619,7 @@ router.get('/public', async (req, res) => {
     data: {
       businessCategories: appData.businessCategories,
       globeMartCategories: normalizeGlobeMartCategories(appData.globeMartCategories),
-      enabledModules: appData.enabledModules,
+      enabledModules: normalizeEnabledModules(appData.enabledModules),
       registeredAccounts: registeredAccounts,
       moduleData: {
         ...appData.moduleData,
@@ -2544,7 +2618,7 @@ router.get('/admin', authenticate, adminOnly, async (req, res) => {
     data: {
       businessCategories: appData.businessCategories,
       globeMartCategories: normalizeGlobeMartCategories(appData.globeMartCategories),
-      enabledModules: appData.enabledModules,
+      enabledModules: normalizeEnabledModules(appData.enabledModules),
       registrationApplications: appData.registrationApplications,
       registeredAccounts: registeredAccounts,
       moduleData: {
@@ -2885,31 +2959,17 @@ router.patch('/registration-applications/:applicationId/review', authenticate, a
   });
 });
 
-router.put('/business-categories/:categoryId/fee', authenticate, adminOnly, async (req, res) => {
-  const fee = Number(req.body?.fee);
-
-  const nextData = await devAppDataStore.updateAppData(async (currentData) => ({
-    ...currentData,
-    businessCategories: currentData.businessCategories.map((category) =>
-      category.id === req.params.categoryId
-        ? { ...category, fee: Number.isNaN(fee) ? 0 : fee }
-        : category
-    ),
-  }));
-
-  return res.json({
-    success: true,
-    data: {
-      businessCategories: nextData.businessCategories,
-    },
-  });
-});
-
 router.patch('/enabled-modules/:moduleId', authenticate, adminOnly, async (req, res) => {
+  // Normalize the module ID to match frontend normalization
+  const normalizedModuleId = normalizeModuleId(req.params.moduleId);
+
   const nextData = await devAppDataStore.updateAppData(async (currentData) => {
-    const enabledModules = currentData.enabledModules.includes(req.params.moduleId)
-      ? currentData.enabledModules.filter((id) => id !== req.params.moduleId)
-      : [...currentData.enabledModules, req.params.moduleId];
+    // Normalize existing modules to handle legacy data with denormalized IDs
+    const normalizedExistingModules = normalizeEnabledModules(currentData.enabledModules);
+    
+    const enabledModules = normalizedExistingModules.includes(normalizedModuleId)
+      ? normalizedExistingModules.filter((id) => id !== normalizedModuleId)
+      : [...normalizedExistingModules, normalizedModuleId];
 
     return {
       ...currentData,
@@ -2920,7 +2980,7 @@ router.patch('/enabled-modules/:moduleId', authenticate, adminOnly, async (req, 
   return res.json({
     success: true,
     data: {
-      enabledModules: nextData.enabledModules,
+      enabledModules: normalizeEnabledModules(nextData.enabledModules),
     },
   });
 });
