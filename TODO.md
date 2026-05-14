@@ -1,14 +1,29 @@
+# TODO - Premium Admin Dashboard redesign: Module Subscription Settings
 
-# TODO - GulfServices 360° Upgrade
+## Step 1
+- [ ] Add premium styling CSS (glassmorphism, gradients, typography, responsive table/card collapse)
 
-- [~] Step 1: Refactor `src/modules/gulfservices/GulfServices.js` into smaller subcomponents (no feature changes) (**scaffolding complete, extraction/rewiring next**)
+## Step 2
+- [ ] Refactor `AdminModuleSubscriptionScreen.js` UI:
+  - [ ] Premium header with breadcrumbs + subtitle + CTA
+  - [ ] Premium analytics cards row (6 cards with trend + sparkline)
+  - [ ] Subscription plans section redesign (search, filters, sorting, pagination placeholder)
+  - [ ] Premium responsive table -> card layout on mobile
 
-- [ ] Step 2: Add a unified state/model for “requests” (visa + attestation + jobs applications + emergency) in UI
-- [ ] Step 3: Implement “My Requests” page/view fed by dashboard or new API endpoints
-- [ ] Step 4: Add “Reminders” center UI (and integrate with backend endpoints if available)
-- [ ] Step 5: Unify tracking timeline rendering into a single reusable component
-- [ ] Step 6: Improve Jobs UX (saved/shortlist + application status list) depending on backend support
-- [ ] Step 7: Add Emergency incident workflow UI depending on backend support
-- [ ] Step 8: Add accessibility improvements to modal system (focus management)
-- [ ] Step 9: Add/extend tests and run lint/build
+## Step 3
+- [ ] Redesign create/edit form:
+  - [ ] Floating labels multi-column grid
+  - [ ] Modern dropdowns + toggle switches (Auto Renewal)
+  - [ ] Rich textarea styling + validation states
+  - [ ] Section dividers
+
+## Step 4
+- [ ] Multiple plans support UI improvements:
+  - [ ] Module-wise plan cards list instead of grouped table only
+  - [ ] Add drag-and-drop ordering (client-side)
+  - [ ] Add duplicate/copy actions + module filter
+  - [ ] Real-time preview panel (based on selected form draft)
+
+## Step 5
+- [ ] Run build/lint/tests (as available) and fix any errors
 

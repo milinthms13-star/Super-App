@@ -90,6 +90,18 @@ const ASTRO_SECTIONS = [
   },
 ];
 
+const SECTION_PRIORITY = [
+  "today",
+  "consult",
+  "ai",
+  "kundli",
+  "match",
+  "profile",
+  "panchangam",
+  "remedies",
+  "rashi",
+];
+
 const getNakshatraFromSign = (sign) => {
   const map = {
     aries: "Ashwini",
@@ -320,6 +332,7 @@ const AstrologyHome = () => {
   const [aiQuestion, setAiQuestion] = useState("");
   const [assistantAnswer, setAssistantAnswer] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [showTimingInsights, setShowTimingInsights] = useState(false);
 
   const ensureSignedIn = () => {
     if (!currentUser?.id && !currentUser?.name) {
@@ -529,6 +542,9 @@ const AstrologyHome = () => {
     astrologyService.getFallbackSign(selectedSign);
 
   const cardNotice = readingNotice || signsNotice;
+  const orderedSections = SECTION_PRIORITY
+    .map((key) => ASTRO_SECTIONS.find((sectionItem) => sectionItem.key === key))
+    .filter(Boolean);
 
   const handleAskAssistant = async () => {
     if (!aiQuestion.trim()) {
@@ -815,15 +831,28 @@ const AstrologyHome = () => {
                       <span>{localize("Lucky number", "ഭാഗ്യസംഖ്യ", language)}</span>
                       <strong>{getLuckyNumber(selectedSign)}</strong>
                     </div>
-                    <div className="astrology-metric-card">
-                      <span>{localize("Good time", "നല്ല സമയം", language)}</span>
-                      <strong>{getGoodTime(selectedSign)}</strong>
-                    </div>
-                    <div className="astrology-metric-card">
-                      <span>{localize("Avoid time", "തള്ളേണ്ട സമയം", language)}</span>
-                      <strong>{getAvoidTime(selectedSign)}</strong>
-                    </div>
+                    {showTimingInsights ? (
+                      <>
+                        <div className="astrology-metric-card">
+                          <span>{localize("Good time", "Good time", language)}</span>
+                          <strong>{getGoodTime(selectedSign)}</strong>
+                        </div>
+                        <div className="astrology-metric-card">
+                          <span>{localize("Avoid time", "Avoid time", language)}</span>
+                          <strong>{getAvoidTime(selectedSign)}</strong>
+                        </div>
+                      </>
+                    ) : null}
                   </div>
+                  <button
+                    type="button"
+                    className="astrology-secondary-button astrology-focus-toggle-button"
+                    onClick={() => setShowTimingInsights((currentValue) => !currentValue)}
+                  >
+                    {showTimingInsights
+                      ? localize("Hide timing details", "Hide timing details", language)
+                      : localize("View timing details", "View timing details", language)}
+                  </button>
                 </div>
               </div>
 
@@ -834,8 +863,8 @@ const AstrologyHome = () => {
                 notice={cardNotice}
               />
 
-              <div className="astrology-nav-grid">
-                {ASTRO_SECTIONS.map((sectionItem) => (
+              <div className="astrology-nav-grid" role="tablist" aria-label="Astrology sections">
+                {orderedSections.map((sectionItem) => (
                   <button
                     key={sectionItem.key}
                     type="button"
@@ -843,6 +872,8 @@ const AstrologyHome = () => {
                       activeSection === sectionItem.key ? "is-active" : ""
                     }`}
                     onClick={() => setActiveSection(sectionItem.key)}
+                    role="tab"
+                    aria-selected={activeSection === sectionItem.key}
                   >
                     <strong>{localize(sectionItem.label, sectionItem.labelMl, language)}</strong>
                     <span>{localize(sectionItem.description, sectionItem.descriptionMl, language)}</span>

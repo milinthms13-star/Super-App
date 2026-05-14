@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import useI18n from "../../hooks/useI18n";
+import { normalizeModuleId } from "../../utils/moduleRoutes";
 import "./AdminDashboard.css";
 
 const DEFAULT_MODERATION_REMARKS = {
@@ -406,27 +407,31 @@ const AdminDashboard = ({
           </div>
 
           <div className="admin-list">
-            {businessCategories.map((category) => (
-              <div className="admin-list-item" key={category.id}>
-                <div>
-                  <strong>{category.name}</strong>
-                  <span>
-                    {enabledModules.includes(category.id)
-                      ? t("admin.visibleOnPlatform", "Visible on the platform")
-                      : t("admin.hiddenOnPlatform", "Hidden on the platform")}
-                  </span>
+            {businessCategories.map((category) => {
+              const normalizedCategoryId = normalizeModuleId(category.id);
+              const isEnabled = enabledModules.includes(normalizedCategoryId);
+              return (
+                <div className="admin-list-item" key={category.id}>
+                  <div>
+                    <strong>{category.name}</strong>
+                    <span>
+                      {isEnabled
+                        ? t("admin.visibleOnPlatform", "Visible on the platform")
+                        : t("admin.hiddenOnPlatform", "Hidden on the platform")}
+                    </span>
+                  </div>
+                  <label className="toggle-switch" htmlFor={`toggle-${category.id}`}>
+                    <input
+                      id={`toggle-${category.id}`}
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={() => onToggleModule(normalizedCategoryId)}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
                 </div>
-                <label className="toggle-switch" htmlFor={`toggle-${category.id}`}>
-                  <input
-                    id={`toggle-${category.id}`}
-                    type="checkbox"
-                    checked={enabledModules.includes(category.id)}
-                    onChange={() => onToggleModule(category.id)}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Ensure fixed module list is shown even if business categories are missing some modules (e.g., astrology) */}
@@ -463,6 +468,8 @@ const AdminDashboard = ({
               "astrology",
               "mydiary",
             ].map((moduleId) => {
+              const normalizedModuleId = normalizeModuleId(moduleId);
+              const isEnabled = enabledModules.includes(normalizedModuleId);
               const name = moduleId
                 .replace(/([a-z])([A-Z])/g, "$1 $2")
                 .replace(/-/g, " ")
@@ -473,7 +480,7 @@ const AdminDashboard = ({
                   <div>
                     <strong>{name}</strong>
                     <span>
-                      {enabledModules.includes(moduleId)
+                      {isEnabled
                         ? t("admin.visibleOnPlatform", "Visible on the platform")
                         : t("admin.hiddenOnPlatform", "Hidden on the platform")}
                     </span>
@@ -482,8 +489,8 @@ const AdminDashboard = ({
                     <input
                       id={`toggle-${moduleId}`}
                       type="checkbox"
-                      checked={enabledModules.includes(moduleId)}
-                      onChange={() => onToggleModule(moduleId)}
+                      checked={isEnabled}
+                      onChange={() => onToggleModule(normalizedModuleId)}
                     />
                     <span className="toggle-slider"></span>
                   </label>
