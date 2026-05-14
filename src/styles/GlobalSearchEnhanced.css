@@ -363,11 +363,6 @@
   font-weight: 500;
 }
 
-/* Block external overlays */
-/* Google Translate widgets are intentionally displayed for site-wide language translation. */
-  overflow: hidden !important;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .global-search-container {
