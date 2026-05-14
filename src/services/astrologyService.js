@@ -186,6 +186,22 @@ const normalizeProfileItem = (item = {}) => ({
   lagna: String(item.lagna || "Mesha").trim(),
 });
 
+const normalizeKundliHistoryItem = (item = {}) => ({
+  id: String(item.id || `kundli-${Math.random().toString(36).slice(2)}`),
+  createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
+  sign: String(item.sign || "aries").trim().toLowerCase(),
+  profileName: String(item.profileName || "Profile").trim(),
+  data: item?.data && typeof item.data === "object" ? item.data : null,
+});
+
+const normalizeCompatibilityHistoryItem = (item = {}) => ({
+  id: String(item.id || `compatibility-${Math.random().toString(36).slice(2)}`),
+  createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
+  sign: String(item.sign || "aries").trim().toLowerCase(),
+  partnerSign: String(item.partnerSign || "taurus").trim().toLowerCase(),
+  data: item?.data && typeof item.data === "object" ? item.data : null,
+});
+
 const normalizeProfilePayload = (payload = {}) => ({
   sign: String(payload.sign || "").trim().toLowerCase(),
   birthDate: formatDateInputValue(payload.birthDate),
@@ -210,6 +226,12 @@ const normalizeProfilePayload = (payload = {}) => ({
     : [],
   savedReadings: Array.isArray(payload.savedReadings)
     ? payload.savedReadings.map((reading) => normalizeReadingPayload(reading))
+    : [],
+  kundliHistory: Array.isArray(payload.kundliHistory)
+    ? payload.kundliHistory.map((item) => normalizeKundliHistoryItem(item))
+    : [],
+  compatibilityHistory: Array.isArray(payload.compatibilityHistory)
+    ? payload.compatibilityHistory.map((item) => normalizeCompatibilityHistoryItem(item))
     : [],
   updatedAt: payload.updatedAt || "",
 });
@@ -370,6 +392,38 @@ export const astrologyService = {
       return normalizeProfilePayload(response.data.data);
     } catch (error) {
       throw buildServiceError(error, null, "Unable to save your astrology profile.");
+    }
+  },
+
+  async updateProfileHistory(payload = {}) {
+    const nextPayload = {};
+
+    if (payload?.kundliHistory !== undefined) {
+      nextPayload.kundliHistory = Array.isArray(payload.kundliHistory)
+        ? payload.kundliHistory.map((item) => normalizeKundliHistoryItem(item))
+        : [];
+    }
+
+    if (payload?.compatibilityHistory !== undefined) {
+      nextPayload.compatibilityHistory = Array.isArray(payload.compatibilityHistory)
+        ? payload.compatibilityHistory.map((item) => normalizeCompatibilityHistoryItem(item))
+        : [];
+    }
+
+    if (!Object.keys(nextPayload).length) {
+      return this.getProfile();
+    }
+
+    try {
+      const response = await axios.put(`${API_BASE_URL}/astrology/profile`, nextPayload);
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to save astrology history.");
+      }
+
+      return normalizeProfilePayload(response.data.data);
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to save astrology history.");
     }
   },
 

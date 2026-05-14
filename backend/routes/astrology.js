@@ -144,6 +144,55 @@ const normalizeFamilyProfiles = (profiles = []) =>
     .filter(Boolean)
     .slice(0, 16);
 
+const normalizeKundliHistory = (items = []) =>
+  (Array.isArray(items) ? items : [])
+    .map((item, index) => {
+      const sign = normalizeSign(item?.sign);
+      if (!getSignDetails(sign)) {
+        return null;
+      }
+
+      const id = sanitizeText(item?.id || `kundli-${index + 1}`, 80);
+      if (!id) {
+        return null;
+      }
+
+      return {
+        id,
+        createdAt: parseOptionalDate(item?.createdAt) || new Date(),
+        sign,
+        profileName: sanitizeText(item?.profileName || 'Profile', 80),
+        data: item?.data && typeof item.data === 'object' ? item.data : null,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 24);
+
+const normalizeCompatibilityHistory = (items = []) =>
+  (Array.isArray(items) ? items : [])
+    .map((item, index) => {
+      const sign = normalizeSign(item?.sign);
+      const partnerSign = normalizeSign(item?.partnerSign);
+      if (!getSignDetails(sign) || !getSignDetails(partnerSign)) {
+        return null;
+      }
+
+      const id = sanitizeText(item?.id || `compatibility-${index + 1}`, 80);
+      if (!id) {
+        return null;
+      }
+
+      return {
+        id,
+        createdAt: parseOptionalDate(item?.createdAt) || new Date(),
+        sign,
+        partnerSign,
+        data: item?.data && typeof item.data === 'object' ? item.data : null,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 24);
+
 const getKundliFallbackProfile = (profile = {}, defaultSign = 'aries') => {
   const sign = normalizeSign(profile?.sign || defaultSign);
   const signDetails = getSignDetails(sign) || getSignDetails(defaultSign) || zodiacSigns[0];
@@ -757,6 +806,14 @@ router.put('/profile', authenticate, async (req, res) => {
           ? normalizeFamilyProfiles(req.body.familyProfiles)
           : normalizeFamilyProfiles(existingProfile?.familyProfiles),
       savedReadings: mergeSavedReadings(existingProfile?.savedReadings, dailyReading),
+      kundliHistory:
+        req.body?.kundliHistory !== undefined
+          ? normalizeKundliHistory(req.body.kundliHistory)
+          : normalizeKundliHistory(existingProfile?.kundliHistory),
+      compatibilityHistory:
+        req.body?.compatibilityHistory !== undefined
+          ? normalizeCompatibilityHistory(req.body.compatibilityHistory)
+          : normalizeCompatibilityHistory(existingProfile?.compatibilityHistory),
     };
 
     const profile = await saveProfileByUserId(userId, nextProfile);

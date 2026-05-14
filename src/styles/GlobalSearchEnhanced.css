@@ -364,30 +364,7 @@
 }
 
 /* Block external overlays */
-div[class*="goog"],
-div[id*="google"],
-.skiptranslate,
-[class*="notranslate"],
-.goog-te-banner-frame,
-.goog-tooltip,
-div[id^="google_translate"],
-div.goog-te-spinner-pos,
-.skiptranslate iframe,
-div.goog-te-banner-frame-top,
-#google_translate_element,
-.google-translate-element,
-[data-google-translate],
-.gtranslate_wrapper {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  z-index: -9999 !important;
-  position: fixed !important;
-  top: -9999px !important;
-  left: -9999px !important;
-  width: 0 !important;
-  height: 0 !important;
-  opacity: 0 !important;
+/* Google Translate widgets are intentionally displayed for site-wide language translation. */
   overflow: hidden !important;
 }
 

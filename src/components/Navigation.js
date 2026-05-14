@@ -58,6 +58,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [isTranslateOpen, setIsTranslateOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
 
@@ -159,6 +160,25 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     setAvatarLoadError(false);
   }, [profileImageSrc]);
 
+  useEffect(() => {
+    const widget = document.getElementById("google_translate_element");
+    if (!widget) {
+      return;
+    }
+
+    if (isTranslateOpen) {
+      widget.classList.add("visible");
+      setTimeout(() => {
+        const select = widget.querySelector(".goog-te-combo");
+        if (select) {
+          select.focus();
+        }
+      }, 100);
+    } else {
+      widget.classList.remove("visible");
+    }
+  }, [isTranslateOpen]);
+
   const handleModuleClick = (moduleId) => {
     navigate(getPathForModule(moduleId, getPathForModule(defaultHomeModule)));
     setIsSidebarOpen(false);
@@ -239,7 +259,14 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                   SOS
                 </button>
               )}
-              
+              <button
+                type="button"
+                className="translate-button polished"
+                onClick={() => setIsTranslateOpen((prev) => !prev)}
+                title={t("navigation.translate", "Translate this page")}
+              >
+                {t("navigation.translate", "Translate")}
+              </button>
               <div className="user-profile" onClick={() => setShowUserMenu(!showUserMenu)}>
                 <span className="user-avatar">
                   {profileImageSrc && !avatarLoadError ? (

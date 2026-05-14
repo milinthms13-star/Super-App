@@ -1130,7 +1130,7 @@ const AstrologyHome = () => {
                         </div>
                       ) : (
                         <p className="astrology-history-empty">
-                          {localize("Compatibility checks you run will be saved locally.", "Compatibility checks you run will be saved locally.", language)}
+                          {localize("Compatibility checks will be saved to your account history.", "Compatibility checks will be saved to your account history.", language)}
                         </p>
                       )}
                     </article>

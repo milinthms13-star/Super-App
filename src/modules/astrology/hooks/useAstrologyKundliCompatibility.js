@@ -1,46 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { astrologyService } from "../../../services/astrologyService";
 
-const KUNDLI_HISTORY_STORAGE_KEY = "astrology.kundliHistory.v1";
-const COMPATIBILITY_HISTORY_STORAGE_KEY = "astrology.compatibilityHistory.v1";
-const MAX_LOCAL_HISTORY_ITEMS = 12;
-
-const getUserScopedStorageKey = (baseKey, currentUser) => {
-  const userKey = currentUser?.id || currentUser?.email || currentUser?.name || "guest";
-  return `${baseKey}.${String(userKey).trim().toLowerCase()}`;
-};
-
-const loadLocalHistory = (storageKey) => {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(storageKey);
-    if (!rawValue) {
-      return [];
-    }
-    const parsed = JSON.parse(rawValue);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    return [];
-  }
-};
-
-const saveLocalHistory = (storageKey, nextItems) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(nextItems));
-  } catch (error) {
-    // Ignore storage write failures.
-  }
-};
+const MAX_HISTORY_ITEMS = 24;
 
 const upsertHistoryItem = (items, nextItem) =>
-  [nextItem, ...items.filter((item) => item.id !== nextItem.id)].slice(0, MAX_LOCAL_HISTORY_ITEMS);
+  [nextItem, ...items.filter((item) => item.id !== nextItem.id)].slice(0, MAX_HISTORY_ITEMS);
 
 const formatSavedReadingDate = (value) => {
   if (!value) {
@@ -77,25 +41,43 @@ export const useAstrologyKundliCompatibility = ({
   const [activeKundliSnapshotId, setActiveKundliSnapshotId] = useState("");
   const [compatibilityHistory, setCompatibilityHistory] = useState([]);
 
-  const currentUserStorageIdentity =
-    currentUser?.id || currentUser?.email || currentUser?.name || "guest";
-  const kundliStorageKey = useMemo(
-    () => getUserScopedStorageKey(KUNDLI_HISTORY_STORAGE_KEY, { id: currentUserStorageIdentity }),
-    [currentUserStorageIdentity]
-  );
-  const compatibilityStorageKey = useMemo(
-    () =>
-      getUserScopedStorageKey(COMPATIBILITY_HISTORY_STORAGE_KEY, {
-        id: currentUserStorageIdentity,
-      }),
-    [currentUserStorageIdentity]
-  );
-
   useEffect(() => {
-    setKundliHistory(loadLocalHistory(kundliStorageKey));
-    setCompatibilityHistory(loadLocalHistory(compatibilityStorageKey));
-    setActiveKundliSnapshotId("");
-  }, [compatibilityStorageKey, kundliStorageKey]);
+    if (!currentUser?.id && !currentUser?.email && !currentUser?.name) {
+      setKundliHistory([]);
+      setCompatibilityHistory([]);
+      setActiveKundliSnapshotId("");
+      return;
+    }
+
+    let active = true;
+
+    const loadHistory = async () => {
+      try {
+        const profile = await astrologyService.getProfile();
+        if (!active) {
+          return;
+        }
+
+        setKundliHistory(Array.isArray(profile?.kundliHistory) ? profile.kundliHistory : []);
+        setCompatibilityHistory(
+          Array.isArray(profile?.compatibilityHistory) ? profile.compatibilityHistory : []
+        );
+        setActiveKundliSnapshotId("");
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setKundliHistory([]);
+        setCompatibilityHistory([]);
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.email, currentUser?.id, currentUser?.name]);
 
   useEffect(() => {
     if (activeSection !== "kundli") {
@@ -128,7 +110,9 @@ export const useAstrologyKundliCompatibility = ({
         };
         setKundliHistory((currentItems) => {
           const nextItems = upsertHistoryItem(currentItems, historyItem);
-          saveLocalHistory(kundliStorageKey, nextItems);
+          if (currentUser?.id || currentUser?.email || currentUser?.name) {
+            void astrologyService.updateProfileHistory({ kundliHistory: nextItems });
+          }
           return nextItems;
         });
       } catch (error) {
@@ -155,8 +139,9 @@ export const useAstrologyKundliCompatibility = ({
   }, [
     activeKundliSnapshotId,
     activeSection,
+    currentUser?.email,
+    currentUser?.id,
     currentUser?.name,
-    kundliStorageKey,
     selectedProfile,
     selectedSign,
     setSaveState,
@@ -175,7 +160,9 @@ export const useAstrologyKundliCompatibility = ({
       };
       setCompatibilityHistory((currentItems) => {
         const nextItems = upsertHistoryItem(currentItems, historyItem);
-        saveLocalHistory(compatibilityStorageKey, nextItems);
+        if (currentUser?.id || currentUser?.email || currentUser?.name) {
+          void astrologyService.updateProfileHistory({ compatibilityHistory: nextItems });
+        }
         return nextItems;
       });
       setSaveState({ type: "success", message: "Compatibility calculated successfully." });

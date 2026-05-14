@@ -426,38 +426,7 @@ html, body {
   isolation: isolate;
 }
 
-/* Block Google Translate widget */
-.goog-te-banner-frame,
-.goog-te-banner-frame.skiptranslate,
-div[id^="google_translate"],
-div.goog-te-spinner-pos,
-.skiptranslate iframe,
-.goog-tooltip {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  z-index: -9999 !important;
-  position: fixed !important;
-  top: -9999px !important;
-  left: -9999px !important;
-  width: 0 !important;
-  height: 0 !important;
-  opacity: 0 !important;
-}
-
-/* Block all Google elements */
-div[class*="goog"],
-div[id*="goog"],
-div[class*="google"],
-div[id*="google"],
-.skiptranslate,
-[class*="notranslate"],
-body[class*="google"] {
-  display: none !important;
-  pointer-events: none !important;
-  z-index: -9999 !important;
-}
-
+/* Google Translate widget should remain available for site-wide translation. */
 /* Enhanced isolation for search component */
 .global-search-container {
   position: relative;

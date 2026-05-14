@@ -535,6 +535,41 @@
   animation: sosGlow 2s ease-in-out infinite;
 }
 
+.translate-button {
+  color: white;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.25s ease;
+}
+
+.translate-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+#google_translate_element {
+  display: none !important;
+  position: fixed !important;
+  top: 72px !important;
+  right: 1rem !important;
+  z-index: 10001 !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  padding: 0.75rem 0.9rem !important;
+  border-radius: 16px !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+#google_translate_element.visible {
+  display: block !important;
+}
+
 @keyframes sosGlow {
   0%, 100% {
     box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);

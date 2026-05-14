@@ -52,6 +52,46 @@ const familyProfileSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const kundliHistorySchema = new mongoose.Schema(
+  {
+    id: { type: String, trim: true, required: true },
+    createdAt: { type: Date, default: Date.now },
+    sign: {
+      type: String,
+      enum: ZODIAC_SIGNS,
+      required: true,
+      lowercase: true,
+      trim: true,
+    },
+    profileName: { type: String, trim: true, default: "Profile" },
+    data: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { _id: false }
+);
+
+const compatibilityHistorySchema = new mongoose.Schema(
+  {
+    id: { type: String, trim: true, required: true },
+    createdAt: { type: Date, default: Date.now },
+    sign: {
+      type: String,
+      enum: ZODIAC_SIGNS,
+      required: true,
+      lowercase: true,
+      trim: true,
+    },
+    partnerSign: {
+      type: String,
+      enum: ZODIAC_SIGNS,
+      required: true,
+      lowercase: true,
+      trim: true,
+    },
+    data: { type: mongoose.Schema.Types.Mixed, default: null },
+  },
+  { _id: false }
+);
+
 const astrologyUserProfileSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true, unique: true, index: true },
@@ -77,6 +117,8 @@ const astrologyUserProfileSchema = new mongoose.Schema(
     },
     familyProfiles: [familyProfileSchema],
     savedReadings: [astrologyReadingSchema],
+    kundliHistory: [kundliHistorySchema],
+    compatibilityHistory: [compatibilityHistorySchema],
   },
   {
     timestamps: true,
