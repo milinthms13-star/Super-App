@@ -1218,3 +1218,220 @@
     width: 100%;
   }
 }
+
+/* Premium Redesign Layer */
+.realestate-shell {
+  --realestate-ink: #132132;
+  --realestate-muted: #60738a;
+  --realestate-border: #d7e3ee;
+  --realestate-surface: #ffffff;
+  --realestate-surface-alt: #eff6fb;
+  --realestate-primary: #0f766e;
+  --realestate-primary-dark: #0c4f56;
+  --realestate-accent: #cf8f2d;
+  --realestate-danger: #c03939;
+  font-family: "Sora", "Poppins", "Manrope", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(15, 118, 110, 0.1), transparent 32%),
+    radial-gradient(circle at 88% 22%, rgba(207, 143, 45, 0.14), transparent 30%),
+    linear-gradient(180deg, #f7fbff 0%, #eef4fa 100%);
+}
+
+.realestate-hero,
+.realestate-filter-card,
+.realestate-listing-card,
+.realestate-surface-card,
+.realestate-detail-card,
+.realestate-stat-card {
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  box-shadow:
+    0 20px 44px rgba(18, 33, 50, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(6px);
+}
+
+.realestate-hero {
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.96), rgba(245, 252, 255, 0.92)),
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.11), transparent 45%);
+  overflow: hidden;
+}
+
+.realestate-hero-copy h1 {
+  letter-spacing: -0.02em;
+}
+
+.realestate-kicker,
+.realestate-hero-tags span {
+  border: 1px solid rgba(15, 118, 110, 0.16);
+}
+
+.realestate-primary-button,
+.realestate-plan-button {
+  background: linear-gradient(135deg, #0f766e, #0c5f59);
+  box-shadow: 0 10px 20px rgba(15, 118, 110, 0.26);
+}
+
+.realestate-secondary-button,
+.realestate-inline-button,
+.realestate-tab {
+  border-color: #cfe0ea;
+}
+
+.realestate-primary-button:hover,
+.realestate-secondary-button:hover,
+.realestate-inline-button:hover,
+.realestate-plan-button:hover,
+.realestate-role-card:hover,
+.realestate-property-card:hover,
+.realestate-service-card:hover,
+.realestate-tab:hover {
+  transform: translateY(-2px);
+}
+
+.realestate-role-card,
+.realestate-service-card,
+.realestate-property-card,
+.realestate-tab {
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
+}
+
+.realestate-role-card.active,
+.realestate-service-card.active,
+.realestate-tab.active {
+  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.12);
+}
+
+.realestate-filter-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
+}
+
+.realestate-filter-summary {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.34rem 0.78rem;
+  border: 1px solid rgba(15, 118, 110, 0.17);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.realestate-field input,
+.realestate-field select,
+.realestate-field textarea {
+  border-radius: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.realestate-property-card {
+  background:
+    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%),
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.05), transparent 42%);
+}
+
+.realestate-property-image {
+  transition: transform 0.45s ease;
+}
+
+.realestate-property-card:hover .realestate-property-image {
+  transform: scale(1.04);
+}
+
+.realestate-property-copy h3 {
+  letter-spacing: -0.01em;
+}
+
+.realestate-trust-pill,
+.realestate-docs-pill {
+  border: 1px solid rgba(15, 118, 110, 0.14);
+}
+
+.realestate-detail-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+}
+
+.realestate-detail-tabs-row {
+  gap: 0.62rem;
+}
+
+.realestate-tab {
+  min-height: 40px;
+}
+
+.realestate-trust-panel {
+  background:
+    linear-gradient(180deg, #ffffff 0%, #f4fbfc 100%),
+    radial-gradient(circle at 100% 0%, rgba(15, 118, 110, 0.08), transparent 42%);
+}
+
+.realestate-trust-badge {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 8px 18px rgba(18, 33, 50, 0.12);
+}
+
+.realestate-trust-flag {
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.realestate-trust-flag:hover {
+  transform: translateY(-1px);
+  border-color: #bfd5e6;
+}
+
+.realestate-empty-state-actions {
+  border-style: solid;
+  border-color: #cfe0ec;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #f7fbff 100%),
+    radial-gradient(circle at 20% 20%, rgba(207, 143, 45, 0.08), transparent 45%);
+}
+
+.realestate-shell section,
+.realestate-shell article,
+.realestate-shell aside {
+  animation: realestateRiseIn 0.45s ease both;
+}
+
+.realestate-shell section:nth-of-type(2),
+.realestate-shell section:nth-of-type(3),
+.realestate-shell section:nth-of-type(4) {
+  animation-delay: 0.08s;
+}
+
+@keyframes realestateRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .realestate-shell {
+    padding-bottom: 4rem;
+  }
+
+  .realestate-hero {
+    border-radius: 20px;
+  }
+
+  .realestate-filter-actions {
+    gap: 0.6rem;
+  }
+
+  .realestate-filter-actions button {
+    min-height: 44px;
+  }
+
+  .realestate-tab {
+    min-height: 42px;
+    padding-inline: 0.8rem;
+  }
+
+  .realestate-card-actions {
+    gap: 0.55rem;
+  }
+}

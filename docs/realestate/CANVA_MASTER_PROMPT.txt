@@ -1,0 +1,65 @@
+HomeSphere Premium RealEstate UI System
+
+Create a premium, trust-first, mobile-friendly real estate product design system and screen set for a platform named "HomeSphere". The visual style should feel high-value, modern, clean, and conversion-focused with an Indian-market tone. Use a refined SaaS aesthetic with rich cards, subtle gradients, strong readability, and clear CTA hierarchy.
+
+Brand tokens:
+- Primary: #0F766E
+- Primary Dark: #0C4F56
+- Accent Gold: #CF8F2D
+- Ink: #132132
+- Muted: #60738A
+- Border: #D7E3EE
+- Soft Surface: #EFF6FB
+- White: #FFFFFF
+- Danger: #C03939
+
+Typography:
+- Headings: Sora (Semibold/Bold)
+- Body: Manrope (Regular/Medium)
+- Hero H1 desktop: 48-56px
+- Hero H1 mobile: 34-40px
+- Section H2 desktop: 28-32px
+- Section H2 mobile: 22-26px
+- Body: 16-18px
+
+Layout:
+- Desktop: 12-column grid, 24px gutters, 80-120px section spacing
+- Tablet: 8-column grid
+- Mobile: 4-column grid, 16px horizontal padding
+- Card radius: 20-24px
+- Button radius: pill (999px)
+- Input radius: 14px
+
+Design and present these screens:
+1) Marketplace Dashboard (desktop): hero with headline "Find verified homes, rentals, and land in one place.", CTA buttons (Explore Listings, Post Property), trust chips (Verified Listings, Quick Connect, Multi-language Support), stat cards (Active Listings, Verified Listings, Rental Inventory, Open Leads, Document Checks Pending), role switch cards (Buyer/Tenant, Property Owner, Agent/Broker, Builder/Developer, Admin).
+2) Smart Filter + Listing Grid (desktop): left filter controls with search, intent, location, type, budget slider, area slider, source, possession, nearby, amenity, verified, sort; action buttons (Apply Filters, Clear Filters, Nearby + Verified), active filter count chip; property cards with verification/featured/status badges, media preview, title, price, locality, type-bed-area row, trust pill, docs score (x/6), possession, furnishing, leads, rating, Save button.
+3) Property Detail with tabs (desktop): tabs (Overview, Media, Documents, Financing, Messages, Reviews, Actions), trust snapshot panel (status badge, score /100, missing document warning, Request Documents, Verification History), overview content (pricing, type, intent, specs chips, description, amenities chips, map card, seller card, trust flags, quick metadata).
+4) Documents & Verification screen: KYC, RERA, Title Deed, Tax Receipt, Building Permit, Encumbrance Certificate rows with status dots and labels (Available/Pending/Rejected), missing docs warning block, verification CTAs.
+5) Lead & Visit Management (desktop): CRM-style lead cards (name, channel, priority, stage, Mark Contacted), visit cards (date/time, mode, status, updates), monetization block with subscription plans (Razorpay/Stripe), featured credits, invoice summary.
+6) Messaging + Reviews + Actions tab content: messaging list + input + send; reviews area with rating dropdown/comment textarea/report textarea; action stack (Send Enquiry, Call Owner/Agent, WhatsApp Contact, Share Property, Download Brochure, Enable Alert); visit scheduler (datetime, mode, notes, Schedule Visit).
+7) Mobile screen set (390px): thumb-friendly controls (min 44px targets), stacked cards, filter accordion with apply/clear, property cards with trust/docs badges, tabbed detail switcher, trust panel, sticky bottom action area.
+8) Tablet adaptation (768px): preserve hierarchy, convert dense desktop sections into modular stacked two-column rhythm.
+9) Design System Board: palette swatches with hex values, typography scale, button variants (primary/secondary/ghost/danger), inputs (default/focus/error), badges (verified/pending/featured/sold/rented), trust pills/docs pills, tab states, card components, spacing/radius tokens.
+10) Investor one-page walkthrough slide: problem, trust-first UX solution, workflows (discover/verify/contact/schedule), monetization, mobile readiness, KPI outcomes.
+
+Interaction cues:
+- Subtle card hover lift
+- Button hover elevation/tint
+- Active tab high-contrast pill
+- Gentle image zoom
+
+Copy tone:
+- Crisp, practical, trusted
+- Emphasize verification, fast actions, and decision confidence
+
+Use these optional text snippets in mockups:
+- "Verified inventory. Faster decisions. Smarter closings."
+- "Trust score and legal visibility built into every listing."
+- "Compare, verify, connect, and schedule in one workflow."
+- "Premium discovery with practical next-step actions."
+- "Built for buyers, owners, brokers, builders, and admins."
+
+Output expectation:
+- Premium UI mockups for desktop, tablet, mobile
+- Consistent brand system across all screens
+- Ready for PNG and PDF export
