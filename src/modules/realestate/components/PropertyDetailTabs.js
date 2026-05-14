@@ -53,7 +53,12 @@ const PropertyDetailTabs = ({
   const summary = useMemo(() => (property ? trustSummary(property) : null), [property]);
 
   if (!property) {
-    return <div className="realestate-empty-state">Select a property to see detailed information.</div>;
+    return (
+      <div className="realestate-empty-state realestate-empty-state-actions">
+        <h3>Select a listing</h3>
+        <p>Choose any property card from the left panel to view documents, media, financing, messages, and actions.</p>
+      </div>
+    );
   }
 
   return (
@@ -107,7 +112,7 @@ const PropertyDetailTabs = ({
           <div className="realestate-detail-price-row">
             <strong>{property.priceLabel}</strong>
             <span>
-              {property.type} · {property.intent}
+              {property.type} | {property.intent}
             </span>
           </div>
 
@@ -143,7 +148,7 @@ const PropertyDetailTabs = ({
           <div className="realestate-contact-card">
             <strong>{property.sellerName}</strong>
             <span>
-              {property.sellerRole} · {property.languageSupport?.join(", ") || "English"}
+              {property.sellerRole} | {property.languageSupport?.join(", ") || "English"}
             </span>
             <span>
               {property.rating?.toFixed(1)} / 5 from {property.reviewCount || property.reviews?.length || 0} reviews
@@ -288,4 +293,5 @@ const PropertyDetailTabs = ({
 };
 
 export default PropertyDetailTabs;
+
 

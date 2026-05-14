@@ -106,7 +106,7 @@ describe("RealEstate", () => {
     });
 
     expect(
-      screen.getByRole("heading", { name: /smart rental studio/i, level: 2 })
+      screen.getByRole("heading", { name: /smart rental studio/i, level: 3 })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: /skyline residency 3 bhk/i, level: 3 })
@@ -186,7 +186,7 @@ describe("RealEstate", () => {
       );
       expect(screen.getByText(/listing drafted successfully/i)).toBeInTheDocument();
       expect(
-        screen.getByRole("heading", { name: /new marina apartment/i, level: 2 })
+        screen.getByRole("heading", { name: /new marina apartment/i, level: 3 })
       ).toBeInTheDocument();
     });
   });
@@ -242,6 +242,7 @@ describe("RealEstate", () => {
     render(<RealEstate />);
 
     expect(screen.getAllByText(/^Pending$/i)[0]).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /^actions$/i }));
     fireEvent.click(screen.getByText(/^Approve listing$/i));
 
     await waitFor(() => {
@@ -347,6 +348,7 @@ describe("RealEstate", () => {
   test("lets buyers schedule a property visit from the detail panel", async () => {
     const expectedVisitIso = new Date("2026-05-10T11:00").toISOString();
     render(<RealEstate />);
+    fireEvent.click(screen.getByRole("tab", { name: /^actions$/i }));
 
     fireEvent.change(screen.getByLabelText(/visit date and time/i), {
       target: { value: "2026-05-10T11:00" },

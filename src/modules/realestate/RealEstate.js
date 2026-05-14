@@ -48,6 +48,10 @@ const initialFilters = {
   verifiedFilter: "all",
   sortBy: "featured",
 };
+const buildDefaultFilters = (maxPriceValue = 500) => ({
+  ...initialFilters,
+  maxPriceFilter: Math.max(1, Math.round(maxPriceValue || 500)),
+});
 
 const generateToastId = () => `re-toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const mapRoleModeForPayload = (activeRole) =>
@@ -90,6 +94,7 @@ const RealEstate = () => {
 
   const [activeRole, setActiveRole] = useState(() => getPreferredRoleMode(currentUser));
   const [filters, setFilters] = useState(initialFilters);
+  const [draftFilters, setDraftFilters] = useState(initialFilters);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [enquiryMessage, setEnquiryMessage] = useState("");
   const [chatInput, setChatInput] = useState("");
@@ -186,9 +191,14 @@ const RealEstate = () => {
   );
 
   useEffect(() => {
+    const normalizedMax = Math.max(1, Math.round(maxPrice));
     setFilters((state) => ({
       ...state,
-      maxPriceFilter: Math.max(1, Math.round(maxPrice)),
+      maxPriceFilter: Math.min(normalizedMax, Number(state.maxPriceFilter || normalizedMax)),
+    }));
+    setDraftFilters((state) => ({
+      ...state,
+      maxPriceFilter: Math.min(normalizedMax, Number(state.maxPriceFilter || normalizedMax)),
     }));
   }, [maxPrice]);
 
@@ -388,8 +398,26 @@ const RealEstate = () => {
     ];
   }, [adminQueues.documentVerification.length, properties]);
 
-  const handleFilterChange = (key, value) => {
+  const handleFilterDraftChange = (key, value) => {
+    setDraftFilters((state) => ({ ...state, [key]: value }));
     setFilters((state) => ({ ...state, [key]: value }));
+  };
+
+  const handleApplyFilters = (nextFilters = draftFilters) => {
+    setFilters((state) => ({
+      ...state,
+      ...nextFilters,
+      maxPriceFilter: Math.max(1, Math.min(Number(nextFilters.maxPriceFilter || maxPrice), Math.round(maxPrice))),
+      minSqftFilter: Math.max(0, Number(nextFilters.minSqftFilter || 0)),
+    }));
+    pushToast("Filters applied.");
+  };
+
+  const handleResetFilters = () => {
+    const defaults = buildDefaultFilters(maxPrice);
+    setDraftFilters(defaults);
+    setFilters(defaults);
+    pushToast("Filters reset to default.");
   };
 
   const handleFavoriteToggle = (property) => {
@@ -867,8 +895,10 @@ const RealEstate = () => {
             <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>
           )}
           <FiltersPanel
-            filters={filters}
-            onChange={handleFilterChange}
+            filters={draftFilters}
+            onChange={handleFilterDraftChange}
+            onApply={handleApplyFilters}
+            onReset={handleResetFilters}
             locations={locations}
             propertyTypes={propertyTypes}
             amenities={allAmenities}
@@ -881,20 +911,55 @@ const RealEstate = () => {
               <h2>Marketplace inventory</h2>
               <p>{filteredProperties.length} properties match the current search.</p>
             </div>
-            <div className="realestate-property-grid">
-              {filteredProperties.map((property) => (
-                <PropertyCard
-                  key={property.id}
-                  property={property}
-                  isActive={selectedProperty?.id === property.id}
-                  isFavorite={favoriteIds.has(`realestate-${property.id}`)}
-                  canManage={canManageProperty(property)}
-                  onSelect={setSelectedPropertyId}
-                  onEdit={handleEditListing}
-                  onFavoriteToggle={handleFavoriteToggle}
-                />
-              ))}
-            </div>
+            {filteredProperties.length === 0 ? (
+              <div className="realestate-empty-state realestate-empty-state-actions">
+                <h3>No properties match these filters</h3>
+                <p>Try widening your budget, reducing minimum area, or relaxing nearby constraints.</p>
+                <div className="realestate-inline-actions">
+                  <button type="button" className="realestate-inline-button" onClick={handleResetFilters}>
+                    Reset all filters
+                  </button>
+                  <button
+                    type="button"
+                    className="realestate-inline-button"
+                    onClick={() =>
+                      handleApplyFilters({
+                        ...buildDefaultFilters(maxPrice),
+                        verifiedFilter: "verified-only",
+                        nearbyFilter: "metro",
+                      })
+                    }
+                  >
+                    Show verified near metro
+                  </button>
+                  <button
+                    type="button"
+                    className="realestate-inline-button"
+                    onClick={() => {
+                      setDraftFilters((state) => ({ ...state, searchText: "", amenityFilter: "all", locationFilter: "All" }));
+                      handleApplyFilters({ ...filters, searchText: "", amenityFilter: "all", locationFilter: "All" });
+                    }}
+                  >
+                    Relax text + amenity filters
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="realestate-property-grid">
+                {filteredProperties.map((property) => (
+                  <PropertyCard
+                    key={property.id}
+                    property={property}
+                    isActive={selectedProperty?.id === property.id}
+                    isFavorite={favoriteIds.has(`realestate-${property.id}`)}
+                    canManage={canManageProperty(property)}
+                    onSelect={setSelectedPropertyId}
+                    onEdit={handleEditListing}
+                    onFavoriteToggle={handleFavoriteToggle}
+                  />
+                ))}
+              </div>
+            )}
           </article>
 
           <article className="realestate-operations-grid">
@@ -947,26 +1012,6 @@ const RealEstate = () => {
                 </p>
               ) : null}
             </section>
-          </article>
-
-          <article className="realestate-surface-card">
-            <div className="realestate-section-heading">
-              <h2>Construction & owner services</h2>
-              <p>Book renovation, project launch, or tenant-ready services as part of your property workflow.</p>
-            </div>
-            <div className="realestate-service-grid">
-              {CONSTRUCTION_SERVICES.map((service) => (
-                <button
-                  key={service.id}
-                  type="button"
-                  className={`realestate-service-card ${selectedService === service.id ? "active" : ""}`}
-                  onClick={() => handleConstructionRequest(service.id)}
-                >
-                  <strong>{service.title}</strong>
-                  <span>{service.description}</span>
-                </button>
-              ))}
-            </div>
           </article>
 
           <ListingForm
