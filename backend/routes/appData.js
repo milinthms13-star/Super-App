@@ -1592,15 +1592,14 @@ router.post('/skilllearning/tests/submit', authenticate, async (req, res) => {
   });
   const negativeMarks = wrong * 0.25;
   const score = Math.max(0, Number(((correct - negativeMarks) / totalQuestions) * 100).toFixed(0));
-  const weakAreaTopics = [...new Set(answers
-    .filter((answer) => {
-      const question = questions.find((item) => item.id === answer.id);
-      return question && typeof answer.selectedIndex === 'number' && question.answer !== answer.selectedIndex;
-    })
-    .map((answer) => {
-      const question = questions.find((item) => item.id === answer.id);
-      return question?.topic || 'general';
-    })))];
+  let weakAreaTopics = [];
+  for (const answer of answers) {
+    const question = questions.find((item) => item.id === answer.id);
+    if (question && typeof answer.selectedIndex === 'number' && question.answer !== answer.selectedIndex) {
+      weakAreaTopics.push(question?.topic || 'general');
+    }
+  }
+  weakAreaTopics = [...new Set(weakAreaTopics)];
 
   try {
     const result = await SkillTestResult.create({
