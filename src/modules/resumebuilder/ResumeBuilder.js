@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
 import { jsPDF } from "jspdf";
 import { useApp } from "../../contexts/AppContext";
 import { buildApiUrl } from "../../utils/api";
@@ -193,7 +194,28 @@ const buildResumeFromForm = (formData = {}, template = "simple-ats", resumeType 
   };
 };
 
-const parseAtsSuggestions = (items) => (Array.isArray(items) ? items.filter(Boolean) : []);
+const parseAtsSuggestions = (items) =>
+  Array.isArray(items) ? [...new Set(items.map((item) => clean(item)).filter(Boolean))] : [];
+
+const computeSectionCompleteness = (resume = {}) => {
+  const checks = {
+    profile: Boolean(clean(resume.profile).length >= 60),
+    skills: Array.isArray(resume.skills) && resume.skills.length > 0,
+    education: Array.isArray(resume.education) && resume.education.length > 0,
+    experience: Array.isArray(resume.experience) && resume.experience.length > 0,
+    projects: Array.isArray(resume.projects) && resume.projects.length > 0,
+    certifications: Array.isArray(resume.certifications) && resume.certifications.length > 0,
+  };
+
+  const completed = Object.values(checks).filter(Boolean).length;
+  const total = Object.keys(checks).length;
+  return {
+    checks,
+    completed,
+    total,
+    percent: Math.round((completed / total) * 100),
+  };
+};
 
 const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
   const resumeText = formatResumeText(resume).toLowerCase();
@@ -202,6 +224,7 @@ const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
   const matchedKeywords = jdKeywords.filter((keyword) => resumeKeywords.includes(keyword));
   const missingKeywords = jdKeywords.filter((keyword) => !resumeKeywords.includes(keyword));
   const keywordMatchPercent = jdKeywords.length > 0 ? Math.round((matchedKeywords.length / jdKeywords.length) * 100) : 0;
+  const sectionCompleteness = computeSectionCompleteness(resume);
 
   const issues = [];
   const suggestions = [];
@@ -215,9 +238,9 @@ const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
     issues.push("Professional summary is too short.");
     suggestions.push("Write a stronger summary with measurable outcomes.");
   }
-  if ((resume?.experience || []).length === 0) {
-    issues.push("Experience section is empty.");
-    suggestions.push("Add at least one experience block with 2-4 bullets.");
+  if (sectionCompleteness.percent < 70) {
+    issues.push("Resume sections are incomplete.");
+    suggestions.push("Complete profile, skills, education, experience, projects, and certifications sections.");
   }
   if (!/(\d+%|\d+\+|increased|reduced|improved|saved|grew|achieved)/i.test(resumeText)) {
     issues.push("No measurable achievement detected.");
@@ -233,8 +256,12 @@ const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
   }
 
   let score = 100;
-  score -= issues.length * 8;
-  score -= warnings.length * 3;
+  score -= !clean(resume?.header?.email) && !clean(resume?.header?.phone) ? 20 : 0;
+  score -= clean(resume?.profile).length < 60 ? 12 : 0;
+  score -= Math.max(0, 40 - keywordMatchPercent) * 0.6;
+  score -= sectionCompleteness.percent < 70 ? 16 : 0;
+  score -= /(\d+%|\d+\+|increased|reduced|improved|saved|grew|achieved)/i.test(resumeText) ? 0 : 12;
+  score -= warnings.length * 4;
   score = Math.max(30, Math.min(100, Math.round(score)));
 
   return {
@@ -245,6 +272,7 @@ const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
     issues,
     warnings,
     suggestions,
+    sectionCompleteness,
     checkedAt: new Date().toISOString(),
   };
 };
@@ -745,9 +773,19 @@ const ResumeBuilder = () => {
     setDraftName(record?.name || "");
     setSelectedResumeId(record?._id || record?.id || "");
     const latestAts = Array.isArray(record?.atsHistory) ? record.atsHistory[record.atsHistory.length - 1] : null;
-    if (latestAts?.score) {
-      setAtsReport((current) => ({ ...(current || {}), score: latestAts.score }));
-    }
+    setAtsReport(
+      latestAts?.score
+        ? {
+            score: latestAts.score,
+            keywordMatchPercent: latestAts.keywordMatchPercent || 0,
+            matchedKeywords: [],
+            missingKeywords: [],
+            issues: [],
+            warnings: [],
+            suggestions: [],
+          }
+        : null
+    );
     setActiveSection("builder");
     pushStatus("success", "Draft loaded.");
   }, [pushStatus]);
@@ -818,6 +856,49 @@ const ResumeBuilder = () => {
     [isAuthenticated, loadResumes, pushStatus, request, withBusy]
   );
 
+  const renameDraft = useCallback(
+    async (record) => {
+      const recordId = record?._id || record?.id || "";
+      if (!recordId) return;
+
+      const currentName = clean(record?.name) || "Untitled Resume";
+      const nextName = window.prompt("Enter a new resume name", currentName);
+      if (nextName === null) return;
+
+      const normalizedName = clean(nextName);
+      if (!normalizedName) {
+        pushStatus("error", "Resume name cannot be empty.");
+        return;
+      }
+
+      if (!isAuthenticated || String(recordId).startsWith("local-")) {
+        const drafts = loadLocalDrafts();
+        const next = drafts.map((item) => {
+          const itemId = String(item?._id || item?.id || "");
+          if (itemId !== String(recordId)) return item;
+          return { ...item, name: normalizedName, updatedAt: new Date().toISOString() };
+        });
+        saveLocalDrafts(next);
+        setSavedResumes(next);
+        if (selectedResumeId === recordId) setDraftName(normalizedName);
+        pushStatus("success", "Draft renamed.");
+        return;
+      }
+
+      await withBusy(`rename-${recordId}`, async () => {
+        try {
+          await request("put", `/resumebuilder/my-resumes/${recordId}`, { name: normalizedName });
+          await loadResumes();
+          if (selectedResumeId === recordId) setDraftName(normalizedName);
+          pushStatus("success", "Draft renamed.");
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to rename draft.");
+        }
+      });
+    },
+    [isAuthenticated, loadResumes, pushStatus, request, selectedResumeId, withBusy]
+  );
+
   const exportPdf = useCallback(() => {
     const resume = previewResume;
     const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -881,24 +962,129 @@ const ResumeBuilder = () => {
     addLine("CERTIFICATIONS", 12, true, 2);
     (resume?.certifications || []).forEach((item) => addLine(`- ${item}`, 10, false, 1));
 
+    addLine("LANGUAGES", 12, true, 2);
+    addLine((resume?.languages || []).join(", "), 10, false, 8);
+
+    if (resumeType === "gulf") {
+      const gulf = resume?.gulfProfile || {};
+      addLine("GULF READINESS", 12, true, 2);
+      addLine(`Passport Status: ${gulf.passportStatus || "Not specified"}`, 10, false, 1);
+      addLine(`Visa Status: ${gulf.visaStatus || "Not specified"}`, 10, false, 1);
+      addLine(`GCC Experience: ${gulf.gccExperience || "Not specified"}`, 10, false, 1);
+      addLine(`Driving License: ${gulf.drivingLicense || "Not specified"}`, 10, false, 1);
+      addLine(`Expected Salary: ${gulf.expectedSalary || "Not specified"}`, 10, false, 1);
+      addLine(`Notice Period: ${gulf.noticePeriod || "Not specified"}`, 10, false, 1);
+    }
+
     doc.save(`${clean(resume?.header?.fullName || "resume").replace(/\s+/g, "_")}_resume.pdf`);
     pushStatus("success", "PDF downloaded.");
-  }, [previewResume, pushStatus]);
+  }, [previewResume, pushStatus, resumeType]);
 
-  const exportDoc = useCallback(() => {
-    const filename = `${clean(previewResume?.header?.fullName || "resume").replace(/\s+/g, "_")}_resume.doc`;
-    const content = formatResumeText(previewResume);
-    const blob = new Blob([content], { type: "application/msword;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
-    pushStatus("success", "DOC file downloaded.");
-  }, [previewResume, pushStatus]);
+  const exportDoc = useCallback(async () => {
+    try {
+      const resume = previewResume || {};
+      const header = resume.header || {};
+      const gulf = resume.gulfProfile || {};
+      const contact = [header.email, header.phone, header.linkedin].filter(Boolean).join(" | ");
+      const location = [header.location, header.preferredCountry].filter(Boolean).join(", ");
+
+      const children = [];
+      const addHeading = (text) => {
+        if (!clean(text)) return;
+        children.push(
+          new Paragraph({
+            text,
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 220, after: 80 },
+          })
+        );
+      };
+      const addParagraph = (text, options = {}) => {
+        if (!clean(text)) return;
+        children.push(
+          new Paragraph({
+            children: [new TextRun(String(text))],
+            spacing: { after: options.tight ? 60 : 120 },
+            bullet: options.bullet ? { level: 0 } : undefined,
+          })
+        );
+      };
+
+      children.push(
+        new Paragraph({
+          text: header.fullName || "Candidate",
+          heading: HeadingLevel.TITLE,
+          spacing: { after: 80 },
+        })
+      );
+      if (clean(header.targetJob)) addParagraph(header.targetJob, { tight: true });
+      if (clean(location)) addParagraph(location, { tight: true });
+      if (clean(contact)) addParagraph(contact, { tight: true });
+
+      addHeading("Profile");
+      addParagraph(resume.profile);
+
+      addHeading("Skills");
+      addParagraph((resume.skills || []).join(", "));
+
+      addHeading("Experience");
+      (resume.experience || []).forEach((item) => {
+        const heading = [item.role, item.company, item.duration].filter(Boolean).join(" | ");
+        addParagraph(heading);
+        (item.bullets || []).forEach((bullet) => addParagraph(bullet, { bullet: true, tight: true }));
+      });
+
+      addHeading("Education");
+      (resume.education || []).forEach((item) =>
+        addParagraph([item.degree, item.institution, item.year].filter(Boolean).join(" | "), { tight: true })
+      );
+
+      addHeading("Projects");
+      (resume.projects || []).forEach((item) => {
+        addParagraph([item.name, item.tech ? `(${item.tech})` : ""].filter(Boolean).join(" "), { tight: true });
+        addParagraph(item.summary, { bullet: true, tight: true });
+      });
+
+      addHeading("Certifications");
+      (resume.certifications || []).forEach((item) => addParagraph(item, { bullet: true, tight: true }));
+
+      addHeading("Languages");
+      addParagraph((resume.languages || []).join(", "));
+
+      if (resumeType === "gulf") {
+        addHeading("Gulf Readiness");
+        addParagraph(`Passport Status: ${gulf.passportStatus || "Not specified"}`, { tight: true });
+        addParagraph(`Visa Status: ${gulf.visaStatus || "Not specified"}`, { tight: true });
+        addParagraph(`GCC Experience: ${gulf.gccExperience || "Not specified"}`, { tight: true });
+        addParagraph(`Driving License: ${gulf.drivingLicense || "Not specified"}`, { tight: true });
+        addParagraph(`Expected Salary: ${gulf.expectedSalary || "Not specified"}`, { tight: true });
+        addParagraph(`Notice Period: ${gulf.noticePeriod || "Not specified"}`, { tight: true });
+      }
+
+      const docFile = new Document({
+        sections: [
+          {
+            properties: {},
+            children,
+          },
+        ],
+      });
+
+      const blob = await Packer.toBlob(docFile);
+      const filename = `${clean(header.fullName || "resume").replace(/\s+/g, "_")}_resume.docx`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      pushStatus("success", "DOCX file downloaded.");
+    } catch (_error) {
+      pushStatus("error", "Failed to generate DOCX file.");
+    }
+  }, [previewResume, pushStatus, resumeType]);
 
   const shareWhatsApp = useCallback(() => {
     const resumeText = encodeURIComponent(
@@ -993,6 +1179,11 @@ const ResumeBuilder = () => {
         <div className="preview-block">
           <h4>Certifications</h4>
           <p>{(previewResume.certifications || []).join(", ") || "No certifications added yet."}</p>
+        </div>
+
+        <div className="preview-block">
+          <h4>Languages</h4>
+          <p>{(previewResume.languages || []).join(", ") || "No languages added yet."}</p>
         </div>
 
         {resumeType === "gulf" && (
@@ -1269,24 +1460,42 @@ const ResumeBuilder = () => {
                 </div>
                 <div className="ats-feedback">
                   <div className="feedback-section">
+                    <h4>Section Completeness</h4>
+                    <p>
+                      {atsReport?.sectionCompleteness?.percent ?? "N/A"}%
+                      {atsReport?.sectionCompleteness?.completed !== undefined
+                        ? ` (${atsReport.sectionCompleteness.completed}/${atsReport.sectionCompleteness.total} sections)`
+                        : ""}
+                    </p>
+                  </div>
+
+                  <div className="feedback-section">
                     <h4>Matched Keywords</h4>
                     <div className="keyword-tags">
-                      {parseAtsSuggestions(atsReport.matchedKeywords).map((item) => (
-                        <span key={item} className="keyword-tag">
-                          {item}
-                        </span>
-                      ))}
+                      {parseAtsSuggestions(atsReport.matchedKeywords).length === 0 ? (
+                        <p className="preview-empty">No keyword matches found yet.</p>
+                      ) : (
+                        parseAtsSuggestions(atsReport.matchedKeywords).map((item) => (
+                          <span key={item} className="keyword-tag">
+                            {item}
+                          </span>
+                        ))
+                      )}
                     </div>
                   </div>
 
                   <div className="feedback-section">
                     <h4>Missing Keywords</h4>
                     <div className="keyword-tags">
-                      {parseAtsSuggestions(atsReport.missingKeywords).map((item) => (
-                        <span key={item} className="keyword-tag">
-                          {item}
-                        </span>
-                      ))}
+                      {parseAtsSuggestions(atsReport.missingKeywords).length === 0 ? (
+                        <p className="preview-empty">No missing keywords detected.</p>
+                      ) : (
+                        parseAtsSuggestions(atsReport.missingKeywords).map((item) => (
+                          <span key={item} className="keyword-tag">
+                            {item}
+                          </span>
+                        ))
+                      )}
                     </div>
                   </div>
 
@@ -1475,7 +1684,7 @@ const ResumeBuilder = () => {
                   return (
                     <article key={itemId} className={`saved-resume-card ${isSelected ? "selected" : ""}`}>
                       <h4>{item.name || "Untitled Resume"}</h4>
-                      <p>{item.resumeType || "professional"} • {item.template || "simple-ats"}</p>
+                      <p>{item.resumeType || "professional"} - {item.template || "simple-ats"}</p>
                       <p className="saved-meta">
                         Updated: {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "Unknown"}
                       </p>
@@ -1485,6 +1694,9 @@ const ResumeBuilder = () => {
                         </button>
                         <button type="button" className="secondary-button" onClick={() => duplicateDraft(item)}>
                           Duplicate
+                        </button>
+                        <button type="button" className="secondary-button" onClick={() => renameDraft(item)}>
+                          Rename
                         </button>
                         <button type="button" className="secondary-button danger" onClick={() => deleteDraft(item)}>
                           Delete
@@ -1505,7 +1717,7 @@ const ResumeBuilder = () => {
             Download PDF
           </button>
           <button type="button" onClick={exportDoc}>
-            Download DOC
+            Download Word (.docx)
           </button>
         </div>
         <div className="share-options">
@@ -1522,3 +1734,4 @@ const ResumeBuilder = () => {
 };
 
 export default ResumeBuilder;
+

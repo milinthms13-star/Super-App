@@ -10,6 +10,7 @@ import AdminPanel from "./components/AdminPanel";
 import LoanCalculator from "./components/LoanCalculator";
 import PropertyDetailTabs from "./components/PropertyDetailTabs";
 
+
 import {
   CONSTRUCTION_SERVICES,
   DEFAULT_LISTING_FORM,
@@ -862,6 +863,9 @@ const RealEstate = () => {
 
       <section className="realestate-main-grid">
         <div className="realestate-left-column">
+          {selectedProperty ? null : (
+            <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>
+          )}
           <FiltersPanel
             filters={filters}
             onChange={handleFilterChange}
@@ -983,200 +987,13 @@ const RealEstate = () => {
 
         <aside className="realestate-right-column">
           <article className="realestate-detail-card">
-            {selectedProperty ? (
-              <>
-                <div className="realestate-detail-header">
-                  <div>
-                    <span className={`realestate-badge ${selectedProperty.verified ? "verified" : "pending"}`}>
-                      {selectedProperty.verificationStatus}
-                    </span>
-                    <h2>{selectedProperty.title}</h2>
-                    <p>{selectedProperty.location} · {selectedProperty.locality}</p>
-                  </div>
-                  <div className="realestate-inline-actions">
-                    {canManageProperty(selectedProperty) ? (
-                      <button type="button" className="realestate-inline-button" onClick={() => handleEditListing(selectedProperty)}>
-                        Edit
-                      </button>
-                    ) : null}
-                    {canManageProperty(selectedProperty) ? (
-                      <button type="button" className="realestate-inline-button danger" onClick={() => setConfirmDeleteOpen(true)}>
-                        Delete
-                      </button>
-                    ) : null}
-                    <button type="button" className="realestate-inline-button" onClick={() => handleFavoriteToggle(selectedProperty)}>
-                      {favoriteIds.has(`realestate-${selectedProperty.id}`) ? "Saved" : "Save"}
-                    </button>
-                  </div>
-                </div>
+              <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>
+            <PropertyDetailTabs
+              property={selectedProperty}
 
-                <div className="realestate-detail-media-grid">
-                  {selectedProperty.mediaGallery.length > 0 ? (
-                    selectedProperty.mediaGallery.slice(0, 5).map((media) => (
-                      <div key={media.id} className="realestate-detail-media-item">
-                        {media.type === "image" ? <img src={media.url} alt={media.label || selectedProperty.title} /> : null}
-                        {media.type !== "image" ? (
-                          <a href={media.url} target="_blank" rel="noreferrer">
-                            {media.type === "video" ? "Video tour" : media.type === "floor-plan" ? "Floor plan" : media.type === "brochure" ? "Brochure PDF" : "Map preview"}
-                          </a>
-                        ) : null}
-                        <span>{media.label || media.type}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="realestate-detail-media">
-                      <strong>Images and gallery available</strong>
-                      <span>{selectedProperty.mediaCount} media assets</span>
-                    </div>
-                  )}
-                </div>
+              canManage={canManageProperty(selectedProperty)}
 
-                <div className="realestate-detail-price-row">
-                  <strong>{selectedProperty.priceLabel}</strong>
-                  <span>{selectedProperty.type} · {selectedProperty.intent}</span>
-                </div>
-
-                <div className="realestate-detail-specs">
-                  <span>{selectedProperty.bedrooms || "Studio"} bed</span>
-                  <span>{selectedProperty.bathrooms} bath</span>
-                  <span>{selectedProperty.area}</span>
-                  <span>{selectedProperty.furnishing}</span>
-                  {selectedProperty.floorNumber !== null ? <span>Floor {selectedProperty.floorNumber}</span> : null}
-                  {selectedProperty.totalFloors !== null ? <span>Total floors {selectedProperty.totalFloors}</span> : null}
-                  {selectedProperty.parkingSpots !== null ? <span>{selectedProperty.parkingSpots} parking</span> : null}
-                </div>
-
-                <p className="realestate-description">{selectedProperty.description}</p>
-
-                <div className="realestate-chip-cloud">
-                  {selectedProperty.amenities.map((amenity) => (
-                    <span key={amenity}>{amenity}</span>
-                  ))}
-                </div>
-
-                <div className="realestate-map-card">
-                  <strong>Map location</strong>
-                  <span>{selectedProperty.mapLabel}</span>
-                  {selectedProperty.mapLocationLat && selectedProperty.mapLocationLng ? (
-                    <span>
-                      {selectedProperty.mapLocationLat}, {selectedProperty.mapLocationLng}
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="realestate-contact-card">
-                  <strong>{selectedProperty.sellerName}</strong>
-                  <span>{selectedProperty.sellerRole} · {selectedProperty.languageSupport.join(", ")}</span>
-                  <span>{selectedProperty.rating.toFixed(1)} / 5 from {selectedProperty.reviewCount} reviews</span>
-                  {selectedProperty.contactPhone ? <span>Call: {selectedProperty.contactPhone}</span> : null}
-                  {selectedProperty.whatsappNumber ? <span>WhatsApp: {selectedProperty.whatsappNumber}</span> : null}
-                </div>
-
-                <section className="realestate-docs-card">
-                  <div className="realestate-section-heading">
-                    <h3>Verification & documents</h3>
-                    <p>
-                      Transparent status for KYC, RERA, and key property documents. Missing items are highlighted for quicker approvals.
-                    </p>
-                  </div>
-
-                  <div className="realestate-docs-grid">
-                    <div className="realestate-docs-item">
-                      <span className={`realestate-docs-dot ${selectedProperty.verified ? "ok" : "warn"}`} />
-                      <div>
-                        <strong>KYC</strong>
-                        <span>{selectedProperty.verified ? "Owner verified" : "Verification pending"}</span>
-                      </div>
-                    </div>
-
-                    <div className="realestate-docs-item">
-                      <span className={`realestate-docs-dot ${selectedProperty.reraNumber ? "ok" : "warn"}`} />
-                      <div>
-                        <strong>RERA</strong>
-                        <span>{selectedProperty.reraNumber ? selectedProperty.reraNumber : "RERA pending"}</span>
-                      </div>
-                    </div>
-
-                    <div className="realestate-docs-item">
-                      <span
-                        className={`realestate-docs-dot ${selectedProperty.titleDeedStatus === "verified" ? "ok" : selectedProperty.titleDeedStatus === "rejected" ? "bad" : "warn"}`}
-                      />
-                      <div>
-                        <strong>Title deed</strong>
-                        <span>{selectedProperty.titleDeedStatus}</span>
-                      </div>
-                    </div>
-
-                    <div className="realestate-docs-item">
-                      <span className={`realestate-docs-dot ${selectedProperty.taxReceipt ? "ok" : "warn"}`} />
-                      <div>
-                        <strong>Tax receipt</strong>
-                        <span>{selectedProperty.taxReceipt ? "Available" : "Pending"}</span>
-                      </div>
-                    </div>
-
-                    <div className="realestate-docs-item">
-                      <span className={`realestate-docs-dot ${selectedProperty.buildingPermit ? "ok" : "warn"}`} />
-                      <div>
-                        <strong>Building permit</strong>
-                        <span>{selectedProperty.buildingPermit ? "Available" : "Pending"}</span>
-                      </div>
-                    </div>
-
-                    <div className="realestate-docs-item">
-                      <span className={`realestate-docs-dot ${selectedProperty.encumbranceCertificate ? "ok" : "warn"}`} />
-                      <div>
-                        <strong>Encumbrance certificate</strong>
-                        <span>{selectedProperty.encumbranceCertificate ? "Available" : "Pending"}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="realestate-docs-missing">
-                    {(() => {
-                      const missing = [
-                        { key: "taxReceipt", label: "Tax receipt" },
-                        { key: "buildingPermit", label: "Building permit" },
-                        { key: "encumbranceCertificate", label: "Encumbrance certificate" },
-                      ].filter((item) => !selectedProperty[item.key]);
-
-                      if (!missing.length && selectedProperty.titleDeedStatus === "verified") {
-                        return (
-                          <p className="realestate-docs-good">All key documents are available for this listing.</p>
-                        );
-                      }
-
-                      if (!missing.length) {
-                        return <p className="realestate-docs-good">Documents are mostly complete. Title deed status is: {selectedProperty.titleDeedStatus}.</p>;
-                      }
-
-                      return (
-                        <p className="realestate-docs-warn">
-                          Missing / pending: {missing.map((m) => m.label).join(", ")}. Contact the seller to request documents.
-                        </p>
-                      );
-                    })()}
-                  </div>
-
-                  <div className="realestate-docs-ctas">
-                    <button
-                      type="button"
-                      className="realestate-inline-button"
-                      onClick={() => pushToast("Document request drafted. Seller can share PDFs via chat.")}
-                    >
-                      Request documents
-                    </button>
-                    <button
-                      type="button"
-                      className="realestate-inline-button"
-                      onClick={() => pushToast("Verification history opened (demo).")}
-                    >
-                      View verification history
-                    </button>
-                  </div>
-                </section>
-
-
+              loanCalculator={
                 <LoanCalculator
                   loanAmount={loanAmount}
                   setLoanAmount={setLoanAmount}
@@ -1192,261 +1009,211 @@ const RealEstate = () => {
                   onApply={handleLoanApply}
                   loading={asyncState.loanApply}
                 />
-
-                <section className="realestate-utility-card">
-                  <div className="realestate-section-heading">
-                    <h3>Homeowner & tenant utilities</h3>
-                    <p>Service booking with technician assignment, status tracking, and cost estimate.</p>
-                  </div>
-                  <div className="realestate-chip-cloud">
-                    {TENANT_UTILITIES.map((utility) => (
-                      <span key={utility}>{utility}</span>
-                    ))}
-                  </div>
-                  <label className="realestate-field">
-                    <span>Request type</span>
-                    <select value={maintenanceType} onChange={(event) => setMaintenanceType(event.target.value)}>
-                      {TENANT_UTILITIES.map((utility) => (
-                        <option key={utility} value={utility}>
-                          {utility}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="realestate-field">
-                    <span>Request details</span>
-                    <textarea
-                      rows="3"
-                      value={maintenanceRequest}
-                      onChange={(event) => setMaintenanceRequest(event.target.value)}
-                      placeholder="Describe the repair, service request, or tenant issue"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="realestate-secondary-button"
-                    onClick={handleMaintenanceSubmit}
-                    disabled={asyncState.maintenance}
-                  >
-                    {asyncState.maintenance ? "Submitting..." : "Submit request"}
-                  </button>
-                </section>
-
-                <div className="realestate-action-stack">
-                  <button type="button" className="realestate-primary-button" onClick={handleEnquirySubmit} disabled={asyncState.enquiry}>
-                    {asyncState.enquiry ? "Sending..." : "Send enquiry"}
-                  </button>
-                  <button
-                    type="button"
-                    className="realestate-secondary-button"
-                    onClick={() => pushToast(`Call request shared with ${selectedProperty.sellerName}.`)}
-                  >
-                    Call owner / agent
-                  </button>
-                  <button
-                    type="button"
-                    className="realestate-secondary-button"
-                    onClick={() =>
-                      pushToast(
-                        selectedProperty.whatsappNumber
-                          ? `WhatsApp enquiry initiated: ${selectedProperty.whatsappNumber}`
-                          : `WhatsApp contact initiated with ${selectedProperty.sellerName}.`
-                      )
-                    }
-                  >
-                    WhatsApp contact
-                  </button>
-                  <button
-                    type="button"
-                    className="realestate-secondary-button"
-                    onClick={() => pushToast("Property link copied to clipboard for sharing.")}
-                  >
-                    Share property
-                  </button>
-                  <button
-                    type="button"
-                    className="realestate-secondary-button"
-                    onClick={() =>
-                      pushToast(
-                        selectedProperty.brochureUrl
-                          ? `Brochure ready: ${selectedProperty.brochureUrl}`
-                          : `Brochure download started for ${selectedProperty.title}.`
-                      )
-                    }
-                  >
-                    Download brochure
-                  </button>
-                  <button
-                    type="button"
-                    className="realestate-secondary-button"
-                    onClick={() => pushToast(`Price drop alert enabled for ${selectedProperty.title}.`)}
-                  >
-                    Enable alert
-                  </button>
-                </div>
-
-                <label className="realestate-field">
-                  <span>Enquiry message</span>
-                  <textarea
-                    rows="3"
-                    value={enquiryMessage}
-                    onChange={(event) => setEnquiryMessage(event.target.value)}
-                    placeholder="Share budget, move-in timeline, or site visit request"
-                  />
-                </label>
-
-                {!canManageProperty(selectedProperty) ? (
+              }
+              uiMessages={{
+                onRequestDocuments: () => pushToast("Document request drafted. Seller can share PDFs via chat."),
+                onViewVerificationHistory: () => pushToast("Verification history opened (demo)."),
+                messages: (
                   <section className="realestate-chat-card">
                     <div className="realestate-section-heading">
-                      <h3>Schedule visit</h3>
-                      <p>Book an onsite or virtual visit with conflict-aware seller scheduling.</p>
+                      <h3>In-app messaging</h3>
+                      <p>Images, files, and instant follow-up live here.</p>
+                    </div>
+                    <div className="realestate-message-list">
+                      {selectedMessages.map((message, index) => (
+                        <div key={`${message.from}-${index}`} className="realestate-message-item">
+                          <strong>{message.from}</strong>
+                          <span>{message.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="realestate-message-composer">
+                      <input type="text" value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Type a message" />
+                      <button type="button" onClick={handleSendMessage} disabled={asyncState.message}>
+                        {asyncState.message ? "Sending..." : "Send"}
+                      </button>
+                    </div>
+                  </section>
+                ),
+                reviews: (
+                  <section className="realestate-review-section">
+                    <div className="realestate-section-heading">
+                      <h3>Reviews and reporting</h3>
+                      <p>Rate trusted agents and flag suspicious behavior quickly.</p>
+                    </div>
+                    <div className="realestate-review-list">
+                      {selectedProperty?.reviews?.length ? (
+                        selectedProperty.reviews.map((review, index) => (
+                          <div key={`${review.author}-${index}`} className="realestate-review-item">
+                            <strong>{review.author}</strong>
+                            <span>{review.score} / 5</span>
+                            <p>{review.comment}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="realestate-review-item">
+                          <strong>No reviews yet</strong>
+                          <p>The first verified buyer review will appear here.</p>
+                        </div>
+                      )}
                     </div>
                     <label className="realestate-field">
-                      <span>Visit date and time</span>
-                      <input type="datetime-local" value={visitDateTime} onChange={(event) => setVisitDateTime(event.target.value)} />
-                    </label>
-                    <label className="realestate-field">
-                      <span>Visit mode</span>
-                      <select value={visitMode} onChange={(event) => setVisitMode(event.target.value)}>
-                        <option value="onsite">Onsite</option>
-                        <option value="virtual">Virtual</option>
+                      <span>Review rating</span>
+                      <select value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}>
+                        {["5", "4", "3", "2", "1"].map((score) => (
+                          <option key={score} value={score}>
+                            {score} / 5
+                          </option>
+                        ))}
                       </select>
                     </label>
                     <label className="realestate-field">
-                      <span>Visit note</span>
+                      <span>Review comment</span>
                       <textarea
-                        rows="2"
-                        value={visitNote}
-                        onChange={(event) => setVisitNote(event.target.value)}
-                        placeholder="Share gate access, preferred slot, or virtual meeting details"
+                        rows="3"
+                        value={reviewComment}
+                        onChange={(event) => setReviewComment(event.target.value)}
+                        placeholder="Share how responsive or trustworthy the listing owner was"
                       />
                     </label>
-                    <button type="button" className="realestate-primary-button" onClick={handleVisitSchedule} disabled={asyncState.visitCreate}>
-                      {asyncState.visitCreate ? "Scheduling..." : "Schedule visit"}
-                    </button>
-                  </section>
-                ) : null}
-
-                <section className="realestate-chat-card">
-                  <div className="realestate-section-heading">
-                    <h3>In-app messaging</h3>
-                    <p>Images, files, and instant follow-up live here.</p>
-                  </div>
-                  <div className="realestate-message-list">
-                    {selectedMessages.map((message, index) => (
-                      <div key={`${message.from}-${index}`} className="realestate-message-item">
-                        <strong>{message.from}</strong>
-                        <span>{message.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="realestate-message-composer">
-                    <input type="text" value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Type a message" />
-                    <button type="button" onClick={handleSendMessage} disabled={asyncState.message}>
-                      {asyncState.message ? "Sending..." : "Send"}
-                    </button>
-                  </div>
-                </section>
-
-                <section className="realestate-review-section">
-                  <div className="realestate-section-heading">
-                    <h3>Reviews and reporting</h3>
-                    <p>Rate trusted agents and flag suspicious behavior quickly.</p>
-                  </div>
-                  <div className="realestate-review-list">
-                    {selectedProperty.reviews.length ? (
-                      selectedProperty.reviews.map((review, index) => (
-                        <div key={`${review.author}-${index}`} className="realestate-review-item">
-                          <strong>{review.author}</strong>
-                          <span>{review.score} / 5</span>
-                          <p>{review.comment}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="realestate-review-item">
-                        <strong>No reviews yet</strong>
-                        <p>The first verified buyer review will appear here.</p>
-                      </div>
-                    )}
-                  </div>
-                  <label className="realestate-field">
-                    <span>Review rating</span>
-                    <select value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}>
-                      {["5", "4", "3", "2", "1"].map((score) => (
-                        <option key={score} value={score}>
-                          {score} / 5
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="realestate-field">
-                    <span>Review comment</span>
-                    <textarea
-                      rows="3"
-                      value={reviewComment}
-                      onChange={(event) => setReviewComment(event.target.value)}
-                      placeholder="Share how responsive or trustworthy the listing owner was"
-                    />
-                  </label>
-                  <label className="realestate-field">
-                    <span>Report concern</span>
-                    <textarea
-                      rows="3"
-                      value={reportReason}
-                      onChange={(event) => setReportReason(event.target.value)}
-                      placeholder="Explain why the listing looks suspicious or inaccurate"
-                    />
-                  </label>
-                  <div className="realestate-inline-actions">
-                    <button type="button" className="realestate-inline-button" onClick={handleReviewSubmit} disabled={asyncState.review}>
-                      Rate agent / builder
-                    </button>
-                    <button type="button" className="realestate-inline-button danger" onClick={handleReportSubmit} disabled={asyncState.report}>
-                      Report fake listing
-                    </button>
-                  </div>
-                </section>
-
-                {similarProperties.length ? (
-                  <section className="realestate-similar-section">
-                    <div className="realestate-section-heading">
-                      <h3>Similar properties</h3>
-                      <p>Nearby supply to keep discovery moving.</p>
-                    </div>
-                    <div className="realestate-similar-list">
-                      {similarProperties.map((property) => (
-                        <button key={property.id} type="button" className="realestate-similar-item" onClick={() => setSelectedPropertyId(property.id)}>
-                          <strong>{property.title}</strong>
-                          <span>{property.priceLabel}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-
-                {activeRole === "admin" ? (
-                  <section className="realestate-admin-actions">
-                    <div className="realestate-section-heading">
-                      <h3>Admin actions</h3>
-                      <p>Moderate the listing, verify the owner, or escalate disputes.</p>
-                    </div>
+                    <label className="realestate-field">
+                      <span>Report concern</span>
+                      <textarea
+                        rows="3"
+                        value={reportReason}
+                        onChange={(event) => setReportReason(event.target.value)}
+                        placeholder="Explain why the listing looks suspicious or inaccurate"
+                      />
+                    </label>
                     <div className="realestate-inline-actions">
-                      <button type="button" className="realestate-inline-button" onClick={() => handleAdminAction("approve")} disabled={asyncState.moderation}>
-                        Approve listing
+                      <button type="button" className="realestate-inline-button" onClick={handleReviewSubmit} disabled={asyncState.review}>
+                        Rate agent / builder
                       </button>
-                      <button type="button" className="realestate-inline-button" onClick={() => handleAdminAction("verify-user")} disabled={asyncState.moderation}>
-                        Verify user
-                      </button>
-                      <button type="button" className="realestate-inline-button danger" onClick={() => handleAdminAction("reject")} disabled={asyncState.moderation}>
-                        Reject listing
+                      <button type="button" className="realestate-inline-button danger" onClick={handleReportSubmit} disabled={asyncState.report}>
+                        Report fake listing
                       </button>
                     </div>
                   </section>
-                ) : null}
-              </>
-            ) : (
-              <div className="realestate-empty-state">No properties match the current filters. Adjust search criteria to continue.</div>
-            )}
+                ),
+                actions: (
+                  <>
+                    <div className="realestate-action-stack">
+                      <button type="button" className="realestate-primary-button" onClick={handleEnquirySubmit} disabled={asyncState.enquiry}>
+                        {asyncState.enquiry ? "Sending..." : "Send enquiry"}
+                      </button>
+                      <button
+                        type="button"
+                        className="realestate-secondary-button"
+                        onClick={() => pushToast(`Call request shared with ${selectedProperty?.sellerName}.`)}
+                      >
+                        Call owner / agent
+                      </button>
+                      <button
+                        type="button"
+                        className="realestate-secondary-button"
+                        onClick={() =>
+                          pushToast(
+                            selectedProperty?.whatsappNumber
+                              ? `WhatsApp enquiry initiated: ${selectedProperty.whatsappNumber}`
+                              : `WhatsApp contact initiated with ${selectedProperty?.sellerName}.`
+                          )
+                        }
+                      >
+                        WhatsApp contact
+                      </button>
+                      <button type="button" className="realestate-secondary-button" onClick={() => pushToast("Property link copied to clipboard for sharing.")}>
+                        Share property
+                      </button>
+                      <button type="button" className="realestate-secondary-button" onClick={() => pushToast("Brochure download started (demo).")}>
+                        Download brochure
+                      </button>
+                      <button type="button" className="realestate-secondary-button" onClick={() => pushToast(`Price drop alert enabled for ${selectedProperty?.title}.`)}>
+                        Enable alert
+                      </button>
+                    </div>
+
+                    <label className="realestate-field">
+                      <span>Enquiry message</span>
+                      <textarea
+                        rows="3"
+                        value={enquiryMessage}
+                        onChange={(event) => setEnquiryMessage(event.target.value)}
+                        placeholder="Share budget, move-in timeline, or site visit request"
+                      />
+                    </label>
+
+                    {!canManageProperty(selectedProperty) ? (
+                      <section className="realestate-chat-card">
+                        <div className="realestate-section-heading">
+                          <h3>Schedule visit</h3>
+                          <p>Book an onsite or virtual visit with conflict-aware seller scheduling.</p>
+                        </div>
+                        <label className="realestate-field">
+                          <span>Visit date and time</span>
+                          <input type="datetime-local" value={visitDateTime} onChange={(event) => setVisitDateTime(event.target.value)} />
+                        </label>
+                        <label className="realestate-field">
+                          <span>Visit mode</span>
+                          <select value={visitMode} onChange={(event) => setVisitMode(event.target.value)}>
+                            <option value="onsite">Onsite</option>
+                            <option value="virtual">Virtual</option>
+                          </select>
+                        </label>
+                        <label className="realestate-field">
+                          <span>Visit note</span>
+                          <textarea
+                            rows="2"
+                            value={visitNote}
+                            onChange={(event) => setVisitNote(event.target.value)}
+                            placeholder="Share gate access, preferred slot, or virtual meeting details"
+                          />
+                        </label>
+                        <button type="button" className="realestate-primary-button" onClick={handleVisitSchedule} disabled={asyncState.visitCreate}>
+                          {asyncState.visitCreate ? "Scheduling..." : "Schedule visit"}
+                        </button>
+                      </section>
+                    ) : null}
+
+                    {similarProperties.length ? (
+                      <section className="realestate-similar-section">
+                        <div className="realestate-section-heading">
+                          <h3>Similar properties</h3>
+                          <p>Nearby supply to keep discovery moving.</p>
+                        </div>
+                        <div className="realestate-similar-list">
+                          {similarProperties.map((property) => (
+                            <button key={property.id} type="button" className="realestate-similar-item" onClick={() => setSelectedPropertyId(property.id)}>
+                              <strong>{property.title}</strong>
+                              <span>{property.priceLabel}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {activeRole === "admin" ? (
+                      <section className="realestate-admin-actions">
+                        <div className="realestate-section-heading">
+                          <h3>Admin actions</h3>
+                          <p>Moderate the listing, verify the owner, or escalate disputes.</p>
+                        </div>
+                        <div className="realestate-inline-actions">
+                          <button type="button" className="realestate-inline-button" onClick={() => handleAdminAction("approve")} disabled={asyncState.moderation}>
+                            Approve listing
+                          </button>
+                          <button type="button" className="realestate-inline-button" onClick={() => handleAdminAction("verify-user")} disabled={asyncState.moderation}>
+                            Verify user
+                          </button>
+                          <button type="button" className="realestate-inline-button danger" onClick={() => handleAdminAction("reject")} disabled={asyncState.moderation}>
+                            Reject listing
+                          </button>
+                        </div>
+                      </section>
+                    ) : null}
+                  </>
+                ),
+              }}
+            />
           </article>
         </aside>
       </section>
