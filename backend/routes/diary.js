@@ -779,6 +779,11 @@ const storeDiaryAttachment = async ({ file, user }) => {
 // POST /api/diary - Create new diary entry
 router.post('/', upload.array('attachments', 5), async (req, res) => {
   try {
+    // Preprocess tags field - handle both array and JSON string formats
+    if (req.body.tags) {
+      req.body.tags = parseTagsField(req.body.tags);
+    }
+
     // Validate entry data
     const { error, value: validatedData } = validateDiaryEntry(req.body);
     if (error) {
@@ -852,6 +857,11 @@ router.post('/', upload.array('attachments', 5), async (req, res) => {
 router.put('/:id', upload.array('attachments', 5), async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
+
+    // Preprocess tags field - handle both array and JSON string formats
+    if (req.body.tags) {
+      req.body.tags = parseTagsField(req.body.tags);
+    }
 
     // Validate update data
     const { error, value: validatedData } = validateDiaryEntryUpdate(req.body);

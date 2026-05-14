@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import HoroscopeCard from "./HoroscopeCard";
 import { astrologyService } from "../../services/astrologyService";
 import { useApp } from "../../contexts/AppContext";
@@ -7,103 +7,28 @@ import { useAstrologyKundliCompatibility } from "./hooks/useAstrologyKundliCompa
 import { useAstrologyProfile } from "./hooks/useAstrologyProfile";
 import "../../styles/Astrology.css";
 
-const formatSavedReadingDate = (value) => {
-  if (!value) {
-    return "Today";
-  }
-
-  const parsedDate = new Date(value);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return String(value);
-  }
-
-  return parsedDate.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-const ASTRO_SECTIONS = [
-  {
-    key: "today",
-    label: "Today",
-    labelMl: "ഇന്ന്",
-    description: "Daily predictions, timing, and live Kerala-style guidance.",
-    descriptionMl: "ദിവസേന പ്രവചനങ്ങൾ, സമയ നിർദേശങ്ങൾ, ജീവിച്ചിരിക്കുന്ന കേരള ശൈലിയുടെ മാർഗനിർദ്ദേശം.",
-  },
-  {
-    key: "profile",
-    label: "Profile",
-    labelMl: "പ്രൊഫൈൽ",
-    description: "Save and manage family birth profiles.",
-    descriptionMl: "കുടുംബ ജന്മ പ്രൊഫൈലുകൾ സംരക്ഷിച്ച് നിയന്ത്രിക്കുക.",
-  },
-  {
-    key: "rashi",
-    label: "Rashi/Nakshatra",
-    labelMl: "രാശി/നക്ഷത്രം",
-    description: "Detailed rashi and nakshatra insights.",
-    descriptionMl: "രാശി, നക്ഷത്രം സംബന്ധിച്ച വിശദമായ അറിവുകൾ.",
-  },
-  {
-    key: "kundli",
-    label: "Kundli",
-    labelMl: "കുണ്ടലി",
-    description: "Birth chart, navamsa and dasha summaries.",
-    descriptionMl: "ജന്മ ചാർട്ട്, നവംശം, ദശാ സംഗ്രഹങ്ങൾ.",
-  },
-  {
-    key: "match",
-    label: "Marriage Match",
-    labelMl: "വിവാഹ പൊരുത്തം",
-    description: "Check compatibility for porutham and prosperity.",
-    descriptionMl: "പൊരുത്തം, സമൃദ്ധി എന്നിവയുടെ അനുയോജ്യത പരിശോധിക്കുക.",
-  },
-  {
-    key: "panchangam",
-    label: "Panchangam",
-    labelMl: "പഞ്ചാംഗം",
-    description: "Festival timing, tithi, and auspicious hours.",
-    descriptionMl: "ഉത്സവ സമയങ്ങൾ, തിഥി, ശുഭ സമയങ്ങൾ.",
-  },
-  {
-    key: "remedies",
-    label: "Remedies",
-    labelMl: "ശമനങ്ങൾ",
-    description: "Personalized mantras, temples, and parishads.",
-    descriptionMl: "വ്യക്തിഗത മന്ത്രങ്ങൾ, ക്ഷേത്ര നിർദേശങ്ങൾ, പരിഷദുകൾ.",
-  },
-  {
-    key: "consult",
-    label: "Talk to Astrologer",
-    labelMl: "ജ്യോതിഷനുമായി സംവദിക്കുക",
-    description: "Book paid consultations with Kerala specialists.",
-    descriptionMl: "കേരള വിദഗ്ധരുമായി പണം അടച്ച് 상담ം ബുക്ക് ചെയ്യുക.",
-  },
-  {
-    key: "ai",
-    label: "AI Assistant",
-    labelMl: "എ.ഐ. സഹായി",
-    description: "Ask a specific astrology question and receive guidance.",
-    descriptionMl: "ഒരു വ്യക്തമായ ജ്യോതിഷ ചോദ്യമുയർത്തി മാർഗനിർദ്ദേശം നേടുക.",
-  },
+const FEATURE_TABS = [
+  { key: "today", label: "Daily Horoscope", labelMl: "ദൈനംദിന ഫലം" },
+  { key: "kundli", label: "Birth Chart", labelMl: "ജനന ചാർട്ട്" },
+  { key: "career", label: "Career", labelMl: "തൊഴിൽ" },
+  { key: "finance", label: "Finance", labelMl: "ധനം" },
+  { key: "match", label: "Marriage", labelMl: "വിവാഹം" },
+  { key: "remedies", label: "Remedies", labelMl: "പരിഹാരങ്ങൾ" },
+  { key: "panchangam", label: "Panchangam", labelMl: "പഞ്ചാംഗം" },
+  { key: "ai", label: "AI Astrology", labelMl: "എഐ ജ്യോതിഷം" },
+  { key: "saved", label: "Saved Reports", labelMl: "സേവ് റിപ്പോർട്ടുകൾ" },
 ];
 
-const SECTION_PRIORITY = [
-  "today",
-  "consult",
-  "ai",
-  "kundli",
-  "match",
-  "profile",
-  "panchangam",
-  "remedies",
-  "rashi",
+const MOBILE_NAV_ITEMS = [
+  { key: "today", label: "Home" },
+  { key: "today", label: "Horoscope" },
+  { key: "ai", label: "AI Astro" },
+  { key: "remedies", label: "Remedies" },
+  { key: "profile", label: "Profile" },
 ];
 
-const getNakshatraFromSign = (sign) => {
-  const map = {
+const getNakshatraFromSign = (sign) =>
+  ({
     aries: "Ashwini",
     taurus: "Rohini",
     gemini: "Mrigashira",
@@ -116,13 +41,10 @@ const getNakshatraFromSign = (sign) => {
     capricorn: "Shravana",
     aquarius: "Shatabhisha",
     pisces: "Revati",
-  };
+  }[sign] || "Ashwini");
 
-  return map[sign] || "Ashwini";
-};
-
-const getRashiFromSign = (sign) => {
-  const map = {
+const getRashiFromSign = (sign) =>
+  ({
     aries: "Mesha",
     taurus: "Vrishabha",
     gemini: "Mithuna",
@@ -135,16 +57,10 @@ const getRashiFromSign = (sign) => {
     capricorn: "Makara",
     aquarius: "Kumbha",
     pisces: "Meena",
-  };
-
-  return map[sign] || "Mesha";
-};
+  }[sign] || "Mesha");
 
 const getLagnaFromTime = (time) => {
-  if (!time) {
-    return "Mesha";
-  }
-
+  if (!time) return "Mesha";
   const hour = Number(time.split(":")[0] || 6);
   if (hour < 4) return "Meena";
   if (hour < 8) return "Mesha";
@@ -154,8 +70,8 @@ const getLagnaFromTime = (time) => {
   return "Tula";
 };
 
-const getLuckyColor = (sign) => {
-  const map = {
+const getLuckyColor = (sign) =>
+  ({
     aries: "Red",
     taurus: "Green",
     gemini: "Light Yellow",
@@ -168,13 +84,10 @@ const getLuckyColor = (sign) => {
     capricorn: "Brown",
     aquarius: "Silver",
     pisces: "Sea Green",
-  };
+  }[sign] || "Gold");
 
-  return map[sign] || "Gold";
-};
-
-const getLuckyNumber = (sign) => {
-  const map = {
+const getLuckyNumber = (sign) =>
+  ({
     aries: 9,
     taurus: 6,
     gemini: 5,
@@ -187,13 +100,10 @@ const getLuckyNumber = (sign) => {
     capricorn: 8,
     aquarius: 4,
     pisces: 7,
-  };
+  }[sign] || 7);
 
-  return map[sign] || 7;
-};
-
-const getGoodTime = (sign) => {
-  const map = {
+const getGoodTime = (sign) =>
+  ({
     aries: "06:00 - 08:00",
     taurus: "08:30 - 10:00",
     gemini: "10:30 - 12:00",
@@ -206,64 +116,81 @@ const getGoodTime = (sign) => {
     capricorn: "06:30 - 08:00",
     aquarius: "14:30 - 16:00",
     pisces: "18:00 - 19:30",
-  };
+  }[sign] || "10:30 - 12:00");
 
-  return map[sign] || "10:30 - 12:00";
-};
-
-const getAvoidTime = (sign) => {
-  const map = {
-    aries: "13:00 - 14:30",
-    taurus: "16:30 - 18:00",
-    gemini: "18:30 - 20:00",
-    cancer: "11:00 - 12:30",
-    leo: "09:00 - 10:30",
-    virgo: "15:30 - 17:00",
-    libra: "12:00 - 13:30",
-    scorpio: "08:00 - 09:30",
-    sagittarius: "11:30 - 13:00",
-    capricorn: "17:30 - 19:00",
-    aquarius: "10:00 - 11:30",
-    pisces: "14:00 - 15:30",
-  };
-
-  return map[sign] || "03:00 - 04:30";
-};
-
-const getRashiSummary = (sign) => {
-  const map = {
+const getRashiSummary = (sign) =>
+  ({
     aries: "Today is best for quick decisions backed by a family discussion.",
     taurus: "Planned progress will feel more rewarding than immediate gain.",
     gemini: "A short trip or message will open the right door.",
     cancer: "Trust small rituals to steady your day.",
     leo: "Stay warm, keep your presence generous, and avoid unnecessary conflict.",
-    virgo: "Detail work is powerful now - use it to simplify plans.",
+    virgo: "Detail work is powerful now. Use it to simplify plans.",
     libra: "Balance activity with rest and let others join you.",
     scorpio: "Focus on shared values, not control.",
     sagittarius: "A creative idea can become a practical plan if you start small.",
     capricorn: "Stick to routine, especially with money and health.",
     aquarius: "A friend or sibling brings useful perspective today.",
     pisces: "A calming habit will help you stay centered through change.",
-  };
+  }[sign] || "Create structure before you expand energy outward.");
 
-  return map[sign] || "Create structure before you expand energy outward.";
+const getCareerAdvice = (sign) =>
+  ({
+    aries: "Take lead on one pending task and close it before noon.",
+    taurus: "Steady, practical work beats fast changes today.",
+    gemini: "Communication and follow-ups will unlock momentum.",
+    cancer: "Prioritize team trust and clear boundaries at work.",
+    leo: "Use visibility wisely; support others while leading.",
+    virgo: "Process improvements bring immediate gains.",
+    libra: "Negotiate calmly; balance speed with precision.",
+    scorpio: "Handle sensitive issues directly, without delay.",
+    sagittarius: "Explore one new skill path that supports your goals.",
+    capricorn: "Long-term planning and disciplined execution are favored.",
+    aquarius: "Innovative suggestions will be well received.",
+    pisces: "Focus windows and reduced distraction will boost output.",
+  }[sign] || "Stay consistent and complete what is already open.");
+
+const getFinanceAdvice = (sign) =>
+  ({
+    aries: "Avoid impulse purchases and review recurring expenses.",
+    taurus: "Conservative spending helps preserve near-term stability.",
+    gemini: "Track small leaks in spending and fix them first.",
+    cancer: "Family-linked planning decisions can improve savings.",
+    leo: "Delay non-essential upgrades for a better window.",
+    virgo: "Budget reviews and structured planning work well today.",
+    libra: "Balance comfort spending with clear limits.",
+    scorpio: "Revisit debt and subscription commitments carefully.",
+    sagittarius: "Split funds between essentials and future opportunities.",
+    capricorn: "Discipline with cash flow gives better control.",
+    aquarius: "Digital expense tracking will reveal patterns quickly.",
+    pisces: "Use a simple savings rule to avoid emotional spending.",
+  }[sign] || "Keep spending simple and aligned to your plan.");
+
+const getRemedyTips = (sign) => [
+  ({
+    aries: "Recite Ganapathi mantra before starting major work.",
+    taurus: "Offer white flowers on Friday for peace and stability.",
+    gemini: "Write intentions clearly before important calls.",
+    cancer: "Light a lamp in the evening and keep family space calm.",
+    leo: "Chant Surya mantra and plan your day early.",
+    virgo: "Donate food items and avoid overthinking minor delays.",
+    libra: "Wear gentle colors and maintain emotional balance.",
+    scorpio: "Avoid conflict windows and focus on constructive speech.",
+    sagittarius: "Read one spiritual verse and take measured action.",
+    capricorn: "Do a disciplined morning routine before money decisions.",
+    aquarius: "Help a friend and keep communication clean.",
+    pisces: "Practice silence for a short duration to settle mind.",
+  }[sign] || "Keep routines steady for grounded results."),
+  "Begin the day with a short prayer or mindful breathing.",
+  "Offer a simple act of kindness before sunset.",
+];
+
+const formatSavedReadingDate = (value) => {
+  if (!value) return "Today";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
-
-const getNakshatraReminder = (nakshatra) =>
-  `For ${nakshatra}, favor supportive actions, brief rituals, and sincere conversation.`;
-
-const getDefaultFamilyProfile = (profile, userName) => ({
-  id: `self-${Date.now()}`,
-  name: userName || "You",
-  relation: "Self",
-  sign: profile?.sign || "aries",
-  birthDate: profile?.birthDate || "",
-  birthTime: profile?.birthTime || "",
-  birthPlace: profile?.birthPlace || "",
-  nakshatra: profile?.nakshatra || getNakshatraFromSign(profile?.sign || "aries"),
-  rashi: profile?.rashi || getRashiFromSign(profile?.sign || "aries"),
-  lagna: profile?.lagna || getLagnaFromTime(profile?.birthTime || "06:00"),
-});
 
 const createProfileDraft = (profile = null) => ({
   birthDate: profile?.birthDate || "",
@@ -291,32 +218,31 @@ const createFamilyProfileDraft = (profile = null) => ({
   birthPlace: profile?.birthPlace || "",
 });
 
-const localize = (en, ml, language) => {
-  if (language !== "ml") {
-    return en;
-  }
+const getDefaultFamilyProfile = (profile, userName) => ({
+  id: `self-${Date.now()}`,
+  name: userName || "You",
+  relation: "Self",
+  sign: profile?.sign || "aries",
+  birthDate: profile?.birthDate || "",
+  birthTime: profile?.birthTime || "",
+  birthPlace: profile?.birthPlace || "",
+  nakshatra: profile?.nakshatra || getNakshatraFromSign(profile?.sign || "aries"),
+  rashi: profile?.rashi || getRashiFromSign(profile?.sign || "aries"),
+  lagna: profile?.lagna || getLagnaFromTime(profile?.birthTime || "06:00"),
+});
 
-  if (!ml || typeof ml !== "string") {
-    return en;
-  }
-
-  const hasMalayalam = /[\u0D00-\u0D7F]/.test(ml);
-  if (!hasMalayalam) {
-    return en;
-  }
-
-  // Prevent placeholder content from showing up as "????".
-  // If the Malayalam string contains '?' (common placeholder), fall back to English.
-  if (ml.includes("?")) {
-    return en;
-  }
-
-  return ml;
-};
+const localize = (en, ml, language) => (language === "ml" ? ml : en);
 
 const AstrologyHome = () => {
   const { currentUser } = useApp();
   const [language, setLanguage] = useState("en");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("today");
+  const [showFullPrediction, setShowFullPrediction] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [detailedReport, setDetailedReport] = useState(true);
+
   const [signs, setSigns] = useState([]);
   const [selectedSign, setSelectedSign] = useState("");
   const [reading, setReading] = useState(null);
@@ -324,7 +250,6 @@ const AstrologyHome = () => {
   const [signsNotice, setSignsNotice] = useState("");
   const [readingNotice, setReadingNotice] = useState("");
   const [saveState, setSaveState] = useState({ type: "", message: "" });
-  const [activeSection, setActiveSection] = useState("today");
   const [festivals, setFestivals] = useState([]);
   const [panchangam, setPanchangam] = useState(null);
   const [panchangamNotice, setPanchangamNotice] = useState("");
@@ -332,37 +257,16 @@ const AstrologyHome = () => {
   const [aiQuestion, setAiQuestion] = useState("");
   const [assistantAnswer, setAssistantAnswer] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [showTimingInsights, setShowTimingInsights] = useState(false);
 
   const ensureSignedIn = () => {
     if (!currentUser?.id && !currentUser?.name) {
-      setSaveState({
-        type: "error",
-        message: "Please sign in to use AstroNila features.",
-      });
+      setSaveState({ type: "error", message: "Please sign in to use AstroNila features." });
       return false;
     }
     return true;
   };
 
-  const {
-    profileDraft,
-    profileLoading,
-    profileNotice,
-    savingProfile,
-    familyProfiles,
-    activeFamilyIndex,
-    familyDraft,
-    recentSavedReadings,
-    selectedProfile,
-    handleDraftChange,
-    handleNotificationDraftChange,
-    handleFamilyDraftChange,
-    handleProfileSave,
-    handleNewFamilyProfile,
-    selectFamilyProfile,
-    handleFamilyProfileSave,
-  } = useAstrologyProfile({
+  const profileApi = useAstrologyProfile({
     currentUser,
     selectedSign,
     signs,
@@ -377,52 +281,17 @@ const AstrologyHome = () => {
     getLagnaFromTime,
   });
 
-  const {
-    consultants,
-    consultationSlots,
-    bookingLoadingId,
-    lastBooking,
-    paymentOrder,
-    paymentLoading,
-    consultationHistory,
-    consultationHistoryLoading,
-    consultationActionLoadingId,
-    paymentRefreshLoadingId,
-    rescheduleTargetId,
-    handleConsultationSlotChange,
-    handleBookConsultation,
-    handleCreateConsultationPaymentOrder,
-    handleUpdateConsultationStatus,
-    handleRefreshPaymentStatus,
-    toggleRescheduleTarget,
-    formatStatusLabel,
-    getStatusClassName,
-  } = useAstrologyConsultations({
+  const consultApi = useAstrologyConsultations({
     activeSection,
     currentUser,
     setSaveState,
     ensureSignedIn,
   });
 
-  const {
-    partnerSign,
-    setPartnerSign,
-    compatibility,
-    handleCompatibilitySubmit,
-    compatibilityHistory,
-    handleRestoreCompatibility,
-    kundliData,
-    kundliLoading,
-    downloadingKundli,
-    handleDownloadKundliReport,
-    activeKundliSnapshotId,
-    handleLoadLiveKundli,
-    kundliHistory,
-    handleRestoreKundliSnapshot,
-  } = useAstrologyKundliCompatibility({
+  const kundliApi = useAstrologyKundliCompatibility({
     activeSection,
     currentUser,
-    selectedProfile,
+    selectedProfile: profileApi.selectedProfile,
     selectedSign,
     setSelectedSign,
     setSaveState,
@@ -431,109 +300,70 @@ const AstrologyHome = () => {
 
   useEffect(() => {
     let active = true;
-
-    const loadSigns = async () => {
+    const load = async () => {
       try {
-        const nextSigns = await astrologyService.getSigns();
-        if (!active) {
-          return;
-        }
-
-        setSigns(nextSigns);
-        setSelectedSign((currentSign) => currentSign || nextSigns[0]?.sign || "aries");
+        const next = await astrologyService.getSigns();
+        if (!active) return;
+        setSigns(next);
+        setSelectedSign((cur) => cur || next[0]?.sign || "aries");
         setSignsNotice("");
-      } catch (loadError) {
-        if (!active) {
-          return;
-        }
-
-        const fallbackSigns = loadError.fallbackData || astrologyService.getFallbackSigns();
-        setSigns(fallbackSigns);
-        setSignsNotice(
-          loadError.message ||
-            "Live astrology signs are unavailable right now. Built-in sign data is being shown."
-        );
-        setSelectedSign((currentSign) => currentSign || fallbackSigns[0]?.sign || "aries");
+      } catch (error) {
+        if (!active) return;
+        const fallback = error.fallbackData || astrologyService.getFallbackSigns();
+        setSigns(fallback);
+        setSelectedSign((cur) => cur || fallback[0]?.sign || "aries");
+        setSignsNotice(error.message || "Showing offline sign data.");
       }
     };
-
-    loadSigns();
-
+    void load();
     return () => {
       active = false;
     };
   }, []);
 
   useEffect(() => {
-    if (!selectedSign) {
-      return;
-    }
-
+    if (!selectedSign) return;
     let active = true;
     setLoading(true);
-
-    const loadReading = async () => {
+    const load = async () => {
       try {
-        const nextReading = await astrologyService.getDailyHoroscope(selectedSign);
-        if (!active) {
-          return;
-        }
-
-        setReading(nextReading);
+        const next = await astrologyService.getDailyHoroscope(selectedSign);
+        if (!active) return;
+        setReading(next);
         setReadingNotice("");
-      } catch (loadError) {
-        if (!active) {
-          return;
-        }
-
-        setReading(loadError.fallbackData || astrologyService.getFallbackReading(selectedSign));
-        setReadingNotice(
-          loadError.message ||
-            "Live astrology is unavailable right now. Showing an offline reading instead."
-        );
+      } catch (error) {
+        if (!active) return;
+        setReading(error.fallbackData || astrologyService.getFallbackReading(selectedSign));
+        setReadingNotice(error.message || "Showing offline reading.");
       } finally {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     };
-
-    loadReading();
-
+    void load();
     return () => {
       active = false;
     };
   }, [selectedSign]);
 
   useEffect(() => {
-    const loadFestivals = async () => {
+    const load = async () => {
       try {
-        const nextFestivals = await astrologyService.getFestivalUpdates();
-        setFestivals(nextFestivals);
+        setFestivals(await astrologyService.getFestivalUpdates());
       } catch (error) {
         setFestivals(error.fallbackData || []);
       }
-    };
-
-    const loadPanchangam = async () => {
       setPanchangamLoading(true);
-      setPanchangamNotice("");
-
       try {
-        const data = await astrologyService.getPanchangam();
-        setPanchangam(data);
+        setPanchangam(await astrologyService.getPanchangam());
+        setPanchangamNotice("");
       } catch (error) {
         setPanchangam(error.fallbackData || null);
-        setPanchangamNotice(
-          error?.message || "Unable to fetch Panchangam details. Showing offline data."
-        );
+        setPanchangamNotice(error.message || "Showing offline Panchangam.");
       } finally {
         setPanchangamLoading(false);
       }
     };
-
-    loadFestivals();
-    loadPanchangam();
+    void load();
   }, []);
 
   const selectedSignDetails =
@@ -541,907 +371,263 @@ const AstrologyHome = () => {
     reading ||
     astrologyService.getFallbackSign(selectedSign);
 
-  const cardNotice = readingNotice || signsNotice;
-  const orderedSections = SECTION_PRIORITY
-    .map((key) => ASTRO_SECTIONS.find((sectionItem) => sectionItem.key === key))
-    .filter(Boolean);
+  const heroPrediction = String(
+    reading?.horoscope ||
+      selectedSignDetails?.horoscope ||
+      "Gentle progress comes from staying consistent with the work already in front of you."
+  );
+
+  const filteredSigns = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return signs;
+    return signs.filter((item) => `${item.label} ${item.sign} ${item.dateRange}`.toLowerCase().includes(q));
+  }, [searchQuery, signs]);
+
+  const todayDate = new Date().toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  const handleQuickSave = async () => {
+    if (!ensureSignedIn()) return;
+    await profileApi.handleProfileSave({ preventDefault: () => {} });
+  };
+
+  const handleGenerateReport = async () => {
+    if (!ensureSignedIn()) return;
+    await profileApi.handleProfileSave({ preventDefault: () => {} });
+    if (question.trim()) setAiQuestion(question.trim());
+    setShowFullPrediction(Boolean(detailedReport));
+    setSaveState({ type: "success", message: "Birth details saved. Report cards updated." });
+  };
 
   const handleAskAssistant = async () => {
     if (!aiQuestion.trim()) {
       setSaveState({ type: "error", message: "Ask a question before sending." });
       return;
     }
-
     setAiLoading(true);
     setAssistantAnswer(null);
-    setSaveState({ type: "", message: "" });
-
     try {
-      const answer = await astrologyService.askAstrologyAssistant(aiQuestion, selectedSign);
-      setAssistantAnswer(answer);
+      setAssistantAnswer(await astrologyService.askAstrologyAssistant(aiQuestion, selectedSign));
     } catch (error) {
-      setSaveState({
-        type: "error",
-        message: error.message || "Unable to get an astrology assistant response.",
-      });
+      setSaveState({ type: "error", message: error.message || "Unable to get assistant answer." });
     } finally {
       setAiLoading(false);
     }
   };
 
   return (
-    <section className="astrology-home">
+    <section className="astrology-home" lang={language === "ml" ? "ml" : "en"}>
       <div className="astrology-shell">
-        <header className="astrology-hero">
-          <span className="astrology-kicker">{localize("modules.astrology", "AstroNila", language)}</span>
-          <h1>{localize("astrology.title", "Daily horoscope with a Kerala-first feel", language)}</h1>
-          <p>
-            {localize(
-              "astrology.subtitle",
-              "Choose your sign to see today's energy, timing, and a grounded next step.",
-              language
-            )}
-          </p>
+        <header className="astrology-panel astro-top-header">
+          <div className="astro-branding">
+            <div className="astro-logo">AN</div>
+            <div>
+              <p className="astro-brand-eyebrow">AstroNila</p>
+              <h1>Astrology</h1>
+            </div>
+          </div>
+          <form className="astro-search" onSubmit={(event) => event.preventDefault()}>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={localize("Search sign or feature...", "രാശി അല്ലെങ്കിൽ ഫീച്ചർ തിരയുക...", language)}
+            />
+          </form>
+          <div className="astro-top-actions">
+            <button type="button" className="astrology-secondary-button" onClick={() => setLanguage((prev) => (prev === "en" ? "ml" : "en"))}>
+              {language === "en" ? "മലയാളം" : "English"}
+            </button>
+            <button type="button" className="astrology-secondary-button" onClick={() => setActiveSection("profile")}>
+              Profile
+            </button>
+            <div className="astro-menu-wrap">
+              <button type="button" className="astrology-secondary-button" onClick={() => setHeaderMenuOpen((prev) => !prev)}>
+                Menu
+              </button>
+              {headerMenuOpen ? (
+                <div className="astro-menu-popover">
+                  <button type="button" onClick={() => setActiveSection("consult")}>Consultations</button>
+                  <button type="button" onClick={() => setActiveSection("saved")}>Saved Reports</button>
+                  <a href="/dashboard">Dashboard</a>
+                  <a href="/astrology-analytics">Analytics</a>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </header>
 
-        <div className="astrology-layout">
-          <aside className="astrology-sidebar">
-            <div className="astrology-panel astrology-selector">
-              <h2>{localize("astrology.selectSign", "Select your sign", language)}</h2>
-              <div className="astrology-sign-grid">
-                {signs.map((sign) => (
-                  <button
-                    key={sign.sign}
-                    type="button"
-                    className={`astrology-sign-button ${
-                      selectedSign === sign.sign ? "is-active" : ""
-                    }`}
-                    onClick={() => setSelectedSign(sign.sign)}
-                  >
-                    <span className="astrology-sign-name">{sign.label}</span>
-                    <span className="astrology-sign-range">{sign.dateRange}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+        <article className="astrology-panel astro-hero-card">
+          <div className="astro-hero-main">
+            <p className="astro-hero-kicker">{selectedSignDetails?.label || "Selected sign"} | {todayDate}</p>
+            <h2>{localize("Today's Horoscope", "ഇന്നത്തെ ജ്യോതിഷ ഫലം", language)}</h2>
+            <p>{heroPrediction.length > 180 ? `${heroPrediction.slice(0, 180)}...` : heroPrediction}</p>
+          </div>
+          <div className="astro-quick-grid">
+            <article className="astro-quick-card"><span>{localize("Lucky color", "ഭാഗ്യനിറം", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></article>
+            <article className="astro-quick-card"><span>{localize("Lucky number", "ഭാഗ്യസംഖ്യ", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></article>
+            <article className="astro-quick-card"><span>{localize("Best time", "നല്ല സമയം", language)}</span><strong>{getGoodTime(selectedSign)}</strong></article>
+            <article className="astro-quick-card"><span>{localize("Date", "തീയതി", language)}</span><strong>{todayDate}</strong></article>
+          </div>
+          <div className="astro-hero-actions">
+            <button type="button" className="astrology-save-button" onClick={() => { setActiveSection("today"); setShowFullPrediction(true); }}>View Full Prediction</button>
+            <button type="button" className="astrology-secondary-button" onClick={() => { setActiveSection("today"); setShowFullPrediction(false); }}>
+              {localize("ഇന്നത്തെ ജ്യോതിഷ ഫലം കാണുക", "ഇന്നത്തെ ജ്യോതിഷ ഫലം കാണുക", language)}
+            </button>
+          </div>
+        </article>
 
-            <form className="astrology-panel astrology-profile" onSubmit={handleProfileSave}>
-              <div className="astrology-profile-header">
-                <div>
-                  <span className="astrology-note-label">Profile</span>
-                  <h2>{localize("Save your astrology details", "നിങ്ങളുടെ ജ്യോതിഷ വിവരങ്ങൾ സംരക്ഷിക്കുക", language)}</h2>
-                </div>
-                <span className="astrology-profile-chip">
-                  {selectedSignDetails?.label || "Sign"}
-                </span>
-              </div>
-
-              <p className="astrology-profile-copy">
-                {localize(
-                  `Save your preferred sign, birth details, and favorite topics for ${currentUser?.name || "your account"}.`,
-                  `നിങ്ങളുടെ ഇഷ്ടചിഹ്നം, ജനന വിവരങ്ങൾ, ഇഷ്ട വിഷയങ്ങൾ എന്നിവ ${currentUser?.name || "നിങ്ങളുടെ അക്കൗണ്ട്"} എന്നതിനായി സംരക്ഷിക്കുക.`,
-                  language
-                )}
-              </p>
-
-              {profileLoading ? (
-                <p className="astrology-inline-message">{localize("Loading your saved profile...", "നിങ്ങളുടെ സംരക്ഷിച്ച പ്രൊഫൈൽ ലോഡ് ചെയ്യപ്പെടുന്നു...", language)}</p>
-              ) : null}
-              {profileNotice ? (
-                <p className="astrology-inline-message astrology-inline-message-warning">
-                  {profileNotice}
-                </p>
-              ) : null}
-              {saveState.message ? (
-                <p
-                  className={`astrology-inline-message ${
-                    saveState.type === "error"
-                      ? "astrology-inline-message-error"
-                      : "astrology-inline-message-success"
-                  }`}
-                >
-                  {saveState.message}
-                </p>
-              ) : null}
-
-              <div className="astrology-form-grid">
-                <label className="astrology-field">
-                  <span>{localize("Birth date", "ജന്മ തീയതി", language)}</span>
-                  <input
-                    type="date"
-                    value={profileDraft.birthDate}
-                    onChange={(event) => handleDraftChange("birthDate", event.target.value)}
-                  />
-                </label>
-
-                <label className="astrology-field">
-                  <span>{localize("Birth time", "ജന്മ സമയം", language)}</span>
-                  <input
-                    type="time"
-                    value={profileDraft.birthTime}
-                    onChange={(event) => handleDraftChange("birthTime", event.target.value)}
-                  />
-                </label>
-              </div>
-
-              <label className="astrology-field">
-                <span>{localize("Birth place", "ജന്മ സ്ഥലം", language)}</span>
-                <input
-                  type="text"
-                  value={profileDraft.birthPlace}
-                  onChange={(event) => handleDraftChange("birthPlace", event.target.value)}
-                  placeholder={localize("Kochi, Kerala", "കൊച്ചി, കേരളം", language)}
-                />
-              </label>
-
-              <label className="astrology-field">
-                <span>{localize("Favorite topics", "ഇഷ്ട വിഷയങ്ങൾ", language)}</span>
-                <input
-                  type="text"
-                  value={profileDraft.favoriteTopics}
-                  onChange={(event) => handleDraftChange("favoriteTopics", event.target.value)}
-                  placeholder={localize(
-                    "career, relationships, finance",
-                    "തൊഴിൽ, ബന്ധങ്ങൾ, ധനം",
-                    language
-                  )}
-                />
-              </label>
-
-              <label className="astrology-field astrology-checkbox-field">
-                <input
-                  type="checkbox"
-                  checked={profileDraft.receiveDailyHoroscope}
-                  onChange={(event) =>
-                    handleDraftChange("receiveDailyHoroscope", event.target.checked)
-                  }
-                />
-                <span>{localize("Keep daily horoscope reminders enabled for this profile.", "ഈ പ്രൊഫൈലിനായി ദിന ഹോറോസ്കോപ് ഓർമ്മപ്പെടുത്തലുകൾ സജീവമാക്കുക.", language)}</span>
-              </label>
-
-              <div className="astrology-notification-settings">
-                <h3>{localize("Notification settings", "അറിയിപ്പ് ക്രമീകരണങ്ങൾ", language)}</h3>
-                <label className="astrology-field astrology-checkbox-field">
-                  <input
-                    type="checkbox"
-                    checked={profileDraft.notifications.dailyHoroscope}
-                    onChange={(event) =>
-                      handleNotificationDraftChange("dailyHoroscope", event.target.checked)
-                    }
-                  />
-                  <span>{localize("Daily horoscope alerts", "ദൈനംദിന ജാതകം അറിയിപ്പുകൾ", language)}</span>
-                </label>
-                <label className="astrology-field astrology-checkbox-field">
-                  <input
-                    type="checkbox"
-                    checked={profileDraft.notifications.goodMuhurtam}
-                    onChange={(event) =>
-                      handleNotificationDraftChange("goodMuhurtam", event.target.checked)
-                    }
-                  />
-                  <span>{localize("Good muhurtham alerts", "ശുഭ മുഹൂർത്തം അറിയിപ്പുകൾ", language)}</span>
-                </label>
-                <label className="astrology-field astrology-checkbox-field">
-                  <input
-                    type="checkbox"
-                    checked={profileDraft.notifications.festivalReminders}
-                    onChange={(event) =>
-                      handleNotificationDraftChange("festivalReminders", event.target.checked)
-                    }
-                  />
-                  <span>{localize("Festival reminders", "ഉത്സവ ഓർമ്മിപ്പിക്കൽ", language)}</span>
-                </label>
-                <label className="astrology-field astrology-checkbox-field">
-                  <input
-                    type="checkbox"
-                    checked={profileDraft.notifications.dashaAlerts}
-                    onChange={(event) =>
-                      handleNotificationDraftChange("dashaAlerts", event.target.checked)
-                    }
-                  />
-                  <span>{localize("Dasha change alerts", "ദശ മാറ്റം അറിയിപ്പുകൾ", language)}</span>
-                </label>
-              </div>
-
-              <button type="submit" className="astrology-save-button" disabled={savingProfile}>
-                {savingProfile
-                  ? localize("Saving...", "സംരക്ഷിക്കുന്നു...", language)
-                  : localize("Save profile and today's reading", "പ്രൊഫൈൽ സംരക്ഷിച്ച് ഇന്നത്തെ വായനയും", language)}
+        <section className="astrology-panel astro-zodiac-strip">
+          <div className="astro-zodiac-chips">
+            {(filteredSigns.length ? filteredSigns : signs).map((item) => (
+              <button key={item.sign} type="button" className={`astro-zodiac-chip ${selectedSign === item.sign ? "is-active" : ""}`} onClick={() => setSelectedSign(item.sign)}>
+                <strong>{item.label}</strong>
+                <span>{item.dateRange}</span>
               </button>
+            ))}
+          </div>
+        </section>
 
-              <div className="astrology-history">
-                <div className="astrology-history-header">
-                  <h3>{localize("Recent saved readings", "സമീപകാലത്ത് സംരക്ഷിച്ച വായനകൾ", language)}</h3>
-                  <span>{recentSavedReadings.length}</span>
-                </div>
-
-                {recentSavedReadings.length > 0 ? (
-                  recentSavedReadings.map((savedReading) => (
-                    <button
-                      key={`${savedReading.sign}-${savedReading.readingDate}`}
-                      type="button"
-                      className="astrology-history-item"
-                      onClick={() => setSelectedSign(savedReading.sign)}
-                    >
-                      <div className="astrology-history-meta">
-                        <strong>
-                          {astrologyService.getFallbackSign(savedReading.sign).label}
-                        </strong>
-                        <span>{formatSavedReadingDate(savedReading.readingDate)}</span>
-                      </div>
-                      <p>{savedReading.horoscope}</p>
-                    </button>
-                  ))
-                ) : (
-                  <p className="astrology-history-empty">
-                    {localize(
-                      "Save your profile once to keep a small history of recent readings here.",
-                      "സമീപകാല വായനകളുടെ ചെറിയ ചരിത്രം ഇവിടെ സൂക്ഷിക്കാൻ ഒരിക്കൽ പ്രൊഫൈൽ സംരക്ഷിക്കുക.",
-                      language
-                    )}
-                  </p>
-                )}
-              </div>
-            </form>
-          </aside>
-
-          <main className="astrology-main">
-            <div className="astrology-board">
-              <div className="astrology-top-grid">
-                <div className="astrology-panel astrology-welcome-card">
-                  <div className="astrology-welcome-header">
-                    <div>
-                      <span className="astrology-note-label">
-                        {localize("Kerala first", "കേരളം മുൻനിർത്തി", language)}
-                      </span>
-                      <h2>
-                        {localize(
-                          "Personalized astrology for every family member",
-                          "ഓരോ കുടുംബാംഗത്തിനും വ്യക്തിഗത ജ്യോതിഷം",
-                          language
-                        )}
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      className="astrology-language-button"
-                      onClick={() => setLanguage((lang) => (lang === "en" ? "ml" : "en"))}
-                    >
-                      {language === "en" ? "മലയാളം" : "English"}
-                    </button>
-                  </div>
-
-                  <p>
-                    {localize(
-                      "Malayalam content, festival updates, Panchangam timings, and matched remedies for your sign.",
-                      "മലയാളം ഉള്ളടക്കം, ഉത്സവ അപ്ഡേറ്റുകൾ, പഞ്ചാംഗ സമയങ്ങൾ, നിങ്ങളുടെ രാശിക്ക് പൊരുത്തമുള്ള പരിഹാരങ്ങൾ.",
-                      language
-                    )}
-                  </p>
-                </div>
-
-                <div className="astrology-panel astrology-highlights-card">
-                  <h3>{localize("Quick insights", "തൽസമയ ഉള്ളക്കാഴ്ചകൾ", language)}</h3>
-                  <div className="astrology-metrics-grid">
-                    <div className="astrology-metric-card">
-                      <span>{localize("Lucky color", "ഭാഗ്യനിറം", language)}</span>
-                      <strong>{getLuckyColor(selectedSign)}</strong>
-                    </div>
-                    <div className="astrology-metric-card">
-                      <span>{localize("Lucky number", "ഭാഗ്യസംഖ്യ", language)}</span>
-                      <strong>{getLuckyNumber(selectedSign)}</strong>
-                    </div>
-                    {showTimingInsights ? (
-                      <>
-                        <div className="astrology-metric-card">
-                          <span>{localize("Good time", "Good time", language)}</span>
-                          <strong>{getGoodTime(selectedSign)}</strong>
-                        </div>
-                        <div className="astrology-metric-card">
-                          <span>{localize("Avoid time", "Avoid time", language)}</span>
-                          <strong>{getAvoidTime(selectedSign)}</strong>
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    className="astrology-secondary-button astrology-focus-toggle-button"
-                    onClick={() => setShowTimingInsights((currentValue) => !currentValue)}
-                  >
-                    {showTimingInsights
-                      ? localize("Hide timing details", "Hide timing details", language)
-                      : localize("View timing details", "View timing details", language)}
-                  </button>
-                </div>
-              </div>
-
-              <HoroscopeCard
-                sign={selectedSignDetails}
-                horoscope={reading}
-                loading={loading}
-                notice={cardNotice}
-              />
-
-              <div className="astrology-nav-grid" role="tablist" aria-label="Astrology sections">
-                {orderedSections.map((sectionItem) => (
-                  <button
-                    key={sectionItem.key}
-                    type="button"
-                    className={`astrology-section-card ${
-                      activeSection === sectionItem.key ? "is-active" : ""
-                    }`}
-                    onClick={() => setActiveSection(sectionItem.key)}
-                    role="tab"
-                    aria-selected={activeSection === sectionItem.key}
-                  >
-                    <strong>{localize(sectionItem.label, sectionItem.labelMl, language)}</strong>
-                    <span>{localize(sectionItem.description, sectionItem.descriptionMl, language)}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="astrology-panel astrology-section-content">
-                {activeSection === "today" ? (
-                  <>
-                    <div className="astrology-detail-grid">
-                      <article className="astrology-panel astrology-detail-card">
-                        <h3>{localize("Today's Rashi phalam", "ഇന്നത്തെ രാശി ഫലം", language)}</h3>
-                        <p>{getRashiSummary(selectedSign)}</p>
-                      </article>
-                      <article className="astrology-panel astrology-detail-card">
-                        <h3>{localize("Nakshatra guidance", "നക്ഷത്ര മാർഗനിർദ്ദേശം", language)}</h3>
-                        <p>{getNakshatraReminder(selectedSignDetails?.nakshatra || getNakshatraFromSign(selectedSign))}</p>
-                      </article>
-                    </div>
-                    <div className="astrology-detail-grid">
-                      <article className="astrology-panel astrology-detail-card">
-                        <h3>{localize("Panchangam snapshot", "പഞ്ചാംഗം അവലോകനം", language)}</h3>
-                        <ul>
-                          <li>{localize("Tithi", "തിഥി", language)} : {panchangam?.tithi || "Shukla Paksha Tritiya"}</li>
-                          <li>{localize("Nakshatra", "നക്ഷത്രം", language)} : {panchangam?.nakshatra || selectedSignDetails?.nakshatra || getNakshatraFromSign(selectedSign)}</li>
-                          <li>{localize("Rahu Kalam", "റാഹു കാലം", language)} : {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li>
-                          <li>{localize("Yamagandam", "യമഗന്ധം", language)} : {panchangam?.yamagandam || "03:00 PM - 04:30 PM"}</li>
-                        </ul>
-                      </article>
-                      <article className="astrology-panel astrology-detail-card">
-                        <h3>{localize("Kerala festival note", "കേരള ഉത്സവ കുറിപ്പ്", language)}</h3>
-                        <p>{
-                          festivals[0]?.note ||
-                          localize(
-                            "Vishu is ideal for new plans and family puja.",
-                            "വിഷു പുതിയ പദ്ധതികൾക്കും കുടുംബ പൂജയ്ക്കും അനുയോജ്യമാണ്.",
-                            language
-                          )
-                        }</p>
-                      </article>
-                    </div>
-                  </>
-                ) : activeSection === "profile" ? (
-                  <>
-                    <div className="astrology-section-heading">
-                      <h3>{localize("Family profiles", "കുടുംബ പ്രൊഫൈലുകൾ", language)}</h3>
-                      <button type="button" className="astrology-secondary-button" onClick={handleNewFamilyProfile}>
-                        {localize("Add profile", "പ്രൊഫൈൽ ചേർക്കുക", language)}
-                      </button>
-                    </div>
-                    <div className="astrology-profile-grid">
-                      <aside className="astrology-panel astrology-profile-list">
-                        <h4>{localize("Saved profiles", "സേവ് ചെയ്ത പ്രൊഫൈലുകൾ", language)}</h4>
-                        <div className="astrology-profile-list-items">
-                          {familyProfiles.map((item, index) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`astrology-profile-card ${activeFamilyIndex === index ? "is-active" : ""}`}
-                              onClick={() => selectFamilyProfile(index)}
-                            >
-                              <strong>{item.name}</strong>
-                              <span>{item.relation}</span>
-                              <small>{item.sign.toUpperCase()}</small>
-                            </button>
-                          ))}
-                        </div>
-                      </aside>
-
-                      <section className="astrology-panel astrology-profile-editor">
-                        <h4>{localize("Edit family profile", "കുടുംബ പ്രൊഫൈൽ തിരുത്തുക", language)}</h4>
-                        <div className="astrology-form-grid">
-                          <label className="astrology-field">
-                            <span>{localize("Name", "നാമം", language)}</span>
-                            <input
-                              type="text"
-                              value={familyDraft.name}
-                              onChange={(event) => handleFamilyDraftChange("name", event.target.value)}
-                            />
-                          </label>
-                          <label className="astrology-field">
-                            <span>{localize("Relation", "ബന്ധം", language)}</span>
-                            <input
-                              type="text"
-                              value={familyDraft.relation}
-                              onChange={(event) => handleFamilyDraftChange("relation", event.target.value)}
-                            />
-                          </label>
-                        </div>
-                        <div className="astrology-form-grid">
-                          <label className="astrology-field">
-                            <span>{localize("Sign", "രാശി", language)}</span>
-                            <select
-                              value={familyDraft.sign}
-                              onChange={(event) => handleFamilyDraftChange("sign", event.target.value)}
-                            >
-                              {signs.map((sign) => (
-                                <option key={sign.sign} value={sign.sign}>
-                                  {sign.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="astrology-field">
-                            <span>{localize("Birth date", "ജന്മ തീയതി", language)}</span>
-                            <input
-                              type="date"
-                              value={familyDraft.birthDate}
-                              onChange={(event) => handleFamilyDraftChange("birthDate", event.target.value)}
-                            />
-                          </label>
-                        </div>
-                        <div className="astrology-form-grid">
-                          <label className="astrology-field">
-                            <span>{localize("Birth time", "ജന്മ സമയം", language)}</span>
-                            <input
-                              type="time"
-                              value={familyDraft.birthTime}
-                              onChange={(event) => handleFamilyDraftChange("birthTime", event.target.value)}
-                            />
-                          </label>
-                          <label className="astrology-field">
-                            <span>{localize("Birth place", "ജന്മ സ്ഥലം", language)}</span>
-                            <input
-                              type="text"
-                              value={familyDraft.birthPlace}
-                              onChange={(event) => handleFamilyDraftChange("birthPlace", event.target.value)}
-                              placeholder={localize("Trivandrum, Kerala", "തിരുവനന്തപുരം, കേരളം", language)}
-                            />
-                          </label>
-                        </div>
-                        <button type="button" className="astrology-save-button" onClick={handleFamilyProfileSave}>
-                          {localize("Save family profile", "കുടുംബ പ്രൊഫൈൽ സംരക്ഷിക്കുക", language)}
-                        </button>
-                      </section>
-                    </div>
-                  </>
-                ) : activeSection === "rashi" ? (
-                  <div className="astrology-detail-grid">
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Rashi overview", "രാശി അവലോകനം", language)}</h3>
-                      <p>{getRashiSummary(selectedSign)}</p>
-                      <ul>
-                        <li>{localize("Rashi", "രാശി", language)} : {getRashiFromSign(selectedSign)}</li>
-                        <li>{localize("Nakshatra", "നക്ഷത്രം", language)} : {getNakshatraFromSign(selectedSign)}</li>
-                        <li>{localize("Lagna", "ലഗ്നം", language)} : {getLagnaFromTime(profileDraft.birthTime)}</li>
-                      </ul>
-                    </article>
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Energy focus", "ഊർജ്ജ കേന്ദ്രീകരണം", language)}</h3>
-                      <p>{localize("This week is ideal for resetting habits and opening conversation with elders.", "ഈ ആഴ്ച പതിവുകൾ പുനഃക്രമീകരിക്കാനും മുതിർന്നവരുമായി സംഭാഷണം ആരംഭിക്കാനും അനുയോജ്യമാണ്.", language)}</p>
-                    </article>
-                  </div>
-                ) : activeSection === "kundli" ? (
-                  <div className="astrology-detail-grid">
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Kundli summary", "കുണ്ടലി സംഗ്രഹം", language)}</h3>
-                      <p
-                        className={`astrology-inline-message ${
-                          activeKundliSnapshotId ? "astrology-inline-message-warning" : "astrology-inline-message-success"
-                        }`}
-                      >
-                        {activeKundliSnapshotId
-                          ? localize("Showing saved snapshot.", "Saved snapshot mode.", language)
-                          : localize("Showing live generated Kundli.", "Live generation mode.", language)}
-                      </p>
-                      <p>{localize("Your birth chart is anchored in strong family support and creative momentum.", "നിങ്ങളുടെ ജനന ചാർട്ട് ശക്തമായ കുടുംബ പിന്തുണയിലും സൃഷ്ടിപരമായ പ്രേരണയിലും ആധാരമുണ്ട്.", language)}</p>
-                      <ul>
-                        <li>{localize("Ascendant", "ലഗ്നം", language)} : {kundliData?.birthChart?.ascendant || selectedProfile.lagna || "Mesha"}</li>
-                        <li>{localize("Current Dasha", "നിലവിലെ ദശ", language)} : {kundliData?.dasha?.current || "Venus"}</li>
-                        <li>{localize("Navamsa power", "നവാംശ ശക്തി", language)} : {kundliData?.navamsa?.balance || localize("Stable and supportive", "സ്ഥിരവും പിന്തുണയുള്ളതും", language)}</li>
-                      </ul>
-                    </article>
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Next step", "അടുത്ത പടി", language)}</h3>
-                      <p>{localize("Use this week for steady planning and a small temple visit to deepen your focus.", "ഈ ആഴ്ച സ്ഥിരതയുള്ള പദ്ധതിയിടലിനും ശ്രദ്ധതീവ്രമനയ്ക്കും ഒരു ചെറിയ ക്ഷേത്ര സന്ദർശനത്തിനുമാണ് ഉപയോഗിക്കുന്നത്.", language)}</p>
-                      <button
-                        type="button"
-                        className="astrology-save-button"
-                        disabled={kundliLoading || downloadingKundli}
-                        onClick={handleDownloadKundliReport}
-                      >
-                        {downloadingKundli
-                          ? localize("Downloading...", "ഡൗൺലോഡ് ചെയ്യുന്നു...", language)
-                          : localize("Download PDF report", "PDF റിപ്പോർട്ട് ഡൗൺലോഡ് ചെയ്യുക", language)}
-                      </button>
-                      {activeKundliSnapshotId ? (
-                        <button
-                          type="button"
-                          className="astrology-secondary-button"
-                          onClick={handleLoadLiveKundli}
-                        >
-                          {localize("Use live generation", "Use live generation", language)}
-                        </button>
-                      ) : null}
-                    </article>
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Saved Kundli history", "Saved Kundli history", language)}</h3>
-                      {kundliHistory.length ? (
-                        <div className="astrology-mini-history-list">
-                          {kundliHistory.slice(0, 6).map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`astrology-mini-history-item ${
-                                activeKundliSnapshotId === item.id ? "is-active" : ""
-                              }`}
-                              onClick={() => handleRestoreKundliSnapshot(item)}
-                            >
-                              <strong>{item.profileName || localize("Profile", "Profile", language)}</strong>
-                              <span>
-                                {formatSavedReadingDate(item.createdAt)} -{" "}
-                                {astrologyService.getFallbackSign(item.sign).label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="astrology-history-empty">
-                          {localize("Your generated Kundli reports will appear here.", "Your generated Kundli reports will appear here.", language)}
-                        </p>
-                      )}
-                    </article>
-                  </div>
-                ) : activeSection === "match" ? (
-                  <div className="astrology-detail-grid">
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Marriage compatibility", "വിവാഹ പൊരുത്തം", language)}</h3>
-                      <p>{localize("Compare two signs for emotional and financial harmony.", "രൗദ്രവും ധനപരവുമായ ഐക്യത്തിനായി രണ്ട് രാശികൾ താരതമ്യപ്പെടുത്തുക.", language)}</p>
-                      <div className="astrology-form-grid">
-                        <label className="astrology-field">
-                          <span>{localize("Your sign", "നിങ്ങളുടെ രാശി", language)}</span>
-                          <select value={selectedSign} onChange={(event) => setSelectedSign(event.target.value)}>
-                            {signs.map((sign) => (
-                              <option key={sign.sign} value={sign.sign}>
-                                {sign.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="astrology-field">
-                          <span>{localize("Partner sign", "പങ്കാളിയുടെ രാശി", language)}</span>
-                          <select value={partnerSign} onChange={(event) => setPartnerSign(event.target.value)}>
-                            {signs.map((sign) => (
-                              <option key={sign.sign} value={sign.sign}>
-                                {sign.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <button type="button" className="astrology-save-button" onClick={handleCompatibilitySubmit}>
-                        {localize("Check porutham", "പൊരുത്തം പരിശോധിക്കുക", language)}
-                      </button>
-                    </article>
-                    {compatibility ? (
-                      <article className="astrology-panel astrology-detail-card">
-                        <h3>{localize("Compatibility score", "പൊരുത്ത സ്കോർ", language)}</h3>
-                        <p>{compatibility.summary}</p>
-                        <strong>{compatibility.score}%</strong>
-                        <p>{compatibility.keyMatch}</p>
-                      </article>
-                    ) : null}
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Saved compatibility runs", "Saved compatibility runs", language)}</h3>
-                      {compatibilityHistory.length ? (
-                        <div className="astrology-mini-history-list">
-                          {compatibilityHistory.slice(0, 6).map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className="astrology-mini-history-item"
-                              onClick={() => handleRestoreCompatibility(item)}
-                            >
-                              <strong>
-                                {astrologyService.getFallbackSign(item.sign).label} x{" "}
-                                {astrologyService.getFallbackSign(item.partnerSign).label}
-                              </strong>
-                              <span>
-                                {formatSavedReadingDate(item.createdAt)} - {Number(item.data?.score || 0)}%
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="astrology-history-empty">
-                          {localize("Compatibility checks will be saved to your account history.", "Compatibility checks will be saved to your account history.", language)}
-                        </p>
-                      )}
-                    </article>
-                  </div>
-                ) : activeSection === "panchangam" ? (
-                  <div className="astrology-detail-grid">
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Panchangam today", "ഇന്നത്തെ പഞ്ചാംഗം", language)}</h3>
-
-                      {panchangamNotice ? (
-                        <p className="astrology-inline-message astrology-inline-message-warning">
-                          {panchangamNotice}
-                        </p>
-                      ) : null}
-
-                      {panchangamLoading ? (
-                        <p className="astrology-inline-message">{localize("Loading Panchangam...", "ലോഡ് ചെയ്യുന്നു...", language)}</p>
-                      ) : null}
-
-                      {!panchangamLoading ? (
-                        <ul>
-                          <li>
-                            {localize("Tithi", "തിഥി", language)} :{" "}
-                            {panchangam?.tithi || "Shukla Paksha Tritiya"}
-                          </li>
-                          <li>
-                            {localize("Nakshatra", "നക്ഷത്രം", language)} :{" "}
-                            {panchangam?.nakshatra || "Revati"}
-                          </li>
-                          <li>
-                            {localize("Rahu Kalam", "റാഹു കാലം", language)} :{" "}
-                            {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}
-                          </li>
-                          <li>
-                            {localize("Yamagandam", "യമഗന്ധം", language)} :{" "}
-                            {panchangam?.yamagandam || "03:00 PM - 04:30 PM"}
-                          </li>
-                          <li>
-                            {localize("Gulika", "ഗുളിക", language)} :{" "}
-                            {panchangam?.gulika || "07:30 AM - 09:00 AM"}
-                          </li>
-                        </ul>
-                      ) : null}
-                    </article>
-
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Festival reminders", "ഉത്സവ ഓർമ്മപ്പെടുത്തലുകൾ", language)}</h3>
-                      <ul>
-                        {festivals.map((festival) => (
-                          <li key={festival.name}>
-                            <strong>{festival.name}</strong> - {festival.date}
-                            <p>{festival.note}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    </article>
-                  </div>
-                ) : activeSection === "remedies" ? (
-                  <div className="astrology-detail-grid">
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Remedies for strength", "ശക്തിക്കായുള്ള പരിഹാരങ്ങൾ", language)}</h3>
-                      <ul>
-                        <li>{localize("Recite the Ganapathi mantra before sunrise.", "ഉദയം മുൻപ് ഗണപതി മന്ത്രം ജപിക്കുക.", language)}</li>
-                        <li>{localize("Offer yellow flowers to Vishnu on Thursdays.", "വ്യാഴാഴ്ച വിസ്ംനുവിന് മഞ്ഞ പുഷ്പങ്ങൾ അർപ്പിക്കുക.", language)}</li>
-                        <li>{localize("Donate rice or coconut oil this week.", "ഈ ആഴ്ച അരിയും തേങ്ങെണ്ണവും ദാനം ചെയ്യുക.", language)}</li>
-                      </ul>
-                    </article>
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Temple guidance", "ക്ഷേത്ര മാർഗനിർദ്ദേശം", language)}</h3>
-                      <p>{localize("Visit Guruvayur for peace, or perform a local vratam on Saturday.", "ശാന്തിക്കായി ഗുരുവായൂരിലേക്ക് പോകാം, അല്ലെങ്കിൽ ശനിയാഴ്ച അടുത്തുള്ള ഒരു വ്രതം നിർവ്വഹിക്കാം.", language)}</p>
-                    </article>
-                  </div>
-                ) : activeSection === "consult" ? (
-                  <div className="astrology-detail-grid">
-                    {consultants.map((consultant) => {
-                      const consultantKey = consultant.id || consultant.name;
-                      return (
-                        <article key={consultantKey} className="astrology-panel astrology-detail-card">
-                          <h3>{consultant.name}</h3>
-                          <p>{consultant.specialty}</p>
-                          <p>{consultant.rate}</p>
-                          <p>{consultant.availability}</p>
-                          <label className="astrology-field">
-                            <span>{localize("Choose a slot", "സ്ലോട്ട് തിരഞ്ഞെടുക്കുക", language)}</span>
-                            <select
-                              value={consultationSlots[consultantKey] || ""}
-                              onChange={(event) => handleConsultationSlotChange(consultantKey, event.target.value)}
-                            >
-                              {consultant.availableSlots.map((slot) => (
-                                <option key={slot.id} value={slot.id}>
-                                  {slot.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <button
-                            type="button"
-                            className="astrology-save-button"
-                            disabled={bookingLoadingId === consultantKey}
-                            onClick={() => handleBookConsultation(consultant)}
-                          >
-                            {bookingLoadingId === consultantKey
-                              ? localize("Booking...", "ബുക്കിംഗ് പൂർത്തിയാക്കുന്നു...", language)
-                              : localize("Book consultation", "സഹായിയെ വിളിക്കുക", language)}
-                          </button>
-                        </article>
-                      );
-                    })}
-                    {lastBooking ? (
-                      <article className="astrology-panel astrology-detail-card astrology-booking-confirmation">
-                        <h3>{localize("Booking confirmed", "ബുക്കിംഗ് സ്ഥിരീകരിച്ചു", language)}</h3>
-                        <p>
-                          {localize("Confirmation code", "സ്ഥിരീകരണ കോഡ്", language)}: {lastBooking.confirmationCode}
-                        </p>
-                        <p>
-                          {localize("Consultant", "സലാഹകൻ", language)}: {lastBooking.consultantName}
-                        </p>
-                        <p>
-                          {localize("Slot", "സ്ലോട്ട്", language)}: {lastBooking.slot}
-                        </p>
-                        <p>
-                          {localize("Payment status", "പേയ്മെന്റ് നില", language)}:{" "}
-                          <span className={`astrology-status-pill ${getStatusClassName(lastBooking.paymentStatus)}`}>
-                            {formatStatusLabel(lastBooking.paymentStatus || "pending")}
-                          </span>
-                        </p>
-                        <button
-                          type="button"
-                          className="astrology-secondary-button"
-                          disabled={paymentRefreshLoadingId === lastBooking.id}
-                          onClick={() => handleRefreshPaymentStatus(lastBooking)}
-                        >
-                          {paymentRefreshLoadingId === lastBooking.id
-                            ? localize("Refreshing...", "Refreshing...", language)
-                            : localize("Refresh payment status", "Refresh payment status", language)}
-                        </button>
-                        <button
-                          type="button"
-                          className="astrology-save-button"
-                          onClick={handleCreateConsultationPaymentOrder}
-                          disabled={paymentLoading}
-                        >
-                          {paymentLoading
-                            ? localize("Preparing payment...", "പേയ്മെന്റ് തയ്യാറാക്കുന്നു...", language)
-                            : localize("Pay now", "ഇപ്പോൾ പേയ് ചെയ്യുക", language)}
-                        </button>
-                        {paymentOrder ? (
-                          <p>
-                            {localize("Order ID", "ഓർഡർ ഐഡി", language)}: {paymentOrder.orderId}
-                          </p>
-                        ) : null}
-                        <div className="astrology-inline-actions">
-                          <button
-                            type="button"
-                            className="astrology-secondary-button"
-                            disabled={consultationActionLoadingId === lastBooking.id}
-                            onClick={() => handleUpdateConsultationStatus(lastBooking.id, "cancelled")}
-                          >
-                            {consultationActionLoadingId === lastBooking.id
-                              ? localize("Updating...", "Updating...", language)
-                              : localize("Cancel booking", "Cancel booking", language)}
-                          </button>
-                          <button
-                            type="button"
-                            className="astrology-secondary-button"
-                            onClick={() => toggleRescheduleTarget(lastBooking.id)}
-                          >
-                            {rescheduleTargetId === lastBooking.id
-                              ? localize("Close reschedule", "Close reschedule", language)
-                              : localize("Reschedule", "Reschedule", language)}
-                          </button>
-                        </div>
-                      </article>
-                    ) : null}
-                    <article className="astrology-panel astrology-detail-card">
-                      <h3>{localize("Consultation history", "Consultation history", language)}</h3>
-                      {consultationHistoryLoading ? (
-                        <p className="astrology-inline-message">
-                          {localize("Loading consultation history...", "Loading consultation history...", language)}
-                        </p>
-                      ) : null}
-                      {!consultationHistoryLoading && consultationHistory.length === 0 ? (
-                        <p className="astrology-history-empty">
-                          {localize("Your booked consultations will appear here.", "Your booked consultations will appear here.", language)}
-                        </p>
-                      ) : null}
-                      <div className="astrology-mini-history-list">
-                        {consultationHistory.slice(0, 8).map((booking) => (
-                          <div key={booking.id} className="astrology-mini-history-item is-static">
-                            <strong>
-                              {booking.consultantName || localize("Consultant", "Consultant", language)} -{" "}
-                              {booking.slot || localize("Slot pending", "Slot pending", language)}
-                            </strong>
-                            <span>
-                              {formatSavedReadingDate(booking.createdAt || booking.preferredDate)} -{" "}
-                              {formatStatusLabel(booking.status || "confirmed")} -{" "}
-                              {formatStatusLabel(booking.paymentStatus || "pending")}
-                            </span>
-                            <div className="astrology-inline-actions">
-                              <button
-                                type="button"
-                                className="astrology-secondary-button"
-                                disabled={consultationActionLoadingId === booking.id}
-                                onClick={() => handleUpdateConsultationStatus(booking.id, "cancelled")}
-                              >
-                                {consultationActionLoadingId === booking.id
-                                  ? localize("Updating...", "Updating...", language)
-                                  : localize("Cancel", "Cancel", language)}
-                              </button>
-                              <button
-                                type="button"
-                                className="astrology-secondary-button"
-                                disabled={paymentRefreshLoadingId === booking.id}
-                                onClick={() => handleRefreshPaymentStatus(booking)}
-                              >
-                                {paymentRefreshLoadingId === booking.id
-                                  ? localize("Refreshing...", "Refreshing...", language)
-                                  : localize("Refresh payment", "Refresh payment", language)}
-                              </button>
-                            </div>
-                            {rescheduleTargetId === booking.id ? (
-                              <div className="astrology-inline-actions">
-                                <button
-                                  type="button"
-                                  className="astrology-secondary-button"
-                                  disabled={consultationActionLoadingId === booking.id}
-                                  onClick={() => handleUpdateConsultationStatus(booking.id, "pending")}
-                                >
-                                  {localize("Mark as reschedule requested", "Mark as reschedule requested", language)}
-                                </button>
-                                <span className="astrology-inline-message">
-                                  {localize("Book a new slot above after marking this request.", "Book a new slot above after marking this request.", language)}
-                                </span>
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  </div>
-                ) : activeSection === "ai" ? (
-                  <div className="astrology-ai-panel">
-                    <label className="astrology-field">
-                      <span>{localize("Ask your astrology assistant", "നിങ്ങളുടെ ജ്യോതിഷ സഹായിയോട് ചോദിക്കുക", language)}</span>
-                      <textarea
-                        rows={5}
-                        value={aiQuestion}
-                        onChange={(event) => setAiQuestion(event.target.value)}
-                        placeholder={localize(
-                          "What should I focus on this week?",
-                          "ഈ ആഴ്ച ഞാൻ ഏതിന്മേൽ ശ്രദ്ധ കേന്ദ്രീകരിക്കണം?",
-                          language
-                        )}
-                      />
-                    </label>
-                    <button type="button" className="astrology-save-button" onClick={handleAskAssistant}>
-                      {aiLoading
-                        ? localize("Thinking...", "ചിന്തിക്കുന്നു...", language)
-                        : localize("Ask now", "ഇപ്പോൾ ചോദിക്കുക", language)}
-                    </button>
-                    {assistantAnswer ? (
-                      <article className="astrology-panel astrology-detail-card">
-                        <h3>{localize("Assistant answer", "സഹായിയുടെ ഉത്തരമ", language)}</h3>
-                        <p>{assistantAnswer.answer}</p>
-                        {assistantAnswer.tips?.length ? (
-                          <ul>
-                            {assistantAnswer.tips.map((tip, index) => (
-                              <li key={index}>{tip}</li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </article>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
+        <section className="astrology-panel astro-tab-panel">
+          <div className="astro-feature-tabs" role="tablist">
+            {FEATURE_TABS.map((tab) => (
+              <button key={tab.key} type="button" role="tab" className={`astro-tab-button ${activeSection === tab.key ? "is-active" : ""}`} onClick={() => setActiveSection(tab.key)}>
+                {localize(tab.label, tab.labelMl, language)}
+              </button>
+            ))}
+          </div>
+          {(readingNotice || signsNotice || saveState.message || profileApi.profileNotice) ? (
+            <div className="astro-inline-messages">
+              {readingNotice || signsNotice ? <p className="astrology-inline-message astrology-inline-message-warning">{readingNotice || signsNotice}</p> : null}
+              {profileApi.profileNotice ? <p className="astrology-inline-message astrology-inline-message-warning">{profileApi.profileNotice}</p> : null}
+              {saveState.message ? <p className={`astrology-inline-message ${saveState.type === "error" ? "astrology-inline-message-error" : "astrology-inline-message-success"}`}>{saveState.message}</p> : null}
             </div>
-          </main>
-        </div>
+          ) : null}
+
+          {activeSection === "today" ? (
+            <div className="astro-card-grid">
+              <article className="astrology-panel astro-result-card"><h4>Summary</h4><p>{heroPrediction}</p></article>
+              <article className="astrology-panel astro-result-card"><h4>Today's guidance</h4><p>{getRashiSummary(selectedSign)}</p></article>
+              <article className="astrology-panel astro-result-card"><h4>Career advice</h4><p>{getCareerAdvice(selectedSign)}</p></article>
+              <article className="astrology-panel astro-result-card"><h4>Finance advice</h4><p>{getFinanceAdvice(selectedSign)}</p></article>
+              <article className="astrology-panel astro-result-card"><h4>Remedies</h4><ul>{getRemedyTips(selectedSign).map((tip) => <li key={tip}>{tip}</li>)}</ul></article>
+              <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {panchangam?.nakshatra || getNakshatraFromSign(selectedSign)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
+              {showFullPrediction ? <HoroscopeCard sign={selectedSignDetails} horoscope={reading} loading={loading} notice={readingNotice || signsNotice} /> : null}
+            </div>
+          ) : null}
+
+          {activeSection === "kundli" ? (
+            <div className="astro-card-grid">
+              <article className="astrology-panel astro-result-card astro-span-2">
+                <h4>Birth details</h4>
+                <div className="astro-compact-form">
+                  <label className="astrology-field"><span>Date of birth</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Time of birth</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Place of birth</span><input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Topic / question</span><input type="text" value={question} onChange={(event) => setQuestion(event.target.value)} /></label>
+                </div>
+                <label className="astrology-field astrology-checkbox-field"><input type="checkbox" checked={detailedReport} onChange={(event) => setDetailedReport(event.target.checked)} /><span>Generate detailed personalized report</span></label>
+                <button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate report</button>
+              </article>
+              <article className="astrology-panel astro-result-card"><h4>Kundli summary</h4><ul><li>Ascendant: {kundliApi.kundliData?.birthChart?.ascendant || profileApi.selectedProfile.lagna || "Mesha"}</li><li>Current dasha: {kundliApi.kundliData?.dasha?.current || "Venus"}</li><li>Rashi: {profileApi.selectedProfile.rashi || getRashiFromSign(selectedSign)}</li></ul></article>
+              <article className="astrology-panel astro-result-card"><h4>Actions</h4><button type="button" className="astrology-save-button" disabled={kundliApi.downloadingKundli || kundliApi.kundliLoading} onClick={kundliApi.handleDownloadKundliReport}>{kundliApi.downloadingKundli ? "Downloading..." : "Download PDF report"}</button>{kundliApi.activeKundliSnapshotId ? <button type="button" className="astrology-secondary-button" onClick={kundliApi.handleLoadLiveKundli}>Use live generation</button> : null}</article>
+            </div>
+          ) : null}
+
+          {activeSection === "career" ? <div className="astro-card-grid"><article className="astrology-panel astro-result-card"><h4>Career forecast</h4><p>{getCareerAdvice(selectedSign)}</p></article></div> : null}
+          {activeSection === "finance" ? <div className="astro-card-grid"><article className="astrology-panel astro-result-card"><h4>Finance forecast</h4><p>{getFinanceAdvice(selectedSign)}</p></article></div> : null}
+
+          {activeSection === "match" ? (
+            <div className="astro-card-grid">
+              <article className="astrology-panel astro-result-card astro-span-2">
+                <h4>Marriage compatibility</h4>
+                <div className="astrology-form-grid">
+                  <label className="astrology-field"><span>Your sign</span><select value={selectedSign} onChange={(event) => setSelectedSign(event.target.value)}>{signs.map((item) => <option key={item.sign} value={item.sign}>{item.label}</option>)}</select></label>
+                  <label className="astrology-field"><span>Partner sign</span><select value={kundliApi.partnerSign} onChange={(event) => kundliApi.setPartnerSign(event.target.value)}>{signs.map((item) => <option key={item.sign} value={item.sign}>{item.label}</option>)}</select></label>
+                </div>
+                <button type="button" className="astrology-save-button" onClick={kundliApi.handleCompatibilitySubmit}>Check porutham</button>
+              </article>
+              {kundliApi.compatibility ? <article className="astrology-panel astro-result-card"><h4>Score</h4><p>{kundliApi.compatibility.summary}</p><strong>{Number(kundliApi.compatibility.score || 0)}%</strong></article> : null}
+            </div>
+          ) : null}
+
+          {activeSection === "remedies" ? <div className="astro-card-grid"><article className="astrology-panel astro-result-card"><h4>Remedies</h4><ul>{getRemedyTips(selectedSign).map((tip) => <li key={tip}>{tip}</li>)}</ul></article></div> : null}
+
+          {activeSection === "panchangam" ? (
+            <div className="astro-card-grid">
+              <article className="astrology-panel astro-result-card"><h4>Panchangam today</h4>{panchangamLoading ? <p className="astrology-inline-message">Loading...</p> : <ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {panchangam?.nakshatra || "Revati"}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li><li>Yamagandam: {panchangam?.yamagandam || "03:00 PM - 04:30 PM"}</li></ul>}{panchangamNotice ? <p className="astrology-inline-message astrology-inline-message-warning">{panchangamNotice}</p> : null}</article>
+              <article className="astrology-panel astro-result-card"><h4>Festival updates</h4>{festivals.length ? <ul>{festivals.map((festival) => <li key={festival.name}><strong>{festival.name}</strong> - {festival.date}</li>)}</ul> : <p>No festival updates.</p>}</article>
+            </div>
+          ) : null}
+
+          {activeSection === "ai" ? (
+            <div className="astro-card-grid">
+              <article className="astrology-panel astro-result-card astro-span-2">
+                <h4>Ask AI Astrology</h4>
+                <label className="astrology-field"><span>Your question</span><textarea rows={4} value={aiQuestion} onChange={(event) => setAiQuestion(event.target.value)} /></label>
+                <button type="button" className="astrology-save-button" onClick={handleAskAssistant}>{aiLoading ? "Thinking..." : "Ask now"}</button>
+              </article>
+              {assistantAnswer ? <article className="astrology-panel astro-result-card astro-span-2"><h4>Answer</h4><p>{assistantAnswer.answer}</p>{assistantAnswer.tips?.length ? <ul>{assistantAnswer.tips.map((tip, index) => <li key={`${tip}-${index}`}>{tip}</li>)}</ul> : null}</article> : null}
+            </div>
+          ) : null}
+
+          {activeSection === "saved" ? (
+            <div className="astro-card-grid">
+              <article className="astrology-panel astro-result-card"><h4>Saved daily reports</h4>{profileApi.recentSavedReadings.length ? <div className="astrology-mini-history-list">{profileApi.recentSavedReadings.map((item) => <button key={`${item.sign}-${item.readingDate}`} type="button" className="astrology-mini-history-item" onClick={() => { setSelectedSign(item.sign); setActiveSection("today"); }}><strong>{astrologyService.getFallbackSign(item.sign).label}</strong><span>{formatSavedReadingDate(item.readingDate)}</span></button>)}</div> : <p className="astrology-history-empty">No saved daily reports.</p>}</article>
+              <article className="astrology-panel astro-result-card"><h4>Saved Kundli</h4>{kundliApi.kundliHistory.length ? <div className="astrology-mini-history-list">{kundliApi.kundliHistory.slice(0, 6).map((item) => <button key={item.id} type="button" className="astrology-mini-history-item" onClick={() => { kundliApi.handleRestoreKundliSnapshot(item); setActiveSection("kundli"); }}><strong>{item.profileName || "Profile"}</strong><span>{formatSavedReadingDate(item.createdAt)}</span></button>)}</div> : <p className="astrology-history-empty">No saved Kundli reports.</p>}</article>
+            </div>
+          ) : null}
+
+          {activeSection === "profile" ? (
+            <div className="astro-card-grid">
+              <article className="astrology-panel astro-result-card astro-span-2">
+                <h4>Profile settings</h4>
+                <div className="astro-compact-form">
+                  <label className="astrology-field"><span>Birth date</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Birth time</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Birth place</span><input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Favorite topics</span><input type="text" value={profileApi.profileDraft.favoriteTopics} onChange={(event) => profileApi.handleDraftChange("favoriteTopics", event.target.value)} /></label>
+                </div>
+                <button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save profile</button>
+              </article>
+            </div>
+          ) : null}
+
+          {activeSection === "consult" ? (
+            <div className="astro-card-grid">
+              {consultApi.consultants.map((consultant) => {
+                const key = consultant.id || consultant.name;
+                return (
+                  <article key={key} className="astrology-panel astro-result-card">
+                    <h4>{consultant.name}</h4>
+                    <p>{consultant.specialty}</p>
+                    <p>{consultant.rate}</p>
+                    <label className="astrology-field">
+                      <span>Choose slot</span>
+                      <select value={consultApi.consultationSlots[key] || ""} onChange={(event) => consultApi.handleConsultationSlotChange(key, event.target.value)}>
+                        {consultant.availableSlots.map((slot) => <option key={slot.id} value={slot.id}>{slot.label}</option>)}
+                      </select>
+                    </label>
+                    <button type="button" className="astrology-save-button" disabled={consultApi.bookingLoadingId === key} onClick={() => consultApi.handleBookConsultation(consultant)}>{consultApi.bookingLoadingId === key ? "Booking..." : "Book consultation"}</button>
+                  </article>
+                );
+              })}
+              {consultApi.lastBooking ? <article className="astrology-panel astro-result-card astro-span-2"><h4>Latest booking</h4><p>Code: {consultApi.lastBooking.confirmationCode}</p><p>Consultant: {consultApi.lastBooking.consultantName}</p><button type="button" className="astrology-secondary-button" disabled={consultApi.paymentRefreshLoadingId === consultApi.lastBooking.id} onClick={() => consultApi.handleRefreshPaymentStatus(consultApi.lastBooking)}>Refresh payment</button></article> : null}
+            </div>
+          ) : null}
+        </section>
       </div>
+      <nav className="astro-mobile-nav" aria-label="Astrology quick navigation">
+        {MOBILE_NAV_ITEMS.map((item, index) => (
+          <button key={`${item.key}-${index}`} type="button" className={`astro-mobile-nav-button ${activeSection === item.key ? "is-active" : ""}`} onClick={() => setActiveSection(item.key)}>
+            {item.label}
+          </button>
+        ))}
+      </nav>
     </section>
   );
 };

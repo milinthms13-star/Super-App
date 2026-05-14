@@ -12,7 +12,16 @@ const appendFormValue = (formData, key, value) => {
     return;
   }
 
-  if (Array.isArray(value) || (typeof value === "object" && !(value instanceof Date))) {
+  if (Array.isArray(value)) {
+    // For arrays, append each item individually using bracket notation
+    // This is the standard way to send arrays via FormData
+    value.forEach((item) => {
+      formData.append(`${key}[]`, item);
+    });
+    return;
+  }
+
+  if (typeof value === "object" && !(value instanceof Date)) {
     formData.append(key, JSON.stringify(value));
     return;
   }
