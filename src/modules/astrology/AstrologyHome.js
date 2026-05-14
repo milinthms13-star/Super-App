@@ -746,22 +746,22 @@ const AstrologyHome = () => {
   };
 
   useEffect(() => {
+    if (!profileApi.profileDraft.birthDate || !profileApi.profileDraft.birthTime) {
+      return;
+    }
+    const calculatedProfile = calculateBirthAstroProfile(
+      profileApi.profileDraft.birthDate,
+      profileApi.profileDraft.birthTime,
+      profileApi.profileDraft.birthTimezone
+    );
     if (
-      profileApi.profileDraft.birthDate &&
-      profileApi.profileDraft.birthTime &&
-      (!profileApi.profileDraft.nakshatra || !profileApi.profileDraft.rashi)
+      calculatedProfile.nakshatra &&
+      calculatedProfile.nakshatra !== profileApi.profileDraft.nakshatra
     ) {
-      const calculatedProfile = calculateBirthAstroProfile(
-        profileApi.profileDraft.birthDate,
-        profileApi.profileDraft.birthTime,
-        profileApi.profileDraft.birthTimezone
-      );
-      if (!profileApi.profileDraft.nakshatra && calculatedProfile.nakshatra) {
-        handleProfileDraftChange("nakshatra", calculatedProfile.nakshatra);
-      }
-      if (!profileApi.profileDraft.rashi && calculatedProfile.rashi) {
-        handleProfileDraftChange("rashi", calculatedProfile.rashi);
-      }
+      handleProfileDraftChange("nakshatra", calculatedProfile.nakshatra);
+    }
+    if (calculatedProfile.rashi && calculatedProfile.rashi !== profileApi.profileDraft.rashi) {
+      handleProfileDraftChange("rashi", calculatedProfile.rashi);
     }
   }, [
     profileApi.profileDraft.birthDate,
