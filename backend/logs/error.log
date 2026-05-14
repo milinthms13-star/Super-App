@@ -5034,3 +5034,4 @@
 {"body":"{ invalid json }","expose":true,"level":"\u001b[31merror\u001b[39m","status":400,"statusCode":400,"timestamp":"2026-05-14 06:38:19:3819","type":"entity.parse.failed"}
 {"body":"{ invalid json }","expose":true,"level":"\u001b[31merror\u001b[39m","status":400,"statusCode":400,"timestamp":"2026-05-14 06:40:47:4047","type":"entity.parse.failed"}
 {"body":"{ invalid json }","expose":true,"level":"\u001b[31merror\u001b[39m","status":400,"statusCode":400,"timestamp":"2026-05-14 06:44:16:4416","type":"entity.parse.failed"}
+{"body":"{ invalid json }","expose":true,"level":"\u001b[31merror\u001b[39m","status":400,"statusCode":400,"timestamp":"2026-05-14 06:50:12:5012","type":"entity.parse.failed"}
