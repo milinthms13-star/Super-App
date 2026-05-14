@@ -147,6 +147,8 @@ app.use('/api/messaging/v5/backup', require('./routes/messageBackupRoutes'));
 app.use('/api/bulkorders', require('./routes/bulkorders'));
 app.use('/api/diary', require('./routes/diary'));
 app.use('/api/diary', require('./routes/diary-phase7'));
+app.use('/api/astrology', require('./routes/astrology'));
+app.use('/api/astrology', require('./routes/payments'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/giftcards', require('./routes/giftcards'));
 app.use('/api/health', require('./routes/health'));

@@ -1,4 +1,40 @@
 const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
+
+let mongoServer;
+
+// Start in-memory MongoDB server before all tests
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  const mongoUri = mongoServer.getUri();
+
+  // Override the database URI for tests
+  process.env.MONGODB_URI = mongoUri;
+  process.env.DATABASE_URL = mongoUri;
+  process.env.NODE_ENV = 'test';
+
+  // Connect to the in-memory database
+  await mongoose.connect(mongoUri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
+}, 60000);
+
+// Clean up after all tests
+afterAll(async () => {
+  await mongoose.connection.dropDatabase();
+  await mongoose.connection.close();
+  await mongoServer.stop();
+}, 60000);
+
+// Clean up after each test
+afterEach(async () => {
+  const collections = mongoose.connection.collections;
+  for (const key in collections) {
+    const collection = collections[key];
+    await collection.deleteMany({});
+  }
+});
 
 if (typeof global.ReadableStream === 'undefined') {
   const { ReadableStream, WritableStream, TransformStream } = require('node:stream/web');

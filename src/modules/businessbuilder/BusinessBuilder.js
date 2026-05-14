@@ -194,6 +194,22 @@ const INITIAL_MINIAPP_FORM = {
   secondaryColor: "#10b981",
 };
 
+const INITIAL_PRODUCT_FORM = {
+  name: "",
+  category: "",
+  description: "",
+  price: "",
+  discountedPrice: "",
+  stock: "",
+};
+
+const INITIAL_AI_ASSET_FORM = {
+  assetType: "poster",
+  prompt: "",
+  offer: "",
+  cta: "",
+};
+
 const INITIAL_COST_FORM = {
   rent: 0,
   staffSalary: 0,
@@ -437,6 +453,7 @@ const BusinessBuilder = () => {
 
   const [invoiceForm, setInvoiceForm] = useState(INITIAL_INVOICE_FORM);
   const [miniAppForm, setMiniAppForm] = useState(INITIAL_MINIAPP_FORM);
+  const [productForm, setProductForm] = useState(INITIAL_PRODUCT_FORM);
   const [documentForm, setDocumentForm] = useState(INITIAL_DOCUMENT_FORM);
 
   const [costForm, setCostForm] = useState(() => loadFromStorage(STORAGE_KEYS.costForm, INITIAL_COST_FORM));
@@ -452,6 +469,15 @@ const BusinessBuilder = () => {
   const [activeBusinessId, setActiveBusinessId] = useState("");
   const [invoices, setInvoices] = useState([]);
   const [miniApps, setMiniApps] = useState([]);
+  const [selectedMiniAppId, setSelectedMiniAppId] = useState("");
+  const [miniAppProducts, setMiniAppProducts] = useState([]);
+  const [miniAppOrders, setMiniAppOrders] = useState([]);
+  const [miniAppFunnel, setMiniAppFunnel] = useState(null);
+  const [businessAnalytics, setBusinessAnalytics] = useState(null);
+  const [entitlements, setEntitlements] = useState(null);
+  const [subscriptionPlan, setSubscriptionPlan] = useState("free");
+  const [aiAssetForm, setAiAssetForm] = useState(INITIAL_AI_ASSET_FORM);
+  const [aiAssets, setAiAssets] = useState([]);
   const [statusMessage, setStatusMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -466,15 +492,34 @@ const BusinessBuilder = () => {
     };
 
     fetchDashboardData();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const fetchDependentData = async () => {
-      await Promise.all([fetchInvoices(), fetchMiniApps()]);
+      await Promise.all([
+        fetchInvoices(),
+        fetchMiniApps(),
+        fetchEntitlements(),
+        fetchBusinessAnalytics(),
+        fetchAIAssets(),
+      ]);
     };
 
     fetchDependentData();
-  }, [activeBusinessId]);
+  }, [activeBusinessId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedMiniAppId) {
+      setMiniAppProducts([]);
+      setMiniAppOrders([]);
+      setMiniAppFunnel(null);
+      return;
+    }
+    const fetchMiniAppOps = async () => {
+      await Promise.all([fetchMiniAppProducts(selectedMiniAppId), fetchMiniAppOrders(selectedMiniAppId), fetchMiniAppFunnel(selectedMiniAppId)]);
+    };
+    fetchMiniAppOps();
+  }, [selectedMiniAppId]);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEYS.launchForm, JSON.stringify(launchForm));
@@ -556,10 +601,108 @@ const BusinessBuilder = () => {
         params: activeBusinessId ? { businessId: activeBusinessId } : {},
       });
       if (response.data?.success) {
-        setMiniApps(Array.isArray(response.data.data) ? response.data.data : []);
+        const list = Array.isArray(response.data.data) ? response.data.data : [];
+        setMiniApps(list);
+        if (list.length > 0) {
+          setSelectedMiniAppId((current) => {
+            if (current && list.some((app) => (app.miniAppId || app._id) === current)) {
+              return current;
+            }
+            return list[0].miniAppId || list[0]._id;
+          });
+        } else {
+          setSelectedMiniAppId("");
+        }
       }
     } catch (error) {
       setMiniApps([]);
+      setSelectedMiniAppId("");
+    }
+  };
+
+  const fetchEntitlements = async () => {
+    if (!activeBusinessId) {
+      setEntitlements(null);
+      return;
+    }
+    try {
+      const response = await axios.get(`/api/business-builder/businesses/${activeBusinessId}/entitlements`);
+      if (response.data?.success) {
+        setEntitlements(response.data.data || null);
+        if (response.data?.data?.plan) {
+          setSubscriptionPlan(response.data.data.plan);
+        }
+      }
+    } catch (error) {
+      setEntitlements(null);
+    }
+  };
+
+  const fetchBusinessAnalytics = async () => {
+    if (!activeBusinessId) {
+      setBusinessAnalytics(null);
+      return;
+    }
+    try {
+      const response = await axios.get(`/api/business-builder/businesses/${activeBusinessId}/analytics/dashboard`, {
+        params: { days: 30 },
+      });
+      if (response.data?.success) {
+        setBusinessAnalytics(response.data.data || null);
+      }
+    } catch (error) {
+      setBusinessAnalytics(null);
+    }
+  };
+
+  const fetchAIAssets = async () => {
+    if (!activeBusinessId) {
+      setAiAssets([]);
+      return;
+    }
+    try {
+      const response = await axios.get(`/api/business-builder/businesses/${activeBusinessId}/ai/assets`);
+      if (response.data?.success) {
+        setAiAssets(Array.isArray(response.data.data) ? response.data.data : []);
+      }
+    } catch (error) {
+      setAiAssets([]);
+    }
+  };
+
+  const fetchMiniAppProducts = async (miniAppId) => {
+    try {
+      const response = await axios.get(`/api/business-builder/mini-apps/${miniAppId}/products`);
+      if (response.data?.success) {
+        setMiniAppProducts(Array.isArray(response.data.data) ? response.data.data : []);
+      }
+    } catch (error) {
+      setMiniAppProducts([]);
+    }
+  };
+
+  const fetchMiniAppOrders = async (miniAppId) => {
+    try {
+      const response = await axios.get(`/api/business-builder/mini-apps/${miniAppId}/orders`);
+      if (response.data?.success) {
+        const items = Array.isArray(response.data?.data?.items) ? response.data.data.items : [];
+        setMiniAppOrders(items);
+      }
+    } catch (error) {
+      setMiniAppOrders([]);
+    }
+  };
+
+  const fetchMiniAppFunnel = async (miniAppId) => {
+    try {
+      const response = await axios.get(`/api/business-builder/mini-apps/${miniAppId}/funnel`, {
+        params: { days: 30 },
+      });
+      if (response.data?.success) {
+        setMiniAppFunnel(response.data.data || null);
+      }
+    } catch (error) {
+      setMiniAppFunnel(null);
     }
   };
 
@@ -613,6 +756,14 @@ const BusinessBuilder = () => {
 
   const handleMiniAppChange = (field, value) => {
     setMiniAppForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleProductChange = (field, value) => {
+    setProductForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleAiAssetChange = (field, value) => {
+    setAiAssetForm((current) => ({ ...current, [field]: value }));
   };
 
   const handleDocumentChange = (field, value) => {
@@ -729,11 +880,107 @@ const BusinessBuilder = () => {
       const response = await axios.post("/api/business-builder/mini-apps", payload);
       if (response.data?.success) {
         setMiniAppForm(INITIAL_MINIAPP_FORM);
-        await fetchMiniApps();
+        await Promise.all([fetchMiniApps(), fetchEntitlements()]);
         showStatus("Mini app created successfully.");
       }
     } catch (error) {
       showStatus("Unable to create mini app. Try a different slug and check required fields.");
+    }
+  };
+
+  const handleSaveSubscription = async (event) => {
+    event.preventDefault();
+    if (!activeBusinessId) {
+      showStatus("Create and save a business profile before changing subscription.");
+      return;
+    }
+    try {
+      const payload = {
+        plan: subscriptionPlan,
+        status: "active",
+      };
+      const response = await axios.put(`/api/business-builder/businesses/${activeBusinessId}/subscription`, payload);
+      if (response.data?.success) {
+        await fetchEntitlements();
+        showStatus("Subscription settings updated.");
+      }
+    } catch (error) {
+      showStatus("Unable to update subscription. Please try again.");
+    }
+  };
+
+  const handleCreateProduct = async (event) => {
+    event.preventDefault();
+    if (!selectedMiniAppId) {
+      showStatus("Create/select a mini app before adding products.");
+      return;
+    }
+    try {
+      const payload = {
+        name: productForm.name,
+        category: productForm.category,
+        description: productForm.description,
+        price: Number(productForm.price || 0),
+        discountedPrice: productForm.discountedPrice ? Number(productForm.discountedPrice) : undefined,
+        stock: Number(productForm.stock || 0),
+      };
+      const response = await axios.post(`/api/business-builder/mini-apps/${selectedMiniAppId}/products`, payload);
+      if (response.data?.success) {
+        setProductForm(INITIAL_PRODUCT_FORM);
+        await fetchMiniAppProducts(selectedMiniAppId);
+        showStatus("Mini app product added successfully.");
+      }
+    } catch (error) {
+      showStatus("Unable to add product. Check fields and try again.");
+    }
+  };
+
+  const handleDeleteProduct = async (productId) => {
+    if (!selectedMiniAppId) return;
+    try {
+      const response = await axios.delete(`/api/business-builder/mini-apps/${selectedMiniAppId}/products/${productId}`);
+      if (response.data?.success) {
+        await fetchMiniAppProducts(selectedMiniAppId);
+        showStatus("Product removed.");
+      }
+    } catch (error) {
+      showStatus("Unable to remove product right now.");
+    }
+  };
+
+  const handleGenerateAsset = async (event) => {
+    event.preventDefault();
+    if (!activeBusinessId) {
+      showStatus("Create and save a business profile before generating assets.");
+      return;
+    }
+    try {
+      const payload = {
+        assetType: aiAssetForm.assetType,
+        prompt: aiAssetForm.prompt,
+        offer: aiAssetForm.offer,
+        cta: aiAssetForm.cta,
+      };
+      const response = await axios.post(`/api/business-builder/businesses/${activeBusinessId}/ai/assets/generate`, payload);
+      if (response.data?.success) {
+        setAiAssetForm((current) => ({ ...current, prompt: "", offer: "", cta: "" }));
+        await Promise.all([fetchAIAssets(), fetchEntitlements()]);
+        showStatus("AI asset generated and saved.");
+      }
+    } catch (error) {
+      showStatus(error?.response?.data?.message || "Unable to generate AI asset.");
+    }
+  };
+
+  const handleOrderStatusUpdate = async (orderId, status) => {
+    try {
+      const response = await axios.patch(`/api/business-builder/orders/${orderId}/status`, { status });
+      if (response.data?.success) {
+        await Promise.all([fetchMiniAppOrders(selectedMiniAppId), fetchMiniAppFunnel(selectedMiniAppId), fetchBusinessAnalytics()]);
+        showStatus("Order status updated.");
+      }
+    } catch (error) {
+      showStatus("Unable to update order status.");
     }
   };
 
@@ -921,6 +1168,7 @@ const BusinessBuilder = () => {
   }, [businessForm.businessType]);
 
   const currentWizardConfig = WIZARD_STEPS[wizardStep];
+  const selectedMiniApp = miniApps.find((app) => (app.miniAppId || app._id) === selectedMiniAppId) || null;
 
   return (
     <div className="business-builder-page">
@@ -946,6 +1194,7 @@ const BusinessBuilder = () => {
           ["overview", "Business Profile"],
           ["invoices", "Invoice Studio"],
           ["miniapps", "Mini App Builder"],
+          ["ops360", "360 Operations"],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -1759,12 +2008,245 @@ const BusinessBuilder = () => {
               <div className="miniapp-grid">
                 {miniApps.map((app) => (
                   <div key={app.miniAppId || app._id} className="miniapp-card">
-                    <strong>{app.appName}</strong>
-                    <p>{app.appType} - {app.status}</p>
-                    <p>/{app.slug}</p>
+                    <div>
+                      <strong>{app.appName}</strong>
+                      <p>{app.appType} - {app.status}</p>
+                      <p>/{app.slug}</p>
+                      <p className="muted-inline">Public API: /api/business-builder/public/mini-apps/{app.slug}</p>
+                    </div>
+                    <div className="invoice-card-actions">
+                      <button type="button" onClick={() => setSelectedMiniAppId(app.miniAppId || app._id)}>
+                        Manage in 360
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "ops360" && (
+        <div className="section-card">
+          <h2>360 Operations Center</h2>
+          <p className="section-subtitle">
+            Manage entitlements, AI assets, mini app products, order lifecycle, and funnel analytics in one place.
+          </p>
+
+          <div className="kpi-grid">
+            <div className="kpi-card">
+              <span className="kpi-label">Plan</span>
+              <strong>{entitlements?.plan || "free"}</strong>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-label">AI assets used</span>
+              <strong>{entitlements?.usage?.aiAssetsGenerated || 0}/{entitlements?.limits?.maxAiAssetsPerMonth ?? "-"}</strong>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-label">Mini app limit</span>
+              <strong>{miniApps.length}/{entitlements?.limits?.maxMiniApps ?? "-"}</strong>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-label">30-day views</span>
+              <strong>{businessAnalytics?.summary?.views || 0}</strong>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-label">30-day paid orders</span>
+              <strong>{businessAnalytics?.summary?.paidOrders || 0}</strong>
+            </div>
+            <div className="kpi-card">
+              <span className="kpi-label">30-day revenue</span>
+              <strong>{formatINR(businessAnalytics?.summary?.revenue || 0)}</strong>
+            </div>
+          </div>
+
+          <div className="insight-panels">
+            <div className="insight-card">
+              <h3>Plan and monetization</h3>
+              <form className="form-grid compact-grid" onSubmit={handleSaveSubscription}>
+                <label>
+                  Subscription plan
+                  <select value={subscriptionPlan} onChange={(event) => setSubscriptionPlan(event.target.value)}>
+                    {["free", "starter", "pro", "enterprise"].map((plan) => (
+                      <option key={plan} value={plan}>{plan}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" className="button-primary">Save plan</button>
+              </form>
+              <p className="section-note">
+                Featured directory: {entitlements?.monetization?.featuredDirectory ? "Enabled" : "Disabled"}
+              </p>
+            </div>
+
+            <div className="insight-card">
+              <h3>Generate AI asset</h3>
+              <form className="form-grid compact-grid" onSubmit={handleGenerateAsset}>
+                <label>
+                  Asset type
+                  <select value={aiAssetForm.assetType} onChange={(event) => handleAiAssetChange("assetType", event.target.value)}>
+                    {["poster", "caption", "website"].map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Offer
+                  <input value={aiAssetForm.offer} onChange={(event) => handleAiAssetChange("offer", event.target.value)} />
+                </label>
+                <label>
+                  CTA
+                  <input value={aiAssetForm.cta} onChange={(event) => handleAiAssetChange("cta", event.target.value)} />
+                </label>
+                <label className="full-width">
+                  Prompt
+                  <textarea value={aiAssetForm.prompt} onChange={(event) => handleAiAssetChange("prompt", event.target.value)} />
+                </label>
+                <button type="submit" className="button-primary">Generate</button>
+              </form>
+            </div>
+          </div>
+
+          <div className="list-section">
+            <h3>Recent AI assets</h3>
+            {aiAssets.length === 0 ? (
+              <p>No AI assets generated yet.</p>
+            ) : (
+              <div className="document-history">
+                {aiAssets.slice(0, 6).map((asset) => (
+                  <div key={asset.assetId || asset._id} className="document-card">
+                    <strong>{asset.assetType}</strong>
+                    <p>{new Date(asset.createdAt).toLocaleString()}</p>
+                    <p className="truncate-text">{asset.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="list-section">
+            <h3>Mini app operations</h3>
+            {miniApps.length === 0 ? (
+              <p>Create at least one mini app to manage products, orders, and funnel.</p>
+            ) : (
+              <>
+                <label className="inline-selector">
+                  Select mini app
+                  <select value={selectedMiniAppId} onChange={(event) => setSelectedMiniAppId(event.target.value)}>
+                    {miniApps.map((app) => (
+                      <option key={app.miniAppId || app._id} value={app.miniAppId || app._id}>
+                        {app.appName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="kpi-grid">
+                  <div className="kpi-card">
+                    <span className="kpi-label">Views</span>
+                    <strong>{miniAppFunnel?.metrics?.views || 0}</strong>
+                  </div>
+                  <div className="kpi-card">
+                    <span className="kpi-label">Leads</span>
+                    <strong>{miniAppFunnel?.metrics?.leads || 0}</strong>
+                  </div>
+                  <div className="kpi-card">
+                    <span className="kpi-label">Orders</span>
+                    <strong>{miniAppFunnel?.metrics?.orders || 0}</strong>
+                  </div>
+                  <div className="kpi-card">
+                    <span className="kpi-label">Paid orders</span>
+                    <strong>{miniAppFunnel?.metrics?.paidOrders || 0}</strong>
+                  </div>
+                  <div className="kpi-card">
+                    <span className="kpi-label">Lead conversion</span>
+                    <strong>{miniAppFunnel?.metrics?.leadConversionRate || 0}%</strong>
+                  </div>
+                  <div className="kpi-card">
+                    <span className="kpi-label">Payment success</span>
+                    <strong>{miniAppFunnel?.metrics?.paymentSuccessRate || 0}%</strong>
+                  </div>
+                </div>
+
+                <div className="insight-panels">
+                  <div className="insight-card">
+                    <h3>Add product for {selectedMiniApp?.appName || "mini app"}</h3>
+                    <form className="form-grid compact-grid" onSubmit={handleCreateProduct}>
+                      <label>
+                        Product name
+                        <input value={productForm.name} onChange={(event) => handleProductChange("name", event.target.value)} required />
+                      </label>
+                      <label>
+                        Category
+                        <input value={productForm.category} onChange={(event) => handleProductChange("category", event.target.value)} />
+                      </label>
+                      <label className="full-width">
+                        Description
+                        <textarea value={productForm.description} onChange={(event) => handleProductChange("description", event.target.value)} />
+                      </label>
+                      <label>
+                        Price
+                        <input type="number" min="0" value={productForm.price} onChange={(event) => handleProductChange("price", event.target.value)} required />
+                      </label>
+                      <label>
+                        Discounted price
+                        <input type="number" min="0" value={productForm.discountedPrice} onChange={(event) => handleProductChange("discountedPrice", event.target.value)} />
+                      </label>
+                      <label>
+                        Stock
+                        <input type="number" min="0" value={productForm.stock} onChange={(event) => handleProductChange("stock", event.target.value)} />
+                      </label>
+                      <button type="submit" className="button-primary">Add product</button>
+                    </form>
+                  </div>
+
+                  <div className="insight-card">
+                    <h3>Products ({miniAppProducts.length})</h3>
+                    {miniAppProducts.length === 0 ? (
+                      <p>No products added yet.</p>
+                    ) : (
+                      <div className="document-history">
+                        {miniAppProducts.map((product) => (
+                          <div key={product.productId || product._id} className="document-card">
+                            <strong>{product.name}</strong>
+                            <p>{formatINR(product.price)}{product.discountedPrice ? ` -> ${formatINR(product.discountedPrice)}` : ""}</p>
+                            <p>{product.category || "General"} | Stock: {product.stock ?? "-"}</p>
+                            <button type="button" className="button-secondary" onClick={() => handleDeleteProduct(product.productId || product._id)}>
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="list-section">
+                  <h3>Order lifecycle</h3>
+                  {miniAppOrders.length === 0 ? (
+                    <p>No orders yet for this mini app.</p>
+                  ) : (
+                    <div className="invoice-list">
+                      {miniAppOrders.map((order) => (
+                        <div className="invoice-card" key={order.orderId || order._id}>
+                          <div>
+                            <strong>{order.orderId}</strong>
+                            <p>{order?.customer?.name || "Customer"} | {formatINR(order.totalAmount)}</p>
+                            <p>Payment: {order?.payment?.status || "not_started"}</p>
+                            <p>Status: {order.status}</p>
+                          </div>
+                          <div className="invoice-card-actions">
+                            <button type="button" onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "confirmed")}>Confirm</button>
+                            <button type="button" onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "completed")}>Complete</button>
+                            <button type="button" onClick={() => handleOrderStatusUpdate(order.orderId || order._id, "cancelled")}>Cancel</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>

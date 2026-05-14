@@ -621,6 +621,36 @@ export const astrologyService = {
     }
   },
 
+  async updateConsultationBookingStatus(bookingId, status) {
+    const normalizedBookingId = String(bookingId || "").trim();
+    const normalizedStatus = String(status || "").trim();
+    if (!normalizedBookingId) {
+      throw new Error("Booking id is required to update consultation status.");
+    }
+    if (!normalizedStatus) {
+      throw new Error("Status value is required to update consultation status.");
+    }
+
+    try {
+      const response = await axios.patch(
+        `${API_BASE_URL}/astrology/consultations/${encodeURIComponent(
+          normalizedBookingId
+        )}/status`,
+        {
+          status: normalizedStatus,
+        }
+      );
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to update consultation status.");
+      }
+
+      return normalizeConsultationBooking(response.data.data);
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to update consultation status.");
+    }
+  },
+
   async createConsultationPaymentOrder(bookingId) {
     const normalizedBookingId = String(bookingId || "").trim();
     if (!normalizedBookingId) {

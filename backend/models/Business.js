@@ -72,6 +72,34 @@ const BusinessSchema = new mongoose.Schema(
       enum: ['Draft', 'Active', 'Inactive', 'Suspended'],
       default: 'Draft',
     },
+    subscription: {
+      plan: {
+        type: String,
+        enum: ['free', 'starter', 'pro', 'enterprise'],
+        default: 'free',
+      },
+      status: {
+        type: String,
+        enum: ['active', 'trial', 'expired', 'cancelled'],
+        default: 'active',
+      },
+      setupFeePaid: { type: Boolean, default: false },
+      startedAt: { type: Date, default: Date.now },
+      expiresAt: Date,
+      monthlyFee: { type: Number, default: 0, min: 0 },
+    },
+    featureUsage: {
+      miniAppsCreated: { type: Number, default: 0, min: 0 },
+      aiAssetsGenerated: { type: Number, default: 0, min: 0 },
+      monthlyLeadsProcessed: { type: Number, default: 0, min: 0 },
+      lastResetAt: { type: Date, default: Date.now },
+    },
+    monetization: {
+      featuredDirectory: { type: Boolean, default: false },
+      featuredUntil: Date,
+      customDomain: { type: String, trim: true },
+      setupFeeAmount: { type: Number, default: 0, min: 0 },
+    },
     businessPlan: {
       summary: String,
       marketAnalysis: String,

@@ -406,7 +406,24 @@
   font: inherit;
 }
 
+.astrology-field select,
+.astrology-field textarea {
+  width: 100%;
+  border: 1px solid rgba(23, 48, 52, 0.14);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--astrology-ink);
+  font: inherit;
+}
+
 .astrology-field input:focus {
+  outline: 2px solid rgba(189, 139, 40, 0.28);
+  border-color: rgba(189, 139, 40, 0.55);
+}
+
+.astrology-field select:focus,
+.astrology-field textarea:focus {
   outline: 2px solid rgba(189, 139, 40, 0.28);
   border-color: rgba(189, 139, 40, 0.55);
 }
@@ -443,6 +460,32 @@
 .astrology-save-button:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+
+.astrology-checkbox-field {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+}
+
+.astrology-checkbox-field input[type="checkbox"] {
+  margin-top: 4px;
+}
+
+.astrology-notification-settings {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(23, 48, 52, 0.12);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.astrology-notification-settings h3 {
+  margin: 0;
+  color: var(--astrology-ink);
+  font-size: 1rem;
 }
 
 .astrology-inline-message {
@@ -525,6 +568,74 @@
 .astrology-history-meta span {
   color: var(--astrology-muted);
   font-size: 0.85rem;
+}
+
+.astrology-mini-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.astrology-mini-history-item {
+  border: 1px solid rgba(23, 48, 52, 0.12);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+}
+
+.astrology-mini-history-item.is-static {
+  cursor: default;
+}
+
+.astrology-mini-history-item.is-active {
+  border-color: rgba(189, 139, 40, 0.55);
+  background: #fff6de;
+}
+
+.astrology-mini-history-item strong {
+  color: var(--astrology-ink);
+  font-size: 0.94rem;
+}
+
+.astrology-mini-history-item span {
+  color: var(--astrology-muted);
+  font-size: 0.84rem;
+}
+
+.astrology-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.astrology-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.astrology-status-success {
+  color: #1f6a46;
+  background: rgba(31, 106, 70, 0.12);
+}
+
+.astrology-status-warning {
+  color: #8a6615;
+  background: rgba(138, 102, 21, 0.14);
+}
+
+.astrology-status-danger {
+  color: #8f3042;
+  background: rgba(143, 48, 66, 0.14);
 }
 
 .astrology-card-footer {

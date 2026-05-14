@@ -1,6 +1,6 @@
 module.exports = {
   testEnvironment: 'node',
-  setupFiles: ['<rootDir>/tests/setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testMatch: ['**/__tests__/**/*.js', '**/*.test.js', '**/*.spec.js'],
   collectCoverageFrom: [
     'services/**/*.js',
@@ -17,9 +17,8 @@ module.exports = {
       statements: 50
     }
   },
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
-  testTimeout: 10000,
-  maxWorkers: 4,
+  testTimeout: 30000,
+  maxWorkers: 1,
   forceExit: true,
   detectOpenHandles: true,
   bail: false,

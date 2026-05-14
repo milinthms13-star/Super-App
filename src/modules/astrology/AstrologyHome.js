@@ -324,6 +324,63 @@ const loadRazorpaySdk = () =>
     document.body.appendChild(script);
   });
 
+const KUNDLI_HISTORY_STORAGE_KEY = "astrology.kundliHistory.v1";
+const COMPATIBILITY_HISTORY_STORAGE_KEY = "astrology.compatibilityHistory.v1";
+const MAX_LOCAL_HISTORY_ITEMS = 12;
+
+const getUserScopedStorageKey = (baseKey, currentUser) => {
+  const userKey = currentUser?.id || currentUser?.email || currentUser?.name || "guest";
+  return `${baseKey}.${String(userKey).trim().toLowerCase()}`;
+};
+
+const loadLocalHistory = (storageKey) => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(storageKey);
+    if (!rawValue) {
+      return [];
+    }
+    const parsed = JSON.parse(rawValue);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+};
+
+const saveLocalHistory = (storageKey, nextItems) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(nextItems));
+  } catch (error) {
+    // Ignore storage write failures.
+  }
+};
+
+const upsertHistoryItem = (items, nextItem) =>
+  [nextItem, ...items.filter((item) => item.id !== nextItem.id)].slice(0, MAX_LOCAL_HISTORY_ITEMS);
+
+const formatStatusLabel = (value) =>
+  String(value || "pending")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const getStatusClassName = (value) => {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized === "completed" || normalized === "confirmed") {
+    return "astrology-status-success";
+  }
+  if (normalized === "cancelled" || normalized === "failed") {
+    return "astrology-status-danger";
+  }
+  return "astrology-status-warning";
+};
+
 const AstrologyHome = () => {
   const { currentUser } = useApp();
   const [language, setLanguage] = useState("en");
@@ -361,7 +418,29 @@ const AstrologyHome = () => {
   const [lastBooking, setLastBooking] = useState(null);
   const [paymentOrder, setPaymentOrder] = useState(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const selectedProfile = familyProfiles[activeFamilyIndex] || familyProfiles[0] || {};
+  const [consultationHistory, setConsultationHistory] = useState([]);
+  const [consultationHistoryLoading, setConsultationHistoryLoading] = useState(false);
+  const [consultationActionLoadingId, setConsultationActionLoadingId] = useState("");
+  const [paymentRefreshLoadingId, setPaymentRefreshLoadingId] = useState("");
+  const [rescheduleTargetId, setRescheduleTargetId] = useState("");
+  const [kundliHistory, setKundliHistory] = useState([]);
+  const [activeKundliSnapshotId, setActiveKundliSnapshotId] = useState("");
+  const [compatibilityHistory, setCompatibilityHistory] = useState([]);
+  const currentUserStorageIdentity =
+    currentUser?.id || currentUser?.email || currentUser?.name || "guest";
+  const selectedProfile = useMemo(
+    () => familyProfiles[activeFamilyIndex] || familyProfiles[0] || {},
+    [activeFamilyIndex, familyProfiles]
+  );
+  const kundliStorageKey = useMemo(
+    () => getUserScopedStorageKey(KUNDLI_HISTORY_STORAGE_KEY, { id: currentUserStorageIdentity }),
+    [currentUserStorageIdentity]
+  );
+  const compatibilityStorageKey = useMemo(
+    () =>
+      getUserScopedStorageKey(COMPATIBILITY_HISTORY_STORAGE_KEY, { id: currentUserStorageIdentity }),
+    [currentUserStorageIdentity]
+  );
 
   useEffect(() => {
     let active = true;
@@ -455,6 +534,12 @@ const AstrologyHome = () => {
       active = false;
     };
   }, [currentUser?.name]);
+
+  useEffect(() => {
+    setKundliHistory(loadLocalHistory(kundliStorageKey));
+    setCompatibilityHistory(loadLocalHistory(compatibilityStorageKey));
+    setActiveKundliSnapshotId("");
+  }, [compatibilityStorageKey, kundliStorageKey]);
 
   useEffect(() => {
     if (!selectedSign) {
@@ -558,7 +643,55 @@ const AstrologyHome = () => {
   }, []);
 
   useEffect(() => {
+    if (activeSection !== "consult") {
+      return;
+    }
+
+    let active = true;
+
+    const loadConsultationHistory = async () => {
+      if (!currentUser?.id && !currentUser?.name) {
+        setConsultationHistory([]);
+        return;
+      }
+
+      setConsultationHistoryLoading(true);
+      try {
+        const bookings = await astrologyService.getConsultationHistory();
+        if (!active) {
+          return;
+        }
+
+        const sortedBookings = [...bookings].sort(
+          (left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0)
+        );
+        setConsultationHistory(sortedBookings);
+        setLastBooking((currentBooking) => currentBooking || sortedBookings[0] || null);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setConsultationHistory(error.fallbackData || []);
+      } finally {
+        if (active) {
+          setConsultationHistoryLoading(false);
+        }
+      }
+    };
+
+    loadConsultationHistory();
+
+    return () => {
+      active = false;
+    };
+  }, [activeSection, currentUser?.id, currentUser?.name]);
+
+  useEffect(() => {
     if (activeSection !== "kundli") {
+      return;
+    }
+    if (activeKundliSnapshotId) {
+      setKundliLoading(false);
       return;
     }
 
@@ -575,6 +708,18 @@ const AstrologyHome = () => {
           return;
         }
         setKundliData(kundli);
+        const historyItem = {
+          id: `kundli-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          sign: selectedProfile.sign || selectedSign,
+          profileName: selectedProfile.name || currentUser?.name || "Profile",
+          data: kundli,
+        };
+        setKundliHistory((currentItems) => {
+          const nextItems = upsertHistoryItem(currentItems, historyItem);
+          saveLocalHistory(kundliStorageKey, nextItems);
+          return nextItems;
+        });
       } catch (error) {
         if (!active) {
           return;
@@ -596,7 +741,14 @@ const AstrologyHome = () => {
     return () => {
       active = false;
     };
-  }, [activeSection, selectedProfile, selectedSign]);
+  }, [
+    activeKundliSnapshotId,
+    activeSection,
+    currentUser?.name,
+    kundliStorageKey,
+    selectedProfile,
+    selectedSign,
+  ]);
 
   const selectedSignDetails =
     signs.find((entry) => entry.sign === selectedSign) ||
@@ -617,6 +769,17 @@ const AstrologyHome = () => {
     setProfileDraft((currentDraft) => ({
       ...currentDraft,
       [field]: value,
+    }));
+    setSaveState({ type: "", message: "" });
+  };
+
+  const handleNotificationDraftChange = (field, value) => {
+    setProfileDraft((currentDraft) => ({
+      ...currentDraft,
+      notifications: {
+        ...currentDraft.notifications,
+        [field]: value,
+      },
     }));
     setSaveState({ type: "", message: "" });
   };
@@ -739,6 +902,18 @@ const AstrologyHome = () => {
     try {
       const result = await astrologyService.getCompatibility(selectedSign, partnerSign);
       setCompatibility(result);
+      const historyItem = {
+        id: `compatibility-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        sign: selectedSign,
+        partnerSign,
+        data: result,
+      };
+      setCompatibilityHistory((currentItems) => {
+        const nextItems = upsertHistoryItem(currentItems, historyItem);
+        saveLocalHistory(compatibilityStorageKey, nextItems);
+        return nextItems;
+      });
       setSaveState({ type: "success", message: "Compatibility calculated successfully." });
     } catch (error) {
       setCompatibility(null);
@@ -843,6 +1018,12 @@ const AstrologyHome = () => {
       });
 
       setLastBooking(booking);
+      setConsultationHistory((currentItems) =>
+        [booking, ...currentItems.filter((item) => item.id !== booking.id)].sort(
+          (left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0)
+        )
+      );
+      setRescheduleTargetId("");
       setPaymentOrder(null);
       setSaveState({
         type: "success",
@@ -869,6 +1050,15 @@ const AstrologyHome = () => {
     try {
       const order = await astrologyService.createConsultationPaymentOrder(lastBooking.id);
       setPaymentOrder(order);
+      setLastBooking((currentBooking) =>
+        currentBooking
+          ? {
+              ...currentBooking,
+              paymentOrderId: order.orderId,
+              paymentStatus: "pending",
+            }
+          : currentBooking
+      );
       const isRazorpayReady = await loadRazorpaySdk();
 
       if (!isRazorpayReady || !window.Razorpay) {
@@ -898,6 +1088,11 @@ const AstrologyHome = () => {
               signature: response.razorpay_signature,
             });
             setLastBooking(verifiedBooking);
+            setConsultationHistory((currentItems) =>
+              [verifiedBooking, ...currentItems.filter((item) => item.id !== verifiedBooking.id)].sort(
+                (left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0)
+              )
+            );
             setSaveState({
               type: "success",
               message: `Payment verified: ${verifiedBooking.confirmationCode}`,
@@ -930,6 +1125,160 @@ const AstrologyHome = () => {
       setPaymentLoading(false);
     }
   };
+
+  const handleUpdateConsultationStatus = async (bookingId, nextStatus) => {
+    if (!bookingId || !nextStatus) {
+      return;
+    }
+
+    setConsultationActionLoadingId(bookingId);
+    setSaveState({ type: "", message: "" });
+
+    try {
+      const updatedBooking = await astrologyService.updateConsultationBookingStatus(
+        bookingId,
+        nextStatus
+      );
+      setConsultationHistory((currentItems) =>
+        [updatedBooking, ...currentItems.filter((item) => item.id !== updatedBooking.id)].sort(
+          (left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0)
+        )
+      );
+      setLastBooking((currentBooking) =>
+        currentBooking?.id === updatedBooking.id ? updatedBooking : currentBooking
+      );
+      setSaveState({
+        type: "success",
+        message: `Booking ${updatedBooking.confirmationCode || updatedBooking.id} moved to ${formatStatusLabel(
+          nextStatus
+        )}.`,
+      });
+    } catch (error) {
+      setSaveState({
+        type: "error",
+        message: error.message || "Unable to update consultation booking status.",
+      });
+    } finally {
+      setConsultationActionLoadingId("");
+    }
+  };
+
+  const handleRefreshPaymentStatus = async (booking) => {
+    if (!booking?.id) {
+      return;
+    }
+
+    setPaymentRefreshLoadingId(booking.id);
+    setSaveState({ type: "", message: "" });
+
+    try {
+      const paymentStatus = await astrologyService.getConsultationPaymentStatus(booking.id);
+      const updatedBooking = {
+        ...booking,
+        paymentStatus: paymentStatus.paymentStatus || booking.paymentStatus,
+        paymentOrderId: paymentStatus.paymentOrderId || booking.paymentOrderId,
+        paymentId: paymentStatus.paymentId || booking.paymentId,
+      };
+
+      setConsultationHistory((currentItems) =>
+        [updatedBooking, ...currentItems.filter((item) => item.id !== updatedBooking.id)].sort(
+          (left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0)
+        )
+      );
+      setLastBooking((currentBooking) =>
+        currentBooking?.id === updatedBooking.id ? updatedBooking : currentBooking
+      );
+      setSaveState({
+        type: "success",
+        message: `Payment status: ${formatStatusLabel(updatedBooking.paymentStatus)}.`,
+      });
+    } catch (error) {
+      setSaveState({
+        type: "error",
+        message: error.message || "Unable to refresh payment status.",
+      });
+    } finally {
+      setPaymentRefreshLoadingId("");
+    }
+  };
+
+  const handleRestoreKundliSnapshot = (snapshot) => {
+    if (!snapshot?.data) {
+      return;
+    }
+
+    setActiveKundliSnapshotId(snapshot.id || "");
+    setKundliData(snapshot.data);
+    setSaveState({
+      type: "success",
+      message: `Loaded saved Kundli from ${formatSavedReadingDate(snapshot.createdAt)}.`,
+    });
+  };
+
+  const handleLoadLiveKundli = () => {
+    setActiveKundliSnapshotId("");
+    setSaveState({
+      type: "success",
+      message: "Switched back to live Kundli generation.",
+    });
+  };
+
+  const handleRestoreCompatibility = (historyItem) => {
+    if (!historyItem?.data) {
+      return;
+    }
+
+    setSelectedSign(historyItem.sign || selectedSign);
+    setPartnerSign(historyItem.partnerSign || partnerSign);
+    setCompatibility(historyItem.data);
+    setSaveState({
+      type: "success",
+      message: `Loaded saved compatibility run from ${formatSavedReadingDate(historyItem.createdAt)}.`,
+    });
+  };
+
+  useEffect(() => {
+    if (!lastBooking?.id || lastBooking.paymentStatus === "completed") {
+      return;
+    }
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let stopped = false;
+    const timer = window.setInterval(async () => {
+      if (stopped) {
+        return;
+      }
+
+      try {
+        const paymentStatus = await astrologyService.getConsultationPaymentStatus(lastBooking.id);
+        if (stopped || paymentStatus?.paymentStatus !== "completed") {
+          return;
+        }
+
+        const updatedBooking = {
+          ...lastBooking,
+          paymentStatus: paymentStatus.paymentStatus,
+          paymentOrderId: paymentStatus.paymentOrderId || lastBooking.paymentOrderId,
+          paymentId: paymentStatus.paymentId || lastBooking.paymentId,
+        };
+        setLastBooking(updatedBooking);
+        setConsultationHistory((currentItems) =>
+          [updatedBooking, ...currentItems.filter((item) => item.id !== updatedBooking.id)].sort(
+            (left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0)
+          )
+        );
+      } catch (error) {
+        // Silent polling failure.
+      }
+    }, 12000);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [lastBooking]);
 
   return (
     <section className="astrology-home">
@@ -1060,6 +1409,50 @@ const AstrologyHome = () => {
                 />
                 <span>{localize("Keep daily horoscope reminders enabled for this profile.", "ഈ പ്രൊഫൈലിനായി ദിന ഹോറോസ്കോപ് ഓർമ്മപ്പെടുത്തലുകൾ സജീവമാക്കുക.", language)}</span>
               </label>
+
+              <div className="astrology-notification-settings">
+                <h3>{localize("Notification settings", "അറിയിപ്പ് ക്രമീകരണങ്ങൾ", language)}</h3>
+                <label className="astrology-field astrology-checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={profileDraft.notifications.dailyHoroscope}
+                    onChange={(event) =>
+                      handleNotificationDraftChange("dailyHoroscope", event.target.checked)
+                    }
+                  />
+                  <span>{localize("Daily horoscope alerts", "ദൈനംദിന ജാതകം അറിയിപ്പുകൾ", language)}</span>
+                </label>
+                <label className="astrology-field astrology-checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={profileDraft.notifications.goodMuhurtam}
+                    onChange={(event) =>
+                      handleNotificationDraftChange("goodMuhurtam", event.target.checked)
+                    }
+                  />
+                  <span>{localize("Good muhurtham alerts", "ശുഭ മുഹൂർത്തം അറിയിപ്പുകൾ", language)}</span>
+                </label>
+                <label className="astrology-field astrology-checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={profileDraft.notifications.festivalReminders}
+                    onChange={(event) =>
+                      handleNotificationDraftChange("festivalReminders", event.target.checked)
+                    }
+                  />
+                  <span>{localize("Festival reminders", "ഉത്സവ ഓർമ്മിപ്പിക്കൽ", language)}</span>
+                </label>
+                <label className="astrology-field astrology-checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={profileDraft.notifications.dashaAlerts}
+                    onChange={(event) =>
+                      handleNotificationDraftChange("dashaAlerts", event.target.checked)
+                    }
+                  />
+                  <span>{localize("Dasha change alerts", "ദശ മാറ്റം അറിയിപ്പുകൾ", language)}</span>
+                </label>
+              </div>
 
               <button type="submit" className="astrology-save-button" disabled={savingProfile}>
                 {savingProfile
@@ -1335,11 +1728,20 @@ const AstrologyHome = () => {
                   <div className="astrology-detail-grid">
                     <article className="astrology-panel astrology-detail-card">
                       <h3>{localize("Kundli summary", "കുണ്ടലി സംഗ്രഹം", language)}</h3>
+                      <p
+                        className={`astrology-inline-message ${
+                          activeKundliSnapshotId ? "astrology-inline-message-warning" : "astrology-inline-message-success"
+                        }`}
+                      >
+                        {activeKundliSnapshotId
+                          ? localize("Showing saved snapshot.", "Saved snapshot mode.", language)
+                          : localize("Showing live generated Kundli.", "Live generation mode.", language)}
+                      </p>
                       <p>{localize("Your birth chart is anchored in strong family support and creative momentum.", "നിങ്ങളുടെ ജനന ചാർട്ട് ശക്തമായ കുടുംബ പിന്തുണയിലും സൃഷ്ടിപരമായ പ്രേരണയിലും ആധാരമുണ്ട്.", language)}</p>
                       <ul>
-                        <li>{localize("Ascendant", "ലഗ്നം", language)} : {selectedProfile.lagna || "Mesha"}</li>
-                        <li>{localize("Current Dasha", "നിലവിലെ ദശ", language)} : Venus</li>
-                        <li>{localize("Navamsa power", "നവാംശ ശക്തി", language)} : {localize("Stable and supportive", "സ്ഥിരവും പിന്തുണയുള്ളതും", language)}</li>
+                        <li>{localize("Ascendant", "ലഗ്നം", language)} : {kundliData?.birthChart?.ascendant || selectedProfile.lagna || "Mesha"}</li>
+                        <li>{localize("Current Dasha", "നിലവിലെ ദശ", language)} : {kundliData?.dasha?.current || "Venus"}</li>
+                        <li>{localize("Navamsa power", "നവാംശ ശക്തി", language)} : {kundliData?.navamsa?.balance || localize("Stable and supportive", "സ്ഥിരവും പിന്തുണയുള്ളതും", language)}</li>
                       </ul>
                     </article>
                     <article className="astrology-panel astrology-detail-card">
@@ -1355,6 +1757,42 @@ const AstrologyHome = () => {
                           ? localize("Downloading...", "ഡൗൺലോഡ് ചെയ്യുന്നു...", language)
                           : localize("Download PDF report", "PDF റിപ്പോർട്ട് ഡൗൺലോഡ് ചെയ്യുക", language)}
                       </button>
+                      {activeKundliSnapshotId ? (
+                        <button
+                          type="button"
+                          className="astrology-secondary-button"
+                          onClick={handleLoadLiveKundli}
+                        >
+                          {localize("Use live generation", "Use live generation", language)}
+                        </button>
+                      ) : null}
+                    </article>
+                    <article className="astrology-panel astrology-detail-card">
+                      <h3>{localize("Saved Kundli history", "Saved Kundli history", language)}</h3>
+                      {kundliHistory.length ? (
+                        <div className="astrology-mini-history-list">
+                          {kundliHistory.slice(0, 6).map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`astrology-mini-history-item ${
+                                activeKundliSnapshotId === item.id ? "is-active" : ""
+                              }`}
+                              onClick={() => handleRestoreKundliSnapshot(item)}
+                            >
+                              <strong>{item.profileName || localize("Profile", "Profile", language)}</strong>
+                              <span>
+                                {formatSavedReadingDate(item.createdAt)} -{" "}
+                                {astrologyService.getFallbackSign(item.sign).label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="astrology-history-empty">
+                          {localize("Your generated Kundli reports will appear here.", "Your generated Kundli reports will appear here.", language)}
+                        </p>
+                      )}
                     </article>
                   </div>
                 ) : activeSection === "match" ? (
@@ -1396,6 +1834,33 @@ const AstrologyHome = () => {
                         <p>{compatibility.keyMatch}</p>
                       </article>
                     ) : null}
+                    <article className="astrology-panel astrology-detail-card">
+                      <h3>{localize("Saved compatibility runs", "Saved compatibility runs", language)}</h3>
+                      {compatibilityHistory.length ? (
+                        <div className="astrology-mini-history-list">
+                          {compatibilityHistory.slice(0, 6).map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className="astrology-mini-history-item"
+                              onClick={() => handleRestoreCompatibility(item)}
+                            >
+                              <strong>
+                                {astrologyService.getFallbackSign(item.sign).label} x{" "}
+                                {astrologyService.getFallbackSign(item.partnerSign).label}
+                              </strong>
+                              <span>
+                                {formatSavedReadingDate(item.createdAt)} - {Number(item.data?.score || 0)}%
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="astrology-history-empty">
+                          {localize("Compatibility checks you run will be saved locally.", "Compatibility checks you run will be saved locally.", language)}
+                        </p>
+                      )}
+                    </article>
                   </div>
                 ) : activeSection === "panchangam" ? (
                   <div className="astrology-detail-grid">
@@ -1514,8 +1979,21 @@ const AstrologyHome = () => {
                           {localize("Slot", "സ്ലോട്ട്", language)}: {lastBooking.slot}
                         </p>
                         <p>
-                          {localize("Payment status", "പേയ്മെന്റ് നില", language)}: {lastBooking.paymentStatus || "pending"}
+                          {localize("Payment status", "പേയ്മെന്റ് നില", language)}:{" "}
+                          <span className={`astrology-status-pill ${getStatusClassName(lastBooking.paymentStatus)}`}>
+                            {formatStatusLabel(lastBooking.paymentStatus || "pending")}
+                          </span>
                         </p>
+                        <button
+                          type="button"
+                          className="astrology-secondary-button"
+                          disabled={paymentRefreshLoadingId === lastBooking.id}
+                          onClick={() => handleRefreshPaymentStatus(lastBooking)}
+                        >
+                          {paymentRefreshLoadingId === lastBooking.id
+                            ? localize("Refreshing...", "Refreshing...", language)
+                            : localize("Refresh payment status", "Refresh payment status", language)}
+                        </button>
                         <button
                           type="button"
                           className="astrology-save-button"
@@ -1531,8 +2009,98 @@ const AstrologyHome = () => {
                             {localize("Order ID", "ഓർഡർ ഐഡി", language)}: {paymentOrder.orderId}
                           </p>
                         ) : null}
+                        <div className="astrology-inline-actions">
+                          <button
+                            type="button"
+                            className="astrology-secondary-button"
+                            disabled={consultationActionLoadingId === lastBooking.id}
+                            onClick={() => handleUpdateConsultationStatus(lastBooking.id, "cancelled")}
+                          >
+                            {consultationActionLoadingId === lastBooking.id
+                              ? localize("Updating...", "Updating...", language)
+                              : localize("Cancel booking", "Cancel booking", language)}
+                          </button>
+                          <button
+                            type="button"
+                            className="astrology-secondary-button"
+                            onClick={() =>
+                              setRescheduleTargetId((currentId) =>
+                                currentId === lastBooking.id ? "" : lastBooking.id
+                              )
+                            }
+                          >
+                            {rescheduleTargetId === lastBooking.id
+                              ? localize("Close reschedule", "Close reschedule", language)
+                              : localize("Reschedule", "Reschedule", language)}
+                          </button>
+                        </div>
                       </article>
                     ) : null}
+                    <article className="astrology-panel astrology-detail-card">
+                      <h3>{localize("Consultation history", "Consultation history", language)}</h3>
+                      {consultationHistoryLoading ? (
+                        <p className="astrology-inline-message">
+                          {localize("Loading consultation history...", "Loading consultation history...", language)}
+                        </p>
+                      ) : null}
+                      {!consultationHistoryLoading && consultationHistory.length === 0 ? (
+                        <p className="astrology-history-empty">
+                          {localize("Your booked consultations will appear here.", "Your booked consultations will appear here.", language)}
+                        </p>
+                      ) : null}
+                      <div className="astrology-mini-history-list">
+                        {consultationHistory.slice(0, 8).map((booking) => (
+                          <div key={booking.id} className="astrology-mini-history-item is-static">
+                            <strong>
+                              {booking.consultantName || localize("Consultant", "Consultant", language)} -{" "}
+                              {booking.slot || localize("Slot pending", "Slot pending", language)}
+                            </strong>
+                            <span>
+                              {formatSavedReadingDate(booking.createdAt || booking.preferredDate)} -{" "}
+                              {formatStatusLabel(booking.status || "confirmed")} -{" "}
+                              {formatStatusLabel(booking.paymentStatus || "pending")}
+                            </span>
+                            <div className="astrology-inline-actions">
+                              <button
+                                type="button"
+                                className="astrology-secondary-button"
+                                disabled={consultationActionLoadingId === booking.id}
+                                onClick={() => handleUpdateConsultationStatus(booking.id, "cancelled")}
+                              >
+                                {consultationActionLoadingId === booking.id
+                                  ? localize("Updating...", "Updating...", language)
+                                  : localize("Cancel", "Cancel", language)}
+                              </button>
+                              <button
+                                type="button"
+                                className="astrology-secondary-button"
+                                disabled={paymentRefreshLoadingId === booking.id}
+                                onClick={() => handleRefreshPaymentStatus(booking)}
+                              >
+                                {paymentRefreshLoadingId === booking.id
+                                  ? localize("Refreshing...", "Refreshing...", language)
+                                  : localize("Refresh payment", "Refresh payment", language)}
+                              </button>
+                            </div>
+                            {rescheduleTargetId === booking.id ? (
+                              <div className="astrology-inline-actions">
+                                <button
+                                  type="button"
+                                  className="astrology-secondary-button"
+                                  disabled={consultationActionLoadingId === booking.id}
+                                  onClick={() => handleUpdateConsultationStatus(booking.id, "pending")}
+                                >
+                                  {localize("Mark as reschedule requested", "Mark as reschedule requested", language)}
+                                </button>
+                                <span className="astrology-inline-message">
+                                  {localize("Book a new slot above after marking this request.", "Book a new slot above after marking this request.", language)}
+                                </span>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </article>
                   </div>
                 ) : activeSection === "ai" ? (
                   <div className="astrology-ai-panel">
