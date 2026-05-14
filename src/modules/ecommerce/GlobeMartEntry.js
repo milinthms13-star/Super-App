@@ -81,6 +81,36 @@ const BILLING_CYCLES = [
   { id: "per_transaction", label: "Per Transaction", helper: "No subscription, only commission." },
 ];
 
+const GLOBEMART_QUICK_STATS = [
+  { label: "Active users", value: "5000+" },
+  { label: "Trusted sellers", value: "1200+" },
+  { label: "Support", value: "24/7" },
+  { label: "Regional focus", value: "Kerala-first" },
+];
+
+const GLOBEMART_VALUE_PILLARS = [
+  {
+    id: "payments",
+    title: "Secure payments",
+    description: "Protected checkout and trusted transaction flow for every order.",
+  },
+  {
+    id: "delivery",
+    title: "Hyperlocal delivery",
+    description: "Fast nearby fulfillment with real-time delivery coordination.",
+  },
+  {
+    id: "language",
+    title: "Malayalam support",
+    description: "User-friendly experience for English and Malayalam-first users.",
+  },
+  {
+    id: "ai",
+    title: "AI recommendations",
+    description: "Smarter discovery, reorder nudges, and personalized suggestions.",
+  },
+];
+
 const formatCurrency = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
 
 const normalizeTransactionFee = (value) => {
@@ -290,67 +320,113 @@ const GlobeMartEntry = ({
     setEntryMode("seller-registration");
   };
 
-  const renderEntryModeSelection = () => (
-    <section className="globemart-entry-shell" aria-label="GlobeMart entry choice">
-      <div className="globemart-entry-card globemart-entry-card-wide globemart-entry-hero">
-        <div className="globemart-entry-headline">
-          <span className="globemart-entry-kicker">GlobeMart onboarding</span>
-          <h2>Choose your GlobeMart path</h2>
-          <p>Select how you would like to use GlobeMart today and continue instantly.</p>
-        </div>
-        <div className="globemart-entry-badges" aria-label="Onboarding highlights">
-          <span>Fast setup</span>
-          <span>Secure access</span>
-          <span>Mobile ready</span>
-        </div>
-        <div className="globemart-entry-choice-grid">
-          <article className="globemart-entry-choice-card globemart-entry-choice-buyer">
-            <div className="globemart-entry-choice-top">
-              <span className="globemart-entry-choice-icon" aria-hidden="true">B</span>
-              <div>
-                <strong>Buyer access</strong>
-                <p>Browse stores, place orders, and manage deliveries from one dashboard.</p>
-              </div>
+  const renderEntryModeSelection = () => {
+    const firstName = String(loggedInUser?.name || "").trim().split(" ")[0];
+    const welcomeName = firstName || "there";
+
+    return (
+      <section className="globemart-entry-shell" aria-label="GlobeMart entry choice">
+        <div className="globemart-entry-card globemart-entry-card-wide globemart-entry-hero">
+          <div className="globemart-entry-hero-top">
+            <div className="globemart-entry-headline">
+              <span className="globemart-entry-kicker">GlobeMart onboarding</span>
+              <h2>Welcome back, {welcomeName}</h2>
+              <p>What would you like to do today? Pick a path to continue in one tap.</p>
             </div>
-            <ul className="globemart-entry-list" aria-label="Buyer features">
-              <li>Discover products and offers quickly</li>
-              <li>Track orders and returns in real time</li>
-              <li>Save favorites and reorder faster</li>
-            </ul>
-            <button type="button" className="globemart-entry-cta globemart-entry-cta-buyer" onClick={openBuyerPage}>
-              Continue as Buyer
-            </button>
-          </article>
-          <article className="globemart-entry-choice-card globemart-entry-choice-seller">
-            <div className="globemart-entry-choice-top">
-              <span className="globemart-entry-choice-icon" aria-hidden="true">S</span>
-              <div>
-                <strong>Seller access</strong>
-                <p>List products, manage your shop, and onboard as a GlobeMart seller.</p>
+            <aside className="globemart-entry-visual" aria-label="GlobeMart quick highlights">
+              <strong>Marketplace Pulse</strong>
+              <p>Everything you need in one super app flow.</p>
+              <div className="globemart-entry-visual-pills">
+                <span>Buyer checkout</span>
+                <span>Seller payouts</span>
+                <span>Live support</span>
               </div>
+            </aside>
+          </div>
+          <div className="globemart-entry-badges" aria-label="Onboarding highlights">
+            <span>Fast setup</span>
+            <span>Secure access</span>
+            <span>Mobile ready</span>
+            <span>Kerala focused</span>
+          </div>
+          <div className="globemart-entry-choice-grid">
+            <article className="globemart-entry-choice-card globemart-entry-choice-buyer">
+              <div className="globemart-entry-choice-top">
+                <span className="globemart-entry-choice-icon" aria-hidden="true">B</span>
+                <div>
+                  <strong>Buyer access</strong>
+                  <p>Browse stores, place orders, and manage deliveries from one dashboard.</p>
+                </div>
+              </div>
+              <ul className="globemart-entry-list" aria-label="Buyer features">
+                <li>Discover products and offers quickly</li>
+                <li>Track orders and returns in real time</li>
+                <li>Save favorites and reorder faster</li>
+              </ul>
+              <div className="globemart-entry-trust-row" aria-label="Buyer trust indicators">
+                <span>10k+ buyers</span>
+                <span>Fast reorder</span>
+                <span>Secure checkout</span>
+              </div>
+              <button type="button" className="globemart-entry-cta globemart-entry-cta-buyer" onClick={openBuyerPage}>
+                Continue as Buyer ->
+              </button>
+            </article>
+            <article className="globemart-entry-choice-card globemart-entry-choice-seller">
+              <div className="globemart-entry-choice-top">
+                <span className="globemart-entry-choice-icon" aria-hidden="true">S</span>
+                <div>
+                  <strong>Seller access</strong>
+                  <p>List products, manage your shop, and onboard as a GlobeMart seller.</p>
+                </div>
+              </div>
+              <ul className="globemart-entry-list" aria-label="Seller features">
+                <li>Launch your storefront with guided steps</li>
+                <li>Control inventory, pricing, and payouts</li>
+                <li>Access seller analytics and growth tools</li>
+              </ul>
+              <div className="globemart-entry-trust-row" aria-label="Seller trust indicators">
+                <span>Secure payouts</span>
+                <span>Guided onboarding</span>
+                <span>Growth insights</span>
+              </div>
+              <button type="button" className="globemart-entry-cta globemart-entry-cta-seller" onClick={openSellerFlow}>
+                Continue as Seller ->
+              </button>
+              {sellerRegistration?.registeredAt ? (
+                <p className="globemart-entry-note">
+                  Seller onboarding completed on {new Date(sellerRegistration.registeredAt).toLocaleDateString("en-IN")} ({sellerRegistration.sellerStatus}).
+                </p>
+              ) : !isNativeSeller ? (
+                <p className="globemart-entry-note">
+                  New seller? You will be guided through seller registration after choosing Seller.
+                </p>
+              ) : null}
+            </article>
+          </div>
+          <div className="globemart-entry-stats" aria-label="Marketplace quick stats">
+            {GLOBEMART_QUICK_STATS.map((item) => (
+              <article key={item.label} className="globemart-entry-stat">
+                <strong>{item.value}</strong>
+                <span>{item.label}</span>
+              </article>
+            ))}
+          </div>
+          <section className="globemart-entry-why" aria-label="Why choose GlobeMart">
+            <h3>Why choose GlobeMart?</h3>
+            <div className="globemart-entry-why-grid">
+              {GLOBEMART_VALUE_PILLARS.map((pillar) => (
+                <article key={pillar.id} className="globemart-entry-why-card">
+                  <strong>{pillar.title}</strong>
+                  <p>{pillar.description}</p>
+                </article>
+              ))}
             </div>
-            <ul className="globemart-entry-list" aria-label="Seller features">
-              <li>Launch your storefront with guided steps</li>
-              <li>Control inventory, pricing, and payouts</li>
-              <li>Access seller analytics and growth tools</li>
-            </ul>
-            <button type="button" className="globemart-entry-cta globemart-entry-cta-seller" onClick={openSellerFlow}>
-              Continue as Seller
-            </button>
-            {sellerRegistration?.registeredAt ? (
-              <p className="globemart-entry-note">
-                Seller onboarding completed on {new Date(sellerRegistration.registeredAt).toLocaleDateString("en-IN")} ({sellerRegistration.sellerStatus}).
-              </p>
-            ) : !isNativeSeller ? (
-              <p className="globemart-entry-note">
-                New seller? You will be guided through seller registration after choosing Seller.
-              </p>
-            ) : null}
-          </article>
+          </section>
         </div>
-      </div>
-    </section>
-  );
+      </section>
+    );
+  };
 
   const updateField = (section, field, value) => {
     setFormState((current) => ({

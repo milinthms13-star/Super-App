@@ -53,26 +53,49 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 const uploadsDirectory = path.join(__dirname, 'uploads');
-const configuredFrontendOrigins = String(process.env.FRONTEND_URL || '')
+const DEFAULT_FRONTEND_ORIGINS = [
+  'https://super-app-7j9x.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+];
+
+const normalizeOrigin = (origin) =>
+  String(origin || '')
+    .trim()
+    .replace(/\/$/, '');
+
+const configuredFrontendOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_URL,
+  process.env.WEB_URL,
+  DEFAULT_FRONTEND_ORIGINS.join(','),
+]
+  .filter(Boolean)
+  .join(',')
   .split(',')
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 
+const allowedOriginSet = new Set(configuredFrontendOrigins);
+
 const corsOrigin = (origin, callback) => {
+  const normalizedOrigin = normalizeOrigin(origin);
+
   if (
     !origin ||
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1') ||
+    normalizedOrigin.includes('localhost') ||
+    normalizedOrigin.includes('127.0.0.1') ||
     configuredFrontendOrigins.length === 0 ||
     configuredFrontendOrigins.includes('*') ||
-    configuredFrontendOrigins.includes(origin)
+    allowedOriginSet.has(normalizedOrigin)
   ) {
     callback(null, true);
     return;
   }
 
-  logger.warn(`CORS origin not allowed: ${origin}`);
-  callback(null, true);
+  logger.warn(`CORS origin blocked: ${normalizedOrigin || 'unknown'}`);
+  callback(new Error('Not allowed by CORS'));
 };
 
 app.use(helmet());

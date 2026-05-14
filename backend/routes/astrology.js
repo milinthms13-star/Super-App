@@ -848,6 +848,10 @@ router.put('/profile', authenticate, async (req, res) => {
         req.body?.birthPlace !== undefined
           ? sanitizeText(req.body.birthPlace, 120)
           : sanitizeText(existingProfile?.birthPlace, 120),
+      nakshatra:
+        req.body?.nakshatra !== undefined
+          ? sanitizeText(req.body.nakshatra, 40)
+          : sanitizeText(existingProfile?.nakshatra, 40),
       gender:
         req.body?.gender !== undefined
           ? sanitizeText(req.body.gender, 30).toLowerCase()

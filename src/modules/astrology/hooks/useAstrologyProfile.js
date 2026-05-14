@@ -152,6 +152,7 @@ export const useAstrologyProfile = ({
         birthDate: profileDraft.birthDate,
         birthTime: profileDraft.birthTime,
         birthPlace: profileDraft.birthPlace,
+        nakshatra: profileDraft.nakshatra,
         gender: profileDraft.gender,
         preferences: {
           receiveDailyHoroscope: profileDraft.receiveDailyHoroscope,

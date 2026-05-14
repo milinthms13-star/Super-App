@@ -13,6 +13,10 @@ let io;
 const userSockets = new Map(); // userId -> Set of socket IDs
 const userStatus = new Map(); // userId -> { status, lastSeen }
 const normalizeUserKey = (userId) => (userId?.toString ? userId.toString() : String(userId || ''));
+const normalizeOrigin = (origin) =>
+  String(origin || '')
+    .trim()
+    .replace(/\/$/, '');
 
 const resolveCallRelayTarget = async (callId, senderUserId, preferredTargetId = '') => {
   if (!callId) {
@@ -50,23 +54,38 @@ const resolveCallRelayTarget = async (callId, senderUserId, preferredTargetId = 
 };
 
 const initializeWebSocket = (server, options = {}) => {
-  const allowedSocketOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000,http://localhost:3001,http://localhost:3002')
+  const allowedSocketOrigins = [
+    process.env.FRONTEND_URL,
+    process.env.CLIENT_URL,
+    process.env.WEB_URL,
+    'https://super-app-7j9x.onrender.com',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+  ]
+    .filter(Boolean)
+    .join(',')
     .split(',')
-    .map((origin) => origin.trim().replace(/\/$/, '')) // Remove trailing slashes
+    .map((origin) => normalizeOrigin(origin))
     .filter(Boolean);
+  const allowedSocketOriginSet = new Set(allowedSocketOrigins);
 
   io = socketIo(server, {
     cors: {
       origin: (origin, callback) => {
-        // Allow localhost, undefined, or configured origins
-        if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1') || allowedSocketOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          callback(null, true); // Allow for production debugging
-        }
+        const normalizedOrigin = normalizeOrigin(origin);
+        const isAllowed =
+          !origin ||
+          normalizedOrigin.includes('localhost') ||
+          normalizedOrigin.includes('127.0.0.1') ||
+          allowedSocketOrigins.length === 0 ||
+          allowedSocketOriginSet.has(normalizedOrigin);
+
+        callback(isAllowed ? null : new Error('Socket origin not allowed'), isAllowed);
       },
       credentials: true,
-      methods: ['GET', 'POST'],
+      methods: ['GET', 'POST', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
     },
     transports: ['websocket', 'polling'],
     maxHttpBufferSize: 1e7, // 10MB

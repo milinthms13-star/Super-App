@@ -230,6 +230,7 @@ const createProfileDraft = (profile = null) => ({
   birthDate: profile?.birthDate || "",
   birthTime: profile?.birthTime || "",
   birthPlace: profile?.birthPlace || "",
+  nakshatra: profile?.nakshatra || "",
   gender: profile?.gender || "",
   receiveDailyHoroscope: profile?.preferences?.receiveDailyHoroscope !== false,
   favoriteTopics: Array.isArray(profile?.preferences?.favoriteTopics)
@@ -583,6 +584,10 @@ const AstrologyHome = () => {
                   <input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} />
                 </label>
                 <label className="astrology-field">
+                  <span>{localize("Birth star (Nakshatra)", "ജനന നക്ഷത്രം", language)}</span>
+                  <input type="text" value={profileApi.profileDraft.nakshatra} onChange={(event) => profileApi.handleDraftChange("nakshatra", event.target.value)} />
+                </label>
+                <label className="astrology-field">
                   <span>{localize("Gender", "ലിംഗം", language)}</span>
                   <select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>
                     {GENDER_OPTIONS.map((option) => (
@@ -601,7 +606,7 @@ const AstrologyHome = () => {
               <h3>{localize("Instant Preview", "തൽക്ഷണ പ്രിവ്യൂ", language)}</h3>
               <ul>
                 <li><span>{localize("Rashi", "രാശി", language)}</span><strong>{getRashiFromSign(selectedSign)}</strong></li>
-                <li><span>{localize("Nakshatra", "നക്ഷത്രം", language)}</span><strong>{getNakshatraFromSign(selectedSign)}</strong></li>
+                <li><span>{localize("Nakshatra", "നക്ഷത്രം", language)}</span><strong>{profileApi.profileDraft.nakshatra || getNakshatraFromSign(selectedSign)}</strong></li>
                 <li><span>{localize("Lucky color", "ഭാഗ്യനിറം", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></li>
                 <li><span>{localize("Lucky number", "ഭാഗ്യസംഖ്യ", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></li>
                 <li><span>{localize("Today energy", "ഇന്നത്തെ ഊർജം", language)}</span><strong>{todayEnergyScore}/10</strong></li>
@@ -675,7 +680,7 @@ const AstrologyHome = () => {
                   <article className="astrology-panel astro-result-card"><h4>Career advice</h4><p>{getCareerAdvice(selectedSign)}</p></article>
                   <article className="astrology-panel astro-result-card"><h4>Finance advice</h4><p>{getFinanceAdvice(selectedSign)}</p></article>
                   <article className="astrology-panel astro-result-card"><h4>Remedies</h4><ul>{getRemedyTips(selectedSign).map((tip) => <li key={tip}>{tip}</li>)}</ul></article>
-                  <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {panchangam?.nakshatra || getNakshatraFromSign(selectedSign)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
+                  <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {panchangam?.nakshatra || profileApi.profileDraft.nakshatra || getNakshatraFromSign(selectedSign)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
                   <article className="astrology-panel astro-result-card">
                     <h4>Horoscope actions</h4>
                     <button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate horoscope report</button>
@@ -701,6 +706,7 @@ const AstrologyHome = () => {
                   <label className="astrology-field"><span>Date of birth</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
                   <label className="astrology-field"><span>Time of birth</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
                   <label className="astrology-field"><span>Place of birth</span><input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Birth star (Nakshatra)</span><input type="text" value={profileApi.profileDraft.nakshatra} onChange={(event) => profileApi.handleDraftChange("nakshatra", event.target.value)} /></label>
                   <label className="astrology-field"><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Topic / question</span><input type="text" value={question} onChange={(event) => setQuestion(event.target.value)} /></label>
                 </div>
