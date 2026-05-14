@@ -120,6 +120,15 @@ const DEFAULT_MESSAGE_PAGINATION = {
 const EMERGENCY_CALL_STORAGE_KEY = 'malabarbazaar-emergency-call';
 const MESSAGE_OUTBOX_RETRY_LIMIT = 5;
 const LINKUP_THEME_STORAGE_KEY = 'linkup-theme-variant';
+const SUPERAPP_QUICK_ACTIONS = [
+  { id: 'voice', icon: '🎤', label: 'Voice note' },
+  { id: 'camera', icon: '📷', label: 'Camera / media' },
+  { id: 'location', icon: '📍', label: 'Share location' },
+  { id: 'money', icon: '💸', label: 'Send money' },
+  { id: 'product', icon: '🛒', label: 'Share product' },
+  { id: 'ride', icon: '🚕', label: 'Share ride' },
+  { id: 'property', icon: '🏠', label: 'Share property' },
+];
 
 const readStoredLinkUpTheme = () => {
   if (typeof window === 'undefined') {
@@ -785,16 +794,6 @@ const Messaging = () => {
     ],
     [chats.length, unreadChatsCount]
   );
-
-  const messagingStatusPills = useMemo(() => {
-    const encryptionStatus = encryptionEnabled ? 'Encryption on' : 'Encryption available';
-    return [
-      encryptionStatus,
-      isOnline ? 'Online' : 'Offline',
-      isNetworkOnline ? 'Synced' : 'Sync paused',
-      'Realtime',
-    ];
-  }, [encryptionEnabled, isNetworkOnline, isOnline]);
 
   const handleEmptyStateQuickAction = useCallback((action) => {
     if (action === 'community') {
@@ -2541,6 +2540,41 @@ const Messaging = () => {
     setShowAISuggestions(false);
   };
 
+  const handleSuperappQuickAction = async (actionId) => {
+    if (!selectedChat?._id) {
+      setActiveTab('chats');
+      setShowNewChat(true);
+      return;
+    }
+
+    if (actionId === 'camera') {
+      setShowFileUpload(true);
+      return;
+    }
+
+    if (actionId === 'voice') {
+      await handleSendMessage('🎤 Voice note mode: tap and hold the mic button in the composer.', 'text');
+      return;
+    }
+
+    if (actionId === 'location') {
+      await handleSendMessage('📍 Sharing my current location now. Please wait a moment...', 'location');
+      return;
+    }
+
+    const templateMap = {
+      money: '💸 Payment request: Please share amount and preferred method (UPI/Bank).',
+      product: '🛒 Sharing a product from GlobeMart. Send item name to generate a quick card.',
+      ride: '🚕 Ride share: Share pickup, destination, and time.',
+      property: '🏠 Property share: Send listing details for quick preview.',
+    };
+
+    const templateMessage = templateMap[actionId];
+    if (templateMessage) {
+      await handleSendMessage(templateMessage, 'text');
+    }
+  };
+
   const handleToggleEncryption = async () => {
     if (!selectedChat?._id) {
       return;
@@ -2681,7 +2715,7 @@ const Messaging = () => {
       )}
 
       <div className="messaging-layout">
-        <div className="messaging-sidebar">
+        <div className="messaging-sidebar linkup-chat-rail">
           <div className="sidebar-header">
             <div className="sidebar-tabs">
               <button
@@ -2689,35 +2723,40 @@ const Messaging = () => {
                 onClick={() => setActiveTab('chats')}
                 type="button"
               >
-                Chats
+                <span className="tab-icon">💬</span>
+                <span>Chats</span>
               </button>
               <button
                 className={`tab-btn ${activeTab === 'chatrooms' ? 'active' : ''}`}
                 onClick={() => setActiveTab('chatrooms')}
                 type="button"
               >
-                Chatrooms
+                <span className="tab-icon">🔥</span>
+                <span>Rooms</span>
               </button>
               <button
                 className={`tab-btn ${activeTab === 'contacts' ? 'active' : ''}`}
                 onClick={() => setActiveTab('contacts')}
                 type="button"
               >
-                Contacts
+                <span className="tab-icon">👥</span>
+                <span>People</span>
               </button>
               <button
                 className={`tab-btn ${activeTab === 'invitations' ? 'active' : ''}`}
                 onClick={() => setActiveTab('invitations')}
                 type="button"
               >
-                {`Invites${pendingInvitations.length > 0 ? ` (${pendingInvitations.length})` : ''}`}
+                <span className="tab-icon">✉️</span>
+                <span>{`Invites${pendingInvitations.length > 0 ? ` (${pendingInvitations.length})` : ''}`}</span>
               </button>
               <button
                 className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
                 type="button"
               >
-                Settings
+                <span className="tab-icon">⚙️</span>
+                <span>Settings</span>
               </button>
             </div>
             <div className="sidebar-tools">
@@ -3079,43 +3118,111 @@ const Messaging = () => {
               </div>
             )
           ) : selectedChat ? (
-            <>
-              <ChatWindow
-                chat={selectedChat}
-                messages={messages}
-                onSendMessage={handleSendMessage}
-                onEditMessage={handleEditMessage}
-                onDeleteMessage={handleDeleteMessage}
-                onToggleImportant={handleToggleImportant}
-                onAddReaction={handleAddReaction}
-                onSearchMessages={handleSearchMessages}
-                onTyping={handleTyping}
-                typingUsers={typingUsers}
-                encryptionEnabled={encryptionEnabled}
-                onToggleEncryption={handleToggleEncryption}
-                onStartCall={handleStartCall}
-                onOpenFileUpload={() => setShowFileUpload(true)}
-                onSendVoiceMessage={handleVoiceNoteRecorded}
-                sendingVoiceMessage={sendingVoiceNote}
-                focusedMessageId={focusedMessageId}
-                onFocusHandled={() => setFocusedMessageId('')}
-                totalMessages={messagePagination.total}
-                canShowOlderMessages={!selectedChatClearedAt && loadedMessagePages < (messagePagination.pages || 1)}
-                hasOlderMessagesLoaded={!selectedChatClearedAt && loadedMessagePages > 1}
-                loadingOlderMessages={loadingOlderMessages}
-                onShowOlderMessages={handleShowOlderMessages}
-                onShowLatestOnly={handleShowLatestOnly}
-                onClearChat={handleClearChat}
-                onRestoreClearedChat={handleRestoreClearedChat}
-                isChatCleared={Boolean(selectedChatClearedAt)}
-                onDeleteAllMessages={handleDeleteAllMessages}
-                onRetryMessage={handleRetryMessage}
-                onExportChat={handleExportChat}
-                showAISuggestions={showAISuggestions}
-                latestMessageId={latestMessageId}
-                onSelectAISuggestion={handleAISuggestionSelect}
-                familyAccessPolicy={selectedChatFamilyAccessPolicy}
-              />
+            <div className="linkup-conversation-workspace">
+              <div className="linkup-conversation-pane">
+                <ChatWindow
+                  chat={selectedChat}
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  onEditMessage={handleEditMessage}
+                  onDeleteMessage={handleDeleteMessage}
+                  onToggleImportant={handleToggleImportant}
+                  onAddReaction={handleAddReaction}
+                  onSearchMessages={handleSearchMessages}
+                  onTyping={handleTyping}
+                  typingUsers={typingUsers}
+                  encryptionEnabled={encryptionEnabled}
+                  onToggleEncryption={handleToggleEncryption}
+                  onStartCall={handleStartCall}
+                  onOpenFileUpload={() => setShowFileUpload(true)}
+                  onSendVoiceMessage={handleVoiceNoteRecorded}
+                  sendingVoiceMessage={sendingVoiceNote}
+                  focusedMessageId={focusedMessageId}
+                  onFocusHandled={() => setFocusedMessageId('')}
+                  totalMessages={messagePagination.total}
+                  canShowOlderMessages={!selectedChatClearedAt && loadedMessagePages < (messagePagination.pages || 1)}
+                  hasOlderMessagesLoaded={!selectedChatClearedAt && loadedMessagePages > 1}
+                  loadingOlderMessages={loadingOlderMessages}
+                  onShowOlderMessages={handleShowOlderMessages}
+                  onShowLatestOnly={handleShowLatestOnly}
+                  onClearChat={handleClearChat}
+                  onRestoreClearedChat={handleRestoreClearedChat}
+                  isChatCleared={Boolean(selectedChatClearedAt)}
+                  onDeleteAllMessages={handleDeleteAllMessages}
+                  onRetryMessage={handleRetryMessage}
+                  onExportChat={handleExportChat}
+                  showAISuggestions={showAISuggestions}
+                  latestMessageId={latestMessageId}
+                  onSelectAISuggestion={handleAISuggestionSelect}
+                  familyAccessPolicy={selectedChatFamilyAccessPolicy}
+                />
+              </div>
+
+              <aside className="linkup-smart-sidebar" aria-label="LinkUp smart tools">
+                <section className="linkup-smart-card">
+                  <h4>Quick actions</h4>
+                  <div className="linkup-quick-action-grid">
+                    {SUPERAPP_QUICK_ACTIONS.map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        className="linkup-quick-action-btn"
+                        onClick={() => handleSuperappQuickAction(action.id)}
+                      >
+                        <span className="quick-action-icon">{action.icon}</span>
+                        <span>{action.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="linkup-smart-card">
+                  <h4>AI assist</h4>
+                  <div className="linkup-ai-hint-list">
+                    {aiAssistantHints.map((hint) => (
+                      <button
+                        key={hint}
+                        type="button"
+                        className="linkup-ai-hint-btn"
+                        onClick={() => setShowAISuggestions(true)}
+                      >
+                        {hint}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="linkup-smart-card">
+                  <h4>Live now</h4>
+                  <div className="messaging-online-user-list">
+                    {onlineContactsPreview.slice(0, 5).map((entry) => (
+                      <span key={entry.id} className="messaging-online-user-chip">
+                        <span className="messaging-online-dot"></span>
+                        {entry.name}
+                      </span>
+                    ))}
+                    {onlineContactsPreview.length === 0 && (
+                      <p className="messaging-insight-empty">No contacts online right now.</p>
+                    )}
+                  </div>
+                </section>
+
+                <section className="linkup-smart-card">
+                  <h4>Recent shares</h4>
+                  {recentSharedItems.length > 0 ? (
+                    <ul className="messaging-insight-bullets">
+                      {recentSharedItems.slice(0, 4).map((item) => (
+                        <li key={`${item.id}-${item.type}`}>
+                          <span>{item.title}</span>
+                          <em>{item.type}</em>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="messaging-insight-empty">Shared files and media will appear here.</p>
+                  )}
+                </section>
+              </aside>
 
               {showFileUpload && (
                 <FileUpload
@@ -3134,7 +3241,7 @@ const Messaging = () => {
                   onDeclineCall={handleDeclineCall}
                 />
               )}
-            </>
+            </div>
           ) : (
             <div className="messaging-empty-state messaging-empty-state-rich">
               <div className="messaging-empty-shell">
@@ -3146,12 +3253,11 @@ const Messaging = () => {
                       : 'Start with a quick action, or create your first conversation.'}
                   </p>
                 </div>
-                <div className="messaging-status-pills" aria-label="Platform status">
-                  {messagingStatusPills.map((statusLabel) => (
-                    <span key={statusLabel} className="messaging-status-pill">
-                      {statusLabel}
-                    </span>
-                  ))}
+                <div className="messaging-live-strip" aria-label="LinkUp live activity">
+                  <span className="live-strip-pill">{isOnline ? '🟢 Live network' : '🟠 Reconnecting'}</span>
+                  <span className="live-strip-pill">{unreadChatsCount} unread</span>
+                  <span className="live-strip-pill">{activeNowCount} online now</span>
+                  <span className="live-strip-pill">Typing + presence active</span>
                 </div>
 
                 {chats.length === 0 ? (
@@ -3161,28 +3267,13 @@ const Messaging = () => {
                   />
                 ) : (
                   <>
-                <div className="messaging-empty-metrics">
-                  <div className="messaging-empty-metric">
-                    <span className="metric-label">Active chats</span>
-                    <strong>{chats.length}</strong>
-                  </div>
-                  <div className="messaging-empty-metric">
-                    <span className="metric-label">Unread</span>
-                    <strong>{unreadChatsCount}</strong>
-                  </div>
-                  <div className="messaging-empty-metric">
-                    <span className="metric-label">Online now</span>
-                    <strong>{activeNowCount}</strong>
-                  </div>
-                </div>
-
                 <div className="messaging-empty-actions">
                   <button
                     type="button"
                     className="messaging-empty-action-btn primary"
                     onClick={() => setShowNewChat(true)}
                   >
-                    {encryptionEnabled ? 'Start Encrypted Conversation' : 'Start New Conversation'}
+                    Start New Conversation
                   </button>
                   <button
                     type="button"
@@ -3190,6 +3281,20 @@ const Messaging = () => {
                     onClick={() => setActiveTab('chatrooms')}
                   >
                     Explore Rooms
+                  </button>
+                  <button
+                    type="button"
+                    className="messaging-empty-action-btn"
+                    onClick={() => setShowNewChat(true)}
+                  >
+                    Nearby People
+                  </button>
+                  <button
+                    type="button"
+                    className="messaging-empty-action-btn"
+                    onClick={() => setShowAISuggestions(true)}
+                  >
+                    AI Icebreaker
                   </button>
                 </div>
 
@@ -3295,11 +3400,11 @@ const Messaging = () => {
                   </section>
 
                   <section className="messaging-insight-card messaging-insight-card-wide">
-                    <h4>Secure messaging highlights</h4>
+                    <h4>LinkUp social energy</h4>
                     <ul className="messaging-insight-bullets">
-                      <li>End-to-end encrypted transport for live chats and calls</li>
-                      <li>Delivery syncing across devices with retry-aware queueing</li>
-                      <li>Realtime presence, typing indicators, and unread badges</li>
+                      <li>Jump back into active chats with unread badges and typing previews.</li>
+                      <li>Share superapp items directly: rides, products, property, and payments.</li>
+                      <li>Use AI to translate, polish replies, and draft quick business responses.</li>
                     </ul>
                   </section>
                 </div>

@@ -7014,3 +7014,167 @@
   color: #bfdbfe;
 }
 
+
+/* LinkUp chat-first redesign overrides */
+.messaging-container.linkup-premium .messaging-layout {
+  grid-template-columns: 290px minmax(0, 1fr);
+}
+
+.messaging-container.linkup-premium .linkup-chat-rail .sidebar-tabs {
+  gap: 6px;
+  padding: 0.65rem;
+  border-bottom: none;
+  flex-wrap: wrap;
+}
+
+.messaging-container.linkup-premium .linkup-chat-rail .tab-btn {
+  flex: 1 1 calc(50% - 6px);
+  min-width: 124px;
+  border-radius: 12px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(33, 83, 106, 0.12);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.messaging-container.linkup-premium .linkup-chat-rail .tab-btn .tab-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.messaging-container.linkup-premium .linkup-chat-rail .tab-btn.active {
+  background: linear-gradient(135deg, rgba(20, 92, 86, 0.16), rgba(193, 155, 74, 0.2));
+  border-color: rgba(20, 92, 86, 0.36);
+  color: #0f4743;
+}
+
+.messaging-container.linkup-premium .linkup-conversation-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 0;
+  min-height: 100%;
+}
+
+.messaging-container.linkup-premium .linkup-conversation-pane {
+  min-width: 0;
+}
+
+.messaging-container.linkup-premium .linkup-smart-sidebar {
+  border-left: 1px solid rgba(20, 92, 86, 0.12);
+  background: linear-gradient(180deg, rgba(248, 253, 253, 0.96), rgba(238, 248, 246, 0.94));
+  padding: 14px 12px;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.messaging-container.linkup-premium .linkup-smart-card {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(20, 92, 86, 0.12);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.messaging-container.linkup-premium .linkup-smart-card h4 {
+  margin: 0 0 10px;
+  font-size: 0.92rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #1d5b55;
+}
+
+.messaging-container.linkup-premium .linkup-quick-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.messaging-container.linkup-premium .linkup-quick-action-btn {
+  border: 1px solid rgba(20, 92, 86, 0.15);
+  border-radius: 12px;
+  min-height: 60px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #134441;
+  cursor: pointer;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.messaging-container.linkup-premium .linkup-quick-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(7, 42, 39, 0.12);
+}
+
+.messaging-container.linkup-premium .linkup-quick-action-btn .quick-action-icon {
+  font-size: 1rem;
+}
+
+.messaging-container.linkup-premium .linkup-ai-hint-list {
+  display: grid;
+  gap: 8px;
+}
+
+.messaging-container.linkup-premium .linkup-ai-hint-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(20, 92, 86, 0.16);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #184844;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.messaging-container.linkup-premium .linkup-ai-hint-btn:hover {
+  background: rgba(20, 92, 86, 0.08);
+}
+
+.messaging-container.linkup-premium .messaging-live-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.messaging-container.linkup-premium .live-strip-pill {
+  border: 1px solid rgba(20, 92, 86, 0.14);
+  background: rgba(255, 255, 255, 0.8);
+  color: #1f5954;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+@media (max-width: 1220px) {
+  .messaging-container.linkup-premium .linkup-conversation-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .messaging-container.linkup-premium .linkup-smart-sidebar {
+    border-left: none;
+    border-top: 1px solid rgba(20, 92, 86, 0.12);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .messaging-container.linkup-premium .linkup-chat-rail .tab-btn {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 120px;
+  }
+
+  .messaging-container.linkup-premium .linkup-smart-sidebar {
+    grid-template-columns: 1fr;
+  }
+}
