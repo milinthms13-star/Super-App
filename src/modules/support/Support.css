@@ -29,11 +29,29 @@
   opacity: 0.9;
 }
 
+.support-action-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
 .support-filters {
   display: flex;
   gap: 1rem;
   margin-bottom: 2rem;
   flex-wrap: wrap;
+}
+
+.filter-input {
+  flex: 1.5;
+  min-width: 220px;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 0.95rem;
 }
 
 .filter-select {
@@ -76,6 +94,27 @@
 .btn-primary:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+}
+
+.support-create-mobile {
+  display: none;
+}
+
+.toast-banner {
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  margin: 1rem 0;
+  font-weight: 600;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #e6ffed 0%, #d4f8dd 100%);
+  color: #18631a;
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #ffe7e7 0%, #ffdddd 100%);
+  color: #7a1f1f;
 }
 
 .btn-primary:disabled {
@@ -181,6 +220,14 @@
   }
 }
 
+@media (max-width: 768px) {
+  .support-create-mobile {
+    display: inline-flex;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 480px) {
   .support-header h1 {
     font-size: 1.5rem;
@@ -188,5 +235,86 @@
 
   .btn {
     width: 100%;
+  }
+
+  .support-action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-input,
+  .filter-select {
+    min-width: auto;
+    width: 100%;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .support-container,
+  .support-header,
+  .support-action-row,
+  .support-filters,
+  .btn,
+  .filter-select,
+  .filter-input,
+  .ticket-list-container,
+  .ticket-item,
+  .create-ticket-card,
+  .ticket-details-container,
+  .ticket-description-section,
+  .ticket-messages-section,
+  .message-form,
+  .feedback-section,
+  .support-admin-panel,
+  .support-admin-list,
+  .support-admin-detail-panel {
+    background: #111827;
+    color: #e5e7eb;
+    border-color: #2d3748;
+  }
+
+  .support-header {
+    background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
+  }
+
+  .btn-outline {
+    background: #1f2937;
+    color: #e5e7eb;
+    border-color: #4b5563;
+  }
+
+  .filter-select,
+  .filter-input,
+  .form-group input,
+  .form-group textarea,
+  .form-group select {
+    background: #1f2937;
+    border-color: #374151;
+    color: #e5e7eb;
+  }
+
+  .ticket-item,
+  .create-ticket-card,
+  .ticket-details-header,
+  .ticket-info-grid,
+  .ticket-description-section,
+  .ticket-messages-section,
+  .message-form,
+  .feedback-section,
+  .empty-state {
+    background: #111827;
+    border-color: #334155;
+  }
+
+  .alert-error {
+    background: #4b1212;
+    color: #fca5a5;
+    border-color: #881515;
+  }
+
+  .alert-success {
+    background: #052e16;
+    color: #86efac;
+    border-color: #15803d;
   }
 }

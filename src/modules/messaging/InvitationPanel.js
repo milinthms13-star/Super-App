@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 
-const InvitationPanel = ({ invitations, onAccept, onReject, loading }) => {
+const InvitationPanel = ({
+  invitations,
+  onAccept,
+  onReject,
+  loading,
+  feedback,
+  invitationStatuses = {},
+  actionLoading = {},
+}) => {
   const [expandedId, setExpandedId] = useState(null);
 
   if (loading) {
@@ -25,10 +33,17 @@ const InvitationPanel = ({ invitations, onAccept, onReject, loading }) => {
         <h3>Pending Invitations ({invitations.length})</h3>
         <p>Review connection requests before opening a chat.</p>
       </div>
+      {feedback?.message ? (
+        <div className={`invitation-feedback-banner ${feedback.type || 'info'}`}>
+          {feedback.message}
+        </div>
+      ) : null}
 
       <div className="invitations-list">
         {invitations.map((invitation) => {
           const isExpanded = expandedId === invitation._id;
+          const status = invitationStatuses[String(invitation._id)] || '';
+          const isPending = Boolean(actionLoading[String(invitation._id)]);
 
           return (
             <div key={invitation._id} className="invitation-card">
@@ -38,6 +53,11 @@ const InvitationPanel = ({ invitations, onAccept, onReject, loading }) => {
                   <p className="sender-handle">@{invitation.senderUsername}</p>
                   {invitation.message ? (
                     <p className="invitation-message">{invitation.message}</p>
+                  ) : null}
+                  {status ? (
+                    <p className={`invitation-status-chip ${status}`}>
+                      {status === 'accepted' ? 'Accepted' : status === 'rejected' ? 'Rejected' : status}
+                    </p>
                   ) : null}
                 </div>
 
@@ -56,13 +76,15 @@ const InvitationPanel = ({ invitations, onAccept, onReject, loading }) => {
                     className="btn-accept"
                     type="button"
                     onClick={() => onAccept(invitation._id)}
+                    disabled={isPending || status === 'accepted'}
                   >
-                    Accept
+                    {isPending ? 'Saving...' : 'Accept'}
                   </button>
                   <button
                     className="btn-reject"
                     type="button"
                     onClick={() => onReject(invitation._id)}
+                    disabled={isPending || status === 'rejected'}
                   >
                     Reject
                   </button>

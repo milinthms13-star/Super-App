@@ -1070,24 +1070,110 @@ const RealEstate = () => {
                   {selectedProperty.whatsappNumber ? <span>WhatsApp: {selectedProperty.whatsappNumber}</span> : null}
                 </div>
 
-                <div className="realestate-trust-badges">
-                  <span className="realestate-trust-badge kyc">
-                    <strong>KYC Verified Owner</strong>
-                  </span>
-                  <span className="realestate-trust-badge rera">
-                    <strong>RERA: {selectedProperty.reraNumber || "Pending"}</strong>
-                  </span>
-                  <span className="realestate-trust-badge docs">
-                    <strong>Title deed: {selectedProperty.titleDeedStatus}</strong>
-                  </span>
-                  <span className="realestate-trust-badge guarantee">
-                    <strong>
-                      Docs: {selectedProperty.taxReceipt ? "Tax receipt" : "Tax receipt pending"} |{" "}
-                      {selectedProperty.buildingPermit ? "Permit" : "Permit pending"} |{" "}
-                      {selectedProperty.encumbranceCertificate ? "EC" : "EC pending"}
-                    </strong>
-                  </span>
-                </div>
+                <section className="realestate-docs-card">
+                  <div className="realestate-section-heading">
+                    <h3>Verification & documents</h3>
+                    <p>
+                      Transparent status for KYC, RERA, and key property documents. Missing items are highlighted for quicker approvals.
+                    </p>
+                  </div>
+
+                  <div className="realestate-docs-grid">
+                    <div className="realestate-docs-item">
+                      <span className={`realestate-docs-dot ${selectedProperty.verified ? "ok" : "warn"}`} />
+                      <div>
+                        <strong>KYC</strong>
+                        <span>{selectedProperty.verified ? "Owner verified" : "Verification pending"}</span>
+                      </div>
+                    </div>
+
+                    <div className="realestate-docs-item">
+                      <span className={`realestate-docs-dot ${selectedProperty.reraNumber ? "ok" : "warn"}`} />
+                      <div>
+                        <strong>RERA</strong>
+                        <span>{selectedProperty.reraNumber ? selectedProperty.reraNumber : "RERA pending"}</span>
+                      </div>
+                    </div>
+
+                    <div className="realestate-docs-item">
+                      <span
+                        className={`realestate-docs-dot ${selectedProperty.titleDeedStatus === "verified" ? "ok" : selectedProperty.titleDeedStatus === "rejected" ? "bad" : "warn"}`}
+                      />
+                      <div>
+                        <strong>Title deed</strong>
+                        <span>{selectedProperty.titleDeedStatus}</span>
+                      </div>
+                    </div>
+
+                    <div className="realestate-docs-item">
+                      <span className={`realestate-docs-dot ${selectedProperty.taxReceipt ? "ok" : "warn"}`} />
+                      <div>
+                        <strong>Tax receipt</strong>
+                        <span>{selectedProperty.taxReceipt ? "Available" : "Pending"}</span>
+                      </div>
+                    </div>
+
+                    <div className="realestate-docs-item">
+                      <span className={`realestate-docs-dot ${selectedProperty.buildingPermit ? "ok" : "warn"}`} />
+                      <div>
+                        <strong>Building permit</strong>
+                        <span>{selectedProperty.buildingPermit ? "Available" : "Pending"}</span>
+                      </div>
+                    </div>
+
+                    <div className="realestate-docs-item">
+                      <span className={`realestate-docs-dot ${selectedProperty.encumbranceCertificate ? "ok" : "warn"}`} />
+                      <div>
+                        <strong>Encumbrance certificate</strong>
+                        <span>{selectedProperty.encumbranceCertificate ? "Available" : "Pending"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="realestate-docs-missing">
+                    {(() => {
+                      const missing = [
+                        { key: "taxReceipt", label: "Tax receipt" },
+                        { key: "buildingPermit", label: "Building permit" },
+                        { key: "encumbranceCertificate", label: "Encumbrance certificate" },
+                      ].filter((item) => !selectedProperty[item.key]);
+
+                      if (!missing.length && selectedProperty.titleDeedStatus === "verified") {
+                        return (
+                          <p className="realestate-docs-good">All key documents are available for this listing.</p>
+                        );
+                      }
+
+                      if (!missing.length) {
+                        return <p className="realestate-docs-good">Documents are mostly complete. Title deed status is: {selectedProperty.titleDeedStatus}.</p>;
+                      }
+
+                      return (
+                        <p className="realestate-docs-warn">
+                          Missing / pending: {missing.map((m) => m.label).join(", ")}. Contact the seller to request documents.
+                        </p>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="realestate-docs-ctas">
+                    <button
+                      type="button"
+                      className="realestate-inline-button"
+                      onClick={() => pushToast("Document request drafted. Seller can share PDFs via chat.")}
+                    >
+                      Request documents
+                    </button>
+                    <button
+                      type="button"
+                      className="realestate-inline-button"
+                      onClick={() => pushToast("Verification history opened (demo).")}
+                    >
+                      View verification history
+                    </button>
+                  </div>
+                </section>
+
 
                 <LoanCalculator
                   loanAmount={loanAmount}

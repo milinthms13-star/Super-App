@@ -1,5 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const Joi = require('joi');
 const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
@@ -53,6 +55,17 @@ const { ADMIN_EMAIL } = require('../config/constants');
 const { validatePhone } = require('../utils/validators');
 const { sendEmailViaGmail, hasGmailDeliveryConfig } = require('../config/gmail');
 const logger = require('../config/logger');
+const SkillCertificate = require('../models/SkillCertificate');
+const SkillTestResult = require('../models/SkillTestResult');
+const {
+  COURSE_CATEGORIES,
+  COURSE_CATALOG,
+  getSkillLearningCourses,
+  getCourseById,
+  getSkillRecommendations,
+  getQuestionBank,
+  GOVT_PORTALS,
+} = require('../data/skillLearningData');
 
 const router = express.Router();
 const upload = multer({
@@ -61,6 +74,16 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024,
   },
 });
+
+const ensureUploadsFolder = (subfolder) => {
+  const folderPath = path.join(__dirname, '../uploads', subfolder);
+  if (!fs.existsSync(folderPath)) {
+    fs.mkdirSync(folderPath, { recursive: true });
+  }
+  return folderPath;
+};
+
+const buildSkillRecordId = (prefix) => `${prefix}-${crypto.randomUUID()}`;
 
 // Fetch registered accounts from MongoDB instead of app-data.json
 const getRegisteredAccountsFromDB = async () => {
@@ -1479,6 +1502,242 @@ router.get('/public', async (req, res) => {
       },
     },
   });
+});
+
+router.get('/skilllearning/courses', authenticate, async (req, res) => {
+  try {
+    const filters = {
+      query: req.query.query,
+      category: req.query.category,
+      level: req.query.level,
+      language: req.query.language,
+      region: req.query.region,
+      isFree: req.query.isFree === 'true' ? true : req.query.isFree === 'false' ? false : undefined,
+    };
+    const courses = getSkillLearningCourses(filters);
+    return res.json({ success: true, data: { courses, categories: COURSE_CATEGORIES } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load skill learning courses.', error: error.message });
+  }
+});
+
+router.get('/skilllearning/courses/:courseId', authenticate, async (req, res) => {
+  const course = getCourseById(req.params.courseId);
+  if (!course) {
+    return res.status(404).json({ success: false, message: 'Course not found.' });
+  }
+  return res.json({ success: true, data: { course } });
+});
+
+router.get('/skilllearning/recommendations', authenticate, async (req, res) => {
+  try {
+    const recommendations = getSkillRecommendations({
+      education: req.query.education,
+      interests: req.query.interests,
+      salaryTarget: req.query.salaryTarget,
+      destination: req.query.destination,
+    });
+    return res.json({ success: true, data: { recommendations } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to generate recommendations.', error: error.message });
+  }
+});
+
+router.get('/skilllearning/questions', authenticate, async (req, res) => {
+  try {
+    const category = req.query.category || 'Gulf Ready';
+    const questions = getQuestionBank(category).map((question) => ({
+      id: question.id,
+      category: question.category,
+      question: question.question,
+      options: question.options,
+    }));
+    return res.json({ success: true, data: { questions } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load question bank.', error: error.message });
+  }
+});
+
+router.post('/skilllearning/tests/submit', authenticate, async (req, res) => {
+  const answers = Array.isArray(req.body.answers) ? req.body.answers : [];
+  const category = req.body.category || 'Gulf Ready';
+  const questions = getQuestionBank(category);
+  const totalQuestions = Math.min(answers.length, questions.length);
+  let correct = 0;
+  let wrong = 0;
+  let attempted = 0;
+  answers.forEach((answer) => {
+    const question = questions.find((item) => item.id === answer.id);
+    if (!question) return;
+    if (typeof answer.selectedIndex === 'number') {
+      attempted += 1;
+      if (question.answer === answer.selectedIndex) {
+        correct += 1;
+      } else {
+        wrong += 1;
+      }
+    }
+  });
+  const negativeMarks = wrong * 0.25;
+  const score = Math.max(0, Number(((correct - negativeMarks) / totalQuestions) * 100).toFixed(0));
+  const weakAreaTopics = [...new Set(answers
+    .filter((answer) => {
+      const question = questions.find((item) => item.id === answer.id);
+      return question && typeof answer.selectedIndex === 'number' && question.answer !== answer.selectedIndex;
+    })
+    .map((answer) => {
+      const question = questions.find((item) => item.id === answer.id);
+      return question?.topic || 'general';
+    })));
+
+  try {
+    const result = await SkillTestResult.create({
+      resultId: buildSkillRecordId('skill-test'),
+      userEmail: normalizeEmailAddress(req.user?.email || req.user?.id || req.user?._id),
+      category,
+      score,
+      totalQuestions,
+      correct,
+      wrong,
+      attempted,
+      negativeMarks,
+      weakAreas: weakAreaTopics,
+      questions: questions.slice(0, totalQuestions).map((question) => ({
+        id: question.id,
+        question: question.question,
+        options: question.options,
+        correctIndex: question.answer,
+      })),
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        result,
+        insight: weakAreaTopics.length
+          ? `Focus on ${weakAreaTopics.join(', ')} to improve your next mock test.`
+          : 'Great work — keep building your score with timed practice.',
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to submit test.', error: error.message });
+  }
+});
+
+router.get('/skilllearning/certificates', authenticate, async (req, res) => {
+  try {
+    const userEmail = normalizeEmailAddress(req.user?.email || req.user?.id || req.user?._id);
+    const certificates = await SkillCertificate.find({ userEmail }).sort({ uploadedAt: -1 }).lean();
+    return res.json({ success: true, data: { certificates, govtPortals: GOVT_PORTALS } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load certificates.', error: error.message });
+  }
+});
+
+router.post('/skilllearning/certificates/upload', authenticate, upload.single('certificateFile'), async (req, res) => {
+  const { title, issuer, completedOn, credentialId } = req.body;
+  if (!title || !completedOn) {
+    return res.status(400).json({ success: false, message: 'Title and completion date are required.' });
+  }
+
+  try {
+    const userEmail = normalizeEmailAddress(req.user?.email || req.user?.id || req.user?._id);
+    const uploadFolder = ensureUploadsFolder('skilllearning');
+
+    let fileName = '';
+    let fileUrl = '';
+    if (req.file) {
+      fileName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+      const filePath = path.join(uploadFolder, fileName);
+      fs.writeFileSync(filePath, req.file.buffer);
+      fileUrl = `/uploads/skilllearning/${fileName}`;
+    }
+
+    const certificate = await SkillCertificate.create({
+      certificateId: buildSkillRecordId('skill-cert'),
+      userEmail,
+      title,
+      issuer: issuer || 'Training Partner',
+      completedOn: new Date(completedOn),
+      credentialId: credentialId || '',
+      verificationUrl: `https://verify.example.com/${crypto.randomBytes(8).toString('hex')}`,
+      badgeUrl: `/uploads/skilllearning/badge-default.png`,
+      fileName,
+      fileUrl,
+    });
+
+    return res.json({ success: true, data: { certificate } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to save certificate.', error: error.message });
+  }
+});
+
+router.get('/skilllearning/wallet', authenticate, async (req, res) => {
+  try {
+    const courses = getSkillLearningCourses({});
+    const userEmail = normalizeEmailAddress(req.user?.email || req.user?.id || req.user?._id);
+    const certificates = await SkillCertificate.find({ userEmail }).lean();
+    return res.json({ success: true, data: { courses, certificates } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load wallet data.', error: error.message });
+  }
+});
+
+router.post('/skilllearning/course-enroll', authenticate, async (req, res) => {
+  const { courseId } = req.body;
+  const course = getCourseById(courseId);
+  if (!course) {
+    return res.status(404).json({ success: false, message: 'Course not found.' });
+  }
+
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+    const currentState = await getUserEducationStateFromDB(userIdentifier);
+    const alreadyEnrolled = (currentState.enrolledCourseIds || []).includes(courseId);
+    if (alreadyEnrolled) {
+      return res.json({ success: true, data: { alreadyEnrolled: true, state: currentState } });
+    }
+
+    await updateUserEducationState(userIdentifier, (stateInput) => ({
+      ...stateInput,
+      enrolledCourseIds: [...new Set([...(stateInput.enrolledCourseIds || []), courseId])],
+    }));
+
+    const state = await getUserEducationStateFromDB(userIdentifier);
+    return res.json({ success: true, data: { state, alreadyEnrolled: false } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to enroll in course.', error: error.message });
+  }
+});
+
+router.get('/skilllearning/dashboard', authenticate, async (req, res) => {
+  try {
+    const state = await getUserEducationStateFromDB(req.user?.email || req.user?.id || req.user?._id);
+    const courses = getSkillLearningCourses({});
+    const enrolled = courses.filter((course) => (state.enrolledCourseIds || []).includes(course.id));
+    const recent = enrolled.slice(0, 3);
+    const dashboardStats = {
+      continueLearning: enrolled.length,
+      recommendedCourses: 4,
+      govtCertifications: GOVT_PORTALS.length,
+      upcomingExams: 3,
+      interviewPractice: 3,
+      avgProgress: state.courseProgress
+        ? Math.round(
+            (Object.values(state.courseProgress).reduce((acc, value) => acc + Number(value), 0) || 0) /
+              Math.max(Object.keys(state.courseProgress).length, 1)
+          )
+        : 0,
+    };
+    return res.json({ success: true, data: { dashboardStats, recent, enrolled } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load dashboard.', error: error.message });
+  }
+});
+
+router.get('/skilllearning/govt-portals', async (req, res) => {
+  return res.json({ success: true, data: { govtPortals: GOVT_PORTALS } });
 });
 
 router.get('/education/state', authenticate, async (req, res) => {

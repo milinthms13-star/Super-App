@@ -41,18 +41,31 @@ const ChatroomList = ({
 
     const now = new Date();
     const deltaMinutes = Math.floor((now.getTime() - parsedDate.getTime()) / 60000);
+    const isToday = parsedDate.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = parsedDate.toDateString() === yesterday.toDateString();
 
     if (deltaMinutes < 1) {
-      return 'Active now';
+      return 'Last active just now';
     }
     if (deltaMinutes < 60) {
-      return `Active ${deltaMinutes}m ago`;
+      return `Last active ${deltaMinutes}m ago`;
     }
-    if (deltaMinutes < 24 * 60) {
-      return `Active ${Math.floor(deltaMinutes / 60)}h ago`;
+    if (deltaMinutes < 24 * 60 && isToday) {
+      return `Last active Today at ${parsedDate.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`;
+    }
+    if (isYesterday) {
+      return 'Last active Yesterday';
+    }
+    if (isToday) {
+      return 'Last active Today';
     }
 
-    return `Active ${parsedDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+    return `Last active ${parsedDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
   };
 
   const getRoomTone = (room) => {

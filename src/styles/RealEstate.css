@@ -573,6 +573,95 @@
   margin: 1rem 0;
 }
 
+.realestate-docs-card {
+  margin: 1rem 0 0.25rem;
+  padding: 1.1rem;
+  border-radius: 20px;
+  border: 1px solid var(--realestate-border);
+  background: linear-gradient(180deg, #ffffff 0%, #f4fbfb 100%);
+}
+
+.realestate-docs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.95rem;
+}
+
+.realestate-docs-item {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--realestate-border);
+  border-radius: 16px;
+  background: var(--realestate-surface-alt);
+}
+
+.realestate-docs-dot {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+  border: 2px solid transparent;
+}
+
+.realestate-docs-dot.ok {
+  background: #10b981;
+}
+
+.realestate-docs-dot.warn {
+  background: #f59e0b;
+}
+
+.realestate-docs-dot.bad {
+  background: #ef4444;
+}
+
+.realestate-docs-item strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.realestate-docs-item span {
+  display: block;
+  color: var(--realestate-muted);
+  font-size: 0.88rem;
+}
+
+.realestate-docs-missing {
+  margin-top: 0.95rem;
+}
+
+.realestate-docs-good {
+  margin: 0;
+  padding: 0.8rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.08);
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.realestate-docs-warn {
+  margin: 0;
+  padding: 0.8rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+  color: #8a5a0b;
+  font-weight: 700;
+}
+
+.realestate-docs-ctas {
+  margin-top: 0.95rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+
 .realestate-trust-badge {
   padding: 0.75rem;
   border-radius: 12px;

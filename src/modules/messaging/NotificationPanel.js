@@ -1,20 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
-const NotificationPanel = ({ notifications = [], onClear, onSelectNotification }) => {
-  const [displayNotifications, setDisplayNotifications] = useState(notifications);
-
-  useEffect(() => {
-    setDisplayNotifications(notifications);
-  }, [notifications]);
-
-  const handleDismiss = (notificationId, event) => {
+const NotificationPanel = ({
+  notifications = [],
+  onClear,
+  onSelectNotification,
+  onDismiss,
+  notificationsEnabled = true,
+  onEnableNotifications,
+}) => {
+  const handleDismiss = (notification, event) => {
     event.stopPropagation();
-    setDisplayNotifications((prev) =>
-      prev.filter((notification) => String(notification._id || notification.id) !== String(notificationId))
-    );
+    if (onDismiss) {
+      onDismiss(notification);
+    }
   };
 
-  const unreadCount = displayNotifications.filter((notification) => !notification.isRead).length;
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
   const getNotificationTimestamp = (notification) =>
     notification.createdAt || notification.timestamp || notification.sentAt || new Date().toISOString();
@@ -31,7 +32,7 @@ const NotificationPanel = ({ notifications = [], onClear, onSelectNotification }
           {unreadCount > 0 && <span className="unread-count">{unreadCount}</span>}
         </h3>
         <div className="notification-header-actions">
-          {displayNotifications.length > 0 && (
+          {notifications.length > 0 && (
             <button className="clear-all-btn" onClick={onClear} type="button" title="Clear all notifications">
               Mark all read
             </button>
@@ -40,12 +41,17 @@ const NotificationPanel = ({ notifications = [], onClear, onSelectNotification }
       </div>
 
       <div className="notification-list">
-        {displayNotifications.length === 0 ? (
+        {notifications.length === 0 ? (
           <div className="empty-notifications">
-            <p>No notifications</p>
+            <p>You&apos;re all caught up.</p>
+            {!notificationsEnabled && (
+              <button type="button" className="enable-alerts-inline-btn" onClick={onEnableNotifications}>
+                Enable alerts
+              </button>
+            )}
           </div>
         ) : (
-          displayNotifications.map((notification) => (
+          notifications.map((notification) => (
             <div
               key={notification._id || notification.id}
               className={`notification-item ${!notification.isRead ? 'unread' : ''}`}
@@ -65,11 +71,11 @@ const NotificationPanel = ({ notifications = [], onClear, onSelectNotification }
               </div>
               <button
                 className="dismiss-btn"
-                onClick={(event) => handleDismiss(notification._id || notification.id, event)}
+                onClick={(event) => handleDismiss(notification, event)}
                 type="button"
-                title="Dismiss"
+                title="Dismiss notification"
               >
-                X
+                Dismiss
               </button>
             </div>
           ))

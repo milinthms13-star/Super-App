@@ -233,6 +233,71 @@
   font-size: 1.1rem;
 }
 
+.ticket-subtitle {
+  color: #555;
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+}
+
+.ticket-attachments-section {
+  margin-top: 1rem;
+}
+
+.attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.attachment-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  background: #f7f7fb;
+  border-radius: 999px;
+  color: #334155;
+  font-size: 0.85rem;
+  border: 1px solid #e2e8f0;
+}
+
+.ticket-action-row,
+.admin-panel-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.25rem;
+}
+
+.attachment-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.attachment-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #364154;
+  font-weight: 600;
+}
+
+.attachment-label input {
+  display: none;
+}
+
+.attachment-button {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  cursor: pointer;
+}
+
 .rating-stars {
   display: flex;
   justify-content: center;

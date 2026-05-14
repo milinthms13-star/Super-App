@@ -212,6 +212,7 @@ app.use('/api/sos', require('./routes/sos'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/wishlistshare', require('./routes/wishlistshare'));
+safeUse('/api/resumebuilder', './routes/resumebuilder');
 
 // NEW: User Profile & Personalization Features
 app.use('/api/wishlist', require('./routes/wishlist')); // Core wishlist management

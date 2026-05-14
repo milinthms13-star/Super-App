@@ -22,6 +22,7 @@ import ChatroomBrowser from './ChatroomBrowser';
 import ChatroomList from './ChatroomList';
 import ChatroomPanel from './ChatroomPanel';
 import FamilyQuickChat from './FamilyQuickChat';
+import EnhancedEmptyState from './EnhancedEmptyState';
 import io from 'socket.io-client';
 import { BACKEND_BASE_URL } from '../../utils/api';
 import {
@@ -273,6 +274,9 @@ const Messaging = () => {
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [pendingInvitations, setPendingInvitations] = useState([]);
   const [loadingInvitations, setLoadingInvitations] = useState(false);
+  const [invitationFeedback, setInvitationFeedback] = useState(null);
+  const [invitationStatuses, setInvitationStatuses] = useState({});
+  const [invitationActionLoading, setInvitationActionLoading] = useState({});
   const [sendingVoiceNote, setSendingVoiceNote] = useState(false);
   const [messagePagination, setMessagePagination] = useState(DEFAULT_MESSAGE_PAGINATION);
   const [loadedMessagePages, setLoadedMessagePages] = useState(1);
@@ -782,6 +786,36 @@ const Messaging = () => {
     [chats.length, unreadChatsCount]
   );
 
+  const messagingStatusPills = useMemo(() => {
+    const encryptionStatus = encryptionEnabled ? 'Encryption on' : 'Encryption available';
+    return [
+      encryptionStatus,
+      isOnline ? 'Online' : 'Offline',
+      isNetworkOnline ? 'Synced' : 'Sync paused',
+      'Realtime',
+    ];
+  }, [encryptionEnabled, isNetworkOnline, isOnline]);
+
+  const handleEmptyStateQuickAction = useCallback((action) => {
+    if (action === 'community') {
+      setActiveTab('chatrooms');
+      setShowNewChat(false);
+      return;
+    }
+
+    setActiveTab('chats');
+    setShowNewChat(true);
+  }, []);
+
+  const handleEmptyStateStartNewChat = useCallback((contact) => {
+    setActiveTab('chats');
+    setShowNewChat(true);
+    const suggestedName = String(contact?.name || '').trim();
+    if (suggestedName) {
+      setNewChatSearchQuery(suggestedName);
+    }
+  }, []);
+
   const retryQueuedMessage = useCallback(async (queuedMessage, { manual = false } = {}) => {
     if (!queuedMessage?.clientMessageId || !queuedMessage?.chatId) {
       return null;
@@ -947,7 +981,7 @@ const Messaging = () => {
     [apiCall, contacts, currentUser]
   );
 
-  const handleAddContact = async (userId, userName, userEmail, userUsername) => {
+  const handleAddContact = async (userName, userEmail, userUsername) => {
     try {
       const response = await apiCall('/invitations/send', 'POST', {
         recipientIdentifierType: 'username',
@@ -957,13 +991,19 @@ const Messaging = () => {
       });
 
       if (response.success) {
-        alert(`Invitation sent to ${userName}! They'll receive it and can accept to connect.`);
+        setInvitationFeedback({
+          type: 'success',
+          message: `Invitation sent to ${userName}. You can track it in Invites.`,
+        });
         setNewChatSearchQuery('');
         setAvailableUsers([]);
       }
     } catch (error) {
       console.error('Error sending invitation:', error);
-      alert('Failed to send invitation');
+      setInvitationFeedback({
+        type: 'error',
+        message: 'Unable to send invitation right now. Please try again.',
+      });
     }
   };
 
@@ -973,6 +1013,19 @@ const Messaging = () => {
       const response = await apiCall('/invitations/pending', 'GET');
       if (response?.invitations) {
         setPendingInvitations(response.invitations);
+        const activeInvitationIds = new Set(
+          response.invitations.map((invitation) => String(invitation?._id))
+        );
+        setInvitationStatuses((prevStatuses) =>
+          Object.fromEntries(
+            Object.entries(prevStatuses).filter(([invitationId]) => activeInvitationIds.has(invitationId))
+          )
+        );
+        setInvitationActionLoading((prevLoading) =>
+          Object.fromEntries(
+            Object.entries(prevLoading).filter(([invitationId]) => activeInvitationIds.has(invitationId))
+          )
+        );
       }
     } catch (error) {
       console.error('Error loading invitations:', error);
@@ -982,37 +1035,115 @@ const Messaging = () => {
   }, [apiCall]);
 
   const handleAcceptInvitation = async (invitationId) => {
+    const invitationKey = String(invitationId);
+    setInvitationActionLoading((prevLoading) => ({
+      ...prevLoading,
+      [invitationKey]: true,
+    }));
+
     try {
       const response = await apiCall(`/invitations/${invitationId}/accept`, 'POST', {});
       if (response.success) {
-        alert('Invitation accepted! You can now chat with them.');
-        await loadInvitations();
+        setInvitationStatuses((prevStatuses) => ({
+          ...prevStatuses,
+          [invitationKey]: 'accepted',
+        }));
+        setInvitationFeedback({
+          type: 'success',
+          message: 'Invitation accepted. You can start chatting now.',
+        });
         await loadContacts(contactFilterType);
+
+        window.setTimeout(() => {
+          setPendingInvitations((prevInvitations) =>
+            prevInvitations.filter((invitation) => String(invitation?._id) !== invitationKey)
+          );
+          setInvitationStatuses((prevStatuses) => {
+            const nextStatuses = { ...prevStatuses };
+            delete nextStatuses[invitationKey];
+            return nextStatuses;
+          });
+          loadInvitations();
+        }, 700);
       }
     } catch (error) {
       console.error('Error accepting invitation:', error);
-      alert('Failed to accept invitation');
+      setInvitationFeedback({
+        type: 'error',
+        message: 'Unable to accept invitation right now. Please try again.',
+      });
+    } finally {
+      setInvitationActionLoading((prevLoading) => {
+        const nextLoading = { ...prevLoading };
+        delete nextLoading[invitationKey];
+        return nextLoading;
+      });
     }
   };
 
   const handleRejectInvitation = async (invitationId) => {
+    const invitationKey = String(invitationId);
+    setInvitationActionLoading((prevLoading) => ({
+      ...prevLoading,
+      [invitationKey]: true,
+    }));
+
     try {
       const response = await apiCall(`/invitations/${invitationId}/reject`, 'POST', {
         reason: 'User rejected the invitation',
       });
       if (response.success) {
-        alert('Invitation rejected.');
-        await loadInvitations();
+        setInvitationStatuses((prevStatuses) => ({
+          ...prevStatuses,
+          [invitationKey]: 'rejected',
+        }));
+        setInvitationFeedback({
+          type: 'info',
+          message: 'Invitation rejected.',
+        });
+
+        window.setTimeout(() => {
+          setPendingInvitations((prevInvitations) =>
+            prevInvitations.filter((invitation) => String(invitation?._id) !== invitationKey)
+          );
+          setInvitationStatuses((prevStatuses) => {
+            const nextStatuses = { ...prevStatuses };
+            delete nextStatuses[invitationKey];
+            return nextStatuses;
+          });
+          loadInvitations();
+        }, 700);
       }
     } catch (error) {
       console.error('Error rejecting invitation:', error);
-      alert('Failed to reject invitation');
+      setInvitationFeedback({
+        type: 'error',
+        message: 'Unable to reject invitation right now. Please try again.',
+      });
+    } finally {
+      setInvitationActionLoading((prevLoading) => {
+        const nextLoading = { ...prevLoading };
+        delete nextLoading[invitationKey];
+        return nextLoading;
+      });
     }
   };
 
   useEffect(() => {
     activeCallRef.current = activeCall;
   }, [activeCall]);
+
+  useEffect(() => {
+    if (!invitationFeedback?.message || typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const feedbackTimer = window.setTimeout(() => {
+      setInvitationFeedback(null);
+    }, 4500);
+
+    return () => window.clearTimeout(feedbackTimer);
+  }, [invitationFeedback]);
 
   useEffect(() => {
     incomingCallRef.current = incomingCall;
@@ -2442,6 +2573,27 @@ const Messaging = () => {
       });
   };
 
+  const handleDismissNotification = async (notification) => {
+    const notificationId = notification?._id || notification?.id;
+    if (!notificationId) {
+      return;
+    }
+
+    try {
+      if (!notification?.isRead && isMongoObjectId(notificationId)) {
+        await apiCall(`/messaging/notifications/${notificationId}/read`, 'PUT');
+      }
+    } catch (error) {
+      console.error('Error dismissing notification:', error);
+    }
+
+    setNotifications((prevNotifications) =>
+      prevNotifications.filter(
+        (entry) => String(entry._id || entry.id) !== String(notificationId)
+      )
+    );
+  };
+
   const handleSelectNotification = async (notification) => {
     const notificationId = notification?._id || notification?.id;
     const notificationChatId = getEntityId(notification?.chatId);
@@ -2586,6 +2738,9 @@ const Messaging = () => {
                 notifications={notifications}
                 onClear={handleClearAllNotifications}
                 onSelectNotification={handleSelectNotification}
+                onDismiss={handleDismissNotification}
+                notificationsEnabled={notificationPermission === 'granted'}
+                onEnableNotifications={handleEnableNotifications}
               />
               {notificationPermission === 'default' && (
                 <button
@@ -2653,6 +2808,9 @@ const Messaging = () => {
               onAccept={handleAcceptInvitation}
               onReject={handleRejectInvitation}
               loading={loadingInvitations}
+              feedback={invitationFeedback}
+              invitationStatuses={invitationStatuses}
+              actionLoading={invitationActionLoading}
             />
           )}
 
@@ -2824,7 +2982,7 @@ const Messaging = () => {
                 <div className="new-chat-search">
                   <input
                     type="text"
-                    placeholder="Search for people to invite..."
+                    placeholder="Search people by name, email, or username..."
                     value={newChatSearchQuery}
                     onChange={(e) => {
                       setNewChatSearchQuery(e.target.value);
@@ -2885,7 +3043,7 @@ const Messaging = () => {
                             </div>
                             <button
                               className="btn-add-contact"
-                              onClick={() => handleAddContact(user._id, user.name, user.email, user.username)}
+                              onClick={() => handleAddContact(user.name, user.email, user.username)}
                             >
                               + Invite
                             </button>
@@ -2981,27 +3139,39 @@ const Messaging = () => {
             <div className="messaging-empty-state messaging-empty-state-rich">
               <div className="messaging-empty-shell">
                 <div className="messaging-empty-hero">
-                  <h2>LinkUp Conversations</h2>
-                  <p>Select a chat to start messaging.</p>
+                  <h2>{chats.length > 0 ? 'LinkUp Conversations' : 'Welcome to LinkUp'}</h2>
+                  <p>
+                    {chats.length > 0
+                      ? 'Select a chat to continue messaging.'
+                      : 'Start with a quick action, or create your first conversation.'}
+                  </p>
                 </div>
                 <div className="messaging-status-pills" aria-label="Platform status">
-                  <span className="messaging-status-pill">Encrypted</span>
-                  <span className="messaging-status-pill">{isOnline ? 'Online' : 'Offline'}</span>
-                  <span className="messaging-status-pill">{isNetworkOnline ? 'Synced' : 'Sync paused'}</span>
-                  <span className="messaging-status-pill">Realtime</span>
+                  {messagingStatusPills.map((statusLabel) => (
+                    <span key={statusLabel} className="messaging-status-pill">
+                      {statusLabel}
+                    </span>
+                  ))}
                 </div>
 
+                {chats.length === 0 ? (
+                  <EnhancedEmptyState
+                    onSelectAction={handleEmptyStateQuickAction}
+                    onStartNewChat={handleEmptyStateStartNewChat}
+                  />
+                ) : (
+                  <>
                 <div className="messaging-empty-metrics">
                   <div className="messaging-empty-metric">
-                    <span className="metric-label">💬 Active Chats</span>
+                    <span className="metric-label">Active chats</span>
                     <strong>{chats.length}</strong>
                   </div>
                   <div className="messaging-empty-metric">
-                    <span className="metric-label">🔔 Unread</span>
+                    <span className="metric-label">Unread</span>
                     <strong>{unreadChatsCount}</strong>
                   </div>
                   <div className="messaging-empty-metric">
-                    <span className="metric-label">🟢 Online Now</span>
+                    <span className="metric-label">Online now</span>
                     <strong>{activeNowCount}</strong>
                   </div>
                 </div>
@@ -3012,7 +3182,7 @@ const Messaging = () => {
                     className="messaging-empty-action-btn primary"
                     onClick={() => setShowNewChat(true)}
                   >
-                    Start Secure Conversation
+                    {encryptionEnabled ? 'Start Encrypted Conversation' : 'Start New Conversation'}
                   </button>
                   <button
                     type="button"
@@ -3133,6 +3303,8 @@ const Messaging = () => {
                     </ul>
                   </section>
                 </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -3165,3 +3337,4 @@ const Messaging = () => {
 };
 
 export default Messaging;
+

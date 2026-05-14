@@ -1,60 +1,37 @@
 import React from 'react';
 import useI18n from '../../hooks/useI18n';
+import { getStatusColor, getPriorityColor, getStatusLabel } from './supportUtils';
 import './TicketList.css';
 
-const TicketList = ({ tickets, loading, onSelectTicket }) => {
+const TicketList = ({ tickets, loading, onSelectTicket, onCreateClick }) => {
   const { t } = useI18n();
 
-  const getStatusColor = (status) => {
-    const colors = {
-      open: 'status-open',
-      in_progress: 'status-in-progress',
-      awaiting_user: 'status-awaiting',
-      resolved: 'status-resolved',
-      closed: 'status-closed',
-      escalated: 'status-escalated',
-    };
-    return colors[status] || 'status-open';
-  };
-
-  const getPriorityColor = (priority) => {
-    const colors = {
-      low: 'priority-low',
-      medium: 'priority-medium',
-      high: 'priority-high',
-      urgent: 'priority-urgent',
-    };
-    return colors[priority] || 'priority-medium';
-  };
-
-  const getStatusLabel = (status) => {
-    const labels = {
-      open: t('support.status.open', 'Open'),
-      in_progress: t('support.status.inProgress', 'In Progress'),
-      awaiting_user: t('support.status.awaitingUser', 'Awaiting Your Response'),
-      resolved: t('support.status.resolved', 'Resolved'),
-      closed: t('support.status.closed', 'Closed'),
-      escalated: t('support.status.escalated', 'Escalated'),
-    };
-    return labels[status] || status;
-  };
-
-  if (loading) {
+  if (loading && tickets.length === 0) {
     return (
       <div className="ticket-list-container">
-        <div className="loading-spinner">
-          {t('common.loading', 'Loading tickets...')}
+        <div className="ticket-list">
+          {[1, 2, 3, 4].map((item) => (
+            <div key={item} className="ticket-item ticket-card-skeleton">
+              <div className="skeleton header-skeleton" />
+              <div className="skeleton meta-skeleton" />
+              <div className="skeleton text-skeleton short" />
+              <div className="skeleton text-skeleton long" />
+            </div>
+          ))}
         </div>
       </div>
     );
   }
 
-  if (tickets.length === 0) {
+  if (!loading && tickets.length === 0) {
     return (
       <div className="ticket-list-container">
         <div className="empty-state">
           <h3>{t('support.noTickets', 'No support tickets yet')}</h3>
           <p>{t('support.noTicketsDesc', 'Create a ticket to get started with our support team')}</p>
+          <button type="button" className="btn btn-primary" onClick={onCreateClick}>
+            {t('support.createTicket', 'Create Ticket')}
+          </button>
         </div>
       </div>
     );
@@ -67,7 +44,15 @@ const TicketList = ({ tickets, loading, onSelectTicket }) => {
           <div
             key={ticket._id}
             className="ticket-item"
+            role="button"
+            tabIndex={0}
             onClick={() => onSelectTicket(ticket._id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                onSelectTicket(ticket._id);
+              }
+            }}
+            aria-label={`Open support ticket ${ticket.ticketNumber} about ${ticket.subject}`}
           >
             <div className="ticket-header">
               <div className="ticket-number-subject">

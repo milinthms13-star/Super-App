@@ -696,15 +696,15 @@ const normalizeEnabledModuleIds = (modules) => {
 
 const FAVORITE_MODULES_STORAGE_PREFIX = "nilahub:dashboard:favorites";
 const MODULE_VALUE_BADGE_BY_ID = {
-  ecommerce: "Time-saving",
-  messaging: "Live updates",
-  classifieds: "Fresh leads",
-  realestate: "Smart discovery",
-  ridesharing: "Fast booking",
-  fooddelivery: "Quick reorder",
-  healthcare: "Priority care",
-  billpay: "Due reminders",
-  finance: "Decision support",
+  ecommerce: "GlobeMart: Smart shopping",
+  messaging: "LinkUp: Live updates",
+  classifieds: "TradePost: Fresh leads",
+  realestate: "HomeSphere: Smart discovery",
+  ridesharing: "SwiftRide: Fast booking",
+  fooddelivery: "Feastly: Quick reorder",
+  healthcare: "NilaCare: Priority care",
+  billpay: "Nila Utility Hub: Due reminders",
+  finance: "Nila Finance Hub: Decision support",
 };
 
 const formatRelativeUpdateTime = (input) => {

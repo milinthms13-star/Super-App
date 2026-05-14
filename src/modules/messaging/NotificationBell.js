@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 import NotificationPanel from './NotificationPanel';
 
-const NotificationBell = ({ notifications = [], onClear, onSelectNotification }) => {
+const NotificationBell = ({
+  notifications = [],
+  onClear,
+  onSelectNotification,
+  onDismiss,
+  notificationsEnabled = true,
+  onEnableNotifications,
+}) => {
   const [showPanel, setShowPanel] = useState(false);
   const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
@@ -31,6 +38,9 @@ const NotificationBell = ({ notifications = [], onClear, onSelectNotification })
               onSelectNotification(notification);
               setShowPanel(false);
             }}
+            onDismiss={(notification) => onDismiss?.(notification)}
+            notificationsEnabled={notificationsEnabled}
+            onEnableNotifications={onEnableNotifications}
           />
         </div>
       )}

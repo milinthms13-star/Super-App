@@ -1,5 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import useI18n from '../../hooks/useI18n';
+import {
+  SUPPORT_MODULE_OPTIONS,
+  CATEGORY_OPTIONS_BY_MODULE,
+  PRIORITY_OPTIONS,
+  CONTACT_METHOD_OPTIONS,
+  LANGUAGE_OPTIONS,
+} from './supportConstants';
+import { getSuggestedPriority, validateWhatsAppNumber } from './supportUtils';
 import './CreateTicket.css';
 
 const CreateTicket = ({ onCancel, onSubmit }) => {
@@ -10,18 +18,49 @@ const CreateTicket = ({ onCancel, onSubmit }) => {
     module: 'general',
     category: 'general',
     priority: 'medium',
-    contactPhone: '',
+    orderId: '',
+    contactMethod: 'email',
+    whatsappNumber: '',
+    languagePreference: 'english',
   });
-
+  const [attachmentFiles, setAttachmentFiles] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const moduleCategories = useMemo(
+    () => CATEGORY_OPTIONS_BY_MODULE[formData.module] || CATEGORY_OPTIONS_BY_MODULE.general,
+    [formData.module]
+  );
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => {
+      if (name === 'module') {
+        const nextCategory = CATEGORY_OPTIONS_BY_MODULE[value]?.[0]?.value || 'general';
+        return {
+          ...prev,
+          module: value,
+          category: nextCategory,
+          priority: getSuggestedPriority(value, nextCategory),
+        };
+      }
+      if (name === 'category') {
+        return {
+          ...prev,
+          category: value,
+          priority: getSuggestedPriority(formData.module, value),
+        };
+      }
+      return {
+        ...prev,
+        [name]: value,
+      };
+    });
+  };
+
+  const handleFilesChange = (event) => {
+    const files = Array.from(event.target.files || []);
+    setAttachmentFiles(files.slice(0, 4));
   };
 
   const handleSubmit = async (e) => {
@@ -33,9 +72,29 @@ const CreateTicket = ({ onCancel, onSubmit }) => {
       return;
     }
 
+    if (formData.contactMethod === 'whatsapp' && formData.whatsappNumber && !validateWhatsAppNumber(formData.whatsappNumber)) {
+      setError(t('support.validation.whatsappInvalid', 'Enter a valid 10-digit WhatsApp number'));
+      return;
+    }
+
+    const payload = new FormData();
+    payload.append('subject', formData.subject.trim());
+    payload.append('description', formData.description.trim());
+    payload.append('module', formData.module);
+    payload.append('category', formData.category);
+    payload.append('priority', formData.priority);
+    payload.append('orderId', formData.orderId.trim());
+    payload.append('contactMethod', formData.contactMethod);
+    payload.append('whatsappNumber', formData.whatsappNumber.trim());
+    payload.append('languagePreference', formData.languagePreference);
+
+    attachmentFiles.forEach((file, index) => {
+      payload.append('attachments', file);
+    });
+
     setLoading(true);
     try {
-      await onSubmit(formData);
+      await onSubmit(payload);
     } catch (err) {
       setError(err.response?.data?.message || t('support.errors.createFailed', 'Failed to create ticket'));
     } finally {
@@ -84,48 +143,23 @@ const CreateTicket = ({ onCancel, onSubmit }) => {
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="module">{t('support.relatedModule', 'Related Module')}</label>
-              <select
-                id="module"
-                name="module"
-                value={formData.module}
-                onChange={handleChange}
-              >
-                <option value="general">{t('common.general', 'General')}</option>
-                <option value="ecommerce">GlobeMart</option>
-                <option value="messaging">LinkUp</option>
-                <option value="classifieds">TradePost</option>
-                <option value="realestate">HomeSphere</option>
-                <option value="finance">Nila Finance Hub</option>
-                <option value="freelancer">NilaWorks</option>
-                <option value="billpay">Nila Utility Hub</option>
-                <option value="skilllearning">Nila Skill Hub</option>
-                <option value="fooddelivery">Feastly</option>
-                <option value="devadarshan">Devadarshan</option>
-                <option value="hyperlocal">Nila Hyperlocal Delivery</option>
-                <option value="localservices">Local Services Marketplace</option>
-                <option value="localmarket">Local Market</option>
-                <option value="ridesharing">SwiftRide</option>
-                <option value="matrimonial">SoulMatch</option>
-                <option value="socialmedia">VibeHub</option>
+              <select id="module" name="module" value={formData.module} onChange={handleChange}>
+                {SUPPORT_MODULE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="form-group">
               <label htmlFor="category">{t('support.category', 'Category')}</label>
-              <select
-                id="category"
-                name="category"
-                value={formData.category}
-                onChange={handleChange}
-              >
-                <option value="general">{t('common.general', 'General')}</option>
-                <option value="technical">{t('support.category.technical', 'Technical')}</option>
-                <option value="payment">{t('support.category.payment', 'Payment')}</option>
-                <option value="delivery">{t('support.category.delivery', 'Delivery')}</option>
-                <option value="quality">{t('support.category.quality', 'Quality')}</option>
-                <option value="account">{t('support.category.account', 'Account')}</option>
-                <option value="refund">{t('support.category.refund', 'Refund')}</option>
-                <option value="cancellation">{t('support.category.cancellation', 'Cancellation')}</option>
+              <select id="category" name="category" value={formData.category} onChange={handleChange}>
+                {moduleCategories.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -133,46 +167,100 @@ const CreateTicket = ({ onCancel, onSubmit }) => {
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="priority">{t('support.priority', 'Priority')}</label>
-              <select
-                id="priority"
-                name="priority"
-                value={formData.priority}
-                onChange={handleChange}
-              >
-                <option value="low">{t('support.priority.low', 'Low')}</option>
-                <option value="medium">{t('support.priority.medium', 'Medium')}</option>
-                <option value="high">{t('support.priority.high', 'High')}</option>
-                <option value="urgent">{t('support.priority.urgent', 'Urgent')}</option>
+              <select id="priority" name="priority" value={formData.priority} onChange={handleChange}>
+                {PRIORITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="form-group">
-              <label htmlFor="contactPhone">{t('support.phone', 'Phone Number')}</label>
+              <label htmlFor="orderId">{t('support.orderId', 'Order / Booking / Transaction ID')}</label>
               <input
-                id="contactPhone"
-                type="tel"
-                name="contactPhone"
-                value={formData.contactPhone}
+                id="orderId"
+                type="text"
+                name="orderId"
+                value={formData.orderId}
                 onChange={handleChange}
-                placeholder={t('support.phonePlaceholder', 'Optional contact number')}
+                placeholder={t('support.orderIdPlaceholder', 'Optional order or booking reference')}
               />
             </div>
           </div>
 
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="contactMethod">{t('support.preferredContactMethod', 'Preferred Contact Method')}</label>
+              <select
+                id="contactMethod"
+                name="contactMethod"
+                value={formData.contactMethod}
+                onChange={handleChange}
+              >
+                {CONTACT_METHOD_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="whatsappNumber">{t('support.whatsappNumber', 'WhatsApp Number')}</label>
+              <input
+                id="whatsappNumber"
+                type="tel"
+                name="whatsappNumber"
+                value={formData.whatsappNumber}
+                onChange={handleChange}
+                placeholder={t('support.whatsappPlaceholder', '10-digit WhatsApp number')}
+              />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="languagePreference">{t('support.languagePreference', 'Language Preference')}</label>
+              <select
+                id="languagePreference"
+                name="languagePreference"
+                value={formData.languagePreference}
+                onChange={handleChange}
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group file-uploader">
+              <label htmlFor="attachments">{t('support.attachments', 'Attachments')}</label>
+              <input
+                id="attachments"
+                type="file"
+                name="attachments"
+                accept="image/*,.pdf,.doc,.docx"
+                multiple
+                onChange={handleFilesChange}
+              />
+              <div className="attachment-preview">
+                {attachmentFiles.map((file, index) => (
+                  <span key={index} className="attachment-chip">
+                    {file.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div className="form-actions">
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={onCancel}
-              disabled={loading}
-            >
+            <button type="button" className="btn btn-outline" onClick={onCancel} disabled={loading}>
               {t('common.cancel', 'Cancel')}
             </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={loading}
-            >
+            <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? t('common.submitting', 'Submitting...') : t('support.submitTicket', 'Submit Ticket')}
             </button>
           </div>

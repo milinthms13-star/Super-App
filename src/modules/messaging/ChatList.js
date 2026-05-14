@@ -103,7 +103,7 @@ const ChatList = ({
     const lastVisibleCandidate = lastMessage || { createdAt: chat?.lastMessageAt };
 
     if (isMessageHiddenByClear(lastVisibleCandidate, clearedAt)) {
-      return 'Chat cleared. New messages will appear here.';
+      return 'History hidden after clear. Open this chat to restore the view.';
     }
 
     if (!lastMessage) {
@@ -171,7 +171,7 @@ const ChatList = ({
     }
 
     if (otherUser?.online) {
-      return 'Online now';
+      return 'Online';
     }
 
     if (otherUser?.lastSeen) {
@@ -179,7 +179,8 @@ const ChatList = ({
     }
 
     if (chat.lastMessageAt) {
-      return `Last active ${getChatTime(chat)}`;
+      const chatTime = getChatTime(chat);
+      return chatTime ? `Last active ${chatTime}` : 'Last active recently';
     }
 
     return 'No activity yet';
@@ -222,7 +223,7 @@ const ChatList = ({
       <div className="chat-search">
         <input
           type="text"
-          placeholder="Search chats or names..."
+          placeholder="Search chats by name or recent message..."
           value={searchQuery}
           onChange={(event) => onSearchChange(event.target.value)}
           className="search-input"
