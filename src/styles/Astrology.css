@@ -10,6 +10,9 @@
   --astro-border: rgba(19, 53, 52, 0.15);
   min-height: calc(100vh - 100px);
   padding: 20px 20px 96px;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 14% 0%, rgba(255, 227, 169, 0.16), transparent 36%),
     radial-gradient(circle at 90% 10%, rgba(164, 219, 204, 0.12), transparent 30%),
@@ -29,7 +32,8 @@
 }
 
 .astrology-shell {
-  max-width: 1200px;
+  width: min(1280px, 100%);
+  max-width: 1280px;
   margin: 0 auto;
   display: grid;
   gap: 16px;
@@ -40,6 +44,9 @@
   border: 1px solid var(--astro-border);
   border-radius: 18px;
   box-shadow: 0 8px 24px rgba(5, 17, 17, 0.14);
+  backdrop-filter: blur(6px);
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .astro-top-header {
@@ -47,7 +54,7 @@
   display: grid;
   gap: 12px;
   align-items: center;
-  grid-template-columns: minmax(180px, 250px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(170px, 240px) minmax(0, 1fr) auto;
 }
 
 .astro-branding {
@@ -81,8 +88,13 @@
   font-size: 1.28rem;
 }
 
+.astro-search {
+  min-width: 0;
+}
+
 .astro-search input {
   width: 100%;
+  max-width: 100%;
   min-height: 42px;
   border-radius: 12px;
   border: 1px solid var(--astro-border);
@@ -96,6 +108,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .astrology-secondary-button {
@@ -225,7 +240,10 @@
   display: flex;
   gap: 10px;
   overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
   padding-bottom: 4px;
+  scrollbar-width: thin;
 }
 
 .astro-zodiac-chip {
@@ -261,7 +279,10 @@
   display: flex;
   gap: 8px;
   overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
   padding-bottom: 4px;
+  scrollbar-width: thin;
 }
 
 .astro-tab-button {
@@ -469,6 +490,10 @@
 @media (max-width: 1024px) {
   .astro-top-header {
     grid-template-columns: 1fr;
+  }
+
+  .astro-top-actions {
+    justify-content: flex-start;
   }
 }
 

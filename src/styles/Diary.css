@@ -1893,3 +1893,108 @@
     padding: 16px;
   }
 }
+
+/* Final precedence overrides for premium theme */
+.diary-page {
+  background:
+    radial-gradient(circle at 15% 5%, rgba(255, 221, 163, 0.2), transparent 34%),
+    radial-gradient(circle at 87% 8%, rgba(137, 216, 183, 0.18), transparent 30%),
+    linear-gradient(180deg, #174043, #0f2a2c) !important;
+}
+
+.diary-hero,
+.diary-view-selector {
+  background: transparent !important;
+}
+
+.diary-hero-content {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.diary-hero-stats {
+  margin: 18px 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.diary-hero-stat-card {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  text-align: left;
+}
+
+.diary-hero-stat-card span {
+  display: block;
+  font-size: 0.78rem;
+  color: rgba(255, 250, 239, 0.82);
+}
+
+.diary-hero-stat-card strong {
+  margin-top: 3px;
+  display: block;
+  color: #fff9ed;
+  font-size: 1.18rem;
+}
+
+.diary-filters-section,
+.diary-todays-section,
+.diary-entry-card,
+.diary-editor-modal,
+.diary-modal-content {
+  border-radius: 16px !important;
+  border: 1px solid rgba(23, 51, 52, 0.14) !important;
+}
+
+.diary-filters-section,
+.diary-todays-section {
+  max-width: 1180px;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.diary-entries-section {
+  max-width: 1180px;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.diary-entry-card {
+  background: linear-gradient(180deg, #fffcf5, #fff3de) !important;
+}
+
+.diary-primary-btn {
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #fffbf2 0%, #ffe4b7 100%) !important;
+  color: #294848 !important;
+}
+
+.diary-secondary-btn,
+.diary-view-btn {
+  border-radius: 12px !important;
+}
+
+.diary-view-btn.active {
+  color: #2a3e3d !important;
+  background: linear-gradient(120deg, #fff7e7 0%, #f9d287 100%) !important;
+}
+
+.diary-search-input,
+.diary-filter-select,
+.diary-form-group input[type="text"],
+.diary-form-group input[type="date"],
+.diary-form-group textarea,
+.diary-form-group select {
+  border-radius: 10px !important;
+  border: 1px solid rgba(23, 51, 52, 0.14) !important;
+}
+
+@media (max-width: 960px) {
+  .diary-hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

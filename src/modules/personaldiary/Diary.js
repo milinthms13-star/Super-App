@@ -308,6 +308,23 @@ const Diary = () => {
 
   // All loaded entries (server-side filtered)
   const allLoadedEntries = useMemo(() => entries, [entries]);
+  const heroStats = useMemo(() => {
+    const monthEntries = entries.filter((entry) => {
+      const created = new Date(entry.createdAt);
+      const now = new Date();
+      return (
+        created.getMonth() === now.getMonth() &&
+        created.getFullYear() === now.getFullYear()
+      );
+    }).length;
+
+    return [
+      { label: "Entries", value: entries.length },
+      { label: "This Month", value: monthEntries },
+      { label: "Tags", value: tags.length },
+      { label: "Reminders", value: upcomingReminders.length },
+    ];
+  }, [entries, tags, upcomingReminders]);
 
   const handleCreateEntry = async (entryData, files = []) => {
     try {
@@ -520,12 +537,20 @@ const Diary = () => {
       />
 
       <section className="diary-hero">
-        <div>
+        <div className="diary-hero-content">
           <p className="diary-eyebrow">Personal Reflection</p>
           <h1>My Diary</h1>
           <p className="diary-intro">
             Capture your thoughts, track your moods, and cherish your memories.
           </p>
+          <div className="diary-hero-stats" role="list" aria-label="Diary overview">
+            {heroStats.map((stat) => (
+              <article key={stat.label} className="diary-hero-stat-card" role="listitem">
+                <span>{stat.label}</span>
+                <strong>{stat.value}</strong>
+              </article>
+            ))}
+          </div>
           {error && (
             <div className="diary-error-message">{error}</div>
           )}
