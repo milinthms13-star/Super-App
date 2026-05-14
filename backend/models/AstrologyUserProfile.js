@@ -105,6 +105,7 @@ const astrologyUserProfileSchema = new mongoose.Schema(
     birthDate: { type: Date },
     birthTime: { type: String, trim: true },
     birthPlace: { type: String, trim: true },
+    gender: { type: String, trim: true, lowercase: true },
     preferences: {
       receiveDailyHoroscope: { type: Boolean, default: true },
       favoriteTopics: [{ type: String, trim: true }],

@@ -575,12 +575,81 @@ const formatPeriodStart = (period) => {
     start.setMonth(now.getMonth() - 3);
   } else if (normalizedPeriod === 'year') {
     start.setFullYear(now.getFullYear() - 1);
+  } else if (normalizedPeriod === 'total') {
+    start.setTime(0);
   } else {
     start.setMonth(now.getMonth() - 1);
   }
 
   return start;
 };
+
+const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year') =>
+  new Promise((resolve, reject) => {
+    const normalizedSign = normalizeSign(sign);
+    const signDetails = getSignDetails(normalizedSign) || getSignDetails('aries');
+    const normalizedPeriod = String(period || 'year').toLowerCase();
+    const title = normalizedPeriod === 'year' ? 'Yearly Horoscope' : normalizedPeriod === 'total' ? 'Lifetime Horoscope' : 'Horoscope Report';
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const buffers = [];
+
+    doc.on('data', (chunk) => buffers.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('error', reject);
+
+    const generatedAt = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    doc.fontSize(18).text(`${signDetails.label} ${title}`, { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(11).text(`Sign: ${signDetails.label}`);
+    doc.text(`Generated on: ${generatedAt}`);
+    doc.moveDown();
+    doc.fontSize(12).text('Overview');
+    doc.moveDown(0.3);
+
+    if (normalizedPeriod === 'year') {
+      const months = [
+        'Jan–Mar: Start the year with a stable focus on relationships and routines.',
+        'Apr–Jun: Growth chances arrive through communication and planning.',
+        'Jul–Sep: Stay mindful of timing and choose steady progress over speed.',
+        'Oct–Dec: Review what worked, prepare for the next cycle, and keep energy balanced.',
+      ];
+      months.forEach((line) => {
+        doc.fontSize(11).text(`• ${line}`);
+      });
+    } else if (normalizedPeriod === 'total') {
+      const insights = [
+        'Your long-term direction is strengthened by thoughtful planning and good habits.',
+        'Major life choices should align with your values and personal rhythm.',
+        'Relationships and career both benefit from consistent communication.',
+        'Trust your intuition when opportunities feel aligned with your purpose.',
+      ];
+      insights.forEach((line) => {
+        doc.fontSize(11).text(`• ${line}`);
+      });
+    } else {
+      doc.fontSize(11).text(
+        'This horoscope report brings together your sign details and current energies for a personalized guidance summary.'
+      );
+    }
+
+    doc.moveDown();
+    doc.fontSize(12).text('Practical guidance');
+    doc.moveDown(0.3);
+    [
+      'Keep a simple daily routine to support steady progress.',
+      'Use the coming weeks to review plans before making major decisions.',
+      'Stay connected with trusted friends and family when changes arrive.',
+    ].forEach((tip) => {
+      doc.fontSize(11).text(`• ${tip}`);
+    });
+
+    doc.end();
+  });
 
 const buildAnalyticsMetrics = (bookings = []) => {
   const totalBookings = bookings.length;
@@ -779,6 +848,10 @@ router.put('/profile', authenticate, async (req, res) => {
         req.body?.birthPlace !== undefined
           ? sanitizeText(req.body.birthPlace, 120)
           : sanitizeText(existingProfile?.birthPlace, 120),
+      gender:
+        req.body?.gender !== undefined
+          ? sanitizeText(req.body.gender, 30).toLowerCase()
+          : sanitizeText(existingProfile?.gender, 30).toLowerCase(),
       preferences: {
         receiveDailyHoroscope,
         favoriteTopics,
@@ -1444,6 +1517,24 @@ router.get('/analytics/report', authenticate, async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Unable to generate analytics report.',
+    });
+  }
+});
+
+router.get('/horoscope/report', authenticate, async (req, res) => {
+  try {
+    const period = sanitizeText(String(req.query?.period || 'year'), 16).toLowerCase();
+    const sign = normalizeSign(String(req.query?.sign || 'aries'));
+    const pdfBuffer = await buildHoroscopePdfBuffer(sign, period);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="horoscope-report-${sign}-${period}.pdf"`);
+    res.setHeader('Content-Length', String(pdfBuffer.length));
+    return res.send(pdfBuffer);
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Unable to generate horoscope report.',
     });
   }
 });

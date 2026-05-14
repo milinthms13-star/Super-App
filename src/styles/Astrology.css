@@ -55,6 +55,7 @@
   gap: 12px;
   align-items: center;
   grid-template-columns: minmax(170px, 240px) minmax(0, 1fr) auto;
+  overflow: visible;
 }
 
 .astro-branding {
@@ -127,6 +128,7 @@
 
 .astro-menu-wrap {
   position: relative;
+  overflow: visible;
 }
 
 .astro-menu-popover {
@@ -183,6 +185,62 @@
   margin: 0;
   color: var(--astro-muted);
   line-height: 1.6;
+}
+
+.astro-first-panel-layout {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1.2fr 0.8fr;
+}
+
+.astro-personal-form-card,
+.astro-personal-preview-card {
+  background: var(--astro-card-soft);
+  border: 1px solid var(--astro-border);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.astro-personal-form-card h3,
+.astro-personal-preview-card h3 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
+.astro-hero-form {
+  margin-bottom: 10px;
+}
+
+.astro-personal-form-card .astrology-save-button {
+  width: 100%;
+}
+
+.astro-personal-preview-card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.astro-personal-preview-card li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--astro-border);
+  border-radius: 10px;
+  padding: 8px;
+  background: #fffdf7;
+}
+
+.astro-personal-preview-card li span {
+  color: var(--astro-muted);
+  font-size: 0.86rem;
+}
+
+.astro-personal-preview-card li strong {
+  text-align: right;
 }
 
 .astro-quick-grid {
@@ -504,7 +562,8 @@
 
   .astro-card-grid,
   .astro-compact-form,
-  .astrology-form-grid {
+  .astrology-form-grid,
+  .astro-first-panel-layout {
     grid-template-columns: 1fr;
   }
 

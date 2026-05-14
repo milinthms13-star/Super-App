@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../contexts/AppContext";
 import useI18n from "../hooks/useI18n";
@@ -61,6 +61,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const [isTranslateOpen, setIsTranslateOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
+  const moreMenuRef = useRef(null);
 
   const displayUser = loggedInUser || currentUser;
   const profileImageSrc =
@@ -159,6 +160,21 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   useEffect(() => {
     setAvatarLoadError(false);
   }, [profileImageSrc]);
+
+  useEffect(() => {
+    if (!showMoreMenu) {
+      return undefined;
+    }
+
+    const handleOutsideClick = (event) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+        setShowMoreMenu(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [showMoreMenu]);
 
   useEffect(() => {
     const widget = document.getElementById("google_translate_element");
@@ -333,18 +349,21 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
               ))}
 
               {getMoreNavModules().length > 0 && (
-                <div className="nav-more-wrapper">
+                <div className="nav-more-wrapper" ref={moreMenuRef}>
                   <button
+                    type="button"
                     className={`nav-more-btn polished ${showMoreMenu ? "active" : ""}`}
-                    onClick={() => setShowMoreMenu(!showMoreMenu)}
+                    onClick={() => setShowMoreMenu((prev) => !prev)}
                     title="View more modules"
+                    aria-expanded={showMoreMenu}
+                    aria-haspopup="menu"
                   >
                     <span>More</span>
                     <span className="more-indicator">▼</span>
                   </button>
 
                   {showMoreMenu && (
-                    <div className="nav-categories-dropdown">
+                    <div className="nav-categories-dropdown" role="menu">
                       {categorizedMoreModules.map(([catKey, catData]) => (
                         <div key={catKey} className="nav-categories-group">
                           <div className="nav-category-header">

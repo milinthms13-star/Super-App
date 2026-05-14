@@ -207,6 +207,7 @@ const normalizeProfilePayload = (payload = {}) => ({
   birthDate: formatDateInputValue(payload.birthDate),
   birthTime: String(payload.birthTime || "").trim(),
   birthPlace: String(payload.birthPlace || "").trim(),
+  gender: String(payload.gender || "").trim().toLowerCase(),
   preferences: {
     receiveDailyHoroscope: payload?.preferences?.receiveDailyHoroscope !== false,
     favoriteTopics: Array.isArray(payload?.preferences?.favoriteTopics)
@@ -363,6 +364,7 @@ export const astrologyService = {
       birthDate: payload.birthDate || undefined,
       birthTime: String(payload.birthTime || "").trim(),
       birthPlace: String(payload.birthPlace || "").trim(),
+      gender: String(payload.gender || "").trim().toLowerCase(),
       preferences: {
         receiveDailyHoroscope: payload?.preferences?.receiveDailyHoroscope !== false,
         favoriteTopics: Array.isArray(payload?.preferences?.favoriteTopics)
@@ -634,6 +636,29 @@ export const astrologyService = {
       };
     } catch (error) {
       throw buildServiceError(error, null, "Unable to download Kundli PDF report.");
+    }
+  },
+
+  async downloadHoroscopeReport(sign = "aries", period = "year") {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/horoscope/report`, {
+        params: {
+          sign,
+          period,
+        },
+        responseType: "blob",
+      });
+
+      const fileName = extractFileNameFromContentDisposition(
+        response.headers?.["content-disposition"]
+      );
+
+      return {
+        blob: response.data,
+        fileName,
+      };
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to download horoscope PDF report.");
     }
   },
 

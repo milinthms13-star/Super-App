@@ -68,6 +68,7 @@ const AnalyticsDashboard = () => {
             <option value="month">This month</option>
             <option value="quarter">This quarter</option>
             <option value="year">This year</option>
+            <option value="total">All time</option>
           </select>
           <button type="button" onClick={() => downloadReport('pdf')}>
             Download PDF

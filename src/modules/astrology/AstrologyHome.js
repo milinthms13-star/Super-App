@@ -27,6 +27,13 @@ const MOBILE_NAV_ITEMS = [
   { key: "profile", label: "Profile" },
 ];
 
+const GENDER_OPTIONS = [
+  { value: "", label: "Select gender", labelMl: "ലിംഗം തിരഞ്ഞെടുക്കുക" },
+  { value: "male", label: "Male", labelMl: "പുരുഷൻ" },
+  { value: "female", label: "Female", labelMl: "സ്ത്രീ" },
+  { value: "other", label: "Other", labelMl: "മറ്റുള്ളവർ" },
+];
+
 const getNakshatraFromSign = (sign) =>
   ({
     aries: "Ashwini",
@@ -68,6 +75,33 @@ const getLagnaFromTime = (time) => {
   if (hour < 16) return "Karkata";
   if (hour < 20) return "Simha";
   return "Tula";
+};
+
+const detectSignFromBirthDate = (birthDate) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birthDate || "").trim())) {
+    return "";
+  }
+
+  const [, monthText, dayText] = String(birthDate).split("-");
+  const month = Number(monthText);
+  const day = Number(dayText);
+  if (!Number.isFinite(month) || !Number.isFinite(day)) {
+    return "";
+  }
+
+  const key = month * 100 + day;
+  if (key >= 321 && key <= 419) return "aries";
+  if (key >= 420 && key <= 520) return "taurus";
+  if (key >= 521 && key <= 620) return "gemini";
+  if (key >= 621 && key <= 722) return "cancer";
+  if (key >= 723 && key <= 822) return "leo";
+  if (key >= 823 && key <= 922) return "virgo";
+  if (key >= 923 && key <= 1022) return "libra";
+  if (key >= 1023 && key <= 1121) return "scorpio";
+  if (key >= 1122 && key <= 1221) return "sagittarius";
+  if (key >= 1222 || key <= 119) return "capricorn";
+  if (key <= 218) return "aquarius";
+  return "pisces";
 };
 
 const getLuckyColor = (sign) =>
@@ -196,6 +230,7 @@ const createProfileDraft = (profile = null) => ({
   birthDate: profile?.birthDate || "",
   birthTime: profile?.birthTime || "",
   birthPlace: profile?.birthPlace || "",
+  gender: profile?.gender || "",
   receiveDailyHoroscope: profile?.preferences?.receiveDailyHoroscope !== false,
   favoriteTopics: Array.isArray(profile?.preferences?.favoriteTopics)
     ? profile.preferences.favoriteTopics.join(", ")
@@ -240,6 +275,8 @@ const AstrologyHome = () => {
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("today");
   const [showFullPrediction, setShowFullPrediction] = useState(false);
+  const [personalizedReady, setPersonalizedReady] = useState(false);
+  const [personalizationBootstrapped, setPersonalizationBootstrapped] = useState(false);
   const [question, setQuestion] = useState("");
   const [detailedReport, setDetailedReport] = useState(true);
 
@@ -257,6 +294,7 @@ const AstrologyHome = () => {
   const [aiQuestion, setAiQuestion] = useState("");
   const [assistantAnswer, setAssistantAnswer] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [downloadingHoroscopePeriod, setDownloadingHoroscopePeriod] = useState("");
 
   const ensureSignedIn = () => {
     if (!currentUser?.id && !currentUser?.name) {
@@ -390,6 +428,35 @@ const AstrologyHome = () => {
     year: "numeric",
   });
 
+  const todayEnergyScore = ((getLuckyNumber(selectedSign) + new Date().getDate()) % 10) || 10;
+  const hasRequiredBirthDetails = Boolean(
+    profileApi.profileDraft.birthDate &&
+      profileApi.profileDraft.birthTime &&
+      profileApi.profileDraft.birthPlace &&
+      profileApi.profileDraft.gender
+  );
+
+  useEffect(() => {
+    if (personalizationBootstrapped || profileApi.profileLoading) {
+      return;
+    }
+
+    setPersonalizedReady(hasRequiredBirthDetails);
+    setPersonalizationBootstrapped(true);
+  }, [
+    hasRequiredBirthDetails,
+    personalizationBootstrapped,
+    profileApi.profileLoading,
+  ]);
+
+  const handleBirthDateChange = (value) => {
+    profileApi.handleDraftChange("birthDate", value);
+    const autoSign = detectSignFromBirthDate(value);
+    if (autoSign) {
+      setSelectedSign(autoSign);
+    }
+  };
+
   const handleQuickSave = async () => {
     if (!ensureSignedIn()) return;
     await profileApi.handleProfileSave({ preventDefault: () => {} });
@@ -397,8 +464,17 @@ const AstrologyHome = () => {
 
   const handleGenerateReport = async () => {
     if (!ensureSignedIn()) return;
+    if (!hasRequiredBirthDetails) {
+      setSaveState({
+        type: "error",
+        message: "Enter date of birth, time, place, and gender to generate your personal prediction.",
+      });
+      return;
+    }
     await profileApi.handleProfileSave({ preventDefault: () => {} });
     if (question.trim()) setAiQuestion(question.trim());
+    setActiveSection("today");
+    setPersonalizedReady(true);
     setShowFullPrediction(Boolean(detailedReport));
     setSaveState({ type: "success", message: "Birth details saved. Report cards updated." });
   };
@@ -416,6 +492,29 @@ const AstrologyHome = () => {
       setSaveState({ type: "error", message: error.message || "Unable to get assistant answer." });
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const handleDownloadHoroscopeReport = async (period) => {
+    if (!ensureSignedIn()) return;
+    const normalizedPeriod = String(period || "year").toLowerCase();
+    setDownloadingHoroscopePeriod(normalizedPeriod);
+
+    try {
+      const { blob, fileName } = await astrologyService.downloadHoroscopeReport(selectedSign, normalizedPeriod);
+      const url = window.URL.createObjectURL(new Blob([blob]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setSaveState({ type: "success", message: `Starting ${normalizedPeriod} horoscope download.` });
+    } catch (error) {
+      setSaveState({ type: "error", message: error.message || "Unable to download horoscope report." });
+    } finally {
+      setDownloadingHoroscopePeriod("");
     }
   };
 
@@ -467,6 +566,48 @@ const AstrologyHome = () => {
             <h2>{localize("Today's Horoscope", "ഇന്നത്തെ ജ്യോതിഷ ഫലം", language)}</h2>
             <p>{heroPrediction.length > 180 ? `${heroPrediction.slice(0, 180)}...` : heroPrediction}</p>
           </div>
+          <div className="astro-first-panel-layout">
+            <article className="astro-personal-form-card">
+              <h3>{localize("Get Your Personal Astrology Reading", "നിങ്ങളുടെ വ്യക്തിഗത ജ്യോതിഷ ഫലം ലഭ്യമാക്കൂ", language)}</h3>
+              <div className="astro-compact-form astro-hero-form">
+                <label className="astrology-field">
+                  <span>{localize("Date of birth", "ജനന തീയതി", language)}</span>
+                  <input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => handleBirthDateChange(event.target.value)} />
+                </label>
+                <label className="astrology-field">
+                  <span>{localize("Time of birth", "ജനന സമയം", language)}</span>
+                  <input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} />
+                </label>
+                <label className="astrology-field">
+                  <span>{localize("Place of birth", "ജനന സ്ഥലം", language)}</span>
+                  <input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} />
+                </label>
+                <label className="astrology-field">
+                  <span>{localize("Gender", "ലിംഗം", language)}</span>
+                  <select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>
+                    {GENDER_OPTIONS.map((option) => (
+                      <option key={option.value || "unset"} value={option.value}>
+                        {localize(option.label, option.labelMl, language)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <button type="button" className="astrology-save-button" onClick={handleGenerateReport} disabled={profileApi.savingProfile}>
+                {profileApi.savingProfile ? "Generating..." : localize("Generate My Prediction", "എന്റെ ജ്യോതിഷ ഫലം സൃഷ്ടിക്കുക", language)}
+              </button>
+            </article>
+            <article className="astro-personal-preview-card">
+              <h3>{localize("Instant Preview", "തൽക്ഷണ പ്രിവ്യൂ", language)}</h3>
+              <ul>
+                <li><span>{localize("Rashi", "രാശി", language)}</span><strong>{getRashiFromSign(selectedSign)}</strong></li>
+                <li><span>{localize("Nakshatra", "നക്ഷത്രം", language)}</span><strong>{getNakshatraFromSign(selectedSign)}</strong></li>
+                <li><span>{localize("Lucky color", "ഭാഗ്യനിറം", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></li>
+                <li><span>{localize("Lucky number", "ഭാഗ്യസംഖ്യ", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></li>
+                <li><span>{localize("Today energy", "ഇന്നത്തെ ഊർജം", language)}</span><strong>{todayEnergyScore}/10</strong></li>
+              </ul>
+            </article>
+          </div>
           <div className="astro-quick-grid">
             <article className="astro-quick-card"><span>{localize("Lucky color", "ഭാഗ്യനിറം", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></article>
             <article className="astro-quick-card"><span>{localize("Lucky number", "ഭാഗ്യസംഖ്യ", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></article>
@@ -495,7 +636,24 @@ const AstrologyHome = () => {
         <section className="astrology-panel astro-tab-panel">
           <div className="astro-feature-tabs" role="tablist">
             {FEATURE_TABS.map((tab) => (
-              <button key={tab.key} type="button" role="tab" className={`astro-tab-button ${activeSection === tab.key ? "is-active" : ""}`} onClick={() => setActiveSection(tab.key)}>
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                className={`astro-tab-button ${activeSection === tab.key ? "is-active" : ""}`}
+                onClick={() => {
+                  const allowedBeforePersonalization = new Set(["today", "kundli", "profile"]);
+                  if (!personalizedReady && !allowedBeforePersonalization.has(tab.key)) {
+                    setSaveState({
+                      type: "error",
+                      message: "Enter birth details in the first panel and generate your prediction first.",
+                    });
+                    setActiveSection("today");
+                    return;
+                  }
+                  setActiveSection(tab.key);
+                }}
+              >
                 {localize(tab.label, tab.labelMl, language)}
               </button>
             ))}
@@ -510,13 +668,28 @@ const AstrologyHome = () => {
 
           {activeSection === "today" ? (
             <div className="astro-card-grid">
-              <article className="astrology-panel astro-result-card"><h4>Summary</h4><p>{heroPrediction}</p></article>
-              <article className="astrology-panel astro-result-card"><h4>Today's guidance</h4><p>{getRashiSummary(selectedSign)}</p></article>
-              <article className="astrology-panel astro-result-card"><h4>Career advice</h4><p>{getCareerAdvice(selectedSign)}</p></article>
-              <article className="astrology-panel astro-result-card"><h4>Finance advice</h4><p>{getFinanceAdvice(selectedSign)}</p></article>
-              <article className="astrology-panel astro-result-card"><h4>Remedies</h4><ul>{getRemedyTips(selectedSign).map((tip) => <li key={tip}>{tip}</li>)}</ul></article>
-              <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {panchangam?.nakshatra || getNakshatraFromSign(selectedSign)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
-              {showFullPrediction ? <HoroscopeCard sign={selectedSignDetails} horoscope={reading} loading={loading} notice={readingNotice || signsNotice} /> : null}
+              {personalizedReady ? (
+                <>
+                  <article className="astrology-panel astro-result-card"><h4>Summary</h4><p>{heroPrediction}</p></article>
+                  <article className="astrology-panel astro-result-card"><h4>Today's guidance</h4><p>{getRashiSummary(selectedSign)}</p></article>
+                  <article className="astrology-panel astro-result-card"><h4>Career advice</h4><p>{getCareerAdvice(selectedSign)}</p></article>
+                  <article className="astrology-panel astro-result-card"><h4>Finance advice</h4><p>{getFinanceAdvice(selectedSign)}</p></article>
+                  <article className="astrology-panel astro-result-card"><h4>Remedies</h4><ul>{getRemedyTips(selectedSign).map((tip) => <li key={tip}>{tip}</li>)}</ul></article>
+                  <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {panchangam?.nakshatra || getNakshatraFromSign(selectedSign)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
+                  <article className="astrology-panel astro-result-card">
+                    <h4>Horoscope actions</h4>
+                    <button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate horoscope report</button>
+                    <button type="button" className="astrology-secondary-button" disabled={downloadingHoroscopePeriod !== ""} onClick={() => handleDownloadHoroscopeReport("year")}>{downloadingHoroscopePeriod === "year" ? "Downloading yearly..." : "Download yearly horoscope"}</button>
+                    <button type="button" className="astrology-secondary-button" disabled={downloadingHoroscopePeriod !== ""} onClick={() => handleDownloadHoroscopeReport("total")}>{downloadingHoroscopePeriod === "total" ? "Downloading total..." : "Download total horoscope"}</button>
+                  </article>
+                  {showFullPrediction ? <HoroscopeCard sign={selectedSignDetails} horoscope={reading} loading={loading} notice={readingNotice || signsNotice} /> : null}
+                </>
+              ) : (
+                <article className="astrology-panel astro-result-card astro-span-2">
+                  <h4>{localize("Personal details needed", "വ്യക്തിഗത വിവരങ്ങൾ ആവശ്യമാണ്", language)}</h4>
+                  <p>{localize("Enter DOB, birth time, place, and gender in the first panel to unlock your personalized predictions.", "ആദ്യ പാനലിൽ ജനന തീയതി, സമയം, സ്ഥലം, ലിംഗം നൽകി വ്യക്തിഗത ജ്യോതിഷ ഫലം കാണൂ.", language)}</p>
+                </article>
+              )}
             </div>
           ) : null}
 
@@ -528,13 +701,41 @@ const AstrologyHome = () => {
                   <label className="astrology-field"><span>Date of birth</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
                   <label className="astrology-field"><span>Time of birth</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
                   <label className="astrology-field"><span>Place of birth</span><input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Topic / question</span><input type="text" value={question} onChange={(event) => setQuestion(event.target.value)} /></label>
                 </div>
-                <label className="astrology-field astrology-checkbox-field"><input type="checkbox" checked={detailedReport} onChange={(event) => setDetailedReport(event.target.checked)} /><span>Generate detailed personalized report</span></label>
-                <button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate report</button>
+                <label className="astrology-field astrology-checkbox-field"><input type="checkbox" checked={detailedReport} onChange={(event) => setDetailedReport(event.target.checked)} /><span>Generate detailed personalized horoscope</span></label>
+                <button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate horoscope report</button>
               </article>
               <article className="astrology-panel astro-result-card"><h4>Kundli summary</h4><ul><li>Ascendant: {kundliApi.kundliData?.birthChart?.ascendant || profileApi.selectedProfile.lagna || "Mesha"}</li><li>Current dasha: {kundliApi.kundliData?.dasha?.current || "Venus"}</li><li>Rashi: {profileApi.selectedProfile.rashi || getRashiFromSign(selectedSign)}</li></ul></article>
-              <article className="astrology-panel astro-result-card"><h4>Actions</h4><button type="button" className="astrology-save-button" disabled={kundliApi.downloadingKundli || kundliApi.kundliLoading} onClick={kundliApi.handleDownloadKundliReport}>{kundliApi.downloadingKundli ? "Downloading..." : "Download PDF report"}</button>{kundliApi.activeKundliSnapshotId ? <button type="button" className="astrology-secondary-button" onClick={kundliApi.handleLoadLiveKundli}>Use live generation</button> : null}</article>
+              <article className="astrology-panel astro-result-card">
+                <h4>Actions</h4>
+                <button
+                  type="button"
+                  className="astrology-save-button"
+                  disabled={kundliApi.downloadingKundli || kundliApi.kundliLoading || downloadingHoroscopePeriod !== ""}
+                  onClick={kundliApi.handleDownloadKundliReport}
+                >
+                  {kundliApi.downloadingKundli ? "Downloading..." : "Download Kundli PDF report"}
+                </button>
+                <button
+                  type="button"
+                  className="astrology-secondary-button"
+                  disabled={downloadingHoroscopePeriod !== ""}
+                  onClick={() => handleDownloadHoroscopeReport("year")}
+                >
+                  {downloadingHoroscopePeriod === "year" ? "Downloading yearly..." : "Download yearly horoscope"}
+                </button>
+                <button
+                  type="button"
+                  className="astrology-secondary-button"
+                  disabled={downloadingHoroscopePeriod !== ""}
+                  onClick={() => handleDownloadHoroscopeReport("total")}
+                >
+                  {downloadingHoroscopePeriod === "total" ? "Downloading total..." : "Download total horoscope"}
+                </button>
+                {kundliApi.activeKundliSnapshotId ? <button type="button" className="astrology-secondary-button" onClick={kundliApi.handleLoadLiveKundli}>Use live generation</button> : null}
+              </article>
             </div>
           ) : null}
 
@@ -590,6 +791,7 @@ const AstrologyHome = () => {
                   <label className="astrology-field"><span>Birth date</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
                   <label className="astrology-field"><span>Birth time</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
                   <label className="astrology-field"><span>Birth place</span><input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Favorite topics</span><input type="text" value={profileApi.profileDraft.favoriteTopics} onChange={(event) => profileApi.handleDraftChange("favoriteTopics", event.target.value)} /></label>
                 </div>
                 <button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save profile</button>
@@ -623,7 +825,23 @@ const AstrologyHome = () => {
       </div>
       <nav className="astro-mobile-nav" aria-label="Astrology quick navigation">
         {MOBILE_NAV_ITEMS.map((item, index) => (
-          <button key={`${item.key}-${index}`} type="button" className={`astro-mobile-nav-button ${activeSection === item.key ? "is-active" : ""}`} onClick={() => setActiveSection(item.key)}>
+          <button
+            key={`${item.key}-${index}`}
+            type="button"
+            className={`astro-mobile-nav-button ${activeSection === item.key ? "is-active" : ""}`}
+            onClick={() => {
+              const allowedBeforePersonalization = new Set(["today", "kundli", "profile"]);
+              if (!personalizedReady && !allowedBeforePersonalization.has(item.key)) {
+                setSaveState({
+                  type: "error",
+                  message: "Fill DOB, time, place, and gender in the first panel first.",
+                });
+                setActiveSection("today");
+                return;
+              }
+              setActiveSection(item.key);
+            }}
+          >
             {item.label}
           </button>
         ))}
