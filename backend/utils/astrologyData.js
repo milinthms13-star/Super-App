@@ -240,6 +240,149 @@ const getReadingDateKey = (date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
+const normalizeAngle = (degrees) => ((degrees % 360) + 360) % 360;
+const toRadians = (degrees) => (degrees * Math.PI) / 180;
+const sinDeg = (degrees) => Math.sin(toRadians(degrees));
+const parseBirthDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const dateString = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    return dateString;
+  }
+  const parsed = new Date(dateString);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+};
+
+const getJulianDayFromIst = (dateString, timeString) => {
+  const parsedDateString = parseBirthDate(dateString);
+  if (!parsedDateString) return null;
+  const [year, month, day] = parsedDateString.split('-').map(Number);
+  if (![year, month, day].every(Number.isFinite)) return null;
+  const [hour = 0, minute = 0] = String(timeString || '00:00').split(':').map(Number);
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute) - 5.5 * 60 * 60000;
+  const date = new Date(utcMs);
+  const Y = date.getUTCFullYear();
+  const M = date.getUTCMonth() + 1;
+  const D =
+    date.getUTCDate() +
+    date.getUTCHours() / 24 +
+    date.getUTCMinutes() / 1440 +
+    date.getUTCSeconds() / 86400;
+  let y = Y;
+  let m = M;
+  if (m <= 2) {
+    y -= 1;
+    m += 12;
+  }
+  const A = Math.floor(y / 100);
+  const B = 2 - A + Math.floor(A / 4);
+  return (
+    Math.floor(365.25 * (y + 4716)) +
+    Math.floor(30.6001 * (m + 1)) +
+    D +
+    B -
+    1524.5
+  );
+};
+
+const getMoonEclipticLongitude = (jd) => {
+  const D = jd - 2451545.0;
+  const T = D / 36525.0;
+  const L0 = normalizeAngle(
+    218.3164477 +
+      481267.88123421 * T -
+      0.0015786 * T * T +
+      T * T * T / 538841 -
+      T * T * T * T / 65194000
+  );
+  const M = normalizeAngle(
+    134.9633964 +
+      477198.8675055 * T +
+      0.0087414 * T * T +
+      T * T * T / 69699 -
+      T * T * T * T / 14712000
+  );
+  const Mprime = normalizeAngle(
+    357.5291092 +
+      35999.0502909 * T -
+      0.0001536 * T * T +
+      T * T * T / 24490000
+  );
+  const Dprime = normalizeAngle(
+    297.8501921 +
+      445267.1114034 * T -
+      0.0018819 * T * T +
+      T * T * T / 545868 -
+      T * T * T * T / 113065000
+  );
+  const F = normalizeAngle(
+    93.272095 +
+      483202.0175233 * T -
+      0.0036539 * T * T -
+      T * T * T / 3526000 +
+      T * T * T * T / 863310000
+  );
+
+  let lon = L0;
+  lon += 6.289 * sinDeg(M);
+  lon += 1.274 * sinDeg(2 * Dprime - M);
+  lon += 0.658 * sinDeg(2 * Dprime);
+  lon += 0.214 * sinDeg(2 * M);
+  lon += -0.186 * sinDeg(Mprime);
+  lon += -0.059 * sinDeg(2 * Dprime - 2 * M);
+  lon += -0.057 * sinDeg(2 * Dprime - Mprime - M);
+  lon += 0.053 * sinDeg(2 * Dprime + M);
+  lon += 0.046 * sinDeg(2 * Dprime - Mprime);
+  lon += 0.041 * sinDeg(Mprime - M);
+  lon += -0.035 * sinDeg(Dprime);
+  lon += -0.031 * sinDeg(M + Mprime);
+  lon += 0.015 * sinDeg(2 * F - 2 * Dprime);
+  lon += 0.011 * sinDeg(2 * Dprime - 4 * M);
+
+  return normalizeAngle(lon);
+};
+
+const calculateNakshatra = (birthDate, birthTime) => {
+  const jd = getJulianDayFromIst(birthDate, birthTime);
+  if (!jd) return undefined;
+  const moonLongitude = getMoonEclipticLongitude(jd);
+  const index = Math.floor(moonLongitude / (360 / 27));
+  const names = [
+    'Ashwini',
+    'Bharani',
+    'Krittika',
+    'Rohini',
+    'Mrigashira',
+    'Ardra',
+    'Punarvasu',
+    'Pushya',
+    'Ashlesha',
+    'Magha',
+    'Purva Phalguni',
+    'Uttara Phalguni',
+    'Hasta',
+    'Chitra',
+    'Swati',
+    'Vishakha',
+    'Anuradha',
+    'Jyeshtha',
+    'Mula',
+    'Purva Ashadha',
+    'Uttara Ashadha',
+    'Shravana',
+    'Dhanishta',
+    'Shatabhisha',
+    'Purva Bhadrapada',
+    'Uttara Bhadrapada',
+    'Revati',
+  ];
+  return names[index] || undefined;
+};
+
 const pickMessage = (messages, seed, offset = 0) => {
   const safeMessages = Array.isArray(messages) && messages.length > 0 ? messages : [''];
   const index = Math.abs(seed + offset * 17) % safeMessages.length;
@@ -278,4 +421,5 @@ module.exports = {
   getSignDetails,
   getReadingDateKey,
   getDailyHoroscope,
+  calculateNakshatra,
 };

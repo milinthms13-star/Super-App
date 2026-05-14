@@ -16,6 +16,161 @@
   color: var(--classifieds-ink);
 }
 
+/* TradePost discovery-first redesign overrides */
+.classifieds-hero.classifieds-hero-compact {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 18px;
+  min-height: 40vh;
+}
+
+.classifieds-hero-compact h1 {
+  font-size: clamp(1.4rem, 2.8vw, 2.1rem);
+  line-height: 1.2;
+}
+
+.classifieds-hero-head {
+  display: grid;
+  align-content: center;
+  gap: 0.35rem;
+}
+
+.classifieds-hero-head .classifieds-hero-copy {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.classifieds-hero-actions {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+}
+
+.classifieds-hero-inline-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.6rem;
+  align-items: end;
+}
+
+.classifieds-toolbar.classifieds-toolbar-compact {
+  margin-top: 0.9rem;
+  margin-bottom: 1rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  border: 1px solid rgba(20, 33, 61, 0.1);
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(20, 33, 61, 0.08);
+  gap: 0.55rem;
+}
+
+.classifieds-toolbar.classifieds-toolbar-compact .toolbar-btn {
+  padding: 0.55rem 0.88rem;
+  border-radius: 999px;
+  background: #f8fbff;
+  color: #12315c;
+  border: 1px solid rgba(18, 49, 92, 0.16);
+  box-shadow: none;
+  font-size: 0.84rem;
+}
+
+.classifieds-tools-menu {
+  position: relative;
+}
+
+.classifieds-tools-menu summary {
+  list-style: none;
+}
+
+.classifieds-tools-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.classifieds-tools-menu-content {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  min-width: 220px;
+  z-index: 50;
+  background: #ffffff;
+  border: 1px solid rgba(20, 33, 61, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 16px 30px rgba(20, 33, 61, 0.14);
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.classifieds-post-ad-entry {
+  border: 1px solid rgba(20, 98, 191, 0.18);
+  background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.classifieds-post-composer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 38, 0.58);
+  z-index: 2600;
+  overflow-y: auto;
+  padding: 1rem;
+  display: grid;
+  place-items: center;
+}
+
+.classifieds-post-composer-card {
+  width: min(960px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  border-radius: 18px;
+}
+
+.classifieds-post-composer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: flex-start;
+  margin-bottom: 0.8rem;
+}
+
+.classifieds-post-step-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.classifieds-listings-empty {
+  background:
+    radial-gradient(circle at top right, rgba(20, 98, 191, 0.07), transparent 44%),
+    #fbfdff;
+}
+
+.classifieds-listings-empty strong::before {
+  content: "* ";
+}
+
+@media (max-width: 900px) {
+  .classifieds-hero.classifieds-hero-compact,
+  .classifieds-hero-inline-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .classifieds-post-composer-overlay {
+    padding: 0.5rem;
+  }
+
+  .classifieds-post-composer-card {
+    max-height: calc(100vh - 1rem);
+  }
+
+  .classifieds-tools-menu-content {
+    left: 0;
+    right: auto;
+    min-width: 200px;
+  }
+}
+
 .classifieds-hero {
   display: grid;
   grid-template-columns: 1.5fr 1fr;

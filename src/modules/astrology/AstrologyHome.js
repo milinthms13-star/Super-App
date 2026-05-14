@@ -77,6 +77,107 @@ const getLagnaFromTime = (time) => {
   return "Tula";
 };
 
+const NAKSHATRA_NAMES = [
+  "Ashwini",
+  "Bharani",
+  "Krittika",
+  "Rohini",
+  "Mrigashira",
+  "Ardra",
+  "Punarvasu",
+  "Pushya",
+  "Ashlesha",
+  "Magha",
+  "Purva Phalguni",
+  "Uttara Phalguni",
+  "Hasta",
+  "Chitra",
+  "Swati",
+  "Vishakha",
+  "Anuradha",
+  "Jyeshtha",
+  "Mula",
+  "Purva Ashadha",
+  "Uttara Ashadha",
+  "Shravana",
+  "Dhanishta",
+  "Shatabhisha",
+  "Purva Bhadrapada",
+  "Uttara Bhadrapada",
+  "Revati",
+];
+
+const normalizeAngle = (degrees) => ((degrees % 360) + 360) % 360;
+const toRadians = (degrees) => (degrees * Math.PI) / 180;
+const sinDeg = (degrees) => Math.sin(toRadians(degrees));
+
+const getJulianDayFromIst = (dateString, timeString) => {
+  if (!dateString) return null;
+  const [year, month, day] = String(dateString).split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite)) return null;
+  const [hour = 0, minute = 0] = String(timeString || "00:00").split(":").map(Number);
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute) - 5.5 * 60 * 60000;
+  const date = new Date(utcMs);
+  const Y = date.getUTCFullYear();
+  const M = date.getUTCMonth() + 1;
+  const D =
+    date.getUTCDate() +
+    date.getUTCHours() / 24 +
+    date.getUTCMinutes() / 1440 +
+    date.getUTCSeconds() / 86400;
+  let y = Y;
+  let m = M;
+  if (m <= 2) {
+    y -= 1;
+    m += 12;
+  }
+  const A = Math.floor(y / 100);
+  const B = 2 - A + Math.floor(A / 4);
+  const jd =
+    Math.floor(365.25 * (y + 4716)) +
+    Math.floor(30.6001 * (m + 1)) +
+    D +
+    B -
+    1524.5;
+  return jd;
+};
+
+const getMoonEclipticLongitude = (jd) => {
+  const D = jd - 2451545.0;
+  const T = D / 36525.0;
+  const L0 = normalizeAngle(218.3164477 + 481267.88123421 * T - 0.0015786 * T * T + T * T * T / 538841 - T * T * T * T / 65194000);
+  const M = normalizeAngle(134.9633964 + 477198.8675055 * T + 0.0087414 * T * T + T * T * T / 69699 - T * T * T * T / 14712000);
+  const Mprime = normalizeAngle(357.5291092 + 35999.0502909 * T - 0.0001536 * T * T + T * T * T / 24490000);
+  const Dprime = normalizeAngle(297.8501921 + 445267.1114034 * T - 0.0018819 * T * T + T * T * T / 545868 - T * T * T * T / 113065000);
+  const F = normalizeAngle(93.272095 + 483202.0175233 * T - 0.0036539 * T * T - T * T * T / 3526000 + T * T * T * T / 863310000);
+
+  let lon = L0;
+  lon += 6.289 * sinDeg(M);
+  lon += 1.274 * sinDeg(2 * Dprime - M);
+  lon += 0.658 * sinDeg(2 * Dprime);
+  lon += 0.214 * sinDeg(2 * M);
+  lon += -0.186 * sinDeg(Mprime);
+  lon += -0.059 * sinDeg(2 * Dprime - 2 * M);
+  lon += -0.057 * sinDeg(2 * Dprime - Mprime - M);
+  lon += 0.053 * sinDeg(2 * Dprime + M);
+  lon += 0.046 * sinDeg(2 * Dprime - Mprime);
+  lon += 0.041 * sinDeg(Mprime - M);
+  lon += -0.035 * sinDeg(Dprime);
+  lon += -0.031 * sinDeg(M + Mprime);
+  lon += 0.015 * sinDeg(2 * F - 2 * Dprime);
+  lon += 0.011 * sinDeg(2 * Dprime - 4 * M);
+
+  return normalizeAngle(lon);
+};
+
+const calculateNakshatra = (birthDate, birthTime) => {
+  const jd = getJulianDayFromIst(birthDate, birthTime);
+  if (!jd) return "";
+  const moonLongitude = getMoonEclipticLongitude(jd);
+  const index = Math.floor(moonLongitude / (360 / 27));
+  return NAKSHATRA_NAMES[index] || "";
+};
+
 const detectSignFromBirthDate = (birthDate) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birthDate || "").trim())) {
     return "";
@@ -230,7 +331,10 @@ const createProfileDraft = (profile = null) => ({
   birthDate: profile?.birthDate || "",
   birthTime: profile?.birthTime || "",
   birthPlace: profile?.birthPlace || "",
-  nakshatra: profile?.nakshatra || "",
+  nakshatra:
+    profile?.nakshatra ||
+    calculateNakshatra(profile?.birthDate, profile?.birthTime) ||
+    "",
   gender: profile?.gender || "",
   receiveDailyHoroscope: profile?.preferences?.receiveDailyHoroscope !== false,
   favoriteTopics: Array.isArray(profile?.preferences?.favoriteTopics)
@@ -457,6 +561,26 @@ const AstrologyHome = () => {
       setSelectedSign(autoSign);
     }
   };
+
+  useEffect(() => {
+    if (
+      profileApi.profileDraft.birthDate &&
+      profileApi.profileDraft.birthTime &&
+      !profileApi.profileDraft.nakshatra
+    ) {
+      const calculated = calculateNakshatra(
+        profileApi.profileDraft.birthDate,
+        profileApi.profileDraft.birthTime
+      );
+      if (calculated) {
+        profileApi.handleDraftChange("nakshatra", calculated);
+      }
+    }
+  }, [
+    profileApi.profileDraft.birthDate,
+    profileApi.profileDraft.birthTime,
+    profileApi.profileDraft.nakshatra,
+  ]);
 
   const handleQuickSave = async () => {
     if (!ensureSignedIn()) return;
@@ -706,7 +830,7 @@ const AstrologyHome = () => {
                   <label className="astrology-field"><span>Date of birth</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
                   <label className="astrology-field"><span>Time of birth</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
                   <label className="astrology-field"><span>Place of birth</span><input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} /></label>
-                  <label className="astrology-field"><span>Birth star (Nakshatra)</span><input type="text" value={profileApi.profileDraft.nakshatra} onChange={(event) => profileApi.handleDraftChange("nakshatra", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Birth star (Nakshatra)</span><input type="text" placeholder="Leave blank to auto-calculate" value={profileApi.profileDraft.nakshatra} onChange={(event) => profileApi.handleDraftChange("nakshatra", event.target.value)} /></label>
                   <label className="astrology-field"><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Topic / question</span><input type="text" value={question} onChange={(event) => setQuestion(event.target.value)} /></label>
                 </div>

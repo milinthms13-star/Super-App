@@ -82,6 +82,22 @@ const CORE_CATEGORIES = [
   "Business for Sale",
 ];
 
+const TRADEPOST_TRENDING_CATEGORIES = [
+  { label: "Cars", category: "Vehicles" },
+  { label: "Mobiles", category: "Electronics" },
+  { label: "Jobs", category: "Jobs" },
+  { label: "Property", category: "Properties" },
+  { label: "Services", category: "Services" },
+];
+
+const POST_AD_STEPS = [
+  { id: 1, label: "Category" },
+  { id: 2, label: "Title + Price" },
+  { id: 3, label: "Photos" },
+  { id: 4, label: "Location" },
+  { id: 5, label: "Preview" },
+];
+
 const KERALA_DISTRICTS = [
   "All Districts",
   "Thiruvananthapuram",
@@ -414,6 +430,9 @@ const Classifieds = () => {
   const [customCategoryInput, setCustomCategoryInput] = useState("");
   const [managedCategories, setManagedCategories] = useState(CORE_CATEGORIES);
   const [listingExpiryDays, setListingExpiryDays] = useState("30");
+  const [showPostComposer, setShowPostComposer] = useState(false);
+  const [postComposerStep, setPostComposerStep] = useState(1);
+  const [showSellerTools, setShowSellerTools] = useState(false);
   const fileInputRef = useRef(null);
   const trackedViewIdsRef = useRef(new Set());
   const baseRole = getBaseRole(currentUser);
@@ -1134,13 +1153,31 @@ const Classifieds = () => {
     [listings, reportRecords.length, spamKeywordHits.length]
   );
 
+  const availableRoleModes = useMemo(() => {
+    if (baseRole === "admin") {
+      return ROLE_MODES;
+    }
+    if (baseRole === "seller") {
+      return ROLE_MODES.filter((mode) => mode.id !== "admin");
+    }
+    return ROLE_MODES.filter((mode) => mode.id === "buyer");
+  }, [baseRole]);
+
   const isBuyerView = activeRole === "buyer";
-  const showRoleSwitcher = baseRole !== "buyer";
+  const isAdminView = activeRole === "admin";
+  const showRoleSwitcher = availableRoleModes.length > 1;
   const showMarketplaceSignals = trendingCategories.length > 0 || suggestedSearches.length > 0;
   const showFeaturedPanel = featuredListings.length > 0;
   const showRecentPanel = recentListings.length > 0;
   const showRecentlyViewedPanel = recentlyViewedListings.length > 0;
   const showHighlightsSection = showFeaturedPanel || showRecentPanel || showRecentlyViewedPanel;
+
+  useEffect(() => {
+    if (availableRoleModes.some((mode) => mode.id === activeRole)) {
+      return;
+    }
+    setActiveRole(availableRoleModes[0]?.id || "buyer");
+  }, [activeRole, availableRoleModes]);
 
   useEffect(() => {
     if (!selectedListing?.id) {
@@ -1283,6 +1320,22 @@ const Classifieds = () => {
     }));
   };
 
+  const openPostComposer = () => {
+    setActiveRole("seller");
+    setShowPostComposer(true);
+    setPostComposerStep(1);
+  };
+
+  const closePostComposer = () => {
+    setShowPostComposer(false);
+    setPostComposerStep(1);
+    setShowListingPreview(false);
+  };
+
+  const handlePostComposerStepChange = (step) => {
+    setPostComposerStep(Math.min(POST_AD_STEPS.length, Math.max(1, Number(step) || 1)));
+  };
+
   const handleListingSubmit = async (event) => {
     event.preventDefault();
 
@@ -1345,6 +1398,7 @@ const Classifieds = () => {
         setEditingListingId("");
         setSelectedListingId(updatedListing?.id || "");
         setStatusMessage("Ad updated successfully and stored in the database.");
+        closePostComposer();
       } else {
         // Create new listing
         const createdListing = await createClassifiedListing({
@@ -1371,6 +1425,7 @@ const Classifieds = () => {
             ? "Ad submitted and moved to admin approval because it is in a risky category."
             : "Ad submitted successfully and stored in the database."
         );
+        closePostComposer();
       }
     } catch (error) {
       setStatusMessage(
@@ -1461,38 +1516,53 @@ const Classifieds = () => {
 
   return (
     <div className={`classifieds-page ${isBuyerView ? "buyer-mode" : ""}`}>
-      <section className="classifieds-hero">
-        <div>
+      <section className="classifieds-hero classifieds-hero-compact">
+        <div className="classifieds-hero-head">
           <p className="classifieds-eyebrow">TradePost classifieds</p>
-          <h1>Local buying, selling, discovery, and direct buyer-seller conversations in one flow.</h1>
-          {!isBuyerView && (
-            <p className="classifieds-hero-copy">
-              This classified marketplace is now backed by persisted module data, so ads, messages,
-              moderation activity, and reports survive refreshes and stay stored in the backend.
-            </p>
-          )}
+          <h1>Find nearby listings faster</h1>
+          <p className="classifieds-hero-copy">Search, browse categories, pick location, and post in one clean flow.</p>
         </div>
-
-        {!isBuyerView && (
-          <div className="classifieds-stats-grid">
-            <article className="classifieds-stat-card">
-              <strong>{dashboardStats.liveListings}</strong>
-              <span>Live ads</span>
-            </article>
-            <article className="classifieds-stat-card">
-              <strong>{dashboardStats.verifiedListings}</strong>
-              <span>Verified listings</span>
-            </article>
-            <article className="classifieds-stat-card">
-              <strong>{dashboardStats.chatEngagement}</strong>
-              <span>Chat interactions</span>
-            </article>
-            <article className="classifieds-stat-card">
-              <strong>{dashboardStats.reports}</strong>
-              <span>Stored reports</span>
-            </article>
+        <div className="classifieds-hero-actions">
+          <label className="classifieds-field classifieds-field-search">
+            <span>Search listings</span>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search products, jobs, property, services"
+            />
+          </label>
+          <div className="classifieds-hero-inline-actions">
+            <label className="classifieds-field">
+              <span>Location</span>
+              <select value={districtFilter} onChange={(event) => setDistrictFilter(event.target.value)}>
+                {districts.map((district) => (
+                  <option key={`hero-${district}`} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="classifieds-inline-button" onClick={handleUseNearMeFilter}>
+              Nearby
+            </button>
+            <button type="button" className="classifieds-primary-button" onClick={openPostComposer}>
+              Post Ad
+            </button>
           </div>
-        )}
+          <div className="classifieds-chip-cloud">
+            {TRADEPOST_TRENDING_CATEGORIES.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                className={`classifieds-inline-button ${categoryFilter.includes(item.category) ? "active" : ""}`}
+                onClick={() => setCategoryFilter([item.category])}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="classifieds-mobile-quickbar" aria-label="Mobile quick listing controls">
@@ -1536,8 +1606,7 @@ const Classifieds = () => {
         phone/email, and report suspicious offers.
       </section>
 
-      {/* Toolbar for Priority Set #3 Features */}
-      <div className="classifieds-toolbar">
+      <div className="classifieds-toolbar classifieds-toolbar-compact">
         <button
           className="toolbar-btn notification-btn"
           onClick={() => setNotificationCenterOpen(true)}
@@ -1545,93 +1614,71 @@ const Classifieds = () => {
         >
           Notifications
         </button>
-
-        {isBuyerView && (
-          <button
-            className="toolbar-btn post-ad-btn"
-            onClick={() => setActiveRole("seller")}
-            title="Create a new ad"
+        <button
+          className="toolbar-btn post-ad-btn"
+          onClick={openPostComposer}
+          title="Create a new ad"
+        >
+          Post Ad
+        </button>
+        {baseRole === "seller" ? (
+          <details
+            className="classifieds-tools-menu"
+            open={showSellerTools}
+            onToggle={(event) => setShowSellerTools(event.currentTarget.open)}
           >
-            Post Ad
-          </button>
-        )}
-
-        {baseRole === 'seller' && (
-          <>
-            <button
-              className="toolbar-btn bulk-actions-btn"
-              onClick={() => setBulkActionsOpen(true)}
-              title="Bulk manage listings"
-            >
-              Manage Listings
-            </button>
-            <button
-              className="toolbar-btn reporting-btn"
-              onClick={() => setReportingOpen(true)}
-              title="View analytics"
-            >
-              Analytics
-            </button>
-
-            {/* Priority Set #4 Seller Tools */}
-            <button
-              className="toolbar-btn templates-btn"
-              onClick={() => setTemplatesOpen(true)}
-              title="Manage listing templates"
-            >
-              Templates
-            </button>
-            <button
-              className="toolbar-btn schedule-btn"
-              onClick={() => {
-                if (selectedListing) {
-                  setScheduledPostingOpen(true);
-                } else {
-                  addToast('Please select a listing first', 'warning');
-                }
-              }}
-              title="Schedule listing post"
-            >
-              Schedule
-            </button>
-            <button
-              className="toolbar-btn import-btn"
-              onClick={() => setBulkImportOpen(true)}
-              title="Bulk import listings"
-            >
-              Import
-            </button>
-            <button
-              className="toolbar-btn duplicate-btn"
-              onClick={() => {
-                if (selectedListing) {
-                  setSelectedListingForDuplicate(selectedListing);
-                  setQuickDuplicateOpen(true);
-                } else {
-                  addToast('Please select a listing first', 'warning');
-                }
-              }}
-              title="Quick duplicate listing"
-            >
-              Duplicate
-            </button>
-          </>
-        )}
-
-        {!isBuyerView && (
-          <button
-            className="toolbar-btn category-forms-btn"
-            onClick={() => setShowCategoryForms(true)}
-            title="Add category details"
-          >
-            Category Details
-          </button>
-        )}
+            <summary className="toolbar-btn">Seller Tools</summary>
+            <div className="classifieds-tools-menu-content">
+              <button type="button" className="toolbar-btn" onClick={() => setBulkActionsOpen(true)}>
+                Manage Listings
+              </button>
+              <button type="button" className="toolbar-btn" onClick={() => setReportingOpen(true)}>
+                Analytics
+              </button>
+              <button type="button" className="toolbar-btn" onClick={() => setTemplatesOpen(true)}>
+                Templates
+              </button>
+              <button
+                type="button"
+                className="toolbar-btn"
+                onClick={() => {
+                  if (selectedListing) {
+                    setScheduledPostingOpen(true);
+                  } else {
+                    addToast("Please select a listing first", "warning");
+                  }
+                }}
+              >
+                Schedule
+              </button>
+              <button type="button" className="toolbar-btn" onClick={() => setBulkImportOpen(true)}>
+                Import
+              </button>
+              <button
+                type="button"
+                className="toolbar-btn"
+                onClick={() => {
+                  if (selectedListing) {
+                    setSelectedListingForDuplicate(selectedListing);
+                    setQuickDuplicateOpen(true);
+                  } else {
+                    addToast("Please select a listing first", "warning");
+                  }
+                }}
+              >
+                Duplicate
+              </button>
+              <button type="button" className="toolbar-btn" onClick={() => setShowCategoryForms(true)}>
+                Category Details
+              </button>
+            </div>
+          </details>
+        ) : null}
       </div>
 
       {showRoleSwitcher && (
         <section className="classifieds-role-strip">
-          {ROLE_MODES.map((mode) => (
+          {availableRoleModes.map((mode) => (
             <button
               key={mode.id}
               type="button"
@@ -1995,14 +2042,14 @@ const Classifieds = () => {
             <div className="classifieds-listings-grid">
               {paginatedListings.length === 0 ? (
                 <div className="classifieds-empty-state classifieds-listings-empty">
-                  <strong>No listings match the current filters.</strong>
-                  <span>Try broader filters or be the first to post in your locality.</span>
+                  <strong>No listings yet in your area.</strong>
+                  <span>Try a wider search or be the first seller in your locality.</span>
                   <button
                     type="button"
                     className="classifieds-inline-button"
-                    onClick={() => setActiveRole("seller")}
+                    onClick={openPostComposer}
                   >
-                    Post your ad
+                    Post your first ad
                   </button>
                 </div>
               ) : (
@@ -2120,9 +2167,9 @@ const Classifieds = () => {
             )}
           </article>
 
-          {(activeRole === "seller" || activeRole === "admin") ? (
+          {activeRole === "seller" ? (
             <>
-              {activeRole === "seller" && sellerStats && (
+              {sellerStats && (
                 <article className="classifieds-surface-card">
                   <div className="classifieds-section-heading">
                     <h2>Your seller dashboard</h2>
@@ -2187,10 +2234,44 @@ const Classifieds = () => {
                 </article>
               )}
 
-              <article className="classifieds-surface-card">
+              <article className="classifieds-surface-card classifieds-post-ad-entry">
+                <div className="classifieds-section-heading">
+                  <h2>Ready to post?</h2>
+                  <p>Use a guided 5-step flow to publish faster with better conversion.</p>
+                </div>
+                <div className="classifieds-inline-actions">
+                  <button type="button" className="classifieds-primary-button" onClick={openPostComposer}>
+                    Open post ad wizard
+                  </button>
+                  <button type="button" className="classifieds-secondary-button" onClick={() => setTemplatesOpen(true)}>
+                    Use templates
+                  </button>
+                </div>
+              </article>
+
+              {showPostComposer ? (
+              <div className="classifieds-post-composer-overlay" onClick={closePostComposer}>
+              <article className="classifieds-surface-card classifieds-post-composer-card" onClick={(event) => event.stopPropagation()}>
                 <div className="classifieds-section-heading">
                   <h2>{editingListingId ? "Edit ad" : "Post a new ad"}</h2>
                   <p>{editingListingId ? "Update your existing ad with new details." : "Create a local classified with title, description, price, category, location, media, and promotion plan."}</p>
+                </div>
+                <div className="classifieds-post-composer-head">
+                  <div className="classifieds-post-step-pills">
+                    {POST_AD_STEPS.map((step) => (
+                      <button
+                        key={step.id}
+                        type="button"
+                        className={`classifieds-inline-button ${postComposerStep === step.id ? "active" : ""}`}
+                        onClick={() => handlePostComposerStepChange(step.id)}
+                      >
+                        {step.id}. {step.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="classifieds-inline-button" onClick={closePostComposer}>
+                    Close
+                  </button>
                 </div>
 
               <div className="classifieds-listing-quality-panel">
@@ -2232,12 +2313,12 @@ const Classifieds = () => {
               </div>
 
               <form className="classifieds-form-grid" onSubmit={handleListingSubmit}>
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep === 2 ? "grid" : "none" }}>
                   <span>Title</span>
                   <input name="title" value={listingForm.title} onChange={handleListingInputChange} />
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep === 2 ? "grid" : "none" }}>
                   <span>Price</span>
                   <input
                     name="price"
@@ -2248,7 +2329,7 @@ const Classifieds = () => {
                   />
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep === 1 ? "grid" : "none" }}>
                   <span>Category</span>
                   <select name="category" value={listingForm.category} onChange={handleListingInputChange}>
                     {categories.map((category) => (
@@ -2259,12 +2340,12 @@ const Classifieds = () => {
                   </select>
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep === 4 ? "grid" : "none" }}>
                   <span>Location</span>
                   <input name="location" value={listingForm.location} onChange={handleListingInputChange} />
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep === 4 ? "grid" : "none" }}>
                   <span>District</span>
                   <select name="district" value={listingForm.district} onChange={handleListingInputChange}>
                     {districts
@@ -2277,7 +2358,7 @@ const Classifieds = () => {
                   </select>
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep === 4 ? "grid" : "none" }}>
                   <span>Pincode</span>
                   <input
                     name="pincode"
@@ -2293,7 +2374,7 @@ const Classifieds = () => {
                   />
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep === 1 ? "grid" : "none" }}>
                   <span>Condition</span>
                   <select name="condition" value={listingForm.condition} onChange={handleListingInputChange}>
                     {["New", "Like New", "Used"].map((condition) => (
@@ -2304,7 +2385,7 @@ const Classifieds = () => {
                   </select>
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep === 3 ? "grid" : "none" }}>
                   <span>Media count</span>
                   <select name="mediaCount" value={listingForm.mediaCount} onChange={handleListingInputChange}>
                     {["1", "2", "4", "6", "8"].map((count) => (
@@ -2315,7 +2396,7 @@ const Classifieds = () => {
                   </select>
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep >= 2 ? "grid" : "none" }}>
                   <span>Promotion plan</span>
                   <select name="plan" value={listingForm.plan} onChange={handleListingInputChange}>
                     <option value="free">Free listing</option>
@@ -2326,7 +2407,7 @@ const Classifieds = () => {
                   </select>
                 </label>
 
-                <label className="classifieds-field">
+                <label className="classifieds-field" style={{ display: postComposerStep >= 2 ? "grid" : "none" }}>
                   <span>Listing expiry window (days)</span>
                   <select value={listingExpiryDays} onChange={(event) => setListingExpiryDays(event.target.value)}>
                     <option value="14">14 days</option>
@@ -2336,7 +2417,7 @@ const Classifieds = () => {
                   </select>
                 </label>
 
-                <div className="classifieds-field classifieds-field-full">
+                <div className="classifieds-field classifieds-field-full" style={{ display: postComposerStep === 3 ? "grid" : "none" }}>
                   <span>Upload images</span>
                   <div
                     className={`classifieds-image-upload-zone ${dragOver ? "drag-over" : ""}`}
@@ -2382,7 +2463,7 @@ const Classifieds = () => {
                   )}
                 </div>
 
-                <label className="classifieds-field classifieds-field-full">
+                <label className="classifieds-field classifieds-field-full" style={{ display: postComposerStep >= 2 ? "grid" : "none" }}>
                   <span>Description</span>
                   <textarea
                     rows="4"
@@ -2393,8 +2474,38 @@ const Classifieds = () => {
                   />
                 </label>
 
-                <button type="submit" className="classifieds-primary-button" disabled={submitting}>
-                  {submitting ? "Saving..." : editingListingId ? "Update ad" : "Submit ad"}
+                <button
+                  type={postComposerStep === POST_AD_STEPS.length ? "submit" : "button"}
+                  className="classifieds-primary-button"
+                  disabled={submitting}
+                  onClick={() => {
+                    if (postComposerStep < POST_AD_STEPS.length) {
+                      handlePostComposerStepChange(postComposerStep + 1);
+                    }
+                  }}
+                >
+                  {postComposerStep < POST_AD_STEPS.length
+                    ? "Next step"
+                    : submitting
+                      ? "Saving..."
+                      : editingListingId
+                        ? "Update ad"
+                        : "Publish ad"}
+                </button>
+                <button
+                  type="button"
+                  className="classifieds-secondary-button"
+                  onClick={() => handlePostComposerStepChange(postComposerStep - 1)}
+                  disabled={postComposerStep <= 1}
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  className="classifieds-secondary-button"
+                  onClick={closePostComposer}
+                >
+                  Cancel
                 </button>
                 <button
                   type="button"
@@ -2412,9 +2523,13 @@ const Classifieds = () => {
                       setListingForm(DEFAULT_AD_FORM);
                     }}
                   >
-                    Cancel edit
+                    Reset edit
                   </button>
                 )}
+
+                <button type="submit" className="classifieds-primary-button" disabled={submitting} style={{ display: "none" }}>
+                  {submitting ? "Saving..." : editingListingId ? "Update ad" : "Submit ad"}
+                </button>
               </form>
 
               {showListingPreview ? (
@@ -2427,9 +2542,12 @@ const Classifieds = () => {
                 </div>
               ) : null}
             </article>
+            </div>
+            ) : null}
             </>
           ) : null}
 
+          {isAdminView ? (
           <section className="classifieds-ops-grid">
             <article className="classifieds-surface-card">
               <div className="classifieds-section-heading">
@@ -2480,8 +2598,9 @@ const Classifieds = () => {
               </div>
             </article>
           </section>
+          ) : null}
 
-          {activeRole === "admin" ? (
+          {isAdminView ? (
             <article className="classifieds-surface-card">
               <div className="classifieds-section-heading">
                 <h2>Admin moderation panel</h2>
@@ -3041,7 +3160,11 @@ const Classifieds = () => {
                         <button
                           type="button"
                           className="classifieds-inline-button"
-                          onClick={() => setEditingListingId(selectedListing.id)}
+                          onClick={() => {
+                            setEditingListingId(selectedListing.id);
+                            setPostComposerStep(1);
+                            setShowPostComposer(true);
+                          }}
                         >
                           Edit ad
                         </button>

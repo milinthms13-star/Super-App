@@ -16,6 +16,7 @@ const {
   getSignDetails,
   normalizeSign,
   zodiacSigns,
+  calculateNakshatra,
 } = require('../utils/astrologyData');
 
 const router = express.Router();
@@ -836,6 +837,24 @@ router.put('/profile', authenticate, async (req, res) => {
     );
     const dailyReading = getDailyHoroscope(sign);
 
+    const birthDateValue =
+      req.body?.birthDate !== undefined
+        ? req.body.birthDate
+        : existingProfile?.birthDate;
+    const birthTimeValue =
+      req.body?.birthTime !== undefined
+        ? req.body.birthTime
+        : existingProfile?.birthTime;
+    const explicitNakshatra =
+      req.body?.nakshatra !== undefined
+        ? sanitizeText(req.body.nakshatra, 40)
+        : undefined;
+    const calculatedNakshatra =
+      explicitNakshatra ||
+      (birthDateValue && birthTimeValue
+        ? calculateNakshatra(birthDateValue, birthTimeValue)
+        : undefined);
+
     const nextProfile = {
       userId,
       sign,
@@ -849,9 +868,9 @@ router.put('/profile', authenticate, async (req, res) => {
           ? sanitizeText(req.body.birthPlace, 120)
           : sanitizeText(existingProfile?.birthPlace, 120),
       nakshatra:
-        req.body?.nakshatra !== undefined
-          ? sanitizeText(req.body.nakshatra, 40)
-          : sanitizeText(existingProfile?.nakshatra, 40),
+        explicitNakshatra !== undefined
+          ? explicitNakshatra
+          : sanitizeText(calculatedNakshatra || existingProfile?.nakshatra || 'Ashwini', 40),
       gender:
         req.body?.gender !== undefined
           ? sanitizeText(req.body.gender, 30).toLowerCase()
