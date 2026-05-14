@@ -1600,7 +1600,7 @@ router.post('/skilllearning/tests/submit', authenticate, async (req, res) => {
     .map((answer) => {
       const question = questions.find((item) => item.id === answer.id);
       return question?.topic || 'general';
-    })));
+    } )) ) ] ;
 
   try {
     const result = await SkillTestResult.create({
