@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import './AnalyticsDashboard.css';
 
@@ -17,7 +17,7 @@ const AnalyticsDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -31,11 +31,11 @@ const AnalyticsDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [period]);
 
   useEffect(() => {
-    loadAnalytics();
-  }, [period]);
+    void loadAnalytics();
+  }, [loadAnalytics]);
 
   const downloadReport = async (format = 'pdf') => {
     try {

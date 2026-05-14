@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useApp } from '../../contexts/AppContext';
 import './ConsultantAdminPanel.css';
@@ -21,7 +21,7 @@ const ConsultantAdminPanel = () => {
 
   const consultantId = consultant?.id || currentUser?.consultantId || currentUser?.id || '';
 
-  const loadConsultantData = async () => {
+  const loadConsultantData = useCallback(async () => {
     if (!consultantId) {
       return;
     }
@@ -33,25 +33,25 @@ const ConsultantAdminPanel = () => {
     const consultantData = response?.data?.data || null;
     setConsultant(consultantData);
     setAvailableSlots(consultantData?.availableSlots || []);
-  };
+  }, [consultantId]);
 
-  const loadBookings = async () => {
+  const loadBookings = useCallback(async () => {
     const response = await axios.get('/api/astrology/consultations/consultant-bookings', {
       params: consultantId ? { consultantId } : {},
       headers: authHeaders(),
     });
     setBookings(response?.data?.data || []);
-  };
+  }, [consultantId]);
 
-  const loadEarnings = async () => {
+  const loadEarnings = useCallback(async () => {
     const response = await axios.get('/api/astrology/consultations/consultant-earnings', {
       params: consultantId ? { consultantId } : {},
       headers: authHeaders(),
     });
     setEarnings(response?.data?.data || { total: 0, month: 0, bookings: 0 });
-  };
+  }, [consultantId]);
 
-  const refreshAll = async () => {
+  const refreshAll = useCallback(async () => {
     if (!currentUser?.id) {
       return;
     }
@@ -67,11 +67,11 @@ const ConsultantAdminPanel = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser?.id, loadBookings, loadConsultantData, loadEarnings]);
 
   useEffect(() => {
-    refreshAll();
-  }, [currentUser?.id]);
+    void refreshAll();
+  }, [refreshAll]);
 
   const filteredBookings = useMemo(() => {
     return bookings.filter((booking) => {

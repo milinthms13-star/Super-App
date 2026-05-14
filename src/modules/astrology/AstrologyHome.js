@@ -1,15 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import HoroscopeCard from "./HoroscopeCard";
 import { astrologyService } from "../../services/astrologyService";
 import { useApp } from "../../contexts/AppContext";
 import { useAstrologyConsultations } from "./hooks/useAstrologyConsultations";
+import { useAstrologyKundliCompatibility } from "./hooks/useAstrologyKundliCompatibility";
+import { useAstrologyProfile } from "./hooks/useAstrologyProfile";
 import "../../styles/Astrology.css";
-
-const parseFavoriteTopics = (value = "") =>
-  String(value || "")
-    .split(",")
-    .map((topic) => topic.trim())
-    .filter(Boolean);
 
 const formatSavedReadingDate = (value) => {
   if (!value) {
@@ -306,47 +302,6 @@ const localize = (en, ml, language) => {
   return ml;
 };
 
-const KUNDLI_HISTORY_STORAGE_KEY = "astrology.kundliHistory.v1";
-const COMPATIBILITY_HISTORY_STORAGE_KEY = "astrology.compatibilityHistory.v1";
-const MAX_LOCAL_HISTORY_ITEMS = 12;
-
-const getUserScopedStorageKey = (baseKey, currentUser) => {
-  const userKey = currentUser?.id || currentUser?.email || currentUser?.name || "guest";
-  return `${baseKey}.${String(userKey).trim().toLowerCase()}`;
-};
-
-const loadLocalHistory = (storageKey) => {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(storageKey);
-    if (!rawValue) {
-      return [];
-    }
-    const parsed = JSON.parse(rawValue);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    return [];
-  }
-};
-
-const saveLocalHistory = (storageKey, nextItems) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(nextItems));
-  } catch (error) {
-    // Ignore storage write failures.
-  }
-};
-
-const upsertHistoryItem = (items, nextItem) =>
-  [nextItem, ...items.filter((item) => item.id !== nextItem.id)].slice(0, MAX_LOCAL_HISTORY_ITEMS);
-
 const AstrologyHome = () => {
   const { currentUser } = useApp();
   const [language, setLanguage] = useState("en");
@@ -356,18 +311,8 @@ const AstrologyHome = () => {
   const [loading, setLoading] = useState(true);
   const [signsNotice, setSignsNotice] = useState("");
   const [readingNotice, setReadingNotice] = useState("");
-  const [profile, setProfile] = useState(null);
-  const [profileDraft, setProfileDraft] = useState(() => createProfileDraft());
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [profileNotice, setProfileNotice] = useState("");
   const [saveState, setSaveState] = useState({ type: "", message: "" });
-  const [savingProfile, setSavingProfile] = useState(false);
   const [activeSection, setActiveSection] = useState("today");
-  const [familyProfiles, setFamilyProfiles] = useState([]);
-  const [activeFamilyIndex, setActiveFamilyIndex] = useState(0);
-  const [familyDraft, setFamilyDraft] = useState(() => createFamilyProfileDraft());
-  const [partnerSign, setPartnerSign] = useState("taurus");
-  const [compatibility, setCompatibility] = useState(null);
   const [festivals, setFestivals] = useState([]);
   const [panchangam, setPanchangam] = useState(null);
   const [panchangamNotice, setPanchangamNotice] = useState("");
@@ -375,12 +320,6 @@ const AstrologyHome = () => {
   const [aiQuestion, setAiQuestion] = useState("");
   const [assistantAnswer, setAssistantAnswer] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [kundliData, setKundliData] = useState(null);
-  const [kundliLoading, setKundliLoading] = useState(false);
-  const [downloadingKundli, setDownloadingKundli] = useState(false);
-  const [kundliHistory, setKundliHistory] = useState([]);
-  const [activeKundliSnapshotId, setActiveKundliSnapshotId] = useState("");
-  const [compatibilityHistory, setCompatibilityHistory] = useState([]);
 
   const ensureSignedIn = () => {
     if (!currentUser?.id && !currentUser?.name) {
@@ -392,6 +331,38 @@ const AstrologyHome = () => {
     }
     return true;
   };
+
+  const {
+    profileDraft,
+    profileLoading,
+    profileNotice,
+    savingProfile,
+    familyProfiles,
+    activeFamilyIndex,
+    familyDraft,
+    recentSavedReadings,
+    selectedProfile,
+    handleDraftChange,
+    handleNotificationDraftChange,
+    handleFamilyDraftChange,
+    handleProfileSave,
+    handleNewFamilyProfile,
+    selectFamilyProfile,
+    handleFamilyProfileSave,
+  } = useAstrologyProfile({
+    currentUser,
+    selectedSign,
+    signs,
+    setSelectedSign,
+    setSaveState,
+    ensureSignedIn,
+    createProfileDraft,
+    createFamilyProfileDraft,
+    getDefaultFamilyProfile,
+    getNakshatraFromSign,
+    getRashiFromSign,
+    getLagnaFromTime,
+  });
 
   const {
     consultants,
@@ -420,21 +391,30 @@ const AstrologyHome = () => {
     ensureSignedIn,
   });
 
-  const currentUserStorageIdentity =
-    currentUser?.id || currentUser?.email || currentUser?.name || "guest";
-  const selectedProfile = useMemo(
-    () => familyProfiles[activeFamilyIndex] || familyProfiles[0] || {},
-    [activeFamilyIndex, familyProfiles]
-  );
-  const kundliStorageKey = useMemo(
-    () => getUserScopedStorageKey(KUNDLI_HISTORY_STORAGE_KEY, { id: currentUserStorageIdentity }),
-    [currentUserStorageIdentity]
-  );
-  const compatibilityStorageKey = useMemo(
-    () =>
-      getUserScopedStorageKey(COMPATIBILITY_HISTORY_STORAGE_KEY, { id: currentUserStorageIdentity }),
-    [currentUserStorageIdentity]
-  );
+  const {
+    partnerSign,
+    setPartnerSign,
+    compatibility,
+    handleCompatibilitySubmit,
+    compatibilityHistory,
+    handleRestoreCompatibility,
+    kundliData,
+    kundliLoading,
+    downloadingKundli,
+    handleDownloadKundliReport,
+    activeKundliSnapshotId,
+    handleLoadLiveKundli,
+    kundliHistory,
+    handleRestoreKundliSnapshot,
+  } = useAstrologyKundliCompatibility({
+    activeSection,
+    currentUser,
+    selectedProfile,
+    selectedSign,
+    setSelectedSign,
+    setSaveState,
+    ensureSignedIn,
+  });
 
   useEffect(() => {
     let active = true;
@@ -470,70 +450,6 @@ const AstrologyHome = () => {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    const loadProfile = async () => {
-      setProfileLoading(true);
-
-      try {
-        const nextProfile = await astrologyService.getProfile();
-        if (!active) {
-          return;
-        }
-
-        setProfile(nextProfile);
-        setProfileDraft(createProfileDraft(nextProfile));
-        setProfileNotice("");
-
-        const initialFamily = Array.isArray(nextProfile?.familyProfiles) && nextProfile.familyProfiles.length
-          ? nextProfile.familyProfiles.map((item) => ({
-              ...item,
-              nakshatra: item.nakshatra || getNakshatraFromSign(item.sign),
-              rashi: item.rashi || getRashiFromSign(item.sign),
-              lagna: item.lagna || getLagnaFromTime(item.birthTime),
-            }))
-          : [getDefaultFamilyProfile(nextProfile, currentUser?.name)];
-
-        setFamilyProfiles(initialFamily);
-        setActiveFamilyIndex(0);
-        setFamilyDraft(createFamilyProfileDraft(initialFamily[0]));
-
-        if (nextProfile?.sign) {
-          setSelectedSign(nextProfile.sign);
-        }
-      } catch (loadError) {
-        if (!active) {
-          return;
-        }
-
-        setProfile(null);
-        setProfileDraft(createProfileDraft());
-        const defaultProfiles = [getDefaultFamilyProfile(null, currentUser?.name)];
-        setFamilyProfiles(defaultProfiles);
-        setActiveFamilyIndex(0);
-        setFamilyDraft(createFamilyProfileDraft(defaultProfiles[0]));
-        setProfileNotice(loadError.message || "Unable to load your astrology profile.");
-      } finally {
-        if (active) {
-          setProfileLoading(false);
-        }
-      }
-    };
-
-    loadProfile();
-
-    return () => {
-      active = false;
-    };
-  }, [currentUser?.name]);
-
-  useEffect(() => {
-    setKundliHistory(loadLocalHistory(kundliStorageKey));
-    setCompatibilityHistory(loadLocalHistory(compatibilityStorageKey));
-    setActiveKundliSnapshotId("");
-  }, [compatibilityStorageKey, kundliStorageKey]);
 
   useEffect(() => {
     if (!selectedSign) {
@@ -607,232 +523,12 @@ const AstrologyHome = () => {
     loadPanchangam();
   }, []);
 
-  useEffect(() => {
-    if (activeSection !== "kundli") {
-      return;
-    }
-    if (activeKundliSnapshotId) {
-      setKundliLoading(false);
-      return;
-    }
-
-    let active = true;
-    setKundliLoading(true);
-
-    const loadKundliData = async () => {
-      try {
-        const kundli = await astrologyService.getKundliData({
-          ...selectedProfile,
-          sign: selectedProfile.sign || selectedSign,
-        });
-        if (!active) {
-          return;
-        }
-        setKundliData(kundli);
-        const historyItem = {
-          id: `kundli-${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          sign: selectedProfile.sign || selectedSign,
-          profileName: selectedProfile.name || currentUser?.name || "Profile",
-          data: kundli,
-        };
-        setKundliHistory((currentItems) => {
-          const nextItems = upsertHistoryItem(currentItems, historyItem);
-          saveLocalHistory(kundliStorageKey, nextItems);
-          return nextItems;
-        });
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-        setKundliData(error.fallbackData || null);
-        setSaveState({
-          type: "error",
-          message: error.message || "Unable to load Kundli details.",
-        });
-      } finally {
-        if (active) {
-          setKundliLoading(false);
-        }
-      }
-    };
-
-    loadKundliData();
-
-    return () => {
-      active = false;
-    };
-  }, [
-    activeKundliSnapshotId,
-    activeSection,
-    currentUser?.name,
-    kundliStorageKey,
-    selectedProfile,
-    selectedSign,
-  ]);
-
   const selectedSignDetails =
     signs.find((entry) => entry.sign === selectedSign) ||
     reading ||
     astrologyService.getFallbackSign(selectedSign);
 
   const cardNotice = readingNotice || signsNotice;
-
-  const recentSavedReadings = useMemo(
-    () =>
-      [...(profile?.savedReadings || [])]
-        .sort((left, right) => new Date(right.readingDate) - new Date(left.readingDate))
-        .slice(0, 4),
-    [profile?.savedReadings]
-  );
-
-  const handleDraftChange = (field, value) => {
-    setProfileDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
-    setSaveState({ type: "", message: "" });
-  };
-
-  const handleNotificationDraftChange = (field, value) => {
-    setProfileDraft((currentDraft) => ({
-      ...currentDraft,
-      notifications: {
-        ...currentDraft.notifications,
-        [field]: value,
-      },
-    }));
-    setSaveState({ type: "", message: "" });
-  };
-
-  const handleFamilyDraftChange = (field, value) => {
-    setFamilyDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
-  };
-
-  const handleProfileSave = async (event) => {
-    event.preventDefault();
-    if (!ensureSignedIn()) {
-      return;
-    }
-
-    setSavingProfile(true);
-    setSaveState({ type: "", message: "" });
-
-    try {
-      const updatedProfile = await astrologyService.updateProfile({
-        sign: selectedSign || signs[0]?.sign || "aries",
-        birthDate: profileDraft.birthDate,
-        birthTime: profileDraft.birthTime,
-        birthPlace: profileDraft.birthPlace,
-        preferences: {
-          receiveDailyHoroscope: profileDraft.receiveDailyHoroscope,
-          favoriteTopics: parseFavoriteTopics(profileDraft.favoriteTopics),
-        },
-        notifications: profileDraft.notifications,
-        familyProfiles,
-      });
-
-      setProfile(updatedProfile);
-      setProfileDraft(createProfileDraft(updatedProfile));
-      setSelectedSign(updatedProfile.sign || selectedSign);
-      setProfileNotice("");
-      setSaveState({
-        type: "success",
-        message:
-          "Your astrology profile was saved, and today's reading is now stored in your recent history.",
-      });
-    } catch (saveError) {
-      setSaveState({
-        type: "error",
-        message: saveError.message || "Unable to save your astrology profile.",
-      });
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
-  const handleNewFamilyProfile = () => {
-    setFamilyDraft(createFamilyProfileDraft());
-    setActiveFamilyIndex(familyProfiles.length);
-  };
-
-  const selectFamilyProfile = (index) => {
-    setActiveFamilyIndex(index);
-    setFamilyDraft(createFamilyProfileDraft(familyProfiles[index]));
-  };
-
-  const handleFamilyProfileSave = async () => {
-    const updatedProfileItem = {
-      id: familyDraft.id || `profile-${Date.now()}`,
-      name: familyDraft.name || "Family Member",
-      relation: familyDraft.relation || "Relative",
-      sign: familyDraft.sign || "aries",
-      birthDate: familyDraft.birthDate,
-      birthTime: familyDraft.birthTime,
-      birthPlace: familyDraft.birthPlace,
-      nakshatra: getNakshatraFromSign(familyDraft.sign),
-      rashi: getRashiFromSign(familyDraft.sign),
-      lagna: getLagnaFromTime(familyDraft.birthTime),
-    };
-
-    const nextProfiles = [...familyProfiles];
-    if (activeFamilyIndex >= 0 && activeFamilyIndex < nextProfiles.length) {
-      nextProfiles[activeFamilyIndex] = updatedProfileItem;
-    } else {
-      nextProfiles.push(updatedProfileItem);
-    }
-
-    setFamilyProfiles(nextProfiles);
-    setActiveFamilyIndex(nextProfiles.findIndex((item) => item.id === updatedProfileItem.id));
-    setFamilyDraft(createFamilyProfileDraft(updatedProfileItem));
-
-    try {
-      const updatedProfile = await astrologyService.updateProfile({
-        ...profile,
-        familyProfiles: nextProfiles,
-      });
-      setProfile(updatedProfile);
-      setProfileNotice("");
-      setSaveState({
-        type: "success",
-        message: "Family profile saved successfully.",
-      });
-    } catch (saveError) {
-      setSaveState({
-        type: "error",
-        message: saveError.message || "Unable to save family profile.",
-      });
-    }
-  };
-
-  const handleCompatibilitySubmit = async () => {
-    try {
-      const result = await astrologyService.getCompatibility(selectedSign, partnerSign);
-      setCompatibility(result);
-      const historyItem = {
-        id: `compatibility-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        sign: selectedSign,
-        partnerSign,
-        data: result,
-      };
-      setCompatibilityHistory((currentItems) => {
-        const nextItems = upsertHistoryItem(currentItems, historyItem);
-        saveLocalHistory(compatibilityStorageKey, nextItems);
-        return nextItems;
-      });
-      setSaveState({ type: "success", message: "Compatibility calculated successfully." });
-    } catch (error) {
-      setCompatibility(null);
-      setSaveState({
-        type: "error",
-        message: error.message || "Unable to calculate compatibility.",
-      });
-    }
-  };
 
   const handleAskAssistant = async () => {
     if (!aiQuestion.trim()) {
@@ -855,79 +551,6 @@ const AstrologyHome = () => {
     } finally {
       setAiLoading(false);
     }
-  };
-
-  const handleDownloadKundliReport = async () => {
-    if (!ensureSignedIn()) {
-      return;
-    }
-
-    setDownloadingKundli(true);
-    setSaveState({ type: "", message: "" });
-
-    try {
-      const { blob, fileName } = await astrologyService.downloadKundliReport({
-        ...selectedProfile,
-        sign: selectedProfile.sign || selectedSign,
-        name: selectedProfile.name || currentUser?.name || "Astrology User",
-      });
-
-      const objectUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = fileName || "kundli-report.pdf";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(objectUrl);
-
-      setSaveState({
-        type: "success",
-        message: "Kundli PDF report downloaded successfully.",
-      });
-    } catch (error) {
-      setSaveState({
-        type: "error",
-        message: error.message || "Unable to download Kundli PDF report.",
-      });
-    } finally {
-      setDownloadingKundli(false);
-    }
-  };
-
-  const handleRestoreKundliSnapshot = (snapshot) => {
-    if (!snapshot?.data) {
-      return;
-    }
-
-    setActiveKundliSnapshotId(snapshot.id || "");
-    setKundliData(snapshot.data);
-    setSaveState({
-      type: "success",
-      message: `Loaded saved Kundli from ${formatSavedReadingDate(snapshot.createdAt)}.`,
-    });
-  };
-
-  const handleLoadLiveKundli = () => {
-    setActiveKundliSnapshotId("");
-    setSaveState({
-      type: "success",
-      message: "Switched back to live Kundli generation.",
-    });
-  };
-
-  const handleRestoreCompatibility = (historyItem) => {
-    if (!historyItem?.data) {
-      return;
-    }
-
-    setSelectedSign(historyItem.sign || selectedSign);
-    setPartnerSign(historyItem.partnerSign || partnerSign);
-    setCompatibility(historyItem.data);
-    setSaveState({
-      type: "success",
-      message: `Loaded saved compatibility run from ${formatSavedReadingDate(historyItem.createdAt)}.`,
-    });
   };
 
   return (
