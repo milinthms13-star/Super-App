@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; }
+        .footer { background: #333; color: white; padding: 10px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+        .button { display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+        .status-badge { display: inline-block; padding: 8px 12px; background: #fff3cd; color: #856404; border-radius: 4px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Order Status Update</h1>
+            <p>Your order status has changed</p>
+        </div>
+        <div class="content">
+            <p>Hi {{customerName}},</p>
+            <p>Your order status has been updated. Here are the details:</p>
+            
+            <h3>Status Change</h3>
+            <p>Order ID: <strong>{{orderId}}</strong></p>
+            <p>Service: <strong>{{serviceName}}</strong></p>
+            <p>Previous Status: <span class="status-badge">{{previousStatus}}</span></p>
+            <p style="margin-top: 10px;">Current Status: <span class="status-badge" style="background: #d4edda; color: #155724;">{{newStatus}}</span></p>
+            
+            <p><strong>What does this mean?</strong></p>
+            <ul>
+                <li><strong>Under Review:</strong> Our team is reviewing your request and documents</li>
+                <li><strong>Processing:</strong> Your consultant is actively working on your order</li>
+                <li><strong>Completed:</strong> Your order is complete and ready for delivery</li>
+            </ul>
+            
+            <p>You can view full details and communicate with your consultant here:</p>
+            <a href="{{orderUrl}}" class="button">View Order Details</a>
+            
+            <p>Thank you for choosing Malabar Bazaar!</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2026 Malabar Bazaar. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

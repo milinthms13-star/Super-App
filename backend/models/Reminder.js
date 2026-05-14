@@ -43,7 +43,7 @@ const reminderSchema = new mongoose.Schema({
   },
   reminders: [{
     type: String,
-    enum: ['In-app', 'SMS', 'Call']
+    enum: ['Email', 'In-app', 'SMS', 'Call']
   }],
   recurring: {
     type: String,

@@ -1,45 +1,91 @@
 .devadarshan-page {
+  --dd-ink: #132132;
+  --dd-muted: #5f748a;
+  --dd-line: #d4e4ed;
+  --dd-paper: #ffffff;
+  --dd-surface: #eff6fb;
+  --dd-primary: #0f766e;
+  --dd-primary-dark: #0c4f56;
+  --dd-accent: #cf8f2d;
+  --dd-accent-soft: #fff4e3;
+  --dd-success-soft: #e7f7f4;
+  --dd-warning-soft: #fff7dc;
+  --dd-danger-soft: #fff0f0;
   display: grid;
   gap: 1rem;
-  padding: 1rem;
-  padding-bottom: 90px;
-  background: radial-gradient(circle at 0% 0%, #fff5df 0%, #f7f6ff 48%, #eef8ff 100%);
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 1.25rem;
+  padding-bottom: 96px;
+  color: var(--dd-ink);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at 12% 2%, rgba(15, 118, 110, 0.17), transparent 26%),
+    radial-gradient(circle at 92% 20%, rgba(207, 143, 45, 0.16), transparent 29%),
+    linear-gradient(180deg, #f6fcff 0%, #f3f8fb 54%, #edf5fa 100%);
+}
+
+.devadarshan-hero h1,
+.devadarshan-panel h3,
+.devadarshan-card h3,
+.devadarshan-section h2,
+.quick-card strong {
+  font-family: "Sora", "Manrope", sans-serif;
 }
 
 .devadarshan-hero,
 .devadarshan-panel,
 .devadarshan-card,
 .quick-card {
-  border: 1px solid #d7dfee;
-  border-radius: 16px;
-  background: #ffffff;
+  border: 1px solid rgba(19, 33, 50, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 36px rgba(19, 33, 50, 0.09);
 }
 
 .devadarshan-hero {
+  position: relative;
+  overflow: hidden;
   display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
+  gap: 1rem;
+  padding: 1.2rem;
+  background:
+    radial-gradient(circle at 86% 0%, rgba(207, 143, 45, 0.24), transparent 38%),
+    radial-gradient(circle at 6% 100%, rgba(15, 118, 110, 0.2), transparent 35%),
+    linear-gradient(118deg, #ffffff 0%, #f3fbf8 56%, #f2f8ff 100%);
+}
+
+.devadarshan-hero::after {
+  content: "";
+  position: absolute;
+  right: -34px;
+  bottom: -74px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: 30px solid rgba(12, 79, 86, 0.08);
 }
 
 .devadarshan-kicker {
   margin: 0;
-  color: #854d0e;
+  color: var(--dd-primary-dark);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.14em;
 }
 
 .devadarshan-hero h1 {
-  margin: 0.1rem 0 0;
-  color: #1e293b;
-  font-size: clamp(1.4rem, 3vw, 2rem);
+  margin: 0.14rem 0 0;
+  font-size: clamp(1.55rem, 3vw, 2.25rem);
+  line-height: 1.08;
 }
 
 .devadarshan-subtitle {
   margin: 0.2rem 0 0;
-  color: #475569;
-  max-width: 900px;
+  color: #415b73;
+  line-height: 1.6;
+  max-width: 74ch;
 }
 
 .devadarshan-hero-controls {
@@ -51,25 +97,32 @@
 .devadarshan-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.45rem;
 }
 
 .devadarshan-nav button,
 .devadarshan-bottom-nav button {
-  border: 1px solid #ced8ea;
+  border: 1px solid rgba(19, 33, 50, 0.12);
   border-radius: 999px;
   background: #ffffff;
-  color: #1e293b;
+  color: var(--dd-ink);
   padding: 0.45rem 0.85rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .devadarshan-nav button.active,
 .devadarshan-bottom-nav button.active {
-  background: #0f766e;
+  background: linear-gradient(135deg, var(--dd-primary), var(--dd-primary-dark));
   color: #ffffff;
-  border-color: #0f766e;
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(12, 79, 86, 0.3);
+}
+
+.devadarshan-nav button:hover,
+.devadarshan-bottom-nav button:hover {
+  transform: translateY(-1px);
 }
 
 .devadarshan-hero-controls input,
@@ -81,11 +134,24 @@
 .directory-filters input,
 .directory-filters select {
   width: 100%;
-  border: 1px solid #c7d2e5;
-  border-radius: 10px;
-  padding: 0.62rem 0.74rem;
+  border: 1px solid #c8d9e6;
+  border-radius: 12px;
+  padding: 0.66rem 0.78rem;
   background: #ffffff;
   color: #0f172a;
+  font: inherit;
+}
+
+.devadarshan-hero-controls input:focus,
+.devadarshan-hero-controls select:focus,
+.devadarshan-form input:focus,
+.devadarshan-form select:focus,
+.devadarshan-form textarea:focus,
+.directory-filters input:focus,
+.directory-filters select:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.45);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.13);
 }
 
 .devadarshan-hero-controls button,
@@ -94,33 +160,51 @@
 .quick-card,
 .card-actions a {
   border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #0f766e, #0ea5a0);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--dd-primary), var(--dd-primary-dark));
   color: #ffffff;
-  padding: 0.55rem 0.8rem;
+  padding: 0.56rem 0.88rem;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: none;
   text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.devadarshan-hero-controls button:hover,
+.devadarshan-card button:hover,
+.devadarshan-form button:hover,
+.quick-card:hover,
+.card-actions a:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(12, 79, 86, 0.24);
 }
 
 .devadarshan-hero-controls button.secondary,
 .devadarshan-card button.secondary,
 .inline-btn,
 .card-actions .secondary {
-  background: #eff6ff;
-  color: #1e293b;
-  border: 1px solid #c4d7f0;
+  background: #f5f9fd;
+  color: var(--dd-ink);
+  border: 1px solid rgba(19, 33, 50, 0.12);
+  box-shadow: none;
+}
+
+.devadarshan-hero-controls button.secondary:hover,
+.devadarshan-card button.secondary:hover,
+.inline-btn:hover,
+.card-actions .secondary:hover {
+  box-shadow: 0 10px 18px rgba(19, 33, 50, 0.12);
 }
 
 .devadarshan-status {
   margin: 0;
   border-radius: 12px;
-  border: 1px solid #86efac;
-  background: #f0fdf4;
-  color: #166534;
+  border: 1px solid rgba(15, 118, 110, 0.23);
+  background: linear-gradient(120deg, rgba(15, 118, 110, 0.11), rgba(15, 118, 110, 0.04));
+  color: var(--dd-primary-dark);
   padding: 0.66rem 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .devadarshan-section {
@@ -132,7 +216,16 @@
 .devadarshan-panel h3,
 .devadarshan-card h3 {
   margin: 0;
-  color: #0f172a;
+}
+
+.devadarshan-note {
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px solid #d5e4f3;
+  background: #f7fbff;
+  color: #3d566f;
+  font-size: 0.9rem;
 }
 
 .devadarshan-quick-grid {
@@ -143,16 +236,17 @@
 
 .quick-card {
   display: grid;
-  gap: 0.3rem;
-  border: 1px solid #d9efe9;
+  gap: 0.25rem;
+  text-align: left;
 }
 
 .quick-card strong {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 .quick-card span {
-  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.82rem;
 }
 
 .devadarshan-grid {
@@ -178,14 +272,15 @@
   gap: 0.25rem;
   font-size: 0.85rem;
   color: #334155;
+  font-weight: 600;
 }
 
 .directory-filters.sticky {
   position: sticky;
   top: 0;
-  z-index: 3;
+  z-index: 4;
   padding: 0.65rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #d7e5f0;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(6px);
@@ -199,14 +294,15 @@
 
 .devadarshan-card {
   display: grid;
-  gap: 0.4rem;
-  padding: 0.9rem;
+  gap: 0.45rem;
+  padding: 0.95rem;
 }
 
 .devadarshan-card p {
   margin: 0;
-  color: #475569;
+  color: #4a6078;
   font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .card-top-row {
@@ -220,23 +316,23 @@
   border-radius: 999px;
   padding: 0.2rem 0.55rem;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 800;
   white-space: nowrap;
 }
 
 .badge.verified {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--dd-success-soft);
+  color: #11605b;
 }
 
 .badge.pending {
-  background: #ffedd5;
-  color: #9a3412;
+  background: var(--dd-warning-soft);
+  color: #8a5a03;
 }
 
 .badge.event {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: #e9f0ff;
+  color: #234b93;
 }
 
 .card-actions {
@@ -246,8 +342,14 @@
 }
 
 .devadarshan-card.selected {
-  border-color: #14b8a6;
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
+  border-color: rgba(15, 118, 110, 0.4);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.13), 0 16px 34px rgba(19, 33, 50, 0.13);
+}
+
+.devadarshan-details {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
 }
 
 .devadarshan-form {
@@ -260,7 +362,7 @@
   gap: 0.3rem;
   color: #334155;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .checkbox-row {
@@ -281,13 +383,67 @@
 
 .devadarshan-list li {
   margin: 0.3rem 0;
+  line-height: 1.5;
+}
+
+.booking-row {
+  list-style: none;
+  margin-left: -0.85rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #dbe6f4;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.booking-next-action {
+  margin: 0.35rem 0;
+  color: #334155;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.booking-timeline {
+  margin-top: 0.6rem;
+  padding: 0.58rem;
+  border: 1px dashed #c5d5ea;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.booking-timeline ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.booking-timeline li {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.badge.confirmed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge.completed {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.badge.cancelled {
+  background: var(--dd-danger-soft);
+  color: #991b1b;
 }
 
 .inline-btn {
-  margin-left: 0.5rem;
-  padding: 0.2rem 0.55rem;
+  margin-left: 0.45rem;
+  padding: 0.22rem 0.58rem;
   border-radius: 999px;
   cursor: pointer;
+  font-weight: 700;
 }
 
 .devadarshan-bottom-nav {
@@ -299,7 +455,8 @@
   gap: 0.3rem;
   padding: 0.55rem;
   border-top: 1px solid #dbe4f2;
-  background: rgba(255, 255, 255, 0.97);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(6px);
   z-index: 9;
 }
 
@@ -309,7 +466,7 @@
   padding: 0.45rem 0.3rem;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 980px) {
   .devadarshan-hero-controls {
     grid-template-columns: 1fr 1fr;
   }
@@ -322,15 +479,20 @@
 @media (max-width: 760px) {
   .devadarshan-page {
     padding: 0.7rem;
-    padding-bottom: 82px;
+    padding-bottom: 84px;
   }
 
-  .devadarshan-hero-controls {
-    grid-template-columns: 1fr;
+  .devadarshan-hero {
+    padding: 1rem 0.9rem;
+    border-radius: 16px;
   }
 
   .devadarshan-nav {
     display: none;
+  }
+
+  .devadarshan-hero-controls {
+    grid-template-columns: 1fr;
   }
 
   .devadarshan-bottom-nav {
@@ -339,5 +501,214 @@
 
   .directory-filters {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .devadarshan-panel,
+  .devadarshan-card {
+    border-radius: 15px;
+  }
+}
+
+@media (max-width: 520px) {
+  .directory-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .card-actions,
+  .devadarshan-hero-controls {
+    gap: 0.45rem;
+  }
+}
+
+/* ===== CANVA SECOND PASS: DESKTOP DENSITY ===== */
+@media (min-width: 1200px) {
+  .devadarshan-page {
+    max-width: 1680px;
+    padding: 1rem 1.15rem 3.2rem;
+    gap: 0.8rem;
+  }
+
+  .devadarshan-hero {
+    padding: 0.95rem 1rem;
+    gap: 0.75rem;
+    border-radius: 16px;
+  }
+
+  .devadarshan-hero h1 {
+    font-size: clamp(1.45rem, 2.6vw, 2rem);
+  }
+
+  .devadarshan-subtitle {
+    font-size: 0.93rem;
+    line-height: 1.5;
+  }
+
+  .devadarshan-hero-controls {
+    grid-template-columns: minmax(360px, 1fr) auto auto;
+    gap: 0.5rem;
+  }
+
+  .devadarshan-nav {
+    gap: 0.32rem;
+  }
+
+  .devadarshan-nav button {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.8rem;
+  }
+
+  .devadarshan-section {
+    gap: 0.55rem;
+  }
+
+  .devadarshan-section h2 {
+    font-size: 1.05rem;
+  }
+
+  .devadarshan-quick-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .quick-card {
+    grid-column: span 3;
+    border-radius: 12px;
+    padding: 0.48rem 0.62rem;
+  }
+
+  .quick-card strong {
+    font-size: 0.84rem;
+  }
+
+  .quick-card span {
+    font-size: 0.74rem;
+  }
+
+  .devadarshan-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0.62rem;
+  }
+
+  .devadarshan-panel {
+    grid-column: span 6;
+    padding: 0.82rem;
+    border-radius: 14px;
+    gap: 0.5rem;
+  }
+
+  .devadarshan-cards {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0.62rem;
+  }
+
+  .devadarshan-card {
+    grid-column: span 4;
+    padding: 0.72rem;
+    border-radius: 14px;
+    gap: 0.34rem;
+  }
+
+  .devadarshan-card.selected {
+    grid-column: span 6;
+  }
+
+  .devadarshan-card h3,
+  .devadarshan-panel h3 {
+    font-size: 0.95rem;
+  }
+
+  .devadarshan-card p {
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  .badge {
+    padding: 0.16rem 0.45rem;
+    font-size: 0.64rem;
+  }
+
+  .card-actions {
+    gap: 0.32rem;
+  }
+
+  .card-actions a,
+  .devadarshan-card button,
+  .devadarshan-form button,
+  .devadarshan-hero-controls button {
+    border-radius: 10px;
+    padding: 0.46rem 0.7rem;
+    font-size: 0.8rem;
+  }
+
+  .directory-filters {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0.44rem;
+  }
+
+  .directory-filters > label {
+    grid-column: span 2;
+    font-size: 0.78rem;
+  }
+
+  .directory-filters.sticky {
+    padding: 0.5rem;
+    border-radius: 12px;
+  }
+
+  .devadarshan-form {
+    gap: 0.46rem;
+  }
+
+  .devadarshan-form label {
+    font-size: 0.82rem;
+    gap: 0.24rem;
+  }
+
+  .devadarshan-hero-controls input,
+  .devadarshan-hero-controls select,
+  .devadarshan-hero-controls button,
+  .devadarshan-form input,
+  .devadarshan-form select,
+  .devadarshan-form textarea,
+  .directory-filters input,
+  .directory-filters select {
+    border-radius: 10px;
+    padding: 0.48rem 0.62rem;
+    font-size: 0.84rem;
+  }
+
+  .devadarshan-note,
+  .devadarshan-list,
+  .devadarshan-list li {
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .booking-row {
+    margin-left: -0.82rem;
+    padding: 0.5rem 0.62rem;
+    border-radius: 10px;
+  }
+
+  .booking-next-action {
+    margin: 0.24rem 0;
+    font-size: 0.78rem;
+  }
+
+  .booking-timeline {
+    margin-top: 0.5rem;
+    padding: 0.45rem;
+    border-radius: 8px;
+  }
+
+  .booking-timeline li {
+    gap: 0.12rem;
+    font-size: 0.76rem;
+  }
+
+  .inline-btn {
+    margin-left: 0.3rem;
+    padding: 0.14rem 0.42rem;
+    font-size: 0.74rem;
   }
 }

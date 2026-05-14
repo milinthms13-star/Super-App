@@ -505,6 +505,26 @@ const BusinessServices = () => {
     }
   };
 
+  const assignConsultant = async (orderId, consultantEmail, consultantName) => {
+    try {
+      const response = await axios.patch(
+        `${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}/consultant`,
+        { consultantEmail, consultantName },
+        { withCredentials: true }
+      );
+
+      if (response.data.success) {
+        // Refresh orders to show updated consultant info
+        await loadServiceOrders();
+        alert(`Consultant ${consultantName} assigned successfully!`);
+      } else {
+        alert(response.data.message || "Failed to assign consultant.");
+      }
+    } catch (err) {
+      alert(err?.response?.data?.message || err?.message || "Failed to assign consultant.");
+    }
+  };
+
   return (
     <div className="business-services-shell">
       <div className="business-services-hero">
@@ -814,6 +834,32 @@ const BusinessServices = () => {
                         <span>Payment: {order.paymentStatus === "paid" ? "Paid" : "Pending"}</span>
                       </div>
 
+                      {order.consultant && (
+                        <div className="consultant-info">
+                          <span>
+                            <strong>Consultant:</strong> {order.consultant.assignedName || "Assigned"} ({order.consultant.assignedEmail})
+                          </span>
+                        </div>
+                      )}
+
+                      {currentUser?.role === 'admin' && !order.consultant && (
+                        <div className="consultant-assignment">
+                          <button
+                            className="assign-consultant-btn"
+                            type="button"
+                            onClick={() => {
+                              const consultantEmail = prompt('Enter consultant email:');
+                              const consultantName = prompt('Enter consultant name:');
+                              if (consultantEmail && consultantName) {
+                                assignConsultant(order._id || order.id, consultantEmail, consultantName);
+                              }
+                            }}
+                          >
+                            👤 Assign Consultant
+                          </button>
+                        </div>
+                      )}
+
                       <div className="order-timeline">
                         {ORDER_STATUSES.map((step, index) => {
                           const currentIndex = ORDER_STATUSES.findIndex((status) => status.id === normalizeOrderStatus(order.status));
@@ -873,7 +919,7 @@ const BusinessServices = () => {
                             💳 Pay Now
                           </button>
                         )}
-                        {normalizeOrderStatus(order.status) === "completed" && (
+                        {normalizeOrderStatus(order.status) === "completed" && order.paymentStatus === "paid" && (
                           <button
                             className="download-btn"
                             type="button"

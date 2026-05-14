@@ -1018,6 +1018,43 @@ router.post('/consultations/book', authenticate, async (req, res) => {
 
     const booking = await saveConsultationBooking(bookingPayload);
 
+    // 30-min reminder integration with the existing Reminder schedulers
+    // (EmailReminderScheduler / In-app reminder delivery via reminders pipeline)
+    try {
+      const Reminder = require('../models/Reminder');
+
+      const reminderDueDate = preferredDate || new Date();
+
+      const reminder = await Reminder.create({
+        userId,
+        title: 'AstroNila Consultation Reminder',
+        description: `Your astrology consultation with ${consultant.name} starts in 30 minutes.`,
+        category: 'Personal',
+        priority: 'Medium',
+        dueDate: reminderDueDate,
+        dueTime: undefined,
+        completed: false,
+        status: 'Reminder scheduled',
+        reminders: ['Email', 'In-app'],
+        reminderBeforeOffsets: [30],
+        email: sanitizeText(req.user?.email || '', 200),
+        notificationLog: [],
+        notificationCount: 0,
+        // Helps dedupe/resume later if you extend reminder handling
+        data: {
+          bookingId: booking.id || booking._id || '',
+          confirmationCode,
+          consultantId: consultant.id,
+        },
+      });
+
+      // Keep reference (non-critical)
+      // eslint-disable-next-line no-unused-vars
+      reminder;
+    } catch (_reminderError) {
+      // Booking must not fail due to reminder creation issues
+    }
+
     const bookingNotificationData = {
       userEmail: req.user?.email || '',
       userName: sanitizeText(req.user?.name || 'User', 80),

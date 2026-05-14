@@ -351,7 +351,10 @@ const Classifieds = () => {
     deleteClassifiedSavedSearch = async () => [],
     getRecentlyViewedClassifieds = async () => [],
     trackClassifiedListingView = async () => ({}),
-    mockData,
+    classifiedsListings = [],
+    classifiedsMessages = [],
+    classifiedsReports = [],
+    classifiedsBannedUsers = [],
   } = useApp();
   const [activeRole, setActiveRole] = useState(() => getBaseRole(currentUser));
   const [searchText, setSearchText] = useState("");
@@ -407,7 +410,7 @@ const Classifieds = () => {
   const [mobileFilterSheetOpen, setMobileFilterSheetOpen] = useState(false);
   const [showListingPreview, setShowListingPreview] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
-  const [adminBannedUsers, setAdminBannedUsers] = useState([]);
+  const [adminModerationReason, setAdminModerationReason] = useState("");
   const [customCategoryInput, setCustomCategoryInput] = useState("");
   const [managedCategories, setManagedCategories] = useState(CORE_CATEGORIES);
   const [listingExpiryDays, setListingExpiryDays] = useState("30");
@@ -416,6 +419,35 @@ const Classifieds = () => {
   const baseRole = getBaseRole(currentUser);
   const currentUserDistrict = String(currentUser?.district || "Ernakulam");
   const currentUserPincode = String(currentUser?.pincode || "682001");
+  const blockedUsersStorageKey = useMemo(
+    () => `classifieds-blocked-users-${String(currentUser?.email || "guest").toLowerCase()}`,
+    [currentUser?.email]
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const rawValue = window.localStorage.getItem(blockedUsersStorageKey);
+      const parsedValue = rawValue ? JSON.parse(rawValue) : [];
+      setBlockedUsers(
+        Array.isArray(parsedValue)
+          ? parsedValue.map((value) => String(value || "").trim()).filter(Boolean)
+          : []
+      );
+    } catch (error) {
+      setBlockedUsers([]);
+    }
+  }, [blockedUsersStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(blockedUsersStorageKey, JSON.stringify(blockedUsers));
+  }, [blockedUsers, blockedUsersStorageKey]);
 
   const handleSaveSearch = async () => {
     const searchName = prompt("Enter a name for this saved search:");
@@ -636,18 +668,28 @@ const Classifieds = () => {
 
   const listings = useMemo(
     () =>
-      (Array.isArray(mockData?.classifiedsListings) ? mockData.classifiedsListings : []).map(
-        normalizeListing
-      ),
-    [mockData?.classifiedsListings]
+      (Array.isArray(classifiedsListings) ? classifiedsListings : []).map(normalizeListing),
+    [classifiedsListings]
   );
 
-  const messageRecords = Array.isArray(mockData?.classifiedsMessages)
-    ? mockData.classifiedsMessages
+  const messageRecords = Array.isArray(classifiedsMessages)
+    ? classifiedsMessages
     : [];
-  const reportRecords = Array.isArray(mockData?.classifiedsReports)
-    ? mockData.classifiedsReports
+  const reportRecords = Array.isArray(classifiedsReports)
+    ? classifiedsReports
     : [];
+  const adminBannedUsers = useMemo(
+    () =>
+      Array.isArray(classifiedsBannedUsers)
+        ? classifiedsBannedUsers.map((entry) => ({
+            sellerEmail: String(entry?.sellerEmail || "").trim().toLowerCase(),
+            sellerName: String(entry?.sellerName || entry?.name || "Seller").trim(),
+            reason: String(entry?.reason || "").trim(),
+            createdAt: entry?.createdAt,
+          }))
+        : [],
+    [classifiedsBannedUsers]
+  );
 
   const categories = useMemo(
     () => Array.from(new Set([...(managedCategories || []), ...listings.map((listing) => listing.category)])),
@@ -709,6 +751,13 @@ const Classifieds = () => {
         (String(listing.pincode || "").slice(0, 3) &&
           String(listing.pincode || "").slice(0, 3) === currentUserPincode.slice(0, 3));
       const isNotBlocked = !blockedUsers.includes(listing.seller);
+      const isNotAdminBanned =
+        adminBannedUsers.length === 0 ||
+        !adminBannedUsers.some(
+          (bannedUser) =>
+            String(bannedUser?.sellerEmail || "").trim().toLowerCase() ===
+            String(listing?.sellerEmail || "").trim().toLowerCase()
+        );
       const matchesCondition = conditionFilter.length === 0 || conditionFilter.includes(listing.condition);
       
       const matchesPrice = 
@@ -729,6 +778,7 @@ const Classifieds = () => {
         matchesPincode &&
         matchesNearby &&
         isNotBlocked &&
+        isNotAdminBanned &&
         matchesCondition &&
         matchesPrice
       );
@@ -764,6 +814,7 @@ const Classifieds = () => {
     currentUserPincode,
     districtFilter,
     blockedUsers,
+    adminBannedUsers,
     locationFilter,
     nearMeOnly,
     pincodeFilter,
@@ -1181,7 +1232,6 @@ const Classifieds = () => {
     }
 
     setBlockedUsers((current) => Array.from(new Set([...current, sellerName])));
-    setAdminBannedUsers((current) => Array.from(new Set([...current, sellerName])));
     setStatusMessage(`User ${sellerName} blocked from your marketplace view.`);
   };
 
@@ -1223,11 +1273,6 @@ const Classifieds = () => {
     setCategoryFilter((current) => Array.from(new Set([...current, categoryName])));
     addToast(`Category "${categoryName}" added to current filters.`, "info");
     setCustomCategoryInput("");
-  };
-
-  const handleAdminUnban = (sellerName) => {
-    setAdminBannedUsers((current) => current.filter((user) => user !== sellerName));
-    addToast(`${sellerName} removed from banned users list.`, "info");
   };
 
   const handleListingInputChange = (event) => {
@@ -1382,7 +1427,10 @@ const Classifieds = () => {
 
     setSubmitting(true);
     try {
-      await moderateClassifiedListing(selectedListing.id, action);
+      await moderateClassifiedListing(selectedListing.id, action, {
+        reason: adminModerationReason.trim(),
+      });
+      setAdminModerationReason("");
       setStatusMessage(successMessage);
     } catch (error) {
       setStatusMessage(
@@ -1966,7 +2014,7 @@ const Classifieds = () => {
                 return (
                   <article
                     key={listing.id}
-                    className={`classifieds-listing-card ${selectedListing?.id === listing.id ? "selected" : ""} ${isSelected ? "bulk-selected" : ""}`}
+                    className={`classifieds-listing-card ${selectedListing?.id === listing.id ? "selected" : ""} ${isSelected ? "bulk-selected" : ""} ${listing.featured ? "is-featured" : ""} ${listing.urgent ? "is-urgent" : ""}`}
                     onClick={() => setSelectedListingId(listing.id)}
                   >
                     {activeRole === "admin" && (
@@ -2505,17 +2553,14 @@ const Classifieds = () => {
 
               <div className="classifieds-banned-users">
                 <strong>Banned users list</strong>
-                {adminBannedUsers.length === 0 ? <span>No banned users yet.</span> : null}
-                {adminBannedUsers.map((sellerName) => (
-                  <div key={`ban-${sellerName}`} className="classifieds-expiry-item">
-                    <span>{sellerName}</span>
-                    <button
-                      type="button"
-                      className="classifieds-inline-button"
-                      onClick={() => handleAdminUnban(sellerName)}
-                    >
-                      Unban
-                    </button>
+                {adminBannedUsers.length === 0 ? <span>No banned users synced from backend.</span> : null}
+                {adminBannedUsers.map((seller) => (
+                  <div key={`ban-${seller.sellerEmail || seller.sellerName}`} className="classifieds-expiry-item">
+                    <span>
+                      {seller.sellerName}
+                      {seller.reason ? ` - ${seller.reason}` : ""}
+                    </span>
+                    <small>{seller.sellerEmail}</small>
                   </div>
                 ))}
               </div>
@@ -2541,6 +2586,11 @@ const Classifieds = () => {
                       {selectedListing.location} - {selectedListing.locality} - {selectedListing.district}
                       {selectedListing.pincode ? ` (${selectedListing.pincode})` : ""}
                     </p>
+                    {selectedListing.moderationNotes ? (
+                      <p className="classifieds-detail-description">
+                        <strong>Moderator note:</strong> {selectedListing.moderationNotes}
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -2965,6 +3015,17 @@ const Classifieds = () => {
                       <h3>Listing actions</h3>
                       <p>Manage live ads directly from persisted marketplace data.</p>
                     </div>
+                    {activeRole === "admin" ? (
+                      <label className="classifieds-field classifieds-field-full">
+                        <span>Moderation note</span>
+                        <textarea
+                          rows="2"
+                          value={adminModerationReason}
+                          onChange={(event) => setAdminModerationReason(event.target.value)}
+                          placeholder="Example: Missing ownership proof. Re-upload document to proceed."
+                        />
+                      </label>
+                    ) : null}
                     <div className="classifieds-inline-actions">
                       {activeRole === "admin" ? (
                         <button
@@ -3000,6 +3061,20 @@ const Classifieds = () => {
                           Awaiting tools
                         </button>
                       )}
+                      {activeRole === "admin" ? (
+                        <button
+                          type="button"
+                          className="classifieds-inline-button"
+                          onClick={() =>
+                            handleAdminAction(
+                              "return_to_review",
+                              `${selectedListing.title} returned to seller review queue.`
+                            )
+                          }
+                        >
+                          Return to review
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="classifieds-inline-button danger"

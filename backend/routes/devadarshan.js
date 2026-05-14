@@ -19,6 +19,12 @@ const ADMIN_EMAIL = 'mgdhanyamohan@gmail.com';
 const PAYMENT_GATEWAYS = ['razorpay', 'stripe'];
 const BOOKING_STATUSES = ['Pending', 'Confirmed', 'Completed', 'Cancelled'];
 const DONATION_CATEGORIES = ['Annadanam', 'Temple Maintenance', 'Festival Fund', 'Special Seva Donation'];
+const BOOKING_STATUS_TRANSITIONS = {
+  Pending: new Set(['Confirmed', 'Cancelled']),
+  Confirmed: new Set(['Completed', 'Cancelled']),
+  Completed: new Set([]),
+  Cancelled: new Set([]),
+};
 
 const DEFAULT_PROFILE = {
   primaryNakshatra: '',
@@ -232,6 +238,85 @@ const isAdminUser = (user = {}) => {
 };
 
 const generateId = (prefix) => `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`;
+const nowIso = () => new Date().toISOString();
+
+const canTransitionBookingStatus = (currentStatus = 'Pending', nextStatus = 'Pending') => {
+  const normalizedCurrent = String(currentStatus || 'Pending').trim();
+  const normalizedNext = String(nextStatus || 'Pending').trim();
+  if (normalizedCurrent === normalizedNext) {
+    return true;
+  }
+
+  const allowedTransitions = BOOKING_STATUS_TRANSITIONS[normalizedCurrent];
+  if (!allowedTransitions) {
+    return false;
+  }
+
+  return allowedTransitions.has(normalizedNext);
+};
+
+const addBookingTimelineEntry = (booking, status, by = 'system', note = '') => {
+  if (!booking) {
+    return;
+  }
+
+  if (!Array.isArray(booking.statusTimeline)) {
+    booking.statusTimeline = [];
+  }
+
+  const normalizedStatus = String(status || booking.status || '').trim();
+  if (!normalizedStatus) {
+    return;
+  }
+
+  const normalizedNote = String(note || '').trim();
+  const latestEntry = booking.statusTimeline[booking.statusTimeline.length - 1];
+  if (
+    latestEntry &&
+    String(latestEntry.status || '').trim() === normalizedStatus &&
+    String(latestEntry.note || '').trim() === normalizedNote
+  ) {
+    return;
+  }
+
+  booking.statusTimeline.push({
+    status: normalizedStatus,
+    at: nowIso(),
+    by: String(by || 'system').trim(),
+    note: normalizedNote,
+  });
+};
+
+const createBookingReceiptText = (booking) =>
+  [
+    'DEVADARSHAN RECEIPT',
+    `Receipt No: ${booking.receiptNumber || 'N/A'}`,
+    `Booking ID: ${booking.bookingCode || 'N/A'}`,
+    `Temple: ${booking.templeName || 'N/A'}`,
+    `Pooja: ${booking.poojaType || 'N/A'}`,
+    `Devotee: ${booking.devoteeName || 'N/A'}`,
+    `Nakshatra: ${booking.nakshatra || 'N/A'}`,
+    `Booking Date: ${booking.bookingDate || 'N/A'}`,
+    `Payment: ${booking.paymentMethod || 'N/A'} (${booking.paymentStatus || 'N/A'})`,
+    `Amount: INR ${Number(booking.amount || 0).toLocaleString('en-IN')}`,
+    `Transaction Ref: ${booking.transactionRef || 'N/A'}`,
+    `Admin Approval: ${booking.adminApprovalStatus || 'N/A'}`,
+    `Status: ${booking.status || 'N/A'}`,
+  ].join('\n');
+
+const createDonationReceiptText = (donation) =>
+  [
+    'DEVADARSHAN DONATION RECEIPT',
+    `Receipt No: ${donation.receiptNumber || 'N/A'}`,
+    `Donation ID: ${donation.donationCode || 'N/A'}`,
+    `Temple: ${donation.templeName || 'N/A'}`,
+    `Category: ${donation.category || 'N/A'}`,
+    `Purpose: ${donation.purpose || 'N/A'}`,
+    `Amount: INR ${Number(donation.amount || 0).toLocaleString('en-IN')}`,
+    `Payment: ${donation.paymentMethod || 'N/A'} (${donation.paymentStatus || 'N/A'})`,
+    `Transaction Ref: ${donation.transactionRef || 'N/A'}`,
+    `Date: ${donation.createdDate || donation.createdAt || 'N/A'}`,
+  ].join('\n');
 
 const ensureSeedData = async () => {
   const templeCount = await DevadarshanTemple.countDocuments();
@@ -482,6 +567,7 @@ router.post('/bookings', authenticate, async (req, res) => {
 
     const quantity = Math.max(1, Number(value.quantity || 1));
     const bookingCode = generateId('BK');
+    const initialStatus = temple.verified ? 'Confirmed' : 'Pending';
     const booking = await DevadarshanBooking.create({
       bookingCode,
       customerEmail: req.user.email,
@@ -504,7 +590,26 @@ router.post('/bookings', authenticate, async (req, res) => {
       transactionRef: generateId('TXN'),
       receiptNumber: generateId('RCPT'),
       adminApprovalStatus: temple.verified ? 'Auto Approved (Verified Temple)' : 'Pending Admin Approval',
-      status: temple.verified ? 'Confirmed' : 'Pending',
+      status: initialStatus,
+      refundStatus: 'Not Requested',
+      statusTimeline: [
+        {
+          status: 'Pending',
+          at: nowIso(),
+          by: 'system',
+          note: 'Booking request submitted.',
+        },
+        ...(initialStatus === 'Confirmed'
+          ? [
+              {
+                status: 'Confirmed',
+                at: nowIso(),
+                by: 'system',
+                note: 'Auto approved for verified temple.',
+              },
+            ]
+          : []),
+      ],
     });
 
     const state = await getOrCreateState(req.user.email);
@@ -530,17 +635,92 @@ router.patch('/bookings/:bookingCode/cancel', authenticate, async (req, res) => 
       return res.status(403).json({ success: false, message: 'Not allowed.' });
     }
 
+    if (!canTransitionBookingStatus(booking.status, 'Cancelled')) {
+      return res.status(409).json({
+        success: false,
+        message: `Booking cannot be cancelled once it is ${booking.status}.`,
+      });
+    }
+
     booking.status = 'Cancelled';
-    booking.adminApprovalStatus = 'Cancelled by user';
+    booking.adminApprovalStatus = isAdminUser(req.user) ? 'Cancelled by admin' : 'Cancelled by user';
+    if (booking.paymentStatus === 'Paid') {
+      booking.refundStatus = 'Requested';
+      booking.refundAmount = Number(booking.amount || 0);
+    }
+    addBookingTimelineEntry(
+      booking,
+      'Cancelled',
+      isAdminUser(req.user) ? 'admin' : 'user',
+      booking.paymentStatus === 'Paid' ? 'Cancellation requested after payment. Refund initiated for review.' : 'Booking cancelled before payment.'
+    );
     await booking.save();
 
     const state = await getOrCreateState(booking.customerEmail);
-    await addStateNotification(state, `Booking ${booking.bookingCode} cancelled.`);
+    await addStateNotification(
+      state,
+      booking.paymentStatus === 'Paid'
+        ? `Booking ${booking.bookingCode} cancelled. Refund request is now under review.`
+        : `Booking ${booking.bookingCode} cancelled.`
+    );
 
     return res.json({ success: true, data: { booking: { ...booking.toObject(), id: booking.bookingCode } } });
   } catch (err) {
     logger.error('devadarshan cancel booking error:', err);
     return res.status(500).json({ success: false, message: 'Unable to cancel booking.' });
+  }
+});
+
+router.get('/bookings/:bookingCode/timeline', authenticate, async (req, res) => {
+  try {
+    const bookingCode = String(req.params.bookingCode || '').trim();
+    const booking = await DevadarshanBooking.findOne({ bookingCode }).lean();
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    const isOwner = String(booking.customerEmail || '').toLowerCase() === String(req.user.email || '').toLowerCase();
+    if (!isOwner && !isAdminUser(req.user)) {
+      return res.status(403).json({ success: false, message: 'Not allowed.' });
+    }
+
+    const timeline = Array.isArray(booking.statusTimeline) ? booking.statusTimeline : [];
+    return res.json({
+      success: true,
+      data: {
+        bookingCode: booking.bookingCode,
+        status: booking.status,
+        paymentStatus: booking.paymentStatus,
+        refundStatus: booking.refundStatus || 'Not Requested',
+        timeline,
+      },
+    });
+  } catch (error) {
+    logger.error('devadarshan booking timeline error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load booking timeline.' });
+  }
+});
+
+router.get('/bookings/:bookingCode/receipt', authenticate, async (req, res) => {
+  try {
+    const bookingCode = String(req.params.bookingCode || '').trim();
+    const booking = await DevadarshanBooking.findOne({ bookingCode }).lean();
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    const isOwner = String(booking.customerEmail || '').toLowerCase() === String(req.user.email || '').toLowerCase();
+    if (!isOwner && !isAdminUser(req.user)) {
+      return res.status(403).json({ success: false, message: 'Not allowed.' });
+    }
+
+    const receiptText = createBookingReceiptText(booking);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${booking.receiptNumber || booking.bookingCode}.txt"`);
+    return res.send(receiptText);
+  } catch (error) {
+    logger.error('devadarshan booking receipt error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to generate booking receipt.' });
   }
 });
 
@@ -559,6 +739,14 @@ router.post('/bookings/:bookingCode/payments/initiate', authenticate, async (req
 
     if (String(booking.customerEmail || '').toLowerCase() !== String(req.user.email || '').toLowerCase()) {
       return res.status(403).json({ success: false, message: 'Not allowed.' });
+    }
+
+    if (booking.status === 'Cancelled') {
+      return res.status(409).json({ success: false, message: 'Cancelled bookings cannot be paid.' });
+    }
+
+    if (booking.paymentStatus === 'Paid') {
+      return res.status(409).json({ success: false, message: 'Booking is already paid.' });
     }
 
     const amount = Number(booking.amount || 0);
@@ -653,10 +841,28 @@ router.post('/bookings/:bookingCode/payments/verify', authenticate, async (req, 
       return res.status(403).json({ success: false, message: 'Not allowed.' });
     }
 
+    if (booking.status === 'Cancelled') {
+      return res.status(409).json({
+        success: false,
+        message: 'This booking is cancelled. Payment verification is blocked.',
+      });
+    }
+
     const { paymentId, razorpay_payment_id, razorpay_order_id, razorpay_signature, stripePaymentIntentId } = req.body || {};
     const payment = await Payment.findOne({ paymentId, orderId: booking._id.toString() });
     if (!payment) {
       return res.status(404).json({ success: false, message: 'Payment record not found.' });
+    }
+
+    if (booking.paymentStatus === 'Paid' && payment.status === 'captured') {
+      return res.json({
+        success: true,
+        data: {
+          booking: { ...booking.toObject(), id: booking.bookingCode },
+          payment,
+          idempotent: true,
+        },
+      });
     }
 
     const gatewayConfig = await PaymentGateway.findOne({ gatewayName: payment.paymentGateway, isActive: true }).select('+credentials');
@@ -732,10 +938,12 @@ router.post('/bookings/:bookingCode/payments/verify', authenticate, async (req, 
     booking.paymentStatus = 'Paid';
     booking.paymentRecordId = payment.paymentId;
     booking.paymentDetails = payment.paymentDetails || booking.paymentDetails;
-    if (booking.status === 'Pending') {
+    if (booking.status === 'Pending' && canTransitionBookingStatus(booking.status, 'Confirmed')) {
       booking.status = 'Confirmed';
       booking.adminApprovalStatus = 'Approved by payment';
+      addBookingTimelineEntry(booking, 'Confirmed', 'payment', 'Payment verified and booking confirmed.');
     }
+    addBookingTimelineEntry(booking, booking.status, 'payment', `Payment captured via ${payment.paymentGateway}.`);
     await booking.save();
 
     const state = await getOrCreateState(booking.customerEmail);
@@ -776,8 +984,11 @@ router.post('/donations', authenticate, async (req, res) => {
       amount: Number(value.amount || 0),
       purpose: value.purpose,
       paymentMethod: value.paymentMethod,
+      paymentStatus: 'Paid',
+      paymentReference: generateId('PAYREF'),
       transactionRef: generateId('TXN'),
       receiptNumber: generateId('DRCPT'),
+      receiptGeneratedAt: nowIso(),
       createdDate: new Date().toISOString().slice(0, 10),
     });
 
@@ -797,6 +1008,29 @@ router.post('/donations', authenticate, async (req, res) => {
   } catch (err) {
     logger.error('devadarshan create donation error:', err);
     return res.status(500).json({ success: false, message: 'Unable to complete donation.' });
+  }
+});
+
+router.get('/donations/:donationCode/receipt', authenticate, async (req, res) => {
+  try {
+    const donationCode = String(req.params.donationCode || '').trim();
+    const donation = await DevadarshanDonation.findOne({ donationCode }).lean();
+    if (!donation) {
+      return res.status(404).json({ success: false, message: 'Donation not found.' });
+    }
+
+    const isOwner = String(donation.customerEmail || '').toLowerCase() === String(req.user.email || '').toLowerCase();
+    if (!isOwner && !isAdminUser(req.user)) {
+      return res.status(403).json({ success: false, message: 'Not allowed.' });
+    }
+
+    const receiptText = createDonationReceiptText(donation);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${donation.receiptNumber || donation.donationCode}.txt"`);
+    return res.send(receiptText);
+  } catch (error) {
+    logger.error('devadarshan donation receipt error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to generate donation receipt.' });
   }
 });
 
@@ -895,10 +1129,21 @@ router.patch('/admin/bookings/:bookingCode/status', authenticate, verifyAdmin, a
       return res.status(404).json({ success: false, message: 'Booking not found.' });
     }
 
+    if (!canTransitionBookingStatus(booking.status, value.status)) {
+      return res.status(409).json({
+        success: false,
+        message: `Booking status cannot move from ${booking.status} to ${value.status}.`,
+      });
+    }
+
     booking.status = value.status;
     if (value.status === 'Confirmed') {
       booking.adminApprovalStatus = 'Approved by Admin';
     }
+    if (value.status === 'Completed') {
+      booking.refundStatus = 'Not Requested';
+    }
+    addBookingTimelineEntry(booking, value.status, 'admin', 'Status updated by admin.');
     await booking.save();
 
     const state = await getOrCreateState(booking.customerEmail);
@@ -923,5 +1168,7 @@ module.exports.__private__ = {
   adminStatusSchema,
   paymentInitiateSchema,
   isAdminUser,
+  canTransitionBookingStatus,
+  createBookingReceiptText,
+  createDonationReceiptText,
 };
-

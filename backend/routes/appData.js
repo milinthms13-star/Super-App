@@ -206,7 +206,14 @@ const classifiedsReviewSchema = Joi.object({
 });
 
 const classifiedsModerationSchema = Joi.object({
-  action: Joi.string().valid('approve', 'flag', 'reject').required(),
+  action: Joi.string().valid('approve', 'flag', 'reject', 'return_to_review').required(),
+  reason: Joi.string().allow('').trim().max(300).default(''),
+});
+
+const classifiedsBanSellerSchema = Joi.object({
+  sellerEmail: Joi.string().trim().email().required(),
+  sellerName: Joi.string().allow('').trim().max(120).default(''),
+  reason: Joi.string().allow('').trim().max(300).default(''),
 });
 
 const classifiedsRenewalSchema = Joi.object({
@@ -433,6 +440,9 @@ const ensureClassifiedsModuleData = (moduleData = {}) => ({
   classifiedsReports: Array.isArray(moduleData.classifiedsReports)
     ? moduleData.classifiedsReports
     : [],
+  classifiedsBannedUsers: Array.isArray(moduleData.classifiedsBannedUsers)
+    ? moduleData.classifiedsBannedUsers
+    : [],
 });
 
 const buildClassifiedPlanLabel = (plan = 'free') => {
@@ -648,8 +658,22 @@ const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
       (Array.isArray(listing.reviews) ? listing.reviews.length : 0)
   ),
   moderationStatus: String(listing.moderationStatus || (listing.verified === false ? 'pending' : 'approved')).trim(),
+  moderationNotes: String(listing.moderationNotes || '').trim(),
+  moderationUpdatedAt: listing.moderationUpdatedAt
+    ? String(listing.moderationUpdatedAt).trim()
+    : String(listing.updatedAt || listing.createdAt || new Date().toISOString()).trim(),
   createdAt: String(listing.createdAt || new Date().toISOString()).trim(),
   updatedAt: String(listing.updatedAt || listing.createdAt || new Date().toISOString()).trim(),
+});
+
+const normalizeClassifiedBannedUserRecord = (record = {}, index = 0) => ({
+  id: String(record.id || `classified-ban-${index + 1}`).trim(),
+  sellerEmail: String(record.sellerEmail || record.email || '').trim().toLowerCase(),
+  sellerName: String(record.sellerName || record.name || 'Seller').trim(),
+  reason: String(record.reason || '').trim(),
+  bannedByEmail: String(record.bannedByEmail || '').trim().toLowerCase(),
+  bannedByName: String(record.bannedByName || '').trim(),
+  createdAt: String(record.createdAt || new Date().toISOString()).trim(),
 });
 
 const normalizeClassifiedsModule = (moduleData = {}) => {
@@ -674,10 +698,39 @@ const normalizeClassifiedsModule = (moduleData = {}) => {
       status: String(report.status || 'open').trim(),
       createdAt: String(report.createdAt || new Date().toISOString()).trim(),
     })),
+    classifiedsBannedUsers: nextModuleData.classifiedsBannedUsers
+      .map(normalizeClassifiedBannedUserRecord)
+      .filter((record) => record.sellerEmail),
   };
 };
 
 const normalizeEmailAddress = (value = '') => String(value || '').trim().toLowerCase();
+
+const isClassifiedSellerBanned = (sellerEmail = '', moduleData = {}) => {
+  const normalizedEmail = normalizeEmailAddress(sellerEmail);
+  if (!normalizedEmail) {
+    return false;
+  }
+
+  const normalizedModule = normalizeClassifiedsModule(moduleData);
+  return normalizedModule.classifiedsBannedUsers.some(
+    (record) => normalizeEmailAddress(record?.sellerEmail) === normalizedEmail
+  );
+};
+
+const getClassifiedBannedSellerRecord = (sellerEmail = '', moduleData = {}) => {
+  const normalizedEmail = normalizeEmailAddress(sellerEmail);
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const normalizedModule = normalizeClassifiedsModule(moduleData);
+  return (
+    normalizedModule.classifiedsBannedUsers.find(
+      (record) => normalizeEmailAddress(record?.sellerEmail) === normalizedEmail
+    ) || null
+  );
+};
 
 const normalizeEducationState = (state = {}) => {
   const normalizeList = (values) =>
@@ -3620,13 +3673,38 @@ router.patch('/classifieds/listings/:listingId/moderation', authenticate, adminO
     });
   }
 
+  const moderationNote = String(value.reason || '').trim();
+  const moderationTimestamp = new Date().toISOString();
+
   if (useMongoClassifieds()) {
     const updates =
       value.action === 'approve'
-        ? { verified: true, moderationStatus: 'approved' }
+        ? {
+            verified: true,
+            moderationStatus: 'approved',
+            moderationNotes: moderationNote,
+            moderationUpdatedAt: moderationTimestamp,
+          }
         : value.action === 'flag'
-          ? { verified: false, moderationStatus: 'flagged' }
-          : { verified: false, moderationStatus: 'rejected' };
+          ? {
+              verified: false,
+              moderationStatus: 'flagged',
+              moderationNotes: moderationNote,
+              moderationUpdatedAt: moderationTimestamp,
+            }
+          : value.action === 'return_to_review'
+            ? {
+                verified: false,
+                moderationStatus: 'pending',
+                moderationNotes: moderationNote,
+                moderationUpdatedAt: moderationTimestamp,
+              }
+            : {
+                verified: false,
+                moderationStatus: 'rejected',
+                moderationNotes: moderationNote,
+                moderationUpdatedAt: moderationTimestamp,
+              };
 
     const updatedListing = await moderateClassifiedAd(req.params.listingId, updates);
 
@@ -3657,6 +3735,8 @@ router.patch('/classifieds/listings/:listingId/moderation', authenticate, adminO
           ...listing,
           verified: true,
           moderationStatus: 'approved',
+          moderationNotes: moderationNote,
+          moderationUpdatedAt: moderationTimestamp,
           updatedAt: new Date().toISOString(),
         };
       }
@@ -3666,6 +3746,19 @@ router.patch('/classifieds/listings/:listingId/moderation', authenticate, adminO
           ...listing,
           verified: false,
           moderationStatus: 'flagged',
+          moderationNotes: moderationNote,
+          moderationUpdatedAt: moderationTimestamp,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      if (value.action === 'return_to_review') {
+        return {
+          ...listing,
+          verified: false,
+          moderationStatus: 'pending',
+          moderationNotes: moderationNote,
+          moderationUpdatedAt: moderationTimestamp,
           updatedAt: new Date().toISOString(),
         };
       }
@@ -3674,6 +3767,8 @@ router.patch('/classifieds/listings/:listingId/moderation', authenticate, adminO
         ...listing,
         verified: false,
         moderationStatus: 'rejected',
+        moderationNotes: moderationNote,
+        moderationUpdatedAt: moderationTimestamp,
         updatedAt: new Date().toISOString(),
       };
     });

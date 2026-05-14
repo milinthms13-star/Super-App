@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; }
+        .footer { background: #333; color: white; padding: 10px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+        .button { display: inline-block; background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+        .highlight { background: #d1fae5; padding: 15px; border-left: 4px solid #10b981; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Deliverables Ready for Review</h1>
+            <p>Your consultant has uploaded the completed work</p>
+        </div>
+        <div class="content">
+            <p>Hi {{customerName}},</p>
+            <p>Great news! {{consultantName}} has uploaded the completed deliverables for your {{serviceName}} order. You can now review the work and approve or request revisions.</p>
+            
+            <div class="highlight">
+                <h3 style="margin-top: 0;">What to Do Next</h3>
+                <ol style="margin: 0;">
+                    <li>Review all deliverables carefully</li>
+                    <li>If satisfied, click "Approve" to complete the order</li>
+                    <li>If you need changes, provide feedback to your consultant</li>
+                    <li>Once approved, your invoice will be ready to download</li>
+                </ol>
+            </div>
+            
+            <p><strong>Review the deliverables now:</strong></p>
+            <a href="{{orderUrl}}" class="button">View Deliverables</a>
+            
+            <p>If you have any questions about the work, you can message {{consultantName}} directly from your order page.</p>
+            
+            <p>Thank you for working with us!</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2026 Malabar Bazaar. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

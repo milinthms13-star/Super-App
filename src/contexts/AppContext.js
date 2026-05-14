@@ -47,6 +47,7 @@ const EMPTY_MODULE_DATA = {
   classifiedsListings: [],
   classifiedsMessages: [],
   classifiedsReports: [],
+  classifiedsBannedUsers: [],
   realestateProperties: [],
   restaurants: [],
   rideOffers: [],
@@ -1110,10 +1111,13 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
     return response.data.data?.listing;
   };
 
-  const moderateClassifiedListing = async (listingId, action) => {
+  const moderateClassifiedListing = async (listingId, action, payload = {}) => {
     const response = await axios.patch(
       `${API_BASE_URL}/app-data/classifieds/listings/${encodeURIComponent(listingId)}/moderation`,
-      { action },
+      {
+        action,
+        reason: payload?.reason || "",
+      },
       { headers: authHeaders }
     );
 
@@ -1947,6 +1951,10 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
         ecommerceSavedSearches,
         ecommerceSearchHistory,
         ecommerceRefillReminders,
+        classifiedsListings: moduleData.classifiedsListings || [],
+        classifiedsMessages: moduleData.classifiedsMessages || [],
+        classifiedsReports: moduleData.classifiedsReports || [],
+        classifiedsBannedUsers: moduleData.classifiedsBannedUsers || [],
         orders,
         sellerOrders,
         ecommerceProducts: approvedProducts,
@@ -2030,6 +2038,7 @@ export const AppProvider = ({ children, loggedInUser, language = "en", authToken
           classifiedsListings: moduleData.classifiedsListings || [],
           classifiedsMessages: moduleData.classifiedsMessages || [],
           classifiedsReports: moduleData.classifiedsReports || [],
+          classifiedsBannedUsers: moduleData.classifiedsBannedUsers || [],
           realestateProperties: moduleData.realestateProperties || [],
           restaurants: moduleData.restaurants || [],
           rideOffers: moduleData.rideOffers || [],

@@ -11,12 +11,14 @@ const devadarshanDonationSchema = new mongoose.Schema(
     amount: { type: Number, required: true, min: 1 },
     purpose: { type: String, default: '', trim: true },
     paymentMethod: { type: String, default: 'UPI', trim: true },
+    paymentStatus: { type: String, default: 'Paid', trim: true, index: true },
+    paymentReference: { type: String, default: '', trim: true },
     transactionRef: { type: String, default: '', trim: true },
     receiptNumber: { type: String, default: '', trim: true },
+    receiptGeneratedAt: { type: String, default: '', trim: true },
     createdDate: { type: String, default: '', trim: true },
   },
   { timestamps: true }
 );
 
 module.exports = mongoose.model('DevadarshanDonation', devadarshanDonationSchema);
-

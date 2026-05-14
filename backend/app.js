@@ -159,6 +159,7 @@ app.use('/api/messaging', require('./routes/messaging'));
 app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/checkout', require('./routes/checkoutRoutes')); // Phase 5D: Checkout & Payment
+app.use('/api/cart', require('./routes/cartRoutes')); // Persistent cart API
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/settlements', require('./routes/settlements'));
 app.use('/webhooks/payment', require('./routes/paymentWebhookRoutes')); // Phase 5D: Payment Gateway Webhooks

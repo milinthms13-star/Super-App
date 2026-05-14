@@ -175,7 +175,7 @@ describe("Ecommerce seller review workflow", () => {
     expect(screen.getAllByText(/return requests/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/packet arrived torn/i)).toBeInTheDocument();
     expect(screen.getByText(/reason: damaged/i)).toBeInTheDocument();
-    expect(screen.getByText(/pending/i)).toBeInTheDocument();
+    expect(screen.getByText(/^pending$/i)).toBeInTheDocument();
   });
 
   test("lets the seller approve a return request", async () => {

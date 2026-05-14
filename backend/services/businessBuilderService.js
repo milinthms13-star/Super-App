@@ -9,6 +9,17 @@ const BusinessBuilderAsset = require('../models/BusinessBuilderAsset');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
+
+const castObjectId = (value) => {
+  const v = String(value || '').trim();
+  if (!v) return null;
+  // If it's already an ObjectId string, this will cast; otherwise it will throw.
+  if (!mongoose.Types.ObjectId.isValid(v)) {
+    throw new Error(`Invalid ObjectId: ${v}`);
+  }
+  return new mongoose.Types.ObjectId(v);
+};
 
 const PLAN_LIMITS = {
   free: { maxMiniApps: 1, maxAiAssetsPerMonth: 5, featuredDirectory: false },
@@ -931,23 +942,43 @@ class BusinessBuilderService {
     const isPaid = ['paid', 'captured', 'success', 'completed'].includes(normalizedStatus);
     const isFailed = ['failed', 'failure', 'cancelled'].includes(normalizedStatus);
 
+    const nextPaymentReference = String(payload.paymentReference || payload.paymentId || '').trim().slice(0, 140);
+    const nextMethod = String(payload.method || payload.paymentMethod || '').trim().slice(0, 80);
+
+    // Idempotency: if we already processed this order/payment reference, do nothing further
+    const alreadyPaid =
+      String(order?.payment?.status || '').toLowerCase() === 'paid' &&
+      nextPaymentReference &&
+      String(order?.payment?.paymentReference || '').trim() === nextPaymentReference;
+
+    if (alreadyPaid) {
+      return order;
+    }
+
+    // Update payment fields
     order.payment = {
       ...(order.payment || {}),
       status: isPaid ? 'paid' : isFailed ? 'failed' : 'pending',
-      paymentReference: String(payload.paymentReference || payload.paymentId || '').trim().slice(0, 140),
-      method: String(payload.method || payload.paymentMethod || '').trim().slice(0, 80),
+      paymentReference: nextPaymentReference,
+      method: nextMethod,
       paidAt: isPaid ? new Date() : order?.payment?.paidAt || null,
       webhookPayload: payload,
     };
 
     if (isPaid) {
-      order.pushStatus('paid', 'Payment confirmed via webhook');
+      // Avoid duplicate status pushes
+      if (String(order?.status || '').toLowerCase() !== 'paid') {
+        order.pushStatus('paid', 'Payment confirmed via webhook');
+      }
     } else if (isFailed) {
-      order.pushStatus('failed', 'Payment failed/cancelled');
+      if (String(order?.status || '').toLowerCase() !== 'failed') {
+        order.pushStatus('failed', 'Payment failed/cancelled');
+      }
     }
+
     await order.save();
 
-    if (isPaid) {
+    if (isPaid && !alreadyPaid) {
       await BusinessBuilderEvent.create({
         miniAppId: order.miniAppId,
         businessId: order.businessId,

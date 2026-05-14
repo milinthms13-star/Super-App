@@ -123,14 +123,15 @@ describe("FoodDelivery", () => {
     fireEvent.click(await screen.findByRole("button", { name: /view menu/i }));
     expect(await screen.findByText("Paneer Tikka Burger")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /^add$/i }));
-    expect(await screen.findByText(/paneer tikka burger x 1/i)).toBeInTheDocument();
+    expect(await screen.findByText(/paneer tikka burger added to cart\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /checkout/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
 
     await waitFor(() => {
       expect(foodDeliveryService.clearCart).toHaveBeenCalledWith("rest-1");
     });
-    expect(screen.queryByText(/paneer tikka burger x 1/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /checkout/i })).not.toBeInTheDocument();
   });
 
   test("checks out and appends the order to my orders", async () => {
@@ -157,7 +158,7 @@ describe("FoodDelivery", () => {
   test("switches between customer, restaurant, rider, and admin workspaces", async () => {
     render(<FoodDelivery />);
 
-    expect(await screen.findByRole("button", { name: /customer/i })).toBeInTheDocument();
+    expect((await screen.findAllByRole("button", { name: /^customer$/i })).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /restaurant partner/i }));
     fireEvent.click(screen.getByRole("button", { name: /restaurant ops/i }));
     expect(screen.getByRole("heading", { name: /restaurant workspace/i })).toBeInTheDocument();

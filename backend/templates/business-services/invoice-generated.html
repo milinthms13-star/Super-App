@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; }
+        .footer { background: #333; color: white; padding: 10px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+        .button { display: inline-block; background: #8b5cf6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+        .invoice-box { background: white; border: 1px solid #e5e7eb; padding: 15px; border-radius: 6px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Invoice Generated</h1>
+            <p>Your service invoice is ready</p>
+        </div>
+        <div class="content">
+            <p>Hi {{customerName}},</p>
+            <p>Your {{serviceName}} order has been completed successfully! Your invoice is now ready for download.</p>
+            
+            <div class="invoice-box">
+                <h3 style="margin-top: 0;">Invoice Summary</h3>
+                <ul style="margin: 0;">
+                    <li><strong>Order ID:</strong> {{orderId}}</li>
+                    <li><strong>Service:</strong> {{serviceName}}</li>
+                    <li><strong>Total Amount:</strong> ₹{{amount}}</li>
+                    <li><strong>Status:</strong> Completed & Paid</li>
+                </ul>
+            </div>
+            
+            <h3>Download Your Invoice</h3>
+            <p>Click the button below to download your official invoice:</p>
+            <a href="{{invoiceUrl}}" class="button">Download Invoice (PDF)</a>
+            
+            <h3>What's Included</h3>
+            <ul>
+                <li>Service description and charges</li>
+                <li>Payment details and transaction reference</li>
+                <li>Tax information (if applicable)</li>
+                <li>Consultant and company details</li>
+            </ul>
+            
+            <p>You can also access your invoice anytime from your order page.</p>
+            
+            <p>Thank you for choosing Malabar Bazaar! We hope to work with you again.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2026 Malabar Bazaar. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

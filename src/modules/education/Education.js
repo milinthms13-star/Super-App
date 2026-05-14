@@ -179,6 +179,36 @@ const normalizeEducationState = (state = {}) => ({
   joinedGroups: normalizeStringList(state.joinedGroups),
 });
 
+const EDUCATION_LOCAL_STATE_KEY = "education-module-state-v1";
+
+const readEducationStateFromLocalStorage = () => {
+  if (typeof window === "undefined") {
+    return normalizeEducationState({});
+  }
+
+  try {
+    const raw = window.localStorage.getItem(EDUCATION_LOCAL_STATE_KEY);
+    if (!raw) {
+      return normalizeEducationState({});
+    }
+    return normalizeEducationState(JSON.parse(raw));
+  } catch (error) {
+    return normalizeEducationState({});
+  }
+};
+
+const writeEducationStateToLocalStorage = (state) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(EDUCATION_LOCAL_STATE_KEY, JSON.stringify(normalizeEducationState(state)));
+  } catch (error) {
+    // Ignore local storage failures and keep in-memory state.
+  }
+};
+
 const parseCourseAmount = (price) => {
   const raw = String(price || '')
     .replace(/[^0-9.]/g, '')
@@ -231,17 +261,14 @@ const Education = () => {
     setEnrolledCourseIds(normalizedState.enrolledCourseIds);
     setAppliedScholarships(normalizedState.appliedScholarships);
     setJoinedGroups(normalizedState.joinedGroups);
+    writeEducationStateToLocalStorage(normalizedState);
     return normalizedState;
   }, []);
 
   useEffect(() => {
     const shouldSyncFromBackend = Boolean(currentUser?.id || currentUser?.email) && typeof apiCall === "function";
     if (!shouldSyncFromBackend) {
-      applyEducationState({
-        enrolledCourseIds: [],
-        appliedScholarships: [],
-        joinedGroups: [],
-      });
+      applyEducationState(readEducationStateFromLocalStorage());
       return undefined;
     }
 
@@ -274,17 +301,18 @@ const Education = () => {
   }, [apiCall, applyEducationState, currentUser?.email, currentUser?.id]);
 
   const persistEducationState = useCallback(async (nextState, successMessage = "") => {
+    const normalizedState = applyEducationState(nextState);
     const shouldSyncToBackend = Boolean(currentUser?.id || currentUser?.email) && typeof apiCall === "function";
 
     if (!shouldSyncToBackend) {
-      setStatusMessage("Sign in to save education progress.");
+      setStatusMessage(successMessage || "Saved locally. Sign in to sync education progress.");
       return;
     }
 
     setSyncInProgress(true);
     try {
-      const response = await apiCall("/app-data/education/state", "PATCH", normalizeEducationState(nextState));
-      const syncedState = normalizeEducationState(response?.data?.state || response?.state || {});
+      const response = await apiCall("/app-data/education/state", "PATCH", normalizedState);
+      const syncedState = normalizeEducationState(response?.data?.state || response?.state || normalizedState);
       applyEducationState(syncedState);
       if (successMessage) {
         setStatusMessage(successMessage);
@@ -701,7 +729,11 @@ const Education = () => {
                 <strong>{course.price}</strong>
                 <p>{course.description}</p>
                 <div className="education-course-actions">
-                  <button type="button" className="education-secondary-button" onClick={() => viewCourseDetails(course)}>
+                  <button
+                    type="button"
+                    className="education-secondary-button"
+                    onClick={() => viewCourseDetails(course)}
+                  >
                     View Details
                   </button>
                   <button
@@ -710,7 +742,7 @@ const Education = () => {
                     data-testid={`education-enroll-${course.id}`}
                     onClick={() => handleCourseEnroll(course)}
                   >
-                    {enrolledCourseIds.includes(course.id) ? "Enrolled" : "Enroll Now"}
+                    {enrolledCourseIds.includes(course.id) ? "Continue" : "Enroll Now"}
                   </button>
                 </div>
               </div>

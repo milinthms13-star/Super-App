@@ -72,6 +72,8 @@ const ReminderAlert = React.lazy(() => import("./modules/reminderalert/ReminderA
 const QuickLinks = React.lazy(() => import("./modules/quicklinks/QuickLinks"));
 const SOSAlert = React.lazy(() => import("./modules/sos/SOSAlert"));
 const AstrologyHome = React.lazy(() => import("./modules/astrology/AstrologyHome"));
+const ConsultantAdminPanel = React.lazy(() => import("./modules/astrology/ConsultantAdminPanel"));
+const AstrologyAnalyticsDashboard = React.lazy(() => import("./modules/astrology/AnalyticsDashboard"));
 const Support = React.lazy(() => import("./modules/support/Support"));
 const Diary = React.lazy(() =>
   import("./modules/personaldiary").then((module) => ({ default: module.Diary }))
@@ -1189,6 +1191,8 @@ function AppShell() {
               <Route path="diary" element={<Diary />} />
               <Route path="sosalert" element={<SOSAlert />} />
               <Route path="astrology" element={<AstrologyHome />} />
+              <Route path="astrology-consultant-admin" element={<ConsultantAdminPanel />} />
+              <Route path="astrology-analytics" element={<AstrologyAnalyticsDashboard />} />
               <Route path="support" element={<Support />} />
               <Route 
                 path="profile" 

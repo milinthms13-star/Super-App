@@ -116,7 +116,7 @@ router.use(authenticate);
 // Business CRUD routes
 router.post('/businesses', async (req, res) => {
   try {
-    const business = await businessBuilderService.createBusiness(req.user.id, req.body);
+    const business = await businessBuilderService.createBusiness(String(req.user?._id || req.user?.id), req.body);
     res.status(201).json({
       success: true,
       data: business,
@@ -132,7 +132,7 @@ router.post('/businesses', async (req, res) => {
 
 router.get('/businesses', async (req, res) => {
   try {
-    const businesses = await businessBuilderService.getBusinesses(req.user.id);
+    const businesses = await businessBuilderService.getBusinesses(String(req.user?._id || req.user?.id));
     res.json({
       success: true,
       data: businesses
@@ -147,7 +147,7 @@ router.get('/businesses', async (req, res) => {
 
 router.get('/businesses/me', async (req, res) => {
   try {
-    const businesses = await businessBuilderService.getBusinesses(req.user.id);
+    const businesses = await businessBuilderService.getBusinesses(String(req.user?._id || req.user?.id));
     const business = Array.isArray(businesses) && businesses.length > 0 ? businesses[0] : null;
     res.json({
       success: true,
@@ -164,7 +164,20 @@ router.get('/businesses/me', async (req, res) => {
 
 router.get('/businesses/:businessId', async (req, res) => {
   try {
-    const business = await businessBuilderService.getBusinessById(req.params.businessId, req.user.id);
+    console.log('[businessBuilderRoutes] getBusinessById', {
+      businessId: req.params.businessId,
+      reqUser: {
+        _id: req.user?._id,
+        id: req.user?.id,
+        email: req.user?.email,
+        userType: typeof req.user,
+      },
+      derivedUserId: String(req.user?._id || req.user?.id),
+    });
+    const business = await businessBuilderService.getBusinessById(
+      req.params.businessId,
+      String(req.user?._id || req.user?.id)
+    );
     res.json({
       success: true,
       data: business
@@ -180,7 +193,11 @@ router.get('/businesses/:businessId', async (req, res) => {
 
 router.put('/businesses/:businessId', async (req, res) => {
   try {
-    const business = await businessBuilderService.updateBusiness(req.params.businessId, req.user.id, req.body);
+    const business = await businessBuilderService.updateBusiness(
+      req.params.businessId,
+      String(req.user?._id || req.user?.id),
+      req.body
+    );
     res.json({
       success: true,
       data: business,
@@ -199,7 +216,7 @@ router.put('/businesses/:businessId/subscription', async (req, res) => {
   try {
     const data = await businessBuilderService.updateBusinessSubscription(
       req.params.businessId,
-      req.user.id,
+      String(req.user?._id || req.user?.id),
       req.body || {}
     );
     res.json({
@@ -251,7 +268,10 @@ router.delete('/businesses/:businessId', async (req, res) => {
 // Business Plan routes
 router.post('/businesses/:businessId/generate-plan', async (req, res) => {
   try {
-    const businessPlan = await businessBuilderService.generateBusinessPlan(req.params.businessId, req.user.id);
+    const businessPlan = await businessBuilderService.generateBusinessPlan(
+      req.params.businessId,
+      String(req.user?._id || req.user?.id)
+    );
     res.json({
       success: true,
       data: businessPlan,
@@ -268,7 +288,10 @@ router.post('/businesses/:businessId/generate-plan', async (req, res) => {
 
 router.get('/businesses/:businessId/schemes', async (req, res) => {
   try {
-    const schemes = await businessBuilderService.getEligibleSchemes(req.params.businessId, req.user.id);
+    const schemes = await businessBuilderService.getEligibleSchemes(
+      req.params.businessId,
+      String(req.user?._id || req.user?.id)
+    );
     res.json({
       success: true,
       data: schemes

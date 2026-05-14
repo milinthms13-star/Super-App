@@ -46,11 +46,26 @@ const businessServiceOrderSchema = new mongoose.Schema(
       },
     ],
 
+
     // lightweight consultant workflow placeholder
     consultant: {
       assignedEmail: { type: String, default: '', trim: true, lowercase: true },
       assignedName: { type: String, default: '', trim: true },
     },
+
+    // Consultant deliverables (uploaded after work is done)
+    deliverables: [
+      {
+        fileId: { type: String, required: true, trim: true },
+        name: { type: String, default: '', trim: true },
+        contentType: { type: String, default: '', trim: true },
+        size: { type: Number, default: 0, min: 0 },
+        url: { type: String, default: '', trim: true },
+        uploadedBy: { type: String, default: '', trim: true }, // consultant email
+        uploadedAt: { type: Date, default: () => new Date() },
+        status: { type: String, default: 'pending-review', trim: true }, // 'pending-review', 'approved', 'rejected'
+      },
+    ],
 
     adminNotes: { type: String, default: '', trim: true },
     paymentStatus: { type: String, default: 'pending', trim: true, index: true },

@@ -116,8 +116,7 @@ const SECTION_ORDER = [
 const generateId = (prefix) => `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`;
 const formatINR = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
 
-const downloadText = (filename, content) => {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+const downloadBlob = (filename, blob) => {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -126,6 +125,15 @@ const downloadText = (filename, content) => {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+};
+
+const statusToLabel = (status) => {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "pending") return "Awaiting payment or approval";
+  if (normalized === "confirmed") return "Confirmed with temple";
+  if (normalized === "completed") return "Pooja completed";
+  if (normalized === "cancelled") return "Cancelled";
+  return status || "Unknown";
 };
 
 const DevadarshanHub = () => {
@@ -162,6 +170,8 @@ const DevadarshanHub = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [selectedPaymentGateway, setSelectedPaymentGateway] = useState("razorpay");
+  const [bookingTimelines, setBookingTimelines] = useState({});
+  const [expandedBookingId, setExpandedBookingId] = useState("");
 
   const apiBase = `${BACKEND_BASE_URL}/api/devadarshan`;
 
@@ -323,6 +333,11 @@ const DevadarshanHub = () => {
     [bookings]
   );
 
+  const cancelledBookings = useMemo(
+    () => bookings.filter((item) => item.status === "Cancelled"),
+    [bookings]
+  );
+
   const upcomingEvents = useMemo(
     () =>
       [...festivalEvents]
@@ -340,6 +355,27 @@ const DevadarshanHub = () => {
     { id: "my-bookings", title: "My Bookings", value: `${bookings.length + donations.length} total records`, action: () => setActiveSection("my") },
     { id: "notifications", title: "Notifications", value: `${notifications.length} updates`, action: () => setActiveSection("dashboard") },
   ];
+
+  const getBookingNextAction = (entry) => {
+    if (entry.status === "Cancelled") {
+      return entry.refundStatus === "Requested"
+        ? "Refund request is under review."
+        : "Booking cancelled.";
+    }
+    if (entry.paymentStatus === "Pending") {
+      return "Complete payment to confirm this pooja.";
+    }
+    if (entry.status === "Pending") {
+      return "Awaiting temple/admin approval.";
+    }
+    if (entry.status === "Confirmed") {
+      return "Track updates or contact temple.";
+    }
+    if (entry.status === "Completed") {
+      return "Download receipt for records.";
+    }
+    return "Track timeline for latest update.";
+  };
 
   const handleApiError = (error, fallbackMessage) => {
     showStatus(error?.response?.data?.message || error?.message || fallbackMessage);
@@ -499,41 +535,45 @@ const DevadarshanHub = () => {
     }
   };
 
-  const createReceiptText = (record, type) => {
-    if (type === "BOOKING") {
-      return [
-        "DEVADARSHAN RECEIPT",
-        `Receipt No: ${record.receiptNumber}`,
-        `Booking ID: ${record.id}`,
-        `Temple: ${record.templeName}`,
-        `Pooja: ${record.poojaType}`,
-        `Devotee: ${record.devoteeName}`,
-        `Nakshatra: ${record.nakshatra || "N/A"}`,
-        `Date: ${record.bookingDate}`,
-        `Payment: ${record.paymentMethod} (${record.paymentStatus})`,
-        `Amount: ${formatINR(record.amount)}`,
-        `Transaction Ref: ${record.transactionRef}`,
-        `Admin Approval: ${record.adminApprovalStatus}`,
-      ].join("\n");
+  const downloadReceipt = async (record, type) => {
+    try {
+      const endpoint =
+        type === "BOOKING"
+          ? `${apiBase}/bookings/${encodeURIComponent(record.id)}/receipt`
+          : `${apiBase}/donations/${encodeURIComponent(record.id)}/receipt`;
+      const response = await axios.get(endpoint, { responseType: "blob" });
+      const filename = `${record.receiptNumber || record.id || "receipt"}.txt`;
+      downloadBlob(filename, response.data);
+      showStatus("Receipt downloaded.");
+    } catch (error) {
+      handleApiError(error, "Unable to download receipt.");
     }
-
-    return [
-      "DEVADARSHAN DONATION RECEIPT",
-      `Receipt No: ${record.receiptNumber}`,
-      `Donation ID: ${record.id}`,
-      `Temple: ${record.templeName}`,
-      `Category: ${record.category}`,
-      `Purpose: ${record.purpose || "N/A"}`,
-      `Amount: ${formatINR(record.amount)}`,
-      `Payment: ${record.paymentMethod}`,
-      `Transaction Ref: ${record.transactionRef}`,
-      `Date: ${record.createdAt}`,
-    ].join("\n");
   };
 
-  const downloadReceipt = (record, type) => {
-    const text = createReceiptText(record, type);
-    downloadText(`${record.receiptNumber}.txt`, text);
+  const toggleBookingTimeline = async (bookingId) => {
+    try {
+      const isExpanded = expandedBookingId === bookingId;
+      if (isExpanded) {
+        setExpandedBookingId("");
+        return;
+      }
+
+      if (!bookingTimelines[bookingId]) {
+        const response = await axios.get(
+          `${apiBase}/bookings/${encodeURIComponent(bookingId)}/timeline`
+        );
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || "Unable to load booking timeline.");
+        }
+        setBookingTimelines((current) => ({
+          ...current,
+          [bookingId]: response.data.data,
+        }));
+      }
+      setExpandedBookingId(bookingId);
+    } catch (error) {
+      handleApiError(error, "Unable to load booking timeline.");
+    }
   };
 
   const handleBookingSubmit = async (event) => {
@@ -1097,9 +1137,18 @@ const DevadarshanHub = () => {
               {upcomingBookings.length === 0 ? <p>No upcoming bookings.</p> : (
                 <ul className="devadarshan-list">
                   {upcomingBookings.map((entry) => (
-                    <li key={entry.id}>
-                      {entry.bookingDate} | {entry.templeName} | {entry.poojaType} | {entry.paymentStatus} | {entry.status}
+                    <li key={entry.id} className="booking-row">
+                      <div>
+                        <strong>{entry.bookingDate}</strong> | {entry.templeName} | {entry.poojaType}
+                      </div>
+                      <div>
+                        Payment: {entry.paymentStatus} | Status: {entry.status}
+                      </div>
+                      <p className="booking-next-action">{getBookingNextAction(entry)}</p>
                       <button type="button" className="inline-btn" onClick={() => downloadReceipt(entry, "BOOKING")}>Receipt</button>
+                      <button type="button" className="inline-btn" onClick={() => toggleBookingTimeline(entry.id)}>
+                        {expandedBookingId === entry.id ? "Hide Timeline" : "Track Timeline"}
+                      </button>
                       {entry.paymentStatus === "Pending" && (
                         <button type="button" className="inline-btn" onClick={() => markBookingPaid(entry.id)} disabled={isSaving}>
                           Pay Now
@@ -1109,6 +1158,25 @@ const DevadarshanHub = () => {
                         <button type="button" className="inline-btn" onClick={() => cancelBooking(entry.id)}>
                           Cancel
                         </button>
+                      )}
+                      {expandedBookingId === entry.id && (
+                        <div className="booking-timeline">
+                          {(bookingTimelines[entry.id]?.timeline || []).length === 0 ? (
+                            <p>No timeline entries yet.</p>
+                          ) : (
+                            <ul>
+                              {(bookingTimelines[entry.id]?.timeline || []).map((item, index) => (
+                                <li key={`${entry.id}-timeline-${index}`}>
+                                  <span className={`badge ${String(item.status || "").toLowerCase()}`}>
+                                    {statusToLabel(item.status)}
+                                  </span>
+                                  <span>{new Date(item.at).toLocaleString("en-IN")}</span>
+                                  <span>{item.note || "-"}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       )}
                     </li>
                   ))}
@@ -1140,11 +1208,13 @@ const DevadarshanHub = () => {
               )}
               <h3>Cancelled / Refunded</h3>
               <ul className="devadarshan-list">
-                {bookings.filter((entry) => entry.status === "Cancelled").length === 0 ? (
+                {cancelledBookings.length === 0 ? (
                   <li>No cancelled bookings.</li>
                 ) : (
-                  bookings.filter((entry) => entry.status === "Cancelled").map((entry) => (
-                    <li key={entry.id}>{entry.id} | {entry.templeName} | Cancelled</li>
+                  cancelledBookings.map((entry) => (
+                    <li key={entry.id}>
+                      {entry.id} | {entry.templeName} | Cancelled | Refund: {entry.refundStatus || "Not Requested"}
+                    </li>
                   ))
                 )}
               </ul>

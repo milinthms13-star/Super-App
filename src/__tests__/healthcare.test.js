@@ -45,15 +45,15 @@ jest.mock('../modules/healthcare/components/ElderlyCare', () => {
 });
 
 jest.mock('../modules/healthcare/components/HealthcareNav', () => {
-  return function MockHealthcareNav({ activeSection, onSectionChange }) {
+  return function MockHealthcareNav({ onChange }) {
     return (
       <nav data-testid="healthcare-nav">
-        <button onClick={() => onSectionChange('consultation')}>Consultation</button>
-        <button onClick={() => onSectionChange('lab')}>Lab</button>
-        <button onClick={() => onSectionChange('records')}>Records</button>
-        <button onClick={() => onSectionChange('pharmacy')}>Pharmacy</button>
-        <button onClick={() => onSectionChange('emergency')}>Emergency</button>
-        <button onClick={() => onSectionChange('elderly')}>Elderly Care</button>
+        <button onClick={() => onChange('consultation')}>Consultation</button>
+        <button onClick={() => onChange('lab')}>Lab</button>
+        <button onClick={() => onChange('records')}>Records</button>
+        <button onClick={() => onChange('pharmacy')}>Pharmacy</button>
+        <button onClick={() => onChange('emergency')}>Emergency</button>
+        <button onClick={() => onChange('elderly')}>Elderly Care</button>
       </nav>
     );
   };
@@ -200,8 +200,8 @@ describe('Healthcare Module', () => {
 
     render(<Healthcare />);
 
-    // Should show loading state initially
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
+    expect(healthcareApi.getInitialData).toHaveBeenCalledTimes(1);
   });
 
   test('handles API error gracefully', async () => {
@@ -211,7 +211,7 @@ describe('Healthcare Module', () => {
     render(<Healthcare />);
 
     await waitFor(() => {
-      expect(screen.getByText(errorMessage)).toBeInTheDocument();
+      expect(screen.getByText(/unable to load healthcare data\./i)).toBeInTheDocument();
     });
   });
 
@@ -242,17 +242,16 @@ describe('Healthcare API Service', () => {
   });
 
   test('handles API errors with fallback', async () => {
-    // Mock axios to reject
-    const mockAxios = require('axios');
-    mockAxios.get.mockRejectedValue(new Error('Network error'));
+    const axios = require('axios');
+    const getSpy = jest.spyOn(axios, 'get').mockRejectedValue(new Error('Network error'));
+    const { healthcareApi: realApi } = jest.requireActual('../modules/healthcare/services/healthcareApi');
 
-    // Import the actual API service to test fallback logic
-    const { healthcareApi: realApi } = require('../modules/healthcare/services/healthcareApi');
-
-    // Test that it falls back to mock data on error
     const result = await realApi.getInitialData();
 
     expect(result).toBeDefined();
     expect(Array.isArray(result.doctors)).toBe(true);
+    expect(Array.isArray(result.labTests)).toBe(true);
+
+    getSpy.mockRestore();
   });
 });

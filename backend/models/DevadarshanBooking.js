@@ -1,5 +1,15 @@
 const mongoose = require('mongoose');
 
+const bookingTimelineEntrySchema = new mongoose.Schema(
+  {
+    status: { type: String, required: true, trim: true },
+    at: { type: String, required: true, trim: true },
+    by: { type: String, default: 'system', trim: true },
+    note: { type: String, default: '', trim: true },
+  },
+  { _id: false }
+);
+
 const devadarshanBookingSchema = new mongoose.Schema(
   {
     bookingCode: { type: String, required: true, trim: true, unique: true, index: true },
@@ -27,9 +37,12 @@ const devadarshanBookingSchema = new mongoose.Schema(
     paymentGateway: { type: String, default: '', trim: true },
     paymentRecordId: { type: String, default: '', trim: true },
     paymentDetails: { type: mongoose.Schema.Types.Mixed, default: {} },
+    refundStatus: { type: String, default: 'Not Requested', trim: true, index: true },
+    refundAmount: { type: Number, default: 0, min: 0 },
+    refundReference: { type: String, default: '', trim: true },
+    statusTimeline: { type: [bookingTimelineEntrySchema], default: [] },
   },
   { timestamps: true }
 );
 
 module.exports = mongoose.model('DevadarshanBooking', devadarshanBookingSchema);
-

@@ -2,6 +2,15 @@ const express = require('express');
 const request = require('supertest');
 const crypto = require('crypto');
 
+jest.mock('../models/Reminder', () => ({
+  create: jest.fn(async () => ({
+    _id: 'reminder_test_1',
+    userId: 'astro-user-1',
+    reminders: ['Email', 'In-app'],
+    reminderBeforeOffsets: [30],
+  })),
+}));
+
 jest.mock('razorpay', () =>
   jest.fn().mockImplementation(() => ({
     orders: {
@@ -72,6 +81,12 @@ describe('astrology routes integration', () => {
         notes: 'Need guidance on career decisions.',
       })
       .expect(201);
+
+    const Reminder = require('../models/Reminder');
+    expect(Reminder.create).toHaveBeenCalled();
+    const reminderPayload = Reminder.create.mock.calls[0][0];
+    expect(reminderPayload.reminders).toEqual(expect.arrayContaining(['Email', 'In-app']));
+    expect(reminderPayload.reminderBeforeOffsets).toEqual([30]);
 
     expect(response.body.success).toBe(true);
     expect(response.body.data).toEqual(

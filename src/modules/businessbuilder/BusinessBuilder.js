@@ -250,6 +250,26 @@ const BUSINESS_PLAN_SECTIONS = [
   { key: "roadmap180", label: "6-month roadmap" },
 ];
 
+const TAB_CONFIG = [
+  { id: "dashboard", label: "Growth Dashboard", subtitle: "Readiness KPIs, milestones, and next best action." },
+  { id: "wizard", label: "Launch Wizard", subtitle: "Guided inputs from business idea to execution details." },
+  { id: "ai-plan", label: "AI Plan Generator", subtitle: "Generate strategy, roadmap, and brand assets." },
+  { id: "cost", label: "Startup Cost", subtitle: "Project investment, burn rate, and break-even window." },
+  { id: "schemes", label: "Scheme Hub", subtitle: "Find subsidy, loan, and eligibility-based opportunities." },
+  { id: "documents", label: "Document Generator", subtitle: "Produce operational and sales-ready business docs." },
+  { id: "checklist", label: "Launch Checklist", subtitle: "Track practical execution progress before scaling." },
+  { id: "overview", label: "Business Profile", subtitle: "Maintain business identity and contact standards." },
+  { id: "invoices", label: "Invoice Studio", subtitle: "Create invoices and distribute downloadable PDFs." },
+  { id: "miniapps", label: "Mini App Builder", subtitle: "Launch mini-app surfaces for customer discovery." },
+  { id: "ops360", label: "360 Operations", subtitle: "Control entitlements, assets, products, and funnel ops." },
+];
+
+const HEADER_HIGHLIGHTS = [
+  "Unified control plane for SME growth",
+  "Built-in AI + mini app + billing workflows",
+  "Mobile-first execution with premium UX",
+];
+
 const formatINR = (value) =>
   new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -1169,6 +1189,7 @@ const BusinessBuilder = () => {
 
   const currentWizardConfig = WIZARD_STEPS[wizardStep];
   const selectedMiniApp = miniApps.find((app) => (app.miniAppId || app._id) === selectedMiniAppId) || null;
+  const activeTabConfig = TAB_CONFIG.find((tab) => tab.id === activeTab) || TAB_CONFIG[0];
 
   return (
     <div className="business-builder-page">
@@ -1179,32 +1200,42 @@ const BusinessBuilder = () => {
           <p className="page-description">
             Practical launch workflows, AI-ready business planning, startup cost intelligence, government scheme matching, documents, and execution checklists.
           </p>
+          <div className="header-chip-row">
+            {HEADER_HIGHLIGHTS.map((item) => (
+              <span key={item} className="header-chip">{item}</span>
+            ))}
+          </div>
+          <div className="header-actions">
+            <button type="button" className="action-ghost" onClick={() => setActiveTab("wizard")}>
+              Start Guided Launch
+            </button>
+            <button type="button" className="action-ghost" onClick={() => setActiveTab("ai-plan")}>
+              Generate AI Plan
+            </button>
+            <button type="button" className="action-ghost" onClick={() => setActiveTab("ops360")}>
+              Open 360 Ops
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="business-builder-tabs">
-        {[
-          ["dashboard", "Growth Dashboard"],
-          ["wizard", "Launch Wizard"],
-          ["ai-plan", "AI Plan Generator"],
-          ["cost", "Startup Cost"],
-          ["schemes", "Scheme Hub"],
-          ["documents", "Document Generator"],
-          ["checklist", "Launch Checklist"],
-          ["overview", "Business Profile"],
-          ["invoices", "Invoice Studio"],
-          ["miniapps", "Mini App Builder"],
-          ["ops360", "360 Operations"],
-        ].map(([id, label]) => (
+        {TAB_CONFIG.map((tab) => (
           <button
-            key={id}
-            className={`tab-button ${activeTab === id ? "active" : ""}`}
+            key={tab.id}
+            className={`tab-button ${activeTab === tab.id ? "active" : ""}`}
             type="button"
-            onClick={() => setActiveTab(id)}
+            onClick={() => setActiveTab(tab.id)}
           >
-            {label}
+            {tab.label}
           </button>
         ))}
+      </div>
+
+      <div className="active-view-banner">
+        <p className="active-view-label">Current Workspace</p>
+        <h3>{activeTabConfig.label}</h3>
+        <p>{activeTabConfig.subtitle}</p>
       </div>
 
       {statusMessage && <div className="status-banner">{statusMessage}</div>}

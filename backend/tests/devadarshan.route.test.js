@@ -6,6 +6,8 @@ const {
   profileSchema,
   paymentInitiateSchema,
   adminStatusSchema,
+  canTransitionBookingStatus,
+  createBookingReceiptText,
 } = devadarshanRouter.__private__;
 
 describe('devadarshan route schemas', () => {
@@ -61,5 +63,30 @@ describe('devadarshan route schemas', () => {
     expect(good.error).toBeUndefined();
     expect(bad.error).toBeDefined();
   });
-});
 
+  test('canTransitionBookingStatus enforces lifecycle transitions', () => {
+    expect(canTransitionBookingStatus('Pending', 'Confirmed')).toBe(true);
+    expect(canTransitionBookingStatus('Confirmed', 'Completed')).toBe(true);
+    expect(canTransitionBookingStatus('Completed', 'Pending')).toBe(false);
+    expect(canTransitionBookingStatus('Cancelled', 'Confirmed')).toBe(false);
+  });
+
+  test('createBookingReceiptText includes booking and receipt identifiers', () => {
+    const receiptText = createBookingReceiptText({
+      receiptNumber: 'RCPT-001',
+      bookingCode: 'BK-001',
+      templeName: 'Sample Temple',
+      poojaType: 'Archana',
+      devoteeName: 'Anu',
+      paymentMethod: 'UPI',
+      paymentStatus: 'Paid',
+      amount: 500,
+      adminApprovalStatus: 'Approved',
+      status: 'Confirmed',
+    });
+
+    expect(receiptText).toContain('Receipt No: RCPT-001');
+    expect(receiptText).toContain('Booking ID: BK-001');
+    expect(receiptText).toContain('Temple: Sample Temple');
+  });
+});

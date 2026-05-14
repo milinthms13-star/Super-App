@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f9f9f9; padding: 20px; border: 1px solid #ddd; }
+        .footer { background: #333; color: white; padding: 10px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+        .button { display: inline-block; background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+        .highlight { background: #d1fae5; padding: 15px; border-left: 4px solid #10b981; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✓ Payment Confirmed</h1>
+            <p>Your order payment has been successfully received</p>
+        </div>
+        <div class="content">
+            <p>Hi {{customerName}},</p>
+            <p>We're thrilled to confirm that your payment has been successfully processed!</p>
+            
+            <div class="highlight">
+                <h3 style="margin-top: 0;">Payment Details</h3>
+                <ul style="margin: 0;">
+                    <li><strong>Order ID:</strong> {{orderId}}</li>
+                    <li><strong>Service:</strong> {{serviceName}}</li>
+                    <li><strong>Amount Paid:</strong> ₹{{amount}}</li>
+                    <li><strong>Payment Method:</strong> {{paymentMethod}}</li>
+                </ul>
+            </div>
+            
+            <h3>What Happens Next?</h3>
+            <ol>
+                <li>Our team will review your request and documents immediately</li>
+                <li>An expert consultant will be assigned to your order</li>
+                <li>You can track progress in real-time on your order page</li>
+                <li>Once completed, you'll receive all deliverables and an invoice</li>
+            </ol>
+            
+            <p><strong>Track Your Order</strong></p>
+            <a href="{{orderUrl}}" class="button">View Order Status</a>
+            
+            <p>A team member may reach out if we need any additional information. Thank you for your business!</p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2026 Malabar Bazaar. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

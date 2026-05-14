@@ -308,16 +308,35 @@ router.get('/:orderId/receipt', verifyToken, async (req, res) => {
 router.get('/:orderId/payment-status', verifyToken, async (req, res) => {
   try {
     const { orderId } = req.params;
-
     if (!orderId) {
       return res.status(400).json({ error: 'Order ID is required' });
     }
-
-    // TODO: Implement payment status check
+    // Find order
+    const order = await require('../models/Order').findById(orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    // Find payment
+    const Payment = require('../models/Payment');
+    const payment = await Payment.findOne({ orderId: order._id.toString() });
+    let paymentStatus = payment ? payment.status : 'not_initiated';
+    let paymentDetails = payment ? {
+      paymentId: payment.paymentId || payment._id,
+      status: payment.status,
+      gateway: payment.paymentGateway,
+      amount: payment.amount,
+      transactionId: payment.transactionId || payment.gatewayTransactionId,
+      refund: payment.refund || null,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+    } : null;
     res.json({
       success: true,
       data: {
-        message: 'Payment status endpoint',
+        orderId: order._id,
+        orderStatus: order.status,
+        paymentStatus,
+        paymentDetails,
       },
     });
   } catch (err) {

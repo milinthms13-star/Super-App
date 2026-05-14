@@ -332,12 +332,13 @@ test("shows Local Market and AstroNila on the launch page when they are enabled"
   expect(screen.queryByRole("button", { name: /feastly/i })).not.toBeInTheDocument();
 });
 
-test("shows simplified email login without role categorization", async () => {
+test("shows login method selection and email OTP flow without role categorization", async () => {
   mockAxiosForApp();
 
   render(<App />);
 
   fireEvent.click(await screen.findByRole("button", { name: /login/i }));
+  fireEvent.click(screen.getByRole("button", { name: /^email$/i }));
 
   expect(
     screen.getByRole("heading", { level: 2, name: /enter your email/i })
@@ -351,6 +352,7 @@ test("allows the admin email to login without role selection", async () => {
 
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: /login/i }));
+  fireEvent.click(screen.getByRole("button", { name: /^email$/i }));
 
   fireEvent.change(screen.getByLabelText(/email address/i), {
     target: { value: "mgdhanyamohan@gmail.com" },

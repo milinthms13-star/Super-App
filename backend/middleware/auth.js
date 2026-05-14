@@ -219,6 +219,61 @@ const authenticate = async (req, res, next) => {
   }
 };
 
+const optionalToken = async (req, res, next) => {
+  try {
+    if (resolveExistingAuthContext(req)) {
+      return next();
+    }
+
+    const authHeader = req.headers.authorization || '';
+    const [scheme, token] = authHeader.split(' ');
+    const cookieToken = getCookieValue(req.headers.cookie, AUTH_COOKIE_NAME);
+    const authToken = scheme === 'Bearer' && token ? token : cookieToken;
+
+    // No token: unauthenticated is allowed
+    if (!authToken) return next();
+
+    const payload = verifyTokenPayload(authToken);
+    const subjectId = payload.sub || payload.userId || payload._id || payload.id;
+
+    // In test mode, try to build a user from payload
+    if (process.env.NODE_ENV === 'test') {
+      const user = buildTestUserFromPayload(payload);
+      if (user) {
+        req.user = user;
+        req.auth = payload;
+      }
+      return next();
+    }
+
+    // Otherwise attempt to load user (best-effort)
+    const useMemoryAuth = process.env.AUTH_STORAGE === 'memory' && process.env.NODE_ENV !== 'production';
+    let user = null;
+
+    if (subjectId) {
+      if (useMemoryAuth) {
+        user = await devAuthStore.findUserById(String(subjectId));
+      } else {
+        try {
+          user = await User.findById(String(subjectId));
+        } catch (_err) {
+          user = null;
+        }
+      }
+    }
+
+    if (user) {
+      req.user = user;
+      req.auth = payload;
+    }
+
+    return next();
+  } catch (_err) {
+    // Optional auth should never block request
+    return next();
+  }
+};
+
 const verifyAdmin = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({
@@ -281,6 +336,7 @@ authenticate.hasAdminPrivileges = hasAdminPrivileges;
 module.exports = authenticate;
 module.exports.authenticate = authenticate;
 module.exports.authenticateToken = authenticate;
+module.exports.optionalToken = optionalToken;
 module.exports.verifyToken = authenticate;
 module.exports.verifyAdmin = verifyAdmin;
 module.exports.authorize = authorize;
