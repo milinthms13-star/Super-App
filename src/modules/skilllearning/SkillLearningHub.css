@@ -286,6 +286,162 @@
   color: #334155;
 }
 
+.skillhub-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.skillhub-subfilters {
+  border-top: 1px solid rgba(15, 23, 42, 0.05);
+  padding-top: 0.8rem;
+}
+
+.skillhub-filter-row select,
+.skillhub-filter-row button {
+  min-width: 140px;
+}
+
+.skillhub-course-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.skillhub-course-card {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 16px;
+  background: #f8fbff;
+  padding: 1rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.skillhub-course-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+  align-items: flex-start;
+}
+
+.skillhub-course-card-header h3 {
+  margin: 0;
+}
+
+.skillhub-course-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  color: #334155;
+  font-size: 0.78rem;
+}
+
+.skillhub-progress-bar {
+  background: rgba(14, 165, 233, 0.12);
+  border-radius: 999px;
+  height: 0.8rem;
+  overflow: hidden;
+}
+
+.skillhub-progress-fill {
+  background: linear-gradient(135deg, #2096f3 0%, #0ea5a7 100%);
+  height: 100%;
+  border-radius: 999px;
+}
+
+.skillhub-course-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.skillhub-course-actions button.secondary {
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.skillhub-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.skillhub-course-detail {
+  display: grid;
+  gap: 1rem;
+}
+
+.skillhub-course-detail-main {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 1rem;
+}
+
+.skillhub-course-player iframe {
+  width: 100%;
+  min-height: 240px;
+  border-radius: 14px;
+  border: none;
+}
+
+.skillhub-course-modules {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.skillhub-question-bank {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.skillhub-question-card {
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: #f8fcff;
+}
+
+.skillhub-question-options {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+
+.skillhub-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.84rem;
+}
+
+.skillhub-table-wrap {
+  overflow-x: auto;
+}
+
+.skillhub-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+}
+
+.skillhub-table th,
+.skillhub-table td {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 0.7rem 0.75rem;
+  text-align: left;
+}
+
+.skillhub-table th {
+  background: #f8fafc;
+  font-size: 0.79rem;
+  color: #0f172a;
+}
+
 @media (max-width: 1200px) {
   .skillhub-stats-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -304,6 +304,22 @@ function getSkillLearningCourses(filters = {}) {
       return false;
     }
 
+    if (filters.certificateAvailable === true && !course.certificateAvailable) {
+      return false;
+    }
+
+    if (filters.certificateAvailable === false && course.certificateAvailable) {
+      return false;
+    }
+
+    if (filters.jobLinked === true && !course.jobLinked) {
+      return false;
+    }
+
+    if (filters.jobLinked === false && course.jobLinked) {
+      return false;
+    }
+
     if (normalizedQuery) {
       const text = [course.title, course.description, course.tags.join(' '), course.category].join(' ').toLowerCase();
       if (!text.includes(normalizedQuery)) {

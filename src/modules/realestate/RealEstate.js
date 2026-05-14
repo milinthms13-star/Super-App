@@ -8,6 +8,8 @@ import VisitBoard from "./components/VisitBoard";
 import ListingForm from "./components/ListingForm";
 import AdminPanel from "./components/AdminPanel";
 import LoanCalculator from "./components/LoanCalculator";
+import PropertyDetailTabs from "./components/PropertyDetailTabs";
+
 import {
   CONSTRUCTION_SERVICES,
   DEFAULT_LISTING_FORM,

@@ -1513,6 +1513,18 @@ router.get('/skilllearning/courses', authenticate, async (req, res) => {
       language: req.query.language,
       region: req.query.region,
       isFree: req.query.isFree === 'true' ? true : req.query.isFree === 'false' ? false : undefined,
+      certificateAvailable:
+        req.query.certificateAvailable === 'true'
+          ? true
+          : req.query.certificateAvailable === 'false'
+          ? false
+          : undefined,
+      jobLinked:
+        req.query.jobLinked === 'true'
+          ? true
+          : req.query.jobLinked === 'false'
+          ? false
+          : undefined,
     };
     const courses = getSkillLearningCourses(filters);
     return res.json({ success: true, data: { courses, categories: COURSE_CATEGORIES } });
