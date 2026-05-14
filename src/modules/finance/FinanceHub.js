@@ -1,30 +1,19 @@
-
 import React, { useEffect, useMemo, useState } from "react";
 import { financeApi } from "./financeApi";
 import "./FinanceHub.css";
 
-// Subcomponents
 import LoanMarketplaceTab from "./components/LoanMarketplaceTab";
 import EligibilityTab from "./components/EligibilityTab";
 import EmiCalculatorTab from "./components/EmiCalculatorTab";
 import ApplyLeadTab from "./components/ApplyLeadTab";
 import TrackingDashTab from "./components/TrackingDashTab";
 import SchemesTab from "./components/SchemesTab";
-import AuditLogsPanel from "./components/AuditLogsPanel";
-import AdminMetricsPanel from "./components/AdminMetricsPanel";
 
-// Service modules
 import { calculateEmi, buildEmiSchedule, exportEmiScheduleCsv } from "./services/financeMath";
 import { getLeadFormErrors, getEligibilityFormErrors } from "./services/financeValidation";
 import { normalizeRoleTokens, hasAnyRole } from "./services/roleAccess";
 
-const SOUTH_KERALA_DISTRICTS = [
-  "Kollam",
-  "Trivandrum",
-  "Alappuzha",
-  "Kottayam",
-  "Pathanamthitta",
-];
+const SOUTH_KERALA_DISTRICTS = ["Kollam", "Trivandrum", "Alappuzha", "Kottayam", "Pathanamthitta"];
 
 const LOAN_CATEGORIES = [
   { id: "business", title: "Business Loans", summary: "Working capital, machinery, MSME expansion." },
@@ -97,118 +86,116 @@ const GOVERNMENT_SCHEMES = [
     id: "women-entrepreneur",
     name: "Women Entrepreneur Schemes",
     categoryHint: "women",
-  prepaymentMonth = 0,
-}) => {
-  const monthlyEmi = calculateMonthlyEmi(principal, annualInterest, tenureMonths);
-  const monthlyRate = Number(annualInterest || 0) / 12 / 100;
-  const prepayValue = Number(prepaymentAmount || 0);
-  const prepayMonthIndex = Number(prepaymentMonth || 0);
+    eligibility: "Women-led startups or established entrepreneurs.",
+    maxAmount: "Depends on institution and subsidy alignment",
+    documents: "KYC, business registration, project report, banking track record.",
+    benefit: "Priority processing, subsidy linkage, and mentorship support.",
+  },
+];
 
-  let outstanding = Number(principal || 0);
-  let totalInterest = 0;
-  const schedule = [];
-
-  for (let month = 1; month <= Number(tenureMonths || 0); month += 1) {
-    if (outstanding <= 0) {
-      break;
-    }
-
-    const interestPart = monthlyRate === 0 ? 0 : outstanding * monthlyRate;
-    let principalPart = monthlyEmi - interestPart;
-    if (principalPart > outstanding) {
-      principalPart = outstanding;
-    }
-
-    let prepaymentThisMonth = 0;
-    if (prepayMonthIndex > 0 && prepayMonthIndex === month && prepayValue > 0) {
-      prepaymentThisMonth = Math.min(prepayValue, outstanding - principalPart);
-    }
-
-    const totalPrincipalPart = principalPart + prepaymentThisMonth;
-    const closingBalance = Math.max(0, outstanding - totalPrincipalPart);
-
-    totalInterest += interestPart;
-    schedule.push({
-      month,
-      emi: monthlyEmi,
-      interest: interestPart,
-      principal: principalPart,
-      prepayment: prepaymentThisMonth,
-      closingBalance,
-    });
-
-    outstanding = closingBalance;
-  }
-
-  return {
-    monthlyEmi,
-    totalInterest,
-    totalPayable: schedule.reduce((sum, row) => sum + row.emi + row.prepayment, 0),
-    schedule,
-  };
+const INITIAL_ELIGIBILITY_FORM = {
+  fullName: "",
+  phone: "",
+  loanCategory: "business",
+  district: "Kollam",
+  age: "30",
+  monthlyIncome: "50000",
+  requiredAmount: "500000",
+  existingEmi: "0",
+  monthlyExpenses: "18000",
+  employmentType: "salaried",
+  employmentStabilityMonths: "24",
+  cibilScore: "730",
+  businessVintageMonths: "0",
+  collateralAvailable: false,
+  hasGstItr: false,
 };
+
+const INITIAL_EMI_FORM = {
+  principal: "500000",
+  annualInterest: "12",
+  tenureMonths: "60",
+  processingFeeType: "percentage",
+  processingFeeValue: "1.5",
+  prepaymentAmount: "0",
+  prepaymentMonth: "0",
+};
+
+const INITIAL_OFFER_COMPARE = [
+  { lender: "Bank Offer", interest: "11.5", processingFee: "1" },
+  { lender: "NBFC Offer", interest: "13.25", processingFee: "1.75" },
+  { lender: "Fintech Offer", interest: "14", processingFee: "2" },
+];
+
+const INITIAL_LEAD_FORM = {
+  fullName: "",
+  phone: "",
+  loanCategory: "business",
+  amount: "",
+  preferredInterestRate: "12",
+  preferredTenureMonths: "60",
+  district: "Kollam",
+  institutionId: "",
+  callbackWindow: "today-evening",
+  documentNotes: "",
+  whatsappOptIn: false,
+  consentPrivacy: false,
+  consentKyc: false,
+  consentDisclaimer: false,
+};
+
+const INITIAL_ASSIGNMENT_FORM = {
+  leadId: "",
+  consultantId: "",
+  consultantName: "",
+  consultantPhone: "",
+};
+
+const INITIAL_STATUS_FORM = {
+  leadId: "",
+  status: "documents_pending",
+  note: "",
+};
+
+const INITIAL_COMMISSION_FORM = {
+  leadId: "",
+  actualAmount: "",
+  status: "pending",
+};
+
+const createEmptyDocuments = () => ({
+  aadhaar: [],
+  pan: [],
+  salarySlip: [],
+  bankStatement: [],
+  gstProof: [],
+  collateralDocuments: [],
+});
+
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
 
 const getYearlyBreakdown = (schedule = []) => {
   const yearlyMap = {};
   schedule.forEach((row) => {
-    const year = Math.ceil(row.month / 12);
+    const year = Math.ceil(Number(row.month || 0) / 12);
     if (!yearlyMap[year]) {
       yearlyMap[year] = { year, interest: 0, principal: 0, prepayment: 0, total: 0 };
     }
-    yearlyMap[year].interest += row.interest;
-    yearlyMap[year].principal += row.principal;
-    yearlyMap[year].prepayment += row.prepayment;
-    yearlyMap[year].total += row.emi + row.prepayment;
+    yearlyMap[year].interest += Number(row.interest || 0);
+    yearlyMap[year].principal += Number(row.principal || 0);
+    yearlyMap[year].prepayment += Number(row.prepayment || 0);
+    yearlyMap[year].total += Number(row.emi || 0) + Number(row.prepayment || 0);
   });
   return Object.values(yearlyMap);
 };
 
-const downloadScheduleCsv = (schedule = [], leadName = "loan") => {
-  const headers = ["Month", "EMI", "Interest", "Principal", "Prepayment", "Closing Balance"];
-  const rows = schedule.map((item) => [
-    item.month,
-    item.emi.toFixed(2),
-    item.interest.toFixed(2),
-    item.principal.toFixed(2),
-    item.prepayment.toFixed(2),
-    item.closingBalance.toFixed(2),
-  ]);
-
-  const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", `${leadName}-emi-schedule.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
-
-const getLeadFormErrors = (form) => {
-  const issues = [];
-  if (!/^[A-Za-z ]+$/.test(String(form.fullName || "").trim())) {
-    issues.push("Name should contain letters and spaces only.");
-  }
-  if (!/^\d{10}$/.test(String(form.phone || "").trim())) {
-    issues.push("Phone must be exactly 10 digits.");
-  }
-  if (Number(form.amount || 0) <= 0) {
-    issues.push("Loan amount must be greater than zero.");
-  }
-  if (Number(form.preferredTenureMonths || 0) <= 0) {
-    issues.push("Tenure must be a positive number of months.");
-  }
-  const interest = Number(form.preferredInterestRate || 0);
-  if (interest < 6 || interest > 36) {
-    issues.push("Preferred interest rate must be between 6% and 36%.");
-  }
-  if (!form.consentPrivacy || !form.consentKyc || !form.consentDisclaimer) {
-    issues.push("All consent checkboxes must be accepted.");
-  }
-  return issues;
-};
+const pickInstitutions = (response) => response?.data?.institutions || response?.institutions || [];
+const pickPayload = (response) => response?.data || response || null;
 
 const FinanceHub = () => {
   const [activeTab, setActiveTab] = useState("loans");
@@ -227,20 +214,14 @@ const FinanceHub = () => {
   const [emiState, setEmiState] = useState({ error: "", result: null, yearly: [], offers: [] });
 
   const [leadForm, setLeadForm] = useState(INITIAL_LEAD_FORM);
-  const [documentsByCategory, setDocumentsByCategory] = useState({
-    aadhaar: [],
-    pan: [],
-    salarySlip: [],
-    bankStatement: [],
-    gstProof: [],
-    collateralDocuments: [],
-  });
+  const [documentsByCategory, setDocumentsByCategory] = useState(createEmptyDocuments());
   const [leadState, setLeadState] = useState({ loading: false, error: "", success: "", consentAt: "" });
 
   const [trackPhone, setTrackPhone] = useState("");
   const [leadHistory, setLeadHistory] = useState([]);
   const [userDashboard, setUserDashboard] = useState(null);
   const [trackLoadError, setTrackLoadError] = useState("");
+
   const [roleCapabilities, setRoleCapabilities] = useState({
     loaded: false,
     isAdmin: false,
@@ -267,25 +248,38 @@ const FinanceHub = () => {
 
   const summaryCards = useMemo(
     () => [
+      { id: "verified", label: "Verified Partners", value: institutions.filter((item) => item.verifiedPartner).length },
+      { id: "districts", label: "District Coverage", value: SOUTH_KERALA_DISTRICTS.length },
+      { id: "categories", label: "Loan Categories", value: LOAN_CATEGORIES.length },
+      { id: "schemes", label: "Govt Schemes", value: GOVERNMENT_SCHEMES.length },
+    ],
+    [institutions]
+  );
+  const heroSignals = useMemo(
+    () => [
+      {
+        id: "market",
+        label: "Institution Network",
+        value: institutions.length,
+        helper: "Live institutions",
+      },
       {
         id: "verified",
-        label: "Verified Partners",
+        label: "Verified",
         value: institutions.filter((item) => item.verifiedPartner).length,
-      },
-      {
-        id: "districts",
-        label: "District Coverage",
-        value: SOUTH_KERALA_DISTRICTS.length,
-      },
-      {
-        id: "categories",
-        label: "Loan Categories",
-        value: LOAN_CATEGORIES.length,
+        helper: "Trust-marked partners",
       },
       {
         id: "schemes",
         label: "Govt Schemes",
         value: GOVERNMENT_SCHEMES.length,
+        helper: "Curated support options",
+      },
+      {
+        id: "categories",
+        label: "Loan Categories",
+        value: LOAN_CATEGORIES.length,
+        helper: "Coverage breadth",
       },
     ],
     [institutions]
@@ -304,7 +298,7 @@ const FinanceHub = () => {
     () =>
       institutions.filter((institution) => {
         const byCategory = selectedCategory === "all" || institution.loanCategories?.includes(selectedCategory);
-        const bySearch = `${institution.name} ${institution.branchAddress} ${institution.contactPerson?.name}`
+        const bySearch = `${institution.name || ""} ${institution.branchAddress || ""} ${institution.contactPerson?.name || ""}`
           .toLowerCase()
           .includes(searchTerm.toLowerCase());
         return byCategory && bySearch;
@@ -312,10 +306,32 @@ const FinanceHub = () => {
     [institutions, searchTerm, selectedCategory]
   );
 
+  const loadAdminAndCommissionDashboards = async (isAdmin) => {
+    if (!isAdmin) {
+      setAdminDashboard(null);
+      setCommissionDashboard(null);
+      setAuditLogs([]);
+      return;
+    }
+
+    try {
+      const [adminResponse, commissionResponse, auditResponse] = await Promise.all([
+        financeApi.getAdminDashboard(),
+        financeApi.getCommissionDashboard(),
+        financeApi.getAuditLogs(15),
+      ]);
+      setAdminDashboard(pickPayload(adminResponse));
+      setCommissionDashboard(pickPayload(commissionResponse));
+      setAuditLogs(auditResponse?.data?.logs || auditResponse?.logs || []);
+    } catch (_error) {
+      setWorkflowMessage("Some admin dashboard data could not be loaded.");
+    }
+  };
+
   const loadViewerProfile = async () => {
     try {
       const response = await financeApi.getAuthProfile();
-      const user = response?.user || null;
+      const user = response?.user || response?.data?.user || null;
       const roleTokens = normalizeRoleTokens(user || {});
       const isAdmin = hasAnyRole(roleTokens, ["admin", "finance", "finance_admin"]);
       const isConsultant = isAdmin || hasAnyRole(roleTokens, ["consultant", "finance_consultant"]);
@@ -340,6 +356,7 @@ const FinanceHub = () => {
         setConsultantId(derivedConsultantId);
         setAssignmentForm((current) => ({ ...current, consultantId: derivedConsultantId }));
       }
+
       if (isConsultant) {
         setWorkflowRole("consultant");
       } else if (isAdmin) {
@@ -349,6 +366,8 @@ const FinanceHub = () => {
       } else {
         setWorkflowRole("user");
       }
+
+      await loadAdminAndCommissionDashboards(isAdmin);
     } catch (_error) {
       setRoleCapabilities((current) => ({ ...current, loaded: true }));
     }
@@ -362,35 +381,13 @@ const FinanceHub = () => {
         type: institutionTypeFilter === "all" ? "" : institutionTypeFilter,
         category: selectedCategory === "all" ? "" : selectedCategory,
       });
-      setInstitutions(response?.data?.institutions || []);
+      setInstitutions(pickInstitutions(response));
       setInstitutionLoadState({ loading: false, error: "" });
     } catch (error) {
       setInstitutionLoadState({
         loading: false,
         error: error?.response?.data?.message || "Unable to load institution marketplace.",
       });
-    }
-  };
-
-  const loadAdminAndCommissionDashboards = async () => {
-    if (!roleCapabilities.isAdmin) {
-      setAdminDashboard(null);
-      setCommissionDashboard(null);
-      setAuditLogs([]);
-      return;
-    }
-
-    try {
-      const [adminResponse, commissionResponse, auditResponse] = await Promise.all([
-        financeApi.getAdminDashboard(),
-        financeApi.getCommissionDashboard(),
-        financeApi.getAuditLogs(15),
-      ]);
-      setAdminDashboard(adminResponse?.data || null);
-      setCommissionDashboard(commissionResponse?.data || null);
-      setAuditLogs(auditResponse?.data?.logs || []);
-    } catch (_error) {
-      setWorkflowMessage("Some admin dashboard data could not be loaded.");
     }
   };
 
@@ -404,27 +401,13 @@ const FinanceHub = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [districtFilter, institutionTypeFilter, selectedCategory]);
 
-  useEffect(() => {
-    if (roleCapabilities.loaded && roleCapabilities.isAdmin) {
-      void loadAdminAndCommissionDashboards();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roleCapabilities.loaded, roleCapabilities.isAdmin]);
-
   const handleEligibilitySubmit = async (event) => {
     event.preventDefault();
     setEligibilityState({ loading: true, error: "", result: null });
 
-    if (Number(eligibilityForm.monthlyIncome || 0) <= 0) {
-      setEligibilityState({ loading: false, error: "Monthly income must be greater than zero.", result: null });
-      return;
-    }
-    if (Number(eligibilityForm.requiredAmount || 0) <= 0) {
-      setEligibilityState({ loading: false, error: "Requested loan amount must be greater than zero.", result: null });
-      return;
-    }
-    if (Number(eligibilityForm.age || 0) < 18) {
-      setEligibilityState({ loading: false, error: "Age must be 18 or above.", result: null });
+    const validationErrors = getEligibilityFormErrors(eligibilityForm);
+    if (validationErrors.length > 0) {
+      setEligibilityState({ loading: false, error: validationErrors.join(" "), result: null });
       return;
     }
 
@@ -442,11 +425,7 @@ const FinanceHub = () => {
       };
 
       const response = await financeApi.saveEligibility(payload);
-      setEligibilityState({
-        loading: false,
-        error: "",
-        result: response?.data || null,
-      });
+      setEligibilityState({ loading: false, error: "", result: pickPayload(response) });
     } catch (error) {
       setEligibilityState({
         loading: false,
@@ -458,6 +437,7 @@ const FinanceHub = () => {
 
   const handleEmiCalculation = (event) => {
     event.preventDefault();
+
     const principal = Number(emiForm.principal || 0);
     const annualInterest = Number(emiForm.annualInterest || 0);
     const tenureMonths = Number(emiForm.tenureMonths || 0);
@@ -477,10 +457,9 @@ const FinanceHub = () => {
 
     const processingFeeType = emiForm.processingFeeType;
     const processingFeeValue = Number(emiForm.processingFeeValue || 0);
-    const processingFeeAmount =
-      processingFeeType === "flat"
-        ? processingFeeValue
-        : Number(((principal * processingFeeValue) / 100).toFixed(2));
+    const processingFeeAmount = processingFeeType === "flat"
+      ? processingFeeValue
+      : Number(((principal * processingFeeValue) / 100).toFixed(2));
 
     const result = buildEmiSchedule({
       principal,
@@ -494,7 +473,7 @@ const FinanceHub = () => {
     const offers = offerCompare.map((offer) => {
       const offerRate = Number(offer.interest || 0);
       const offerFeePercentage = Number(offer.processingFee || 0);
-      const offerEmi = calculateMonthlyEmi(principal, offerRate, tenureMonths);
+      const offerEmi = calculateEmi(principal, offerRate, tenureMonths);
       const offerTotal = offerEmi * tenureMonths + (principal * offerFeePercentage) / 100;
       return {
         lender: offer.lender || "Offer",
@@ -523,12 +502,7 @@ const FinanceHub = () => {
 
     const validationErrors = getLeadFormErrors(leadForm);
     if (validationErrors.length > 0) {
-      setLeadState({
-        loading: false,
-        error: validationErrors.join(" "),
-        success: "",
-        consentAt: "",
-      });
+      setLeadState({ loading: false, error: validationErrors.join(" "), success: "", consentAt: "" });
       return;
     }
 
@@ -537,6 +511,7 @@ const FinanceHub = () => {
       Object.entries(leadForm).forEach(([key, value]) => {
         formData.append(key, value);
       });
+
       if (eligibilityState.result?.result) {
         formData.append("eligibilitySnapshot", JSON.stringify(eligibilityState.result.result));
       }
@@ -549,7 +524,7 @@ const FinanceHub = () => {
       });
 
       const response = await financeApi.createLead(formData);
-      const createdLead = response?.data?.lead;
+      const createdLead = response?.data?.lead || response?.lead;
 
       setLeadState({
         loading: false,
@@ -558,22 +533,18 @@ const FinanceHub = () => {
         consentAt: new Date().toLocaleString(),
       });
       setLeadForm(INITIAL_LEAD_FORM);
-      setDocumentsByCategory({
-        aadhaar: [],
-        pan: [],
-        salarySlip: [],
-        bankStatement: [],
-        gstProof: [],
-        collateralDocuments: [],
-      });
-      setTrackPhone(String(createdLead?.phone || trackPhone || ""));
+      setDocumentsByCategory(createEmptyDocuments());
+
       if (createdLead?.phone) {
-        const userSummary = await financeApi.getUserDashboard(createdLead.phone);
-        setUserDashboard(userSummary?.data || null);
-        setLeadHistory(userSummary?.data?.leads || []);
+        setTrackPhone(String(createdLead.phone));
+        const userSummary = await financeApi.getUserDashboard(String(createdLead.phone));
+        const summaryData = pickPayload(userSummary);
+        setUserDashboard(summaryData);
+        setLeadHistory(summaryData?.leads || []);
       }
+
       if (roleCapabilities.isAdmin) {
-        await loadAdminAndCommissionDashboards();
+        await loadAdminAndCommissionDashboards(true);
       }
     } catch (error) {
       setLeadState({
@@ -597,8 +568,9 @@ const FinanceHub = () => {
 
     try {
       const response = await financeApi.getUserDashboard(phoneToTrack);
-      setUserDashboard(response?.data || null);
-      setLeadHistory(response?.data?.leads || []);
+      const summaryData = pickPayload(response);
+      setUserDashboard(summaryData);
+      setLeadHistory(summaryData?.leads || []);
     } catch (error) {
       setTrackLoadError(error?.response?.data?.message || "Unable to fetch tracking information.");
     }
@@ -612,10 +584,10 @@ const FinanceHub = () => {
       setWorkflowMessage(`Consultant assigned for ${assignmentForm.leadId}.`);
       if (consultantId) {
         const consultantData = await financeApi.getConsultantDashboard(consultantId);
-        setConsultantDashboard(consultantData?.data || null);
+        setConsultantDashboard(pickPayload(consultantData));
       }
       if (roleCapabilities.isAdmin) {
-        await loadAdminAndCommissionDashboards();
+        await loadAdminAndCommissionDashboards(true);
       }
     } catch (error) {
       setWorkflowMessage(error?.response?.data?.message || "Consultant assignment failed.");
@@ -631,15 +603,16 @@ const FinanceHub = () => {
         note: statusForm.note,
       });
       setWorkflowMessage(`Status updated for ${statusForm.leadId}.`);
+
       if (consultantId) {
         const consultantData = await financeApi.getConsultantDashboard(consultantId);
-        setConsultantDashboard(consultantData?.data || null);
+        setConsultantDashboard(pickPayload(consultantData));
       }
       if (trackPhone) {
         await handleTrackFetch();
       }
       if (roleCapabilities.isAdmin) {
-        await loadAdminAndCommissionDashboards();
+        await loadAdminAndCommissionDashboards(true);
       }
     } catch (error) {
       setWorkflowMessage(error?.response?.data?.message || "Status update failed.");
@@ -656,7 +629,7 @@ const FinanceHub = () => {
       });
       setWorkflowMessage(`Commission updated for ${commissionForm.leadId}.`);
       if (roleCapabilities.isAdmin) {
-        await loadAdminAndCommissionDashboards();
+        await loadAdminAndCommissionDashboards(true);
       }
     } catch (error) {
       setWorkflowMessage(error?.response?.data?.message || "Commission update failed.");
@@ -667,7 +640,7 @@ const FinanceHub = () => {
     setWorkflowMessage("");
     try {
       const response = await financeApi.getConsultantDashboard(consultantId);
-      setConsultantDashboard(response?.data || null);
+      setConsultantDashboard(pickPayload(response));
     } catch (error) {
       setWorkflowMessage(error?.response?.data?.message || "Unable to fetch consultant dashboard.");
     }
@@ -679,9 +652,10 @@ const FinanceHub = () => {
       setWorkflowMessage("Select an institution to view institution dashboard.");
       return;
     }
+
     try {
       const response = await financeApi.getInstitutionDashboard(institutionDashboardId);
-      setInstitutionDashboard(response?.data || null);
+      setInstitutionDashboard(pickPayload(response));
     } catch (error) {
       setWorkflowMessage(error?.response?.data?.message || "Unable to fetch institution dashboard.");
     }
@@ -697,19 +671,22 @@ const FinanceHub = () => {
       setWorkflowMessage("Enter your 10 digit phone in tracker to request data deletion.");
       return;
     }
+
     if (String(dataDeletionReason || "").trim().length < 5) {
       setWorkflowMessage("Enter a valid reason for data deletion request.");
       return;
     }
+
     try {
       const response = await financeApi.requestDataDeletion({
         phone: targetPhone,
         reason: dataDeletionReason.trim(),
       });
-      setWorkflowMessage(response?.message || "Data deletion request submitted.");
+      setWorkflowMessage(response?.message || response?.data?.message || "Data deletion request submitted.");
       setDataDeletionReason("");
+
       if (roleCapabilities.isAdmin) {
-        await loadAdminAndCommissionDashboards();
+        await loadAdminAndCommissionDashboards(true);
       }
     } catch (error) {
       setWorkflowMessage(error?.response?.data?.message || "Data deletion request failed.");
@@ -719,13 +696,14 @@ const FinanceHub = () => {
   const openApplyWithScheme = (categoryHint) => {
     setLeadForm((current) => ({ ...current, loanCategory: categoryHint || "business" }));
     setActiveTab("apply");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const canUseConsultantWorkflow = roleCapabilities.isConsultant;
   const canUseAdminWorkflow = roleCapabilities.isAdmin;
-  const canUseInstitutionWorkflow =
-    roleCapabilities.isAdmin || roleCapabilities.isConsultant || roleCapabilities.isInstitutionUser;
+  const canUseInstitutionWorkflow = roleCapabilities.isAdmin || roleCapabilities.isConsultant || roleCapabilities.isInstitutionUser;
   const canUseCommissionWorkflow = roleCapabilities.canViewCommission;
 
   return (
@@ -739,6 +717,26 @@ const FinanceHub = () => {
               Backend-connected enquiries, document uploads, consultant assignment, lead tracking,
               scheme discovery and commission dashboards.
             </p>
+            <div className="finance-hero-actions">
+              <button type="button" className="finance-hero-action-btn" onClick={() => setActiveTab("loans")}>
+                Explore Loans
+              </button>
+              <button type="button" className="finance-hero-action-btn" onClick={() => setActiveTab("eligibility")}>
+                Check Eligibility
+              </button>
+              <button type="button" className="finance-hero-action-btn" onClick={() => setActiveTab("apply")}>
+                Start Application
+              </button>
+            </div>
+            <div className="finance-hero-highlights" aria-label="Finance pulse">
+              {heroSignals.map((item) => (
+                <article key={item.id} className="finance-hero-signal">
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <small>{item.helper}</small>
+                </article>
+              ))}
+            </div>
           </div>
           <div className="finance-hero-tools">
             <input
@@ -753,18 +751,13 @@ const FinanceHub = () => {
                 <select value={districtFilter} onChange={(event) => setDistrictFilter(event.target.value)}>
                   <option value="all">All</option>
                   {SOUTH_KERALA_DISTRICTS.map((district) => (
-                    <option key={district} value={district}>
-                      {district}
-                    </option>
+                    <option key={district} value={district}>{district}</option>
                   ))}
                 </select>
               </label>
               <label>
                 Institution
-                <select
-                  value={institutionTypeFilter}
-                  onChange={(event) => setInstitutionTypeFilter(event.target.value)}
-                >
+                <select value={institutionTypeFilter} onChange={(event) => setInstitutionTypeFilter(event.target.value)}>
                   <option value="all">All</option>
                   <option value="bank">Banks</option>
                   <option value="nbfc">NBFCs</option>
@@ -800,10 +793,8 @@ const FinanceHub = () => {
         ))}
       </section>
 
-
       {activeTab === "loans" ? (
         <LoanMarketplaceTab
-          institutions={institutions}
           categories={LOAN_CATEGORIES}
           filters={{ selectedCategory, filteredLoanCategories, filteredInstitutions, institutionLoadState }}
           onFilterChange={{ setSelectedCategory }}
@@ -825,557 +816,83 @@ const FinanceHub = () => {
       {activeTab === "emi" ? (
         <EmiCalculatorTab
           form={emiForm}
-          onChange={fn => setEmiForm(fn)}
+          onChange={setEmiForm}
           onCalculate={handleEmiCalculation}
           state={emiState}
           offerCompare={offerCompare}
           setOfferCompare={setOfferCompare}
-          downloadScheduleCsv={downloadScheduleCsv}
+          downloadScheduleCsv={exportEmiScheduleCsv}
           leadForm={leadForm}
           formatCurrency={formatCurrency}
         />
       ) : null}
 
       {activeTab === "apply" ? (
-        <section className="finance-section">
-          <div className="finance-section-header">
-            <h2>Apply for Assistance</h2>
-            <p>Real document upload + consent capture + backend lead creation.</p>
-          </div>
-
-          <form className="finance-form" onSubmit={handleLeadSubmit}>
-            <label>
-              Full Name
-              <input
-                type="text"
-                value={leadForm.fullName}
-                onChange={(event) => setLeadForm((current) => ({ ...current, fullName: event.target.value }))}
-              />
-            </label>
-            <label>
-              Phone (10 digits)
-              <input
-                type="tel"
-                value={leadForm.phone}
-                onChange={(event) => setLeadForm((current) => ({ ...current, phone: event.target.value }))}
-              />
-            </label>
-            <label>
-              Loan Category
-              <select
-                value={leadForm.loanCategory}
-                onChange={(event) => setLeadForm((current) => ({ ...current, loanCategory: event.target.value }))}
-              >
-                {LOAN_CATEGORIES.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Required Amount (INR)
-              <input
-                type="number"
-                value={leadForm.amount}
-                onChange={(event) => setLeadForm((current) => ({ ...current, amount: event.target.value }))}
-              />
-            </label>
-            <label>
-              Preferred Interest (%)
-              <input
-                type="number"
-                step="0.01"
-                value={leadForm.preferredInterestRate}
-                onChange={(event) =>
-                  setLeadForm((current) => ({ ...current, preferredInterestRate: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Preferred Tenure (months)
-              <input
-                type="number"
-                value={leadForm.preferredTenureMonths}
-                onChange={(event) =>
-                  setLeadForm((current) => ({ ...current, preferredTenureMonths: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              District
-              <select
-                value={leadForm.district}
-                onChange={(event) => setLeadForm((current) => ({ ...current, district: event.target.value }))}
-              >
-                {SOUTH_KERALA_DISTRICTS.map((district) => (
-                  <option key={district} value={district}>
-                    {district}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Preferred Institution
-              <select
-                value={leadForm.institutionId}
-                onChange={(event) => {
-                  setLeadForm((current) => ({ ...current, institutionId: event.target.value }));
-                  setInstitutionDashboardId(event.target.value);
-                }}
-              >
-                <option value="">Auto-match institution</option>
-                {institutions.map((institution) => (
-                  <option key={institution._id} value={institution._id}>
-                    {institution.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Preferred Callback
-              <select
-                value={leadForm.callbackWindow}
-                onChange={(event) =>
-                  setLeadForm((current) => ({ ...current, callbackWindow: event.target.value }))
-                }
-              >
-                <option value="today-evening">Today evening</option>
-                <option value="tomorrow-morning">Tomorrow morning</option>
-                <option value="tomorrow-evening">Tomorrow evening</option>
-              </select>
-            </label>
-            <label>
-              Document Notes
-              <textarea
-                rows={3}
-                value={leadForm.documentNotes}
-                onChange={(event) => setLeadForm((current) => ({ ...current, documentNotes: event.target.value }))}
-                placeholder="Add context for documents or missing files."
-              />
-            </label>
-
-            {DOCUMENT_FIELDS.map((docField) => (
-              <label key={docField.key}>
-                {docField.label}
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={(event) =>
-                    setDocumentsByCategory((current) => ({
-                      ...current,
-                      [docField.key]: Array.from(event.target.files || []),
-                    }))
-                  }
-                />
-              </label>
-            ))}
-
-            <label className="finance-consent">
-              <input
-                type="checkbox"
-                checked={leadForm.whatsappOptIn}
-                onChange={(event) =>
-                  setLeadForm((current) => ({ ...current, whatsappOptIn: event.target.checked }))
-                }
-              />
-              Enable WhatsApp callback integration
-            </label>
-            <label className="finance-consent">
-              <input
-                type="checkbox"
-                checked={leadForm.consentPrivacy}
-                onChange={(event) =>
-                  setLeadForm((current) => ({ ...current, consentPrivacy: event.target.checked }))
-                }
-              />
-              I consent to data processing as per privacy policy.
-            </label>
-            <label className="finance-consent">
-              <input
-                type="checkbox"
-                checked={leadForm.consentKyc}
-                onChange={(event) => setLeadForm((current) => ({ ...current, consentKyc: event.target.checked }))}
-              />
-              I consent to secure KYC document storage and verification workflow.
-            </label>
-            <label className="finance-consent">
-              <input
-                type="checkbox"
-                checked={leadForm.consentDisclaimer}
-                onChange={(event) =>
-                  setLeadForm((current) => ({ ...current, consentDisclaimer: event.target.checked }))
-                }
-              />
-              I understand that approval is not guaranteed and is decided by lender underwriting.
-            </label>
-
-            <button type="submit" disabled={leadState.loading}>
-              {leadState.loading ? "Submitting..." : "Submit Loan Enquiry"}
-            </button>
-          </form>
-
-          {leadState.error ? <p className="finance-error">{leadState.error}</p> : null}
-          {leadState.success ? (
-            <p className="finance-status">
-              {leadState.success} {leadState.consentAt ? `Consent timestamp: ${leadState.consentAt}` : ""}
-            </p>
-          ) : null}
-
-          <div className="finance-compliance-banner">
-            <strong>Compliance and Trust:</strong> We operate as an assistance and facilitation platform.
-            Loan approval is solely lender-dependent. <a href="/PRIVACY_POLICY.html">Privacy Policy</a> |
-            RBI/NBFC/bank disclaimer applies.
-          </div>
-        </section>
+        <ApplyLeadTab
+          form={leadForm}
+          onChange={setLeadForm}
+          onSubmit={handleLeadSubmit}
+          state={leadState}
+          documents={documentsByCategory}
+          onDocumentUpload={(key, files) => {
+            setDocumentsByCategory((current) => ({ ...current, [key]: files }));
+          }}
+          documentFields={DOCUMENT_FIELDS}
+          categories={LOAN_CATEGORIES}
+          districts={SOUTH_KERALA_DISTRICTS}
+          institutions={institutions}
+          onInstitutionSelect={setInstitutionDashboardId}
+        />
       ) : null}
 
       {activeTab === "track" ? (
-        <section className="finance-section">
-          <div className="finance-section-header">
-            <h2>Tracking & Workflow Dashboards</h2>
-            <p>User, consultant, admin, institution and commission workflows in one place.</p>
-          </div>
-
-          <div className="finance-filter-row">
-            <label>
-              Track by Phone
-              <input
-                type="tel"
-                value={trackPhone}
-                onChange={(event) => setTrackPhone(event.target.value)}
-                placeholder="10 digit phone"
-              />
-            </label>
-            <button type="button" onClick={handleTrackFetch}>
-              Load User Dashboard
-            </button>
-          </div>
-          {trackLoadError ? <p className="finance-error">{trackLoadError}</p> : null}
-
-          {userDashboard ? (
-            <article className="finance-panel">
-              <h3>User Loan Dashboard</h3>
-              <p>Total Leads: {userDashboard.totalLeads}</p>
-              <div className="finance-tag-row">
-                {Object.entries(userDashboard.statusCounts || {}).map(([status, count]) => (
-                  <span key={status}>
-                    {status}: {count}
-                  </span>
-                ))}
-              </div>
-              <ul className="finance-list">
-                {(leadHistory || []).map((lead) => (
-                  <li key={lead.leadId}>
-                    <strong>{lead.leadId}</strong> | {lead.loanCategory} | {formatCurrency(lead.amount)} |{" "}
-                    {lead.status}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ) : null}
-
-          <div className="finance-chip-row">
-            <button type="button" onClick={() => setWorkflowRole("user")}>
-              User
-            </button>
-            {canUseConsultantWorkflow ? (
-              <button type="button" onClick={() => setWorkflowRole("consultant")}>
-                Consultant
-              </button>
-            ) : null}
-            {canUseAdminWorkflow ? (
-              <button type="button" onClick={() => setWorkflowRole("admin")}>
-                Admin
-              </button>
-            ) : null}
-            {canUseInstitutionWorkflow ? (
-              <button type="button" onClick={() => setWorkflowRole("institution")}>
-                Institution
-              </button>
-            ) : null}
-            {canUseCommissionWorkflow ? (
-              <button type="button" onClick={() => setWorkflowRole("commission")}>
-                Commission
-              </button>
-            ) : null}
-          </div>
-
-          {workflowRole === "consultant" && canUseConsultantWorkflow ? (
-            <article className="finance-panel">
-              <h3>Consultant Dashboard</h3>
-              <div className="finance-filter-row">
-                <label>
-                  Consultant ID
-                  <input
-                    type="text"
-                    value={consultantId}
-                    onChange={(event) => {
-                      setConsultantId(event.target.value);
-                      setAssignmentForm((current) => ({ ...current, consultantId: event.target.value }));
-                    }}
-                  />
-                </label>
-                <button type="button" onClick={loadConsultantDashboard}>
-                  Load Consultant Dashboard
-                </button>
-              </div>
-
-              <form className="finance-form" onSubmit={handleAssignmentSubmit}>
-                <h4>Assign Consultant to Lead</h4>
-                <label>
-                  Lead ID
-                  <input
-                    type="text"
-                    value={assignmentForm.leadId}
-                    onChange={(event) =>
-                      setAssignmentForm((current) => ({ ...current, leadId: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Consultant Name
-                  <input
-                    type="text"
-                    value={assignmentForm.consultantName}
-                    onChange={(event) =>
-                      setAssignmentForm((current) => ({ ...current, consultantName: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Consultant Phone
-                  <input
-                    type="tel"
-                    value={assignmentForm.consultantPhone}
-                    onChange={(event) =>
-                      setAssignmentForm((current) => ({ ...current, consultantPhone: event.target.value }))
-                    }
-                  />
-                </label>
-                <button type="submit">Assign</button>
-              </form>
-
-              <form className="finance-form" onSubmit={handleStatusSubmit}>
-                <h4>Update Lead Status</h4>
-                <label>
-                  Lead ID
-                  <input
-                    type="text"
-                    value={statusForm.leadId}
-                    onChange={(event) =>
-                      setStatusForm((current) => ({ ...current, leadId: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Status
-                  <select
-                    value={statusForm.status}
-                    onChange={(event) =>
-                      setStatusForm((current) => ({ ...current, status: event.target.value }))
-                    }
-                  >
-                    <option value="documents_pending">Documents Pending</option>
-                    <option value="consultant_assigned">Consultant Assigned</option>
-                    <option value="in_review">In Review</option>
-                    <option value="submitted_to_institution">Submitted to Institution</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="disbursed">Disbursed</option>
-                  </select>
-                </label>
-                <label>
-                  Note
-                  <input
-                    type="text"
-                    value={statusForm.note}
-                    onChange={(event) => setStatusForm((current) => ({ ...current, note: event.target.value }))}
-                  />
-                </label>
-                <button type="submit">Update Status</button>
-              </form>
-
-              {consultantDashboard ? (
-                <div className="finance-result">
-                  <p>Assigned Leads: {consultantDashboard.assignedLeads}</p>
-                  <div className="finance-tag-row">
-                    {Object.entries(consultantDashboard.statusCounts || {}).map(([status, count]) => (
-                      <span key={status}>
-                        {status}: {count}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </article>
-          ) : null}
-
-          {workflowRole === "admin" && canUseAdminWorkflow ? (
-            <article className="finance-panel">
-              <h3>Admin Lead Management</h3>
-              <div className="finance-tag-row">
-                <span>Total Leads: {adminDashboard?.metrics?.totalLeads || 0}</span>
-                <span>Open Leads: {adminDashboard?.metrics?.openLeads || 0}</span>
-                <span>Disbursed: {adminDashboard?.metrics?.disbursedLeads || 0}</span>
-                <span>Deletion Requests: {adminDashboard?.metrics?.pendingDeletionRequests || 0}</span>
-              </div>
-              <form className="finance-form" onSubmit={handleCommissionSubmit}>
-                <h4>Update Commission</h4>
-                <label>
-                  Lead ID
-                  <input
-                    type="text"
-                    value={commissionForm.leadId}
-                    onChange={(event) =>
-                      setCommissionForm((current) => ({ ...current, leadId: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Actual Amount
-                  <input
-                    type="number"
-                    value={commissionForm.actualAmount}
-                    onChange={(event) =>
-                      setCommissionForm((current) => ({ ...current, actualAmount: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Status
-                  <select
-                    value={commissionForm.status}
-                    onChange={(event) =>
-                      setCommissionForm((current) => ({ ...current, status: event.target.value }))
-                    }
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="eligible">Eligible</option>
-                    <option value="paid">Paid</option>
-                  </select>
-                </label>
-                <button type="submit">Save Commission</button>
-              </form>
-
-              <h4>Admin Audit Log</h4>
-              <ul className="finance-list">
-                {auditLogs.map((log) => (
-                  <li key={log._id}>
-                    {new Date(log.timestamp || log.createdAt).toLocaleString()} | {log.actionType} |{" "}
-                    {log.leadId || "-"}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ) : null}
-
-          {workflowRole === "institution" && canUseInstitutionWorkflow ? (
-            <article className="finance-panel">
-              <h3>Institution Dashboard</h3>
-              <div className="finance-filter-row">
-                <label>
-                  Institution
-                  <select
-                    value={institutionDashboardId}
-                    onChange={(event) => setInstitutionDashboardId(event.target.value)}
-                  >
-                    <option value="">Select institution</option>
-                    {institutions.map((institution) => (
-                      <option key={institution._id} value={institution._id}>
-                        {institution.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="button" onClick={loadInstitutionDashboard}>
-                  Load Institution Dashboard
-                </button>
-              </div>
-              {institutionDashboard ? (
-                <div className="finance-result">
-                  <p>Total Leads: {institutionDashboard.totalLeads}</p>
-                  <p>Approved: {institutionDashboard.approvedCount}</p>
-                  <p>Conversion Rate: {institutionDashboard.conversionRate}%</p>
-                </div>
-              ) : null}
-            </article>
-          ) : null}
-
-          {workflowRole === "commission" && canUseCommissionWorkflow ? (
-            <article className="finance-panel">
-              <h3>Commission Dashboard</h3>
-              <p>
-                Expected: {formatCurrency(commissionDashboard?.totals?.expected || 0)} | Actual:{" "}
-                {formatCurrency(commissionDashboard?.totals?.actual || 0)} | Paid:{" "}
-                {formatCurrency(commissionDashboard?.totals?.paid || 0)}
-              </p>
-              <ul className="finance-list">
-                {(commissionDashboard?.byInstitution || []).map((row) => (
-                  <li key={row.institutionName}>
-                    {row.institutionName}: Leads {row.leadCount}, Expected {formatCurrency(row.expected)}, Paid{" "}
-                    {formatCurrency(row.paid)}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ) : null}
-
-          <article className="finance-panel">
-            <h3>Data Deletion Request</h3>
-            <p className="finance-muted">For compliance and privacy rights under data protection norms.</p>
-            <label>
-              Reason
-              <textarea
-                rows={2}
-                value={dataDeletionReason}
-                onChange={(event) => setDataDeletionReason(event.target.value)}
-              />
-            </label>
-            <button type="button" onClick={handleDataDeletionRequest}>
-              Submit Data Deletion Request
-            </button>
-          </article>
-
-          {workflowMessage ? <p className="finance-status">{workflowMessage}</p> : null}
-        </section>
+        <TrackingDashTab
+          trackPhone={trackPhone}
+          setTrackPhone={setTrackPhone}
+          onTrackFetch={handleTrackFetch}
+          trackLoadError={trackLoadError}
+          userDashboard={userDashboard}
+          leadHistory={leadHistory}
+          formatCurrency={formatCurrency}
+          workflowRole={workflowRole}
+          setWorkflowRole={setWorkflowRole}
+          canUseConsultantWorkflow={canUseConsultantWorkflow}
+          canUseAdminWorkflow={canUseAdminWorkflow}
+          canUseInstitutionWorkflow={canUseInstitutionWorkflow}
+          canUseCommissionWorkflow={canUseCommissionWorkflow}
+          consultantId={consultantId}
+          setConsultantId={setConsultantId}
+          assignmentForm={assignmentForm}
+          setAssignmentForm={setAssignmentForm}
+          onAssignmentSubmit={handleAssignmentSubmit}
+          statusForm={statusForm}
+          setStatusForm={setStatusForm}
+          onStatusSubmit={handleStatusSubmit}
+          consultantDashboard={consultantDashboard}
+          loadConsultantDashboard={loadConsultantDashboard}
+          adminDashboard={adminDashboard}
+          commissionForm={commissionForm}
+          setCommissionForm={setCommissionForm}
+          onCommissionSubmit={handleCommissionSubmit}
+          auditLogs={auditLogs}
+          institutionDashboardId={institutionDashboardId}
+          setInstitutionDashboardId={setInstitutionDashboardId}
+          institutions={institutions}
+          loadInstitutionDashboard={loadInstitutionDashboard}
+          institutionDashboard={institutionDashboard}
+          commissionDashboard={commissionDashboard}
+          dataDeletionReason={dataDeletionReason}
+          setDataDeletionReason={setDataDeletionReason}
+          onDataDeletionRequest={handleDataDeletionRequest}
+          workflowMessage={workflowMessage}
+        />
       ) : null}
 
       {activeTab === "schemes" ? (
-        <section className="finance-section">
-          <div className="finance-section-header">
-            <h2>Government Scheme Hub</h2>
-            <p>Detailed scheme cards with eligibility, amount, docs, benefit and support action.</p>
-          </div>
-          <div className="finance-card-grid">
-            {GOVERNMENT_SCHEMES.map((scheme) => (
-              <article key={scheme.id} className="finance-card">
-                <h3>{scheme.name}</h3>
-                <p>
-                  <strong>Eligibility:</strong> {scheme.eligibility}
-                </p>
-                <p>
-                  <strong>Max Amount:</strong> {scheme.maxAmount}
-                </p>
-                <p>
-                  <strong>Documents:</strong> {scheme.documents}
-                </p>
-                <p>
-                  <strong>Benefit:</strong> {scheme.benefit}
-                </p>
-                <button type="button" onClick={() => openApplyWithScheme(scheme.categoryHint)}>
-                  Apply Support
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
+        <SchemesTab schemes={GOVERNMENT_SCHEMES} onApplyWithScheme={openApplyWithScheme} />
       ) : null}
 
-      <button type="button" className="finance-floating-apply" onClick={() => setActiveTab("apply")}>
-        Apply Now
-      </button>
+      <button type="button" className="finance-floating-apply" onClick={() => setActiveTab("apply")}>Apply Now</button>
     </div>
   );
 };

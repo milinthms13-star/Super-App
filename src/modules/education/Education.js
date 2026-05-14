@@ -345,6 +345,36 @@ const Education = () => {
     () => SKILL_COURSES.filter((course) => enrolledCourseIds.includes(course.id)),
     [enrolledCourseIds]
   );
+  const educationPulse = useMemo(() => {
+    const completionSignal = Math.min(100, enrolledCourseIds.length * 22);
+    return [
+      {
+        label: "Skill Courses",
+        value: SKILL_COURSES.length,
+        helper: "Career-focused programs",
+      },
+      {
+        label: "My Enrollments",
+        value: enrolledCourseIds.length,
+        helper: "Courses in progress",
+      },
+      {
+        label: "Community Groups",
+        value: joinedGroups.length,
+        helper: "Peer circles joined",
+      },
+      {
+        label: "Scholarship Drafts",
+        value: appliedScholarships.length,
+        helper: "Applications tracked",
+      },
+      {
+        label: "Learning Momentum",
+        value: `${completionSignal}%`,
+        helper: "Progress indicator",
+      },
+    ];
+  }, [appliedScholarships.length, enrolledCourseIds.length, joinedGroups.length]);
 
   const viewCourseDetails = (course) => {
     setSelectedCourse(course);
@@ -643,6 +673,19 @@ const Education = () => {
             <span>Government scholarships</span>
           </div>
         </div>
+        <aside className="education-hero-metrics" aria-label="Learning dashboard pulse">
+          <h2>Learning Pulse</h2>
+          <p>Track your activity and stay consistent across courses, community, and support programs.</p>
+          <div className="education-pulse-grid">
+            {educationPulse.map((item) => (
+              <article key={item.label} className="education-pulse-card">
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <small>{item.helper}</small>
+              </article>
+            ))}
+          </div>
+        </aside>
       </section>
 
       <section className="education-nav">

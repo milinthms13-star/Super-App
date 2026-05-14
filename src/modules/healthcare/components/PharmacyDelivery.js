@@ -1,8 +1,13 @@
 import React, { useMemo, useState } from "react";
 
 const formatCurrency = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
+const NEXT_ORDER_STATUS = {
+  placed: "packed",
+  packed: "out_for_delivery",
+  out_for_delivery: "delivered",
+};
 
-const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyPayment }) => {
+const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyPayment, onUpdateOrderStatus }) => {
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState([]);
   const [prescriptionFile, setPrescriptionFile] = useState(null);
@@ -96,6 +101,11 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
       setFeedbackMessage("Fill all payment and delivery details.");
       return;
     }
+    const hasPrescriptionMedicines = cart.some((item) => item.requiresPrescription);
+    if (hasPrescriptionMedicines && (!prescriptionVerified || !prescriptionFile)) {
+      setFeedbackMessage("Prescription verification is required for restricted medicines before checkout.");
+      return;
+    }
 
     setPlacingOrder(true);
 
@@ -116,6 +126,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
           paymentMethod: paymentForm.paymentMethod,
           notes: "",
           prescriptionVerified,
+          requiresPrescriptionReview: hasPrescriptionMedicines,
         },
         prescriptionFile,
       });
@@ -247,6 +258,20 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
               <span>Total: {formatCurrency(order.totalAmount || 0)}</span>
               <span>Order status: {order.orderStatus || "placed"}</span>
               <span>Payment: {order.paymentStatus || "pending"}</span>
+              {order.requiresPrescriptionReview ? <span>Prescription: verified</span> : null}
+            </div>
+            <div className="healthcare-record-actions">
+              {NEXT_ORDER_STATUS[order.orderStatus || "placed"] ? (
+                <button
+                  type="button"
+                  className="healthcare-secondary-button"
+                  onClick={() => onUpdateOrderStatus?.(order.id, NEXT_ORDER_STATUS[order.orderStatus || "placed"])}
+                >
+                  Mark {NEXT_ORDER_STATUS[order.orderStatus || "placed"].replaceAll("_", " ")}
+                </button>
+              ) : (
+                <span className="healthcare-success-text">Delivery complete</span>
+              )}
             </div>
           </article>
         ))}

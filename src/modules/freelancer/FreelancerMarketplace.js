@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import BookingsTab from "./components/BookingsTab";
+import HireTab from "./components/HireTab";
 import { freelancerApi } from "./freelancerApi";
 import "./FreelancerMarketplace.css";
 
@@ -111,8 +113,66 @@ const parseMilestones = (value = "") => {
     .filter((item) => item.title && Number.isFinite(item.amount) && item.amount >= 0);
 };
 
+const ROLE_OPTIONS = [
+  { id: "customer", label: "Customer" },
+  { id: "provider", label: "Provider" },
+  { id: "admin", label: "Admin" },
+];
+
+const BOOKING_STATUS_SEQUENCE = [
+  "requested",
+  "provider_assigned",
+  "otp_pending",
+  "work_in_progress",
+  "payment_in_escrow",
+  "completed",
+];
+
+const BOOKING_STATUS_LABELS = {
+  requested: "Requested",
+  provider_assigned: "Provider Assigned",
+  awaiting_payment: "Awaiting Payment",
+  payment_in_escrow: "Escrow Ready",
+  otp_pending: "OTP Pending",
+  work_in_progress: "Work In Progress",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  disputed: "Disputed",
+};
+
+const normalizeBookingStatus = (status = "") => String(status || "").trim().toLowerCase();
+
+const getBookingStatusLabel = (status) =>
+  BOOKING_STATUS_LABELS[normalizeBookingStatus(status)] || status || "Unknown";
+
+const getBookingNextAction = (booking = {}) => {
+  const status = normalizeBookingStatus(booking.status);
+  if (status === "requested") return "Assign a provider to move this booking forward.";
+  if (status === "provider_assigned") return "Generate OTP to verify work start.";
+  if (status === "otp_pending") return "Verify OTP before starting work.";
+  if (status === "work_in_progress" && booking.payment?.status !== "in_escrow") {
+    return "Initialize escrow and milestones for payment protection.";
+  }
+  if (status === "work_in_progress" && booking.payment?.status === "in_escrow") {
+    return "Release milestones as deliverables are accepted.";
+  }
+  if (status === "disputed") return "Track dispute updates and attach supporting proofs.";
+  if (status === "cancelled") return "Review cancellation policy and refund state.";
+  if (status === "completed") return "Submit a provider review and close billing.";
+  return "Track status updates and take the next workflow action.";
+};
+
+const maskPhone = (phone = "") => {
+  const normalized = String(phone || "").replace(/\D/g, "");
+  if (normalized.length < 4) {
+    return "hidden";
+  }
+  return `******${normalized.slice(-4)}`;
+};
+
 const FreelancerMarketplace = () => {
   const [activeTab, setActiveTab] = useState("hire");
+  const [actingRole, setActingRole] = useState("customer");
   const [bootstrap, setBootstrap] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
 
@@ -126,6 +186,17 @@ const FreelancerMarketplace = () => {
   const [compareProviderIds, setCompareProviderIds] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [activeProviderPanel, setActiveProviderPanel] = useState("");
+  const [activeProviderForPanel, setActiveProviderForPanel] = useState(null);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatByProvider, setChatByProvider] = useState({});
+  const [callRequestNote, setCallRequestNote] = useState("");
+  const [reviewDraft, setReviewDraft] = useState({
+    reviewerName: "",
+    reviewerPhone: "",
+    rating: "5",
+    comment: "",
+  });
 
   const [jobs, setJobs] = useState([]);
   const [jobsLoading, setJobsLoading] = useState(true);
@@ -157,6 +228,7 @@ const FreelancerMarketplace = () => {
   const [disputeAgainstRole, setDisputeAgainstRole] = useState("provider");
   const [disputeProofs, setDisputeProofs] = useState([]);
   const [disputeRaisedByName, setDisputeRaisedByName] = useState("");
+  const [disputeResolutionNote, setDisputeResolutionNote] = useState("");
 
   const [quoteForm, setQuoteForm] = useState(INITIAL_QUOTE_FORM);
   const [quoteResult, setQuoteResult] = useState(null);
@@ -314,6 +386,107 @@ const FreelancerMarketplace = () => {
     }
   };
 
+  const openProviderPanel = async (provider, panelId) => {
+    setActiveProviderForPanel(provider);
+    setActiveProviderPanel(panelId);
+    setStatusMessage("");
+    setCallRequestNote("");
+    setChatDraft("");
+    setReviewDraft({
+      reviewerName: "",
+      reviewerPhone: "",
+      rating: "5",
+      comment: "",
+    });
+
+    if (!selectedProvider || selectedProvider._id !== provider._id) {
+      await handleProviderProfile(provider._id);
+    }
+  };
+
+  const closeProviderPanel = () => {
+    setActiveProviderPanel("");
+    setActiveProviderForPanel(null);
+    setChatDraft("");
+    setCallRequestNote("");
+  };
+
+  const sendChatMessage = () => {
+    if (!activeProviderForPanel?._id) {
+      setStatusMessage("Select a provider before starting chat.");
+      return;
+    }
+    if (!chatDraft.trim()) {
+      setStatusMessage("Type a message before sending.");
+      return;
+    }
+
+    const providerId = activeProviderForPanel._id;
+    const message = {
+      id: `${providerId}-${Date.now()}`,
+      body: chatDraft.trim(),
+      by: actingRole,
+      at: new Date().toISOString(),
+    };
+
+    setChatByProvider((current) => ({
+      ...current,
+      [providerId]: [...(current[providerId] || []), message],
+    }));
+    setChatDraft("");
+    setStatusMessage("Message queued in conversation thread.");
+  };
+
+  const submitCallRequest = () => {
+    if (!activeProviderForPanel?._id) {
+      setStatusMessage("Select a provider before requesting a call.");
+      return;
+    }
+    const providerName = activeProviderForPanel.name || "provider";
+    const phonePreview = maskPhone(activeProviderForPanel.contactPhone);
+    const noteSuffix = callRequestNote.trim() ? ` Note: ${callRequestNote.trim()}` : "";
+    setStatusMessage(
+      `Call request sent to ${providerName}. Contact remains masked (${phonePreview}).${noteSuffix}`
+    );
+    setCallRequestNote("");
+  };
+
+  const submitProviderReview = async () => {
+    if (!activeProviderForPanel?._id) {
+      setStatusMessage("Select a provider before submitting a review.");
+      return;
+    }
+    if (!reviewDraft.reviewerName.trim() || !/^\d{10}$/.test(reviewDraft.reviewerPhone)) {
+      setStatusMessage("Reviewer name and a valid 10 digit phone are required.");
+      return;
+    }
+    const rating = Number(reviewDraft.rating || 0);
+    if (rating < 1 || rating > 5) {
+      setStatusMessage("Rating should be between 1 and 5.");
+      return;
+    }
+
+    try {
+      await freelancerApi.addReview(activeProviderForPanel._id, {
+        reviewerName: reviewDraft.reviewerName.trim(),
+        reviewerPhone: reviewDraft.reviewerPhone,
+        rating,
+        comment: reviewDraft.comment.trim(),
+      });
+      setStatusMessage("Review submitted successfully.");
+      await loadProviders();
+      await handleProviderProfile(activeProviderForPanel._id);
+      setReviewDraft({
+        reviewerName: "",
+        reviewerPhone: "",
+        rating: "5",
+        comment: "",
+      });
+    } catch (error) {
+      setStatusMessage(error?.response?.data?.message || "Unable to submit review.");
+    }
+  };
+
   const toggleSaveProvider = (providerId) => {
     setSavedProviderIds((current) =>
       current.includes(providerId) ? current.filter((id) => id !== providerId) : [...current, providerId]
@@ -388,6 +561,10 @@ const FreelancerMarketplace = () => {
   const submitBid = async (event) => {
     event.preventDefault();
     setStatusMessage("");
+    if (actingRole !== "provider" && actingRole !== "admin") {
+      setStatusMessage("Switch to Provider/Admin role to submit bids.");
+      return;
+    }
     if (!bidForm.jobId || !bidForm.providerId) {
       setStatusMessage("Select both job and provider for bid.");
       return;
@@ -409,6 +586,10 @@ const FreelancerMarketplace = () => {
 
   const purchaseLead = async (jobId, providerId) => {
     setStatusMessage("");
+    if (actingRole !== "provider" && actingRole !== "admin") {
+      setStatusMessage("Switch to Provider/Admin role to purchase leads.");
+      return;
+    }
     try {
       const response = await freelancerApi.purchaseLead(jobId, providerId);
       setStatusMessage(response?.message || "Lead purchased.");
@@ -422,6 +603,10 @@ const FreelancerMarketplace = () => {
   const createBooking = async (event) => {
     event.preventDefault();
     setStatusMessage("");
+    if (actingRole !== "customer" && actingRole !== "admin") {
+      setStatusMessage("Switch to Customer/Admin role to create bookings.");
+      return;
+    }
     if (!bookingForm.providerId) {
       setStatusMessage("Select a provider for booking.");
       return;
@@ -479,9 +664,7 @@ const FreelancerMarketplace = () => {
     }
     try {
       const response = await freelancerApi.sendBookingOtp(otpTargetBooking);
-      setStatusMessage(
-        `${response?.message || "OTP sent."} Dev OTP: ${response?.data?.devOtp || "n/a"}`
-      );
+      setStatusMessage(response?.message || "OTP sent to registered contact.");
       await fetchMyBookings();
     } catch (error) {
       setStatusMessage(error?.response?.data?.message || "OTP generation failed.");
@@ -590,6 +773,32 @@ const FreelancerMarketplace = () => {
       await fetchMyBookings();
     } catch (error) {
       setStatusMessage(error?.response?.data?.message || "Dispute creation failed.");
+    }
+  };
+
+  const resolveDispute = async (disputeCode, status, action) => {
+    if (actingRole !== "admin") {
+      setStatusMessage("Switch to Admin role to resolve disputes.");
+      return;
+    }
+    if (!disputeResolutionNote.trim()) {
+      setStatusMessage("Add a resolution note before resolving a dispute.");
+      return;
+    }
+
+    try {
+      await freelancerApi.resolveDispute(disputeCode, {
+        status,
+        action,
+        note: disputeResolutionNote.trim(),
+        resolvedBy: "admin-console",
+      });
+      setStatusMessage(`Dispute ${disputeCode} moved to ${status}.`);
+      setDisputeResolutionNote("");
+      await loadDisputes();
+      await fetchMyBookings();
+    } catch (error) {
+      setStatusMessage(error?.response?.data?.message || "Unable to resolve dispute.");
     }
   };
 
@@ -712,6 +921,17 @@ const FreelancerMarketplace = () => {
   const providerListState =
     providersLoading ? "loading" : providersError ? "error" : providers.length === 0 ? "empty" : "ready";
 
+  const rolePermissions = useMemo(
+    () => ({
+      canBook: actingRole === "customer" || actingRole === "admin",
+      canBid: actingRole === "provider" || actingRole === "admin",
+      canLeadPurchase: actingRole === "provider" || actingRole === "admin",
+      canSubmitReview: actingRole === "customer" || actingRole === "admin",
+      canResolveDisputes: actingRole === "admin",
+    }),
+    [actingRole]
+  );
+
   return (
     <div className="freelancer-marketplace-page">
       <section className="freelancer-sticky-header">
@@ -739,6 +959,16 @@ const FreelancerMarketplace = () => {
                 Clear Filters
               </button>
             </div>
+            <label className="freelancer-role-select">
+              Acting Role
+              <select value={actingRole} onChange={(event) => setActingRole(event.target.value)}>
+                {ROLE_OPTIONS.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
 
@@ -901,234 +1131,50 @@ const FreelancerMarketplace = () => {
       {statusMessage ? <p className="freelancer-status">{statusMessage}</p> : null}
 
       {activeTab === "hire" ? (
-        <section className="freelancer-section">
-          <div className="freelancer-section-header">
-            <h2>Hire Professionals</h2>
-            <p>View profile, compare, save, chat/call, reviews, portfolio and service area.</p>
-          </div>
-
-          {providerListState === "loading" ? (
-            <div className="freelancer-skeleton-grid">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div className="freelancer-skeleton-card" key={`skeleton-${index}`} />
-              ))}
-            </div>
-          ) : null}
-          {providerListState === "error" ? <p className="freelancer-error">{providersError}</p> : null}
-          {providerListState === "empty" ? (
-            <p className="freelancer-note">No results found. Try relaxing filters.</p>
-          ) : null}
-
-          {providerListState === "ready" ? (
-            <div className="freelancer-card-grid">
-              {providers.map((provider) => (
-                <article key={provider._id} className="freelancer-card">
-                  <h3>{provider.name}</h3>
-                  <p>
-                    {provider.category} | {provider.type} | {provider.district}
-                  </p>
-                  <p>
-                    Rating {provider.rating} ({provider.reviewCount} reviews) | Experience {provider.experience} years
-                  </p>
-                  <p>
-                    {formatInr(provider.hourlyRate)} / hr | Starts from {formatInr(provider.gigStartsFrom)}
-                  </p>
-                  <p>
-                    Response {provider.responseMinutes} min | Completion {provider.completionRate}% | Service area{" "}
-                    {(provider.serviceAreas || []).join(", ")}
-                  </p>
-                  <div className="freelancer-tag-row">
-                    {(provider.verificationBadges || []).map((badge) => (
-                      <span key={`${provider._id}-${badge}`}>{badge}</span>
-                    ))}
-                  </div>
-                  <div className="freelancer-inline-actions">
-                    <button type="button" onClick={() => handleProviderProfile(provider._id)}>
-                      View Profile
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBookingForm((current) => ({ ...current, providerId: provider._id }));
-                        setActiveTab("bookings");
-                      }}
-                    >
-                      Book Now
-                    </button>
-                    <button type="button" onClick={() => toggleCompareProvider(provider._id)}>
-                      Compare
-                    </button>
-                    <button type="button" onClick={() => toggleSaveProvider(provider._id)}>
-                      {savedProviderIds.includes(provider._id) ? "Saved" : "Save"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusMessage(`Call requested. Masked phone: ${provider.contactPhone ? `******${provider.contactPhone.slice(-4)}` : "hidden"}.`)}
-                    >
-                      Call
-                    </button>
-                    <button type="button" onClick={() => setStatusMessage("LinkUp chat initiated with masked contact.")}>
-                      Chat
-                    </button>
-                    <button type="button" onClick={() => handleProviderProfile(provider._id)}>
-                      Reviews
-                    </button>
-                    <button type="button" onClick={() => handleProviderProfile(provider._id)}>
-                      Portfolio
-                    </button>
-                    <button type="button" onClick={() => setStatusMessage(`Service area: ${(provider.serviceAreas || []).join(", ")}`)}>
-                      Service Area
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : null}
-
-          {compareProviderIds.length > 0 ? (
-            <article className="freelancer-panel">
-              <h3>Compare Providers ({compareProviderIds.length}/3)</h3>
-              <div className="freelancer-list-grid">
-                {filteredCompareProviders.map((provider) => (
-                  <div key={`compare-${provider._id}`} className="freelancer-list-item">
-                    <strong>{provider.name}</strong>
-                    <p>Rating: {provider.rating}</p>
-                    <p>Rate: {formatInr(provider.hourlyRate)}</p>
-                    <p>Response: {provider.responseMinutes} min</p>
-                  </div>
-                ))}
-              </div>
-            </article>
-          ) : null}
-
-          <article className="freelancer-panel">
-            <h3>AI Quote Generator</h3>
-            <form className="freelancer-form" onSubmit={submitQuote}>
-              <label>
-                Category
-                <select
-                  value={quoteForm.category}
-                  onChange={(event) => setQuoteForm((current) => ({ ...current, category: event.target.value }))}
-                >
-                  <option value="">Select category</option>
-                  {categoryOptions.map((category) => (
-                    <option key={`quote-cat-${category}`} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Scope
-                <textarea
-                  rows={3}
-                  value={quoteForm.scope}
-                  onChange={(event) => setQuoteForm((current) => ({ ...current, scope: event.target.value }))}
-                  placeholder="Describe scope, deliverables, constraints and priority."
-                />
-              </label>
-              <label>
-                Budget
-                <input
-                  type="number"
-                  value={quoteForm.budget}
-                  onChange={(event) => setQuoteForm((current) => ({ ...current, budget: event.target.value }))}
-                />
-              </label>
-              <label>
-                Urgency
-                <select
-                  value={quoteForm.urgency}
-                  onChange={(event) => setQuoteForm((current) => ({ ...current, urgency: event.target.value }))}
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="emergency">Emergency</option>
-                </select>
-              </label>
-              <label>
-                District
-                <select
-                  value={quoteForm.location}
-                  onChange={(event) => setQuoteForm((current) => ({ ...current, location: event.target.value }))}
-                >
-                  <option value="">Select district</option>
-                  {districtOptions.map((district) => (
-                    <option key={`quote-location-${district}`} value={district}>
-                      {district}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Skill Level
-                <select
-                  value={quoteForm.skillLevel}
-                  onChange={(event) => setQuoteForm((current) => ({ ...current, skillLevel: event.target.value }))}
-                >
-                  <option value="junior">Junior</option>
-                  <option value="mid">Mid</option>
-                  <option value="senior">Senior</option>
-                  <option value="expert">Expert</option>
-                </select>
-              </label>
-              <label>
-                Service Type
-                <select
-                  value={quoteForm.serviceType}
-                  onChange={(event) => setQuoteForm((current) => ({ ...current, serviceType: event.target.value }))}
-                >
-                  <option value="digital">Digital</option>
-                  <option value="local">Local</option>
-                </select>
-              </label>
-              <button type="submit">Generate Quote</button>
-            </form>
-            {quoteResult ? (
-              <div className="freelancer-result">
-                <p>
-                  Estimated price: {formatInr(quoteResult.priceRange?.min)} -{" "}
-                  {formatInr(quoteResult.priceRange?.max)}
-                </p>
-                <p>
-                  Timeline: {quoteResult.recommendedTimelineDays?.min} to{" "}
-                  {quoteResult.recommendedTimelineDays?.max} days
-                </p>
-                <p>Skills: {(quoteResult.recommendedSkills || []).join(", ")}</p>
-                <p>
-                  Matches: {(quoteResult.matchedProviders || []).map((provider) => provider.name).join(", ") || "No direct matches"}
-                </p>
-              </div>
-            ) : null}
-          </article>
-
-          <article className="freelancer-panel">
-            <h3>Provider Profile</h3>
-            {profileLoading ? <p className="freelancer-note">Loading profile...</p> : null}
-            {!profileLoading && selectedProvider ? (
-              <div className="freelancer-list-grid">
-                <div className="freelancer-list-item">
-                  <strong>{selectedProvider.name}</strong>
-                  <p>{selectedProvider.about || "No profile summary provided."}</p>
-                  <p>
-                    Contact protected: {selectedProvider.maskedPhoneEnabled ? "Yes" : "No"} | KYC:{" "}
-                    {selectedProvider.kycStatus}
-                  </p>
-                  <p>
-                    Reviews: {selectedProvider.reviewCount} | Rating {selectedProvider.rating}
-                  </p>
-                  <p>
-                    Portfolio items: {(selectedProvider.portfolio || []).length}
-                  </p>
-                </div>
-              </div>
-            ) : null}
-            {!profileLoading && !selectedProvider ? (
-              <p className="freelancer-note">Use View Profile on a provider card to see details.</p>
-            ) : null}
-          </article>
-        </section>
+        <HireTab
+          providerListState={providerListState}
+          providers={providers}
+          providersError={providersError}
+          formatInr={formatInr}
+          handleProviderProfile={handleProviderProfile}
+          rolePermissions={rolePermissions}
+          setStatusMessage={setStatusMessage}
+          setBookingForm={setBookingForm}
+          setActiveTab={setActiveTab}
+          toggleCompareProvider={toggleCompareProvider}
+          toggleSaveProvider={toggleSaveProvider}
+          savedProviderIds={savedProviderIds}
+          openProviderPanel={openProviderPanel}
+          compareProviderIds={compareProviderIds}
+          filteredCompareProviders={filteredCompareProviders}
+          activeProviderPanel={activeProviderPanel}
+          activeProviderForPanel={activeProviderForPanel}
+          closeProviderPanel={closeProviderPanel}
+          chatByProvider={chatByProvider}
+          chatDraft={chatDraft}
+          setChatDraft={setChatDraft}
+          sendChatMessage={sendChatMessage}
+          callRequestNote={callRequestNote}
+          setCallRequestNote={setCallRequestNote}
+          submitCallRequest={submitCallRequest}
+          reviewDraft={reviewDraft}
+          setReviewDraft={setReviewDraft}
+          submitProviderReview={() => {
+            if (!rolePermissions.canSubmitReview) {
+              setStatusMessage("Only Customer/Admin role can submit reviews.");
+              return;
+            }
+            void submitProviderReview();
+          }}
+          selectedProvider={selectedProvider}
+          quoteForm={quoteForm}
+          setQuoteForm={setQuoteForm}
+          categoryOptions={categoryOptions}
+          districtOptions={districtOptions}
+          submitQuote={submitQuote}
+          quoteResult={quoteResult}
+          profileLoading={profileLoading}
+        />
       ) : null}
 
       {activeTab === "post" ? (
@@ -1329,7 +1375,9 @@ const FreelancerMarketplace = () => {
                     }
                   />
                 </label>
-                <button type="submit">Submit Bid</button>
+                <button type="submit" disabled={!rolePermissions.canBid}>
+                  Submit Bid
+                </button>
               </form>
             </article>
           </div>
@@ -1355,6 +1403,7 @@ const FreelancerMarketplace = () => {
                   <div className="freelancer-inline-actions">
                     <button
                       type="button"
+                      disabled={!rolePermissions.canLeadPurchase}
                       onClick={() => {
                         const targetProvider = providers[0];
                         if (targetProvider) {
@@ -1375,367 +1424,72 @@ const FreelancerMarketplace = () => {
       ) : null}
 
       {activeTab === "bookings" ? (
-        <section className="freelancer-section">
-          <div className="freelancer-section-header">
-            <h2>Booking + Payment + Safety Workflow</h2>
-            <p>Real booking table, status flow, OTP start, escrow, milestones, refunds and disputes.</p>
-          </div>
-
-          <div className="freelancer-dual-grid">
-            <article className="freelancer-panel">
-              <h3>Create Booking</h3>
-              <form className="freelancer-form" onSubmit={createBooking}>
-                <label>
-                  Provider
-                  <select
-                    value={bookingForm.providerId}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, providerId: event.target.value }))
-                    }
-                  >
-                    <option value="">Select provider</option>
-                    {providers.map((provider) => (
-                      <option key={`booking-provider-${provider._id}`} value={provider._id}>
-                        {provider.name} ({provider.category})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Customer Name
-                  <input
-                    type="text"
-                    value={bookingForm.customerName}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, customerName: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Customer Phone
-                  <input
-                    type="tel"
-                    value={bookingForm.customerPhone}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, customerPhone: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Service Mode
-                  <select
-                    value={bookingForm.serviceMode}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, serviceMode: event.target.value }))
-                    }
-                  >
-                    <option value="gig">Gig</option>
-                    <option value="hourly">Hourly</option>
-                  </select>
-                </label>
-                <label>
-                  Booking Mode
-                  <select
-                    value={bookingForm.bookingMode}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, bookingMode: event.target.value }))
-                    }
-                  >
-                    <option value="instant">Instant</option>
-                    <option value="schedule">Schedule</option>
-                    <option value="quotation">Quotation</option>
-                    <option value="bidding">Bidding</option>
-                  </select>
-                </label>
-                <label>
-                  Schedule
-                  <input
-                    type="text"
-                    value={bookingForm.schedule}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, schedule: event.target.value }))
-                    }
-                    placeholder="Tomorrow 10:00 AM"
-                  />
-                </label>
-                <label>
-                  Notes
-                  <textarea
-                    rows={3}
-                    value={bookingForm.notes}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, notes: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Amount
-                  <input
-                    type="number"
-                    value={bookingForm.totalAmount}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, totalAmount: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="freelancer-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={bookingForm.emergency}
-                    onChange={(event) =>
-                      setBookingForm((current) => ({ ...current, emergency: event.target.checked }))
-                    }
-                  />
-                  Emergency Booking
-                </label>
-                <button type="submit">Create Booking</button>
-              </form>
-            </article>
-
-            <article className="freelancer-panel">
-              <h3>My Booking Tracker</h3>
-              <div className="freelancer-inline-actions">
-                <input
-                  type="tel"
-                  value={trackPhone}
-                  onChange={(event) => setTrackPhone(event.target.value)}
-                  placeholder="Customer phone"
-                />
-                <button type="button" onClick={() => fetchMyBookings()}>
-                  Load
-                </button>
-              </div>
-
-              {bookingsLoading ? <p className="freelancer-note">Loading bookings...</p> : null}
-              {!bookingsLoading && bookings.length === 0 ? (
-                <p className="freelancer-note">No booking records. Create one to start the workflow.</p>
-              ) : null}
-              <ul className="freelancer-list">
-                {bookings.map((booking) => (
-                  <li key={booking._id}>
-                    <strong>{booking.bookingCode}</strong> | {booking.providerName}
-                    <br />
-                    Status: {booking.status} | Payment: {booking.payment?.status}
-                    <br />
-                    Masked Phone: {booking.customer?.maskedPhone}
-                    {Array.isArray(booking.payment?.milestones) && booking.payment.milestones.length > 0 ? (
-                      <div className="freelancer-inline-actions">
-                        {booking.payment.milestones.map((milestone, index) => (
-                          <button
-                            key={`${booking.bookingCode}-ms-${index}`}
-                            type="button"
-                            onClick={() => releaseMilestone(booking.bookingCode, index)}
-                            disabled={milestone.status === "released"}
-                          >
-                            Release M{index + 1} ({milestone.status})
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </div>
-
-          <div className="freelancer-dual-grid">
-            <article className="freelancer-panel">
-              <h3>OTP Before Work Starts</h3>
-              <label>
-                Booking Code
-                <input
-                  type="text"
-                  value={otpTargetBooking}
-                  onChange={(event) => setOtpTargetBooking(event.target.value)}
-                />
-              </label>
-              <div className="freelancer-inline-actions">
-                <button type="button" onClick={sendOtp}>
-                  Send OTP
-                </button>
-              </div>
-              <label>
-                OTP
-                <input type="text" value={otpCode} onChange={(event) => setOtpCode(event.target.value)} />
-              </label>
-              <button type="button" onClick={verifyOtp}>
-                Verify OTP
-              </button>
-            </article>
-
-            <article className="freelancer-panel">
-              <h3>Escrow and Milestones</h3>
-              <label>
-                Booking Code
-                <input
-                  type="text"
-                  value={escrowBookingCode}
-                  onChange={(event) => setEscrowBookingCode(event.target.value)}
-                />
-              </label>
-              <label>
-                Total Amount
-                <input
-                  type="number"
-                  value={escrowTotalAmount}
-                  onChange={(event) => setEscrowTotalAmount(event.target.value)}
-                />
-              </label>
-              <label>
-                Milestones (one per line: Title|Amount)
-                <textarea
-                  rows={4}
-                  value={escrowMilestonesText}
-                  onChange={(event) => setEscrowMilestonesText(event.target.value)}
-                />
-              </label>
-              <button type="button" onClick={initializeEscrow}>
-                Initialize Escrow
-              </button>
-            </article>
-          </div>
-
-          <div className="freelancer-dual-grid">
-            <article className="freelancer-panel">
-              <h3>Cancellation Policy Flow</h3>
-              <label>
-                Booking Code
-                <input
-                  type="text"
-                  value={cancelBookingCode}
-                  onChange={(event) => setCancelBookingCode(event.target.value)}
-                />
-              </label>
-              <label>
-                Requested By
-                <select value={cancelByRole} onChange={(event) => setCancelByRole(event.target.value)}>
-                  <option value="customer">Customer</option>
-                  <option value="provider">Provider</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
-              <label>
-                Reason
-                <textarea
-                  rows={2}
-                  value={cancelReason}
-                  onChange={(event) => setCancelReason(event.target.value)}
-                />
-              </label>
-              <button type="button" onClick={submitCancellation}>
-                Submit Cancellation
-              </button>
-            </article>
-
-            <article className="freelancer-panel">
-              <h3>Refund Request</h3>
-              <label>
-                Booking Code
-                <input
-                  type="text"
-                  value={refundBookingCode}
-                  onChange={(event) => setRefundBookingCode(event.target.value)}
-                />
-              </label>
-              <label>
-                Reason
-                <textarea
-                  rows={2}
-                  value={refundReason}
-                  onChange={(event) => setRefundReason(event.target.value)}
-                />
-              </label>
-              <button type="button" onClick={submitRefund}>
-                Request Refund
-              </button>
-            </article>
-          </div>
-
-          <article className="freelancer-panel">
-            <h3>Dispute and Proof Upload</h3>
-            <div className="freelancer-filter-grid">
-              <label>
-                Booking Code
-                <input
-                  type="text"
-                  value={disputeBookingCode}
-                  onChange={(event) => setDisputeBookingCode(event.target.value)}
-                />
-              </label>
-              <label>
-                Raised By Name
-                <input
-                  type="text"
-                  value={disputeRaisedByName}
-                  onChange={(event) => setDisputeRaisedByName(event.target.value)}
-                />
-              </label>
-              <label>
-                Raised By Role
-                <select value={disputeRole} onChange={(event) => setDisputeRole(event.target.value)}>
-                  <option value="customer">Customer</option>
-                  <option value="provider">Provider</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
-              <label>
-                Against
-                <select
-                  value={disputeAgainstRole}
-                  onChange={(event) => setDisputeAgainstRole(event.target.value)}
-                >
-                  <option value="provider">Provider</option>
-                  <option value="customer">Customer</option>
-                  <option value="platform">Platform</option>
-                </select>
-              </label>
-            </div>
-            <label>
-              Reason
-              <input type="text" value={disputeReason} onChange={(event) => setDisputeReason(event.target.value)} />
-            </label>
-            <label>
-              Details
-              <textarea
-                rows={3}
-                value={disputeDetails}
-                onChange={(event) => setDisputeDetails(event.target.value)}
-              />
-            </label>
-            <label>
-              Proof Upload
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.png,.jpg,.jpeg,.webp,.mp4"
-                onChange={(event) => setDisputeProofs(Array.from(event.target.files || []))}
-              />
-            </label>
-            <button type="button" onClick={submitDispute}>
-              Create Dispute
-            </button>
-            <h4>Admin Dispute Panel</h4>
-            <label>
-              Filter
-              <select
-                value={disputeStatusFilter}
-                onChange={(event) => setDisputeStatusFilter(event.target.value)}
-              >
-                <option value="open">Open</option>
-                <option value="under-review">Under Review</option>
-                <option value="resolved">Resolved</option>
-                <option value="all">All</option>
-              </select>
-            </label>
-            <ul className="freelancer-list">
-              {disputes.map((dispute) => (
-                <li key={dispute._id}>
-                  <strong>{dispute.disputeCode}</strong> | {dispute.reason} | {dispute.status}
-                </li>
-              ))}
-            </ul>
-          </article>
-        </section>
+        <BookingsTab
+          createBooking={createBooking}
+          bookingForm={bookingForm}
+          setBookingForm={setBookingForm}
+          providers={providers}
+          rolePermissions={rolePermissions}
+          trackPhone={trackPhone}
+          setTrackPhone={setTrackPhone}
+          fetchMyBookings={fetchMyBookings}
+          bookingsLoading={bookingsLoading}
+          bookings={bookings}
+          bookingStatusSequence={BOOKING_STATUS_SEQUENCE}
+          bookingStatusLabels={BOOKING_STATUS_LABELS}
+          normalizeBookingStatus={normalizeBookingStatus}
+          getBookingStatusLabel={getBookingStatusLabel}
+          getBookingNextAction={getBookingNextAction}
+          setOtpTargetBooking={setOtpTargetBooking}
+          setEscrowBookingCode={setEscrowBookingCode}
+          setEscrowTotalAmount={setEscrowTotalAmount}
+          setDisputeBookingCode={setDisputeBookingCode}
+          releaseMilestone={releaseMilestone}
+          otpTargetBooking={otpTargetBooking}
+          sendOtp={sendOtp}
+          otpCode={otpCode}
+          setOtpCode={setOtpCode}
+          verifyOtp={verifyOtp}
+          escrowBookingCode={escrowBookingCode}
+          setEscrowBookingCodeValue={setEscrowBookingCode}
+          escrowTotalAmount={escrowTotalAmount}
+          setEscrowTotalAmountValue={setEscrowTotalAmount}
+          escrowMilestonesText={escrowMilestonesText}
+          setEscrowMilestonesText={setEscrowMilestonesText}
+          initializeEscrow={initializeEscrow}
+          cancelBookingCode={cancelBookingCode}
+          setCancelBookingCode={setCancelBookingCode}
+          cancelByRole={cancelByRole}
+          setCancelByRole={setCancelByRole}
+          cancelReason={cancelReason}
+          setCancelReason={setCancelReason}
+          submitCancellation={submitCancellation}
+          refundBookingCode={refundBookingCode}
+          setRefundBookingCode={setRefundBookingCode}
+          refundReason={refundReason}
+          setRefundReason={setRefundReason}
+          submitRefund={submitRefund}
+          disputeBookingCode={disputeBookingCode}
+          setDisputeBookingCodeValue={setDisputeBookingCode}
+          disputeRaisedByName={disputeRaisedByName}
+          setDisputeRaisedByName={setDisputeRaisedByName}
+          disputeRole={disputeRole}
+          setDisputeRole={setDisputeRole}
+          disputeAgainstRole={disputeAgainstRole}
+          setDisputeAgainstRole={setDisputeAgainstRole}
+          disputeReason={disputeReason}
+          setDisputeReason={setDisputeReason}
+          disputeDetails={disputeDetails}
+          setDisputeDetails={setDisputeDetails}
+          setDisputeProofs={setDisputeProofs}
+          submitDispute={submitDispute}
+          disputeStatusFilter={disputeStatusFilter}
+          setDisputeStatusFilter={setDisputeStatusFilter}
+          disputeResolutionNote={disputeResolutionNote}
+          setDisputeResolutionNote={setDisputeResolutionNote}
+          disputes={disputes}
+          resolveDispute={resolveDispute}
+        />
       ) : null}
 
       {activeTab === "emergency" ? (
@@ -2198,4 +1952,3 @@ const FreelancerMarketplace = () => {
 };
 
 export default FreelancerMarketplace;
-

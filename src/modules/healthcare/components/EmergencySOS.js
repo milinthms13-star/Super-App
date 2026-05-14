@@ -8,6 +8,7 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
   });
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showSosConfirm, setShowSosConfirm] = useState(false);
+  const [escalationLevel, setEscalationLevel] = useState("high");
 
   const getLocation = async () => {
     if (!navigator.geolocation) {
@@ -114,10 +115,17 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
       familyMember: "Self",
       incidentType: "sos",
       message: "SOS alert triggered from healthcare emergency module.",
+      escalationLevel,
       location: {
         latitude: coords.latitude,
         longitude: coords.longitude,
       },
+      timeline: [
+        {
+          step: "sos_triggered",
+          at: new Date().toISOString(),
+        },
+      ],
       actions: {
         familyNotified: true,
         locationShared: true,
@@ -133,6 +141,25 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
     }
     await notifyFamily();
     setStatusMessage("SOS alert triggered. Family notification and location share are in progress.");
+  };
+
+  const logSafeCheckIn = async () => {
+    const coords = locationState.latitude ? locationState : await getLocation();
+    await onCreateIncident?.({
+      familyMember: "Self",
+      incidentType: "safe_check_in",
+      message: "User marked themselves safe after SOS event.",
+      escalationLevel: "resolved",
+      location: coords || undefined,
+      timeline: [
+        {
+          step: "safe_check_in",
+          at: new Date().toISOString(),
+        },
+      ],
+      status: "resolved",
+    });
+    setStatusMessage("Safe check-in logged for your incident timeline.");
   };
 
   return (
@@ -217,6 +244,20 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
         <strong>Emergency note:</strong> For immediate life-threatening emergencies, call 108 or 112 right away.
       </div>
 
+      <div className="healthcare-pill-row">
+        <label className="healthcare-field">
+          <span>SOS Escalation Level</span>
+          <select value={escalationLevel} onChange={(event) => setEscalationLevel(event.target.value)}>
+            <option value="high">High (Immediate response)</option>
+            <option value="critical">Critical (Life threatening)</option>
+            <option value="medium">Medium (Needs assistance)</option>
+          </select>
+        </label>
+        <button type="button" className="healthcare-secondary-button" onClick={logSafeCheckIn}>
+          Log Safe Check-in
+        </button>
+      </div>
+
       <div className="healthcare-record-list-card">
         <h3>Emergency Incident History</h3>
         {(incidents || []).length === 0 ? <p>No incidents yet.</p> : null}
@@ -226,9 +267,17 @@ const EmergencySOS = ({ familyMembers, incidents, onCreateIncident, onUpdateInci
               <strong>{incident.incidentType || "sos"}</strong>
               <span>Status: {incident.status || "open"}</span>
               <span>{incident.message || "Emergency alert"}</span>
+              <span>Escalation: {incident.escalationLevel || "high"}</span>
               <span>
                 Location: {incident.location?.latitude || "-"}, {incident.location?.longitude || "-"}
               </span>
+              {(incident.timeline || []).length ? (
+                <span>
+                  Timeline: {(incident.timeline || [])
+                    .map((entry) => `${entry.step.replaceAll("_", " ")} (${String(entry.at || "").slice(0, 10)})`)
+                    .join(" -> ")}
+                </span>
+              ) : null}
             </div>
           </article>
         ))}

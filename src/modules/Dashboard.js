@@ -1739,15 +1739,21 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                 module.cardType === "module"
                   ? getModuleValueBadge(module.id)
                   : "External shortcut";
+              const moduleCardStyle =
+                module.id === "education"
+                  ? { background: "linear-gradient(135deg, #ff8b58 0%, #1f6fff 52%, #0fa57f 100%)" }
+                  : { background: module.gradient };
               return (
               <article
                 role="button"
                 tabIndex={0}
-                className={`module-card polished micro-glow ${isSeller ? "seller-module-card" : ""}`}
+                className={`module-card polished micro-glow ${isSeller ? "seller-module-card" : ""} ${
+                  module.id === "education" ? "education-module-card" : ""
+                }`}
                 key={module.id}
                 onClick={() => handleModuleCardActivation(module)}
                 onKeyDown={(event) => handleModuleCardKeyDown(event, module)}
-                style={{ background: module.gradient }}
+                style={moduleCardStyle}
               >
                 {showFavoriteToggle && (
                   <button
@@ -1859,6 +1865,15 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                   <span className="qa-icon"><Icon type="classifieds" className="qa-icon-svg" /></span>
                   <span className="qa-label">Browse</span>
                   <span className="qa-meta">New listings</span>
+                </button>
+                <button
+                  type="button"
+                  className="quick-action-btn quick-action-education"
+                  onClick={() => handleModuleNavigation("education")}
+                >
+                  <span className="qa-icon"><Icon type="education" className="qa-icon-svg" /></span>
+                  <span className="qa-label">Learn</span>
+                  <span className="qa-meta">Courses & scholarships</span>
                 </button>
                 <button 
                   type="button"

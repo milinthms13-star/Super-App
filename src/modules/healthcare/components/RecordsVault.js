@@ -39,21 +39,52 @@ const getFamilyOptionValue = (member) => {
   return member.name || member.relation || "Family";
 };
 
-const RecordsVault = ({ records, familyMembers, loading, onCreateRecord, onDeleteRecord, onDownloadRecord }) => {
+const RecordsVault = ({
+  records,
+  familyMembers,
+  loading,
+  onCreateRecord,
+  onDeleteRecord,
+  onDownloadRecord,
+  onPreviewRecord,
+  auditLog,
+}) => {
   const [form, setForm] = useState({
     title: "",
     category: "Prescription",
     doctorName: "",
     familyMember: "Self",
     recordDate: "",
+    visibility: "private",
+    consentExpiryDate: "",
+    consentAccepted: false,
   });
   const [selectedFile, setSelectedFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const sortedRecords = useMemo(() => {
-    return [...(records || [])].sort((a, b) => (b.recordDate || "").localeCompare(a.recordDate || ""));
-  }, [records]);
+    const normalizedQuery = searchText.trim().toLowerCase();
+    const filtered = (records || []).filter((record) => {
+      const categoryMatch = categoryFilter === "all" || record.category === categoryFilter;
+      if (!categoryMatch) {
+        return false;
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+      return (
+        String(record.title || "").toLowerCase().includes(normalizedQuery) ||
+        String(record.fileName || "").toLowerCase().includes(normalizedQuery) ||
+        String(record.doctorName || "").toLowerCase().includes(normalizedQuery) ||
+        String(record.familyMember || "").toLowerCase().includes(normalizedQuery)
+      );
+    });
+
+    return filtered.sort((a, b) => (b.recordDate || "").localeCompare(a.recordDate || ""));
+  }, [records, searchText, categoryFilter]);
 
   const updateField = (key, value) => {
     setForm((previous) => ({
@@ -69,6 +100,9 @@ const RecordsVault = ({ records, familyMembers, loading, onCreateRecord, onDelet
       doctorName: "",
       familyMember: "Self",
       recordDate: "",
+      visibility: "private",
+      consentExpiryDate: "",
+      consentAccepted: false,
     });
     setSelectedFile(null);
   };
@@ -85,12 +119,19 @@ const RecordsVault = ({ records, familyMembers, loading, onCreateRecord, onDelet
       setFeedbackMessage("Please complete title, doctor name, and record date.");
       return;
     }
+    if (!form.consentAccepted) {
+      setFeedbackMessage("Please accept consent before uploading medical data.");
+      return;
+    }
 
     setSubmitting(true);
 
     try {
       await onCreateRecord({
-        meta: form,
+        meta: {
+          ...form,
+          consentGrantedAt: new Date().toISOString(),
+        },
         file: selectedFile,
       });
 
@@ -113,9 +154,13 @@ const RecordsVault = ({ records, familyMembers, loading, onCreateRecord, onDelet
     }
 
     return (
-      <a href={record.fileUrl} target="_blank" rel="noreferrer" className="healthcare-secondary-button">
+      <button
+        type="button"
+        className="healthcare-secondary-button"
+        onClick={() => onPreviewRecord?.(record)}
+      >
         Preview File
-      </a>
+      </button>
     );
   };
 
@@ -194,6 +239,34 @@ const RecordsVault = ({ records, familyMembers, loading, onCreateRecord, onDelet
             />
           </label>
 
+          <label className="healthcare-field">
+            <span>Sharing Permission</span>
+            <select value={form.visibility} onChange={(event) => updateField("visibility", event.target.value)}>
+              <option value="private">Only me</option>
+              <option value="family">Family viewers</option>
+              <option value="care-team">Family and care team</option>
+            </select>
+          </label>
+
+          <label className="healthcare-field">
+            <span>Consent Expiry</span>
+            <input
+              type="date"
+              value={form.consentExpiryDate}
+              min={new Date().toISOString().split("T")[0]}
+              onChange={(event) => updateField("consentExpiryDate", event.target.value)}
+            />
+          </label>
+
+          <label className="healthcare-checkbox healthcare-field-full">
+            <input
+              type="checkbox"
+              checked={form.consentAccepted}
+              onChange={(event) => updateField("consentAccepted", event.target.checked)}
+            />
+            <span>I consent to storing this medical document in the healthcare vault.</span>
+          </label>
+
           <button type="submit" className="healthcare-primary-button" disabled={submitting}>
             {submitting ? "Uploading..." : "Upload To Vault"}
           </button>
@@ -201,6 +274,29 @@ const RecordsVault = ({ records, familyMembers, loading, onCreateRecord, onDelet
 
         <div className="healthcare-record-list-card">
           <h3>Stored Records</h3>
+          <div className="healthcare-filter-row">
+            <label className="healthcare-field">
+              <span>Search</span>
+              <input
+                type="text"
+                placeholder="Search title, doctor, file, family member"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+              />
+            </label>
+            <label className="healthcare-field">
+              <span>Category</span>
+              <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                <option value="all">All categories</option>
+                {RECORD_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
           {loading ? <p>Loading records...</p> : null}
           {!loading && sortedRecords.length === 0 ? <p>No records yet.</p> : null}
 
@@ -213,6 +309,8 @@ const RecordsVault = ({ records, familyMembers, loading, onCreateRecord, onDelet
                 </span>
                 <span>Doctor: {record.doctorName || "Not specified"}</span>
                 <span>File: {record.fileName}</span>
+                <span>Version: v{record.version || 1}</span>
+                <span>Visibility: {record.visibility || "private"}</span>
               </div>
 
               <div className="healthcare-record-actions">
@@ -224,13 +322,39 @@ const RecordsVault = ({ records, familyMembers, loading, onCreateRecord, onDelet
                 >
                   Secure Download
                 </button>
-                <button type="button" className="healthcare-danger-button" onClick={() => onDeleteRecord(record.id)}>
+                <button
+                  type="button"
+                  className="healthcare-danger-button"
+                  onClick={() => {
+                    const confirmed = window.confirm("Archive this record? It will be removed from active list.");
+                    if (confirmed) {
+                      void onDeleteRecord(record.id);
+                    }
+                  }}
+                >
                   Delete
                 </button>
               </div>
             </article>
           ))}
         </div>
+      </div>
+
+      <div className="healthcare-record-list-card">
+        <h3>Audit Trail</h3>
+        {(auditLog || []).length === 0 ? <p>No record events captured yet.</p> : null}
+        {(auditLog || []).slice(0, 10).map((entry) => (
+          <article key={entry.id} className="healthcare-record-item">
+            <div className="healthcare-record-meta">
+              <strong>{entry.recordTitle}</strong>
+              <span>{entry.eventType.replaceAll("_", " ")}</span>
+              <span>{entry.details}</span>
+              <span>
+                {entry.actor} | {formatDate(entry.createdAt)}
+              </span>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );

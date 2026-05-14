@@ -1052,8 +1052,8 @@ router.post('/bookings/:bookingCode/otp/send', otpLimiter, async (req, res) => {
       message: 'OTP generated for booking start verification.',
       data: {
         bookingCode: booking.bookingCode,
-        devOtp: otp,
         expiresAt: booking.otpVerification.expiresAt,
+        ...(process.env.NODE_ENV !== 'production' ? { devOtp: otp } : {}),
       },
     });
   } catch (error) {

@@ -77,7 +77,7 @@ const EmiCalculatorTab = ({ form, onChange, onCalculate, state, offerCompare, se
         </ul>
         <h4>Offer Comparison</h4>
         <ul className="finance-list">
-          {state.offers.sort((a, b) => a.totalPayable - b.totalPayable).map(offer => (
+          {[...(state.offers || [])].sort((a, b) => a.totalPayable - b.totalPayable).map(offer => (
             <li key={offer.lender}>{offer.lender}: EMI {formatCurrency(offer.monthlyEmi)} | Total {formatCurrency(offer.totalPayable)}</li>
           ))}
         </ul>

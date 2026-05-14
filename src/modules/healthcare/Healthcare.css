@@ -419,13 +419,39 @@
 }
 
 .healthcare-status-booked,
+.healthcare-status-requested,
 .healthcare-status-confirmed,
 .healthcare-status-rescheduled {
   color: #0369a1;
   background: rgba(3, 105, 161, 0.12);
 }
 
+.healthcare-status-in_progress,
+.healthcare-status-sample_collected,
+.healthcare-status-under_processing,
+.healthcare-status-packed,
+.healthcare-status-out_for_delivery {
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.healthcare-status-results_ready,
+.healthcare-status-delivered,
+.healthcare-status-completed,
+.healthcare-status-paid,
+.healthcare-status-resolved {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.12);
+}
+
 .healthcare-status-cancelled {
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.12);
+}
+
+.healthcare-status-no_show,
+.healthcare-status-failed,
+.healthcare-status-rejected {
   color: #b91c1c;
   background: rgba(185, 28, 28, 0.12);
 }

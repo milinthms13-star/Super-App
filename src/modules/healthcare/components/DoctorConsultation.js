@@ -38,6 +38,7 @@ const DoctorConsultation = ({
   onCancelAppointment,
   onRescheduleAppointment,
   onPayAppointment,
+  onUpdateAppointmentLifecycle,
 }) => {
   const [selectedSpecialty, setSelectedSpecialty] = useState("all");
   const [activeDoctor, setActiveDoctor] = useState(null);
@@ -148,7 +149,7 @@ const DoctorConsultation = ({
       patientName: bookingForm.patientName,
       patientPhone: bookingForm.patientPhone,
       familyMember: bookingForm.familyMember,
-      status: "booked",
+      status: bookingType === "reschedule" ? "rescheduled" : "requested",
       category: "doctor",
       amountDue: Number(activeDoctor.consultationFee || 0),
     };
@@ -254,7 +255,10 @@ const DoctorConsultation = ({
 
           {sortedAppointments.map((appointment) => {
             const currentDoctor = doctors.find((doctor) => doctor.id === appointment.doctorId);
-            const isUpcoming = appointment.status !== "cancelled" && appointment.status !== "completed";
+            const status = appointment.status || "requested";
+            const isUpcoming = !["cancelled", "completed", "no_show"].includes(status);
+            const canStartVisit = ["requested", "booked", "confirmed", "rescheduled"].includes(status);
+            const canCompleteVisit = ["in_progress", "confirmed", "rescheduled"].includes(status);
 
             return (
               <div key={appointment.id} className="healthcare-appointment-item">
@@ -265,8 +269,8 @@ const DoctorConsultation = ({
                 <span>Mode: {appointment.mode}</span>
                 <span>Patient: {appointment.patientName || appointment.familyMember || "Self"}</span>
                 <span>Amount: INR {Number(appointment.amountDue || 0).toLocaleString("en-IN")}</span>
-                <span className={`healthcare-status healthcare-status-${appointment.status || "booked"}`}>
-                  {appointment.status || "booked"}
+                <span className={`healthcare-status healthcare-status-${status}`}>
+                  {status.replaceAll("_", " ")}
                 </span>
                 <span className={`healthcare-status healthcare-status-${appointment.paymentStatus || "pending"}`}>
                   payment: {appointment.paymentStatus || "pending"}
@@ -277,7 +281,12 @@ const DoctorConsultation = ({
                     <button
                       type="button"
                       className="healthcare-secondary-button"
-                      onClick={() => onCancelAppointment(appointment.id)}
+                      onClick={() => {
+                        const confirmed = window.confirm("Cancel this appointment?");
+                        if (confirmed) {
+                          void onCancelAppointment(appointment.id);
+                        }
+                      }}
                     >
                       Cancel
                     </button>
@@ -298,6 +307,54 @@ const DoctorConsultation = ({
                         Pay Now
                       </button>
                     ) : null}
+                    {status === "requested" || status === "booked" ? (
+                      <button
+                        type="button"
+                        className="healthcare-secondary-button"
+                        onClick={() => onUpdateAppointmentLifecycle?.(appointment.id, "confirmed")}
+                      >
+                        Confirm
+                      </button>
+                    ) : null}
+                    {canStartVisit ? (
+                      <button
+                        type="button"
+                        className="healthcare-secondary-button"
+                        onClick={() => onUpdateAppointmentLifecycle?.(appointment.id, "in_progress")}
+                      >
+                        Start Visit
+                      </button>
+                    ) : null}
+                    {canCompleteVisit ? (
+                      <button
+                        type="button"
+                        className="healthcare-primary-button"
+                        onClick={() => onUpdateAppointmentLifecycle?.(appointment.id, "completed")}
+                      >
+                        Mark Completed
+                      </button>
+                    ) : null}
+                    {canStartVisit ? (
+                      <button
+                        type="button"
+                        className="healthcare-danger-button"
+                        onClick={() => onUpdateAppointmentLifecycle?.(appointment.id, "no_show")}
+                      >
+                        Mark No-Show
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {status === "completed" ? (
+                  <div className="healthcare-doctor-actions">
+                    <button
+                      type="button"
+                      className="healthcare-secondary-button"
+                      onClick={() => openBookingModal(currentDoctor, "reschedule", appointment)}
+                      disabled={!currentDoctor}
+                    >
+                      Schedule Follow-up
+                    </button>
                   </div>
                 ) : null}
               </div>

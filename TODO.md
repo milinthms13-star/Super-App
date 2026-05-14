@@ -1,24 +1,14 @@
-# TODO - RealEstate module UX upgrade
 
-## Plan order & steps
-1. Trust/Docs panel: replace badge-only trust with structured verification & documents section (expandable + missing docs + guidance).
-2. Media modal: implement media viewer modal and connect it from right-panel gallery.
-3. Filters chips/reset: show active filter chips, add reset filters, add results breakdown within filtered set.
-4. Similarity scoring: improve similar properties logic and add “why recommended”.
-5. Lead/Visit detail: enhance LeadBoard + VisitBoard information density and actions.
-6. Messaging polish: convert chat preview into a simple conversation UI with better UX feedback/optimistic append.
-7. Listing form validation/previews: validate media/amenities inputs and add previews/counts.
-8. Admin drill-down: upgrade AdminPanel from summary-only to actionable queue lists.
-9. CSS polish: styling + visual hierarchy improvements across updated sections.
+# TODO - GulfServices 360° Upgrade
 
-## Progress tracking
-- [x] Step 1: Trust/Docs panel
-- [ ] Step 2: Media modal
-- [ ] Step 3: Filters chips/reset
-- [ ] Step 4: Similarity scoring
-- [ ] Step 5: Lead/Visit detail
-- [ ] Step 6: Messaging polish
-- [ ] Step 7: Listing form validation/previews
-- [ ] Step 8: Admin drill-down
-- [ ] Step 9: CSS polish
+- [~] Step 1: Refactor `src/modules/gulfservices/GulfServices.js` into smaller subcomponents (no feature changes) (**scaffolding complete, extraction/rewiring next**)
+
+- [ ] Step 2: Add a unified state/model for “requests” (visa + attestation + jobs applications + emergency) in UI
+- [ ] Step 3: Implement “My Requests” page/view fed by dashboard or new API endpoints
+- [ ] Step 4: Add “Reminders” center UI (and integrate with backend endpoints if available)
+- [ ] Step 5: Unify tracking timeline rendering into a single reusable component
+- [ ] Step 6: Improve Jobs UX (saved/shortlist + application status list) depending on backend support
+- [ ] Step 7: Add Emergency incident workflow UI depending on backend support
+- [ ] Step 8: Add accessibility improvements to modal system (focus management)
+- [ ] Step 9: Add/extend tests and run lint/build
 

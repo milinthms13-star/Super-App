@@ -8,6 +8,7 @@ const INITIAL_REMINDER = {
   nextRefillDate: "",
   reminderDaysBefore: 5,
   active: true,
+  adherenceStatus: "pending",
 };
 
 const RefillReminders = ({ reminders, loading, familyMembers, onCreateReminder, onUpdateReminder, onDeleteReminder }) => {
@@ -50,6 +51,13 @@ const RefillReminders = ({ reminders, loading, familyMembers, onCreateReminder, 
   const toggleActive = async (reminder) => {
     await onUpdateReminder(reminder.id, {
       active: !reminder.active,
+    });
+  };
+
+  const updateCompliance = async (reminder, adherenceStatus) => {
+    await onUpdateReminder(reminder.id, {
+      adherenceStatus,
+      lastComplianceUpdate: new Date().toISOString(),
     });
   };
 
@@ -149,13 +157,31 @@ const RefillReminders = ({ reminders, loading, familyMembers, onCreateReminder, 
                 <span className={reminder.active ? "healthcare-success-text" : "healthcare-warning-text"}>
                   {reminder.active ? "Active" : "Paused"}
                 </span>
+                <span>
+                  Compliance: {String(reminder.adherenceStatus || "pending").replaceAll("_", " ")}
+                </span>
               </div>
 
               <div className="healthcare-record-actions">
                 <button type="button" className="healthcare-secondary-button" onClick={() => toggleActive(reminder)}>
                   {reminder.active ? "Pause" : "Resume"}
                 </button>
-                <button type="button" className="healthcare-danger-button" onClick={() => onDeleteReminder(reminder.id)}>
+                <button type="button" className="healthcare-secondary-button" onClick={() => updateCompliance(reminder, "met")}>
+                  Mark Met
+                </button>
+                <button type="button" className="healthcare-secondary-button" onClick={() => updateCompliance(reminder, "missed")}>
+                  Mark Missed
+                </button>
+                <button
+                  type="button"
+                  className="healthcare-danger-button"
+                  onClick={() => {
+                    const confirmed = window.confirm("Delete this reminder?");
+                    if (confirmed) {
+                      void onDeleteReminder(reminder.id);
+                    }
+                  }}
+                >
                   Delete
                 </button>
               </div>

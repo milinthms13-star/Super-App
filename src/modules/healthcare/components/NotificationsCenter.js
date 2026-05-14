@@ -19,7 +19,7 @@ const formatDateTime = (value) => {
   });
 };
 
-const NotificationsCenter = ({ notifications, loading, onMarkRead }) => {
+const NotificationsCenter = ({ notifications, loading, onMarkRead, onAction }) => {
   return (
     <section className="healthcare-section">
       <div className="healthcare-section-heading">
@@ -48,6 +48,11 @@ const NotificationsCenter = ({ notifications, loading, onMarkRead }) => {
                 <button type="button" className="healthcare-secondary-button" onClick={() => onMarkRead(notification.id)}>
                   Mark As Read
                 </button>
+                {notification.actionType ? (
+                  <button type="button" className="healthcare-primary-button" onClick={() => onAction?.(notification)}>
+                    {notification.actionLabel || "Open"}
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </article>

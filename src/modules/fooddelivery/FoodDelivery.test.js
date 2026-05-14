@@ -171,4 +171,46 @@ describe("FoodDelivery", () => {
     fireEvent.click(screen.getByRole("button", { name: /admin ops/i }));
     expect(screen.getByRole("heading", { name: /admin workspace/i })).toBeInTheDocument();
   });
+
+  test("shows dispute status progression and resolution details for existing orders", async () => {
+    foodDeliveryService.getMyOrders.mockResolvedValueOnce([
+      {
+        id: "order-2",
+        status: "delivered",
+        total: 220,
+        paymentMethod: "upi",
+        paymentStatus: "paid",
+        refundStatus: "completed",
+        canCancel: false,
+        loyalty: { pointsEarned: 22, pointsRedeemed: 0 },
+        etaSnapshot: { estimatedArrivalAt: "2026-05-14T11:00:00.000Z" },
+        statusTimeline: [
+          { status: "placed", timestamp: "2026-05-14T10:00:00.000Z" },
+          { status: "confirmed", timestamp: "2026-05-14T10:05:00.000Z" },
+          { status: "preparing", timestamp: "2026-05-14T10:20:00.000Z" },
+          { status: "out-for-delivery", timestamp: "2026-05-14T10:40:00.000Z" },
+          { status: "delivered", timestamp: "2026-05-14T11:10:00.000Z" },
+        ],
+        disputes: [
+          {
+            id: "dispute-22",
+            issueType: "late_delivery",
+            description: "Delivery arrived much later than expected.",
+            status: "resolved",
+            resolutionNote: "Refund approved for delivery fee.",
+            createdAt: "2026-05-14T11:20:00.000Z",
+            resolvedAt: "2026-05-14T12:15:00.000Z",
+          },
+        ],
+      },
+    ]);
+
+    render(<FoodDelivery />);
+
+    expect(await screen.findByText(/order order-2/i)).toBeInTheDocument();
+    expect(screen.getByText(/payment: paid/i)).toBeInTheDocument();
+    expect(screen.getByText(/refund: completed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/late delivery/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/resolution: refund approved for delivery fee\./i)).toBeInTheDocument();
+  });
 });

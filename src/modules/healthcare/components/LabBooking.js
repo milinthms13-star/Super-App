@@ -2,7 +2,22 @@ import React, { useMemo, useState } from "react";
 
 const formatCurrency = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
 
-const LabBooking = ({ labTests, healthPackages, onCreateAppointment, loading }) => {
+const LAB_NEXT_STATUS = {
+  booked: "sample_collected",
+  sample_collected: "under_processing",
+  under_processing: "results_ready",
+  results_ready: "delivered",
+};
+
+const LabBooking = ({
+  labTests,
+  healthPackages,
+  onCreateAppointment,
+  loading,
+  labAppointments,
+  onUpdateAppointmentStatus,
+  onSaveResultToRecord,
+}) => {
   const [activeBookingItem, setActiveBookingItem] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
@@ -244,6 +259,49 @@ const LabBooking = ({ labTests, healthPackages, onCreateAppointment, loading }) 
           </div>
         </div>
       ) : null}
+
+      <div className="healthcare-record-list-card">
+        <h3>Lab Booking Lifecycle</h3>
+        {(labAppointments || []).length === 0 ? <p>No lab bookings yet.</p> : null}
+        {(labAppointments || []).map((appointment) => {
+          const status = appointment.status || "booked";
+          const nextStatus = LAB_NEXT_STATUS[status];
+          const canSaveResult = status === "results_ready";
+
+          return (
+            <article key={appointment.id} className="healthcare-record-item">
+              <div className="healthcare-record-meta">
+                <strong>{appointment.reason}</strong>
+                <span>
+                  {appointment.patientName || "Self"} | {appointment.appointmentDate} {appointment.appointmentTime}
+                </span>
+                <span>Collection: {appointment.mode === "home-collection" ? "Home" : "Lab Visit"}</span>
+                <span className={`healthcare-status healthcare-status-${status}`}>{status.replaceAll("_", " ")}</span>
+              </div>
+              <div className="healthcare-record-actions">
+                {nextStatus ? (
+                  <button
+                    type="button"
+                    className="healthcare-secondary-button"
+                    onClick={() => onUpdateAppointmentStatus?.(appointment.id, nextStatus)}
+                  >
+                    Mark {nextStatus.replaceAll("_", " ")}
+                  </button>
+                ) : null}
+                {canSaveResult ? (
+                  <button
+                    type="button"
+                    className="healthcare-primary-button"
+                    onClick={() => onSaveResultToRecord?.(appointment)}
+                  >
+                    Save Result To Vault
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 };

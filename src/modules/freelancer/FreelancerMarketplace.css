@@ -57,6 +57,21 @@
   font-size: 0.9rem;
 }
 
+.freelancer-role-select {
+  display: grid;
+  gap: 0.24rem;
+  font-size: 0.8rem;
+}
+
+.freelancer-role-select select {
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 10px;
+  padding: 0.5rem 0.58rem;
+  font-size: 0.84rem;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f2f5d;
+}
+
 .freelancer-tab-row {
   display: flex;
   gap: 0.45rem;
@@ -160,6 +175,13 @@
 .freelancer-panel h4 {
   margin: 0;
   color: #0f172a;
+}
+
+.freelancer-panel-headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
 }
 
 .freelancer-form {
@@ -266,6 +288,57 @@
   margin: 0;
   font-size: 0.82rem;
   color: #334155;
+}
+
+.freelancer-chat-log {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.freelancer-booking-next-action {
+  margin-top: 0.3rem;
+  margin-bottom: 0.3rem;
+  padding: 0.4rem 0.52rem;
+  border: 1px solid rgba(14, 165, 168, 0.26);
+  border-radius: 8px;
+  background: #f0fdfa;
+  color: #134e4a;
+  font-size: 0.8rem;
+}
+
+.freelancer-booking-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  margin-bottom: 0.35rem;
+}
+
+.freelancer-booking-timeline span {
+  border: 1px solid #d1d9e6;
+  border-radius: 999px;
+  padding: 0.22rem 0.48rem;
+  font-size: 0.72rem;
+  color: #52607a;
+}
+
+.freelancer-booking-timeline span.is-complete {
+  border-color: rgba(5, 150, 105, 0.3);
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.freelancer-booking-timeline span.is-cancelled {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.freelancer-booking-timeline span.is-disputed {
+  border-color: rgba(217, 119, 6, 0.35);
+  background: #fffbeb;
+  color: #92400e;
 }
 
 .freelancer-list {
@@ -431,4 +504,3 @@
     padding-bottom: 4.3rem;
   }
 }
-

@@ -374,3 +374,45 @@
     color: #24324c;
   }
 }
+
+/* Education module continuity styles */
+.dashboard-container .module-card.education-module-card {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 20px 40px rgba(25, 45, 82, 0.22);
+}
+
+.dashboard-container .module-card.education-module-card .module-hero-overlay {
+  background:
+    radial-gradient(circle at 8% 10%, rgba(255, 210, 120, 0.36), transparent 35%),
+    radial-gradient(circle at 86% 18%, rgba(130, 213, 255, 0.28), transparent 30%);
+}
+
+.dashboard-container .module-card.education-module-card .module-icon {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  color: #ffffff;
+}
+
+.dashboard-container .module-card.education-module-card .module-stats-badge {
+  background: rgba(255, 255, 255, 0.22);
+  color: #f8fbff;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+}
+
+.dashboard-container .module-card.education-module-card .module-badge {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #f8fbff;
+}
+
+.dashboard-container .quick-action-btn.quick-action-education {
+  border-color: rgba(31, 111, 255, 0.34);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 146, 87, 0.24), transparent 32%),
+    linear-gradient(135deg, rgba(31, 111, 255, 0.14), rgba(15, 165, 127, 0.1));
+}
+
+.dashboard-container .quick-action-btn.quick-action-education:hover {
+  border-color: rgba(31, 111, 255, 0.58);
+  box-shadow: 0 14px 35px rgba(31, 111, 255, 0.28);
+}

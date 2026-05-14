@@ -40,7 +40,99 @@ const ISSUE_OPTIONS = [
   { value: "rider_issue", label: "Rider issue" },
 ];
 
+const ORDER_STAGE_SEQUENCE = ["placed", "confirmed", "preparing", "out-for-delivery", "delivered"];
+const DISPUTE_STAGE_SEQUENCE = ["submitted", "investigating", "resolved"];
+
+const ORDER_STATUS_LABELS = {
+  placed: "Placed",
+  confirmed: "Confirmed",
+  preparing: "Preparing",
+  "out-for-delivery": "Picked Up",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+};
+
+const DISPUTE_STATUS_LABELS = {
+  open: "Submitted",
+  investigating: "Investigating",
+  resolved: "Resolved",
+  rejected: "Rejected",
+};
+
 const formatInr = (value) => `INR ${Number(value || 0).toFixed(2)}`;
+
+const formatDateTime = (value) => {
+  if (!value) {
+    return "Not available";
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Not available";
+  }
+
+  return parsedDate.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const normalizeOrderStatus = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "out_for_delivery") {
+    return "out-for-delivery";
+  }
+  return normalized;
+};
+
+const getOrderStatusLabel = (status) => ORDER_STATUS_LABELS[normalizeOrderStatus(status)] || status || "Unknown";
+
+const getStatusTimestamp = (timeline = [], targetStatus) => {
+  const normalizedTarget = normalizeOrderStatus(targetStatus);
+  const matched = timeline.find(
+    (entry) => normalizeOrderStatus(entry.status) === normalizedTarget && entry.timestamp
+  );
+  return matched?.timestamp || null;
+};
+
+const computeEtaDeltaMinutes = (order) => {
+  const expectedArrival = order.etaSnapshot?.estimatedArrivalAt;
+  const deliveredAt = getStatusTimestamp(order.statusTimeline || [], "delivered") || order.deliveredAt;
+
+  if (!expectedArrival || !deliveredAt) {
+    return null;
+  }
+
+  const expectedTime = new Date(expectedArrival).getTime();
+  const deliveredTime = new Date(deliveredAt).getTime();
+
+  if (Number.isNaN(expectedTime) || Number.isNaN(deliveredTime)) {
+    return null;
+  }
+
+  return Math.round((deliveredTime - expectedTime) / (1000 * 60));
+};
+
+const mapDisputeStage = (status) => {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "open") {
+    return "submitted";
+  }
+  if (normalized === "rejected") {
+    return "resolved";
+  }
+  return normalized;
+};
+
+const formatIssueLabel = (issueType) =>
+  String(issueType || "issue")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ");
 
 const toDateTimeInputValue = (value) => {
   if (!value) {
@@ -607,6 +699,51 @@ const FoodDelivery = () => {
     );
   };
 
+  const renderOrderTimeline = (order) => {
+    const timeline = Array.isArray(order.statusTimeline) ? order.statusTimeline : [];
+    const activeStatus = normalizeOrderStatus(order.status);
+    const activeIndex = ORDER_STAGE_SEQUENCE.indexOf(activeStatus);
+
+    return (
+      <div className="fd-timeline">
+        {ORDER_STAGE_SEQUENCE.map((status, index) => {
+          const isComplete = activeStatus === "cancelled" ? false : index <= activeIndex;
+          const timestamp = getStatusTimestamp(timeline, status);
+          return (
+            <div key={`${order.id}-${status}`} className={isComplete ? "fd-timeline-step complete" : "fd-timeline-step"}>
+              <strong>{ORDER_STATUS_LABELS[status]}</strong>
+              <span>{timestamp ? formatDateTime(timestamp) : "Pending"}</span>
+            </div>
+          );
+        })}
+        {activeStatus === "cancelled" && (
+          <div className="fd-timeline-step cancelled">
+            <strong>Cancelled</strong>
+            <span>{formatDateTime(getStatusTimestamp(timeline, "cancelled") || order.cancelledAt)}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderDisputeProgress = (dispute) => {
+    const currentStage = mapDisputeStage(dispute.status);
+    const currentIndex = DISPUTE_STAGE_SEQUENCE.indexOf(currentStage);
+
+    return (
+      <div className="fd-dispute-progress">
+        {DISPUTE_STAGE_SEQUENCE.map((stage, index) => (
+          <span
+            key={`${dispute.id}-${stage}`}
+            className={index <= currentIndex ? "fd-dispute-stage active" : "fd-dispute-stage"}
+          >
+            {stage}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
   const renderCustomerView = () => (
     <>
       <div className="fd-controls fd-rolebar">
@@ -827,7 +964,7 @@ const FoodDelivery = () => {
 
             <div className="fd-controls">
               <button onClick={handleCheckout} disabled={checkingOut || !isCartReady}>
-                {checkingOut ? "Processing…" : "Checkout"}
+                {checkingOut ? "Processing..." : "Checkout"}
               </button>
             </div>
           </aside>
@@ -840,34 +977,96 @@ const FoodDelivery = () => {
         {orders.map((order) => {
           const tracking = trackingByOrderId[order.id];
           const draft = disputeDrafts[order.id] || { issueType: "", description: "" };
+          const etaDeltaMinutes = computeEtaDeltaMinutes(order);
+          const normalizedPaymentStatus = String(order.paymentStatus || "pending").toLowerCase();
+          const normalizedRefundStatus = String(order.refundStatus || "none").toLowerCase();
+          const expectedArrivalText = order.etaSnapshot?.estimatedArrivalAt
+            ? formatDateTime(order.etaSnapshot.estimatedArrivalAt)
+            : "Not available";
 
           return (
             <div key={order.id} className="fd-order-status">
-              <div>
-                Order {order.id}: {order.status} - {formatInr(order.total)}
-              </div>
-              <div>
-                Payment: {order.paymentMethod || "cod"} | Refund: {order.refundStatus || "none"}
+              <div className="fd-order-header">
+                <div>
+                  <strong>Order {order.id}</strong>
+                  <div>{getOrderStatusLabel(order.status)} | {formatInr(order.total)}</div>
+                </div>
+                <div className="fd-order-meta">
+                  <span className={`fd-status-chip payment-${normalizedPaymentStatus}`}>
+                    Payment: {normalizedPaymentStatus}
+                  </span>
+                  <span className={`fd-status-chip refund-${normalizedRefundStatus}`}>
+                    Refund: {normalizedRefundStatus}
+                  </span>
+                </div>
               </div>
               <div>Rider: {order.driverProfile?.name || "Not assigned yet"}</div>
               {order.isScheduled && <div>Scheduled: {order.scheduledWindowLabel}</div>}
               <div>
                 Loyalty: earned {order.loyalty?.pointsEarned || 0}, redeemed {order.loyalty?.pointsRedeemed || 0}
               </div>
-              <button onClick={() => handleLoadTracking(order.id)}>Track Order</button>
+              <div>Expected arrival: {expectedArrivalText}</div>
+              {etaDeltaMinutes != null && (
+                <div>
+                  ETA delta: {etaDeltaMinutes === 0 ? "On time" : `${etaDeltaMinutes > 0 ? "+" : ""}${etaDeltaMinutes} mins`}
+                </div>
+              )}
+
+              <div className="fd-order-section">
+                <strong>Order Timeline</strong>
+                {renderOrderTimeline(order)}
+              </div>
+
+              <button
+                onClick={() => handleLoadTracking(order.id)}
+                disabled={trackingLoadingByOrderId[order.id]}
+              >
+                {trackingLoadingByOrderId[order.id] ? "Refreshing..." : "Track Order"}
+              </button>
               {order.canCancel && (
                 <button onClick={() => handleCancelOrder(order.id)}>Cancel Order</button>
               )}
 
               {tracking && (
-                <div>
+                <div className="fd-order-section">
+                  <strong>Live Tracking Snapshot</strong>
                   <div>Tracking Status: {tracking.tracking?.status || "unassigned"}</div>
                   <div>ETA: {tracking.tracking?.estimatedArrivalMinutes || tracking.etaSnapshot?.totalMinutes || 0} mins</div>
                   <div>Route: {tracking.tracking?.routeStrategy || tracking.etaSnapshot?.routeStrategy || "balanced"}</div>
                   <div>Distance to you: {tracking.tracking?.distanceToCustomerKm || 0} km</div>
+                  {tracking.tracking?.routeHistory?.length > 0 && (
+                    <div>Route points captured: {tracking.tracking.routeHistory.length}</div>
+                  )}
                   {tracking.riderSafety?.activeSos && <div>Rider SOS is currently active for this order.</div>}
                 </div>
               )}
+
+              <div className="fd-order-section">
+                <strong>Dispute Center</strong>
+                {Array.isArray(order.disputes) && order.disputes.length > 0 ? (
+                  <div className="fd-disputes-list">
+                    {order.disputes.map((dispute) => (
+                      <div key={dispute.id} className="fd-dispute-card">
+                        <div className="fd-dispute-row">
+                          <strong>{formatIssueLabel(dispute.issueType)}</strong>
+                          <span className={`fd-status-chip dispute-${String(dispute.status || "open").toLowerCase()}`}>
+                            {DISPUTE_STATUS_LABELS[String(dispute.status || "open").toLowerCase()] || dispute.status}
+                          </span>
+                        </div>
+                        {renderDisputeProgress(dispute)}
+                        <div className="fd-dispute-row">
+                          <span>Raised: {formatDateTime(dispute.createdAt)}</span>
+                          {dispute.resolvedAt && <span>Closed: {formatDateTime(dispute.resolvedAt)}</span>}
+                        </div>
+                        {dispute.description && <div>Issue: {dispute.description}</div>}
+                        {dispute.resolutionNote && <div>Resolution: {dispute.resolutionNote}</div>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div>No disputes raised for this order yet.</div>
+                )}
+              </div>
 
               <div className="fd-controls">
                 <select

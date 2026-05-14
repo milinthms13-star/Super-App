@@ -343,3 +343,210 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Redesign Layer: Vibrant learning studio visuals */
+.education-shell {
+  --education-brand-blue: #1e6fff;
+  --education-brand-coral: #ff7a3d;
+  --education-brand-leaf: #0e9f7a;
+  --education-brand-ink: #13294b;
+  --education-brand-muted: #52647e;
+  --education-brand-glass: rgba(255, 255, 255, 0.88);
+  --education-brand-border: rgba(19, 41, 75, 0.14);
+  color: var(--education-brand-ink);
+  font-family: "Poppins", "Trebuchet MS", "Segoe UI", sans-serif;
+  position: relative;
+  isolation: isolate;
+}
+
+.education-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(circle at 8% 4%, rgba(255, 142, 79, 0.2), transparent 34%),
+    radial-gradient(circle at 92% 18%, rgba(30, 111, 255, 0.2), transparent 30%),
+    linear-gradient(160deg, #fff5ea 0%, #f1f8ff 54%, #eefbf8 100%);
+}
+
+.education-status-banner,
+.education-sync-banner,
+.education-hero,
+.education-section,
+.education-ai-assistant,
+.education-exam-prep {
+  backdrop-filter: blur(3px);
+}
+
+.education-hero {
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 150, 84, 0.22), transparent 36%),
+    radial-gradient(circle at 100% 0%, rgba(30, 111, 255, 0.18), transparent 38%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(242, 249, 255, 0.92));
+  box-shadow: 0 24px 52px rgba(23, 48, 66, 0.14);
+  animation: educationFadeUp 0.7s ease both;
+}
+
+.education-hero-copy h1 {
+  color: #0f2c54;
+  letter-spacing: -0.02em;
+}
+
+.education-hero-copy p,
+.education-section-heading p {
+  color: var(--education-brand-muted);
+}
+
+.education-hero-tags span {
+  background: rgba(30, 111, 255, 0.12);
+  color: #1655bf;
+  border: 1px solid rgba(30, 111, 255, 0.24);
+}
+
+.education-hero-metrics {
+  border: 1px solid var(--education-brand-border);
+  border-radius: 20px;
+  background: var(--education-brand-glass);
+  padding: 1rem;
+  box-shadow: 0 14px 30px rgba(19, 41, 75, 0.08);
+}
+
+.education-hero-metrics h2 {
+  margin: 0;
+  color: #12315f;
+}
+
+.education-hero-metrics p {
+  margin: 0.45rem 0 0.95rem;
+  color: var(--education-brand-muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.education-pulse-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.education-pulse-card {
+  padding: 0.72rem 0.75rem;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.92));
+  border: 1px solid rgba(19, 41, 75, 0.12);
+  animation: educationFadeUp 0.6s ease both;
+}
+
+.education-pulse-card span,
+.education-pulse-card small {
+  display: block;
+  color: var(--education-brand-muted);
+}
+
+.education-pulse-card strong {
+  display: block;
+  margin: 0.15rem 0 0.2rem;
+  font-size: 1.22rem;
+  color: #0f2f5f;
+}
+
+.education-nav-item {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--education-brand-border);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.education-nav-item:hover {
+  transform: translateY(-2px);
+  border-color: rgba(30, 111, 255, 0.35);
+  box-shadow: 0 14px 28px rgba(19, 41, 75, 0.1);
+}
+
+.education-nav-item.active {
+  border-color: rgba(30, 111, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(30, 111, 255, 0.2), 0 10px 20px rgba(19, 41, 75, 0.08);
+}
+
+.education-nav-icon {
+  font-size: 1.35rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0 auto 0.6rem;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(30, 111, 255, 0.11);
+  color: #1857be;
+}
+
+.education-section,
+.education-ai-assistant,
+.education-exam-prep {
+  background: var(--education-brand-glass);
+  border: 1px solid var(--education-brand-border);
+  box-shadow: 0 16px 38px rgba(23, 48, 66, 0.1);
+}
+
+.education-course-card,
+.education-forum-card,
+.education-scholarship-card,
+.education-exam-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.92));
+  border-color: rgba(19, 41, 75, 0.14);
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(19, 41, 75, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.education-course-card:hover,
+.education-forum-card:hover,
+.education-scholarship-card:hover,
+.education-exam-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(30, 111, 255, 0.3);
+  box-shadow: 0 16px 30px rgba(19, 41, 75, 0.13);
+}
+
+.education-primary-button {
+  background: linear-gradient(135deg, var(--education-brand-blue), #1c56d7);
+  box-shadow: 0 10px 22px rgba(30, 111, 255, 0.26);
+}
+
+.education-secondary-button {
+  border-color: rgba(19, 41, 75, 0.2);
+  background: rgba(255, 255, 255, 0.94);
+  color: #19355f;
+}
+
+.education-primary-button:hover,
+.education-secondary-button:hover {
+  transform: translateY(-2px);
+}
+
+.education-ai-chat button {
+  background: linear-gradient(135deg, var(--education-brand-leaf), #0e7f63);
+}
+
+.education-ai-response {
+  border-left-color: var(--education-brand-coral);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 244, 236, 0.94));
+}
+
+@keyframes educationFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1200px) {
+  .education-hero {
+    grid-template-columns: 1fr;
+  }
+}

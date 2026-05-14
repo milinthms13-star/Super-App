@@ -10,6 +10,7 @@ const EMPTY_PROFILE = {
   notes: "",
   emergencyPhone: "",
   isEmergencyContact: false,
+  inviteStatus: "accepted",
 };
 
 const FamilyProfiles = ({ profiles, loading, onCreateProfile, onUpdateProfile, onDeleteProfile }) => {
@@ -46,6 +47,7 @@ const FamilyProfiles = ({ profiles, loading, onCreateProfile, onUpdateProfile, o
       notes: profile.notes || "",
       emergencyPhone: profile.emergencyPhone || "",
       isEmergencyContact: Boolean(profile.isEmergencyContact),
+      inviteStatus: profile.inviteStatus || "accepted",
     });
   };
 
@@ -142,6 +144,15 @@ const FamilyProfiles = ({ profiles, loading, onCreateProfile, onUpdateProfile, o
             <span>Use as emergency contact</span>
           </label>
 
+          <label className="healthcare-field">
+            <span>Family Invite Status</span>
+            <select value={form.inviteStatus} onChange={(event) => updateField("inviteStatus", event.target.value)}>
+              <option value="accepted">Accepted</option>
+              <option value="pending">Pending invite</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+
           <div className="healthcare-modal-actions">
             {editingId ? (
               <button type="button" className="healthcare-secondary-button" onClick={resetForm}>
@@ -169,13 +180,23 @@ const FamilyProfiles = ({ profiles, loading, onCreateProfile, onUpdateProfile, o
                 </span>
                 {profile.phone ? <span>Phone: {profile.phone}</span> : null}
                 {profile.isEmergencyContact ? <span className="healthcare-warning-text">Emergency contact</span> : null}
+                <span>Invite: {profile.inviteStatus || "accepted"}</span>
               </div>
 
               <div className="healthcare-record-actions">
                 <button type="button" className="healthcare-secondary-button" onClick={() => startEdit(profile)}>
                   Edit
                 </button>
-                <button type="button" className="healthcare-danger-button" onClick={() => onDeleteProfile(profile.id)}>
+                <button
+                  type="button"
+                  className="healthcare-danger-button"
+                  onClick={() => {
+                    const confirmed = window.confirm("Remove this family profile?");
+                    if (confirmed) {
+                      void onDeleteProfile(profile.id);
+                    }
+                  }}
+                >
                   Remove
                 </button>
               </div>

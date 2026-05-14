@@ -310,6 +310,16 @@ export const healthcareApi = {
     }));
   },
 
+  updatePharmacyOrder: async (orderId, payload) => {
+    return getWithFallback(async () => {
+      const response = await axios.patch(`${endpoints.pharmacyOrders}/${orderId}`, payload, authHeaders());
+      return unwrap(response);
+    }, () => ({
+      id: orderId,
+      ...payload,
+    }));
+  },
+
   getRefillReminders: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.refillReminders, authHeaders());

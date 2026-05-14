@@ -12,6 +12,12 @@ const INITIAL_APPLICATION = {
   notes: "",
 };
 
+const PARTNER_REQUIREMENTS = {
+  doctor: ["Medical license", "KYC ID", "Clinic address proof"],
+  lab: ["Lab accreditation", "KYC ID", "Equipment checklist"],
+  pharmacy: ["Drug license", "KYC ID", "Delivery zone declaration"],
+};
+
 const PartnerDashboard = ({
   dashboard,
   applications,
@@ -159,6 +165,10 @@ const PartnerDashboard = ({
             />
           </label>
 
+          <div className="healthcare-disclaimer">
+            <strong>Required checklist:</strong> {(PARTNER_REQUIREMENTS[form.entityType] || []).join(", ")}
+          </div>
+
           <button type="submit" className="healthcare-primary-button" disabled={submitting}>
             {submitting ? "Submitting..." : "Submit Application"}
           </button>
@@ -179,6 +189,9 @@ const PartnerDashboard = ({
                 <span>{application.email}</span>
                 <span className={application.status === "approved" ? "healthcare-success-text" : "healthcare-warning-text"}>
                   {application.status}
+                </span>
+                <span>
+                  Workflow: submitted -> review -> {application.status === "approved" ? "onboarded" : application.status}
                 </span>
                 {application.reviewNotes ? <span>Review: {application.reviewNotes}</span> : null}
               </div>
@@ -204,13 +217,35 @@ const PartnerDashboard = ({
               </div>
 
               <div className="healthcare-record-actions">
-                <button type="button" className="healthcare-secondary-button" onClick={() => onReviewApplication(application.id, "approved")}>
+                <button
+                  type="button"
+                  className="healthcare-secondary-button"
+                  onClick={() => {
+                    const confirmed = window.confirm("Approve this partner application?");
+                    if (confirmed) {
+                      void onReviewApplication(application.id, "approved");
+                    }
+                  }}
+                >
                   Approve
                 </button>
-                <button type="button" className="healthcare-danger-button" onClick={() => onReviewApplication(application.id, "rejected")}>
+                <button
+                  type="button"
+                  className="healthcare-danger-button"
+                  onClick={() => {
+                    const confirmed = window.confirm("Reject this partner application?");
+                    if (confirmed) {
+                      void onReviewApplication(application.id, "rejected");
+                    }
+                  }}
+                >
                   Reject
                 </button>
-                <button type="button" className="healthcare-secondary-button" onClick={() => onReviewApplication(application.id, "revision_requested")}>
+                <button
+                  type="button"
+                  className="healthcare-secondary-button"
+                  onClick={() => onReviewApplication(application.id, "revision_requested")}
+                >
                   Ask Revision
                 </button>
               </div>

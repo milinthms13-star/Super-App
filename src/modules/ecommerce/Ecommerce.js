@@ -1017,6 +1017,67 @@ const Ecommerce = ({
       : hasRemoteMarketplaceFilters
         ? esSearchResults.total || sortedProducts.length
         : marketplacePagination.totalItems || sortedProducts.length;
+  const averageMarketplaceRating = useMemo(() => {
+    if (!sortedProducts.length) {
+      return 0;
+    }
+
+    const totalRating = sortedProducts.reduce((sum, product) => {
+      const ratingValue = Number(product.rating);
+      return sum + (Number.isFinite(ratingValue) ? ratingValue : 0);
+    }, 0);
+
+    return totalRating / sortedProducts.length;
+  }, [sortedProducts]);
+  const activeDiscountCount = useMemo(
+    () => sortedProducts.filter((product) => product.isDiscountActive).length,
+    [sortedProducts]
+  );
+  const heroStats = isEntrepreneur
+    ? [
+        {
+          label: "Approved",
+          value: `${approvedProductCount}`,
+          hint: "Listings live in marketplace",
+        },
+        {
+          label: "Pending Review",
+          value: `${pendingProductCount}`,
+          hint: "Needs admin review",
+        },
+        {
+          label: "Seller Orders",
+          value: `${sellerOrdersPagination.totalItems || visibleSellerOrders.length}`,
+          hint: "Active fulfillment queue",
+        },
+        {
+          label: "Return Requests",
+          value: `${sellerReturnRequestCount}`,
+          hint: "Open return actions",
+        },
+      ]
+    : [
+        {
+          label: "Live Listings",
+          value: `${activeMarketplaceCount}`,
+          hint: "Available now",
+        },
+        {
+          label: "Deals Live",
+          value: `${activeDiscountCount}`,
+          hint: "Discounted products",
+        },
+        {
+          label: "Flash Sales",
+          value: `${activeFlashSales.length}`,
+          hint: "Time-sensitive offers",
+        },
+        {
+          label: "Avg Rating",
+          value: averageMarketplaceRating > 0 ? averageMarketplaceRating.toFixed(1) : "0.0",
+          hint: "Marketplace quality pulse",
+        },
+      ];
 
   const businessCategories = useMemo(() => {
     const adminCategories = categoryRecords.map((category) => category.name).filter(Boolean);
@@ -1741,12 +1802,24 @@ const Ecommerce = ({
         </div>
       )}
       <div className="ecommerce-header">
+        <span className="ecommerce-header-kicker">
+          {isEntrepreneur ? "Seller Command Center" : "Smart Shopping Experience"}
+        </span>
         <h1>GlobeMart</h1>
         <p>
           {isEntrepreneur
             ? `Manage your catalog for ${currentBusinessName}, get product approval first, and add stock batch details only when inventory arrives.`
             : "Browse approved products from GlobeMart businesses and add them to your cart."}
         </p>
+        <div className="market-pulse-strip" aria-label="Marketplace pulse">
+          {heroStats.map((stat) => (
+            <article key={stat.label} className="market-pulse-card">
+              <span>{stat.label}</span>
+              <strong>{stat.value}</strong>
+              <small>{stat.hint}</small>
+            </article>
+          ))}
+        </div>
       </div>
 
       {(onOpenOrders || onOpenReturns) && (

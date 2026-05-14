@@ -1,6 +1,6 @@
 import React from "react";
 
-const LoanMarketplaceTab = ({ institutions, categories, filters, onFilterChange }) => {
+const LoanMarketplaceTab = ({ categories, filters, onFilterChange }) => {
   const { selectedCategory, filteredLoanCategories, filteredInstitutions, institutionLoadState } = filters;
   const { setSelectedCategory } = onFilterChange;
 
@@ -12,9 +12,20 @@ const LoanMarketplaceTab = ({ institutions, categories, filters, onFilterChange 
       </div>
 
       <div className="finance-chip-row">
-        <button type="button" onClick={() => setSelectedCategory("all")}>All</button>
+        <button
+          type="button"
+          className={selectedCategory === "all" ? "active" : ""}
+          onClick={() => setSelectedCategory("all")}
+        >
+          All
+        </button>
         {categories.map((category) => (
-          <button key={category.id} type="button" onClick={() => setSelectedCategory(category.id)}>
+          <button
+            key={category.id}
+            type="button"
+            className={selectedCategory === category.id ? "active" : ""}
+            onClick={() => setSelectedCategory(category.id)}
+          >
             {category.title}
           </button>
         ))}

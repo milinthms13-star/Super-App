@@ -100,10 +100,33 @@ const normalizeCart = (cart = {}) => ({
   items: Array.isArray(cart.items) ? cart.items.map(normalizeMenuItem) : [],
 });
 
+const normalizeStatusTimelineEntry = (entry = {}) => ({
+  ...entry,
+  status: entry.status || '',
+  note: entry.note || '',
+  updatedBy: entry.updatedBy || '',
+  timestamp: entry.timestamp || entry.createdAt || null,
+});
+
+const normalizeDispute = (dispute = {}) => ({
+  ...dispute,
+  id: normalizeId(dispute.id || dispute._id),
+  issueType: dispute.issueType || '',
+  description: dispute.description || '',
+  status: dispute.status || 'open',
+  resolutionNote: dispute.resolutionNote || '',
+  createdByUserId: normalizeId(dispute.createdByUserId),
+  createdAt: dispute.createdAt || null,
+  resolvedAt: dispute.resolvedAt || null,
+  resolvedBy: dispute.resolvedBy || '',
+});
+
 const normalizeOrder = (order = {}) => ({
   ...order,
   id: normalizeId(order.id || order._id),
   status: order.status || order.orderStatus || 'placed',
+  paymentStatus: order.paymentStatus || 'pending',
+  refundStatus: order.refundStatus || 'none',
   total: Number(order.total || order.totalAmount || 0),
   totalAmount: Number(order.totalAmount || order.total || 0),
   subtotal: Number(order.subtotal || 0),
@@ -158,6 +181,11 @@ const normalizeOrder = (order = {}) => ({
       }
     : null,
   coupon: order.coupon || null,
+  statusTimeline: Array.isArray(order.statusTimeline)
+    ? order.statusTimeline.map(normalizeStatusTimelineEntry)
+    : [],
+  disputes: Array.isArray(order.disputes) ? order.disputes.map(normalizeDispute) : [],
+  activeDisputeCount: Number(order.activeDisputeCount || 0),
   items: Array.isArray(order.items)
     ? order.items.map((item) => ({
         ...item,
@@ -533,7 +561,7 @@ export default {
       payload,
       getAuthHeaders()
     );
-    return data.data;
+    return normalizeDispute(data.data);
   },
 
   updateDispute: async (orderId, disputeId, payload = {}) => {
@@ -542,7 +570,7 @@ export default {
       payload,
       getAuthHeaders()
     );
-    return data.data;
+    return normalizeDispute(data.data);
   },
 
   getAdminDashboard: async () => {
