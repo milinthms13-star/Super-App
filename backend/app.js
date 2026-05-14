@@ -1,4 +1,44 @@
 const path = require('path');
+
+if (typeof global.ReadableStream === 'undefined') {
+  const { ReadableStream, WritableStream, TransformStream } = require('node:stream/web');
+  global.ReadableStream = ReadableStream;
+  global.WritableStream = WritableStream;
+  global.TransformStream = TransformStream;
+}
+
+if (typeof global.Blob === 'undefined') {
+  const { Blob, File } = require('buffer');
+  global.Blob = Blob;
+  global.File = typeof global.File === 'undefined' ? File : global.File;
+}
+
+if (typeof global.TextEncoder === 'undefined') {
+  const { TextEncoder, TextDecoder } = require('util');
+  global.TextEncoder = TextEncoder;
+  global.TextDecoder = TextDecoder;
+}
+
+if (typeof global.MessagePort === 'undefined') {
+  try {
+    const { MessagePort, MessageChannel } = require('worker_threads');
+    global.MessagePort = MessagePort;
+    global.MessageChannel = MessageChannel;
+  } catch (error) {
+    global.MessagePort = class {};
+    global.MessageChannel = class {};
+  }
+}
+
+if (typeof global.DOMException === 'undefined') {
+  global.DOMException = class DOMException extends Error {
+    constructor(message, name = 'Error') {
+      super(message);
+      this.name = name;
+    }
+  };
+}
+
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config({ path: path.join(__dirname, '../.env'), override: false });
 
@@ -106,6 +146,7 @@ app.use('/api/messaging/v5/backup', require('./routes/messageBackupRoutes'));
 
 app.use('/api/bulkorders', require('./routes/bulkorders'));
 app.use('/api/diary', require('./routes/diary'));
+app.use('/api/diary', require('./routes/diary-phase7'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/giftcards', require('./routes/giftcards'));
 app.use('/api/health', require('./routes/health'));

@@ -1,5 +1,6 @@
 module.exports = {
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/tests/setup.js'],
   testMatch: ['**/__tests__/**/*.js', '**/*.test.js', '**/*.spec.js'],
   collectCoverageFrom: [
     'services/**/*.js',

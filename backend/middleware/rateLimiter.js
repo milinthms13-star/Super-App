@@ -6,6 +6,9 @@
 const requestCounts = new Map();
 const CLEANUP_INTERVAL = 60000; // Clean up old entries every 60 seconds
 
+const isRateLimitDisabled = () =>
+  process.env.NODE_ENV === 'test' || process.env.DISABLE_RATE_LIMITS === 'true';
+
 /**
  * Create a rate limiter middleware
  * @param {object} options - Configuration options
@@ -33,6 +36,10 @@ const createRateLimiter = (options = {}) => {
 
   if (typeof cleanupTimer.unref === 'function') {
     cleanupTimer.unref();
+  }
+
+  if (isRateLimitDisabled()) {
+    return (_req, _res, next) => next();
   }
 
   return (req, res, next) => {

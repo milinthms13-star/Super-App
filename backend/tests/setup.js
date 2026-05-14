@@ -1,5 +1,44 @@
 const mongoose = require('mongoose');
 
+if (typeof global.ReadableStream === 'undefined') {
+  const { ReadableStream, WritableStream, TransformStream } = require('node:stream/web');
+  global.ReadableStream = ReadableStream;
+  global.WritableStream = WritableStream;
+  global.TransformStream = TransformStream;
+}
+
+if (typeof global.Blob === 'undefined') {
+  const { Blob, File } = require('buffer');
+  global.Blob = Blob;
+  global.File = typeof global.File === 'undefined' ? File : global.File;
+}
+
+if (typeof global.TextEncoder === 'undefined') {
+  const { TextEncoder, TextDecoder } = require('util');
+  global.TextEncoder = TextEncoder;
+  global.TextDecoder = TextDecoder;
+}
+
+if (typeof global.MessagePort === 'undefined') {
+  try {
+    const { MessagePort, MessageChannel } = require('worker_threads');
+    global.MessagePort = MessagePort;
+    global.MessageChannel = MessageChannel;
+  } catch (error) {
+    global.MessagePort = class {};
+    global.MessageChannel = class {};
+  }
+}
+
+if (typeof global.DOMException === 'undefined') {
+  global.DOMException = class DOMException extends Error {
+    constructor(message, name = 'Error') {
+      super(message);
+      this.name = name;
+    }
+  };
+}
+
 // Mock mongoose.Types.ObjectId globally
 global.ObjectId = mongoose.Types.ObjectId;
 
