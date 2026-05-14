@@ -111,6 +111,18 @@ const GLOBEMART_VALUE_PILLARS = [
   },
 ];
 
+const DEFAULT_GLOBEMART_CATEGORIES = ["Electronics", "Grocery", "Fashion", "Food", "Home", "Beauty"];
+
+const QUICK_ENTRY_ACTIONS = [
+  { id: "shop", label: "Shop Products", emoji: "🛍️", type: "buyer" },
+  { id: "sell", label: "Sell Products", emoji: "📦", type: "seller" },
+  { id: "orders", label: "Orders", emoji: "📄", type: "buyer" },
+  { id: "cart", label: "Cart", emoji: "🛒", type: "buyer" },
+];
+
+const TRENDING_ITEMS = ["Smartphones", "Groceries", "Fashion", "Food"];
+const NEARBY_STORES = ["Nila Mart", "Fresh Hub", "Style Corner", "Daily Grocer"];
+
 const formatCurrency = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
 
 const normalizeTransactionFee = (value) => {
@@ -275,6 +287,7 @@ const GlobeMartEntry = ({
     loggedInUser?.registrationType === "entrepreneur" || loggedInUser?.role === "business";
 
   const [entryMode, setEntryMode] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [sellerRegistration, setSellerRegistration] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedPlanId, setSelectedPlanId] = useState(DEFAULT_SELLER_ONBOARDING_PLANS[0].id);
@@ -323,103 +336,110 @@ const GlobeMartEntry = ({
   const renderEntryModeSelection = () => {
     const firstName = String(loggedInUser?.name || "").trim().split(" ")[0];
     const welcomeName = firstName || "there";
+    const topCategories = (Array.isArray(globeMartCategories) && globeMartCategories.length
+      ? globeMartCategories.slice(0, 6).map((category) => String(category).trim())
+      : DEFAULT_GLOBEMART_CATEGORIES
+    ).filter(Boolean);
+
+    const handleQuickAction = (type) => {
+      if (type === "seller") {
+        openSellerFlow();
+        return;
+      }
+      openBuyerPage();
+    };
 
     return (
-      <section className="globemart-entry-shell" aria-label="GlobeMart entry choice">
-        <div className="globemart-entry-card globemart-entry-card-wide globemart-entry-hero">
-          <div className="globemart-entry-hero-top">
-            <div className="globemart-entry-headline">
-              <span className="globemart-entry-kicker">GlobeMart onboarding</span>
+      <section className="globemart-entry-shell globemart-dashboard-shell" aria-label="GlobeMart dashboard">
+        <div className="globemart-entry-card globemart-home-card">
+          <div className="globemart-home-header">
+            <div>
+              <span className="globemart-entry-kicker">GlobeMart</span>
               <h2>Welcome back, {welcomeName}</h2>
-              <p>What would you like to do today? Pick a path to continue in one tap.</p>
             </div>
-            <aside className="globemart-entry-visual" aria-label="GlobeMart quick highlights">
-              <strong>Marketplace Pulse</strong>
-              <p>Everything you need in one super app flow.</p>
-              <div className="globemart-entry-visual-pills">
-                <span>Buyer checkout</span>
-                <span>Seller payouts</span>
-                <span>Live support</span>
-              </div>
-            </aside>
+            <div className="globemart-home-toolbar">
+              <button type="button" className="globemart-home-icon-btn" aria-label="Search">🔍</button>
+              <button type="button" className="globemart-home-icon-btn" aria-label="Cart">🛒</button>
+              <button type="button" className="globemart-home-icon-btn" aria-label="Profile">👤</button>
+            </div>
           </div>
-          <div className="globemart-entry-badges" aria-label="Onboarding highlights">
-            <span>Fast setup</span>
-            <span>Secure access</span>
-            <span>Mobile ready</span>
-            <span>Kerala focused</span>
+
+          <div className="globemart-home-search">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search products, stores, offers..."
+              aria-label="Search GlobeMart"
+            />
           </div>
-          <div className="globemart-entry-choice-grid">
-            <article className="globemart-entry-choice-card globemart-entry-choice-buyer">
-              <div className="globemart-entry-choice-top">
-                <span className="globemart-entry-choice-icon" aria-hidden="true">B</span>
-                <div>
-                  <strong>Buyer access</strong>
-                  <p>Browse stores, place orders, and manage deliveries from one dashboard.</p>
-                </div>
-              </div>
-              <ul className="globemart-entry-list" aria-label="Buyer features">
-                <li>Discover products and offers quickly</li>
-                <li>Track orders and returns in real time</li>
-                <li>Save favorites and reorder faster</li>
-              </ul>
-              <div className="globemart-entry-trust-row" aria-label="Buyer trust indicators">
-                <span>10k+ buyers</span>
-                <span>Fast reorder</span>
-                <span>Secure checkout</span>
-              </div>
-              <button type="button" className="globemart-entry-cta globemart-entry-cta-buyer" onClick={openBuyerPage}>
-                Continue as Buyer ->
+
+          <div className="globemart-home-quick-actions">
+            {QUICK_ENTRY_ACTIONS.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                className={`globemart-home-action-btn ${action.type === "seller" ? "seller" : "buyer"}`}
+                onClick={() => handleQuickAction(action.type)}
+              >
+                <span aria-hidden="true">{action.emoji}</span>
+                <span>{action.label}</span>
               </button>
-            </article>
-            <article className="globemart-entry-choice-card globemart-entry-choice-seller">
-              <div className="globemart-entry-choice-top">
-                <span className="globemart-entry-choice-icon" aria-hidden="true">S</span>
-                <div>
-                  <strong>Seller access</strong>
-                  <p>List products, manage your shop, and onboard as a GlobeMart seller.</p>
-                </div>
-              </div>
-              <ul className="globemart-entry-list" aria-label="Seller features">
-                <li>Launch your storefront with guided steps</li>
-                <li>Control inventory, pricing, and payouts</li>
-                <li>Access seller analytics and growth tools</li>
-              </ul>
-              <div className="globemart-entry-trust-row" aria-label="Seller trust indicators">
-                <span>Secure payouts</span>
-                <span>Guided onboarding</span>
-                <span>Growth insights</span>
-              </div>
-              <button type="button" className="globemart-entry-cta globemart-entry-cta-seller" onClick={openSellerFlow}>
-                Continue as Seller ->
-              </button>
-              {sellerRegistration?.registeredAt ? (
-                <p className="globemart-entry-note">
-                  Seller onboarding completed on {new Date(sellerRegistration.registeredAt).toLocaleDateString("en-IN")} ({sellerRegistration.sellerStatus}).
-                </p>
-              ) : !isNativeSeller ? (
-                <p className="globemart-entry-note">
-                  New seller? You will be guided through seller registration after choosing Seller.
-                </p>
-              ) : null}
-            </article>
-          </div>
-          <div className="globemart-entry-stats" aria-label="Marketplace quick stats">
-            {GLOBEMART_QUICK_STATS.map((item) => (
-              <article key={item.label} className="globemart-entry-stat">
-                <strong>{item.value}</strong>
-                <span>{item.label}</span>
-              </article>
             ))}
           </div>
-          <section className="globemart-entry-why" aria-label="Why choose GlobeMart">
-            <h3>Why choose GlobeMart?</h3>
-            <div className="globemart-entry-why-grid">
-              {GLOBEMART_VALUE_PILLARS.map((pillar) => (
-                <article key={pillar.id} className="globemart-entry-why-card">
-                  <strong>{pillar.title}</strong>
-                  <p>{pillar.description}</p>
-                </article>
+
+          <div className="globemart-home-chips" aria-label="Top categories">
+            {topCategories.map((category) => (
+              <button key={category} type="button" className="globemart-home-chip">
+                {category}
+              </button>
+            ))}
+          </div>
+
+          <article className="globemart-home-hero">
+            <div>
+              <span className="globemart-home-hero-kicker">Seasonal offer</span>
+              <h3>Flash deals on local favorites</h3>
+              <p>Shop nearby stores. Short. Fast. Clear.</p>
+              <button type="button" className="btn btn-primary" onClick={openBuyerPage}>
+                Start shopping
+              </button>
+            </div>
+          </article>
+
+          <div className="globemart-home-badges" aria-label="GlobeMart highlights">
+            <span>⭐ 5000+ Users</span>
+            <span>🚚 Fast Delivery</span>
+            <span>🛡 Secure Checkout</span>
+            <span>🌐 Malayalam</span>
+          </div>
+
+          <section className="globemart-home-row" aria-label="Trending products">
+            <div className="globemart-home-row-header">
+              <h3>Trending deals</h3>
+              <button type="button" className="globemart-home-link">See all</button>
+            </div>
+            <div className="globemart-home-scroll">
+              {TRENDING_ITEMS.map((item) => (
+                <div key={item} className="globemart-home-pill-card">
+                  <strong>{item}</strong>
+                  <span>Best prices nearby</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="globemart-home-row" aria-label="Nearby stores">
+            <div className="globemart-home-row-header">
+              <h3>Nearby stores</h3>
+              <button type="button" className="globemart-home-link">Explore</button>
+            </div>
+            <div className="globemart-home-scroll">
+              {NEARBY_STORES.map((store) => (
+                <div key={store} className="globemart-home-store-card">
+                  <strong>{store}</strong>
+                  <span>2 km away</span>
+                </div>
               ))}
             </div>
           </section>

@@ -8,15 +8,15 @@ import { useAstrologyProfile } from "./hooks/useAstrologyProfile";
 import "../../styles/Astrology.css";
 
 const FEATURE_TABS = [
-  { key: "today", label: "Daily Horoscope", labelMl: "ദൈനംദിന ഫലം" },
-  { key: "kundli", label: "Birth Chart", labelMl: "ജനന ചാർട്ട്" },
-  { key: "career", label: "Career", labelMl: "തൊഴിൽ" },
-  { key: "finance", label: "Finance", labelMl: "ധനം" },
-  { key: "match", label: "Marriage", labelMl: "വിവാഹം" },
-  { key: "remedies", label: "Remedies", labelMl: "പരിഹാരങ്ങൾ" },
-  { key: "panchangam", label: "Panchangam", labelMl: "പഞ്ചാംഗം" },
-  { key: "ai", label: "AI Astrology", labelMl: "എഐ ജ്യോതിഷം" },
-  { key: "saved", label: "Saved Reports", labelMl: "സേവ് റിപ്പോർട്ടുകൾ" },
+  { key: "today", label: "Daily Horoscope", labelMl: "à´¦àµˆà´¨à´‚à´¦à´¿à´¨ à´«à´²à´‚" },
+  { key: "kundli", label: "Birth Chart", labelMl: "à´œà´¨à´¨ à´šà´¾àµ¼à´Ÿàµà´Ÿàµ" },
+  { key: "career", label: "Career", labelMl: "à´¤àµŠà´´à´¿àµ½" },
+  { key: "finance", label: "Finance", labelMl: "à´§à´¨à´‚" },
+  { key: "match", label: "Marriage", labelMl: "à´µà´¿à´µà´¾à´¹à´‚" },
+  { key: "remedies", label: "Remedies", labelMl: "à´ªà´°à´¿à´¹à´¾à´°à´™àµà´™àµ¾" },
+  { key: "panchangam", label: "Panchangam", labelMl: "à´ªà´žàµà´šà´¾à´‚à´—à´‚" },
+  { key: "ai", label: "AI Astrology", labelMl: "à´Žà´ à´œàµà´¯àµ‹à´¤à´¿à´·à´‚" },
+  { key: "saved", label: "Saved Reports", labelMl: "à´¸àµ‡à´µàµ à´±à´¿à´ªàµà´ªàµ‹àµ¼à´Ÿàµà´Ÿàµà´•àµ¾" },
 ];
 
 const MOBILE_NAV_ITEMS = [
@@ -28,12 +28,38 @@ const MOBILE_NAV_ITEMS = [
 ];
 
 const GENDER_OPTIONS = [
-  { value: "", label: "Select gender", labelMl: "ലിംഗം തിരഞ്ഞെടുക്കുക" },
-  { value: "male", label: "Male", labelMl: "പുരുഷൻ" },
-  { value: "female", label: "Female", labelMl: "സ്ത്രീ" },
-  { value: "other", label: "Other", labelMl: "മറ്റുള്ളവർ" },
+  { value: "", label: "Select gender", labelMl: "à´²à´¿à´‚à´—à´‚ à´¤à´¿à´°à´žàµà´žàµ†à´Ÿàµà´•àµà´•àµà´•" },
+  { value: "male", label: "Male", labelMl: "à´ªàµà´°àµà´·àµ»" },
+  { value: "female", label: "Female", labelMl: "à´¸àµà´¤àµà´°àµ€" },
+  { value: "other", label: "Other", labelMl: "à´®à´±àµà´±àµà´³àµà´³à´µàµ¼" },
 ];
 
+const DEFAULT_BIRTH_TIME_ZONE = "Asia/Kolkata";
+
+const BIRTH_TIMEZONE_OPTIONS = [
+  { value: "Asia/Kolkata", label: "India (IST) - Asia/Kolkata" },
+  { value: "Asia/Dubai", label: "UAE - Asia/Dubai" },
+  { value: "Asia/Singapore", label: "Singapore - Asia/Singapore" },
+  { value: "Europe/London", label: "UK - Europe/London" },
+  { value: "America/New_York", label: "US Eastern - America/New_York" },
+  { value: "America/Chicago", label: "US Central - America/Chicago" },
+  { value: "America/Denver", label: "US Mountain - America/Denver" },
+  { value: "America/Los_Angeles", label: "US Pacific - America/Los_Angeles" },
+];
+
+const BIRTH_LOCATION_OPTIONS = [
+  { label: "Kollam, Kerala, India", timeZone: "Asia/Kolkata" },
+  { label: "Thiruvananthapuram, Kerala, India", timeZone: "Asia/Kolkata" },
+  { label: "Kochi, Kerala, India", timeZone: "Asia/Kolkata" },
+  { label: "Kozhikode, Kerala, India", timeZone: "Asia/Kolkata" },
+  { label: "Thrissur, Kerala, India", timeZone: "Asia/Kolkata" },
+  { label: "Bengaluru, Karnataka, India", timeZone: "Asia/Kolkata" },
+  { label: "Chennai, Tamil Nadu, India", timeZone: "Asia/Kolkata" },
+  { label: "Dubai, UAE", timeZone: "Asia/Dubai" },
+  { label: "Singapore", timeZone: "Asia/Singapore" },
+  { label: "London, UK", timeZone: "Europe/London" },
+  { label: "New York, USA", timeZone: "America/New_York" },
+];
 const getNakshatraFromSign = (sign) =>
   ({
     aries: "Ashwini",
@@ -65,6 +91,22 @@ const getRashiFromSign = (sign) =>
     aquarius: "Kumbha",
     pisces: "Meena",
   }[sign] || "Mesha");
+
+const getSignFromRashi = (rashi = "") =>
+  ({
+    mesha: "aries",
+    vrishabha: "taurus",
+    mithuna: "gemini",
+    karka: "cancer",
+    simha: "leo",
+    kanya: "virgo",
+    tula: "libra",
+    vrischika: "scorpio",
+    dhanu: "sagittarius",
+    makara: "capricorn",
+    kumbha: "aquarius",
+    meena: "pisces",
+  }[String(rashi || "").trim().toLowerCase()] || "");
 
 const getLagnaFromTime = (time) => {
   if (!time) return "Mesha";
@@ -107,16 +149,101 @@ const NAKSHATRA_NAMES = [
   "Revati",
 ];
 
+const RASHI_NAMES = [
+  "Mesha",
+  "Vrishabha",
+  "Mithuna",
+  "Karka",
+  "Simha",
+  "Kanya",
+  "Tula",
+  "Vrischika",
+  "Dhanu",
+  "Makara",
+  "Kumbha",
+  "Meena",
+];
+
 const normalizeAngle = (degrees) => ((degrees % 360) + 360) % 360;
 const toRadians = (degrees) => (degrees * Math.PI) / 180;
 const sinDeg = (degrees) => Math.sin(toRadians(degrees));
+const normalizeTimeZoneValue = (value) => String(value || "").trim() || DEFAULT_BIRTH_TIME_ZONE;
+const parseUtcOffsetMinutes = (value) => {
+  const match = String(value || "")
+    .trim()
+    .match(/^([+-])(\d{2}):?(\d{2})$/);
+  if (!match) return null;
+  const sign = match[1] === "-" ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
+  if (![hours, minutes].every(Number.isFinite) || hours > 14 || minutes > 59) {
+    return null;
+  }
+  return sign * (hours * 60 + minutes);
+};
 
-const getJulianDayFromIst = (dateString, timeString) => {
+const isValidIanaTimeZone = (timeZone) => {
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+const getTimeZoneOffsetMinutes = (utcDate, timeZone) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(utcDate);
+  const partAsNumber = (type) => Number(parts.find((entry) => entry.type === type)?.value || 0);
+  const year = partAsNumber("year");
+  const month = partAsNumber("month");
+  const day = partAsNumber("day");
+  let hour = partAsNumber("hour");
+  const minute = partAsNumber("minute");
+  const second = partAsNumber("second");
+  if (hour === 24) {
+    hour = 0;
+  }
+  const asUtcMillis = Date.UTC(year, month - 1, day, hour, minute, second);
+  return (asUtcMillis - utcDate.getTime()) / 60000;
+};
+
+const getUtcMillisFromLocalBirthDetails = (dateString, timeString, timeZone) => {
   if (!dateString) return null;
   const [year, month, day] = String(dateString).split("-").map(Number);
   if (![year, month, day].every(Number.isFinite)) return null;
   const [hour = 0, minute = 0] = String(timeString || "00:00").split(":").map(Number);
-  const utcMs = Date.UTC(year, month - 1, day, hour, minute) - 5.5 * 60 * 60000;
+  if (![hour, minute].every(Number.isFinite)) return null;
+  const normalizedTimeZone = normalizeTimeZoneValue(timeZone);
+  const offsetMinutes = parseUtcOffsetMinutes(normalizedTimeZone);
+  if (offsetMinutes !== null) {
+    return Date.UTC(year, month - 1, day, hour, minute) - offsetMinutes * 60000;
+  }
+  const safeTimeZone = isValidIanaTimeZone(normalizedTimeZone)
+    ? normalizedTimeZone
+    : DEFAULT_BIRTH_TIME_ZONE;
+  const guessUtcMillis = Date.UTC(year, month - 1, day, hour, minute);
+  const firstOffsetMinutes = getTimeZoneOffsetMinutes(new Date(guessUtcMillis), safeTimeZone);
+  let correctedUtcMillis = guessUtcMillis - firstOffsetMinutes * 60000;
+  const secondOffsetMinutes = getTimeZoneOffsetMinutes(new Date(correctedUtcMillis), safeTimeZone);
+  if (secondOffsetMinutes !== firstOffsetMinutes) {
+    correctedUtcMillis = guessUtcMillis - secondOffsetMinutes * 60000;
+  }
+  return correctedUtcMillis;
+};
+
+const getJulianDayFromBirthDetails = (dateString, timeString, timeZone) => {
+  const utcMs = getUtcMillisFromLocalBirthDetails(dateString, timeString, timeZone);
+  if (!Number.isFinite(utcMs)) return null;
   const date = new Date(utcMs);
   const Y = date.getUTCFullYear();
   const M = date.getUTCMonth() + 1;
@@ -170,12 +297,31 @@ const getMoonEclipticLongitude = (jd) => {
   return normalizeAngle(lon);
 };
 
-const calculateNakshatra = (birthDate, birthTime) => {
-  const jd = getJulianDayFromIst(birthDate, birthTime);
-  if (!jd) return "";
+const getLahiriAyanamsa = (jd) => {
+  const T = (jd - 2451545.0) / 36525.0;
+  const ayanamsaAtJ2000 = 23.853222;
+  const precessionArcSeconds = 5028.796195 * T + 1.1054348 * T * T;
+  return ayanamsaAtJ2000 + precessionArcSeconds / 3600;
+};
+
+const calculateBirthAstroProfile = (birthDate, birthTime, timeZone) => {
+  const jd = getJulianDayFromBirthDetails(birthDate, birthTime, timeZone);
+  if (!jd) {
+    return { nakshatra: "", rashi: "" };
+  }
   const moonLongitude = getMoonEclipticLongitude(jd);
-  const index = Math.floor(moonLongitude / (360 / 27));
-  return NAKSHATRA_NAMES[index] || "";
+  const siderealMoonLongitude = normalizeAngle(moonLongitude - getLahiriAyanamsa(jd));
+  const nakshatraIndex = Math.floor(siderealMoonLongitude / (360 / 27));
+  const rashiIndex = Math.floor(siderealMoonLongitude / 30);
+  return {
+    nakshatra: NAKSHATRA_NAMES[nakshatraIndex] || "",
+    rashi: RASHI_NAMES[rashiIndex] || "",
+  };
+};
+
+const calculateNakshatra = (birthDate, birthTime, timeZone) => {
+  const profile = calculateBirthAstroProfile(birthDate, birthTime, timeZone);
+  return profile.nakshatra;
 };
 
 const detectSignFromBirthDate = (birthDate) => {
@@ -331,9 +477,16 @@ const createProfileDraft = (profile = null) => ({
   birthDate: profile?.birthDate || "",
   birthTime: profile?.birthTime || "",
   birthPlace: profile?.birthPlace || "",
+  birthTimezone: profile?.birthTimezone || DEFAULT_BIRTH_TIME_ZONE,
   nakshatra:
     profile?.nakshatra ||
-    calculateNakshatra(profile?.birthDate, profile?.birthTime) ||
+    calculateNakshatra(profile?.birthDate, profile?.birthTime, profile?.birthTimezone) ||
+    "",
+  rashi:
+    profile?.rashi ||
+    calculateBirthAstroProfile(profile?.birthDate, profile?.birthTime, profile?.birthTimezone).rashi ||
+    "",
+  lagna: profile?.lagna || getLagnaFromTime(profile?.birthTime) ||
     "",
   gender: profile?.gender || "",
   receiveDailyHoroscope: profile?.preferences?.receiveDailyHoroscope !== false,
@@ -356,6 +509,7 @@ const createFamilyProfileDraft = (profile = null) => ({
   birthDate: profile?.birthDate || "",
   birthTime: profile?.birthTime || "",
   birthPlace: profile?.birthPlace || "",
+  birthTimezone: profile?.birthTimezone || DEFAULT_BIRTH_TIME_ZONE,
 });
 
 const getDefaultFamilyProfile = (profile, userName) => ({
@@ -366,6 +520,7 @@ const getDefaultFamilyProfile = (profile, userName) => ({
   birthDate: profile?.birthDate || "",
   birthTime: profile?.birthTime || "",
   birthPlace: profile?.birthPlace || "",
+  birthTimezone: profile?.birthTimezone || DEFAULT_BIRTH_TIME_ZONE,
   nakshatra: profile?.nakshatra || getNakshatraFromSign(profile?.sign || "aries"),
   rashi: profile?.rashi || getRashiFromSign(profile?.sign || "aries"),
   lagna: profile?.lagna || getLagnaFromTime(profile?.birthTime || "06:00"),
@@ -513,6 +668,7 @@ const AstrologyHome = () => {
     signs.find((entry) => entry.sign === selectedSign) ||
     reading ||
     astrologyService.getFallbackSign(selectedSign);
+  const handleProfileDraftChange = profileApi.handleDraftChange;
 
   const heroPrediction = String(
     reading?.horoscope ||
@@ -534,6 +690,19 @@ const AstrologyHome = () => {
   });
 
   const todayEnergyScore = ((getLuckyNumber(selectedSign) + new Date().getDate()) % 10) || 10;
+  const birthAstroPreview = useMemo(
+    () =>
+      calculateBirthAstroProfile(
+        profileApi.profileDraft.birthDate,
+        profileApi.profileDraft.birthTime,
+        profileApi.profileDraft.birthTimezone
+      ),
+    [
+      profileApi.profileDraft.birthDate,
+      profileApi.profileDraft.birthTime,
+      profileApi.profileDraft.birthTimezone,
+    ]
+  );
   const hasRequiredBirthDetails = Boolean(
     profileApi.profileDraft.birthDate &&
       profileApi.profileDraft.birthTime &&
@@ -555,32 +724,73 @@ const AstrologyHome = () => {
   ]);
 
   const handleBirthDateChange = (value) => {
-    profileApi.handleDraftChange("birthDate", value);
+    handleProfileDraftChange("birthDate", value);
     const autoSign = detectSignFromBirthDate(value);
     if (autoSign) {
       setSelectedSign(autoSign);
     }
   };
 
+  const handleBirthPlaceChange = (value) => {
+    handleProfileDraftChange("birthPlace", value);
+    const matched = BIRTH_LOCATION_OPTIONS.find(
+      (item) => item.label.toLowerCase() === String(value || "").trim().toLowerCase()
+    );
+    if (matched?.timeZone) {
+      handleProfileDraftChange("birthTimezone", matched.timeZone);
+    }
+  };
+
+  const handleBirthTimezoneChange = (value) => {
+    handleProfileDraftChange("birthTimezone", normalizeTimeZoneValue(value));
+  };
+
   useEffect(() => {
     if (
       profileApi.profileDraft.birthDate &&
       profileApi.profileDraft.birthTime &&
-      !profileApi.profileDraft.nakshatra
+      (!profileApi.profileDraft.nakshatra || !profileApi.profileDraft.rashi)
     ) {
-      const calculated = calculateNakshatra(
+      const calculatedProfile = calculateBirthAstroProfile(
         profileApi.profileDraft.birthDate,
-        profileApi.profileDraft.birthTime
+        profileApi.profileDraft.birthTime,
+        profileApi.profileDraft.birthTimezone
       );
-      if (calculated) {
-        profileApi.handleDraftChange("nakshatra", calculated);
+      if (!profileApi.profileDraft.nakshatra && calculatedProfile.nakshatra) {
+        handleProfileDraftChange("nakshatra", calculatedProfile.nakshatra);
+      }
+      if (!profileApi.profileDraft.rashi && calculatedProfile.rashi) {
+        handleProfileDraftChange("rashi", calculatedProfile.rashi);
       }
     }
   }, [
     profileApi.profileDraft.birthDate,
     profileApi.profileDraft.birthTime,
+    profileApi.profileDraft.birthTimezone,
     profileApi.profileDraft.nakshatra,
+    profileApi.profileDraft.rashi,
+    handleProfileDraftChange,
   ]);
+
+  useEffect(() => {
+    if (!profileApi.profileDraft.birthTime) {
+      return;
+    }
+    const autoLagna = getLagnaFromTime(profileApi.profileDraft.birthTime);
+    if (autoLagna && autoLagna !== profileApi.profileDraft.lagna) {
+      handleProfileDraftChange("lagna", autoLagna);
+    }
+  }, [profileApi.profileDraft.birthTime, profileApi.profileDraft.lagna, handleProfileDraftChange]);
+
+  useEffect(() => {
+    if (!birthAstroPreview.rashi) {
+      return;
+    }
+    const autoSign = getSignFromRashi(birthAstroPreview.rashi);
+    if (autoSign && autoSign !== selectedSign) {
+      setSelectedSign(autoSign);
+    }
+  }, [birthAstroPreview.rashi, selectedSign]);
 
   const handleQuickSave = async () => {
     if (!ensureSignedIn()) return;
@@ -659,12 +869,12 @@ const AstrologyHome = () => {
               type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder={localize("Search sign or feature...", "രാശി അല്ലെങ്കിൽ ഫീച്ചർ തിരയുക...", language)}
+              placeholder={localize("Search sign or feature...", "à´°à´¾à´¶à´¿ à´…à´²àµà´²àµ†à´™àµà´•à´¿àµ½ à´«àµ€à´šàµà´šàµ¼ à´¤à´¿à´°à´¯àµà´•...", language)}
             />
           </form>
           <div className="astro-top-actions">
             <button type="button" className="astrology-secondary-button" onClick={() => setLanguage((prev) => (prev === "en" ? "ml" : "en"))}>
-              {language === "en" ? "മലയാളം" : "English"}
+              {language === "en" ? "à´®à´²à´¯à´¾à´³à´‚" : "English"}
             </button>
             <button type="button" className="astrology-secondary-button" onClick={() => setActiveSection("profile")}>
               Profile
@@ -688,31 +898,54 @@ const AstrologyHome = () => {
         <article className="astrology-panel astro-hero-card">
           <div className="astro-hero-main">
             <p className="astro-hero-kicker">{selectedSignDetails?.label || "Selected sign"} | {todayDate}</p>
-            <h2>{localize("Today's Horoscope", "ഇന്നത്തെ ജ്യോതിഷ ഫലം", language)}</h2>
+            <h2>{localize("Today's Horoscope", "à´‡à´¨àµà´¨à´¤àµà´¤àµ† à´œàµà´¯àµ‹à´¤à´¿à´· à´«à´²à´‚", language)}</h2>
             <p>{heroPrediction.length > 180 ? `${heroPrediction.slice(0, 180)}...` : heroPrediction}</p>
           </div>
           <div className="astro-first-panel-layout">
             <article className="astro-personal-form-card">
-              <h3>{localize("Get Your Personal Astrology Reading", "നിങ്ങളുടെ വ്യക്തിഗത ജ്യോതിഷ ഫലം ലഭ്യമാക്കൂ", language)}</h3>
+              <h3>{localize("Get Your Personal Astrology Reading", "à´¨à´¿à´™àµà´™à´³àµà´Ÿàµ† à´µàµà´¯à´•àµà´¤à´¿à´—à´¤ à´œàµà´¯àµ‹à´¤à´¿à´· à´«à´²à´‚ à´²à´­àµà´¯à´®à´¾à´•àµà´•àµ‚", language)}</h3>
               <div className="astro-compact-form astro-hero-form">
                 <label className="astrology-field">
-                  <span>{localize("Date of birth", "ജനന തീയതി", language)}</span>
+                  <span>{localize("Date of birth", "à´œà´¨à´¨ à´¤àµ€à´¯à´¤à´¿", language)}</span>
                   <input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => handleBirthDateChange(event.target.value)} />
                 </label>
                 <label className="astrology-field">
-                  <span>{localize("Time of birth", "ജനന സമയം", language)}</span>
+                  <span>{localize("Time of birth", "à´œà´¨à´¨ à´¸à´®à´¯à´‚", language)}</span>
                   <input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} />
                 </label>
                 <label className="astrology-field">
-                  <span>{localize("Place of birth", "ജനന സ്ഥലം", language)}</span>
-                  <input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} />
+                  <span>{localize("Place of birth", "à´œà´¨à´¨ à´¸àµà´¥à´²à´‚", language)}</span>
+                  <input
+                    type="text"
+                    list="astro-birth-place-options"
+                    value={profileApi.profileDraft.birthPlace}
+                    onChange={(event) => handleBirthPlaceChange(event.target.value)}
+                  />
+                  <datalist id="astro-birth-place-options">
+                    {BIRTH_LOCATION_OPTIONS.map((option) => (
+                      <option key={option.label} value={option.label} />
+                    ))}
+                  </datalist>
                 </label>
                 <label className="astrology-field">
-                  <span>{localize("Birth star (Nakshatra)", "ജനന നക്ഷത്രം", language)}</span>
+                  <span>{localize("Birth timezone", "ജനന ടൈംസോൺ", language)}</span>
+                  <select
+                    value={profileApi.profileDraft.birthTimezone || DEFAULT_BIRTH_TIME_ZONE}
+                    onChange={(event) => handleBirthTimezoneChange(event.target.value)}
+                  >
+                    {BIRTH_TIMEZONE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="astrology-field">
+                  <span>{localize("Birth star (Nakshatra)", "à´œà´¨à´¨ à´¨à´•àµà´·à´¤àµà´°à´‚", language)}</span>
                   <input type="text" value={profileApi.profileDraft.nakshatra} onChange={(event) => profileApi.handleDraftChange("nakshatra", event.target.value)} />
                 </label>
                 <label className="astrology-field">
-                  <span>{localize("Gender", "ലിംഗം", language)}</span>
+                  <span>{localize("Gender", "à´²à´¿à´‚à´—à´‚", language)}</span>
                   <select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>
                     {GENDER_OPTIONS.map((option) => (
                       <option key={option.value || "unset"} value={option.value}>
@@ -723,30 +956,30 @@ const AstrologyHome = () => {
                 </label>
               </div>
               <button type="button" className="astrology-save-button" onClick={handleGenerateReport} disabled={profileApi.savingProfile}>
-                {profileApi.savingProfile ? "Generating..." : localize("Generate My Prediction", "എന്റെ ജ്യോതിഷ ഫലം സൃഷ്ടിക്കുക", language)}
+                {profileApi.savingProfile ? "Generating..." : localize("Generate My Prediction", "à´Žà´¨àµà´±àµ† à´œàµà´¯àµ‹à´¤à´¿à´· à´«à´²à´‚ à´¸àµƒà´·àµà´Ÿà´¿à´•àµà´•àµà´•", language)}
               </button>
             </article>
             <article className="astro-personal-preview-card">
-              <h3>{localize("Instant Preview", "തൽക്ഷണ പ്രിവ്യൂ", language)}</h3>
+              <h3>{localize("Instant Preview", "à´¤àµ½à´•àµà´·à´£ à´ªàµà´°à´¿à´µàµà´¯àµ‚", language)}</h3>
               <ul>
-                <li><span>{localize("Rashi", "രാശി", language)}</span><strong>{getRashiFromSign(selectedSign)}</strong></li>
-                <li><span>{localize("Nakshatra", "നക്ഷത്രം", language)}</span><strong>{profileApi.profileDraft.nakshatra || getNakshatraFromSign(selectedSign)}</strong></li>
-                <li><span>{localize("Lucky color", "ഭാഗ്യനിറം", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></li>
-                <li><span>{localize("Lucky number", "ഭാഗ്യസംഖ്യ", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></li>
-                <li><span>{localize("Today energy", "ഇന്നത്തെ ഊർജം", language)}</span><strong>{todayEnergyScore}/10</strong></li>
+                <li><span>{localize("Rashi", "à´°à´¾à´¶à´¿", language)}</span><strong>{profileApi.profileDraft.rashi || birthAstroPreview.rashi || getRashiFromSign(selectedSign)}</strong></li>
+                <li><span>{localize("Nakshatra", "à´¨à´•àµà´·à´¤àµà´°à´‚", language)}</span><strong>{profileApi.profileDraft.nakshatra || birthAstroPreview.nakshatra || getNakshatraFromSign(selectedSign)}</strong></li>
+                <li><span>{localize("Lucky color", "à´­à´¾à´—àµà´¯à´¨à´¿à´±à´‚", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></li>
+                <li><span>{localize("Lucky number", "à´­à´¾à´—àµà´¯à´¸à´‚à´–àµà´¯", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></li>
+                <li><span>{localize("Today energy", "à´‡à´¨àµà´¨à´¤àµà´¤àµ† à´Šàµ¼à´œà´‚", language)}</span><strong>{todayEnergyScore}/10</strong></li>
               </ul>
             </article>
           </div>
           <div className="astro-quick-grid">
-            <article className="astro-quick-card"><span>{localize("Lucky color", "ഭാഗ്യനിറം", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></article>
-            <article className="astro-quick-card"><span>{localize("Lucky number", "ഭാഗ്യസംഖ്യ", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></article>
-            <article className="astro-quick-card"><span>{localize("Best time", "നല്ല സമയം", language)}</span><strong>{getGoodTime(selectedSign)}</strong></article>
-            <article className="astro-quick-card"><span>{localize("Date", "തീയതി", language)}</span><strong>{todayDate}</strong></article>
+            <article className="astro-quick-card"><span>{localize("Lucky color", "à´­à´¾à´—àµà´¯à´¨à´¿à´±à´‚", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></article>
+            <article className="astro-quick-card"><span>{localize("Lucky number", "à´­à´¾à´—àµà´¯à´¸à´‚à´–àµà´¯", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></article>
+            <article className="astro-quick-card"><span>{localize("Best time", "à´¨à´²àµà´² à´¸à´®à´¯à´‚", language)}</span><strong>{getGoodTime(selectedSign)}</strong></article>
+            <article className="astro-quick-card"><span>{localize("Date", "à´¤àµ€à´¯à´¤à´¿", language)}</span><strong>{todayDate}</strong></article>
           </div>
           <div className="astro-hero-actions">
             <button type="button" className="astrology-save-button" onClick={() => { setActiveSection("today"); setShowFullPrediction(true); }}>View Full Prediction</button>
             <button type="button" className="astrology-secondary-button" onClick={() => { setActiveSection("today"); setShowFullPrediction(false); }}>
-              {localize("ഇന്നത്തെ ജ്യോതിഷ ഫലം കാണുക", "ഇന്നത്തെ ജ്യോതിഷ ഫലം കാണുക", language)}
+              {localize("à´‡à´¨àµà´¨à´¤àµà´¤àµ† à´œàµà´¯àµ‹à´¤à´¿à´· à´«à´²à´‚ à´•à´¾à´£àµà´•", "à´‡à´¨àµà´¨à´¤àµà´¤àµ† à´œàµà´¯àµ‹à´¤à´¿à´· à´«à´²à´‚ à´•à´¾à´£àµà´•", language)}
             </button>
           </div>
         </article>
@@ -815,8 +1048,8 @@ const AstrologyHome = () => {
                 </>
               ) : (
                 <article className="astrology-panel astro-result-card astro-span-2">
-                  <h4>{localize("Personal details needed", "വ്യക്തിഗത വിവരങ്ങൾ ആവശ്യമാണ്", language)}</h4>
-                  <p>{localize("Enter DOB, birth time, place, and gender in the first panel to unlock your personalized predictions.", "ആദ്യ പാനലിൽ ജനന തീയതി, സമയം, സ്ഥലം, ലിംഗം നൽകി വ്യക്തിഗത ജ്യോതിഷ ഫലം കാണൂ.", language)}</p>
+                  <h4>{localize("Personal details needed", "à´µàµà´¯à´•àµà´¤à´¿à´—à´¤ à´µà´¿à´µà´°à´™àµà´™àµ¾ à´†à´µà´¶àµà´¯à´®à´¾à´£àµ", language)}</h4>
+                  <p>{localize("Enter DOB, birth time, place, and gender in the first panel to unlock your personalized predictions.", "à´†à´¦àµà´¯ à´ªà´¾à´¨à´²à´¿àµ½ à´œà´¨à´¨ à´¤àµ€à´¯à´¤à´¿, à´¸à´®à´¯à´‚, à´¸àµà´¥à´²à´‚, à´²à´¿à´‚à´—à´‚ à´¨àµ½à´•à´¿ à´µàµà´¯à´•àµà´¤à´¿à´—à´¤ à´œàµà´¯àµ‹à´¤à´¿à´· à´«à´²à´‚ à´•à´¾à´£àµ‚.", language)}</p>
                 </article>
               )}
             </div>
@@ -829,7 +1062,8 @@ const AstrologyHome = () => {
                 <div className="astro-compact-form">
                   <label className="astrology-field"><span>Date of birth</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
                   <label className="astrology-field"><span>Time of birth</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
-                  <label className="astrology-field"><span>Place of birth</span><input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Place of birth</span><input type="text" list="astro-birth-place-options-kundli" value={profileApi.profileDraft.birthPlace} onChange={(event) => handleBirthPlaceChange(event.target.value)} /><datalist id="astro-birth-place-options-kundli">{BIRTH_LOCATION_OPTIONS.map((option) => <option key={option.label} value={option.label} />)}</datalist></label>
+                  <label className="astrology-field"><span>Birth timezone</span><select value={profileApi.profileDraft.birthTimezone || DEFAULT_BIRTH_TIME_ZONE} onChange={(event) => handleBirthTimezoneChange(event.target.value)}>{BIRTH_TIMEZONE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Birth star (Nakshatra)</span><input type="text" placeholder="Leave blank to auto-calculate" value={profileApi.profileDraft.nakshatra} onChange={(event) => profileApi.handleDraftChange("nakshatra", event.target.value)} /></label>
                   <label className="astrology-field"><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Topic / question</span><input type="text" value={question} onChange={(event) => setQuestion(event.target.value)} /></label>
@@ -920,7 +1154,8 @@ const AstrologyHome = () => {
                 <div className="astro-compact-form">
                   <label className="astrology-field"><span>Birth date</span><input type="date" value={profileApi.profileDraft.birthDate} onChange={(event) => profileApi.handleDraftChange("birthDate", event.target.value)} /></label>
                   <label className="astrology-field"><span>Birth time</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
-                  <label className="astrology-field"><span>Birth place</span><input type="text" value={profileApi.profileDraft.birthPlace} onChange={(event) => profileApi.handleDraftChange("birthPlace", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Birth place</span><input type="text" list="astro-birth-place-options-profile" value={profileApi.profileDraft.birthPlace} onChange={(event) => handleBirthPlaceChange(event.target.value)} /><datalist id="astro-birth-place-options-profile">{BIRTH_LOCATION_OPTIONS.map((option) => <option key={option.label} value={option.label} />)}</datalist></label>
+                  <label className="astrology-field"><span>Birth timezone</span><select value={profileApi.profileDraft.birthTimezone || DEFAULT_BIRTH_TIME_ZONE} onChange={(event) => handleBirthTimezoneChange(event.target.value)}>{BIRTH_TIMEZONE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Favorite topics</span><input type="text" value={profileApi.profileDraft.favoriteTopics} onChange={(event) => profileApi.handleDraftChange("favoriteTopics", event.target.value)} /></label>
                 </div>
@@ -981,3 +1216,4 @@ const AstrologyHome = () => {
 };
 
 export default AstrologyHome;
+

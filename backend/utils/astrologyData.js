@@ -243,6 +243,7 @@ const getReadingDateKey = (date = new Date()) => {
 const normalizeAngle = (degrees) => ((degrees % 360) + 360) % 360;
 const toRadians = (degrees) => (degrees * Math.PI) / 180;
 const sinDeg = (degrees) => Math.sin(toRadians(degrees));
+const DEFAULT_BIRTH_TIME_ZONE = 'Asia/Kolkata';
 const parseBirthDate = (value) => {
   if (!value) return null;
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -257,13 +258,145 @@ const parseBirthDate = (value) => {
   return parsed.toISOString().slice(0, 10);
 };
 
-const getJulianDayFromIst = (dateString, timeString) => {
+const NAKSHATRA_NAMES = [
+  'Ashwini',
+  'Bharani',
+  'Krittika',
+  'Rohini',
+  'Mrigashira',
+  'Ardra',
+  'Punarvasu',
+  'Pushya',
+  'Ashlesha',
+  'Magha',
+  'Purva Phalguni',
+  'Uttara Phalguni',
+  'Hasta',
+  'Chitra',
+  'Swati',
+  'Vishakha',
+  'Anuradha',
+  'Jyeshtha',
+  'Mula',
+  'Purva Ashadha',
+  'Uttara Ashadha',
+  'Shravana',
+  'Dhanishta',
+  'Shatabhisha',
+  'Purva Bhadrapada',
+  'Uttara Bhadrapada',
+  'Revati',
+];
+
+const RASHI_NAMES = [
+  'Mesha',
+  'Vrishabha',
+  'Mithuna',
+  'Karka',
+  'Simha',
+  'Kanya',
+  'Tula',
+  'Vrischika',
+  'Dhanu',
+  'Makara',
+  'Kumbha',
+  'Meena',
+];
+
+const normalizeTimeZoneValue = (value) => {
+  const text = String(value || '').trim();
+  if (!text) {
+    return DEFAULT_BIRTH_TIME_ZONE;
+  }
+  return text;
+};
+
+const parseUtcOffsetMinutes = (value) => {
+  const match = String(value || '')
+    .trim()
+    .match(/^([+-])(\d{2}):?(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3]);
+  if (
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes) ||
+    hours > 14 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+  return sign * (hours * 60 + minutes);
+};
+
+const isValidIanaTimeZone = (timeZone) => {
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+const getTimeZoneOffsetMinutes = (utcDate, timeZone) => {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(utcDate);
+  const findPart = (type) => Number(parts.find((entry) => entry.type === type)?.value || 0);
+  const year = findPart('year');
+  const month = findPart('month');
+  const day = findPart('day');
+  let hour = findPart('hour');
+  const minute = findPart('minute');
+  const second = findPart('second');
+  if (hour === 24) {
+    hour = 0;
+  }
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  return (asUtc - utcDate.getTime()) / 60000;
+};
+
+const getUtcMillisFromLocalDateTime = (dateString, timeString, timeZone) => {
   const parsedDateString = parseBirthDate(dateString);
   if (!parsedDateString) return null;
   const [year, month, day] = parsedDateString.split('-').map(Number);
   if (![year, month, day].every(Number.isFinite)) return null;
   const [hour = 0, minute = 0] = String(timeString || '00:00').split(':').map(Number);
-  const utcMs = Date.UTC(year, month - 1, day, hour, minute) - 5.5 * 60 * 60000;
+  if (![hour, minute].every(Number.isFinite)) return null;
+  const normalizedTimeZone = normalizeTimeZoneValue(timeZone);
+  const offsetMinutes = parseUtcOffsetMinutes(normalizedTimeZone);
+
+  if (offsetMinutes !== null) {
+    return Date.UTC(year, month - 1, day, hour, minute) - offsetMinutes * 60000;
+  }
+
+  const safeTimeZone = isValidIanaTimeZone(normalizedTimeZone)
+    ? normalizedTimeZone
+    : DEFAULT_BIRTH_TIME_ZONE;
+  const localUtcGuess = Date.UTC(year, month - 1, day, hour, minute);
+  const offsetGuess = getTimeZoneOffsetMinutes(new Date(localUtcGuess), safeTimeZone);
+  let correctedUtc = localUtcGuess - offsetGuess * 60000;
+  const correctedOffset = getTimeZoneOffsetMinutes(new Date(correctedUtc), safeTimeZone);
+  if (correctedOffset !== offsetGuess) {
+    correctedUtc = localUtcGuess - correctedOffset * 60000;
+  }
+  return correctedUtc;
+};
+
+const getJulianDayFromBirthDetails = (dateString, timeString, timeZone) => {
+  const utcMs = getUtcMillisFromLocalDateTime(dateString, timeString, timeZone);
+  if (!Number.isFinite(utcMs)) return null;
   const date = new Date(utcMs);
   const Y = date.getUTCFullYear();
   const M = date.getUTCMonth() + 1;
@@ -346,41 +479,34 @@ const getMoonEclipticLongitude = (jd) => {
   return normalizeAngle(lon);
 };
 
-const calculateNakshatra = (birthDate, birthTime) => {
-  const jd = getJulianDayFromIst(birthDate, birthTime);
+const getLahiriAyanamsa = (jd) => {
+  const T = (jd - 2451545.0) / 36525.0;
+  const ayanamsaAtJ2000 = 23.853222;
+  const precessionArcSeconds = 5028.796195 * T + 1.1054348 * T * T;
+  return ayanamsaAtJ2000 + precessionArcSeconds / 3600;
+};
+
+const calculateBirthAstroProfile = (birthDate, birthTime, options = {}) => {
+  const timeZone = normalizeTimeZoneValue(options?.timeZone || options?.birthTimeZone);
+  const jd = getJulianDayFromBirthDetails(birthDate, birthTime, timeZone);
   if (!jd) return undefined;
   const moonLongitude = getMoonEclipticLongitude(jd);
-  const index = Math.floor(moonLongitude / (360 / 27));
-  const names = [
-    'Ashwini',
-    'Bharani',
-    'Krittika',
-    'Rohini',
-    'Mrigashira',
-    'Ardra',
-    'Punarvasu',
-    'Pushya',
-    'Ashlesha',
-    'Magha',
-    'Purva Phalguni',
-    'Uttara Phalguni',
-    'Hasta',
-    'Chitra',
-    'Swati',
-    'Vishakha',
-    'Anuradha',
-    'Jyeshtha',
-    'Mula',
-    'Purva Ashadha',
-    'Uttara Ashadha',
-    'Shravana',
-    'Dhanishta',
-    'Shatabhisha',
-    'Purva Bhadrapada',
-    'Uttara Bhadrapada',
-    'Revati',
-  ];
-  return names[index] || undefined;
+  const siderealMoonLongitude = normalizeAngle(moonLongitude - getLahiriAyanamsa(jd));
+  const nakshatraIndex = Math.floor(siderealMoonLongitude / (360 / 27));
+  const rashiIndex = Math.floor(siderealMoonLongitude / 30);
+
+  return {
+    nakshatra: NAKSHATRA_NAMES[nakshatraIndex] || undefined,
+    rashi: RASHI_NAMES[rashiIndex] || undefined,
+    siderealMoonLongitude,
+    moonLongitude,
+    ayanamsa: getLahiriAyanamsa(jd),
+  };
+};
+
+const calculateNakshatra = (birthDate, birthTime, options = {}) => {
+  const profile = calculateBirthAstroProfile(birthDate, birthTime, options);
+  return profile?.nakshatra;
 };
 
 const pickMessage = (messages, seed, offset = 0) => {
@@ -422,4 +548,5 @@ module.exports = {
   getReadingDateKey,
   getDailyHoroscope,
   calculateNakshatra,
+  calculateBirthAstroProfile,
 };

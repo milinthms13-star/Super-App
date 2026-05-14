@@ -152,7 +152,10 @@ export const useAstrologyProfile = ({
         birthDate: profileDraft.birthDate,
         birthTime: profileDraft.birthTime,
         birthPlace: profileDraft.birthPlace,
+        birthTimezone: profileDraft.birthTimezone,
         nakshatra: profileDraft.nakshatra,
+        rashi: profileDraft.rashi,
+        lagna: profileDraft.lagna,
         gender: profileDraft.gender,
         preferences: {
           receiveDailyHoroscope: profileDraft.receiveDailyHoroscope,
@@ -200,6 +203,7 @@ export const useAstrologyProfile = ({
       birthDate: familyDraft.birthDate,
       birthTime: familyDraft.birthTime,
       birthPlace: familyDraft.birthPlace,
+      birthTimezone: familyDraft.birthTimezone || "Asia/Kolkata",
       nakshatra: getNakshatraFromSign(familyDraft.sign),
       rashi: getRashiFromSign(familyDraft.sign),
       lagna: getLagnaFromTime(familyDraft.birthTime),

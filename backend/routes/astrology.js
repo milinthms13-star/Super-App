@@ -17,6 +17,7 @@ const {
   normalizeSign,
   zodiacSigns,
   calculateNakshatra,
+  calculateBirthAstroProfile,
 } = require('../utils/astrologyData');
 
 const router = express.Router();
@@ -65,6 +66,24 @@ const parseOptionalDate = (value) => {
 
   const parsedDate = new Date(value);
   return Number.isNaN(parsedDate.getTime()) ? undefined : parsedDate;
+};
+
+const DEFAULT_BIRTH_TIME_ZONE = 'Asia/Kolkata';
+
+const normalizeBirthTimeZone = (value, fallback = DEFAULT_BIRTH_TIME_ZONE) => {
+  const text = sanitizeText(value, 64);
+  if (!text) {
+    return fallback;
+  }
+  if (/^[+-]\d{2}:?\d{2}$/.test(text)) {
+    return text;
+  }
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: text }).format(new Date());
+    return text;
+  } catch (error) {
+    return fallback;
+  }
 };
 
 const normalizeFavoriteTopics = (topics) =>
@@ -137,6 +156,7 @@ const normalizeFamilyProfiles = (profiles = []) =>
         birthDate: parseOptionalDate(profile?.birthDate),
         birthTime: sanitizeText(profile?.birthTime, 16),
         birthPlace: sanitizeText(profile?.birthPlace, 120),
+        birthTimezone: normalizeBirthTimeZone(profile?.birthTimezone),
         nakshatra: sanitizeText(profile?.nakshatra, 40),
         rashi: sanitizeText(profile?.rashi, 40),
         lagna: sanitizeText(profile?.lagna, 40),
@@ -203,6 +223,7 @@ const getKundliFallbackProfile = (profile = {}, defaultSign = 'aries') => {
     label: signDetails.label,
     birthTime: sanitizeText(profile?.birthTime || '', 16),
     birthPlace: sanitizeText(profile?.birthPlace || '', 120),
+    birthTimezone: normalizeBirthTimeZone(profile?.birthTimezone),
     lagna: sanitizeText(profile?.lagna || 'Mesha', 40),
     nakshatra: sanitizeText(profile?.nakshatra || 'Ashwini', 40),
   };
@@ -845,15 +866,41 @@ router.put('/profile', authenticate, async (req, res) => {
       req.body?.birthTime !== undefined
         ? req.body.birthTime
         : existingProfile?.birthTime;
+    const birthTimezoneValue =
+      req.body?.birthTimezone !== undefined
+        ? req.body.birthTimezone
+        : existingProfile?.birthTimezone;
+    const normalizedBirthTimezone = normalizeBirthTimeZone(
+      birthTimezoneValue,
+      normalizeBirthTimeZone(existingProfile?.birthTimezone, DEFAULT_BIRTH_TIME_ZONE)
+    );
     const explicitNakshatra =
       req.body?.nakshatra !== undefined
         ? sanitizeText(req.body.nakshatra, 40)
         : undefined;
+    const explicitRashi =
+      req.body?.rashi !== undefined
+        ? sanitizeText(req.body.rashi, 40)
+        : undefined;
+    const explicitLagna =
+      req.body?.lagna !== undefined
+        ? sanitizeText(req.body.lagna, 40)
+        : undefined;
+    const autoBirthProfile =
+      birthDateValue && birthTimeValue
+        ? calculateBirthAstroProfile(birthDateValue, birthTimeValue, {
+            timeZone: normalizedBirthTimezone,
+          })
+        : undefined;
     const calculatedNakshatra =
       explicitNakshatra ||
+      autoBirthProfile?.nakshatra ||
       (birthDateValue && birthTimeValue
-        ? calculateNakshatra(birthDateValue, birthTimeValue)
+        ? calculateNakshatra(birthDateValue, birthTimeValue, {
+            timeZone: normalizedBirthTimezone,
+          })
         : undefined);
+    const calculatedRashi = explicitRashi || autoBirthProfile?.rashi;
 
     const nextProfile = {
       userId,
@@ -867,10 +914,13 @@ router.put('/profile', authenticate, async (req, res) => {
         req.body?.birthPlace !== undefined
           ? sanitizeText(req.body.birthPlace, 120)
           : sanitizeText(existingProfile?.birthPlace, 120),
+      birthTimezone: normalizedBirthTimezone,
       nakshatra:
         explicitNakshatra !== undefined
           ? explicitNakshatra
           : sanitizeText(calculatedNakshatra || existingProfile?.nakshatra || 'Ashwini', 40),
+      rashi: sanitizeText(calculatedRashi || existingProfile?.rashi || '', 40),
+      lagna: sanitizeText(explicitLagna || existingProfile?.lagna || '', 40),
       gender:
         req.body?.gender !== undefined
           ? sanitizeText(req.body.gender, 30).toLowerCase()
