@@ -515,7 +515,7 @@ const BusinessServices = () => {
 
       if (response.data.success) {
         // Refresh orders to show updated consultant info
-        await loadServiceOrders();
+        await refreshOrders();
         alert(`Consultant ${consultantName} assigned successfully!`);
       } else {
         alert(response.data.message || "Failed to assign consultant.");
