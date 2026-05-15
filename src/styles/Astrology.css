@@ -524,6 +524,87 @@
   gap: 6px;
 }
 
+.astro-yearly-card,
+.astro-total-card {
+  background:
+    radial-gradient(circle at 95% 0%, rgba(200, 155, 60, 0.2), transparent 34%),
+    #fff8ea;
+}
+
+.astro-yearly-pillars {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.astro-yearly-pillar {
+  border: 1px solid var(--astro-border);
+  border-radius: 12px;
+  background: #fffdf7;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.astro-yearly-pillar p {
+  margin: 0;
+}
+
+.astro-total-guiding-principle {
+  display: block;
+  margin-top: 10px;
+  color: #0e4d41;
+}
+
+.astro-square-chart {
+  margin-top: 8px;
+  border: 1px solid var(--astro-border);
+  border-radius: 14px;
+  background: #fffdf7;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.astro-square-cell {
+  min-height: 64px;
+  border: 1px solid rgba(19, 53, 52, 0.16);
+  border-radius: 8px;
+  padding: 6px;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.astro-square-cell span {
+  font-size: 0.72rem;
+  color: var(--astro-muted);
+}
+
+.astro-square-cell strong {
+  font-size: 0.79rem;
+  line-height: 1.35;
+}
+
+.astro-square-center {
+  grid-column: 2 / span 2;
+  grid-row: 2 / span 2;
+  border: 1px dashed rgba(19, 53, 52, 0.28);
+  border-radius: 10px;
+  padding: 8px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: rgba(200, 155, 60, 0.1);
+}
+
+.astro-square-center span {
+  font-size: 0.78rem;
+  color: var(--astro-muted);
+}
+
 .astrology-card {
   --astrology-accent: var(--astro-gold);
   grid-column: span 2;
@@ -811,7 +892,8 @@
 
   .astro-future-metric-grid,
   .astro-outcome-grid,
-  .astro-timeline-grid {
+  .astro-timeline-grid,
+  .astro-yearly-pillars {
     grid-template-columns: 1fr;
   }
 

@@ -871,30 +871,7 @@ const RealEstate = () => {
 
   return (
     <div className="realestate-shell">
-      {isBuyerMode ? (
-        <section className="realestate-buyer-quickbar">
-          <div className="realestate-buyer-quickbar-main">
-            <h1>Find your next home in fewer clicks</h1>
-            <p>Search, filter, and contact sellers directly from listings.</p>
-            <div className="realestate-buyer-quickbar-actions">
-                <button type="button" className="realestate-primary-button" onClick={scrollToBuyerListings}>
-                  Explore listings
-                </button>
-                <button type="button" className="realestate-secondary-button" onClick={handleOpenSellerWorkspace}>
-                  Post an ad
-              </button>
-            </div>
-          </div>
-          <div className="realestate-buyer-quickbar-stats">
-            {buyerQuickStats.map((stat) => (
-              <article key={stat.label} className="realestate-buyer-stat-pill">
-                <strong>{stat.value}</strong>
-                <span>{stat.label}</span>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : !sellerWorkspaceMode ? (
+      {!sellerWorkspaceMode ? (
         <>
           <section className="realestate-hero">
             <div className="realestate-hero-copy">
