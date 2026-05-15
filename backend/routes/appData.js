@@ -48,6 +48,7 @@ const EducationEnrollment = require('../models/EducationEnrollment');
 const EducationScholarshipApplication = require('../models/EducationScholarshipApplication');
 const EducationCommunityMembership = require('../models/EducationCommunityMembership');
 const EducationTuitionRequest = require('../models/EducationTuitionRequest');
+const PlatformSetting = require('../models/PlatformSetting');
 const CheckoutService = require('../services/CheckoutService');
 const devAuthStore = require('../utils/devAuthStore');
 const { deleteGridFSFile, uploadBufferToGridFS } = require('../utils/gridfs');
@@ -157,6 +158,50 @@ const normalizeEnabledModules = (moduleIds = []) => {
         .filter(Boolean)
     )
   );
+};
+
+const PLATFORM_SETTINGS_KEY = 'global';
+
+const getPersistedEnabledModules = async (fallbackModules = []) => {
+  const normalizedFallbackModules = normalizeEnabledModules(fallbackModules);
+
+  try {
+    const platformSettings = await PlatformSetting.findOne({ key: PLATFORM_SETTINGS_KEY }).lean();
+    if (!platformSettings || !Array.isArray(platformSettings.enabledModules)) {
+      return normalizedFallbackModules;
+    }
+
+    return normalizeEnabledModules(platformSettings.enabledModules);
+  } catch (error) {
+    return normalizedFallbackModules;
+  }
+};
+
+const persistEnabledModules = async (moduleIds = []) => {
+  const normalizedModules = normalizeEnabledModules(moduleIds);
+
+  try {
+    await PlatformSetting.findOneAndUpdate(
+      { key: PLATFORM_SETTINGS_KEY },
+      {
+        $set: {
+          enabledModules: normalizedModules,
+        },
+        $setOnInsert: {
+          key: PLATFORM_SETTINGS_KEY,
+        },
+      },
+      {
+        upsert: true,
+      }
+    );
+  } catch (error) {
+    logger.warn('Failed to persist enabled modules in MongoDB. Falling back to file data.', {
+      error: error.message,
+    });
+  }
+
+  return normalizedModules;
 };
 
 // Fetch registered accounts from MongoDB instead of app-data.json
@@ -1609,6 +1654,7 @@ const sendRegistrationReviewEmail = async ({ to, applicantName, businessName, st
 
 router.get('/public', async (req, res) => {
   const appData = await devAppDataStore.readAppData();
+  const enabledModules = await getPersistedEnabledModules(appData.enabledModules);
   const classifiedsModuleData = await listClassifiedModuleData();
   const realestateProperties = await listRealEstateProperties();
   const restaurants = await listRestaurants();
@@ -1619,7 +1665,7 @@ router.get('/public', async (req, res) => {
     data: {
       businessCategories: appData.businessCategories,
       globeMartCategories: normalizeGlobeMartCategories(appData.globeMartCategories),
-      enabledModules: normalizeEnabledModules(appData.enabledModules),
+      enabledModules,
       registeredAccounts: registeredAccounts,
       moduleData: {
         ...appData.moduleData,
@@ -2605,6 +2651,7 @@ router.post('/classifieds/listings/:listingId/view', authenticate, async (req, r
 
 router.get('/admin', authenticate, adminOnly, async (req, res) => {
   const appData = await devAppDataStore.readAppData();
+  const enabledModules = await getPersistedEnabledModules(appData.enabledModules);
   const classifiedsModuleData = await listClassifiedModuleData({}, {
     includeExpired: true,
     includeRejected: true,
@@ -2618,7 +2665,7 @@ router.get('/admin', authenticate, adminOnly, async (req, res) => {
     data: {
       businessCategories: appData.businessCategories,
       globeMartCategories: normalizeGlobeMartCategories(appData.globeMartCategories),
-      enabledModules: normalizeEnabledModules(appData.enabledModules),
+      enabledModules,
       registrationApplications: appData.registrationApplications,
       registeredAccounts: registeredAccounts,
       moduleData: {
@@ -2962,20 +3009,17 @@ router.patch('/registration-applications/:applicationId/review', authenticate, a
 router.patch('/enabled-modules/:moduleId', authenticate, adminOnly, async (req, res) => {
   // Normalize the module ID to match frontend normalization
   const normalizedModuleId = normalizeModuleId(req.params.moduleId);
+  const currentData = await devAppDataStore.readAppData();
+  const normalizedExistingModules = await getPersistedEnabledModules(currentData.enabledModules);
+  const enabledModules = normalizedExistingModules.includes(normalizedModuleId)
+    ? normalizedExistingModules.filter((id) => id !== normalizedModuleId)
+    : [...normalizedExistingModules, normalizedModuleId];
 
-  const nextData = await devAppDataStore.updateAppData(async (currentData) => {
-    // Normalize existing modules to handle legacy data with denormalized IDs
-    const normalizedExistingModules = normalizeEnabledModules(currentData.enabledModules);
-    
-    const enabledModules = normalizedExistingModules.includes(normalizedModuleId)
-      ? normalizedExistingModules.filter((id) => id !== normalizedModuleId)
-      : [...normalizedExistingModules, normalizedModuleId];
-
-    return {
-      ...currentData,
-      enabledModules,
-    };
-  });
+  const normalizedEnabledModules = await persistEnabledModules(enabledModules);
+  const nextData = await devAppDataStore.updateAppData(async (latestData) => ({
+    ...latestData,
+    enabledModules: normalizedEnabledModules,
+  }));
 
   return res.json({
     success: true,

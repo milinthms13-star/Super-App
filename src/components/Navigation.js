@@ -417,6 +417,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                 </div>
               )}
             </div>
+            </div>
           </div>
         </div>
       </nav>
