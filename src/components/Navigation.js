@@ -138,6 +138,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "sosalert", label: t("modules.sosalert", "SOS Safety Center"), icon: "🆘" },
     { id: "astrology", label: t("modules.astrology", "AstroNila"), icon: "✨" },
     { id: "support", label: t("modules.support", "Support"), icon: "🛟", sellerVisible: true },
+    { id: "voicefriend", label: t("modules.voicefriend", "AI Voice Friend"), icon: "🎙️" },
   ];
   const isModuleVisible = (moduleId) =>
     ALWAYS_VISIBLE_MODULE_IDS.has(moduleId) || enabledModuleIds.has(moduleId);

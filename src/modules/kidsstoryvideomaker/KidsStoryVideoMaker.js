@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { buildApiUrl } from "../../utils/api";
 import "./KidsStoryVideoMaker.css";
 
 const LANGUAGE_OPTIONS = [
@@ -108,7 +109,11 @@ const hasUnsafeThemes = (value = "") => UNSAFE_THEME_PATTERNS.some((pattern) => 
 const parseApiResponse = async (response) => {
   const text = await response.text();
   if (!text) {
-    throw new Error(`Server returned empty response (${response.status})`);
+    const emptyError = new Error(
+      `Video service returned empty response (${response.status}). Please verify backend API availability.`
+    );
+    emptyError.status = response.status;
+    throw emptyError;
   }
 
   let payload;
@@ -119,10 +124,93 @@ const parseApiResponse = async (response) => {
   }
 
   if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || `Request failed (${response.status}).`);
+    const requestError = new Error(payload?.error || payload?.message || `Request failed (${response.status}).`);
+    requestError.status = response.status;
+    throw requestError;
   }
 
   return payload;
+};
+
+const FALLBACK_SCENE_TITLES = ["Beginning", "Adventure", "Challenge", "Magic", "Celebration"];
+const FALLBACK_CAMERA_ACTIONS = ["soft zoom", "gentle pan", "wide reveal", "close-up", "dolly in"];
+
+const createClientFallbackProject = ({
+  storyTitle,
+  storyPrompt,
+  languageId,
+  styleId,
+  voiceType,
+  videoSizeId,
+  storyMode,
+  safeMode,
+  ageFilter,
+  storySource,
+}) => {
+  const rawLines = sanitizeText(storyPrompt)
+    .split(/[\.\?\!]+/)
+    .map((line) => sanitizeText(line))
+    .filter(Boolean);
+
+  const lines = rawLines.length ? rawLines.slice(0, 5) : ["A child discovers a magical surprise and learns teamwork."];
+
+  const scenes = lines.map((line, index) => ({
+    id: index + 1,
+    title: FALLBACK_SCENE_TITLES[index] || `Scene ${index + 1}`,
+    description: line,
+    emotion: index === 0 ? "curious" : index === 2 ? "brave" : index === 4 ? "joyful" : "wonder",
+    characters: [{ name: "Main Hero", role: "Hero", voice: voiceType }],
+    cameraActions: FALLBACK_CAMERA_ACTIONS[index] || "subtle move",
+    dialogue: `"${line}"`,
+  }));
+
+  return {
+    projectId: `local-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    title: sanitizeText(storyTitle || "AI Kids Story Video Generator"),
+    storyPrompt: sanitizeText(storyPrompt),
+    storySource,
+    language: languageId,
+    style: styleId,
+    videoSize: videoSizeId,
+    voiceType,
+    storyMode,
+    safeMode,
+    ageFilter,
+    premiumExport: false,
+    mode: storyMode,
+    themes: [storyMode],
+    characters: [
+      {
+        name: "Minku Rabbit",
+        role: "Hero",
+        appearance: "white rabbit with a purple vest and glowing eyes",
+        voiceProfile: "kid-friendly playful narrator",
+        colorPalette: ["lavender", "peach", "sky blue"],
+      },
+      {
+        name: "Luna Fairy",
+        role: "Guide",
+        appearance: "sparkling fairy with pastel wings and a lantern",
+        voiceProfile: "soft storytelling voice",
+        colorPalette: ["rose gold", "mint", "cream"],
+      },
+    ],
+    scenes,
+    subtitles: scenes.map((scene, index) => ({
+      start: index * 4,
+      end: index * 4 + 4,
+      text: `${scene.title}: ${scene.description}`,
+    })),
+    promptHints: scenes.map((scene) => ({
+      imagePrompt: `Child-safe ${styleId} scene with ${scene.emotion} emotion`,
+      animationPrompt: "Gentle movement, smooth transitions, and playful motion",
+      backgroundPrompt: `Warm ${storyMode} environment with soft pastel colors`,
+    })),
+    narration: `${sanitizeText(storyTitle || "Story time")}. ${scenes
+      .map((scene) => `${scene.title}: ${scene.description}`)
+      .join(" ")}`,
+  };
 };
 
 const getSceneId = (scene, index) => String(scene?.id || index + 1);
@@ -305,7 +393,7 @@ const KidsStoryVideoMaker = () => {
     setIsGenerating(true);
 
     try {
-      const response = await fetch("/api/video-studio/create", {
+      const response = await fetch(buildApiUrl("/video-studio/create"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -340,7 +428,37 @@ const KidsStoryVideoMaker = () => {
       setMessage("AI project generated. Review scenes and render your video.");
       setActiveTab("scenes");
     } catch (err) {
-      setError(err.message || "Unable to generate the AI story project.");
+      const isServiceIssue =
+        /empty response|invalid json|failed to fetch|network/i.test(String(err?.message || "")) ||
+        Number(err?.status) >= 500;
+
+      if (!isServiceIssue) {
+        setError(err.message || "Unable to generate the AI story project.");
+        return;
+      }
+
+      const fallbackProject = createClientFallbackProject({
+        storyTitle: safeTitle,
+        storyPrompt: storyContent,
+        languageId,
+        styleId,
+        voiceType,
+        videoSizeId,
+        storyMode,
+        safeMode,
+        ageFilter,
+        storySource,
+      });
+
+      setGeneratedProject(fallbackProject);
+      setGeneratedScenes(fallbackProject.scenes || []);
+      setStoryTitle(fallbackProject.title || safeTitle);
+      setVideoUrl("");
+      setError("");
+      setMessage(
+        `AI service is unavailable right now (${err.message || "unknown error"}). Loaded local storyboard fallback.`
+      );
+      setActiveTab("scenes");
     } finally {
       setIsGenerating(false);
     }
@@ -390,7 +508,7 @@ const KidsStoryVideoMaker = () => {
     setIsRendering(true);
 
     try {
-      const response = await fetch("/api/video-studio/render", {
+      const response = await fetch(buildApiUrl("/video-studio/render"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project: renderProject, premiumHD }),
