@@ -824,6 +824,7 @@ const RealEstate = () => {
 
     setActiveRole("owner");
     setSellerWorkspaceMode(true);
+    setSelectedPropertyId("");
     if (options?.postingType === "property" || options?.postingType === "requirement") {
       setEditListingId("");
       setListingFieldErrors({});
@@ -1030,8 +1031,9 @@ const RealEstate = () => {
         </section>
       ) : null}
 
-      <section className="realestate-main-grid" style={{ display: isBuyerMode ? "none" : "grid" }}>
-        <div className="realestate-left-column">
+      {!isBuyerMode ? (
+        <section className="realestate-main-grid">
+          <div className="realestate-left-column">
           {!sellerWorkspaceMode && selectedProperty ? null : (
             <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>
           )}
@@ -1181,7 +1183,8 @@ const RealEstate = () => {
           ) : null}
         </div>
 
-        <aside className="realestate-right-column" style={{ display: sellerWorkspaceMode ? "none" : "block" }}>
+        {!sellerWorkspaceMode ? (
+          <aside className="realestate-right-column">
           <article className="realestate-detail-card">
               <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>
             <PropertyDetailTabs
@@ -1412,7 +1415,9 @@ const RealEstate = () => {
             />
           </article>
         </aside>
+        ) : null}
       </section>
+      ) : null}
 
       {toasts.length ? (
         <div className="realestate-toast-stack" aria-live="polite">

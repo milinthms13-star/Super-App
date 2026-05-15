@@ -6,7 +6,6 @@ import QuickFilters from "./components/QuickFilters";
 import LoanCalculator from "./components/LoanCalculator";
 import PopularLocations from "./components/PopularLocations";
 import PropertyCategories from "./components/PropertyCategories";
-import VerifiedAgents from "./components/VerifiedAgents";
 import DownloadAppCTA from "./components/DownloadAppCTA";
 import {
   HOME_LOAN_PARTNERS,
@@ -434,8 +433,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                     onFavoriteToggle={handleFavoriteToggle}
                     hasSubscription={currentUser?.subscriptionStatus === "active" || currentUser?.isPremium}
                     onSubscribeClick={() => {
-                      // TODO: Open subscription modal
-                      alert("Subscribe to view contact details of property posters!");
+                      pushToast("Subscribe to view contact details of property posters!", "info");
                     }}
                   />
                 ))}
@@ -617,9 +615,6 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
         propertyTypes={propertyTypes}
         onTypeClick={(type) => setTypeFilter(type)}
       />
-
-      {/* VERIFIED AGENTS SECTION */}
-      <VerifiedAgents />
 
       {/* DOWNLOAD APP CTA */}
       <DownloadAppCTA />

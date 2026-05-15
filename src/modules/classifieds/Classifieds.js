@@ -1358,8 +1358,10 @@ const Classifieds = () => {
     }));
   };
 
-  const openPostComposer = () => {
-    setActiveRole("seller");
+  const openPostComposer = ({ forceSeller = true } = {}) => {
+    if (forceSeller) {
+      setActiveRole("seller");
+    }
     setShowPostComposer(true);
     setPostComposerStep(1);
   };
@@ -1757,7 +1759,7 @@ const Classifieds = () => {
       {isBuyerView ? (
         <TradePostHome
           onNavigateToDashboard={() => {
-            openPostComposer();
+            openPostComposer({ forceSeller: false });
             return true;
           }}
         />
@@ -2244,7 +2246,7 @@ const Classifieds = () => {
             )}
           </article>
 
-          {activeRole === "seller" ? (
+          {activeRole === "seller" || showPostComposer ? (
             <>
               {sellerStats && (
                 <article className="classifieds-surface-card">
