@@ -170,22 +170,28 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
   );
 
   const canPostProperty =
-    currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
+    currentUser?.registrationType === "entrepreneur" ||
+    currentUser?.role === "business" ||
+    currentUser?.registrationType === "admin" ||
+    currentUser?.role === "admin";
 
-  const redirectToSellerDashboard = () => {
-    if (!canPostProperty) {
+  const redirectToWorkspace = ({ postingType = "property", requireSeller = false } = {}) => {
+    if (requireSeller && !canPostProperty) {
       pushToast("Upgrade to a seller account to post property listings.", "info");
       return false;
     }
 
-    const movedToDashboard = onNavigateToDashboard?.("seller");
+    const movedToDashboard = onNavigateToDashboard?.("owner", { postingType });
     if (!movedToDashboard) {
-      pushToast("Posting is available after enabling seller access.", "info");
+      pushToast("Posting workspace is currently unavailable. Please try again.", "info");
     }
     return movedToDashboard;
   };
 
-  const handlePostPropertyClick = () => redirectToSellerDashboard();
+  const handlePostPropertyClick = () =>
+    redirectToWorkspace({ postingType: "property", requireSeller: true });
+  const handlePostRequirementClick = () =>
+    redirectToWorkspace({ postingType: "requirement", requireSeller: false });
 
   const handleFavoriteToggle = (propertyId) => {
     const fullId = `realestate-${propertyId}`;
@@ -341,6 +347,13 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
             <button
               type="button"
               className="realestate-secondary-button"
+              onClick={handlePostRequirementClick}
+            >
+              Post Requirement
+            </button>
+            <button
+              type="button"
+              className="realestate-secondary-button"
               onClick={() => setIntentFilter("all")}
             >
               Explore Listings
@@ -457,13 +470,21 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                   messages: (
                     <section className="homesphere-chat-section">
                       <div className="realestate-section-heading">
-                        <h3>Contact owner</h3>
+                        <h3>
+                          {selectedProperty?.postingType === "requirement"
+                            ? "Contact buyer"
+                            : "Contact owner"}
+                        </h3>
                       </div>
                       <div className="homesphere-message-composer">
                         <textarea
                           value={chatInput}
                           onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Ask about the property..."
+                          placeholder={
+                            selectedProperty?.postingType === "requirement"
+                              ? "Share a matching property for this requirement..."
+                              : "Ask about the property..."
+                          }
                           rows="3"
                         />
                         <button
@@ -558,6 +579,13 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                   onClick={handlePostPropertyClick}
                 >
                   Post your property
+                </button>
+                <button
+                  type="button"
+                  className="realestate-secondary-button"
+                  onClick={handlePostRequirementClick}
+                >
+                  Post your requirement
                 </button>
               </div>
             )}

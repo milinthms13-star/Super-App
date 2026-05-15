@@ -163,7 +163,7 @@ const realEstatePropertySchema = new mongoose.Schema({
   sellerName: { type: String, required: true, trim: true },
   sellerRole: { 
     type: String, 
-    enum: ['Owner', 'Agent', 'Builder', 'Admin'], 
+    enum: ['Owner', 'Agent', 'Builder', 'Admin', 'Buyer'], 
     required: true 
   },
   sellerEmail: { type: String, required: true, trim: true, lowercase: true },
@@ -229,6 +229,17 @@ const realEstatePropertySchema = new mongoose.Schema({
   mediaCount: { type: Number, default: 0 },
   hasVideoTour: { type: Boolean, default: false },
   projectUnits: { type: Number },
+  postingType: {
+    type: String,
+    enum: ['property', 'requirement'],
+    default: 'property',
+    index: true,
+  },
+  minBudget: { type: String, trim: true, default: '' },
+  maxBudget: { type: String, trim: true, default: '' },
+  preferredLocations: { type: String, trim: true, default: '' },
+  mustHaveAmenities: { type: String, trim: true, default: '' },
+  moveInDate: { type: String, trim: true, default: '' },
   leads: [realEstateLeadSchema],
   visits: [realEstateVisitSchema],
   chatPreview: [realEstateMessageSchema],

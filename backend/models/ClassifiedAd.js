@@ -176,6 +176,12 @@ const ClassifiedAdSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    listingType: {
+      type: String,
+      enum: ['sell', 'buy'],
+      default: 'sell',
+      index: true,
+    },
     subcategory: {
       type: String,
       default: '',

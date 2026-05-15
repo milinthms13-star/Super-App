@@ -602,6 +602,16 @@
   color: #9b6b00;
 }
 
+.classifieds-badge.seller {
+  background: #eef4ff;
+  color: #1f4fbf;
+}
+
+.classifieds-badge.buyer {
+  background: #e8faf3;
+  color: #0f7d4f;
+}
+
 .classifieds-chip-cloud span {
   background: #f4f7fd;
   color: var(--classifieds-ink);

@@ -94,13 +94,28 @@ const serializeRealEstateProperty = (record, index = 0) => {
       : typeof plainRecord.rating === 'number'
         ? plainRecord.rating
         : 0;
+  const postingType =
+    String(plainRecord.postingType || '').trim().toLowerCase() === 'requirement'
+      ? 'requirement'
+      : 'property';
+  const minBudget = String(plainRecord.minBudget || '').trim();
+  const maxBudget = String(plainRecord.maxBudget || '').trim();
+  const preferredLocations = String(plainRecord.preferredLocations || '').trim();
+  const mustHaveAmenities = String(plainRecord.mustHaveAmenities || '').trim();
+  const moveInDate = String(plainRecord.moveInDate || '').trim();
 
   return {
     id,
+    postingType,
     title: plainRecord.title || 'Verified Property',
     price: plainRecord.price || plainRecord.priceLabel || 'Price on request',
     priceLabel: plainRecord.priceLabel || plainRecord.price || 'Price on request',
     priceValue,
+    minBudget,
+    maxBudget,
+    preferredLocations,
+    mustHaveAmenities,
+    moveInDate,
     area: plainRecord.area || `${areaSqft || 1200} sq ft`,
     areaSqft: areaSqft || 1200,
     location: plainRecord.location || 'Kerala',
@@ -132,7 +147,9 @@ const serializeRealEstateProperty = (record, index = 0) => {
     possession: plainRecord.possession || 'Ready to move',
     description:
       plainRecord.description ||
-      'Verified listing with strong local demand, transparent pricing, and responsive seller communication.',
+      (postingType === 'requirement'
+        ? 'Buyer requirement posted for matching properties.'
+        : 'Verified listing with strong local demand, transparent pricing, and responsive seller communication.'),
     mapLabel: plainRecord.mapLabel || `${plainRecord.location || 'Kerala'} growth corridor`,
     mapPreviewUrl: plainRecord.mapPreviewUrl || '',
     mapLocationLat: typeof plainRecord.mapLocationLat === 'number' ? plainRecord.mapLocationLat : null,

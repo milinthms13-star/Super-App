@@ -171,11 +171,11 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
       }
     };
 
-    document.addEventListener("mousedown", handleOutsideClick);
-    document.addEventListener("touchstart", handleOutsideClick);
+    document.addEventListener("mousedown", handleOutsideClick, true);
+    document.addEventListener("touchstart", handleOutsideClick, true);
     return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-      document.removeEventListener("touchstart", handleOutsideClick);
+      document.removeEventListener("mousedown", handleOutsideClick, true);
+      document.removeEventListener("touchstart", handleOutsideClick, true);
     };
   }, [showMoreMenu]);
 
@@ -352,7 +352,10 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                     <button
                       type="button"
                       className={`nav-more-btn polished ${showMoreMenu ? "active" : ""}`}
-                      onClick={() => setShowMoreMenu((prev) => !prev)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setShowMoreMenu((prev) => !prev);
+                      }}
                       title="View more modules"
                       aria-expanded={showMoreMenu}
                       aria-haspopup="menu"
@@ -362,7 +365,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                     </button>
 
                     {showMoreMenu && (
-                      <div className="nav-categories-dropdown" role="menu">
+                      <div className="nav-categories-dropdown" role="menu" onClick={(event) => event.stopPropagation()}>
                       {categorizedMoreModules.map(([catKey, catData]) => (
                         <div key={catKey} className="nav-categories-group">
                           <div className="nav-category-header">

@@ -152,7 +152,21 @@ const QUICK_CHAT_REPLIES = [
   "Can you share more photos?",
 ];
 
+const LISTING_INTENT_OPTIONS = [
+  {
+    value: "sell",
+    label: "Seller offer",
+    description: "Post an item/service you want to sell.",
+  },
+  {
+    value: "buy",
+    label: "Buyer requirement",
+    description: "Post what you want to buy so sellers can contact you.",
+  },
+];
+
 const DEFAULT_AD_FORM = {
+  listingType: "sell",
   title: "",
   description: "",
   price: "",
@@ -164,6 +178,19 @@ const DEFAULT_AD_FORM = {
   mediaCount: "4",
   plan: "free",
 };
+
+const resolveListingType = (listing = {}) =>
+  String(listing?.listingType || listing?.intent || "")
+    .trim()
+    .toLowerCase() === "buy"
+    ? "buy"
+    : "sell";
+
+const getListingTypeBadgeLabel = (listing = {}) =>
+  resolveListingType(listing) === "buy" ? "Buyer requirement" : "Seller offer";
+
+const getCounterpartyLabel = (listing = {}) =>
+  resolveListingType(listing) === "buy" ? "Buyer" : "Seller";
 
 const getExpiryDateFromPosted = (postedDate) => {
   const posted = new Date(postedDate);
@@ -194,6 +221,7 @@ const deriveDistrict = (listing = {}) => {
 
 const normalizeListing = (listing, index) => ({
   id: listing?.id || `classified-${index + 1}`,
+  listingType: resolveListingType(listing),
   title: listing?.title || "Marketplace Listing",
   description:
     listing?.description ||
@@ -206,7 +234,7 @@ const normalizeListing = (listing, index) => ({
   locality: listing?.locality || listing?.location || "Prime area",
   condition: listing?.condition || "Used",
   seller: listing?.seller || "Trusted Seller",
-  sellerRole: listing?.sellerRole || "Seller",
+  sellerRole: listing?.sellerRole || (resolveListingType(listing) === "buy" ? "Buyer" : "Seller"),
   sellerEmail: listing?.sellerEmail || "",
   posted: listing?.posted || "2026-04-18",
   expiresAt: listing?.expiresAt || getExpiryDateFromPosted(listing?.posted || "2026-04-18"),
@@ -234,7 +262,9 @@ const normalizeListing = (listing, index) => ({
   mediaGallery:
     Array.isArray(listing?.mediaGallery) && listing.mediaGallery.length > 0
       ? listing.mediaGallery
-      : ["Primary image"],
+      : resolveListingType(listing) === "buy"
+        ? []
+        : ["Primary image"],
   monetizationPlan: listing?.monetizationPlan || (listing?.featured ? "Featured" : "Free"),
   spamScore: listing?.spamScore || 0,
   spamFlags: listing?.spamFlags || [],
@@ -878,6 +908,7 @@ const Classifieds = () => {
   useEffect(() => {
     if (editingListing) {
       setListingForm({
+        listingType: resolveListingType(editingListing),
         title: editingListing.title || "",
         description: editingListing.description || "",
         price: editingListing.price || "",
@@ -906,6 +937,8 @@ const Classifieds = () => {
   const selectedReportCount = selectedListing
     ? reportRecords.filter((report) => String(report.listingId) === String(selectedListing.id)).length
     : 0;
+  const selectedListingType = resolveListingType(selectedListing || {});
+  const selectedCounterpartyLabel = getCounterpartyLabel(selectedListing || {});
 
   const sellerListings = useMemo(
     () => {
@@ -1101,7 +1134,10 @@ const Classifieds = () => {
   );
 
   const listingTitleSuggestions = TITLE_SUGGESTIONS[listingForm.category] || [];
-  const listingPriceHint = PRICE_HINTS[listingForm.category] || "Add a realistic market price to improve response rate.";
+  const listingPriceHint =
+    listingForm.listingType === "buy"
+      ? "Set a realistic budget so sellers can send relevant offers."
+      : PRICE_HINTS[listingForm.category] || "Add a realistic market price to improve response rate.";
   const duplicateDraftWarning = useMemo(() => {
     const normalizedTitle = String(listingForm.title || "").trim().toLowerCase();
     if (!normalizedTitle || !sellerListings.length) {
@@ -1125,7 +1161,7 @@ const Classifieds = () => {
       Boolean(listingForm.location.trim()),
       Boolean(listingForm.district),
       /^\d{6}$/.test(String(listingForm.pincode || "")),
-      uploadedImages.length > 0,
+      listingForm.listingType === "buy" || uploadedImages.length > 0,
     ];
     const completed = checks.filter(Boolean).length;
     return Math.round((completed / checks.length) * 100);
@@ -1340,6 +1376,7 @@ const Classifieds = () => {
 
   const handleListingSubmit = async (event) => {
     event.preventDefault();
+    const isBuyerRequirement = listingForm.listingType === "buy";
 
     if (!listingForm.title.trim() || !listingForm.description.trim() || !listingForm.location.trim()) {
       setStatusMessage("Add a title, description, and location before publishing an ad.");
@@ -1347,7 +1384,11 @@ const Classifieds = () => {
     }
 
     if (Number(listingForm.price || 0) <= 0) {
-      setStatusMessage("Enter a valid price before publishing an ad.");
+      setStatusMessage(
+        isBuyerRequirement
+          ? "Enter a valid budget before publishing your buyer requirement."
+          : "Enter a valid price before publishing an ad."
+      );
       return;
     }
 
@@ -1356,7 +1397,7 @@ const Classifieds = () => {
       return;
     }
 
-    if (!editingListingId && uploadedImages.length === 0) {
+    if (!editingListingId && !isBuyerRequirement && uploadedImages.length === 0) {
       setStatusMessage("Upload at least one image before publishing.");
       return;
     }
@@ -1384,8 +1425,14 @@ const Classifieds = () => {
         // Update existing listing
         const updatedListing = await updateClassifiedListing(editingListingId, {
           ...listingForm,
+          listingType: isBuyerRequirement ? "buy" : "sell",
           price: Number(listingForm.price),
-          mediaCount: Number(listingForm.mediaCount),
+          mediaCount:
+            uploadedImages.length > 0
+              ? Number(listingForm.mediaCount)
+              : isBuyerRequirement
+                ? 0
+                : Number(listingForm.mediaCount),
           pincode: String(listingForm.pincode || ""),
           district: listingForm.district || deriveDistrict({ location: listingForm.location }),
           expiresAt: expiryDate.toISOString().slice(0, 10),
@@ -1395,7 +1442,9 @@ const Classifieds = () => {
           mediaGallery:
             uploadedImages.length > 0
               ? uploadedImages.map((image) => image.name || "Listing image")
-              : undefined,
+              : isBuyerRequirement
+                ? []
+                : undefined,
         });
         setEditingListingId("");
         setSelectedListingId(updatedListing?.id || "");
@@ -1405,8 +1454,14 @@ const Classifieds = () => {
         // Create new listing
         const createdListing = await createClassifiedListing({
           ...listingForm,
+          listingType: isBuyerRequirement ? "buy" : "sell",
           price: Number(listingForm.price),
-          mediaCount: Number(listingForm.mediaCount),
+          mediaCount:
+            uploadedImages.length > 0
+              ? Number(listingForm.mediaCount)
+              : isBuyerRequirement
+                ? 0
+                : Number(listingForm.mediaCount),
           pincode: String(listingForm.pincode || ""),
           district: listingForm.district || deriveDistrict({ location: listingForm.location }),
           expiresAt: expiryDate.toISOString().slice(0, 10),
@@ -1416,7 +1471,10 @@ const Classifieds = () => {
           monetizationPlan: listingForm.plan,
           verificationBadges: ["phone", "email"],
           image: uploadedImages[0]?.name || "Ad listing",
-          mediaGallery: uploadedImages.map((image) => image.name || "Listing image"),
+          mediaGallery:
+            uploadedImages.length > 0
+              ? uploadedImages.map((image) => image.name || "Listing image")
+              : [],
         });
         setListingForm(DEFAULT_AD_FORM);
         setUploadedImages([]);
@@ -2102,6 +2160,9 @@ const Classifieds = () => {
                     </div>
                     <div className="classifieds-listing-body">
                       <div className="classifieds-listing-badges">
+                        <span className={`classifieds-badge ${listing.listingType === "buy" ? "buyer" : "seller"}`}>
+                          {getListingTypeBadgeLabel(listing)}
+                        </span>
                         {listing.featured ? <span className="classifieds-badge accent">Featured</span> : null}
                         {listing.urgent ? <span className="classifieds-badge urgent">Urgent</span> : null}
                         <span className={`classifieds-badge ${listing.verified ? "verified" : "pending"}`}>
@@ -2109,14 +2170,20 @@ const Classifieds = () => {
                         </span>
                       </div>
                       <h3>{listing.title}</h3>
-                      <strong>{formatPrice(listing.price)}</strong>
+                      <strong>
+                        {listing.listingType === "buy"
+                          ? `Budget ${formatPrice(listing.price)}`
+                          : formatPrice(listing.price)}
+                      </strong>
                       <p>
                         {listing.category} - {listing.condition} - {listing.location} - {listing.district}
                         {listing.pincode ? ` (${listing.pincode})` : ""}
                       </p>
                       <div className="classifieds-seller-row">
                         <span className="classifieds-seller-avatar">{getSellerInitials(listing.seller)}</span>
-                        <span className="classifieds-seller-name">{listing.seller}</span>
+                        <span className="classifieds-seller-name">
+                          {listing.seller} ({getCounterpartyLabel(listing)})
+                        </span>
                         {listing.verified ? <span className="classifieds-seller-verified">Verified</span> : null}
                         {listing.verified ? <span className="classifieds-seller-verified">Phone + Email</span> : null}
                       </div>
@@ -2329,7 +2396,7 @@ const Classifieds = () => {
                 </label>
 
                 <label className="classifieds-field" style={{ display: postComposerStep === 2 ? "grid" : "none" }}>
-                  <span>Price</span>
+                  <span>{listingForm.listingType === "buy" ? "Budget" : "Price"}</span>
                   <input
                     name="price"
                     type="number"
@@ -2337,6 +2404,17 @@ const Classifieds = () => {
                     value={listingForm.price}
                     onChange={handleListingInputChange}
                   />
+                </label>
+
+                <label className="classifieds-field" style={{ display: postComposerStep === 1 ? "grid" : "none" }}>
+                  <span>Posting as</span>
+                  <select name="listingType" value={listingForm.listingType} onChange={handleListingInputChange}>
+                    {LISTING_INTENT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="classifieds-field" style={{ display: postComposerStep === 1 ? "grid" : "none" }}>
@@ -2385,7 +2463,7 @@ const Classifieds = () => {
                 </label>
 
                 <label className="classifieds-field" style={{ display: postComposerStep === 1 ? "grid" : "none" }}>
-                  <span>Condition</span>
+                  <span>{listingForm.listingType === "buy" ? "Preferred condition" : "Condition"}</span>
                   <select name="condition" value={listingForm.condition} onChange={handleListingInputChange}>
                     {["New", "Like New", "Used"].map((condition) => (
                       <option key={condition} value={condition}>
@@ -2398,7 +2476,7 @@ const Classifieds = () => {
                 <label className="classifieds-field" style={{ display: postComposerStep === 3 ? "grid" : "none" }}>
                   <span>Media count</span>
                   <select name="mediaCount" value={listingForm.mediaCount} onChange={handleListingInputChange}>
-                    {["1", "2", "4", "6", "8"].map((count) => (
+                    {["0", "1", "2", "4", "6", "8"].map((count) => (
                       <option key={count} value={count}>
                         {count}
                       </option>
@@ -2439,7 +2517,9 @@ const Classifieds = () => {
                     <div className="classifieds-upload-content">
                       <span className="classifieds-upload-icon">Upload</span>
                       <p>Drag and drop images here or click to select</p>
-                      <span className="classifieds-upload-hint">Supports JPG, PNG, GIF (Max 5MB each)</span>
+                      <span className="classifieds-upload-hint">
+                        Supports JPG, PNG, GIF (Max 5MB each). Optional for buyer requirements.
+                      </span>
                     </div>
                     <input
                       ref={fileInputRef}
@@ -2480,7 +2560,11 @@ const Classifieds = () => {
                     name="description"
                     value={listingForm.description}
                     onChange={handleListingInputChange}
-                    placeholder="Explain the item, condition, deal terms, and pickup or service details"
+                    placeholder={
+                      listingForm.listingType === "buy"
+                        ? "Describe what you want to buy, preferred condition, budget range, and location"
+                        : "Explain the item, condition, deal terms, and pickup or service details"
+                    }
                   />
                 </label>
 
@@ -2500,7 +2584,9 @@ const Classifieds = () => {
                       ? "Saving..."
                       : editingListingId
                         ? "Update ad"
-                        : "Publish ad"}
+                        : listingForm.listingType === "buy"
+                          ? "Publish requirement"
+                          : "Publish ad"}
                 </button>
                 <button
                   type="button"
@@ -2546,9 +2632,18 @@ const Classifieds = () => {
                 <div className="classifieds-preview-card">
                   <strong>Listing Preview</strong>
                   <h3>{listingForm.title || "Listing title"}</h3>
-                  <p>{listingForm.category} | {listingForm.condition} | {listingForm.location || "Location"}</p>
+                  <p>
+                    {listingForm.listingType === "buy" ? "Buyer requirement" : "Seller offer"} |{" "}
+                    {listingForm.category} | {listingForm.condition} | {listingForm.location || "Location"}
+                  </p>
                   <p>{listingForm.description || "Description preview appears here."}</p>
-                  <span>{listingForm.price ? formatPrice(listingForm.price) : "Price pending"}</span>
+                  <span>
+                    {listingForm.price
+                      ? `${listingForm.listingType === "buy" ? "Budget" : "Price"}: ${formatPrice(listingForm.price)}`
+                      : listingForm.listingType === "buy"
+                        ? "Budget pending"
+                        : "Price pending"}
+                  </span>
                 </div>
               ) : null}
             </article>
@@ -2704,10 +2799,15 @@ const Classifieds = () => {
                 <div className="classifieds-detail-header">
                   <div>
                     <div className="classifieds-listing-badges">
+                      <span className={`classifieds-badge ${selectedListingType === "buy" ? "buyer" : "seller"}`}>
+                        {getListingTypeBadgeLabel(selectedListing)}
+                      </span>
                       {selectedListing.featured ? <span className="classifieds-badge accent">Featured</span> : null}
                       {selectedListing.urgent ? <span className="classifieds-badge urgent">Urgent</span> : null}
                       <span className={`classifieds-badge ${selectedListing.verified ? "verified" : "pending"}`}>
-                        {selectedListing.verified ? "Verified seller" : "Pending verification"}
+                        {selectedListing.verified
+                          ? `Verified ${selectedCounterpartyLabel.toLowerCase()}`
+                          : "Pending verification"}
                       </span>
                     </div>
                     <h2>{selectedListing.title}</h2>
@@ -2751,7 +2851,11 @@ const Classifieds = () => {
                 />
 
                 <div className="classifieds-detail-price">
-                  <strong>{formatPrice(selectedListing.price)}</strong>
+                  <strong>
+                    {selectedListingType === "buy"
+                      ? `Budget ${formatPrice(selectedListing.price)}`
+                      : formatPrice(selectedListing.price)}
+                  </strong>
                   <span>{selectedListing.category} - {selectedListing.condition}</span>
                 </div>
 
@@ -2985,14 +3089,14 @@ const Classifieds = () => {
                       setChatOpen(true);
                     }}
                   >
-                    Chat with Seller
+                    {selectedListingType === "buy" ? "Chat with Buyer" : "Chat with Seller"}
                   </button>
                   <button
                     type="button"
                     className="classifieds-secondary-button"
                     onClick={() => addToast(`Call request shared with ${selectedListing.seller}.`, 'info')}
                   >
-                    Call Seller
+                    {selectedListingType === "buy" ? "Call Buyer" : "Call Seller"}
                   </button>
                   <button
                     type="button"
@@ -3008,7 +3112,7 @@ const Classifieds = () => {
                     <h3>Buyer and seller chat</h3>
                     <p>Message history is loaded from the backend store for this listing.</p>
                     <span className="classifieds-chat-status">
-                      Seller status: {selectedListing.isOnline ? "Online now" : `Last seen ${getRelativeTimeLabel(selectedListing.posted)}`}
+                      {selectedCounterpartyLabel} status: {selectedListing.isOnline ? "Online now" : `Last seen ${getRelativeTimeLabel(selectedListing.posted)}`}
                     </span>
                   </div>
                   <div className="classifieds-message-list">
@@ -3031,7 +3135,7 @@ const Classifieds = () => {
                       type="text"
                       value={chatInput}
                       onChange={(event) => setChatInput(event.target.value)}
-                      placeholder="Type a message for the seller"
+                      placeholder={`Type a message for the ${selectedCounterpartyLabel.toLowerCase()}`}
                     />
                     <button type="button" onClick={handleSendMessage} disabled={submitting}>
                       Send

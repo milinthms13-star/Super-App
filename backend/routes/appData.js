@@ -303,13 +303,14 @@ const classifiedsMediaItemSchema = Joi.alternatives().try(
 );
 
 const classifiedsListingSchema = Joi.object({
+  listingType: Joi.string().valid('sell', 'buy').default('sell'),
   title: Joi.string().trim().min(3).max(140).required(),
   description: Joi.string().trim().min(10).max(1500).required(),
   price: Joi.number().min(1).required(),
   category: Joi.string().trim().min(2).max(60).required(),
   location: Joi.string().trim().min(2).max(120).required(),
   condition: Joi.string().valid('New', 'Like New', 'Used').default('Used'),
-  mediaCount: Joi.number().integer().min(1).max(12).default(1),
+  mediaCount: Joi.number().integer().min(0).max(12).default(1),
   mediaGallery: Joi.array().items(classifiedsMediaItemSchema).max(12).default([]),
   plan: Joi.string().valid('free', 'featured', 'urgent', 'subscription').default('free'),
 });
@@ -377,6 +378,7 @@ const realEstateMediaItemSchema = Joi.object({
 });
 
 const realEstateListingSchema = Joi.object({
+  postingType: Joi.string().valid('property', 'requirement').default('property'),
   title: Joi.string().trim().min(3).max(140).required(),
   intent: Joi.string().valid('sale', 'rent', 'project').default('sale'),
   priceLabel: Joi.string().trim().min(2).max(80).required(),
@@ -423,6 +425,11 @@ const realEstateListingSchema = Joi.object({
   taxReceipt: Joi.boolean().default(false),
   buildingPermit: Joi.boolean().default(false),
   encumbranceCertificate: Joi.boolean().default(false),
+  minBudget: Joi.string().allow('').trim().max(80).default(''),
+  maxBudget: Joi.string().allow('').trim().max(80).default(''),
+  preferredLocations: Joi.string().allow('').trim().max(300).default(''),
+  mustHaveAmenities: Joi.string().allow('').trim().max(300).default(''),
+  moveInDate: Joi.string().allow('').trim().max(50).default(''),
   status: Joi.string().valid('available', 'sold', 'rented').default('available'),
   roleMode: Joi.string().valid('owner', 'agent', 'builder').default('owner'),
 });
@@ -726,6 +733,12 @@ const normalizeClassifiedMediaGallery = (mediaGallery = []) =>
 
 const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
   id: String(listing.id || `classified-${index + 1}`),
+  listingType:
+    String(listing.listingType || listing.intent || '')
+      .trim()
+      .toLowerCase() === 'buy'
+      ? 'buy'
+      : 'sell',
   title: String(listing.title || 'Marketplace Listing').trim(),
   description: String(
     listing.description ||
@@ -734,7 +747,12 @@ const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
   price: Number(listing.price || 0),
   category: String(listing.category || 'General').trim(),
   seller: String(listing.seller || 'Trusted Seller').trim(),
-  sellerRole: String(listing.sellerRole || 'Seller').trim(),
+  sellerRole: String(
+    listing.sellerRole ||
+      (String(listing.listingType || listing.intent || '').trim().toLowerCase() === 'buy'
+        ? 'Buyer'
+        : 'Seller')
+  ).trim(),
   sellerEmail: String(listing.sellerEmail || '').trim().toLowerCase(),
   location: String(listing.location || 'Kerala').trim(),
   locality: String(listing.locality || listing.location || 'Prime area').trim(),
@@ -3123,10 +3141,17 @@ router.post('/globemart-categories/:categoryId/subcategories', authenticate, adm
 });
 
 router.post('/classifieds/listings', authenticate, createListingLimiter, async (req, res) => {
-  if (!canManageClassifieds(req.user)) {
+  const requestedListingType =
+    String(req.body?.listingType || '')
+      .trim()
+      .toLowerCase() === 'buy'
+      ? 'buy'
+      : 'sell';
+
+  if (!canManageClassifieds(req.user) && requestedListingType !== 'buy') {
     return res.status(403).json({
       success: false,
-      message: 'Seller or admin access required to post classifieds.',
+      message: 'Seller or admin access required to post sell ads. Buy requirements are available to all signed-in users.',
     });
   }
 
@@ -3143,6 +3168,8 @@ router.post('/classifieds/listings', authenticate, createListingLimiter, async (
   const sellerRole =
     req.user.email?.trim().toLowerCase() === ADMIN_EMAIL
       ? 'Admin'
+      : value.listingType === 'buy'
+        ? 'Buyer'
       : req.user.registrationType === 'entrepreneur' || req.user.role === 'business'
         ? 'Micro-entrepreneur'
         : 'Seller';
@@ -3155,6 +3182,7 @@ router.post('/classifieds/listings', authenticate, createListingLimiter, async (
   const createdListing = normalizeClassifiedsListingRecord({
     id: listingId,
     ...value,
+    listingType: value.listingType,
     ...lifecycleFields,
     seller: sellerName,
     sellerRole,
@@ -3168,14 +3196,16 @@ router.post('/classifieds/listings', authenticate, createListingLimiter, async (
     mediaGallery:
       normalizeClassifiedMediaGallery(value.mediaGallery).length > 0
         ? normalizeClassifiedMediaGallery(value.mediaGallery)
-        : Array.from({ length: value.mediaCount }, (_, index) => ({
-            id: `classified-media-${index + 1}`,
-            url: '',
-            fileId: '',
-            type: 'image',
-            order: index,
-            uploadedAt: now,
-          })),
+        : Number(value.mediaCount || 0) > 0
+          ? Array.from({ length: value.mediaCount }, (_, index) => ({
+              id: `classified-media-${index + 1}`,
+              url: '',
+              fileId: '',
+              type: 'image',
+              order: index,
+              uploadedAt: now,
+            }))
+          : [],
     contactOptions: ['Chat', 'Call'],
     languageSupport: ['English', 'Malayalam', 'Tamil', 'Hindi'],
     tags: [value.category, value.condition, 'New ad'],
@@ -3988,10 +4018,16 @@ router.delete('/classifieds/listings/:listingId', authenticate, async (req, res)
 });
 
 router.post('/realestate/listings', authenticate, async (req, res) => {
-  if (!canManageRealEstate(req.user)) {
+  const requestedPostingType =
+    String(req.body?.postingType || '').trim().toLowerCase() === 'requirement'
+      ? 'requirement'
+      : 'property';
+
+  if (!canManageRealEstate(req.user) && requestedPostingType !== 'requirement') {
     return res.status(403).json({
       success: false,
-      message: 'Seller or admin access required to post real-estate listings.',
+      message:
+        'Seller or admin access required to post property ads. Buyer requirements are available to all signed-in users.',
     });
   }
 
@@ -4005,10 +4041,23 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
 
   const now = new Date().toISOString();
   const sellerName = req.user.businessName?.trim() || req.user.name?.trim() || 'New Partner';
-  const sellerRole = resolveRealEstateSellerRole(value.roleMode, req.user);
+  const sellerRole =
+    value.postingType === 'requirement'
+      ? 'Buyer'
+      : resolveRealEstateSellerRole(value.roleMode, req.user);
   const ownerId = resolveRealEstateOwnerId(req.user);
   const isAdmin = req.user.email?.trim().toLowerCase() === ADMIN_EMAIL;
-  const numericPriceValue = Number(String(value.priceLabel || '').replace(/[^0-9.]/g, '')) || 0;
+  const budgetLabel =
+    value.postingType === 'requirement'
+      ? value.minBudget && value.maxBudget
+        ? `${value.minBudget} - ${value.maxBudget}`
+        : value.maxBudget
+          ? `Up to ${value.maxBudget}`
+          : value.minBudget
+            ? `From ${value.minBudget}`
+            : value.priceLabel
+      : value.priceLabel;
+  const numericPriceValue = Number(String(budgetLabel || '').replace(/[^0-9.]/g, '')) || 0;
   const mediaGallery = Array.isArray(value.mediaGallery)
     ? value.mediaGallery
         .map((media, mediaIndex) => ({
@@ -4026,12 +4075,13 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
     mediaGallery.find((media) => media.url)?.url ||
     '';
   const listingPayload = {
+    postingType: value.postingType,
     title: value.title,
-    price: value.priceLabel,
-    priceLabel: value.priceLabel,
+    price: budgetLabel,
+    priceLabel: budgetLabel,
     priceValue: numericPriceValue,
-    area: `${Number(value.areaSqft)} sq ft`,
-    areaSqft: Number(value.areaSqft),
+    area: `${Math.max(100, Number(value.areaSqft || 0) || 100)} sq ft`,
+    areaSqft: Math.max(100, Number(value.areaSqft || 0) || 100),
     location: value.location,
     locality: value.locality || value.location,
     type: value.type,
@@ -4048,7 +4098,17 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
     amenities:
       Array.isArray(value.amenities) && value.amenities.length > 0
         ? value.amenities
-        : ['Photo upload ready', 'Lead capture', 'Map support'],
+        : value.postingType === 'requirement' && value.mustHaveAmenities
+          ? value.mustHaveAmenities
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : ['Photo upload ready', 'Lead capture', 'Map support'],
+    minBudget: value.minBudget,
+    maxBudget: value.maxBudget,
+    preferredLocations: value.preferredLocations,
+    mustHaveAmenities: value.mustHaveAmenities,
+    moveInDate: value.moveInDate,
     sellerName,
     sellerRole,
     sellerEmail: req.user.email,
@@ -4064,7 +4124,9 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
     underConstruction: Boolean(value.underConstruction),
     description:
       value.description ||
-      'Freshly posted listing waiting for admin review. Media, map pin, and legal checks can be attached in the next step.',
+      (value.postingType === 'requirement'
+        ? 'Buyer requirement posted. Matching owners and agents can respond with suitable options.'
+        : 'Freshly posted listing waiting for admin review. Media, map pin, and legal checks can be attached in the next step.'),
     mapLabel: `${value.locality || value.location} growth corridor`,
     mediaGallery,
     videoTourUrl: value.videoTourUrl,
@@ -4095,18 +4157,20 @@ router.post('/realestate/listings', authenticate, async (req, res) => {
     rating: 0,
     reviewCount: 0,
     premiumPlan:
-      Boolean(value.featured) && isAdmin
-        ? 'Featured Listing'
-        : sellerRole === 'Builder' || sellerRole === 'Agent'
-          ? 'Agent Pro'
-          : 'Starter',
+      value.postingType === 'requirement'
+        ? 'Buyer Requirement'
+        : Boolean(value.featured) && isAdmin
+          ? 'Featured Listing'
+          : sellerRole === 'Builder' || sellerRole === 'Agent'
+            ? 'Agent Pro'
+            : 'Starter',
     mediaCount: Number(value.mediaCount || 0),
     hasVideoTour: Boolean(value.hasVideoTour || value.videoTourUrl),
     projectUnits: value.intent === 'project' ? 1 : 1,
     leads: [],
     visits: [],
     chatPreview: [],
-    similarTags: [value.type, value.location, value.intent].filter(Boolean),
+    similarTags: [value.type, value.location, value.intent, value.postingType].filter(Boolean),
     reviews: [],
     reports: [],
     disputeCount: 0,

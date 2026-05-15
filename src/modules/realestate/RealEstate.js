@@ -458,7 +458,12 @@ const RealEstate = () => {
     const validationResult = validateListingForm(listingForm);
     setListingFieldErrors(validationResult.fieldErrors);
     if (!validationResult.isValid) {
-      pushToast("Complete title, location, price, type, and area.", "error");
+      pushToast(
+        listingForm.postingType === "requirement"
+          ? "Complete title, location, type, and at least one budget field."
+          : "Complete title, location, price, type, and area.",
+        "error"
+      );
       return;
     }
 
@@ -468,11 +473,19 @@ const RealEstate = () => {
         if (editListingId) {
           const updatedListing = await updateRealEstateListing(editListingId, payload);
           setSelectedPropertyId(updatedListing?.id || editListingId);
-          pushToast("Listing updated successfully.");
+          pushToast(
+            listingForm.postingType === "requirement"
+              ? "Requirement updated successfully."
+              : "Listing updated successfully."
+          );
         } else {
           const createdListing = await createRealEstateListing(payload);
           setSelectedPropertyId(createdListing?.id || "");
-          pushToast("Listing drafted successfully. It is now waiting for admin approval.");
+          pushToast(
+            listingForm.postingType === "requirement"
+              ? "Requirement posted successfully. Matching owners and agents can now respond."
+              : "Listing drafted successfully. It is now waiting for admin approval."
+          );
         }
         setListingForm(DEFAULT_LISTING_FORM);
         setListingFieldErrors({});
@@ -487,6 +500,7 @@ const RealEstate = () => {
     setEditListingId(property.id);
     setListingForm({
       ...DEFAULT_LISTING_FORM,
+      postingType: property.postingType || "property",
       title: property.title,
       intent: property.intent,
       priceLabel: property.priceLabel,
@@ -528,6 +542,11 @@ const RealEstate = () => {
       buildingPermit: Boolean(property.buildingPermit),
       encumbranceCertificate: Boolean(property.encumbranceCertificate),
       description: property.description || "",
+      minBudget: property.minBudget || "",
+      maxBudget: property.maxBudget || "",
+      preferredLocations: property.preferredLocations || "",
+      mustHaveAmenities: property.mustHaveAmenities || "",
+      moveInDate: property.moveInDate || "",
     });
   };
 
@@ -931,9 +950,25 @@ const RealEstate = () => {
       {/* HOMESPHERE FOR BUYERS */}
       {isBuyerMode ? (
         <HomeSphere
-          onNavigateToDashboard={(role) => {
+          onNavigateToDashboard={(role, options = {}) => {
             const normalizedRole = String(role || "").toLowerCase() === "seller" ? "owner" : String(role || "").toLowerCase();
             setActiveRole(normalizedRole || "owner");
+            if (options?.postingType === "property" || options?.postingType === "requirement") {
+              setEditListingId("");
+              setListingFieldErrors({});
+              setListingForm({
+                ...DEFAULT_LISTING_FORM,
+                postingType: options.postingType,
+                title: "",
+                description: "",
+                priceLabel: "",
+                minBudget: "",
+                maxBudget: "",
+                preferredLocations: "",
+                mustHaveAmenities: "",
+                moveInDate: "",
+              });
+            }
             return true;
           }}
         />
@@ -1353,4 +1388,3 @@ const RealEstate = () => {
 };
 
 export default RealEstate;
-

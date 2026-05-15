@@ -138,6 +138,12 @@ const serializeClassifiedAd = (record, index = 0) => {
 
   return {
     id,
+    listingType:
+      String(plainRecord.listingType || plainRecord.intent || '')
+        .trim()
+        .toLowerCase() === 'buy'
+        ? 'buy'
+        : 'sell',
     title: String(plainRecord.title || 'Marketplace Listing').trim(),
     description: String(
       plainRecord.description ||
@@ -149,7 +155,12 @@ const serializeClassifiedAd = (record, index = 0) => {
     category: String(plainRecord.category || 'General').trim(),
     subcategory: String(plainRecord.subcategory || '').trim(),
     seller: String(plainRecord.seller || 'Trusted Seller').trim(),
-    sellerRole: String(plainRecord.sellerRole || 'Seller').trim(),
+    sellerRole: String(
+      plainRecord.sellerRole ||
+        (String(plainRecord.listingType || plainRecord.intent || '').trim().toLowerCase() === 'buy'
+          ? 'Buyer'
+          : 'Seller')
+    ).trim(),
     sellerEmail: String(plainRecord.sellerEmail || '').trim().toLowerCase(),
     sellerTotalRating: Number(plainRecord.classifiedsTotalRating || plainRecord.sellerTotalRating || 5),
     sellerReviewCount: Number(plainRecord.classifiedsReviewCount || plainRecord.sellerReviewCount || 0),

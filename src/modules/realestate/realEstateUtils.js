@@ -160,6 +160,15 @@ export const normalizeProperty = (property, index) => {
     mediaGallery[0]?.url ||
     "";
   const listedBy = property?.listedBy || property?.sellerRole || "Owner";
+  const postingType =
+    String(property?.postingType || "").trim().toLowerCase() === "requirement"
+      ? "requirement"
+      : "property";
+  const minBudget = String(property?.minBudget || "").trim();
+  const maxBudget = String(property?.maxBudget || "").trim();
+  const preferredLocations = String(property?.preferredLocations || "").trim();
+  const mustHaveAmenities = String(property?.mustHaveAmenities || "").trim();
+  const moveInDate = String(property?.moveInDate || "").trim();
 
   return {
     id: property?.id || property?._id || `property-${index + 1}`,
@@ -167,6 +176,12 @@ export const normalizeProperty = (property, index) => {
     price: property?.price || property?.priceLabel || "Price on request",
     priceLabel: property?.priceLabel || property?.price || "Price on request",
     priceValue,
+    postingType,
+    minBudget,
+    maxBudget,
+    preferredLocations,
+    mustHaveAmenities,
+    moveInDate,
     location: property?.location || "Kerala",
     locality: property?.locality || property?.location || "Prime neighborhood",
     type: property?.type || "Flat",
@@ -198,11 +213,18 @@ export const normalizeProperty = (property, index) => {
     mapLocationLng: typeof property?.mapLocationLng === "number" ? property.mapLocationLng : null,
     description:
       property?.description ||
-      "Verified listing with strong local demand, transparent pricing, and responsive seller communication.",
+      (postingType === "requirement"
+        ? "Buyer requirement posted for matching properties in preferred locations."
+        : "Verified listing with strong local demand, transparent pricing, and responsive seller communication."),
     amenities:
       Array.isArray(property?.amenities) && property.amenities.length > 0
         ? property.amenities
-        : ["Parking", "Security", "Power Backup"],
+        : postingType === "requirement" && mustHaveAmenities
+          ? mustHaveAmenities
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : ["Parking", "Security", "Power Backup"],
     sellerName: property?.sellerName || "Trusted Seller",
     ownerId:
       property?.ownerId ||
@@ -300,22 +322,39 @@ export const normalizeProperty = (property, index) => {
   };
 };
 
-const REQUIRED_FORM_FIELDS = {
-  title: (value) => String(value || "").trim().length >= 3,
-  priceLabel: (value) => String(value || "").trim().length >= 2,
-  location: (value) => String(value || "").trim().length >= 2,
-  type: (value) => String(value || "").trim().length >= 2,
-  areaSqft: (value) => Number(value || 0) >= 100,
-};
-
 export const validateListingForm = (formValues = {}) => {
   const fieldErrors = {};
+  const postingType =
+    String(formValues.postingType || "").trim().toLowerCase() === "requirement"
+      ? "requirement"
+      : "property";
 
-  Object.entries(REQUIRED_FORM_FIELDS).forEach(([fieldName, validator]) => {
-    if (!validator(formValues[fieldName])) {
-      fieldErrors[fieldName] = "Required";
+  if (String(formValues.title || "").trim().length < 3) {
+    fieldErrors.title = "Required";
+  }
+
+  if (String(formValues.location || "").trim().length < 2) {
+    fieldErrors.location = "Required";
+  }
+
+  if (String(formValues.type || "").trim().length < 2) {
+    fieldErrors.type = "Required";
+  }
+
+  if (postingType === "property") {
+    if (String(formValues.priceLabel || "").trim().length < 2) {
+      fieldErrors.priceLabel = "Required";
     }
-  });
+    if (Number(formValues.areaSqft || 0) < 100) {
+      fieldErrors.areaSqft = "Required";
+    }
+  } else {
+    const hasMinBudget = String(formValues.minBudget || "").trim().length > 0;
+    const hasMaxBudget = String(formValues.maxBudget || "").trim().length > 0;
+    if (!hasMinBudget && !hasMaxBudget) {
+      fieldErrors.maxBudget = "Add min or max budget";
+    }
+  }
 
   if (formValues.reraNumber && String(formValues.reraNumber).trim().length < 6) {
     fieldErrors.reraNumber = "RERA number looks too short";
@@ -360,13 +399,30 @@ export const mapLeadStatusLabel = (status) =>
   LEAD_STAGE_OPTIONS.find((option) => option.value === normalizeLeadStatus(status))?.label || "New";
 
 export const buildListingPayloadFromForm = (form, roleMode) => ({
+  postingType:
+    String(form.postingType || "").trim().toLowerCase() === "requirement"
+      ? "requirement"
+      : "property",
   title: String(form.title || "").trim(),
   intent: form.intent || "sale",
-  priceLabel: String(form.priceLabel || "").trim(),
+  priceLabel:
+    String(form.postingType || "").trim().toLowerCase() === "requirement"
+      ? (() => {
+          const minBudget = String(form.minBudget || "").trim();
+          const maxBudget = String(form.maxBudget || "").trim();
+          if (minBudget && maxBudget) return `${minBudget} - ${maxBudget}`;
+          if (maxBudget) return `Up to ${maxBudget}`;
+          if (minBudget) return `From ${minBudget}`;
+          return "Budget negotiable";
+        })()
+      : String(form.priceLabel || "").trim(),
   location: String(form.location || "").trim(),
   locality: String(form.locality || form.location || "").trim(),
   type: form.type || "Flat",
-  areaSqft: Number(form.areaSqft) || 0,
+  areaSqft:
+    String(form.postingType || "").trim().toLowerCase() === "requirement"
+      ? Math.max(100, Number(form.areaSqft) || 100)
+      : Number(form.areaSqft) || 0,
   carpetAreaSqft: form.carpetAreaSqft ? Number(form.carpetAreaSqft) : null,
   builtUpAreaSqft: form.builtUpAreaSqft ? Number(form.builtUpAreaSqft) : null,
   landSizeSqft: form.landSizeSqft ? Number(form.landSizeSqft) : null,
@@ -389,7 +445,15 @@ export const buildListingPayloadFromForm = (form, roleMode) => ({
   videoTourUrl: String(form.videoTourUrl || "").trim(),
   floorPlanUrl: String(form.floorPlanUrl || "").trim(),
   brochureUrl: String(form.brochureUrl || "").trim(),
-  amenities: parseAmenitiesInput(form.amenitiesInput),
+  amenities:
+    String(form.postingType || "").trim().toLowerCase() === "requirement"
+      ? parseAmenitiesInput(form.mustHaveAmenities)
+      : parseAmenitiesInput(form.amenitiesInput),
+  minBudget: String(form.minBudget || "").trim(),
+  maxBudget: String(form.maxBudget || "").trim(),
+  preferredLocations: String(form.preferredLocations || "").trim(),
+  mustHaveAmenities: String(form.mustHaveAmenities || "").trim(),
+  moveInDate: String(form.moveInDate || "").trim(),
   nearbySchoolKm: form.nearbySchoolKm !== "" ? Number(form.nearbySchoolKm) : null,
   nearbyHospitalKm: form.nearbyHospitalKm !== "" ? Number(form.nearbyHospitalKm) : null,
   nearbyMetroKm: form.nearbyMetroKm !== "" ? Number(form.nearbyMetroKm) : null,
