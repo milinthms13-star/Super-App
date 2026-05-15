@@ -260,7 +260,8 @@ const getBaseRole = (currentUser) => {
     return "seller";
   }
 
-  return "buyer";
+  // Allow all users to be sellers in TradePost
+  return "seller";
 };
 
 const formatCompactNumber = (value) =>

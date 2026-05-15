@@ -741,6 +741,116 @@ const buildTotalAreaInsights = (signDetails, language) => {
   ];
 };
 
+const ensurePdfSpace = (doc, requiredHeight = 72) => {
+  if (doc.y + requiredHeight > doc.page.height - doc.page.margins.bottom) {
+    doc.addPage();
+  }
+};
+
+const drawScoreBarChart = (
+  doc,
+  {
+    title = 'Score Chart',
+    rows = [],
+    labelKey = 'label',
+    valueKey = 'value',
+    startX = 40,
+    startY = 120,
+    width = 500,
+    barColor = '#1f7a8c',
+    trackColor = '#e5e7eb',
+  } = {}
+) => {
+  const labelWidth = 120;
+  const valueWidth = 34;
+  const barWidth = Math.max(120, width - labelWidth - valueWidth - 18);
+  const rowHeight = 18;
+  const barHeight = 9;
+  const chartTop = startY + 18;
+
+  doc.fillColor('#0f172a').fontSize(12).text(title, startX, startY, { width });
+
+  rows.forEach((row, index) => {
+    const y = chartTop + index * rowHeight;
+    const label = String(row?.[labelKey] || '');
+    const value = Math.max(0, Math.min(100, Number(row?.[valueKey] || 0)));
+    const activeBarWidth = Math.round((value / 100) * barWidth);
+
+    doc.fillColor('#1f2937').fontSize(9).text(label, startX, y, { width: labelWidth });
+    doc
+      .rect(startX + labelWidth + 6, y + 2, barWidth, barHeight)
+      .fill(trackColor)
+      .stroke(trackColor);
+    doc
+      .rect(startX + labelWidth + 6, y + 2, activeBarWidth, barHeight)
+      .fill(barColor)
+      .stroke(barColor);
+    doc.fillColor('#1f2937').fontSize(9).text(`${value}`, startX + labelWidth + 10 + barWidth, y, {
+      width: valueWidth,
+      align: 'right',
+    });
+  });
+
+  return chartTop + rows.length * rowHeight + 8;
+};
+
+const createYearlyScoreRows = (sign, language) => {
+  const labels = MONTH_LABELS[language] || MONTH_LABELS.en;
+  return labels.map((month, index) => {
+    const seed = hashText(`${sign}:${index + 1}`);
+    const score = 58 + (seed % 37);
+    return {
+      month,
+      score,
+      career: 54 + ((seed >> 2) % 42),
+      finance: 52 + ((seed >> 3) % 43),
+      relationships: 55 + ((seed >> 4) % 40),
+      health: 53 + ((seed >> 5) % 41),
+      spirituality: 50 + ((seed >> 6) % 45),
+    };
+  });
+};
+
+const buildAreaScoreRows = (signDetails, language) => {
+  const copy = HOROSCOPE_REPORT_COPY[language] || HOROSCOPE_REPORT_COPY.en;
+  const sign = normalizeSign(signDetails?.sign || 'aries');
+  const areas = [
+    copy.areaCareer,
+    copy.areaFinance,
+    copy.areaLove,
+    copy.areaHealth,
+    copy.areaFamily,
+    copy.areaEducation,
+    copy.areaTravel,
+    copy.areaSpirituality,
+    copy.areaRemedies,
+  ];
+
+  return areas.map((area, index) => {
+    const seed = hashText(`${sign}:area:${index + 1}`);
+    return {
+      area,
+      score: 57 + (seed % 39),
+    };
+  });
+};
+
+const writeWrappedParagraph = (doc, text, options = {}) => {
+  const {
+    fontSize = 10.5,
+    color = '#1f2937',
+    gap = 0.35,
+    width = doc.page.width - doc.page.margins.left - doc.page.margins.right,
+  } = options;
+
+  ensurePdfSpace(doc, 40);
+  doc.fillColor(color).fontSize(fontSize).text(String(text || ''), {
+    width,
+    align: 'left',
+  });
+  doc.moveDown(gap);
+};
+
 const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year', language = 'en') =>
   new Promise((resolve, reject) => {
     const normalizedSign = normalizeSign(sign);
@@ -748,7 +858,12 @@ const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year', language = 'en
     const normalizedPeriod = String(period || 'year').toLowerCase();
     const normalizedLanguage = normalizeReportLanguage(language);
     const copy = HOROSCOPE_REPORT_COPY[normalizedLanguage] || HOROSCOPE_REPORT_COPY.en;
-    const title = normalizedPeriod === 'year' ? copy.titleYear : normalizedPeriod === 'total' ? copy.titleTotal : copy.titleDefault;
+    const title =
+      normalizedPeriod === 'year'
+        ? copy.titleYear
+        : normalizedPeriod === 'total'
+          ? copy.titleTotal
+          : copy.titleDefault;
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     const buffers = [];
 
@@ -762,108 +877,253 @@ const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year', language = 'en
       year: 'numeric',
     });
 
-    doc.fontSize(18).text(`${signDetails.label} ${title}`, { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(11).text(`${copy.signLabel}: ${signDetails.label}`);
-    doc.text(`${copy.generatedOn}: ${generatedAt}`);
-    doc.moveDown();
-    doc.fontSize(12).text(copy.overview);
+    const baseSummary =
+      String(getDailyHoroscope(normalizedSign)?.horoscope || '').trim() || copy.fallbackSummary;
+    const overviewText =
+      normalizedLanguage === 'ml'
+        ? `${signDetails.label} rashi-yude ee visadamaaya report varshika pravrithikalum jeevitha mekhakalum vyakthamaayi vivarikkunnu. ${baseSummary}`
+        : `This expanded ${title.toLowerCase()} for ${signDetails.label} is written as a practical guide for the full cycle, with clear month-by-month and life-area direction. ${baseSummary}`;
+
+    doc.fillColor('#0f172a').fontSize(20).text(`${signDetails.label} ${title}`, { align: 'center' });
     doc.moveDown(0.3);
+    doc.fillColor('#334155').fontSize(10.5).text(`${copy.signLabel}: ${signDetails.label}`, { align: 'center' });
+    doc.text(`${copy.generatedOn}: ${generatedAt}`, { align: 'center' });
+    doc.moveDown(0.6);
+    doc.fillColor('#0f172a').fontSize(13).text(copy.overview);
+    doc.moveDown(0.25);
+    writeWrappedParagraph(doc, overviewText, { fontSize: 10.5, gap: 0.5 });
 
     if (normalizedPeriod === 'year') {
-      doc.fontSize(12).text(copy.monthwiseHeading);
-      doc.moveDown(0.3);
-      const monthwise = buildMonthwisePredictions(normalizedSign, normalizedLanguage);
-      monthwise.forEach((line) => {
-        doc.fontSize(11).text(`- ${line}`);
+      const monthScores = createYearlyScoreRows(normalizedSign, normalizedLanguage);
+      const chartRows = monthScores.map((row) => ({ label: row.month.slice(0, 3), value: row.score }));
+      const nextY = drawScoreBarChart(doc, {
+        title: normalizedLanguage === 'ml' ? 'Varshika bala chart (0-100)' : 'Yearly momentum chart (0-100)',
+        rows: chartRows,
+        labelKey: 'label',
+        valueKey: 'value',
+        startY: doc.y + 4,
+        width: 510,
+        barColor: '#0f766e',
       });
-      doc.moveDown();
-      doc.fontSize(12).text(copy.practicalGuidance);
-      doc.moveDown(0.3);
-      const practicalTips = normalizedLanguage === 'ml'
-        ? [
-            'Prathidinavum oru simple routine paalikkuka.',
-            'Valiya theerumanangal munpe plan punaravalokanam cheyyuka.',
-            'Bandhangalil shanthamaya samsaram nilanirthuka.',
-          ]
-        : [
-            'Keep a simple daily routine to support steady progress.',
-            'Review plans before making major decisions.',
-            'Stay connected with trusted family and support circles.',
-          ];
-      practicalTips.forEach((tip) => {
-        doc.fontSize(11).text(`- ${tip}`);
+      doc.y = nextY + 6;
+
+      writeWrappedParagraph(
+        doc,
+        normalizedLanguage === 'ml'
+          ? 'Chart-il ullathu masam prathi urja score aanu. 70+ masangalil puthiya thudakkangal, 60-69 masangalil sthiratha, 60-il thaazhe ullava punaravasanathinu nallathu.'
+          : 'The chart shows month-wise momentum. Scores above 70 indicate expansion windows, 60-69 support stable progress, and lower ranges are best used for review and correction.',
+        { gap: 0.5 }
+      );
+
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(copy.monthwiseHeading);
+      doc.moveDown(0.35);
+
+      monthScores.slice(0, 6).forEach((row) => {
+        ensurePdfSpace(doc, 88);
+        doc.fontSize(12).fillColor('#0f172a').text(`${row.month} | Score ${row.score}/100`);
+        doc.moveDown(0.15);
+        writeWrappedParagraph(
+          doc,
+          normalizedLanguage === 'ml'
+            ? `Career: ${row.career}/100 - sthiramaaya prayatnam vazhi melottam. Finance: ${row.finance}/100 - budget anusarichu nadannal labham. Relationship: ${row.relationships}/100 - samsaram shanthamayi nilanirthuka.`
+            : `Career ${row.career}/100: consistent execution brings visibility. Finance ${row.finance}/100: measured decisions protect gains. Relationships ${row.relationships}/100: calm conversations improve trust and cooperation.`,
+          { gap: 0.2 }
+        );
+        writeWrappedParagraph(
+          doc,
+          normalizedLanguage === 'ml'
+            ? `Health ${row.health}/100 um spirituality ${row.spirituality}/100 um samathwathode kaiyarikuka. Action: ee masam oru single-priority plan ezhuthuka, weekly review cheyyuka.`
+            : `Health ${row.health}/100 and spirituality ${row.spirituality}/100 suggest balancing effort with recovery. Action step: define one priority for the month and review weekly progress every Sunday.`,
+          { gap: 0.45 }
+        );
       });
+
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(
+        normalizedLanguage === 'ml' ? 'Second-half detailed forecast' : 'Second-half detailed forecast'
+      );
+      doc.moveDown(0.35);
+
+      monthScores.slice(6).forEach((row) => {
+        ensurePdfSpace(doc, 88);
+        doc.fontSize(12).fillColor('#0f172a').text(`${row.month} | Score ${row.score}/100`);
+        doc.moveDown(0.15);
+        writeWrappedParagraph(
+          doc,
+          normalizedLanguage === 'ml'
+            ? `Ee masam thozhilum kudumba badhyathakalum balance cheyyunnathu pradhanam. Thirumanangalil vegathayekkal sthiratha nalkuka. Financial risk kuraykkan reserve budget undakkuka.`
+            : `This month favors balancing professional commitments with personal responsibilities. Choose reliability over speed in major commitments. Keep a reserve budget and avoid emotionally driven purchases.`,
+          { gap: 0.2 }
+        );
+        writeWrappedParagraph(
+          doc,
+          normalizedLanguage === 'ml'
+            ? 'Bandhangalil viswasam urappakkan nerittulla samsaram nadathuka. Aarogyathinu sleep cycleum regular movementum nirbandham.'
+            : 'Strengthen relationships through direct communication and predictable follow-up. For health, protect sleep quality and maintain regular movement even during busy weeks.',
+          { gap: 0.45 }
+        );
+      });
+
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(copy.practicalGuidance);
+      doc.moveDown(0.35);
+
+      const quarterCopy =
+        normalizedLanguage === 'ml'
+          ? [
+              'Q1 (Jan-Mar): plan, routine, foundation.',
+              'Q2 (Apr-Jun): communication, career execution, and savings discipline.',
+              'Q3 (Jul-Sep): correction cycle, health balancing, and low-risk growth.',
+              'Q4 (Oct-Dec): consolidation, relationship clarity, and next-year planning.',
+            ]
+          : [
+              'Q1 (Jan-Mar): foundation quarter for planning, discipline, and structure.',
+              'Q2 (Apr-Jun): execution quarter for communication-heavy work and visible output.',
+              'Q3 (Jul-Sep): correction quarter for health, systems, and low-risk decisions.',
+              'Q4 (Oct-Dec): consolidation quarter for relationships, gratitude, and next-year setup.',
+            ];
+
+      quarterCopy.forEach((line) => {
+        ensurePdfSpace(doc, 22);
+        doc.fontSize(11).fillColor('#1f2937').text(`- ${line}`);
+      });
+      doc.moveDown(0.4);
+
+      const finalChecklist =
+        normalizedLanguage === 'ml'
+          ? [
+              'Monthly spending tracker maintain cheyyuka.',
+              '3-month career goal board update cheyyuka.',
+              'Week-il 1 digital detox block set cheyyuka.',
+              'Prathimasam family alignment discussion nadathuka.',
+              'Quarter-end gratitude and reset ritual follow cheyyuka.',
+            ]
+          : [
+              'Maintain a monthly spending tracker and review variance.',
+              'Update a rolling 3-month career goal board.',
+              'Set one weekly digital-detox focus block.',
+              'Schedule a family alignment conversation each month.',
+              'Close each quarter with a reset and gratitude routine.',
+            ];
+
+      writeWrappedParagraph(
+        doc,
+        normalizedLanguage === 'ml'
+          ? 'Final Action Checklist'
+          : 'Final Action Checklist',
+        { fontSize: 12, color: '#0f172a', gap: 0.25 }
+      );
+      finalChecklist.forEach((line) => {
+        ensurePdfSpace(doc, 20);
+        doc.fontSize(10.5).fillColor('#1f2937').text(`- ${line}`);
+      });
+
       doc.end();
       return;
     }
 
     if (normalizedPeriod === 'total') {
-      doc.fontSize(12).text(copy.totalAreasHeading);
-      doc.moveDown(0.3);
+      const areaScores = buildAreaScoreRows(signDetails, normalizedLanguage);
+      const nextY = drawScoreBarChart(doc, {
+        title: normalizedLanguage === 'ml' ? 'Jeevitha mekhala score chart (0-100)' : 'Life-area clarity chart (0-100)',
+        rows: areaScores.map((row) => ({ label: row.area, value: row.score })),
+        labelKey: 'label',
+        valueKey: 'value',
+        startY: doc.y + 4,
+        width: 510,
+        barColor: '#7c3aed',
+      });
+      doc.y = nextY + 6;
+
+      writeWrappedParagraph(
+        doc,
+        normalizedLanguage === 'ml'
+          ? 'Ee chart jeevitha mekhala prathi balam kaanikkunnu. Uyarna score ullathil expansion nadathuka; kuranja mekhakalil disciplineum support systemum nirmmikkuka.'
+          : 'This chart summarizes your long-horizon strength across major life areas. Expand where scores are high, and build systems, support, and patience where scores are moderate.',
+        { gap: 0.5 }
+      );
+
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(copy.totalAreasHeading);
+      doc.moveDown(0.35);
+
       const areaInsights = buildTotalAreaInsights(signDetails, normalizedLanguage);
-      areaInsights.forEach((insight) => {
-        doc.fontSize(11).text(`${insight.title}: ${insight.text}`);
-        doc.moveDown(0.2);
+      areaInsights.forEach((insight, index) => {
+        const score = areaScores[index]?.score || 65;
+        ensurePdfSpace(doc, 92);
+        doc.fontSize(12).fillColor('#0f172a').text(`${insight.title} (${score}/100)`);
+        doc.moveDown(0.15);
+        writeWrappedParagraph(doc, insight.text, { gap: 0.15 });
+        writeWrappedParagraph(
+          doc,
+          normalizedLanguage === 'ml'
+            ? 'Deep guidance: goal set cheyyuka, weekly progress check cheyyuka, emotional reaction-ne pakaram structured response follow cheyyuka.'
+            : 'Deep guidance: set one measurable target, review progress weekly, and replace emotional reaction with a structured response loop.',
+          { gap: 0.45 }
+        );
       });
-      doc.moveDown();
-      doc.fontSize(12).text(copy.practicalGuidance);
+
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(
+        normalizedLanguage === 'ml' ? '12-month total roadmap' : '12-month total roadmap'
+      );
       doc.moveDown(0.3);
-      const practicalTips = normalizedLanguage === 'ml'
-        ? [
-            'Prathidinavum oru simple routine paalikkuka.',
-            'Valiya theerumanangal munpe plan punaravalokanam cheyyuka.',
-            'Bandhangalil shanthamaya samsaram nilanirthuka.',
-          ]
-        : [
-            'Keep a simple daily routine to support steady progress.',
-            'Review plans before making major decisions.',
-            'Stay connected with trusted family and support circles.',
-          ];
-      practicalTips.forEach((tip) => {
-        doc.fontSize(11).text(`- ${tip}`);
+
+      const monthwise = buildMonthwisePredictions(normalizedSign, normalizedLanguage);
+      monthwise.forEach((line, index) => {
+        ensurePdfSpace(doc, 34);
+        doc.fontSize(11).fillColor('#0f172a').text(`${index + 1}. ${line}`);
+        writeWrappedParagraph(
+          doc,
+          normalizedLanguage === 'ml'
+            ? 'Action focus: oru practical step choose cheythu 30-day consistency nilanirthuka.'
+            : 'Action focus: choose one practical step and hold 30-day consistency before scaling.',
+          { fontSize: 10, gap: 0.28 }
+        );
       });
+
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(copy.practicalGuidance);
+      doc.moveDown(0.35);
+
+      const totalGuidance =
+        normalizedLanguage === 'ml'
+          ? [
+              'Core rhythm: morning planning + evening reflection.',
+              'Money: 50-30-20 style budgeting with emergency buffer.',
+              'Career: quarterly skill milestone and mentor check-in.',
+              'Relationships: conflict-ne delay cheyyathe same day clear cheyyuka.',
+              'Health: weekly movement target + sleep window discipline.',
+              'Spirituality: short daily prayer/meditation and monthly silence block.',
+              'Annual review: quarter-wise wins, losses, and next adjustments.',
+            ]
+          : [
+              'Core rhythm: morning planning and evening reflection.',
+              'Money system: follow a 50-30-20 budget with an emergency reserve.',
+              'Career arc: maintain quarterly skill milestones and mentor checkpoints.',
+              'Relationships: resolve friction quickly with same-day clarity conversations.',
+              'Health stack: weekly movement targets plus consistent sleep windows.',
+              'Spiritual reset: daily short prayer/meditation and one monthly silence block.',
+              'Annual review loop: track wins, misses, and next-quarter adjustments.',
+            ];
+
+      totalGuidance.forEach((tip) => {
+        ensurePdfSpace(doc, 22);
+        doc.fontSize(11).fillColor('#1f2937').text(`- ${tip}`);
+      });
+
       doc.end();
       return;
     }
 
-    if (normalizedPeriod === 'year') {
-      const months = [
-        'Jan–Mar: Start the year with a stable focus on relationships and routines.',
-        'Apr–Jun: Growth chances arrive through communication and planning.',
-        'Jul–Sep: Stay mindful of timing and choose steady progress over speed.',
-        'Oct–Dec: Review what worked, prepare for the next cycle, and keep energy balanced.',
-      ];
-      months.forEach((line) => {
-        doc.fontSize(11).text(`• ${line}`);
-      });
-    } else if (normalizedPeriod === 'total') {
-      const insights = [
-        'Your long-term direction is strengthened by thoughtful planning and good habits.',
-        'Major life choices should align with your values and personal rhythm.',
-        'Relationships and career both benefit from consistent communication.',
-        'Trust your intuition when opportunities feel aligned with your purpose.',
-      ];
-      insights.forEach((line) => {
-        doc.fontSize(11).text(`• ${line}`);
-      });
-    } else {
-      doc.fontSize(11).text(
-        'This horoscope report brings together your sign details and current energies for a personalized guidance summary.'
-      );
-    }
-
-    doc.moveDown();
-    doc.fontSize(12).text('Practical guidance');
-    doc.moveDown(0.3);
-    [
-      'Keep a simple daily routine to support steady progress.',
-      'Use the coming weeks to review plans before making major decisions.',
-      'Stay connected with trusted friends and family when changes arrive.',
-    ].forEach((tip) => {
-      doc.fontSize(11).text(`• ${tip}`);
-    });
-
+    writeWrappedParagraph(
+      doc,
+      normalizedLanguage === 'ml'
+        ? 'Ithu generic report aanu. Year allenkil total select cheythal visadamaaya multi-page report labhikkum.'
+        : 'This is a generic report format. Select year or total to generate a detailed multi-page horoscope.',
+      { gap: 0.5 }
+    );
     doc.end();
   });
 

@@ -77,7 +77,8 @@ export const getAllowedRoleModes = (user) => {
     return ["buyer", "owner", "agent", "builder"];
   }
 
-  return ["buyer"];
+  // Allow all users to access owner/seller mode for posting properties
+  return ["buyer", "owner"];
 };
 
 export const getPreferredRoleMode = (user) => {
