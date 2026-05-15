@@ -648,12 +648,13 @@ export const astrologyService = {
     }
   },
 
-  async downloadHoroscopeReport(sign = "aries", period = "year") {
+  async downloadHoroscopeReport(sign = "aries", period = "year", language = "en") {
     try {
       const response = await axios.get(`${API_BASE_URL}/astrology/horoscope/report`, {
         params: {
           sign,
           period,
+          language,
         },
         responseType: "blob",
       });

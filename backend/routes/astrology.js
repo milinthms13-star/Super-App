@@ -606,12 +606,149 @@ const formatPeriodStart = (period) => {
   return start;
 };
 
-const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year') =>
+const normalizeReportLanguage = (value) => (sanitizeText(value, 8).toLowerCase() === 'ml' ? 'ml' : 'en');
+
+const HOROSCOPE_REPORT_COPY = {
+  en: {
+    titleYear: 'Yearly Horoscope',
+    titleTotal: 'Total Horoscope',
+    titleDefault: 'Horoscope Report',
+    signLabel: 'Sign',
+    generatedOn: 'Generated on',
+    overview: 'Overview',
+    monthwiseHeading: 'Month-wise predictions',
+    totalAreasHeading: 'Total horoscope across life areas',
+    practicalGuidance: 'Practical guidance',
+    areaCareer: 'Career',
+    areaLove: 'Love life',
+    areaFinance: 'Finance',
+    areaHealth: 'Health',
+    areaFamily: 'Family and relationships',
+    areaEducation: 'Learning and growth',
+    areaTravel: 'Travel and movement',
+    areaSpirituality: 'Spiritual and inner balance',
+    areaRemedies: 'Remedies and support',
+    fallbackSummary:
+      'This horoscope report combines your sign energy with practical timing guidance.',
+  },
+  ml: {
+    titleYear: 'Varshika Horoscope',
+    titleTotal: 'Sampoorna Horoscope',
+    titleDefault: 'Horoscope Report',
+    signLabel: 'Rashi',
+    generatedOn: 'Generated on',
+    overview: 'Saram',
+    monthwiseHeading: 'Masam prathi phala nirdeham',
+    totalAreasHeading: 'Jeevitha mekhala muzhuvanulla phala vilayiruthal',
+    practicalGuidance: 'Prayogika nirdeshangal',
+    areaCareer: 'Thozhil',
+    areaLove: 'Sneham',
+    areaFinance: 'Dhanam',
+    areaHealth: 'Aarogyam',
+    areaFamily: 'Kudumba bandhangal',
+    areaEducation: 'Padanamum valarchayum',
+    areaTravel: 'Yathra',
+    areaSpirituality: 'Aathmeeya samathwam',
+    areaRemedies: 'Pariharam',
+    fallbackSummary:
+      'Ee report ningalude rashi balamum samaya marganirdeshavum onnichu tharunnu.',
+  },
+};
+
+const MONTH_LABELS = {
+  en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  ml: ['Januvari', 'Februvari', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+};
+
+const MONTHLY_FOCUS_LINES = {
+  en: [
+    'Start with clarity and disciplined planning.',
+    'Strengthen communication and practical follow-through.',
+    'Focus on consistency over speed.',
+    'Career alignment improves through steady effort.',
+    'Money decisions favor caution and structure.',
+    'Relationships benefit from calm conversations.',
+    'Health improves with routine and sleep discipline.',
+    'Avoid overcommitment and protect your time.',
+    'Learning and skill-building bring long-term gains.',
+    'Review goals and remove low-value tasks.',
+    'Family priorities need balanced attention.',
+    'Close the year with gratitude and smart planning.',
+  ],
+  ml: [
+    'Spashtamaya plan-ode varsham thudanguka.',
+    'Sambhashanavum prayogika nadapadikalum balappetuka.',
+    'Vegathayekkal sthiratha pradhanam.',
+    'Thozhil margam nannayi samanvayikkum.',
+    'Dhana theerumanangalil sookshmatha avashyam.',
+    'Bandhangal shanthamaya samsaram kondu balappedum.',
+    'Aarogyathinu nithya anushthanam sahayikkum.',
+    'Adhika badhyathakal kurakkuka, samayam rakshikkuka.',
+    'Puthiya padanamum skill valarchayum labhakaram.',
+    'Lakshyangal punaravalokanam cheyyuka.',
+    'Kudumba karyangalil samanvayam urappakkuka.',
+    'Varsha avasanam nandiode puthiya plan tayyarakkuka.',
+  ],
+};
+
+const buildMonthwisePredictions = (sign, language) => {
+  const labels = MONTH_LABELS[language] || MONTH_LABELS.en;
+  const focus = MONTHLY_FOCUS_LINES[language] || MONTHLY_FOCUS_LINES.en;
+  const baseYear = new Date().getFullYear();
+
+  return labels.map((monthLabel, monthIndex) => {
+    const monthDate = new Date(Date.UTC(baseYear, monthIndex, 15));
+    const reading = getDailyHoroscope(sign, monthDate);
+    const openingLine = String(reading?.horoscope || '')
+      .split('.')
+      .map((item) => item.trim())
+      .filter(Boolean)[0] || '';
+    const monthFocus = focus[monthIndex] || focus[0];
+    const mergedLine = openingLine ? `${monthFocus} ${openingLine}` : monthFocus;
+    return `${monthLabel}: ${mergedLine}`;
+  });
+};
+
+const buildTotalAreaInsights = (signDetails, language) => {
+  const copy = HOROSCOPE_REPORT_COPY[language] || HOROSCOPE_REPORT_COPY.en;
+  const signLabel = signDetails?.label || 'Your sign';
+  const element = signDetails?.element || 'Element';
+
+  if (language === 'ml') {
+    return [
+      { title: copy.areaCareer, text: `${signLabel} rashi-kku ee kalam sthirathaulla thozhil pravarthanangalil melottam kaanikunnu.` },
+      { title: copy.areaLove, text: 'Sneha jeevithathil viswasamum shanthamaya samsaravum bandham balappetum.' },
+      { title: copy.areaFinance, text: 'Dhana mekhayil budget anusarichu nadannal nalla samrakshanam labhikkum.' },
+      { title: copy.areaHealth, text: 'Nidra, vellam, nithya vyayamam eniva paalichal aarogyam nilanirtham.' },
+      { title: copy.areaFamily, text: 'Kudumba badhyathakal samanvayathode kaiyarikumbol samadhanam vardhikkum.' },
+      { title: copy.areaEducation, text: 'Puthiya padanam, certification, skill upgradation ivayil nalla phalam undakum.' },
+      { title: copy.areaTravel, text: 'Cheriya yathrakalum pravarthana sambandhamaya sanchaaravum upakarapradham.' },
+      { title: copy.areaSpirituality, text: `${element} swabhavam samathwathode nilanirthan dhyanam, japam, nishabdha samayam sahayikkum.` },
+      { title: copy.areaRemedies, text: 'Prathidinavum cheriya prarthana, danam, manasika samyam eniva anukoolamaya urja vardhippikkum.' },
+    ];
+  }
+
+  return [
+    { title: copy.areaCareer, text: `${signLabel} is favored for disciplined progress, consistent execution, and steady leadership choices.` },
+    { title: copy.areaLove, text: 'Love life improves through clear communication, emotional patience, and shared daily routines.' },
+    { title: copy.areaFinance, text: 'Financial growth is possible when spending stays structured and long-term goals are prioritized.' },
+    { title: copy.areaHealth, text: 'Health remains stable with sleep discipline, hydration, and predictable activity windows.' },
+    { title: copy.areaFamily, text: 'Family relationships become smoother when boundaries and responsibilities are discussed early.' },
+    { title: copy.areaEducation, text: 'Learning outcomes improve through focused skill-building and consistent study habits.' },
+    { title: copy.areaTravel, text: 'Travel opportunities are useful for practical outcomes, networking, and perspective refresh.' },
+    { title: copy.areaSpirituality, text: `${element}-element balance improves with reflection, prayer, and mindful decisions.` },
+    { title: copy.areaRemedies, text: 'Simple remedies such as gratitude, charity, and morning intention-setting remain supportive.' },
+  ];
+};
+
+const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year', language = 'en') =>
   new Promise((resolve, reject) => {
     const normalizedSign = normalizeSign(sign);
     const signDetails = getSignDetails(normalizedSign) || getSignDetails('aries');
     const normalizedPeriod = String(period || 'year').toLowerCase();
-    const title = normalizedPeriod === 'year' ? 'Yearly Horoscope' : normalizedPeriod === 'total' ? 'Lifetime Horoscope' : 'Horoscope Report';
+    const normalizedLanguage = normalizeReportLanguage(language);
+    const copy = HOROSCOPE_REPORT_COPY[normalizedLanguage] || HOROSCOPE_REPORT_COPY.en;
+    const title = normalizedPeriod === 'year' ? copy.titleYear : normalizedPeriod === 'total' ? copy.titleTotal : copy.titleDefault;
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     const buffers = [];
 
@@ -627,11 +764,68 @@ const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year') =>
 
     doc.fontSize(18).text(`${signDetails.label} ${title}`, { align: 'center' });
     doc.moveDown();
-    doc.fontSize(11).text(`Sign: ${signDetails.label}`);
-    doc.text(`Generated on: ${generatedAt}`);
+    doc.fontSize(11).text(`${copy.signLabel}: ${signDetails.label}`);
+    doc.text(`${copy.generatedOn}: ${generatedAt}`);
     doc.moveDown();
-    doc.fontSize(12).text('Overview');
+    doc.fontSize(12).text(copy.overview);
     doc.moveDown(0.3);
+
+    if (normalizedPeriod === 'year') {
+      doc.fontSize(12).text(copy.monthwiseHeading);
+      doc.moveDown(0.3);
+      const monthwise = buildMonthwisePredictions(normalizedSign, normalizedLanguage);
+      monthwise.forEach((line) => {
+        doc.fontSize(11).text(`- ${line}`);
+      });
+      doc.moveDown();
+      doc.fontSize(12).text(copy.practicalGuidance);
+      doc.moveDown(0.3);
+      const practicalTips = normalizedLanguage === 'ml'
+        ? [
+            'Prathidinavum oru simple routine paalikkuka.',
+            'Valiya theerumanangal munpe plan punaravalokanam cheyyuka.',
+            'Bandhangalil shanthamaya samsaram nilanirthuka.',
+          ]
+        : [
+            'Keep a simple daily routine to support steady progress.',
+            'Review plans before making major decisions.',
+            'Stay connected with trusted family and support circles.',
+          ];
+      practicalTips.forEach((tip) => {
+        doc.fontSize(11).text(`- ${tip}`);
+      });
+      doc.end();
+      return;
+    }
+
+    if (normalizedPeriod === 'total') {
+      doc.fontSize(12).text(copy.totalAreasHeading);
+      doc.moveDown(0.3);
+      const areaInsights = buildTotalAreaInsights(signDetails, normalizedLanguage);
+      areaInsights.forEach((insight) => {
+        doc.fontSize(11).text(`${insight.title}: ${insight.text}`);
+        doc.moveDown(0.2);
+      });
+      doc.moveDown();
+      doc.fontSize(12).text(copy.practicalGuidance);
+      doc.moveDown(0.3);
+      const practicalTips = normalizedLanguage === 'ml'
+        ? [
+            'Prathidinavum oru simple routine paalikkuka.',
+            'Valiya theerumanangal munpe plan punaravalokanam cheyyuka.',
+            'Bandhangalil shanthamaya samsaram nilanirthuka.',
+          ]
+        : [
+            'Keep a simple daily routine to support steady progress.',
+            'Review plans before making major decisions.',
+            'Stay connected with trusted family and support circles.',
+          ];
+      practicalTips.forEach((tip) => {
+        doc.fontSize(11).text(`- ${tip}`);
+      });
+      doc.end();
+      return;
+    }
 
     if (normalizedPeriod === 'year') {
       const months = [
@@ -1598,10 +1792,11 @@ router.get('/horoscope/report', authenticate, async (req, res) => {
   try {
     const period = sanitizeText(String(req.query?.period || 'year'), 16).toLowerCase();
     const sign = normalizeSign(String(req.query?.sign || 'aries'));
-    const pdfBuffer = await buildHoroscopePdfBuffer(sign, period);
+    const language = normalizeReportLanguage(req.query?.language || 'en');
+    const pdfBuffer = await buildHoroscopePdfBuffer(sign, period, language);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="horoscope-report-${sign}-${period}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="horoscope-report-${sign}-${period}-${language}.pdf"`);
     res.setHeader('Content-Length', String(pdfBuffer.length));
     return res.send(pdfBuffer);
   } catch (error) {

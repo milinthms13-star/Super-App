@@ -149,6 +149,99 @@ const NAKSHATRA_NAMES = [
   "Revati",
 ];
 
+const NAKSHATRA_DISPLAY_NAMES = {
+  Ashwini: { en: "Ashwini", ml: "Aswathi" },
+  Bharani: { en: "Bharani", ml: "Bharani" },
+  Krittika: { en: "Krittika", ml: "Karthika" },
+  Rohini: { en: "Rohini", ml: "Rohini" },
+  Mrigashira: { en: "Mrigashira", ml: "Makayiram" },
+  Ardra: { en: "Ardra", ml: "Thiruvathira" },
+  Punarvasu: { en: "Punarvasu", ml: "Punartham" },
+  Pushya: { en: "Pushya", ml: "Pooyam" },
+  Ashlesha: { en: "Ashlesha", ml: "Aayilyam" },
+  Magha: { en: "Magha", ml: "Makam" },
+  "Purva Phalguni": { en: "Purva Phalguni", ml: "Pooram" },
+  "Uttara Phalguni": { en: "Uttara Phalguni", ml: "Uthram" },
+  Hasta: { en: "Hasta", ml: "Atham" },
+  Chitra: { en: "Chitra", ml: "Chithira" },
+  Swati: { en: "Swati", ml: "Chothi" },
+  Vishakha: { en: "Vishakha", ml: "Vishakham" },
+  Anuradha: { en: "Anuradha", ml: "Anizham" },
+  Jyeshtha: { en: "Jyeshtha", ml: "Thrikketta" },
+  Mula: { en: "Mula", ml: "Moolam" },
+  "Purva Ashadha": { en: "Purva Ashadha", ml: "Pooradam" },
+  "Uttara Ashadha": { en: "Uttara Ashadha", ml: "Uthradam" },
+  Shravana: { en: "Shravana", ml: "Thiruvonam" },
+  Dhanishta: { en: "Dhanishta", ml: "Avittam" },
+  Shatabhisha: { en: "Shatabhisha", ml: "Chathayam" },
+  "Purva Bhadrapada": { en: "Purva Bhadrapada", ml: "Pooruruttathi" },
+  "Uttara Bhadrapada": { en: "Uttara Bhadrapada", ml: "Uthrattathi" },
+  Revati: { en: "Revati", ml: "Revathi" },
+};
+
+const normalizeLookupToken = (value) => String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+
+const NAKSHATRA_ALIASES = {
+  aswathi: "Ashwini",
+  ashwathi: "Ashwini",
+  karthika: "Krittika",
+  makayiram: "Mrigashira",
+  thiruvathira: "Ardra",
+  punartham: "Punarvasu",
+  pooyam: "Pushya",
+  aayilyam: "Ashlesha",
+  makham: "Magha",
+  pooram: "Purva Phalguni",
+  uthram: "Uttara Phalguni",
+  atham: "Hasta",
+  chithira: "Chitra",
+  chothi: "Swati",
+  vishakham: "Vishakha",
+  anizham: "Anuradha",
+  thrikketta: "Jyeshtha",
+  trikketta: "Jyeshtha",
+  thriketta: "Jyeshtha",
+  triketta: "Jyeshtha",
+  moolam: "Mula",
+  pooradam: "Purva Ashadha",
+  uthradam: "Uttara Ashadha",
+  thiruvonam: "Shravana",
+  tiruvonam: "Shravana",
+  sravana: "Shravana",
+  shravan: "Shravana",
+  avittam: "Dhanishta",
+  chathayam: "Shatabhisha",
+  pooruruttathi: "Purva Bhadrapada",
+  poorattathi: "Purva Bhadrapada",
+  uthrattathi: "Uttara Bhadrapada",
+  revathi: "Revati",
+};
+
+const getCanonicalNakshatraName = (value) => {
+  const input = String(value || "").trim();
+  if (!input) return "";
+  const direct = NAKSHATRA_NAMES.find((item) => item.toLowerCase() === input.toLowerCase());
+  if (direct) return direct;
+  const token = normalizeLookupToken(input);
+  const alias = NAKSHATRA_ALIASES[token];
+  if (alias) return alias;
+  const fromDisplay = NAKSHATRA_NAMES.find((item) => {
+    const display = NAKSHATRA_DISPLAY_NAMES[item];
+    return (
+      normalizeLookupToken(display?.en) === token ||
+      normalizeLookupToken(display?.ml) === token
+    );
+  });
+  return fromDisplay || input;
+};
+
+const getNakshatraDisplayName = (value, language) => {
+  const canonical = getCanonicalNakshatraName(value);
+  const mapped = NAKSHATRA_DISPLAY_NAMES[canonical];
+  if (!mapped) return canonical;
+  return language === "ml" ? mapped.ml : mapped.en;
+};
+
 const RASHI_NAMES = [
   "Mesha",
   "Vrishabha",
@@ -479,7 +572,7 @@ const createProfileDraft = (profile = null) => ({
   birthPlace: profile?.birthPlace || "",
   birthTimezone: profile?.birthTimezone || DEFAULT_BIRTH_TIME_ZONE,
   nakshatra:
-    profile?.nakshatra ||
+    getCanonicalNakshatraName(profile?.nakshatra) ||
     calculateNakshatra(profile?.birthDate, profile?.birthTime, profile?.birthTimezone) ||
     "",
   rashi:
@@ -521,7 +614,7 @@ const getDefaultFamilyProfile = (profile, userName) => ({
   birthTime: profile?.birthTime || "",
   birthPlace: profile?.birthPlace || "",
   birthTimezone: profile?.birthTimezone || DEFAULT_BIRTH_TIME_ZONE,
-  nakshatra: profile?.nakshatra || getNakshatraFromSign(profile?.sign || "aries"),
+  nakshatra: getCanonicalNakshatraName(profile?.nakshatra) || getNakshatraFromSign(profile?.sign || "aries"),
   rashi: profile?.rashi || getRashiFromSign(profile?.sign || "aries"),
   lagna: profile?.lagna || getLagnaFromTime(profile?.birthTime || "06:00"),
 });
@@ -745,6 +838,10 @@ const AstrologyHome = () => {
     handleProfileDraftChange("birthTimezone", normalizeTimeZoneValue(value));
   };
 
+  const handleNakshatraChange = (value) => {
+    handleProfileDraftChange("nakshatra", getCanonicalNakshatraName(value));
+  };
+
   useEffect(() => {
     if (!profileApi.profileDraft.birthDate || !profileApi.profileDraft.birthTime) {
       return;
@@ -836,7 +933,11 @@ const AstrologyHome = () => {
     setDownloadingHoroscopePeriod(normalizedPeriod);
 
     try {
-      const { blob, fileName } = await astrologyService.downloadHoroscopeReport(selectedSign, normalizedPeriod);
+      const { blob, fileName } = await astrologyService.downloadHoroscopeReport(
+        selectedSign,
+        normalizedPeriod,
+        language
+      );
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement("a");
       link.href = url;
@@ -942,7 +1043,13 @@ const AstrologyHome = () => {
                 </label>
                 <label className="astrology-field">
                   <span>{localize("Birth star (Nakshatra)", "à´œà´¨à´¨ à´¨à´•àµà´·à´¤àµà´°à´‚", language)}</span>
-                  <input type="text" value={profileApi.profileDraft.nakshatra} onChange={(event) => profileApi.handleDraftChange("nakshatra", event.target.value)} />
+                  <select value={getCanonicalNakshatraName(profileApi.profileDraft.nakshatra)} onChange={(event) => handleNakshatraChange(event.target.value)}>
+                    {NAKSHATRA_NAMES.map((name) => (
+                      <option key={name} value={name}>
+                        {getNakshatraDisplayName(name, language)}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 <label className="astrology-field">
                   <span>{localize("Gender", "à´²à´¿à´‚à´—à´‚", language)}</span>
@@ -963,7 +1070,7 @@ const AstrologyHome = () => {
               <h3>{localize("Instant Preview", "à´¤àµ½à´•àµà´·à´£ à´ªàµà´°à´¿à´µàµà´¯àµ‚", language)}</h3>
               <ul>
                 <li><span>{localize("Rashi", "à´°à´¾à´¶à´¿", language)}</span><strong>{profileApi.profileDraft.rashi || birthAstroPreview.rashi || getRashiFromSign(selectedSign)}</strong></li>
-                <li><span>{localize("Nakshatra", "à´¨à´•àµà´·à´¤àµà´°à´‚", language)}</span><strong>{profileApi.profileDraft.nakshatra || birthAstroPreview.nakshatra || getNakshatraFromSign(selectedSign)}</strong></li>
+                <li><span>{localize("Nakshatra", "à´¨à´•àµà´·à´¤àµà´°à´‚", language)}</span><strong>{getNakshatraDisplayName(profileApi.profileDraft.nakshatra || birthAstroPreview.nakshatra || getNakshatraFromSign(selectedSign), language)}</strong></li>
                 <li><span>{localize("Lucky color", "à´­à´¾à´—àµà´¯à´¨à´¿à´±à´‚", language)}</span><strong>{getLuckyColor(selectedSign)}</strong></li>
                 <li><span>{localize("Lucky number", "à´­à´¾à´—àµà´¯à´¸à´‚à´–àµà´¯", language)}</span><strong>{getLuckyNumber(selectedSign)}</strong></li>
                 <li><span>{localize("Today energy", "à´‡à´¨àµà´¨à´¤àµà´¤àµ† à´Šàµ¼à´œà´‚", language)}</span><strong>{todayEnergyScore}/10</strong></li>
@@ -1037,7 +1144,7 @@ const AstrologyHome = () => {
                   <article className="astrology-panel astro-result-card"><h4>Career advice</h4><p>{getCareerAdvice(selectedSign)}</p></article>
                   <article className="astrology-panel astro-result-card"><h4>Finance advice</h4><p>{getFinanceAdvice(selectedSign)}</p></article>
                   <article className="astrology-panel astro-result-card"><h4>Remedies</h4><ul>{getRemedyTips(selectedSign).map((tip) => <li key={tip}>{tip}</li>)}</ul></article>
-                  <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {panchangam?.nakshatra || profileApi.profileDraft.nakshatra || getNakshatraFromSign(selectedSign)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
+                  <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {getNakshatraDisplayName(panchangam?.nakshatra || profileApi.profileDraft.nakshatra || getNakshatraFromSign(selectedSign), language)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
                   <article className="astrology-panel astro-result-card">
                     <h4>Horoscope actions</h4>
                     <button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate horoscope report</button>
@@ -1064,7 +1171,7 @@ const AstrologyHome = () => {
                   <label className="astrology-field"><span>Time of birth</span><input type="time" value={profileApi.profileDraft.birthTime} onChange={(event) => profileApi.handleDraftChange("birthTime", event.target.value)} /></label>
                   <label className="astrology-field"><span>Place of birth</span><input type="text" list="astro-birth-place-options-kundli" value={profileApi.profileDraft.birthPlace} onChange={(event) => handleBirthPlaceChange(event.target.value)} /><datalist id="astro-birth-place-options-kundli">{BIRTH_LOCATION_OPTIONS.map((option) => <option key={option.label} value={option.label} />)}</datalist></label>
                   <label className="astrology-field"><span>Birth timezone</span><select value={profileApi.profileDraft.birthTimezone || DEFAULT_BIRTH_TIME_ZONE} onChange={(event) => handleBirthTimezoneChange(event.target.value)}>{BIRTH_TIMEZONE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-                  <label className="astrology-field"><span>Birth star (Nakshatra)</span><input type="text" placeholder="Leave blank to auto-calculate" value={profileApi.profileDraft.nakshatra} onChange={(event) => profileApi.handleDraftChange("nakshatra", event.target.value)} /></label>
+                  <label className="astrology-field"><span>Birth star (Nakshatra)</span><select value={getCanonicalNakshatraName(profileApi.profileDraft.nakshatra)} onChange={(event) => handleNakshatraChange(event.target.value)}>{NAKSHATRA_NAMES.map((name) => <option key={name} value={name}>{getNakshatraDisplayName(name, language)}</option>)}</select></label>
                   <label className="astrology-field"><span>Gender</span><select value={profileApi.profileDraft.gender} onChange={(event) => profileApi.handleDraftChange("gender", event.target.value)}>{GENDER_OPTIONS.map((option) => <option key={option.value || "unset"} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="astrology-field"><span>Topic / question</span><input type="text" value={question} onChange={(event) => setQuestion(event.target.value)} /></label>
                 </div>
@@ -1124,7 +1231,7 @@ const AstrologyHome = () => {
 
           {activeSection === "panchangam" ? (
             <div className="astro-card-grid">
-              <article className="astrology-panel astro-result-card"><h4>Panchangam today</h4>{panchangamLoading ? <p className="astrology-inline-message">Loading...</p> : <ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {panchangam?.nakshatra || "Revati"}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li><li>Yamagandam: {panchangam?.yamagandam || "03:00 PM - 04:30 PM"}</li></ul>}{panchangamNotice ? <p className="astrology-inline-message astrology-inline-message-warning">{panchangamNotice}</p> : null}</article>
+              <article className="astrology-panel astro-result-card"><h4>Panchangam today</h4>{panchangamLoading ? <p className="astrology-inline-message">Loading...</p> : <ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {getNakshatraDisplayName(panchangam?.nakshatra || "Revati", language)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li><li>Yamagandam: {panchangam?.yamagandam || "03:00 PM - 04:30 PM"}</li></ul>}{panchangamNotice ? <p className="astrology-inline-message astrology-inline-message-warning">{panchangamNotice}</p> : null}</article>
               <article className="astrology-panel astro-result-card"><h4>Festival updates</h4>{festivals.length ? <ul>{festivals.map((festival) => <li key={festival.name}><strong>{festival.name}</strong> - {festival.date}</li>)}</ul> : <p>No festival updates.</p>}</article>
             </div>
           ) : null}

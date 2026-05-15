@@ -174,6 +174,30 @@
   padding: 0.85rem 1.15rem;
 }
 
+/* Upgrade Seller Button - Prominent CTA for Account Upgrade */
+.realestate-upgrade-seller-button {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+  color: #fff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  font-size: 1rem;
+  padding: 0.9rem 1.5rem !important;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.realestate-upgrade-seller-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(255, 107, 107, 0.4);
+  background: linear-gradient(135deg, #ff5252 0%, #ff3838 100%) !important;
+}
+
+.realestate-upgrade-seller-button:active {
+  transform: translateY(0);
+}
+
 .realestate-inline-button {
   padding: 0.55rem 0.95rem;
 }
@@ -208,6 +232,50 @@
 .realestate-hero-panel ul {
   margin: 1rem 0 0;
   padding-left: 1rem;
+}
+
+/* Seller Upgrade Card */
+.realestate-seller-upgrade-card {
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.15) 0%, rgba(255, 182, 193, 0.15) 100%);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 16px;
+  padding: 1.5rem;
+  color: #fff;
+  text-align: center;
+}
+
+.realestate-seller-upgrade-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  background: linear-gradient(135deg, #ff6b6b, #ff9999);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.realestate-seller-upgrade-card > p {
+  margin: 0 0 1rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.95rem;
+}
+
+.realestate-seller-upgrade-card ul {
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.realestate-seller-upgrade-card li {
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.realestate-seller-upgrade-card .realestate-upgrade-seller-button {
+  margin-top: 1rem;
+  width: 100%;
+  display: block;
 }
 
 .realestate-stats-grid {
