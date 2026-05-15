@@ -113,6 +113,18 @@ const KidsStoryVideoMaker = () => {
     setError("");
   };
 
+  const parseApiResponse = async (response) => {
+    const text = await response.text();
+    if (!text) {
+      throw new Error(`Server returned empty response (${response.status})`);
+    }
+    try {
+      return JSON.parse(text);
+    } catch (parseError) {
+      throw new Error(`Invalid JSON response from server: ${text}`);
+    }
+  };
+
   const handleGenerateProject = async () => {
     const storyContent = storyText.trim();
     if (!storyContent) {
@@ -141,9 +153,9 @@ const KidsStoryVideoMaker = () => {
           storySource,
         }),
       });
-      const payload = await response.json();
+      const payload = await parseApiResponse(response);
       if (!payload.success) {
-        throw new Error(payload.error || "AI pipeline generation failed.");
+        throw new Error(payload.error || payload.message || "AI pipeline generation failed.");
       }
       const project = payload.project;
       setGeneratedProject(project);
@@ -174,9 +186,9 @@ const KidsStoryVideoMaker = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project: generatedProject, premiumHD: false }),
       });
-      const payload = await response.json();
+      const payload = await parseApiResponse(response);
       if (!payload.success) {
-        throw new Error(payload.error || "Video render failed.");
+        throw new Error(payload.error || payload.message || "Video render failed.");
       }
       setVideoUrl(payload.videoUrl);
       setMessage("Video rendered successfully. Preview and export your MP4.");
