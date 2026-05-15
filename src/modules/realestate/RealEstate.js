@@ -792,51 +792,94 @@ const RealEstate = () => {
     });
   };
 
+  const isBuyerMode = activeRole === "buyer";
+  const buyerQuickStats = dashboardStats.slice(0, 3);
+
+  const handleOpenSellerWorkspace = () => {
+    if (allowedRoleModes.includes("owner")) {
+      setActiveRole("owner");
+      return;
+    }
+    pushToast("Enable seller access to post properties.", "info");
+  };
+
+  const scrollToBuyerListings = () => {
+    if (typeof document === "undefined") return;
+    const target = document.querySelector(".homesphere-listings-container");
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <div className="realestate-shell">
-      <section className="realestate-hero">
-        <div className="realestate-hero-copy">
-          <h1>Find verified homes, rentals and land in one place.</h1>
-          <p>Search fast, connect with trusted sellers, and act on property leads immediately.</p>
-          <div className="realestate-hero-actions">
-            <button type="button" className="realestate-primary-button" onClick={() => setActiveRole("buyer")}>
-              Explore listings
-            </button>
-            <button
-              type="button"
-              className="realestate-secondary-button"
-              onClick={() => setActiveRole("owner")}
-            >
-              📤 Post an ad
-            </button>
+      {isBuyerMode ? (
+        <section className="realestate-buyer-quickbar">
+          <div className="realestate-buyer-quickbar-main">
+            <h1>Find your next home in fewer clicks</h1>
+            <p>Search, filter, and contact sellers directly from listings.</p>
+            <div className="realestate-buyer-quickbar-actions">
+              <button type="button" className="realestate-primary-button" onClick={scrollToBuyerListings}>
+                Explore listings
+              </button>
+              <button type="button" className="realestate-secondary-button" onClick={handleOpenSellerWorkspace}>
+                Post an ad
+              </button>
+            </div>
           </div>
-          <div className="realestate-hero-tags">
-            <span>Verified listings</span>
-            <span>Quick connect</span>
-            <span>Multi-language</span>
+          <div className="realestate-buyer-quickbar-stats">
+            {buyerQuickStats.map((stat) => (
+              <article key={stat.label} className="realestate-buyer-stat-pill">
+                <strong>{stat.value}</strong>
+                <span>{stat.label}</span>
+              </article>
+            ))}
           </div>
-        </div>
+        </section>
+      ) : (
+        <>
+          <section className="realestate-hero">
+            <div className="realestate-hero-copy">
+              <h1>Find verified homes, rentals and land in one place.</h1>
+              <p>Search fast, connect with trusted sellers, and act on property leads immediately.</p>
+              <div className="realestate-hero-actions">
+                <button type="button" className="realestate-primary-button" onClick={() => setActiveRole("buyer")}>
+                  Explore listings
+                </button>
+                <button
+                  type="button"
+                  className="realestate-secondary-button"
+                  onClick={handleOpenSellerWorkspace}
+                >
+                  Post an ad
+                </button>
+              </div>
+              <div className="realestate-hero-tags">
+                <span>Verified listings</span>
+                <span>Quick connect</span>
+                <span>Multi-language</span>
+              </div>
+            </div>
 
-        <div className="realestate-hero-panel">
-          <h2>Why HomeSphere</h2>
-          <ul>
-            <li>Post properties & ads instantly</li>
-            <li>Easy search for homes, rentals and land.</li>
-            <li>Chat, book visits and close deals quickly.</li>
-          </ul>
-        </div>
-      </section>
+            <div className="realestate-hero-panel">
+              <h2>Why HomeSphere</h2>
+              <ul>
+                <li>Post properties & ads instantly</li>
+                <li>Easy search for homes, rentals and land.</li>
+                <li>Chat, book visits and close deals quickly.</li>
+              </ul>
+            </div>
+          </section>
 
-      <section className="realestate-stats-grid">
-        {dashboardStats.map((stat) => (
-          <article key={stat.label} className="realestate-stat-card">
-            <strong>{stat.value}</strong>
-            <span>{stat.label}</span>
-          </article>
-        ))}
-      </section>
-
-      <section className="realestate-role-section" style={{ display: activeRole === "buyer" ? "none" : "block" }}>
+          <section className="realestate-stats-grid">
+            {dashboardStats.map((stat) => (
+              <article key={stat.label} className="realestate-stat-card">
+                <strong>{stat.value}</strong>
+                <span>{stat.label}</span>
+              </article>
+            ))}
+          </section>
+        </>
+      )}
+      <section className="realestate-role-section" style={{ display: isBuyerMode ? "none" : "block" }}>
         <div className="realestate-section-heading">
           <h2>Role-based experience</h2>
           <p>Switch between buyer, seller, broker, builder, and admin journeys without leaving the marketplace.</p>
@@ -863,7 +906,7 @@ const RealEstate = () => {
         </div>
       </section>
 
-      <section className="realestate-ecosystem-grid" style={{ display: activeRole === "buyer" ? "none" : "block" }}>
+      <section className="realestate-ecosystem-grid" style={{ display: isBuyerMode ? "none" : "block" }}>
         <article className="realestate-surface-card">
           <div className="realestate-section-heading">
             <h2>Real Estate Ecosystem</h2>
@@ -886,21 +929,17 @@ const RealEstate = () => {
       </section>
 
       {/* HOMESPHERE FOR BUYERS */}
-      {activeRole === "buyer" ? (
+      {isBuyerMode ? (
         <HomeSphere
           onNavigateToDashboard={(role) => {
-            const requestedRole = String(role || "").toLowerCase();
-            const normalizedRole = requestedRole === "seller" ? "owner" : requestedRole;
-            if (allowedRoleModes.includes(normalizedRole)) {
-              setActiveRole(normalizedRole);
-              return true;
-            }
-            return false;
+            const normalizedRole = String(role || "").toLowerCase() === "seller" ? "owner" : String(role || "").toLowerCase();
+            setActiveRole(normalizedRole || "owner");
+            return true;
           }}
         />
       ) : null}
 
-      <section className="realestate-main-grid" style={{ display: activeRole === "buyer" ? "none" : "grid" }}>
+      <section className="realestate-main-grid" style={{ display: isBuyerMode ? "none" : "grid" }}>
         <div className="realestate-left-column">
           {selectedProperty ? null : (
             <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>
@@ -1314,3 +1353,4 @@ const RealEstate = () => {
 };
 
 export default RealEstate;
+

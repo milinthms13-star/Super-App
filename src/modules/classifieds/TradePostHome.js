@@ -110,6 +110,14 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
     [favorites]
   );
 
+  const handlePostAdClick = () => {
+    const didNavigate = onNavigateToDashboard?.("seller");
+    if (didNavigate === false) {
+      pushToast("Posting is available after enabling seller access.", "info");
+    }
+    return didNavigate;
+  };
+
   const handleFavoriteToggle = (listingId) => {
     const fullId = `classifieds-${listingId}`;
     if (favoriteIds.has(fullId)) {
@@ -204,13 +212,6 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
     verifiedOnly,
     Boolean(searchText.trim()),
   ].filter(Boolean).length;
-
-  const handlePostAdClick = () => {
-    const didNavigate = onNavigateToDashboard?.("seller");
-    if (didNavigate === false) {
-      pushToast("Posting is available after enabling seller access.", "info");
-    }
-  };
 
   const resetFilters = () => {
     setSearchText("");
@@ -377,6 +378,11 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
                 >
                   Post the first ad
                 </button>
+                {!canPostAd ? (
+                  <p className="tradepost-empty-note">
+                    Seller accounts only can post listings.
+                  </p>
+                ) : null}
               </div>
             ) : (
               <div className="tradepost-grid">

@@ -1697,26 +1697,9 @@ const Classifieds = () => {
 
       {isBuyerView ? (
         <TradePostHome
-          onNavigateToDashboard={(role) => {
-            const requestedRole = String(role || "").toLowerCase();
-            const normalizedRole = requestedRole === "owner" ? "seller" : requestedRole;
-
-            if (normalizedRole === "seller") {
-              if (availableRoleModes.some((mode) => mode.id === "seller")) {
-                openPostComposer();
-                return true;
-              }
-
-              addToast("Posting is available after enabling seller access.", "info");
-              return false;
-            }
-
-            if (availableRoleModes.some((mode) => mode.id === normalizedRole)) {
-              setActiveRole(normalizedRole);
-              return true;
-            }
-
-            return false;
+          onNavigateToDashboard={() => {
+            openPostComposer();
+            return true;
           }}
         />
       ) : (

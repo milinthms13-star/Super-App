@@ -2801,3 +2801,106 @@
     text-align: center;
   }
 }
+
+/* ============================================================
+   BUYER QUICKBAR (SPACE-FIRST REARRANGEMENT)
+   ============================================================ */
+
+.realestate-buyer-quickbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 0.9rem;
+  align-items: center;
+  padding: 1rem 1.1rem;
+  border-radius: 18px;
+  border: 1px solid var(--realestate-border);
+  background:
+    radial-gradient(circle at top right, rgba(13, 122, 105, 0.16), transparent 45%),
+    linear-gradient(135deg, #f6fbfb 0%, #eef5f6 100%);
+  box-shadow: 0 10px 24px rgba(19, 48, 66, 0.08);
+}
+
+.realestate-buyer-quickbar-main h1 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.2vw, 1.7rem);
+  line-height: 1.2;
+}
+
+.realestate-buyer-quickbar-main p {
+  margin: 0.35rem 0 0;
+  color: var(--realestate-muted);
+  font-size: 0.95rem;
+}
+
+.realestate-buyer-quickbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.8rem;
+}
+
+.realestate-buyer-quickbar-actions .realestate-primary-button,
+.realestate-buyer-quickbar-actions .realestate-secondary-button {
+  min-height: 42px;
+  padding-top: 0.72rem;
+  padding-bottom: 0.72rem;
+}
+
+.realestate-buyer-quickbar-stats {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.realestate-buyer-stat-pill {
+  border: 1px solid var(--realestate-border);
+  border-radius: 12px;
+  padding: 0.58rem 0.72rem;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.realestate-buyer-stat-pill strong {
+  display: block;
+  font-size: 1rem;
+  color: var(--realestate-primary-dark);
+}
+
+.realestate-buyer-stat-pill span {
+  display: block;
+  margin-top: 0.16rem;
+  font-size: 0.8rem;
+  color: var(--realestate-muted);
+}
+
+@media (max-width: 980px) {
+  .realestate-buyer-quickbar {
+    grid-template-columns: 1fr;
+  }
+
+  .realestate-buyer-quickbar-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .realestate-buyer-quickbar {
+    padding: 0.8rem;
+    border-radius: 14px;
+  }
+
+  .realestate-buyer-quickbar-main p {
+    font-size: 0.86rem;
+  }
+
+  .realestate-buyer-quickbar-actions {
+    width: 100%;
+  }
+
+  .realestate-buyer-quickbar-actions .realestate-primary-button,
+  .realestate-buyer-quickbar-actions .realestate-secondary-button {
+    flex: 1 1 calc(50% - 0.3rem);
+  }
+
+  .realestate-buyer-quickbar-stats {
+    grid-template-columns: 1fr;
+  }
+}

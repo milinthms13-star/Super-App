@@ -332,7 +332,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
             <button
               type="button"
               className="realestate-primary-button"
-              onClick={redirectToSellerDashboard}
+              onClick={handlePostPropertyClick}
             >
               Post Property
             </button>
@@ -344,11 +344,6 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
               Explore Listings
             </button>
           </div>
-          {!canPostProperty ? (
-            <div className="homesphere-hero-note">
-              Upgrade to a seller account to post property listings.
-            </div>
-          ) : null}
         </div>
 
         <div className="homesphere-hero-panel">
@@ -558,7 +553,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                 <button
                   type="button"
                   className="realestate-primary-button"
-                  onClick={redirectToSellerDashboard}
+                  onClick={handlePostPropertyClick}
                 >
                   Post your property
                 </button>
