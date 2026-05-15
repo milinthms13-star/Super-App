@@ -4,6 +4,10 @@ import PropertyCard from "./components/PropertyCard";
 import PropertyDetailTabs from "./components/PropertyDetailTabs";
 import QuickFilters from "./components/QuickFilters";
 import LoanCalculator from "./components/LoanCalculator";
+import PopularLocations from "./components/PopularLocations";
+import PropertyCategories from "./components/PropertyCategories";
+import VerifiedAgents from "./components/VerifiedAgents";
+import DownloadAppCTA from "./components/DownloadAppCTA";
 import {
   DEFAULT_LISTING_FORM,
   HOME_LOAN_PARTNERS,
@@ -486,6 +490,24 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
           </div>
         ))}
       </div>
+
+      {/* POPULAR LOCATIONS SECTION */}
+      <PopularLocations
+        locations={locations}
+        onLocationClick={(location) => setLocationFilter(location)}
+      />
+
+      {/* PROPERTY CATEGORIES SECTION */}
+      <PropertyCategories
+        propertyTypes={propertyTypes}
+        onTypeClick={(type) => setTypeFilter(type)}
+      />
+
+      {/* VERIFIED AGENTS SECTION */}
+      <VerifiedAgents />
+
+      {/* DOWNLOAD APP CTA */}
+      <DownloadAppCTA />
     </div>
   );
 };

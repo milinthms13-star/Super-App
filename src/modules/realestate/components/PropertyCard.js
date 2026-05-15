@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 const PropertyCard = ({
   property,
@@ -9,6 +9,8 @@ const PropertyCard = ({
   onEdit,
   onFavoriteToggle,
 }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
   const trustSignals = [
     Boolean(property.verified),
     Boolean(property.reraNumber),
@@ -25,10 +27,16 @@ const PropertyCard = ({
     ? "Under construction"
     : property.possession || "Possession to be announced";
 
+  // Calculate EMI estimate (mock)
+  const emiEstimate = Math.round(property.priceValue * 0.008 * (20 * 12) / ((20 * 12) + 1));
+
   return (
     <article
-      className={`realestate-property-card ${isActive ? "active" : ""}`}
-      onClick={() => onSelect(property.id)}
+      className={`realestate-property-card image-first ${isActive ? "active" : ""}`}
+      onClick={() => {
+        onSelect(property.id);
+        setIsExpanded(true);
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === "Space") {
           event.preventDefault();
@@ -38,70 +46,108 @@ const PropertyCard = ({
       role="button"
       tabIndex={0}
     >
-      <div className="realestate-property-topline">
-        <span className={`realestate-badge ${property.verified ? "verified" : "pending"}`}>
-          {property.verificationStatus}
-        </span>
-        {property.featured ? <span className="realestate-badge featured">Featured</span> : null}
-        <span
-          className={`realestate-badge ${
-            property.status === "available" ? "available" : property.status === "sold" ? "sold" : "rented"
-          }`}
+      {/* IMAGE-FIRST SECTION - PROMINENT */}
+      <div className="realestate-property-image-container">
+        {property.image ? (
+          <img 
+            src={property.image} 
+            alt={property.title} 
+            className="realestate-property-image" 
+          />
+        ) : (
+          <div className="realestate-property-image-placeholder">
+            <span>📷</span>
+          </div>
+        )}
+        
+        {/* OVERLAY BADGES */}
+        <div className="realestate-property-badges-overlay">
+          <span className={`realestate-badge ${property.verified ? "verified" : "pending"}`}>
+            {property.verified ? "✓ Verified" : "Pending"}
+          </span>
+          {property.featured && <span className="realestate-badge featured">⭐ Featured</span>}
+        </div>
+
+        {/* FAVORITE BUTTON (STICKY TOP RIGHT) */}
+        <button
+          type="button"
+          className="realestate-favorite-btn"
+          onClick={(event) => {
+            event.stopPropagation();
+            onFavoriteToggle(property.id);
+          }}
+          aria-label={`${isFavorite ? "Remove from" : "Add to"} favorites`}
         >
-          {property.status}
-        </span>
-      </div>
-      <div className="realestate-property-media-gallery">
-        {property.image ? <img src={property.image} alt={property.title} className="realestate-property-image" /> : null}
-        <div className="realestate-property-media-meta">
-          <strong>{property.mediaGallery.length || property.mediaCount} media assets</strong>
-          <span>{property.hasVideoTour ? "Video tour available" : "Image gallery available"}</span>
+          {isFavorite ? "❤️" : "🤍"}
+        </button>
+
+        {/* MEDIA COUNT */}
+        <div className="realestate-media-count">
+          📸 {property.mediaGallery?.length || property.mediaCount || 0}
         </div>
       </div>
-      <div className="realestate-property-copy">
-        <h3>{property.title}</h3>
-        <p className="realestate-price">{property.priceLabel}</p>
-        <p>{property.location} | {property.locality}</p>
-        <p>{property.type} | {property.bedrooms || "Studio"} bed | {property.area}</p>
-        <div className="realestate-property-trustline">
+
+      {/* QUICK INFO - ALWAYS VISIBLE */}
+      <div className="realestate-property-quick-info">
+        <div className="realestate-price-and-location">
+          <strong className="realestate-price">{property.priceLabel}</strong>
+          <span className="realestate-location">{property.location}</span>
+        </div>
+        
+        {/* MAIN CTA AND MINI BADGES */}
+        <div className="realestate-property-actions">
           <span className={`realestate-trust-pill trust-${trustScore >= 5 ? "high" : trustScore >= 3 ? "good" : "pending"}`}>
             {trustLabel}
           </span>
-          <span className="realestate-docs-pill">{trustScore}/6 docs</span>
-        </div>
-        <div className="realestate-property-meta">
-          <span>{possessionLabel}</span>
-          <span>{property.furnishing}</span>
-          <span>{property.leads.length} leads</span>
-          <span>{property.rating.toFixed(1)} rating</span>
-        </div>
-      </div>
-      <div className="realestate-card-actions">
-        <span>{property.listedBy}</span>
-        {canManage ? (
           <button
             type="button"
-            className="realestate-inline-button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onEdit(property);
+            className="realestate-primary-button-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(property.id);
             }}
           >
-            Edit
+            View
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="realestate-inline-button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onFavoriteToggle(property);
-          }}
-          aria-label={`${isFavorite ? "Remove" : "Add"} ${property.title} to favorites`}
-        >
-          {isFavorite ? "Saved" : "Save"}
-        </button>
+        </div>
       </div>
+
+      {/* EXPANDED DETAILS - SHOWN ON CLICK OR HOVER */}
+      {isActive || isExpanded ? (
+        <div className="realestate-property-details-expanded">
+          <h3>{property.title}</h3>
+          
+          <div className="realestate-property-specs">
+            <span>🏠 {property.type}</span>
+            <span>🛏️ {property.bedrooms || "Studio"}</span>
+            <span>📐 {property.area}</span>
+          </div>
+
+          <div className="realestate-property-highlights">
+            <div className="realestate-emi-badge">
+              <strong>₹{(emiEstimate / 100000).toFixed(1)}L/mo</strong>
+              <span>EMI estimate</span>
+            </div>
+            <div className="realestate-possession-badge">
+              <span>{possessionLabel}</span>
+            </div>
+          </div>
+
+          <div className="realestate-property-amenities-preview">
+            {property.amenities?.slice(0, 3).map((amenity) => (
+              <span key={amenity}>{amenity}</span>
+            ))}
+            {property.amenities?.length > 3 && (
+              <span>+{property.amenities.length - 3} more</span>
+            )}
+          </div>
+
+          <div className="realestate-property-footer">
+            <span>{property.furnishing}</span>
+            <span>{property.listedBy}</span>
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 };

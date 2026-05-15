@@ -13,7 +13,17 @@ import { calculateEmi, buildEmiSchedule, exportEmiScheduleCsv } from "./services
 import { getLeadFormErrors, getEligibilityFormErrors } from "./services/financeValidation";
 import { normalizeRoleTokens, hasAnyRole } from "./services/roleAccess";
 
-const SOUTH_KERALA_DISTRICTS = ["Kollam", "Trivandrum", "Alappuzha", "Kottayam", "Pathanamthitta"];
+const SOUTH_INDIA_REGIONS = {
+  Kerala: ["Kollam", "Thiruvananthapuram", "Trivandrum", "Alappuzha", "Kottayam", "Pathanamthitta", "Ernakulam", "Thrissur", "Kozhikode", "Kannur"],
+  TamilNadu: ["Chennai", "Coimbatore", "Madurai", "Salem", "Tiruchirappalli", "Tirunelveli", "Erode"],
+  Karnataka: ["Bengaluru", "Mysuru", "Mangaluru", "Hubballi", "Belagavi", "Shivamogga"],
+  AndhraPradesh: ["Visakhapatnam", "Vijayawada", "Guntur", "Tirupati", "Kurnool", "Rajahmundry"],
+  Telangana: ["Hyderabad", "Warangal", "Karimnagar", "Nizamabad", "Khammam"],
+};
+
+const SOUTH_INDIA_STATES = Object.keys(SOUTH_INDIA_REGIONS);
+const DEFAULT_STATE = "Kerala";
+const getDistrictsForState = (state) => SOUTH_INDIA_REGIONS[state] || SOUTH_INDIA_REGIONS[DEFAULT_STATE] || [];
 
 const LOAN_CATEGORIES = [
   { id: "business", title: "Business Loans", summary: "Working capital, machinery, MSME expansion." },
@@ -28,12 +38,12 @@ const LOAN_CATEGORIES = [
 ];
 
 const TABS = [
-  { id: "loans", label: "Loans" },
-  { id: "eligibility", label: "Eligibility" },
-  { id: "emi", label: "EMI" },
+  { id: "loans", label: "Compare Offers" },
+  { id: "eligibility", label: "Check Eligibility" },
+  { id: "emi", label: "EMI Plan" },
   { id: "apply", label: "Apply" },
-  { id: "track", label: "Track" },
-  { id: "schemes", label: "Schemes" },
+  { id: "track", label: "Track Status" },
+  { id: "schemes", label: "Govt Schemes" },
 ];
 
 const DOCUMENT_FIELDS = [
@@ -97,7 +107,8 @@ const INITIAL_ELIGIBILITY_FORM = {
   fullName: "",
   phone: "",
   loanCategory: "business",
-  district: "Kollam",
+  state: DEFAULT_STATE,
+  district: getDistrictsForState(DEFAULT_STATE)[0] || "Kollam",
   age: "30",
   monthlyIncome: "50000",
   requiredAmount: "500000",
@@ -134,7 +145,8 @@ const INITIAL_LEAD_FORM = {
   amount: "",
   preferredInterestRate: "12",
   preferredTenureMonths: "60",
-  district: "Kollam",
+  state: DEFAULT_STATE,
+  district: getDistrictsForState(DEFAULT_STATE)[0] || "Kollam",
   institutionId: "",
   callbackWindow: "today-evening",
   documentNotes: "",
@@ -201,6 +213,7 @@ const FinanceHub = () => {
   const [activeTab, setActiveTab] = useState("loans");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [stateFilter, setStateFilter] = useState("all");
   const [districtFilter, setDistrictFilter] = useState("all");
   const [institutionTypeFilter, setInstitutionTypeFilter] = useState("all");
   const [institutions, setInstitutions] = useState([]);
@@ -245,13 +258,20 @@ const FinanceHub = () => {
   const [institutionDashboard, setInstitutionDashboard] = useState(null);
   const [commissionDashboard, setCommissionDashboard] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [quickJourney, setQuickJourney] = useState({
+    loanCategory: "business",
+    amount: "500000",
+    monthlyIncome: "50000",
+    state: DEFAULT_STATE,
+    district: getDistrictsForState(DEFAULT_STATE)[0] || "Kollam",
+  });
 
   const summaryCards = useMemo(
     () => [
       { id: "verified", label: "Verified Partners", value: institutions.filter((item) => item.verifiedPartner).length },
-      { id: "districts", label: "District Coverage", value: SOUTH_KERALA_DISTRICTS.length },
+      { id: "districts", label: "City Coverage", value: SOUTH_INDIA_STATES.reduce((total, state) => total + getDistrictsForState(state).length, 0) },
+      { id: "states", label: "South India States", value: SOUTH_INDIA_STATES.length },
       { id: "categories", label: "Loan Categories", value: LOAN_CATEGORIES.length },
-      { id: "schemes", label: "Govt Schemes", value: GOVERNMENT_SCHEMES.length },
     ],
     [institutions]
   );
@@ -259,9 +279,9 @@ const FinanceHub = () => {
     () => [
       {
         id: "market",
-        label: "Institution Network",
+        label: "Partner Network",
         value: institutions.length,
-        helper: "Live institutions",
+        helper: "Banks, NBFCs, co-ops",
       },
       {
         id: "verified",
@@ -273,13 +293,13 @@ const FinanceHub = () => {
         id: "schemes",
         label: "Govt Schemes",
         value: GOVERNMENT_SCHEMES.length,
-        helper: "Curated support options",
+        helper: "Regional support options",
       },
       {
         id: "categories",
-        label: "Loan Categories",
-        value: LOAN_CATEGORIES.length,
-        helper: "Coverage breadth",
+        label: "State Coverage",
+        value: SOUTH_INDIA_STATES.length,
+        helper: "Kerala, TN, KA, AP, TS",
       },
     ],
     [institutions]
@@ -294,16 +314,34 @@ const FinanceHub = () => {
     [searchTerm]
   );
 
+  const districtOptionsForFilter = useMemo(() => {
+    if (stateFilter === "all") {
+      return SOUTH_INDIA_STATES.flatMap((state) => getDistrictsForState(state));
+    }
+    return getDistrictsForState(stateFilter);
+  }, [stateFilter]);
+
+  const districtOptionsForQuickJourney = useMemo(
+    () => getDistrictsForState(quickJourney.state),
+    [quickJourney.state]
+  );
+
   const filteredInstitutions = useMemo(
     () =>
       institutions.filter((institution) => {
         const byCategory = selectedCategory === "all" || institution.loanCategories?.includes(selectedCategory);
+        const byDistrict =
+          districtFilter === "all" ||
+          (institution.serviceDistricts || []).includes(districtFilter);
+        const byType =
+          institutionTypeFilter === "all" ||
+          String(institution.type || "").toLowerCase() === institutionTypeFilter;
         const bySearch = `${institution.name || ""} ${institution.branchAddress || ""} ${institution.contactPerson?.name || ""}`
           .toLowerCase()
           .includes(searchTerm.toLowerCase());
-        return byCategory && bySearch;
+        return byCategory && byDistrict && byType && bySearch;
       }),
-    [institutions, searchTerm, selectedCategory]
+    [institutions, searchTerm, selectedCategory, districtFilter, institutionTypeFilter]
   );
 
   const loadAdminAndCommissionDashboards = async (isAdmin) => {
@@ -377,6 +415,7 @@ const FinanceHub = () => {
     setInstitutionLoadState({ loading: true, error: "" });
     try {
       const response = await financeApi.getInstitutions({
+        state: stateFilter === "all" ? "" : stateFilter,
         district: districtFilter === "all" ? "" : districtFilter,
         type: institutionTypeFilter === "all" ? "" : institutionTypeFilter,
         category: selectedCategory === "all" ? "" : selectedCategory,
@@ -397,9 +436,29 @@ const FinanceHub = () => {
   }, []);
 
   useEffect(() => {
+    if (stateFilter === "all") {
+      return;
+    }
+    const stateDistricts = getDistrictsForState(stateFilter);
+    if (districtFilter !== "all" && !stateDistricts.includes(districtFilter)) {
+      setDistrictFilter("all");
+    }
+  }, [stateFilter, districtFilter]);
+
+  useEffect(() => {
+    const stateDistricts = getDistrictsForState(quickJourney.state);
+    if (!stateDistricts.includes(quickJourney.district)) {
+      setQuickJourney((current) => ({
+        ...current,
+        district: stateDistricts[0] || current.district,
+      }));
+    }
+  }, [quickJourney.state, quickJourney.district]);
+
+  useEffect(() => {
     void loadInstitutions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [districtFilter, institutionTypeFilter, selectedCategory]);
+  }, [stateFilter, districtFilter, institutionTypeFilter, selectedCategory]);
 
   const handleEligibilitySubmit = async (event) => {
     event.preventDefault();
@@ -701,6 +760,29 @@ const FinanceHub = () => {
     }
   };
 
+  const startEligibilityFromQuickJourney = () => {
+    setEligibilityForm((current) => ({
+      ...current,
+      loanCategory: quickJourney.loanCategory,
+      requiredAmount: quickJourney.amount,
+      monthlyIncome: quickJourney.monthlyIncome,
+      state: quickJourney.state,
+      district: quickJourney.district,
+    }));
+    setActiveTab("eligibility");
+  };
+
+  const startApplicationFromQuickJourney = () => {
+    setLeadForm((current) => ({
+      ...current,
+      loanCategory: quickJourney.loanCategory,
+      amount: quickJourney.amount,
+      state: quickJourney.state,
+      district: quickJourney.district,
+    }));
+    setActiveTab("apply");
+  };
+
   const canUseConsultantWorkflow = roleCapabilities.isConsultant;
   const canUseAdminWorkflow = roleCapabilities.isAdmin;
   const canUseInstitutionWorkflow = roleCapabilities.isAdmin || roleCapabilities.isConsultant || roleCapabilities.isInstitutionUser;
@@ -712,21 +794,33 @@ const FinanceHub = () => {
         <div className="finance-hero">
           <div>
             <p className="finance-kicker">Nila Finance Hub</p>
-            <h1>Production-ready loan marketplace and assistance workflow</h1>
+            <h1>Get loans faster across South India</h1>
             <p className="finance-subtitle">
-              Backend-connected enquiries, document uploads, consultant assignment, lead tracking,
-              scheme discovery and commission dashboards.
+              Personal, business, gold, home and MSME financing with trusted partners across Kerala,
+              Tamil Nadu, Karnataka, Telangana and Andhra Pradesh.
             </p>
             <div className="finance-hero-actions">
               <button type="button" className="finance-hero-action-btn" onClick={() => setActiveTab("loans")}>
-                Explore Loans
+                Compare Offers
               </button>
-              <button type="button" className="finance-hero-action-btn" onClick={() => setActiveTab("eligibility")}>
+              <button type="button" className="finance-hero-action-btn" onClick={startEligibilityFromQuickJourney}>
                 Check Eligibility
               </button>
-              <button type="button" className="finance-hero-action-btn" onClick={() => setActiveTab("apply")}>
-                Start Application
+              <button type="button" className="finance-hero-action-btn" onClick={startApplicationFromQuickJourney}>
+                Apply Now
               </button>
+            </div>
+            <div className="finance-chip-row finance-quick-loan-types" aria-label="Quick loan categories">
+              {LOAN_CATEGORIES.filter((item) => ["personal", "business", "gold", "home", "msme"].includes(item.id)).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={quickJourney.loanCategory === item.id ? "active" : ""}
+                  onClick={() => setQuickJourney((current) => ({ ...current, loanCategory: item.id }))}
+                >
+                  {item.title.replace(" Loans", "")}
+                </button>
+              ))}
             </div>
             <div className="finance-hero-highlights" aria-label="Finance pulse">
               {heroSignals.map((item) => (
@@ -739,18 +833,76 @@ const FinanceHub = () => {
             </div>
           </div>
           <div className="finance-hero-tools">
+            <div className="finance-journey-card">
+              <h3>Check Eligibility in 30 Seconds</h3>
+              <div className="finance-journey-grid">
+                <label>
+                  Loan Amount
+                  <input
+                    type="number"
+                    value={quickJourney.amount}
+                    onChange={(event) => setQuickJourney((current) => ({ ...current, amount: event.target.value }))}
+                    placeholder="e.g. 500000"
+                  />
+                </label>
+                <label>
+                  Monthly Income
+                  <input
+                    type="number"
+                    value={quickJourney.monthlyIncome}
+                    onChange={(event) => setQuickJourney((current) => ({ ...current, monthlyIncome: event.target.value }))}
+                    placeholder="e.g. 50000"
+                  />
+                </label>
+                <label>
+                  State
+                  <select
+                    value={quickJourney.state}
+                    onChange={(event) => setQuickJourney((current) => ({ ...current, state: event.target.value }))}
+                  >
+                    {SOUTH_INDIA_STATES.map((state) => (
+                      <option key={state} value={state}>{state}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  District / City
+                  <select
+                    value={quickJourney.district}
+                    onChange={(event) => setQuickJourney((current) => ({ ...current, district: event.target.value }))}
+                  >
+                    {districtOptionsForQuickJourney.map((district) => (
+                      <option key={district} value={district}>{district}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="finance-journey-actions">
+                <button type="button" onClick={startEligibilityFromQuickJourney}>Check Eligibility</button>
+                <button type="button" onClick={startApplicationFromQuickJourney}>Continue to Apply</button>
+              </div>
+            </div>
             <input
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search institutions, categories, or schemes..."
+              placeholder="Search banks, NBFCs, categories, or schemes..."
             />
             <div className="finance-filter-row">
               <label>
-                District
+                State
+                <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}>
+                  <option value="all">All states</option>
+                  {SOUTH_INDIA_STATES.map((state) => (
+                    <option key={state} value={state}>{state}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                District / City
                 <select value={districtFilter} onChange={(event) => setDistrictFilter(event.target.value)}>
                   <option value="all">All</option>
-                  {SOUTH_KERALA_DISTRICTS.map((district) => (
+                  {districtOptionsForFilter.map((district) => (
                     <option key={district} value={district}>{district}</option>
                   ))}
                 </select>
@@ -808,7 +960,8 @@ const FinanceHub = () => {
           onSubmit={handleEligibilitySubmit}
           state={eligibilityState}
           categories={LOAN_CATEGORIES}
-          districts={SOUTH_KERALA_DISTRICTS}
+          states={SOUTH_INDIA_STATES}
+          districtsByState={SOUTH_INDIA_REGIONS}
           formatCurrency={formatCurrency}
         />
       ) : null}
@@ -839,7 +992,8 @@ const FinanceHub = () => {
           }}
           documentFields={DOCUMENT_FIELDS}
           categories={LOAN_CATEGORIES}
-          districts={SOUTH_KERALA_DISTRICTS}
+          states={SOUTH_INDIA_STATES}
+          districtsByState={SOUTH_INDIA_REGIONS}
           institutions={institutions}
           onInstitutionSelect={setInstitutionDashboardId}
         />

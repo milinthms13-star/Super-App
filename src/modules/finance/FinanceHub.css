@@ -631,3 +631,131 @@
     align-items: stretch;
   }
 }
+
+/* Finance UX Restructure: South India guided consumer flow */
+.finance-journey-card {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0.72rem;
+  display: grid;
+  gap: 0.58rem;
+}
+
+.finance-journey-card h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 0.95rem;
+}
+
+.finance-journey-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.finance-journey-grid label {
+  display: grid;
+  gap: 0.22rem;
+  font-size: 0.76rem;
+  color: #f0f7ff;
+  font-weight: 600;
+}
+
+.finance-journey-grid input,
+.finance-journey-grid select {
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.42rem 0.52rem;
+  font-size: 0.82rem;
+}
+
+.finance-journey-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.finance-journey-actions button {
+  border: none;
+  border-radius: 10px;
+  padding: 0.46rem 0.5rem;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--finance-brand-blue), var(--finance-brand-green));
+}
+
+.finance-journey-actions button:last-child {
+  background: linear-gradient(135deg, #ff7f36, #e06b1f);
+}
+
+.finance-quick-loan-types button {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.finance-quick-loan-types button.active {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+.finance-loan-category-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.finance-loan-category-card strong {
+  font-size: 0.95rem;
+  color: #153866;
+}
+
+.finance-institution-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.finance-institution-card {
+  gap: 0.55rem;
+}
+
+.finance-institution-card button {
+  margin-top: 0.2rem;
+}
+
+.finance-floating-apply {
+  padding: 0.58rem 0.92rem;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 1080px) {
+  .finance-loan-category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .finance-journey-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-journey-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-institution-grid,
+  .finance-loan-category-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-floating-apply {
+    left: 0.6rem;
+    right: 0.6rem;
+    bottom: 0.55rem;
+    border-radius: 12px;
+    text-align: center;
+    padding: 0.72rem 1rem;
+  }
+}

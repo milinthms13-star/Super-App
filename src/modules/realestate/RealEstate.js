@@ -9,6 +9,8 @@ import ListingForm from "./components/ListingForm";
 import AdminPanel from "./components/AdminPanel";
 import LoanCalculator from "./components/LoanCalculator";
 import PropertyDetailTabs from "./components/PropertyDetailTabs";
+import HomeSphere from "./HomeSphere";
+import SellerDashboard from "./components/SellerDashboard";
 
 
 import {
@@ -840,7 +842,7 @@ const RealEstate = () => {
         ))}
       </section>
 
-      <section className="realestate-role-section">
+      <section className="realestate-role-section" style={{ display: activeRole === "buyer" ? "none" : "block" }}>
         <div className="realestate-section-heading">
           <h2>Role-based experience</h2>
           <p>Switch between buyer, seller, broker, builder, and admin journeys without leaving the marketplace.</p>
@@ -867,7 +869,7 @@ const RealEstate = () => {
         </div>
       </section>
 
-      <section className="realestate-ecosystem-grid">
+      <section className="realestate-ecosystem-grid" style={{ display: activeRole === "buyer" ? "none" : "block" }}>
         <article className="realestate-surface-card">
           <div className="realestate-section-heading">
             <h2>Real Estate Ecosystem</h2>
@@ -889,7 +891,14 @@ const RealEstate = () => {
         </article>
       </section>
 
-      <section className="realestate-main-grid">
+      {/* HOMESPHERE FOR BUYERS */}
+      {activeRole === "buyer" ? (
+        <HomeSphere
+          onNavigateToDashboard={(role) => setActiveRole(role)}
+        />
+      ) : null}
+
+      <section className="realestate-main-grid" style={{ display: activeRole === "buyer" ? "none" : "grid" }}>
         <div className="realestate-left-column">
           {selectedProperty ? null : (
             <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>

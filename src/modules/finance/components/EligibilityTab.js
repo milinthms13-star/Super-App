@@ -1,10 +1,13 @@
 import React from "react";
 
-const EligibilityTab = ({ form, onChange, onSubmit, state, categories, districts, formatCurrency }) => (
+const getDistrictsForState = (districtsByState = {}, state = "") =>
+  districtsByState[state] || [];
+
+const EligibilityTab = ({ form, onChange, onSubmit, state, categories, states, districtsByState, formatCurrency }) => (
   <section className="finance-section">
     <div className="finance-section-header">
-      <h2>Enhanced Eligibility Checker</h2>
-      <p>Age, EMI burden, expenses, CIBIL, stability, collateral and GST/ITR aware scoring.</p>
+      <h2>Eligibility Assistant</h2>
+      <p>Check probable approval and best matching offers before applying.</p>
     </div>
     <form className="finance-form" onSubmit={onSubmit}>
       <label>
@@ -22,9 +25,22 @@ const EligibilityTab = ({ form, onChange, onSubmit, state, categories, districts
         </select>
       </label>
       <label>
-        District
+        State
+        <select
+          value={form.state || states[0]}
+          onChange={e => {
+            const nextState = e.target.value;
+            const nextDistricts = getDistrictsForState(districtsByState, nextState);
+            onChange(c => ({ ...c, state: nextState, district: nextDistricts[0] || c.district }));
+          }}
+        >
+          {states.map(item => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </label>
+      <label>
+        District / City
         <select value={form.district} onChange={e => onChange(c => ({ ...c, district: e.target.value }))}>
-          {districts.map(district => <option key={district} value={district}>{district}</option>)}
+          {getDistrictsForState(districtsByState, form.state || states[0]).map(district => <option key={district} value={district}>{district}</option>)}
         </select>
       </label>
       <label>

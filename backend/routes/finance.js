@@ -16,7 +16,16 @@ const logger = require('../utils/logger');
 const router = express.Router();
 const { authenticate, hasAdminPrivileges } = authMiddleware;
 
-const SOUTH_KERALA_DISTRICTS = ['Kollam', 'Trivandrum', 'Alappuzha', 'Kottayam', 'Pathanamthitta'];
+const SOUTH_INDIA_REGIONS = {
+  Kerala: ['Kollam', 'Thiruvananthapuram', 'Trivandrum', 'Alappuzha', 'Kottayam', 'Pathanamthitta', 'Ernakulam', 'Thrissur', 'Kozhikode', 'Kannur'],
+  TamilNadu: ['Chennai', 'Coimbatore', 'Madurai', 'Salem', 'Tiruchirappalli', 'Tirunelveli', 'Erode'],
+  Karnataka: ['Bengaluru', 'Mysuru', 'Mangaluru', 'Hubballi', 'Belagavi', 'Shivamogga'],
+  AndhraPradesh: ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Tirupati', 'Kurnool', 'Rajahmundry'],
+  Telangana: ['Hyderabad', 'Warangal', 'Karimnagar', 'Nizamabad', 'Khammam'],
+};
+
+const SOUTH_INDIA_DISTRICTS = Object.values(SOUTH_INDIA_REGIONS).flat();
+const SOUTH_INDIA_STATES = Object.keys(SOUTH_INDIA_REGIONS);
 
 const LOAN_CATEGORIES = [
   'business',
@@ -157,7 +166,8 @@ const upload = multer({
 const leadCreateSchema = Joi.object({
   fullName: Joi.string().trim().min(2).max(80).pattern(/^[A-Za-z ]+$/).required(),
   phone: Joi.string().trim().pattern(/^\d{10}$/).required(),
-  district: Joi.string().valid(...SOUTH_KERALA_DISTRICTS).required(),
+  state: Joi.string().valid(...SOUTH_INDIA_STATES).allow('').default(''),
+  district: Joi.string().valid(...SOUTH_INDIA_DISTRICTS).required(),
   loanCategory: Joi.string().valid(...LOAN_CATEGORIES).required(),
   amount: Joi.number().min(1).required(),
   institutionId: Joi.string().trim().allow(''),
@@ -175,7 +185,8 @@ const leadCreateSchema = Joi.object({
 const eligibilitySchema = Joi.object({
   fullName: Joi.string().trim().allow(''),
   phone: Joi.string().trim().pattern(/^\d{10}$/).allow(''),
-  district: Joi.string().valid(...SOUTH_KERALA_DISTRICTS).required(),
+  state: Joi.string().valid(...SOUTH_INDIA_STATES).allow('').default(''),
+  district: Joi.string().valid(...SOUTH_INDIA_DISTRICTS).required(),
   loanCategory: Joi.string().valid(...LOAN_CATEGORIES).required(),
   age: Joi.number().integer().min(18).max(75).required(),
   monthlyIncome: Joi.number().min(1).required(),
@@ -482,9 +493,13 @@ router.get('/institutions', publicReadLimiter, async (req, res) => {
   try {
     await ensureInstitutionsSeeded();
 
-    const { district, type, category, verified } = req.query;
+    const { state, district, type, category, verified } = req.query;
     const query = { isActive: true };
 
+    const selectedState = String(state || '').trim();
+    if (selectedState && SOUTH_INDIA_REGIONS[selectedState]) {
+      query.serviceDistricts = { $in: SOUTH_INDIA_REGIONS[selectedState] };
+    }
     if (district) {
       query.serviceDistricts = district;
     }
@@ -534,6 +549,7 @@ router.post('/eligibility', publicReadLimiter, async (req, res) => {
       recordId: `FER-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
       fullName: value.fullName || '',
       phone: value.phone || '',
+      state: value.state || '',
       district: value.district,
       loanCategory: value.loanCategory,
       payload: value,
@@ -546,6 +562,7 @@ router.post('/eligibility', publicReadLimiter, async (req, res) => {
         recordId: record.recordId,
         score: result.score,
         probability: result.approvalProbability,
+        state: value.state || '',
         district: value.district,
         loanCategory: value.loanCategory,
       },
@@ -654,6 +671,7 @@ router.post(
         leadId,
         fullName: value.fullName,
         phone: value.phone,
+        state: value.state || '',
         district: value.district,
         loanCategory: value.loanCategory,
         amount: value.amount,
@@ -699,6 +717,7 @@ router.post(
         leadId,
         institutionId: String(selectedInstitution?._id || ''),
         details: {
+          state: value.state || '',
           district: value.district,
           loanCategory: value.loanCategory,
           amount: value.amount,

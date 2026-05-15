@@ -1,5 +1,8 @@
 import React from "react";
 
+const getDistrictsForState = (districtsByState = {}, state = "") =>
+  districtsByState[state] || [];
+
 const ApplyLeadTab = ({
   form,
   onChange,
@@ -9,14 +12,15 @@ const ApplyLeadTab = ({
   onDocumentUpload,
   documentFields,
   categories,
-  districts,
+  states,
+  districtsByState,
   institutions,
   onInstitutionSelect,
 }) => (
   <section className="finance-section">
     <div className="finance-section-header">
-      <h2>Apply for Assistance</h2>
-      <p>Real document upload + consent capture + backend lead creation.</p>
+      <h2>Apply for Loan Assistance</h2>
+      <p>Share details once and get matched with suitable South India lenders.</p>
     </div>
 
     <form className="finance-form" onSubmit={onSubmit}>
@@ -49,9 +53,24 @@ const ApplyLeadTab = ({
         <input type="number" value={form.preferredTenureMonths} onChange={(event) => onChange((current) => ({ ...current, preferredTenureMonths: event.target.value }))} />
       </label>
       <label>
-        District
+        State
+        <select
+          value={form.state || states[0]}
+          onChange={(event) => {
+            const nextState = event.target.value;
+            const nextDistricts = getDistrictsForState(districtsByState, nextState);
+            onChange((current) => ({ ...current, state: nextState, district: nextDistricts[0] || current.district }));
+          }}
+        >
+          {states.map((stateItem) => (
+            <option key={stateItem} value={stateItem}>{stateItem}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        District / City
         <select value={form.district} onChange={(event) => onChange((current) => ({ ...current, district: event.target.value }))}>
-          {districts.map((district) => (
+          {getDistrictsForState(districtsByState, form.state || states[0]).map((district) => (
             <option key={district} value={district}>{district}</option>
           ))}
         </select>

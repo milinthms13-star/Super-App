@@ -44,12 +44,18 @@ const TrackingDashTab = ({
   workflowMessage,
 }) => {
   const leadAlerts = useMemo(() => buildLeadAlerts(leadHistory || []), [leadHistory]);
+  const hasOpsAccess =
+    canUseConsultantWorkflow || canUseAdminWorkflow || canUseInstitutionWorkflow || canUseCommissionWorkflow;
 
   return (
     <section className="finance-section">
       <div className="finance-section-header">
-        <h2>Tracking & Workflow Dashboards</h2>
-        <p>User, consultant, admin, institution and commission workflows in one place.</p>
+        <h2>Application Tracking</h2>
+        <p>
+          {hasOpsAccess
+            ? "Track customer applications and switch to operations dashboards by role."
+            : "Track your application status, updates, and next action in one place."}
+        </p>
       </div>
 
       <div className="finance-filter-row">
@@ -136,13 +142,15 @@ const TrackingDashTab = ({
         </article>
       ) : null}
 
-      <div className="finance-chip-row">
-        <button type="button" onClick={() => setWorkflowRole("user")}>User</button>
-        {canUseConsultantWorkflow ? <button type="button" onClick={() => setWorkflowRole("consultant")}>Consultant</button> : null}
-        {canUseAdminWorkflow ? <button type="button" onClick={() => setWorkflowRole("admin")}>Admin</button> : null}
-        {canUseInstitutionWorkflow ? <button type="button" onClick={() => setWorkflowRole("institution")}>Institution</button> : null}
-        {canUseCommissionWorkflow ? <button type="button" onClick={() => setWorkflowRole("commission")}>Commission</button> : null}
-      </div>
+      {hasOpsAccess ? (
+        <div className="finance-chip-row">
+          <button type="button" onClick={() => setWorkflowRole("user")}>User</button>
+          {canUseConsultantWorkflow ? <button type="button" onClick={() => setWorkflowRole("consultant")}>Consultant</button> : null}
+          {canUseAdminWorkflow ? <button type="button" onClick={() => setWorkflowRole("admin")}>Admin</button> : null}
+          {canUseInstitutionWorkflow ? <button type="button" onClick={() => setWorkflowRole("institution")}>Institution</button> : null}
+          {canUseCommissionWorkflow ? <button type="button" onClick={() => setWorkflowRole("commission")}>Commission</button> : null}
+        </div>
+      ) : null}
 
       {workflowRole === "consultant" && canUseConsultantWorkflow ? (
         <article className="finance-panel">

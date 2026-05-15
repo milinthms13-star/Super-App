@@ -12,6 +12,7 @@ const financeLeadSchema = new mongoose.Schema(
     },
     fullName: { type: String, required: true, trim: true },
     phone: { type: String, required: true, trim: true, index: true },
+    state: { type: String, default: '', trim: true, index: true },
     district: { type: String, required: true, trim: true, index: true },
     loanCategory: { type: String, required: true, trim: true, index: true },
     amount: { type: Number, required: true, min: 1 },

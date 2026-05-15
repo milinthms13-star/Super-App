@@ -7,8 +7,8 @@ const LoanMarketplaceTab = ({ categories, filters, onFilterChange }) => {
   return (
     <section className="finance-section">
       <div className="finance-section-header">
-        <h2>Loan & Institution Marketplace</h2>
-        <p>Collapsible summary cards first, detailed info on demand.</p>
+        <h2>Loan Marketplace</h2>
+        <p>Discover offers quickly with trusted partner highlights.</p>
       </div>
 
       <div className="finance-chip-row">
@@ -31,41 +31,40 @@ const LoanMarketplaceTab = ({ categories, filters, onFilterChange }) => {
         ))}
       </div>
 
-      <div className="finance-card-grid">
+      <div className="finance-card-grid finance-loan-category-grid">
         {filteredLoanCategories.map((category) => (
-          <details key={category.id} className="finance-card">
-            <summary>
-              <strong>{category.title}</strong>
-            </summary>
+          <article key={category.id} className="finance-card finance-loan-category-card">
+            <strong>{category.title}</strong>
             <p>{category.summary}</p>
-          </details>
+          </article>
         ))}
       </div>
 
       <div className="finance-section-header">
         <h3>Institution Listings</h3>
-        <p>Real onboarding fields with verified badges, fees, turnaround and ratings.</p>
+        <p>EMI, approval speed and trust signals at a glance.</p>
       </div>
 
       {institutionLoadState.loading ? <p>Loading institutions...</p> : null}
       {institutionLoadState.error ? <p className="finance-error">{institutionLoadState.error}</p> : null}
 
-      <div className="finance-card-grid">
+      <div className="finance-card-grid finance-institution-grid">
         {filteredInstitutions.map((institution) => (
-          <details key={institution._id} className="finance-card">
-            <summary className="finance-card-summary">
-              <span>{institution.name}</span>
-              {institution.verifiedPartner ? <span className="finance-verified">Verified Partner</span> : null}
-            </summary>
-            <p><strong>Type:</strong> {institution.type}</p>
-            <p><strong>Branch:</strong> {institution.branchAddress}</p>
-            <p><strong>Contact:</strong> {institution.contactPerson?.name} ({institution.contactPerson?.phone})</p>
-            <p><strong>Service Districts:</strong> {(institution.serviceDistricts || []).join(", ")}</p>
-            <p><strong>Approval Time:</strong> {institution.approvalTime?.minDays}-{institution.approvalTime?.maxDays} days</p>
+          <article key={institution._id} className="finance-card finance-institution-card">
+            <div className="finance-card-summary">
+              <strong>{institution.name}</strong>
+              {institution.verifiedPartner ? <span className="finance-verified">Trusted</span> : null}
+            </div>
+            <div className="finance-tag-row">
+              <span>{String(institution.type || "").toUpperCase()}</span>
+              <span>{institution.approvalTime?.minDays || 1}-{institution.approvalTime?.maxDays || 7} day approval</span>
+            </div>
+            <p><strong>Interest:</strong> {institution.interestRange?.min || "-"}% - {institution.interestRange?.max || "-"}%</p>
             <p><strong>Processing Fee:</strong> {institution.processingFee?.value}{institution.processingFee?.type === "percentage" ? "%" : " INR"}</p>
-            <p><strong>Commission Model:</strong> {institution.commissionModel?.type} {institution.commissionModel?.value}</p>
-            <p><strong>Rating:</strong> {institution.ratings?.average} ({institution.ratings?.totalReviews} reviews)</p>
-          </details>
+            <p><strong>Service Cities:</strong> {(institution.serviceDistricts || []).slice(0, 4).join(", ")}{(institution.serviceDistricts || []).length > 4 ? "..." : ""}</p>
+            <p><strong>Rating:</strong> {institution.ratings?.average || "4.0"} ({institution.ratings?.totalReviews || 0} reviews)</p>
+            <button type="button">Apply with {institution.name}</button>
+          </article>
         ))}
       </div>
     </section>
