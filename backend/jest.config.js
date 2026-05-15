@@ -27,12 +27,16 @@ module.exports = {
   transform: {
     '^.+\\.js$': 'babel-jest'
   },
+// Jest is running in CJS mode, but some dependencies (e.g. `uuid` v9+) ship ESM.
+// Without transforming them, Jest throws "Unexpected token export".
   transformIgnorePatterns: [
     'node_modules/'
   ],
-  globals: {
-    'ts-jest': {
-      useESM: true
-    }
+  // Force a deterministic CJS environment for ESM-only dependencies (e.g. uuid v9+).
+  // We map uuid to its CommonJS build.
+  moduleNameMapper: {
+    '^uuid$': 'uuid/dist-node/index.js',
+    '^uuid/(.*)$': 'uuid/dist-node/$1'
   }
 };
+

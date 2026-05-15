@@ -887,6 +887,102 @@
   color: var(--resume-builder-muted);
 }
 
+.plan-notice {
+  margin-top: 0.85rem;
+  color: var(--resume-builder-primary-dark);
+  font-weight: 600;
+}
+
+.file-note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--resume-builder-muted);
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.wizard-steps-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.wizard-step-pill {
+  border: 1px solid var(--resume-builder-border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.wizard-step-pill.active {
+  border-color: var(--resume-builder-primary);
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.wizard-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  margin: 0.9rem 0 1.2rem;
+  overflow: hidden;
+}
+
+.wizard-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #1d4ed8, #10b981);
+}
+
+.wizard-step-card {
+  border: 1px solid var(--resume-builder-border);
+  border-radius: 12px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.wizard-nav-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.65rem;
+}
+
+.wizard-nav-actions button {
+  min-width: 110px;
+}
+
+.skill-suggest-box {
+  padding: 0.85rem;
+  border-radius: 10px;
+  border: 1px dashed rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.skill-suggest-box p {
+  margin: 0.35rem 0 0;
+}
+
+.template-card.locked {
+  opacity: 0.75;
+}
+
+.template-lock {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #7c2d12;
+  background: #ffedd5;
+  border: 1px solid #fdba74;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+}
+
 @media (max-width: 1200px) {
   .resume-builder-nav {
     grid-template-columns: repeat(2, 1fr);

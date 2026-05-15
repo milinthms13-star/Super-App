@@ -1233,15 +1233,20 @@ const AstrologyHome = () => {
       });
       return;
     }
-    await profileApi.handleProfileSave({ preventDefault: () => {} });
+
+    const saveSuccess = await profileApi.handleProfileSave({ preventDefault: () => {} });
+    if (!saveSuccess) {
+      return;
+    }
+
     if (question.trim()) setAiQuestion(question.trim());
     setActiveSection("today");
     setPersonalizedReady(true);
     setShowFullPrediction(Boolean(detailedReport));
-    setSaveState({ type: "success", message: "Birth details saved. Report cards updated." });
   };
 
   const handleAskAssistant = async () => {
+    if (!ensureSignedIn()) return;
     if (!aiQuestion.trim()) {
       setSaveState({ type: "error", message: "Ask a question before sending." });
       return;

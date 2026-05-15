@@ -241,6 +241,14 @@ case "astrology":
           <circle cx="12" cy="12" r="10" />
         </svg>
       );
+  case "photostudio":
+      return (
+        <svg {...common}>
+          <rect x="4" y="7" width="16" height="12" rx="2" />
+          <circle cx="12" cy="13" r="3.2" />
+          <path d="M8 7V5h2l1-1h2l1 1h2v2" />
+        </svg>
+      );
   case "external":
       return (
         <svg {...common}>
@@ -387,6 +395,17 @@ const MODULE_CONFIG = [
     stats: "ATS-optimized resumes",
     gradient: "linear-gradient(135deg, #7C3AED 0%, #A855F7 45%, #C084FC 100%)",
     emoji: "📄",
+  },
+  {
+    id: "photostudio",
+    nameKey: "modules.photostudio",
+    fallbackName: "Photo Studio AI + AR",
+    icon: "photostudio",
+    descriptionKey: "dashboard.moduleDescriptions.photostudio",
+    fallbackDescription: "AI photo editor + AR camera with filters, templates, background tools, caption generation, and creator monetization.",
+    stats: "AI + AR creator suite",
+    gradient: "linear-gradient(135deg, #0EA5A7 0%, #2563EB 45%, #1D4ED8 100%)",
+    emoji: "📸",
   },
   {
     id: "jobportal",
@@ -647,6 +666,7 @@ const MODULE_CATEGORY_MAP = {
   businessservices: "business",
   freelancer: "business",
   jobportal: "business",
+  photostudio: "business",
   skilllearning: "business",
   resumebuilder: "business",
   education: "business",
@@ -1114,6 +1134,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "billpay" ||
         module.id === "skilllearning" ||
         module.id === "resumebuilder" ||
+        module.id === "photostudio" ||
         module.id === "devadarshan" ||
         module.id === "localservices" ||
         module.id === "hyperlocal" ||

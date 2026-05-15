@@ -56,11 +56,13 @@ const LocalServicesMarketplace = React.lazy(() =>
 const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket"));
 const BusinessBuilder = React.lazy(() => import("./modules/businessbuilder/BusinessBuilder"));
 const NilaAIHub = React.lazy(() => import("./modules/nilaaihub/NilaAIHub"));
+const KidsStoryVideoMaker = React.lazy(() => import("./modules/kidsstoryvideomaker/KidsStoryVideoMaker"));
 const GulfServices = React.lazy(() => import("./modules/gulfservices/GulfServices"));
 const HotelBooking = React.lazy(() => import("./modules/hotelbooking/HotelBooking"));
 const Healthcare = React.lazy(() => import("./modules/healthcare/Healthcare"));
 const BusTrainBooking = React.lazy(() => import("./modules/bustrainbooking/BusTrainBooking"));
 const ResumeBuilder = React.lazy(() => import("./modules/resumebuilder/ResumeBuilder"));
+const PhotoStudioAIAR = React.lazy(() => import("./modules/photostudio/PhotoStudioAIAR"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
 const JobPortal = React.lazy(() => import("./modules/jobportal/JobPortal"));
 const Education = React.lazy(() => import("./modules/education/Education"));
@@ -150,6 +152,8 @@ const PREVIEW_ENABLED_MODULES = [
   "reminderalert",
   "sosalert",
   "astrology",
+  "kidsstoryvideomaker",
+  "photostudio",
 ];
 
 const TOGGLE_CONTROLLED_MODULE_IDS = [
@@ -171,10 +175,12 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "businessservices",
   "freelancer",
   "resumebuilder",
+  "photostudio",
   "jobportal",
   "skilllearning",
   "education",
   "nilaaihub",
+  "kidsstoryvideomaker",
   "finance",
   "billpay",
   "fooddelivery",
@@ -1205,11 +1211,13 @@ function AppShell() {
               <Route path="finance" element={<FinanceHub />} />
               <Route path="business-builder" element={<BusinessBuilder />} />
               <Route path="nila-ai-hub" element={<NilaAIHub />} />
+              <Route path="kids-story-video-maker" element={<KidsStoryVideoMaker />} />
               <Route path="gulf-services" element={<GulfServices />} />
               <Route path="hotelbooking" element={<HotelBooking />} />
               <Route path="healthcare" element={<Healthcare />} />
               <Route path="bustrainbooking" element={<BusTrainBooking />} />
               <Route path="resumebuilder" element={<ResumeBuilder />} />
+              <Route path="photo-studio-ai-ar" element={<PhotoStudioAIAR />} />
               <Route path="businessservices" element={<BusinessServices />} />
               <Route path="jobportal" element={<JobPortal />} />
               <Route path="education" element={<Education />} />

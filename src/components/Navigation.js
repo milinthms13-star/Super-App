@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder"],
+    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio"],
   },
   utilities: {
     label: "Utilities",
@@ -107,11 +107,13 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "hyperlocal", label: t("modules.hyperlocal", "Nila Hyperlocal Delivery"), icon: "HD", sellerVisible: true },
     { id: "localservices", label: t("modules.localservices", "Local Services Marketplace"), icon: "LS", sellerVisible: true },
     { id: "nilaaihub", label: t("modules.nilaaihub", "Nila AI Hub"), icon: "🤖" },
+    { id: "kidsstoryvideomaker", label: t("modules.kidsstoryvideomaker", "AI Kids Story Video Generator"), icon: "🎬" },
     { id: "gulfservices", label: t("modules.gulfservices", "Gulf Services"), icon: "🌍" },
     { id: "hotelbooking", label: t("modules.hotelbooking", "NilaStay"), icon: "🏨" },
     { id: "healthcare", label: t("modules.healthcare", "NilaCare"), icon: "🏥" },
     { id: "bustrainbooking", label: t("modules.bustrainbooking", "NilaTravel Bus/Train"), icon: "🚆" },
     { id: "resumebuilder", label: t("modules.resumebuilder", "AI Resume Builder"), icon: "📄" },
+    { id: "photostudio", label: t("modules.photostudio", "Photo Studio AI + AR"), icon: "PS", sellerVisible: true },
     { id: "businessservices", label: t("modules.businessservices", "Business Services Hub"), icon: "💼" },
     { id: "jobportal", label: t("modules.jobportal", "NilaJobs"), icon: "🔎" },
     { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
@@ -468,12 +470,4 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 };
 
 export default Navigation;
-
-
-
-
-
-
-
-
 

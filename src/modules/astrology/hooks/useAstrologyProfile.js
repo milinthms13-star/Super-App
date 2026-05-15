@@ -138,9 +138,11 @@ export const useAstrologyProfile = ({
   };
 
   const handleProfileSave = async (event) => {
-    event.preventDefault();
+    if (event?.preventDefault) {
+      event.preventDefault();
+    }
     if (!ensureSignedIn()) {
-      return;
+      return false;
     }
 
     setSavingProfile(true);
@@ -174,11 +176,13 @@ export const useAstrologyProfile = ({
         message:
           "Your astrology profile was saved, and today's reading is now stored in your recent history.",
       });
+      return true;
     } catch (saveError) {
       setSaveState({
         type: "error",
         message: saveError.message || "Unable to save your astrology profile.",
       });
+      return false;
     } finally {
       setSavingProfile(false);
     }

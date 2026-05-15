@@ -25,16 +25,18 @@ jest.mock('razorpay', () =>
 
 jest.mock('../middleware/auth', () => ({
   authenticate: (req, _res, next) => {
+    const userId = req.headers['x-user-id'] || 'astro-user-1';
+    const userRole = req.headers['x-user-role'] || 'admin';
     req.user = {
-      id: 'astro-user-1',
-      _id: 'astro-user-1',
+      id: userId,
+      _id: userId,
       name: 'Astro Test User',
       email: 'astro@example.com',
-      role: 'admin',
+      role: userRole,
     };
     next();
   },
-  hasAdminPrivileges: () => true,
+  hasAdminPrivileges: (user) => String(user?.role || '').toLowerCase() === 'admin',
 }));
 
 const devAstrologyStore = require('../utils/devAstrologyStore');
@@ -71,7 +73,18 @@ describe('astrology routes integration', () => {
     expect(Number(response.headers['content-length'])).toBeGreaterThan(0);
   });
 
-  test('POST /api/astrology/consultations/book creates a confirmed booking for a valid slot', async () => {
+  test('GET /api/astrology/horoscope/report returns a downloadable PDF for a valid sign and period', async () => {
+    const response = await request(app)
+      .get('/api/astrology/horoscope/report')
+      .query({ sign: 'virgo', period: 'year', language: 'en' })
+      .expect(200);
+
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.headers['content-disposition']).toContain('attachment; filename="horoscope-report-virgo-year-en.pdf"');
+    expect(Number(response.headers['content-length'])).toBeGreaterThan(0);
+  });
+
+  test('POST /api/astrology/consultations/book creates a pending_payment booking for a valid slot', async () => {
     const response = await request(app)
       .post('/api/astrology/consultations/book')
       .send({
@@ -94,7 +107,7 @@ describe('astrology routes integration', () => {
         consultantId: 'acharya-madhav',
         consultantName: 'Madhav Acharya',
         slot: 'Today 4:00 PM',
-        status: 'confirmed',
+        status: 'pending_payment',
         currency: 'INR',
       })
     );
@@ -141,7 +154,7 @@ describe('astrology routes integration', () => {
     expect(historyResponse.body.data[0]).toEqual(
       expect.objectContaining({
         consultantId: 'nambiar-priya',
-        status: 'confirmed',
+        status: 'pending_payment',
       })
     );
   });
@@ -201,6 +214,7 @@ describe('astrology routes integration', () => {
     expect(verifyResponse.body.data).toEqual(
       expect.objectContaining({
         paymentStatus: 'completed',
+        status: 'confirmed',
       })
     );
   });
@@ -225,6 +239,74 @@ describe('astrology routes integration', () => {
         totalRevenue: expect.any(Number),
       })
     );
+  });
+
+  test('POST /api/astrology/consultations/:bookingId/payment/create-order is blocked when accessing another user booking', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+
+    await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/create-order`)
+      .set('x-user-id', 'astro-user-2')
+      .send({})
+      .expect(403);
+  });
+
+  test('POST /api/astrology/consultations/:bookingId/payment/verify is blocked when another user tries verification', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+    const orderResponse = await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/create-order`)
+      .send({})
+      .expect(200);
+
+    const orderId = orderResponse.body.data.orderId;
+    const paymentId = 'pay_test_123';
+    const signature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret')
+      .update(`${orderId}|${paymentId}`)
+      .digest('hex');
+
+    await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/verify`)
+      .set('x-user-id', 'astro-user-2')
+      .send({
+        orderId,
+        paymentId,
+        signature,
+      })
+      .expect(403);
+  });
+
+  test('GET /api/astrology/consultations/:bookingId/payment returns payment status only for booking owner', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+
+    await request(app)
+      .get(`/api/astrology/consultations/${bookingId}/payment`)
+      .set('x-user-id', 'astro-user-2')
+      .expect(403);
   });
 
   test('POST /api/astrology/consultants/add-slot adds a new consultant slot', async () => {

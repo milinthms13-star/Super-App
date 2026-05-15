@@ -68,6 +68,35 @@ const parseOptionalDate = (value) => {
   return Number.isNaN(parsedDate.getTime()) ? undefined : parsedDate;
 };
 
+const isBookingOwner = (booking, req) => {
+  if (!booking) {
+    return false;
+  }
+  const bookingUserId = String(booking.userId || booking.user || booking.user_id || '');
+  const requestUserId = String(req.user?._id || req.user?.id || '');
+  return bookingUserId === requestUserId;
+};
+
+const ensureBookingAccess = (booking, req, res) => {
+  if (!booking) {
+    res.status(404).json({
+      success: false,
+      message: 'Booking not found.',
+    });
+    return false;
+  }
+
+  if (!isBookingOwner(booking, req)) {
+    res.status(403).json({
+      success: false,
+      message: 'Access denied for this booking.',
+    });
+    return false;
+  }
+
+  return true;
+};
+
 const DEFAULT_BIRTH_TIME_ZONE = 'Asia/Kolkata';
 
 const normalizeBirthTimeZone = (value, fallback = DEFAULT_BIRTH_TIME_ZONE) => {
@@ -1742,7 +1771,7 @@ router.post('/consultations/book', authenticate, async (req, res) => {
       slot: chosenSlot.label,
       preferredDate: preferredDate || new Date(),
       notes,
-      status: 'confirmed',
+      status: consultant.amountInr > 0 ? 'pending_payment' : 'confirmed',
       confirmationCode,
       amountInr: consultant.amountInr,
       currency: 'INR',
@@ -1933,11 +1962,8 @@ router.post('/consultations/:bookingId/payment/create-order', authenticate, asyn
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const booking = await findConsultationBookingById(bookingId);
 
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found.',
-      });
+    if (!ensureBookingAccess(booking, req, res)) {
+      return;
     }
 
     const amountInr = Number(booking.amountInr || 0);
@@ -1962,6 +1988,7 @@ router.post('/consultations/:bookingId/payment/create-order', authenticate, asyn
     await updateConsultationBookingById(booking.id || booking._id || bookingId, {
       paymentOrderId: order.id,
       paymentStatus: 'pending',
+      status: 'pending_payment',
     });
 
     return res.json({
@@ -1988,11 +2015,8 @@ router.post('/consultations/:bookingId/payment/verify', authenticate, async (req
     const { orderId, paymentId, signature } = req.body || {};
     const booking = await findConsultationBookingById(bookingId);
 
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found.',
-      });
+    if (!ensureBookingAccess(booking, req, res)) {
+      return;
     }
 
     const expectedOrderId = sanitizeText(orderId || booking.paymentOrderId, 120);
@@ -2033,11 +2057,8 @@ router.get('/consultations/:bookingId/payment', authenticate, async (req, res) =
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const booking = await findConsultationBookingById(bookingId);
 
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found.',
-      });
+    if (!ensureBookingAccess(booking, req, res)) {
+      return;
     }
 
     return res.json({

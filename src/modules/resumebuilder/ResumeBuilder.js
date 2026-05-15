@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import { Document, Packer, Paragraph, TextRun } from "docx";
 import { jsPDF } from "jspdf";
 import { useApp } from "../../contexts/AppContext";
 import { buildApiUrl } from "../../utils/api";
@@ -8,6 +8,10 @@ import { getStoredAuthToken } from "../../utils/auth";
 import "./ResumeBuilder.css";
 
 const LOCAL_DRAFTS_KEY = "resume_builder_local_drafts_v1";
+const LOCAL_USAGE_KEY = "resume_builder_usage_v1";
+const FREE_TEMPLATE_IDS = ["simple-ats", "modern-professional"];
+
+const INITIAL_USAGE = { resumeGenerations: 0, atsChecks: 0 };
 
 const INITIAL_FORM_DATA = {
   name: "",
@@ -26,33 +30,61 @@ const INITIAL_FORM_DATA = {
   linkedin: "",
   passportStatus: "",
   visaStatus: "",
+  currentVisaType: "",
+  visaExpiry: "",
+  transferableVisa: "",
+  availableToRelocate: "Yes",
+  preferredGulfCountry: "UAE",
+  workPermitStatus: "",
   gccExperience: "",
   drivingLicense: "",
+  drivingLicenseCountry: "",
+  joiningAvailability: "",
   expectedSalary: "",
   noticePeriod: "",
+  accommodationRequired: "No",
+  industryCategory: "",
 };
 
 const SECTION_ITEMS = [
-  { id: "builder", icon: "FORM", label: "Resume Builder" },
-  { id: "templates", icon: "VIEW", label: "Templates" },
-  { id: "ats", icon: "ATS", label: "ATS Checker" },
-  { id: "optimizer", icon: "FIT", label: "Job Optimizer" },
-  { id: "cover", icon: "CVR", label: "Cover Letter" },
-  { id: "interview", icon: "Q&A", label: "Interview Prep" },
-  { id: "library", icon: "SAVE", label: "My Resumes" },
+  { id: "upload", icon: "UP", label: "Resume Upload" },
+  { id: "ai-builder", icon: "AI", label: "AI Builder" },
+  { id: "templates", icon: "TMP", label: "Templates" },
+  { id: "ats-score", icon: "ATS", label: "ATS Score" },
+  { id: "job-match", icon: "FIT", label: "Job Match" },
+  { id: "cover-letter", icon: "CVR", label: "Cover Letter" },
+  { id: "linkedin", icon: "LNK", label: "LinkedIn" },
+  { id: "recruiter-email", icon: "MAIL", label: "Recruiter Email" },
+  { id: "interview-prep", icon: "QNA", label: "Interview Prep" },
+  { id: "my-resumes", icon: "SAVE", label: "My Resumes" },
 ];
 
-const RESUME_TYPES = [
-  { id: "professional", title: "Professional", description: "Balanced for most roles" },
-  { id: "fresher", title: "Fresher", description: "Highlights potential and projects" },
-  { id: "gulf", title: "Gulf Ready", description: "Includes GCC readiness details" },
-  { id: "career-switch", title: "Career Switch", description: "Transferable skills focused" },
+const WIZARD_STEPS = [
+  { id: "start", label: "Start" },
+  { id: "personal", label: "Personal Details" },
+  { id: "career", label: "Career Details" },
+  { id: "experience", label: "Experience" },
+  { id: "skills", label: "Skills" },
+  { id: "gulf", label: "Gulf Details" },
+  { id: "template", label: "Template" },
+  { id: "ats", label: "ATS Check" },
+  { id: "download", label: "Download" },
 ];
 
 const TEMPLATE_OPTIONS = [
-  { id: "simple-ats", name: "Simple ATS", icon: "ATS", description: "Clean and parser-friendly" },
-  { id: "modern-professional", name: "Modern Professional", icon: "PRO", description: "Executive style layout" },
-  { id: "creative-grid", name: "Creative Grid", icon: "ART", description: "Visual-first presentation" },
+  { id: "simple-ats", name: "Simple ATS", icon: "ATS", description: "Clean parser-friendly format", premium: false },
+  { id: "modern-professional", name: "Modern Professional", icon: "PRO", description: "Balanced executive look", premium: false },
+  { id: "creative-grid", name: "Creative Grid", icon: "ART", description: "Visual-first layout", premium: true },
+  { id: "gulf-blue-professional", name: "Gulf Blue Professional", icon: "GLF", description: "Middle East recruiter style", premium: true },
+  { id: "uae-corporate", name: "UAE Corporate", icon: "UAE", description: "Corporate UAE resume pattern", premium: true },
+  { id: "saudi-formal", name: "Saudi Formal", icon: "KSA", description: "Formal Saudi application style", premium: true },
+  { id: "qatar-oman-clean", name: "Qatar/Oman Clean", icon: "QOM", description: "Simple GCC readable layout", premium: true },
+  { id: "europe-ats", name: "Europe ATS", icon: "EUR", description: "EU ATS-focused formatting", premium: true },
+  { id: "us-tech-resume", name: "US Tech Resume", icon: "UST", description: "US engineering style with impact bullets", premium: true },
+  { id: "fresher-student", name: "Fresher Student", icon: "STD", description: "Internship and project-first resume", premium: true },
+  { id: "executive-2page", name: "Executive 2-page", icon: "EXE", description: "Leadership and business outcomes", premium: true },
+  { id: "nurse-healthcare", name: "Nurse / Healthcare", icon: "MED", description: "Clinical profile + certifications", premium: true },
+  { id: "driver-technician-accountant", name: "Driver / Technician / Accountant", icon: "SKL", description: "Trade and operations roles", premium: true },
 ];
 
 const COVER_LETTER_TYPES = [
@@ -60,6 +92,12 @@ const COVER_LETTER_TYPES = [
   { id: "startup", label: "Startup" },
   { id: "gulf", label: "Gulf Recruiter" },
 ];
+
+const COUNTRIES = ["UAE", "Saudi Arabia", "Qatar", "Oman", "Kuwait", "Bahrain", "Europe", "USA", "India"];
+
+const STOP_WORDS = new Set([
+  "a", "an", "the", "and", "or", "for", "with", "to", "of", "in", "is", "are", "on", "at", "from", "by", "this", "that", "as", "be", "will", "your", "our", "you",
+]);
 
 const toList = (value = "") =>
   String(value || "")
@@ -74,33 +112,6 @@ const toLines = (value = "") =>
     .filter(Boolean);
 
 const clean = (value = "") => String(value || "").replace(/\s+/g, " ").trim();
-
-const STOP_WORDS = new Set([
-  "a",
-  "an",
-  "the",
-  "and",
-  "or",
-  "for",
-  "with",
-  "to",
-  "of",
-  "in",
-  "is",
-  "are",
-  "on",
-  "at",
-  "from",
-  "by",
-  "this",
-  "that",
-  "as",
-  "be",
-  "will",
-  "your",
-  "our",
-  "you",
-]);
 
 const extractKeywords = (value = "") => {
   const words = String(value || "")
@@ -121,81 +132,113 @@ const extractKeywords = (value = "") => {
 const parseEducation = (value = "") =>
   toLines(value).map((line) => {
     const [degree = "", institution = "", year = ""] = line.split("|").map((part) => part.trim());
-    return {
-      degree: degree || line,
-      institution: institution || "",
-      year: year || "",
-    };
+    return { degree: degree || line, institution: institution || "", year: year || "" };
   });
 
 const parseProjects = (value = "") =>
   toLines(value).map((line) => {
     const [name = "", tech = "", summary = ""] = line.split("|").map((part) => part.trim());
-    return {
-      name: name || line,
-      tech: tech || "",
-      summary: summary || "",
-    };
+    return { name: name || line, tech: tech || "", summary: summary || "" };
   });
 
 const parseExperience = (value = "") =>
   toLines(value).map((line) => {
-    const [role = "", company = "", duration = "", achievements = ""] = line
-      .split("|")
-      .map((part) => part.trim());
-
+    const [role = "", company = "", duration = "", achievements = ""] = line.split("|").map((part) => part.trim());
     const bullets = String(achievements || "")
       .split(/[;,]/)
       .map((item) => item.trim())
       .filter(Boolean);
 
-    return {
-      role: role || line,
-      company: company || "",
-      duration: duration || "",
-      bullets: bullets.length > 0 ? bullets : [],
-    };
+    return { role: role || line, company: company || "", duration: duration || "", bullets: bullets.length > 0 ? bullets : [] };
   });
 
-const buildResumeFromForm = (formData = {}, template = "simple-ats", resumeType = "professional", language = "en") => {
-  const skills = toList(formData.skills);
+const parseResumeTextToFormData = (text = "") => {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return {};
+
+  const allText = lines.join("\n");
+  const email = (allText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [""])[0];
+  const phone = (allText.match(/(?:\+\d{1,3}[\s-]?)?(?:\(?\d{2,4}\)?[\s-]?)?[\d\s-]{7,15}/g) || [""])[0];
+  const inferredName = lines[0].length < 50 ? lines[0] : "";
+
   return {
-    header: {
-      fullName: clean(formData.name),
-      targetJob: clean(formData.targetJob),
-      location: clean(formData.location),
-      preferredCountry: clean(formData.preferredCountry),
-      email: clean(formData.email),
-      phone: clean(formData.phone),
-      linkedin: clean(formData.linkedin),
-    },
-    profile:
-      clean(formData.summary) ||
-      `Results-focused ${clean(formData.targetJob) || "professional"} with skills in ${skills
-        .slice(0, 6)
-        .join(", ")}.`,
-    skills,
-    education: parseEducation(formData.education),
-    experience: parseExperience(formData.experience),
-    projects: parseProjects(formData.projects),
-    certifications: toList(formData.certifications),
-    languages: toList(formData.languages),
-    gulfProfile: {
-      passportStatus: clean(formData.passportStatus),
-      visaStatus: clean(formData.visaStatus),
-      gccExperience: clean(formData.gccExperience),
-      drivingLicense: clean(formData.drivingLicense),
-      expectedSalary: clean(formData.expectedSalary),
-      noticePeriod: clean(formData.noticePeriod),
-    },
-    template,
-    resumeType,
-    language,
+    name: clean(inferredName),
+    email: clean(email),
+    phone: clean(phone),
+    summary: clean(lines.slice(1, 4).join(" ")),
   };
 };
 
-const parseAtsSuggestions = (items) =>
-  Array.isArray(items) ? [...new Set(items.map((item) => clean(item)).filter(Boolean))] : [];
+const rewriteSummaryLocal = (formData = {}, jobDescription = "") => {
+  const role = clean(formData.targetJob) || "professional";
+  const skills = toList(formData.skills).slice(0, 6);
+  const keywords = extractKeywords(jobDescription).slice(0, 4);
+  return `Results-driven ${role} with hands-on experience in ${skills.join(", ") || "operations and delivery"}. Proven ability to execute high-quality outcomes in fast-paced environments${keywords.length ? `, with strong alignment to ${keywords.join(", ")}` : ""}.`;
+};
+
+const rewriteExperienceLocal = (experienceText = "") =>
+  parseExperience(experienceText)
+    .map((item) => {
+      const bullets = (item.bullets || []).slice(0, 4).map((bullet, index) => {
+        if (/(\d+%|\d+\+|improved|reduced|increased|saved|achieved)/i.test(bullet)) return bullet;
+        return index === 0 ? `${bullet} and improved turnaround time by 20%.` : `${bullet} with clear quality and SLA focus.`;
+      });
+      return `${item.role || "Role"} | ${item.company || "Company"} | ${item.duration || "Duration"} | ${bullets.join(", ")}`;
+    })
+    .join("\n");
+
+const inferRoleSkills = (roleText = "") => {
+  const role = clean(roleText).toLowerCase();
+  if (/accountant|finance/.test(role)) return ["Tally", "GST filing", "Bookkeeping", "MS Excel", "Reconciliation"];
+  if (/driver/.test(role)) return ["Route planning", "Defensive driving", "Fleet safety", "Vehicle maintenance"];
+  if (/technician|electrician|mechanic/.test(role)) return ["Preventive maintenance", "Troubleshooting", "Safety compliance", "Tool handling"];
+  if (/nurse|healthcare/.test(role)) return ["Patient care", "Clinical documentation", "Infection control", "Emergency response"];
+  if (/software|developer|engineer|tech/.test(role)) return ["JavaScript", "React", "APIs", "Problem solving", "System design"];
+  return ["Communication", "Teamwork", "Problem solving", "Execution", "Documentation"];
+};
+
+const buildResumeFromForm = (formData = {}, template = "simple-ats", resumeType = "professional", language = "en") => ({
+  header: {
+    fullName: clean(formData.name),
+    targetJob: clean(formData.targetJob),
+    location: clean(formData.location),
+    preferredCountry: clean(formData.preferredCountry),
+    email: clean(formData.email),
+    phone: clean(formData.phone),
+    linkedin: clean(formData.linkedin),
+  },
+  profile: clean(formData.summary) || rewriteSummaryLocal(formData, ""),
+  skills: toList(formData.skills),
+  education: parseEducation(formData.education),
+  experience: parseExperience(formData.experience),
+  projects: parseProjects(formData.projects),
+  certifications: toList(formData.certifications),
+  languages: toList(formData.languages),
+  gulfProfile: {
+    passportStatus: clean(formData.passportStatus),
+    visaStatus: clean(formData.visaStatus),
+    currentVisaType: clean(formData.currentVisaType),
+    visaExpiry: clean(formData.visaExpiry),
+    transferableVisa: clean(formData.transferableVisa),
+    availableToRelocate: clean(formData.availableToRelocate),
+    preferredGulfCountry: clean(formData.preferredGulfCountry),
+    workPermitStatus: clean(formData.workPermitStatus),
+    gccExperience: clean(formData.gccExperience),
+    drivingLicense: clean(formData.drivingLicense),
+    drivingLicenseCountry: clean(formData.drivingLicenseCountry),
+    joiningAvailability: clean(formData.joiningAvailability),
+    expectedSalary: clean(formData.expectedSalary),
+    noticePeriod: clean(formData.noticePeriod),
+    accommodationRequired: clean(formData.accommodationRequired),
+    industryCategory: clean(formData.industryCategory),
+  },
+  template,
+  resumeType,
+  language,
+});
 
 const computeSectionCompleteness = (resume = {}) => {
   const checks = {
@@ -206,86 +249,17 @@ const computeSectionCompleteness = (resume = {}) => {
     projects: Array.isArray(resume.projects) && resume.projects.length > 0,
     certifications: Array.isArray(resume.certifications) && resume.certifications.length > 0,
   };
-
   const completed = Object.values(checks).filter(Boolean).length;
   const total = Object.keys(checks).length;
-  return {
-    checks,
-    completed,
-    total,
-    percent: Math.round((completed / total) * 100),
-  };
-};
-
-const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
-  const resumeText = formatResumeText(resume).toLowerCase();
-  const jdKeywords = extractKeywords(jobDescription);
-  const resumeKeywords = extractKeywords(resumeText);
-  const matchedKeywords = jdKeywords.filter((keyword) => resumeKeywords.includes(keyword));
-  const missingKeywords = jdKeywords.filter((keyword) => !resumeKeywords.includes(keyword));
-  const keywordMatchPercent = jdKeywords.length > 0 ? Math.round((matchedKeywords.length / jdKeywords.length) * 100) : 0;
-  const sectionCompleteness = computeSectionCompleteness(resume);
-
-  const issues = [];
-  const suggestions = [];
-  const warnings = [];
-
-  if (!clean(resume?.header?.email) && !clean(resume?.header?.phone)) {
-    issues.push("Missing email or phone in resume header.");
-    suggestions.push("Add at least one contact method.");
-  }
-  if (clean(resume?.profile).length < 60) {
-    issues.push("Professional summary is too short.");
-    suggestions.push("Write a stronger summary with measurable outcomes.");
-  }
-  if (sectionCompleteness.percent < 70) {
-    issues.push("Resume sections are incomplete.");
-    suggestions.push("Complete profile, skills, education, experience, projects, and certifications sections.");
-  }
-  if (!/(\d+%|\d+\+|increased|reduced|improved|saved|grew|achieved)/i.test(resumeText)) {
-    issues.push("No measurable achievement detected.");
-    suggestions.push("Include numbers like %, savings, growth, or counts.");
-  }
-  if (keywordMatchPercent < 35 && jdKeywords.length > 0) {
-    issues.push("Low keyword match with job description.");
-    suggestions.push("Use role-specific keywords in summary and experience bullets.");
-  }
-  if (resumeText.split("\n").some((line) => line.length > 180)) {
-    warnings.push("Some lines are too long for ATS parsing.");
-    suggestions.push("Use short bullet points instead of long lines.");
-  }
-
-  let score = 100;
-  score -= !clean(resume?.header?.email) && !clean(resume?.header?.phone) ? 20 : 0;
-  score -= clean(resume?.profile).length < 60 ? 12 : 0;
-  score -= Math.max(0, 40 - keywordMatchPercent) * 0.6;
-  score -= sectionCompleteness.percent < 70 ? 16 : 0;
-  score -= /(\d+%|\d+\+|increased|reduced|improved|saved|grew|achieved)/i.test(resumeText) ? 0 : 12;
-  score -= warnings.length * 4;
-  score = Math.max(30, Math.min(100, Math.round(score)));
-
-  return {
-    score,
-    keywordMatchPercent,
-    matchedKeywords,
-    missingKeywords,
-    issues,
-    warnings,
-    suggestions,
-    sectionCompleteness,
-    checkedAt: new Date().toISOString(),
-  };
+  return { checks, completed, total, percent: Math.round((completed / total) * 100) };
 };
 
 const formatResumeText = (resume = {}) => {
   const lines = [];
   const header = resume.header || {};
-
   lines.push(header.fullName || "Candidate");
   lines.push(header.targetJob || "");
-  lines.push(
-    [header.location, header.preferredCountry].filter(Boolean).join(", ")
-  );
+  lines.push([header.location, header.preferredCountry].filter(Boolean).join(", "));
   lines.push([header.email, header.phone].filter(Boolean).join(" | "));
   lines.push(header.linkedin || "");
   lines.push("");
@@ -295,45 +269,43 @@ const formatResumeText = (resume = {}) => {
   lines.push("SKILLS");
   lines.push((resume.skills || []).join(", "));
   lines.push("");
-
   lines.push("EXPERIENCE");
   (resume.experience || []).forEach((item) => {
     lines.push(`${item.role || ""} | ${item.company || ""} | ${item.duration || ""}`.replace(/\s+\|/g, " |"));
     (item.bullets || []).forEach((bullet) => lines.push(`- ${bullet}`));
   });
   lines.push("");
-
-  lines.push("EDUCATION");
-  (resume.education || []).forEach((item) => {
-    lines.push([item.degree, item.institution, item.year].filter(Boolean).join(" | "));
-  });
-  lines.push("");
-
-  lines.push("PROJECTS");
-  (resume.projects || []).forEach((item) => {
-    lines.push(`${item.name || ""} (${item.tech || ""})`.trim());
-    if (item.summary) lines.push(`- ${item.summary}`);
-  });
-  lines.push("");
-
-  lines.push("CERTIFICATIONS");
-  (resume.certifications || []).forEach((item) => lines.push(`- ${item}`));
-  lines.push("");
-
-  lines.push("LANGUAGES");
-  lines.push((resume.languages || []).join(", "));
-  lines.push("");
-
   lines.push("GULF PROFILE");
   const gulf = resume.gulfProfile || {};
-  lines.push(`Passport Status: ${gulf.passportStatus || "Not specified"}`);
-  lines.push(`Visa Status: ${gulf.visaStatus || "Not specified"}`);
-  lines.push(`GCC Experience: ${gulf.gccExperience || "Not specified"}`);
-  lines.push(`Driving License: ${gulf.drivingLicense || "Not specified"}`);
-  lines.push(`Expected Salary: ${gulf.expectedSalary || "Not specified"}`);
-  lines.push(`Notice Period: ${gulf.noticePeriod || "Not specified"}`);
+  lines.push(`Visa Status: ${gulf.visaStatus || "N/A"}`);
+  lines.push(`Current Visa Type: ${gulf.currentVisaType || "N/A"}`);
+  lines.push(`Relocation: ${gulf.availableToRelocate || "N/A"}`);
+  return lines.join("\n");
+};
 
-  return lines.filter((line) => line !== undefined && line !== null).join("\n");
+const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
+  const resumeText = formatResumeText(resume).toLowerCase();
+  const jdKeywords = extractKeywords(jobDescription);
+  const resumeKeywords = extractKeywords(resumeText);
+  const matchedKeywords = jdKeywords.filter((keyword) => resumeKeywords.includes(keyword));
+  const missingKeywords = jdKeywords.filter((keyword) => !resumeKeywords.includes(keyword));
+  const keywordMatchPercent = jdKeywords.length ? Math.round((matchedKeywords.length / jdKeywords.length) * 100) : 0;
+  const sectionCompleteness = computeSectionCompleteness(resume);
+  const suggestions = [];
+  if (clean(resume.profile).length < 60) suggestions.push("Strengthen your summary with outcomes.");
+  if (keywordMatchPercent < 35) suggestions.push("Add missing keywords from the job description.");
+  if (sectionCompleteness.percent < 70) suggestions.push("Complete missing resume sections.");
+  return {
+    score: Math.max(30, Math.min(100, 52 + Math.round(keywordMatchPercent * 0.5) + Math.round(sectionCompleteness.percent * 0.35))),
+    keywordMatchPercent,
+    matchedKeywords,
+    missingKeywords,
+    issues: [],
+    warnings: [],
+    suggestions,
+    sectionCompleteness,
+    checkedAt: new Date().toISOString(),
+  };
 };
 
 const loadLocalDrafts = () => {
@@ -345,129 +317,122 @@ const loadLocalDrafts = () => {
   }
 };
 
-const saveLocalDrafts = (drafts = []) => {
-  localStorage.setItem(LOCAL_DRAFTS_KEY, JSON.stringify(drafts));
+const saveLocalDrafts = (drafts = []) => localStorage.setItem(LOCAL_DRAFTS_KEY, JSON.stringify(drafts));
+const loadLocalUsage = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LOCAL_USAGE_KEY) || "{}");
+    return { resumeGenerations: Number(parsed?.resumeGenerations || 0), atsChecks: Number(parsed?.atsChecks || 0) };
+  } catch (_error) {
+    return { ...INITIAL_USAGE };
+  }
+};
+const saveLocalUsage = (usage) => localStorage.setItem(LOCAL_USAGE_KEY, JSON.stringify(usage));
+
+const TEMPLATE_THEME = {
+  "simple-ats": { primary: "#1d4ed8" },
+  "modern-professional": { primary: "#0f172a" },
+  "creative-grid": { primary: "#7c3aed" },
+  "gulf-blue-professional": { primary: "#0f3c73" },
+  "uae-corporate": { primary: "#0b4f3c" },
+  "saudi-formal": { primary: "#14532d" },
+  "qatar-oman-clean": { primary: "#7a1c3d" },
+  "europe-ats": { primary: "#1e3a8a" },
+  "us-tech-resume": { primary: "#111827" },
+  "fresher-student": { primary: "#4338ca" },
+  "executive-2page": { primary: "#111827" },
+  "nurse-healthcare": { primary: "#0f766e" },
+  "driver-technician-accountant": { primary: "#374151" },
+};
+
+const hexToRgb = (hex = "#1d4ed8") => {
+  const safe = hex.replace("#", "");
+  const n = Number.parseInt(safe, 16);
+  return {
+    r: (n >> 16) & 255,
+    g: (n >> 8) & 255,
+    b: n & 255,
+  };
 };
 
 const ResumeBuilder = () => {
   const { user } = useApp();
-  const [activeSection, setActiveSection] = useState("builder");
+  const [activeSection, setActiveSection] = useState("upload");
+  const [wizardStep, setWizardStep] = useState(0);
   const [template, setTemplate] = useState("simple-ats");
   const [resumeType, setResumeType] = useState("professional");
   const [language, setLanguage] = useState("en");
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
-  const [formErrors, setFormErrors] = useState({});
-
   const [resumeData, setResumeData] = useState(null);
   const [jobDescription, setJobDescription] = useState("");
   const [atsReport, setAtsReport] = useState(null);
   const [coverLetterType, setCoverLetterType] = useState("company");
   const [coverLetter, setCoverLetter] = useState(null);
   const [interviewPrep, setInterviewPrep] = useState(null);
-
+  const [linkedInProfile, setLinkedInProfile] = useState("");
+  const [recruiterEmail, setRecruiterEmail] = useState("");
   const [draftName, setDraftName] = useState("");
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [savedResumes, setSavedResumes] = useState([]);
-
+  const [uploadedResumeName, setUploadedResumeName] = useState("");
+  const [usageStats, setUsageStats] = useState(INITIAL_USAGE);
   const [busyKey, setBusyKey] = useState("");
   const [status, setStatus] = useState({ type: "", message: "" });
 
   const token = getStoredAuthToken();
   const isAuthenticated = Boolean(token);
 
-  useEffect(() => {
-    setFormData((current) => ({
-      ...current,
-      name: current.name || user?.name || "",
-      email: current.email || user?.email || "",
-    }));
-  }, [user?.email, user?.name]);
+  const hasPremiumAccess = useMemo(() => {
+    const rawPlan = String(user?.planName || user?.subscriptionPlan || user?.subscriptionStatus || "").toLowerCase();
+    return Boolean(user?.isPremium || rawPlan.includes("premium") || rawPlan.includes("pro") || rawPlan.includes("active"));
+  }, [user?.isPremium, user?.planName, user?.subscriptionPlan, user?.subscriptionStatus]);
 
-  const pushStatus = useCallback((type, message) => {
-    setStatus({ type, message });
+  const pushStatus = useCallback((type, message) => setStatus({ type, message }), []);
+  const canUseTemplate = useCallback((templateId) => hasPremiumAccess || FREE_TEMPLATE_IDS.includes(templateId), [hasPremiumAccess]);
+
+  useEffect(() => {
+    setFormData((current) => ({ ...current, name: current.name || user?.name || "", email: current.email || user?.email || "" }));
+  }, [user?.email, user?.name]);
+  useEffect(() => setUsageStats(loadLocalUsage()), []);
+
+  const updateUsage = useCallback((patch = {}) => {
+    setUsageStats((current) => {
+      const next = {
+        resumeGenerations: Number(current.resumeGenerations || 0) + Number(patch.resumeGenerations || 0),
+        atsChecks: Number(current.atsChecks || 0) + Number(patch.atsChecks || 0),
+      };
+      saveLocalUsage(next);
+      return next;
+    });
   }, []);
 
   const getHeaders = useCallback(() => {
     const authToken = getStoredAuthToken();
     return authToken ? { Authorization: `Bearer ${authToken}` } : {};
   }, []);
-
   const request = useCallback(
     async (method, path, payload) => {
-      const response = await axios({
-        method,
-        url: buildApiUrl(path),
-        data: payload,
-        headers: getHeaders(),
-      });
+      const response = await axios({ method, url: buildApiUrl(path), data: payload, headers: getHeaders() });
       return response.data;
     },
     [getHeaders]
   );
 
   const validateForm = useCallback(() => {
-    const errors = {};
-    if (!clean(formData.name)) errors.name = "Name is required.";
-    if (!clean(formData.targetJob)) errors.targetJob = "Target job is required.";
-    if (!clean(formData.skills)) errors.skills = "At least one skill is required.";
-    if (!clean(formData.email) && !clean(formData.phone)) {
-      errors.contact = "Email or phone is required.";
-    }
-    if (clean(formData.email) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(formData.email))) {
-      errors.email = "Enter a valid email address.";
-    }
-    if (clean(formData.phone) && !/^[+\d\s()-]{7,20}$/.test(clean(formData.phone))) {
-      errors.phone = "Enter a valid phone number.";
-    }
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    if (!clean(formData.name)) return false;
+    if (!clean(formData.targetJob)) return false;
+    if (!clean(formData.skills)) return false;
+    if (!clean(formData.email) && !clean(formData.phone)) return false;
+    return true;
   }, [formData]);
 
-  const previewResume = useMemo(
-    () => resumeData || buildResumeFromForm(formData, template, resumeType, language),
-    [formData, language, resumeData, resumeType, template]
-  );
-
-  const completeness = useMemo(() => {
-    const checks = [
-      Boolean(clean(previewResume.profile).length >= 60),
-      (previewResume.skills || []).length > 0,
-      (previewResume.education || []).length > 0,
-      (previewResume.experience || []).length > 0,
-      (previewResume.projects || []).length > 0,
-      (previewResume.certifications || []).length > 0,
-    ];
-    const done = checks.filter(Boolean).length;
-    return Math.round((done / checks.length) * 100);
-  }, [previewResume]);
-
-  const loadResumes = useCallback(async () => {
-    if (!isAuthenticated) {
-      const localDrafts = loadLocalDrafts();
-      setSavedResumes(localDrafts);
-      return;
-    }
-
-    try {
-      const result = await request("get", "/resumebuilder/my-resumes");
-      setSavedResumes(Array.isArray(result?.resumes) ? result.resumes : []);
-    } catch (error) {
-      pushStatus("error", error?.response?.data?.message || "Unable to load saved resumes.");
-      setSavedResumes([]);
-    }
-  }, [isAuthenticated, pushStatus, request]);
-
-  useEffect(() => {
-    loadResumes();
-  }, [loadResumes]);
-
-  const handleInputChange = (field) => (event) => {
-    const value = event?.target?.value ?? "";
-    setFormData((current) => ({ ...current, [field]: value }));
-    if (formErrors[field] || formErrors.contact) {
-      setFormErrors((current) => ({ ...current, [field]: "", contact: "" }));
-    }
-  };
+  const previewResume = useMemo(() => resumeData || buildResumeFromForm(formData, template, resumeType, language), [formData, language, resumeData, resumeType, template]);
+  const completeness = useMemo(() => computeSectionCompleteness(previewResume).percent, [previewResume]);
+  const roleSuggestions = useMemo(() => inferRoleSkills(formData.targetJob), [formData.targetJob]);
+  const missingSkills = useMemo(() => {
+    const jd = extractKeywords(jobDescription);
+    const existing = new Set(extractKeywords(`${formData.skills} ${formData.summary} ${formData.experience}`));
+    return jd.filter((keyword) => !existing.has(keyword)).slice(0, 10);
+  }, [formData.experience, formData.skills, formData.summary, jobDescription]);
 
   const withBusy = useCallback(async (key, fn) => {
     setBusyKey(key);
@@ -478,260 +443,227 @@ const ResumeBuilder = () => {
     }
   }, []);
 
+  const loadResumes = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSavedResumes(loadLocalDrafts());
+      return;
+    }
+    try {
+      const result = await request("get", "/resumebuilder/my-resumes");
+      setSavedResumes(Array.isArray(result?.resumes) ? result.resumes : []);
+    } catch (_error) {
+      setSavedResumes([]);
+    }
+  }, [isAuthenticated, request]);
+  useEffect(() => {
+    loadResumes();
+  }, [loadResumes]);
+
+  const handleInputChange = (field) => (event) => {
+    const value = event?.target?.value ?? "";
+    setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const chooseTemplate = useCallback(
+    (templateId) => {
+      if (!canUseTemplate(templateId)) {
+        pushStatus("error", "This template is premium.");
+        return;
+      }
+      setTemplate(templateId);
+      pushStatus("success", `Template changed to ${TEMPLATE_OPTIONS.find((item) => item.id === templateId)?.name || templateId}.`);
+    },
+    [canUseTemplate, pushStatus]
+  );
+
+  const handleUploadResume = useCallback(
+    (event) => {
+      const file = event?.target?.files?.[0];
+      if (!file) return;
+      setUploadedResumeName(file.name);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const parsed = parseResumeTextToFormData(String(e?.target?.result || ""));
+        setFormData((current) => ({ ...current, ...parsed }));
+        pushStatus("success", "Resume uploaded and basic details auto-filled.");
+      };
+      reader.readAsText(file);
+    },
+    [pushStatus]
+  );
+
+  const handleRoleWiseGeneration = useCallback(() => {
+    const suggested = inferRoleSkills(formData.targetJob);
+    setFormData((current) => ({ ...current, skills: [...new Set([...toList(current.skills), ...suggested])].join(", "), summary: rewriteSummaryLocal(current, jobDescription) }));
+    pushStatus("success", "Role-wise generation applied.");
+  }, [formData.targetJob, jobDescription, pushStatus]);
+
+  const handleGulfStyle = useCallback(() => {
+    setResumeType("gulf");
+    chooseTemplate("gulf-blue-professional");
+    setFormData((current) => ({ ...current, summary: `${rewriteSummaryLocal(current, jobDescription)} Gulf-ready profile with visa and relocation clarity.` }));
+  }, [chooseTemplate, jobDescription]);
+
   const handleGenerateResume = useCallback(async () => {
     if (!validateForm()) {
-      pushStatus("error", "Fix required fields before generating.");
+      pushStatus("error", "Please fill name, target role, skills, and at least email or phone before generating.");
+      return;
+    }
+    if (!hasPremiumAccess && usageStats.resumeGenerations >= 1) {
+      pushStatus("error", "Free limit reached: 1 resume generation.");
       return;
     }
 
     if (!isAuthenticated) {
       setResumeData(buildResumeFromForm(formData, template, resumeType, language));
-      pushStatus("success", "Draft resume generated locally. Login to use AI-enhanced generation.");
+      updateUsage({ resumeGenerations: 1 });
+      pushStatus("success", "Resume generated locally.");
       return;
     }
 
     await withBusy("generate", async () => {
       try {
-        const result = await request("post", "/resumebuilder/generate", {
-          formData,
-          template,
-          resumeType,
-          language,
-        });
+        const result = await request("post", "/resumebuilder/generate", { formData, template, resumeType, language });
         setResumeData(result?.resume || null);
-        pushStatus("success", "Resume generated successfully.");
+        updateUsage({ resumeGenerations: 1 });
+        pushStatus("success", "Resume generated.");
       } catch (error) {
-        pushStatus("error", error?.response?.data?.message || "Failed to generate resume.");
+        pushStatus("error", error?.response?.data?.message || "Generate failed.");
       }
     });
-  }, [formData, isAuthenticated, language, pushStatus, request, resumeType, template, validateForm, withBusy]);
+  }, [formData, hasPremiumAccess, isAuthenticated, language, pushStatus, request, resumeType, template, updateUsage, usageStats.resumeGenerations, validateForm, withBusy]);
 
   const handleAtsCheck = useCallback(async () => {
+    if (!clean(jobDescription)) {
+      pushStatus("error", "Paste a job description before running ATS check.");
+      return;
+    }
+    if (!hasPremiumAccess && usageStats.atsChecks >= 1) {
+      pushStatus("error", "Free limit reached: 1 ATS check.");
+      return;
+    }
     const resumePayload = resumeData || buildResumeFromForm(formData, template, resumeType, language);
 
     if (!isAuthenticated) {
       setAtsReport(buildLocalAtsReport({ resume: resumePayload, jobDescription }));
-      pushStatus("success", "ATS report generated locally. Login for AI-backed scoring.");
+      updateUsage({ atsChecks: 1 });
       return;
     }
 
     await withBusy("ats", async () => {
       try {
-        const result = await request("post", "/resumebuilder/ats-check", {
-          resume: resumePayload,
-          jobDescription,
-        });
+        const result = await request("post", "/resumebuilder/ats-check", { resume: resumePayload, jobDescription });
         setAtsReport(result?.report || null);
-        pushStatus("success", "ATS report generated.");
+        updateUsage({ atsChecks: 1 });
       } catch (error) {
-        pushStatus("error", error?.response?.data?.message || "Failed to check ATS score.");
+        pushStatus("error", error?.response?.data?.message || "ATS check failed.");
       }
     });
-  }, [
-    formData,
-    isAuthenticated,
-    jobDescription,
-    language,
-    pushStatus,
-    request,
-    resumeData,
-    resumeType,
-    template,
-    withBusy,
-  ]);
+  }, [formData, hasPremiumAccess, isAuthenticated, jobDescription, language, pushStatus, request, resumeData, resumeType, template, updateUsage, usageStats.atsChecks, withBusy]);
 
   const handleOptimizeResume = useCallback(async () => {
-    const resumePayload = resumeData || buildResumeFromForm(formData, template, resumeType, language);
     if (!clean(jobDescription)) {
-      pushStatus("error", "Paste a job description to optimize.");
+      pushStatus("error", "Paste a job description before improving the resume.");
       return;
     }
-
+    const resumePayload = resumeData || buildResumeFromForm(formData, template, resumeType, language);
     if (!isAuthenticated) {
-      const missingKeywords = buildLocalAtsReport({ resume: resumePayload, jobDescription }).missingKeywords.slice(0, 6);
-      const localOptimized = {
+      const local = buildLocalAtsReport({ resume: resumePayload, jobDescription });
+      const optimized = {
         ...resumePayload,
-        profile: `${clean(resumePayload.profile)} ${missingKeywords.join(", ")}`.trim(),
-        optimization: { appliedKeywords: missingKeywords },
+        profile: `${clean(resumePayload.profile)} ${local.missingKeywords.slice(0, 6).join(", ")}`.trim(),
       };
-      setResumeData(localOptimized);
-      setAtsReport(buildLocalAtsReport({ resume: localOptimized, jobDescription }));
-      pushStatus("success", "Resume optimized locally. Login for AI rewriting.");
+      setResumeData(optimized);
+      setAtsReport(buildLocalAtsReport({ resume: optimized, jobDescription }));
       return;
     }
-
     await withBusy("optimize", async () => {
       try {
-        const result = await request("post", "/resumebuilder/optimize", {
-          resume: resumePayload,
-          jobDescription,
-        });
+        const result = await request("post", "/resumebuilder/optimize", { resume: resumePayload, jobDescription });
         setResumeData(result?.resume || resumePayload);
         if (result?.report) setAtsReport(result.report);
-        pushStatus("success", "Resume optimized for target job.");
       } catch (error) {
-        pushStatus("error", error?.response?.data?.message || "Failed to optimize resume.");
+        pushStatus("error", error?.response?.data?.message || "Resume optimization failed.");
       }
     });
-  }, [
-    formData,
-    isAuthenticated,
-    jobDescription,
-    language,
-    pushStatus,
-    request,
-    resumeData,
-    resumeType,
-    template,
-    withBusy,
-  ]);
+  }, [formData, isAuthenticated, jobDescription, language, pushStatus, request, resumeData, resumeType, template, updateUsage, withBusy]);
 
   const handleCoverLetter = useCallback(async () => {
     const resumePayload = resumeData || buildResumeFromForm(formData, template, resumeType, language);
-
     if (!isAuthenticated) {
-      const name = clean(formData.name) || "Candidate";
-      const role = clean(formData.targetJob) || "the role";
       const topSkills = (resumePayload.skills || []).slice(0, 4);
       setCoverLetter({
         type: coverLetterType,
-        content: `Dear Hiring Manager,\n\nI am applying for the ${role} role. I bring hands-on experience in ${topSkills.join(
-          ", "
-        )} and a track record of delivering measurable outcomes.\n\nI would value the opportunity to discuss how I can contribute to your team.\n\nSincerely,\n${name}`,
+        content: `Dear Hiring Manager,\n\nI am applying for the ${formData.targetJob || "role"}. I bring experience in ${topSkills.join(", ")}.\n\nSincerely,\n${formData.name || "Candidate"}`,
         highlights: topSkills,
       });
-      pushStatus("success", "Cover letter generated locally. Login for AI-enhanced writing.");
       return;
     }
-
     await withBusy("cover-letter", async () => {
       try {
-        const result = await request("post", "/resumebuilder/cover-letter", {
-          formData,
-          resume: resumePayload,
-          type: coverLetterType,
-          jobDescription,
-        });
+        const result = await request("post", "/resumebuilder/cover-letter", { formData, resume: resumePayload, type: coverLetterType, jobDescription });
         setCoverLetter(result?.letter || null);
-        pushStatus("success", "Cover letter generated.");
       } catch (error) {
-        pushStatus("error", error?.response?.data?.message || "Failed to generate cover letter.");
+        pushStatus("error", error?.response?.data?.message || "Cover letter generation failed.");
       }
     });
-  }, [
-    coverLetterType,
-    formData,
-    isAuthenticated,
-    jobDescription,
-    language,
-    pushStatus,
-    request,
-    resumeData,
-    resumeType,
-    template,
-    withBusy,
-  ]);
+  }, [coverLetterType, formData, isAuthenticated, jobDescription, language, pushStatus, request, resumeData, resumeType, template, withBusy]);
+
+  const handleLinkedInGenerate = useCallback(() => {
+    const header = previewResume?.header || {};
+    const topSkills = (previewResume?.skills || []).slice(0, 8).join(" | ");
+    setLinkedInProfile(`${header.targetJob || "Professional"} | ${header.preferredCountry || "Global"} | ${topSkills}\n\n${previewResume?.profile || ""}`);
+  }, [previewResume]);
+  const handleRecruiterEmail = useCallback(() => {
+    const header = previewResume?.header || {};
+    const gulf = previewResume?.gulfProfile || {};
+    setRecruiterEmail(`Subject: Application - ${header.targetJob || "Role"}\n\nDear Recruiter,\n\nI am interested in the ${header.targetJob || "position"} role.\nVisa: ${gulf.visaStatus || "N/A"} | Type: ${gulf.currentVisaType || "N/A"}\nRelocation: ${gulf.availableToRelocate || "Yes"}\n\nRegards,\n${header.fullName || "Candidate"}`);
+  }, [previewResume]);
 
   const handleInterviewPrep = useCallback(async () => {
-    if (!isAuthenticated) {
-      const skills = toList(formData.skills).slice(0, 4);
-      setInterviewPrep({
-        questions: [
-          `Tell me about your experience related to ${formData.targetJob || "this role"}.`,
-          `Describe a project where you used ${skills[0] || "your key skill"}.`,
-          "How do you manage deadlines under pressure?",
-          "What is one measurable result you achieved recently?",
-        ],
-        tips: [
-          "Use STAR format in each answer.",
-          "Show impact using numbers and business outcomes.",
-          "Tailor examples to the target role and job description.",
-        ],
-        skillCourses: skills,
-      });
-      pushStatus("success", "Interview prep generated locally. Login for AI coaching.");
+    if (!clean(formData.targetJob)) {
+      pushStatus("error", "Add a target role before generating interview prep.");
       return;
     }
-
+    if (!isAuthenticated) {
+      setInterviewPrep({
+        questions: [`Tell me about your experience related to ${formData.targetJob || "this role"}.`, "How do you handle deadlines?"],
+        tips: ["Use STAR format.", "Quantify impact."],
+      });
+      return;
+    }
     await withBusy("interview", async () => {
       try {
-        const result = await request("post", "/resumebuilder/interview-prep", {
-          targetJob: formData.targetJob,
-          jobDescription,
-          experience: formData.experience,
-          skills: formData.skills,
-        });
+        const result = await request("post", "/resumebuilder/interview-prep", { targetJob: formData.targetJob, jobDescription, experience: formData.experience, skills: formData.skills });
         setInterviewPrep(result?.prep || null);
-        pushStatus("success", "Interview prep generated.");
       } catch (error) {
-        pushStatus("error", error?.response?.data?.message || "Failed to generate interview prep.");
+        pushStatus("error", error?.response?.data?.message || "Interview prep generation failed.");
       }
     });
   }, [formData.experience, formData.skills, formData.targetJob, isAuthenticated, jobDescription, pushStatus, request, withBusy]);
 
-  const persistLocalDraft = useCallback(
-    (resumeId = "") => {
-      const drafts = loadLocalDrafts();
-      const now = new Date().toISOString();
-      const id = resumeId || selectedResumeId || `local-${Date.now()}`;
-      const name = clean(draftName) || `${clean(formData.name) || "Untitled"} Resume`;
-      const draftPayload = {
-        _id: id,
-        id,
-        name,
-        resumeType,
-        template,
-        language,
-        formData,
-        resumeData: previewResume,
-        updatedAt: now,
-        createdAt: now,
-        atsHistory: atsReport?.score ? [{ score: atsReport.score, checkedAt: now }] : [],
-        source: "local",
-      };
-
-      const next = drafts.filter((item) => String(item?._id || item?.id) !== id);
-      next.unshift(draftPayload);
-      saveLocalDrafts(next);
-      setSavedResumes(next);
-      setSelectedResumeId(id);
-      pushStatus("success", "Draft saved locally.");
-    },
-    [
-      atsReport?.score,
-      draftName,
-      formData,
-      language,
-      previewResume,
-      pushStatus,
-      resumeType,
-      selectedResumeId,
-      template,
-    ]
-  );
+  const persistLocalDraft = useCallback(() => {
+    const drafts = loadLocalDrafts();
+    const id = selectedResumeId || `local-${Date.now()}`;
+    const payload = { _id: id, id, name: clean(draftName) || `${clean(formData.name) || "Untitled"} Resume`, resumeType, template, language, formData, resumeData: previewResume, jobDescription, updatedAt: new Date().toISOString() };
+    const next = drafts.filter((item) => String(item?._id || item?.id) !== id);
+    next.unshift(payload);
+    saveLocalDrafts(next);
+    setSavedResumes(next);
+    setSelectedResumeId(id);
+  }, [draftName, formData, jobDescription, language, previewResume, resumeType, selectedResumeId, template]);
 
   const handleSaveDraft = useCallback(async () => {
     if (!validateForm()) {
-      pushStatus("error", "Fix required fields before saving.");
+      pushStatus("error", "Please fill name, target role, skills, and at least email or phone before saving.");
       return;
     }
-
     if (!isAuthenticated) {
       persistLocalDraft();
       return;
     }
-
     await withBusy("save", async () => {
-      const payload = {
-        name: clean(draftName) || `${clean(formData.name) || "Untitled"} Resume`,
-        resumeType,
-        template,
-        language,
-        formData,
-        resumeData: previewResume,
-        atsScore: atsReport?.score,
-      };
-
+      const payload = { name: clean(draftName) || `${clean(formData.name) || "Untitled"} Resume`, resumeType, template, language, formData, resumeData: previewResume, atsScore: atsReport?.score };
       try {
         if (selectedResumeId) {
           await request("put", `/resumebuilder/my-resumes/${selectedResumeId}`, payload);
@@ -740,482 +672,173 @@ const ResumeBuilder = () => {
           setSelectedResumeId(result?.resume?._id || result?.resume?.id || "");
         }
         await loadResumes();
-        pushStatus("success", "Resume draft saved.");
-      } catch (error) {
-        pushStatus("error", error?.response?.data?.message || "Failed to save draft.");
-      }
+      } catch (_error) {}
     });
-  }, [
-    atsReport?.score,
-    draftName,
-    formData,
-    isAuthenticated,
-    language,
-    loadResumes,
-    persistLocalDraft,
-    previewResume,
-    pushStatus,
-    request,
-    resumeType,
-    selectedResumeId,
-    template,
-    validateForm,
-    withBusy,
-  ]);
+  }, [atsReport?.score, draftName, formData, isAuthenticated, language, loadResumes, persistLocalDraft, previewResume, request, resumeType, selectedResumeId, template, validateForm, withBusy]);
 
   const openDraft = useCallback((record) => {
-    const data = record?.formData || INITIAL_FORM_DATA;
-    setFormData((current) => ({ ...current, ...INITIAL_FORM_DATA, ...data }));
+    setFormData((current) => ({ ...current, ...INITIAL_FORM_DATA, ...(record?.formData || {}) }));
     setResumeData(record?.resumeData || null);
     setTemplate(record?.template || "simple-ats");
     setResumeType(record?.resumeType || "professional");
     setLanguage(record?.language || "en");
     setDraftName(record?.name || "");
     setSelectedResumeId(record?._id || record?.id || "");
-    const latestAts = Array.isArray(record?.atsHistory) ? record.atsHistory[record.atsHistory.length - 1] : null;
-    setAtsReport(
-      latestAts?.score
-        ? {
-            score: latestAts.score,
-            keywordMatchPercent: latestAts.keywordMatchPercent || 0,
-            matchedKeywords: [],
-            missingKeywords: [],
-            issues: [],
-            warnings: [],
-            suggestions: [],
-          }
-        : null
-    );
-    setActiveSection("builder");
-    pushStatus("success", "Draft loaded.");
-  }, [pushStatus]);
+    setJobDescription(record?.jobDescription || "");
+    setActiveSection("ai-builder");
+  }, []);
 
-  const deleteDraft = useCallback(
-    async (record) => {
-      const recordId = record?._id || record?.id || "";
-      if (!recordId) return;
+  const deleteDraft = useCallback(async (record) => {
+    const recordId = record?._id || record?.id || "";
+    if (!recordId) return;
+    if (!isAuthenticated || String(recordId).startsWith("local-")) {
+      const next = loadLocalDrafts().filter((item) => String(item?._id || item?.id) !== String(recordId));
+      saveLocalDrafts(next);
+      setSavedResumes(next);
+      return;
+    }
+    await withBusy(`delete-${recordId}`, async () => {
+      await request("delete", `/resumebuilder/my-resumes/${recordId}`);
+      await loadResumes();
+    });
+  }, [isAuthenticated, loadResumes, request, withBusy]);
 
-      if (!isAuthenticated || String(recordId).startsWith("local-")) {
-        const next = loadLocalDrafts().filter((item) => String(item?._id || item?.id) !== String(recordId));
-        saveLocalDrafts(next);
-        setSavedResumes(next);
-        if (selectedResumeId === recordId) setSelectedResumeId("");
-        pushStatus("success", "Draft deleted.");
-        return;
-      }
+  const duplicateDraft = useCallback(async (record) => {
+    const recordId = record?._id || record?.id || "";
+    if (!recordId) return;
+    if (!isAuthenticated || String(recordId).startsWith("local-")) {
+      const drafts = loadLocalDrafts();
+      const duplicateId = `local-${Date.now()}`;
+      drafts.unshift({ ...record, _id: duplicateId, id: duplicateId, name: `${record?.name || "Untitled"} (Copy)`, updatedAt: new Date().toISOString() });
+      saveLocalDrafts(drafts);
+      setSavedResumes(drafts);
+      return;
+    }
+    await withBusy(`duplicate-${recordId}`, async () => {
+      await request("post", `/resumebuilder/my-resumes/${recordId}/duplicate`);
+      await loadResumes();
+    });
+  }, [isAuthenticated, loadResumes, request, withBusy]);
 
-      await withBusy(`delete-${recordId}`, async () => {
-        try {
-          await request("delete", `/resumebuilder/my-resumes/${recordId}`);
-          await loadResumes();
-          if (selectedResumeId === recordId) setSelectedResumeId("");
-          pushStatus("success", "Draft deleted.");
-        } catch (error) {
-          pushStatus("error", error?.response?.data?.message || "Failed to delete draft.");
-        }
-      });
-    },
-    [isAuthenticated, loadResumes, pushStatus, request, selectedResumeId, withBusy]
-  );
-
-  const duplicateDraft = useCallback(
-    async (record) => {
-      const recordId = record?._id || record?.id || "";
-      if (!recordId) return;
-
-      if (!isAuthenticated || String(recordId).startsWith("local-")) {
-        const drafts = loadLocalDrafts();
-        const now = new Date().toISOString();
-        const duplicateId = `local-${Date.now()}`;
-        const duplicated = {
-          ...record,
-          _id: duplicateId,
-          id: duplicateId,
-          name: `${record?.name || "Untitled"} (Copy)`,
-          updatedAt: now,
-          createdAt: now,
-          source: "local",
-        };
-        drafts.unshift(duplicated);
-        saveLocalDrafts(drafts);
-        setSavedResumes(drafts);
-        pushStatus("success", "Draft duplicated.");
-        return;
-      }
-
-      await withBusy(`duplicate-${recordId}`, async () => {
-        try {
-          await request("post", `/resumebuilder/my-resumes/${recordId}/duplicate`);
-          await loadResumes();
-          pushStatus("success", "Draft duplicated.");
-        } catch (error) {
-          pushStatus("error", error?.response?.data?.message || "Failed to duplicate draft.");
-        }
-      });
-    },
-    [isAuthenticated, loadResumes, pushStatus, request, withBusy]
-  );
-
-  const renameDraft = useCallback(
-    async (record) => {
-      const recordId = record?._id || record?.id || "";
-      if (!recordId) return;
-
-      const currentName = clean(record?.name) || "Untitled Resume";
-      const nextName = window.prompt("Enter a new resume name", currentName);
-      if (nextName === null) return;
-
-      const normalizedName = clean(nextName);
-      if (!normalizedName) {
-        pushStatus("error", "Resume name cannot be empty.");
-        return;
-      }
-
-      if (!isAuthenticated || String(recordId).startsWith("local-")) {
-        const drafts = loadLocalDrafts();
-        const next = drafts.map((item) => {
-          const itemId = String(item?._id || item?.id || "");
-          if (itemId !== String(recordId)) return item;
-          return { ...item, name: normalizedName, updatedAt: new Date().toISOString() };
-        });
-        saveLocalDrafts(next);
-        setSavedResumes(next);
-        if (selectedResumeId === recordId) setDraftName(normalizedName);
-        pushStatus("success", "Draft renamed.");
-        return;
-      }
-
-      await withBusy(`rename-${recordId}`, async () => {
-        try {
-          await request("put", `/resumebuilder/my-resumes/${recordId}`, { name: normalizedName });
-          await loadResumes();
-          if (selectedResumeId === recordId) setDraftName(normalizedName);
-          pushStatus("success", "Draft renamed.");
-        } catch (error) {
-          pushStatus("error", error?.response?.data?.message || "Failed to rename draft.");
-        }
-      });
-    },
-    [isAuthenticated, loadResumes, pushStatus, request, selectedResumeId, withBusy]
-  );
+  const renameDraft = useCallback(async (record) => {
+    const recordId = record?._id || record?.id || "";
+    if (!recordId) return;
+    const nextName = window.prompt("Enter a new resume name", clean(record?.name) || "Untitled Resume");
+    if (nextName === null) return;
+    const normalizedName = clean(nextName);
+    if (!normalizedName) return;
+    if (!isAuthenticated || String(recordId).startsWith("local-")) {
+      const next = loadLocalDrafts().map((item) => (String(item?._id || item?.id) === String(recordId) ? { ...item, name: normalizedName, updatedAt: new Date().toISOString() } : item));
+      saveLocalDrafts(next);
+      setSavedResumes(next);
+      return;
+    }
+    await withBusy(`rename-${recordId}`, async () => {
+      await request("put", `/resumebuilder/my-resumes/${recordId}`, { name: normalizedName });
+      await loadResumes();
+    });
+  }, [isAuthenticated, loadResumes, request, withBusy]);
 
   const exportPdf = useCallback(() => {
-    const resume = previewResume;
     const doc = new jsPDF({ unit: "pt", format: "a4" });
-    const left = 44;
-    const width = 510;
-    const pageHeight = doc.internal.pageSize.height;
+    const text = formatResumeText(previewResume).split("\n");
+    const theme = TEMPLATE_THEME[template] || TEMPLATE_THEME["simple-ats"];
+    const rgb = hexToRgb(theme.primary);
     let y = 44;
 
-    const addLine = (text = "", size = 11, bold = false, extraGap = 4) => {
-      const safeText = String(text || "");
-      doc.setFont("helvetica", bold ? "bold" : "normal");
-      doc.setFontSize(size);
-      const lines = doc.splitTextToSize(safeText, width);
-      lines.forEach((line) => {
-        if (y > pageHeight - 40) {
-          doc.addPage();
-          y = 44;
-        }
-        doc.text(line, left, y);
-        y += size + 4;
-      });
-      y += extraGap;
-    };
+    doc.setFillColor(rgb.r, rgb.g, rgb.b);
+    doc.rect(0, 0, 595, 64, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(17);
+    doc.text(previewResume?.header?.fullName || "Candidate", 44, 34);
+    doc.setFontSize(11);
+    doc.text(previewResume?.header?.targetJob || "Resume", 44, 50);
+    doc.setTextColor(30, 41, 59);
+    y = 84;
 
-    addLine(resume?.header?.fullName || "Candidate", 16, true, 2);
-    addLine(resume?.header?.targetJob || "", 12, false, 2);
-    addLine(
-      [resume?.header?.location, resume?.header?.preferredCountry].filter(Boolean).join(", "),
-      10
-    );
-    addLine(
-      [resume?.header?.email, resume?.header?.phone, resume?.header?.linkedin].filter(Boolean).join(" | "),
-      10
-    );
-
-    addLine("PROFILE", 12, true, 2);
-    addLine(resume?.profile || "", 10, false, 8);
-
-    addLine("SKILLS", 12, true, 2);
-    addLine((resume?.skills || []).join(", "), 10, false, 8);
-
-    addLine("EXPERIENCE", 12, true, 2);
-    (resume?.experience || []).forEach((item) => {
-      addLine(`${item.role || ""} | ${item.company || ""} | ${item.duration || ""}`, 10, true, 2);
-      (item.bullets || []).forEach((bullet) => addLine(`- ${bullet}`, 10, false, 1));
-      y += 3;
+    text.forEach((line) => {
+      if (y > 790) {
+        doc.addPage();
+        y = 44;
+      }
+      if (/^[A-Z ]+$/.test(line)) {
+        doc.setTextColor(rgb.r, rgb.g, rgb.b);
+        doc.setFontSize(11);
+      } else {
+        doc.setTextColor(30, 41, 59);
+        doc.setFontSize(10);
+      }
+      doc.text(line || " ", 44, y);
+      y += 13;
     });
-
-    addLine("EDUCATION", 12, true, 2);
-    (resume?.education || []).forEach((item) => {
-      addLine([item.degree, item.institution, item.year].filter(Boolean).join(" | "), 10, false, 2);
-    });
-    y += 4;
-
-    addLine("PROJECTS", 12, true, 2);
-    (resume?.projects || []).forEach((item) => {
-      addLine(`${item.name || ""} (${item.tech || ""})`, 10, true, 1);
-      if (item.summary) addLine(`- ${item.summary}`, 10, false, 2);
-    });
-
-    addLine("CERTIFICATIONS", 12, true, 2);
-    (resume?.certifications || []).forEach((item) => addLine(`- ${item}`, 10, false, 1));
-
-    addLine("LANGUAGES", 12, true, 2);
-    addLine((resume?.languages || []).join(", "), 10, false, 8);
-
-    if (resumeType === "gulf") {
-      const gulf = resume?.gulfProfile || {};
-      addLine("GULF READINESS", 12, true, 2);
-      addLine(`Passport Status: ${gulf.passportStatus || "Not specified"}`, 10, false, 1);
-      addLine(`Visa Status: ${gulf.visaStatus || "Not specified"}`, 10, false, 1);
-      addLine(`GCC Experience: ${gulf.gccExperience || "Not specified"}`, 10, false, 1);
-      addLine(`Driving License: ${gulf.drivingLicense || "Not specified"}`, 10, false, 1);
-      addLine(`Expected Salary: ${gulf.expectedSalary || "Not specified"}`, 10, false, 1);
-      addLine(`Notice Period: ${gulf.noticePeriod || "Not specified"}`, 10, false, 1);
-    }
-
-    doc.save(`${clean(resume?.header?.fullName || "resume").replace(/\s+/g, "_")}_resume.pdf`);
-    pushStatus("success", "PDF downloaded.");
-  }, [previewResume, pushStatus, resumeType]);
+    doc.save(`${clean(previewResume?.header?.fullName || "resume").replace(/\s+/g, "_")}_${template}.pdf`);
+  }, [previewResume, template]);
 
   const exportDoc = useCallback(async () => {
-    try {
-      const resume = previewResume || {};
-      const header = resume.header || {};
-      const gulf = resume.gulfProfile || {};
-      const contact = [header.email, header.phone, header.linkedin].filter(Boolean).join(" | ");
-      const location = [header.location, header.preferredCountry].filter(Boolean).join(", ");
+    const theme = TEMPLATE_THEME[template] || TEMPLATE_THEME["simple-ats"];
+    const headingColor = theme.primary.replace("#", "");
+    const docFile = new Document({
+      sections: [{
+        properties: {},
+        children: formatResumeText(previewResume)
+          .split("\n")
+          .map((line) => new Paragraph({
+            children: [new TextRun({
+              text: line || " ",
+              color: /^[A-Z ]+$/.test(line) ? headingColor : undefined,
+              bold: /^[A-Z ]+$/.test(line),
+            })],
+          })),
+      }],
+    });
+    const blob = await Packer.toBlob(docFile);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${clean(previewResume?.header?.fullName || "resume").replace(/\s+/g, "_")}_${template}.docx`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, [previewResume, template]);
 
-      const children = [];
-      const addHeading = (text) => {
-        if (!clean(text)) return;
-        children.push(
-          new Paragraph({
-            text,
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 220, after: 80 },
-          })
-        );
-      };
-      const addParagraph = (text, options = {}) => {
-        if (!clean(text)) return;
-        children.push(
-          new Paragraph({
-            children: [new TextRun(String(text))],
-            spacing: { after: options.tight ? 60 : 120 },
-            bullet: options.bullet ? { level: 0 } : undefined,
-          })
-        );
-      };
+  const copyText = useCallback(async (text) => {
+    await navigator.clipboard.writeText(text);
+  }, []);
 
-      children.push(
-        new Paragraph({
-          text: header.fullName || "Candidate",
-          heading: HeadingLevel.TITLE,
-          spacing: { after: 80 },
-        })
-      );
-      if (clean(header.targetJob)) addParagraph(header.targetJob, { tight: true });
-      if (clean(location)) addParagraph(location, { tight: true });
-      if (clean(contact)) addParagraph(contact, { tight: true });
-
-      addHeading("Profile");
-      addParagraph(resume.profile);
-
-      addHeading("Skills");
-      addParagraph((resume.skills || []).join(", "));
-
-      addHeading("Experience");
-      (resume.experience || []).forEach((item) => {
-        const heading = [item.role, item.company, item.duration].filter(Boolean).join(" | ");
-        addParagraph(heading);
-        (item.bullets || []).forEach((bullet) => addParagraph(bullet, { bullet: true, tight: true }));
-      });
-
-      addHeading("Education");
-      (resume.education || []).forEach((item) =>
-        addParagraph([item.degree, item.institution, item.year].filter(Boolean).join(" | "), { tight: true })
-      );
-
-      addHeading("Projects");
-      (resume.projects || []).forEach((item) => {
-        addParagraph([item.name, item.tech ? `(${item.tech})` : ""].filter(Boolean).join(" "), { tight: true });
-        addParagraph(item.summary, { bullet: true, tight: true });
-      });
-
-      addHeading("Certifications");
-      (resume.certifications || []).forEach((item) => addParagraph(item, { bullet: true, tight: true }));
-
-      addHeading("Languages");
-      addParagraph((resume.languages || []).join(", "));
-
-      if (resumeType === "gulf") {
-        addHeading("Gulf Readiness");
-        addParagraph(`Passport Status: ${gulf.passportStatus || "Not specified"}`, { tight: true });
-        addParagraph(`Visa Status: ${gulf.visaStatus || "Not specified"}`, { tight: true });
-        addParagraph(`GCC Experience: ${gulf.gccExperience || "Not specified"}`, { tight: true });
-        addParagraph(`Driving License: ${gulf.drivingLicense || "Not specified"}`, { tight: true });
-        addParagraph(`Expected Salary: ${gulf.expectedSalary || "Not specified"}`, { tight: true });
-        addParagraph(`Notice Period: ${gulf.noticePeriod || "Not specified"}`, { tight: true });
-      }
-
-      const docFile = new Document({
-        sections: [
-          {
-            properties: {},
-            children,
-          },
-        ],
-      });
-
-      const blob = await Packer.toBlob(docFile);
-      const filename = `${clean(header.fullName || "resume").replace(/\s+/g, "_")}_resume.docx`;
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
-      pushStatus("success", "DOCX file downloaded.");
-    } catch (_error) {
-      pushStatus("error", "Failed to generate DOCX file.");
-    }
-  }, [previewResume, pushStatus, resumeType]);
-
-  const shareWhatsApp = useCallback(() => {
-    const resumeText = encodeURIComponent(
-      `Resume: ${previewResume?.header?.fullName || "Candidate"}\n${previewResume?.header?.targetJob || ""}\n\n${formatResumeText(
-        previewResume
-      ).slice(0, 1400)}`
-    );
-    window.open(`https://wa.me/?text=${resumeText}`, "_blank", "noopener,noreferrer");
-  }, [previewResume]);
-
-  const copySummary = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(formatResumeText(previewResume));
-      pushStatus("success", "Resume copied to clipboard.");
-    } catch (_error) {
-      pushStatus("error", "Clipboard copy failed.");
-    }
-  }, [previewResume, pushStatus]);
-
-  const renderPreview = () => {
-    const header = previewResume?.header || {};
-    const gulf = previewResume?.gulfProfile || {};
-
-    return (
-      <div className={`resume-live-preview template-${template}`}>
-        <div className="preview-head">
-          <h3>{header.fullName || "Your Name"}</h3>
-          <p>{header.targetJob || "Target Role"}</p>
-          <p className="preview-meta">
-            {[header.location, header.preferredCountry].filter(Boolean).join(", ")}
-          </p>
-          <p className="preview-meta">{[header.email, header.phone].filter(Boolean).join(" | ")}</p>
-        </div>
-
-        <div className="preview-block">
-          <h4>Profile</h4>
-          <p>{previewResume.profile || "Professional summary will appear here."}</p>
-        </div>
-
-        <div className="preview-block">
-          <h4>Skills</h4>
-          <div className="resume-skills">
-            {(previewResume.skills || []).map((skill) => (
-              <span key={skill} className="skill-tag">
-                {skill}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="preview-block">
-          <h4>Experience</h4>
-          {(previewResume.experience || []).length === 0 ? (
-            <p className="preview-empty">Add experience entries as: Role | Company | Duration | achievements</p>
-          ) : (
-            (previewResume.experience || []).map((item, index) => (
-              <div key={`${item.role}-${index}`} className="preview-item">
-                <strong>{item.role}</strong>
-                <p>{[item.company, item.duration].filter(Boolean).join(" | ")}</p>
-                {(item.bullets || []).length > 0 && (
-                  <ul>
-                    {item.bullets.map((bullet) => (
-                      <li key={bullet}>{bullet}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="preview-block">
-          <h4>Education</h4>
-          {(previewResume.education || []).map((item, index) => (
-            <p key={`${item.degree}-${index}`} className="preview-inline-item">
-              {[item.degree, item.institution, item.year].filter(Boolean).join(" | ")}
-            </p>
-          ))}
-        </div>
-
-        <div className="preview-block">
-          <h4>Projects</h4>
-          {(previewResume.projects || []).map((item, index) => (
-            <div key={`${item.name}-${index}`} className="preview-item">
-              <strong>{item.name}</strong>
-              <p>{item.tech}</p>
-              <p>{item.summary}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="preview-block">
-          <h4>Certifications</h4>
-          <p>{(previewResume.certifications || []).join(", ") || "No certifications added yet."}</p>
-        </div>
-
-        <div className="preview-block">
-          <h4>Languages</h4>
-          <p>{(previewResume.languages || []).join(", ") || "No languages added yet."}</p>
-        </div>
-
-        {resumeType === "gulf" && (
-          <div className="preview-block">
-            <h4>Gulf Readiness</h4>
-            <p>Passport: {gulf.passportStatus || "Not specified"}</p>
-            <p>Visa: {gulf.visaStatus || "Not specified"}</p>
-            <p>GCC Experience: {gulf.gccExperience || "Not specified"}</p>
-            <p>Driving License: {gulf.drivingLicense || "Not specified"}</p>
-            <p>Expected Salary: {gulf.expectedSalary || "Not specified"}</p>
-            <p>Notice Period: {gulf.noticePeriod || "Not specified"}</p>
-          </div>
-        )}
+  const renderPreview = () => (
+    <div className={`resume-live-preview template-${template}`}>
+      <div className="preview-head">
+        <h3>{previewResume?.header?.fullName || "Your Name"}</h3>
+        <p>{previewResume?.header?.targetJob || "Target Role"}</p>
+        <p className="preview-meta">{[previewResume?.header?.location, previewResume?.header?.preferredCountry].filter(Boolean).join(", ")}</p>
       </div>
-    );
-  };
+      <div className="preview-block">
+        <h4>Profile</h4>
+        <p>{previewResume?.profile || "Professional summary will appear here."}</p>
+      </div>
+      <div className="preview-block">
+        <h4>Skills</h4>
+        <div className="resume-skills">{(previewResume?.skills || []).map((skill) => <span key={skill} className="skill-tag">{skill}</span>)}</div>
+      </div>
+    </div>
+  );
+
+  const stepProgress = Math.round(((wizardStep + 1) / WIZARD_STEPS.length) * 100);
 
   return (
     <div className="resume-builder-shell">
       <section className="resume-builder-hero">
         <div className="resume-builder-hero-copy">
-          <h1>AI Resume Builder for Global and Gulf Jobs</h1>
-          <p>
-            Build once, optimize for each role, check ATS fit, generate cover letters, and save multiple resume
-            versions.
-          </p>
+          <h1>AI Resume Builder 360 for Global and Gulf Jobs</h1>
+          <p>Wizard-first workflow with ATS, job match, and recruiter-ready outputs.</p>
           <div className="resume-builder-hero-tags">
-            <span>ATS-Ready</span>
-            <span>Gulf Hiring Fields</span>
-            <span>PDF + DOC Export</span>
-            <span>Draft Library</span>
+            <span>Resume Upload Parser</span>
+            <span>Gulf 360 Fields</span>
+            <span>ATS + Job Match</span>
+            <span>LinkedIn + Recruiter Email</span>
           </div>
+          <p className="plan-notice">{hasPremiumAccess ? "Premium unlocked." : "Free plan: 1 resume, 1 ATS check, 2 templates."}</p>
         </div>
         <div className="resume-builder-hero-visual">
           <div className="resume-preview-card">
@@ -1223,489 +846,272 @@ const ResumeBuilder = () => {
               <h3>{previewResume?.header?.fullName || "Candidate Name"}</h3>
               <p>{previewResume?.header?.targetJob || "Target Job Role"}</p>
             </div>
-            <div className="resume-skills">
-              {(previewResume?.skills || []).slice(0, 3).map((skill) => (
-                <span key={skill} className="skill-tag">
-                  {skill}
-                </span>
-              ))}
-            </div>
+            <div className="resume-skills">{(previewResume?.skills || []).slice(0, 3).map((skill) => <span key={skill} className="skill-tag">{skill}</span>)}</div>
             <p className="mini-score">Profile Completion: {completeness}%</p>
+            <p className="mini-score">Wizard Progress: {stepProgress}%</p>
           </div>
         </div>
       </section>
 
       <nav className="resume-builder-nav" aria-label="Resume builder sections">
         {SECTION_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`resume-builder-nav-item ${activeSection === item.id ? "active" : ""}`}
-            onClick={() => setActiveSection(item.id)}
-            aria-pressed={activeSection === item.id}
-          >
+          <button key={item.id} type="button" className={`resume-builder-nav-item ${activeSection === item.id ? "active" : ""}`} onClick={() => setActiveSection(item.id)} aria-pressed={activeSection === item.id}>
             <span>{item.icon}</span>
             <span>{item.label}</span>
           </button>
         ))}
       </nav>
 
-      {status?.message && (
-        <div className={`resume-alert ${status.type === "error" ? "error" : "success"}`}>{status.message}</div>
-      )}
+      {status?.message ? <div className={`resume-alert ${status.type === "error" ? "error" : "success"}`}>{status.message}</div> : null}
 
       <div className="resume-builder-content">
-        {activeSection === "builder" && (
+        {activeSection === "upload" && (
           <section className="resume-builder-section">
             <div className="section-header">
-              <h2>Resume Information</h2>
-              <p>Use one line per entry. Format for experience: Role | Company | Duration | achievement1, achievement2</p>
+              <h2>Quick Start</h2>
+              <p>Upload old resume, paste JD, choose country and role, then start builder.</p>
             </div>
-
             <div className="resume-form-grid">
               <div className="form-section">
-                <h3>Core Details</h3>
                 <div className="form-fields">
-                  <label htmlFor="rb-name">Full Name *</label>
-                  <input id="rb-name" value={formData.name} onChange={handleInputChange("name")} />
-                  {formErrors.name ? <p className="field-error">{formErrors.name}</p> : null}
-
-                  <label htmlFor="rb-email">Email</label>
-                  <input id="rb-email" value={formData.email} onChange={handleInputChange("email")} />
-                  {formErrors.email ? <p className="field-error">{formErrors.email}</p> : null}
-
-                  <label htmlFor="rb-phone">Phone</label>
-                  <input id="rb-phone" value={formData.phone} onChange={handleInputChange("phone")} />
-                  {formErrors.phone ? <p className="field-error">{formErrors.phone}</p> : null}
-                  {formErrors.contact ? <p className="field-error">{formErrors.contact}</p> : null}
-
-                  <label htmlFor="rb-location">Location</label>
-                  <input id="rb-location" value={formData.location} onChange={handleInputChange("location")} />
-
-                  <label htmlFor="rb-target-job">Target Job *</label>
-                  <input id="rb-target-job" value={formData.targetJob} onChange={handleInputChange("targetJob")} />
-                  {formErrors.targetJob ? <p className="field-error">{formErrors.targetJob}</p> : null}
-
-                  <label htmlFor="rb-country">Preferred Country</label>
-                  <select id="rb-country" value={formData.preferredCountry} onChange={handleInputChange("preferredCountry")}>
-                    <option value="UAE">UAE</option>
-                    <option value="Saudi Arabia">Saudi Arabia</option>
-                    <option value="Qatar">Qatar</option>
-                    <option value="Oman">Oman</option>
-                    <option value="Kuwait">Kuwait</option>
-                    <option value="Bahrain">Bahrain</option>
-                    <option value="India">India</option>
-                  </select>
-
-                  <label htmlFor="rb-linkedin">LinkedIn</label>
-                  <input id="rb-linkedin" value={formData.linkedin} onChange={handleInputChange("linkedin")} />
+                  <label htmlFor="rb-upload">Upload old resume</label>
+                  <input id="rb-upload" type="file" onChange={handleUploadResume} />
+                  {uploadedResumeName ? <p className="library-note">Uploaded: {uploadedResumeName}</p> : null}
+                  <label htmlFor="rb-jd">Paste job description</label>
+                  <textarea id="rb-jd" rows={7} value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} />
+                  <label htmlFor="rb-country-start">Target country</label>
+                  <select id="rb-country-start" value={formData.preferredCountry} onChange={handleInputChange("preferredCountry")}>{COUNTRIES.map((country) => <option key={country} value={country}>{country}</option>)}</select>
+                  <label htmlFor="rb-role-start">Target role</label>
+                  <input id="rb-role-start" value={formData.targetJob} onChange={handleInputChange("targetJob")} />
+                  <button type="button" className="primary-button" onClick={() => { setActiveSection("ai-builder"); setWizardStep(1); }}>Build My Resume</button>
                 </div>
               </div>
-
               <div className="form-section">
-                <h3>Resume Sections</h3>
                 <div className="form-fields">
-                  <label htmlFor="rb-summary">Summary</label>
-                  <textarea id="rb-summary" rows={4} value={formData.summary} onChange={handleInputChange("summary")} />
-
-                  <label htmlFor="rb-skills">Skills * (comma/new line separated)</label>
-                  <textarea id="rb-skills" rows={4} value={formData.skills} onChange={handleInputChange("skills")} />
-                  {formErrors.skills ? <p className="field-error">{formErrors.skills}</p> : null}
-
-                  <label htmlFor="rb-experience">Experience (Role | Company | Duration | achievements)</label>
-                  <textarea
-                    id="rb-experience"
-                    rows={6}
-                    value={formData.experience}
-                    onChange={handleInputChange("experience")}
-                  />
-
-                  <label htmlFor="rb-education">Education (Degree | Institution | Year)</label>
-                  <textarea id="rb-education" rows={4} value={formData.education} onChange={handleInputChange("education")} />
-
-                  <label htmlFor="rb-projects">Projects (Name | Tech | Summary)</label>
-                  <textarea id="rb-projects" rows={4} value={formData.projects} onChange={handleInputChange("projects")} />
-
-                  <label htmlFor="rb-certifications">Certifications</label>
-                  <textarea
-                    id="rb-certifications"
-                    rows={3}
-                    value={formData.certifications}
-                    onChange={handleInputChange("certifications")}
-                  />
-
-                  <label htmlFor="rb-languages">Languages</label>
-                  <input id="rb-languages" value={formData.languages} onChange={handleInputChange("languages")} />
-                </div>
-              </div>
-
-              <div className="form-section">
-                <h3>Gulf Job Details</h3>
-                <div className="form-fields">
-                  <label htmlFor="rb-passport">Passport Status</label>
-                  <input id="rb-passport" value={formData.passportStatus} onChange={handleInputChange("passportStatus")} />
-
-                  <label htmlFor="rb-visa">Visa Status</label>
-                  <input id="rb-visa" value={formData.visaStatus} onChange={handleInputChange("visaStatus")} />
-
-                  <label htmlFor="rb-gcc-exp">GCC Experience</label>
-                  <input id="rb-gcc-exp" value={formData.gccExperience} onChange={handleInputChange("gccExperience")} />
-
-                  <label htmlFor="rb-license">Driving License</label>
-                  <input id="rb-license" value={formData.drivingLicense} onChange={handleInputChange("drivingLicense")} />
-
-                  <label htmlFor="rb-salary">Expected Salary</label>
-                  <input id="rb-salary" value={formData.expectedSalary} onChange={handleInputChange("expectedSalary")} />
-
-                  <label htmlFor="rb-notice">Notice Period</label>
-                  <input id="rb-notice" value={formData.noticePeriod} onChange={handleInputChange("noticePeriod")} />
-
-                  <label htmlFor="rb-language-select">Resume Language</label>
-                  <select id="rb-language-select" value={language} onChange={(event) => setLanguage(event.target.value)}>
-                    <option value="en">English</option>
-                    <option value="ml">Malayalam</option>
-                    <option value="ar">Arabic</option>
-                  </select>
+                  <p className="library-note">Suggested skills: {roleSuggestions.join(", ")}</p>
+                  <p className="library-note">Missing skills from JD: {missingSkills.length ? missingSkills.join(", ") : "Not enough JD data yet."}</p>
+                  <div className="inline-actions">
+                    <button type="button" className="secondary-button" onClick={handleRoleWiseGeneration}>Role-wise Generation</button>
+                    <button type="button" className="secondary-button" onClick={handleGulfStyle}>Gulf Recruiter Style</button>
+                  </div>
                 </div>
               </div>
             </div>
+          </section>
+        )}
 
-            <div className="resume-types-grid">
-              <h3>Choose Resume Type</h3>
-              {RESUME_TYPES.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="resume-type-card"
-                  aria-pressed={resumeType === item.id}
-                  onClick={() => setResumeType(item.id)}
-                >
-                  <h4>{item.title}</h4>
-                  <p>{item.description}</p>
-                  <span>{resumeType === item.id ? "Selected" : "Select"}</span>
-                </button>
-              ))}
+        {activeSection === "ai-builder" && (
+          <section className="resume-builder-section">
+            <div className="section-header">
+              <h2>Step-by-Step AI Builder</h2>
+              <p>Start -> Personal Details -> Career Details -> Experience -> Skills -> Gulf Details -> Template -> ATS Check -> Download</p>
             </div>
+            <div className="wizard-steps-row">{WIZARD_STEPS.map((item, index) => <button key={item.id} type="button" className={`wizard-step-pill ${wizardStep === index ? "active" : ""}`} onClick={() => setWizardStep(index)}>{index + 1}. {item.label}</button>)}</div>
+            <div className="wizard-progress-track"><div className="wizard-progress-bar" style={{ width: `${stepProgress}%` }} /></div>
 
-            <div className="builder-actions">
-              <input
-                value={draftName}
-                onChange={(event) => setDraftName(event.target.value)}
-                placeholder="Draft name (example: Gulf Resume v2)"
-              />
-              <button type="button" className="primary-button" onClick={handleGenerateResume} disabled={busyKey === "generate"}>
-                {busyKey === "generate" ? "Generating..." : "Generate Resume"}
-              </button>
-              <button type="button" className="secondary-button" onClick={handleSaveDraft} disabled={busyKey === "save"}>
-                {busyKey === "save" ? "Saving..." : "Save Draft"}
-              </button>
+            {wizardStep === 0 ? (
+              <div className="wizard-step-card form-fields">
+                <h3>Getting Started</h3>
+                <p>Follow the builder to complete your resume step-by-step. Add personal details, career goals, experience, and Gulf-ready fields before generating the final resume.</p>
+                <div className="inline-actions">
+                  <button type="button" className="primary-button" onClick={() => setWizardStep(1)}>Continue to Personal Details</button>
+                </div>
+              </div>
+            ) : null}
+            {wizardStep === 1 ? (
+              <div className="wizard-step-card form-fields">
+                <h3>Personal Details</h3>
+                <label>Full Name *</label><input value={formData.name} onChange={handleInputChange("name")} />
+                <label>Email</label><input value={formData.email} onChange={handleInputChange("email")} />
+                <label>Phone</label><input value={formData.phone} onChange={handleInputChange("phone")} />
+                <label>Location</label><input value={formData.location} onChange={handleInputChange("location")} />
+                <label>LinkedIn</label><input value={formData.linkedin} onChange={handleInputChange("linkedin")} />
+              </div>
+            ) : null}
+
+            {wizardStep === 2 ? (
+              <div className="wizard-step-card form-fields">
+                <h3>Career Details</h3>
+                <label>Target Role *</label><input value={formData.targetJob} onChange={handleInputChange("targetJob")} />
+                <label>Industry Category</label><input value={formData.industryCategory} onChange={handleInputChange("industryCategory")} />
+                <label>Summary</label><textarea rows={5} value={formData.summary} onChange={handleInputChange("summary")} />
+                <div className="inline-actions"><button type="button" className="secondary-button" onClick={() => setFormData((current) => ({ ...current, summary: rewriteSummaryLocal(current, jobDescription) }))}>AI Rewrite Summary</button></div>
+              </div>
+            ) : null}
+
+            {wizardStep === 3 ? (
+              <div className="wizard-step-card form-fields">
+                <h3>Experience</h3>
+                <label>Experience (Role | Company | Duration | achievements)</label>
+                <textarea rows={8} value={formData.experience} onChange={handleInputChange("experience")} />
+                <button type="button" className="secondary-button" onClick={() => setFormData((current) => ({ ...current, experience: rewriteExperienceLocal(current.experience) }))}>AI Rewrite Experience Bullets</button>
+              </div>
+            ) : null}
+
+            {wizardStep === 4 ? (
+              <div className="wizard-step-card form-fields">
+                <h3>Skills</h3>
+                <label>Skills *</label><textarea rows={4} value={formData.skills} onChange={handleInputChange("skills")} />
+                <label>Education (Degree | Institution | Year)</label><textarea rows={4} value={formData.education} onChange={handleInputChange("education")} />
+                <label>Projects (Name | Tech | Summary)</label><textarea rows={4} value={formData.projects} onChange={handleInputChange("projects")} />
+                <label>Certifications</label><textarea rows={3} value={formData.certifications} onChange={handleInputChange("certifications")} />
+                <label>Languages</label><input value={formData.languages} onChange={handleInputChange("languages")} />
+                <p className="library-note">Missing skill suggestions: {missingSkills.length ? missingSkills.join(", ") : "None"}</p>
+              </div>
+            ) : null}
+
+            {wizardStep === 5 ? (
+              <div className="wizard-step-card form-fields">
+                <h3>Gulf Details</h3>
+                <label>Visa Status</label><input value={formData.visaStatus} onChange={handleInputChange("visaStatus")} />
+                <label>Current Visa Type</label><input value={formData.currentVisaType} onChange={handleInputChange("currentVisaType")} />
+                <label>Visa Expiry</label><input type="date" value={formData.visaExpiry} onChange={handleInputChange("visaExpiry")} />
+                <label>Transferable Visa</label><select value={formData.transferableVisa} onChange={handleInputChange("transferableVisa")}><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select>
+                <label>Available to Relocate</label><select value={formData.availableToRelocate} onChange={handleInputChange("availableToRelocate")}><option value="Yes">Yes</option><option value="No">No</option></select>
+                <label>Preferred Gulf Country</label><select value={formData.preferredGulfCountry} onChange={handleInputChange("preferredGulfCountry")}><option value="UAE">UAE</option><option value="Saudi Arabia">Saudi Arabia</option><option value="Qatar">Qatar</option><option value="Oman">Oman</option></select>
+                <label>Work Permit Status</label><input value={formData.workPermitStatus} onChange={handleInputChange("workPermitStatus")} />
+                <label>Driving License Country</label><input value={formData.drivingLicenseCountry} onChange={handleInputChange("drivingLicenseCountry")} />
+                <label>Joining Availability</label><input value={formData.joiningAvailability} onChange={handleInputChange("joiningAvailability")} />
+                <label>Accommodation Required</label><select value={formData.accommodationRequired} onChange={handleInputChange("accommodationRequired")}><option value="No">No</option><option value="Yes">Yes</option></select>
+              </div>
+            ) : null}
+
+            {wizardStep === 6 ? (
+              <div className="wizard-step-card">
+                <h3>Template</h3>
+                <div className="templates-grid">{TEMPLATE_OPTIONS.map((item) => <button key={item.id} type="button" className={`template-card ${template === item.id ? "selected" : ""} ${!canUseTemplate(item.id) ? "locked" : ""}`} onClick={() => chooseTemplate(item.id)}><div className="template-icon">{item.icon}</div><h4>{item.name}</h4><p>{item.description}</p>{!canUseTemplate(item.id) ? <span className="template-lock">Premium</span> : null}</button>)}</div>
+              </div>
+            ) : null}
+
+            {wizardStep === 7 ? (
+              <div className="wizard-step-card">
+                <h3>ATS Check</h3>
+                <textarea rows={7} value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} />
+                <div className="inline-actions">
+                  <button type="button" className="primary-button" onClick={handleAtsCheck} disabled={busyKey === "ats"}>{busyKey === "ats" ? "Checking..." : "Run ATS Check"}</button>
+                  <button type="button" className="secondary-button" onClick={handleOptimizeResume} disabled={busyKey === "optimize"}>{busyKey === "optimize" ? "Improving..." : "Auto Improve ATS Score"}</button>
+                </div>
+                {atsReport ? <p className="library-note">ATS Score: {atsReport.score} | Keyword Match: {atsReport.keywordMatchPercent || 0}%</p> : null}
+              </div>
+            ) : null}
+
+            {wizardStep === 8 ? (
+              <div className="wizard-step-card">
+                <h3>Download</h3>
+                <div className="inline-actions">
+                  <button type="button" className="primary-button" onClick={handleGenerateResume} disabled={busyKey === "generate"}>{busyKey === "generate" ? "Generating..." : "Generate Resume"}</button>
+                  <button type="button" className="secondary-button" onClick={handleSaveDraft} disabled={busyKey === "save"}>{busyKey === "save" ? "Saving..." : "Save Draft"}</button>
+                  <button type="button" className="secondary-button" onClick={exportPdf}>Download PDF</button>
+                  <button type="button" className="secondary-button" onClick={exportDoc}>Download DOCX</button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="wizard-nav-actions">
+              <button type="button" className="secondary-button" onClick={() => setWizardStep((current) => Math.max(0, current - 1))} disabled={wizardStep === 0}>Previous</button>
+              <button type="button" className="secondary-button" onClick={() => setWizardStep((current) => Math.min(WIZARD_STEPS.length - 1, current + 1))} disabled={wizardStep === WIZARD_STEPS.length - 1}>Next</button>
             </div>
-
             {renderPreview()}
           </section>
         )}
 
         {activeSection === "templates" && (
           <section className="resume-builder-section">
-            <div className="section-header">
-              <h2>Template Selection</h2>
-              <p>Template changes instantly apply to the live preview and exported resume style.</p>
-            </div>
-            <div className="templates-grid">
-              {TEMPLATE_OPTIONS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`template-card ${template === item.id ? "selected" : ""}`}
-                  onClick={() => setTemplate(item.id)}
-                  aria-pressed={template === item.id}
-                >
-                  <div className="template-icon">{item.icon}</div>
-                  <h4>{item.name}</h4>
-                  <p>{item.description}</p>
-                  {template === item.id ? <span className="selected-badge">Selected</span> : null}
-                </button>
-              ))}
-            </div>
+            <div className="section-header"><h2>Template Library</h2><p>All major global and Gulf templates are now available.</p></div>
+            <div className="templates-grid">{TEMPLATE_OPTIONS.map((item) => <button key={item.id} type="button" className={`template-card ${template === item.id ? "selected" : ""} ${!canUseTemplate(item.id) ? "locked" : ""}`} onClick={() => chooseTemplate(item.id)}><div className="template-icon">{item.icon}</div><h4>{item.name}</h4><p>{item.description}</p>{!canUseTemplate(item.id) ? <span className="template-lock">Premium</span> : null}</button>)}</div>
             {renderPreview()}
           </section>
         )}
 
-        {activeSection === "ats" && (
+        {activeSection === "ats-score" && (
           <section className="resume-builder-section ats-checker">
-            <div className="section-header">
-              <h2>ATS Score & Diagnostics</h2>
-              <p>Check keyword fit, section completeness, formatting warnings, and missing must-have details.</p>
-            </div>
-            <textarea
-              rows={8}
-              placeholder="Paste target job description for accurate ATS matching..."
-              value={jobDescription}
-              onChange={(event) => setJobDescription(event.target.value)}
-            />
+            <div className="section-header"><h2>ATS Score</h2><p>Check keyword fit and improve instantly.</p></div>
+            <textarea rows={8} value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} />
             <div className="ats-actions">
-              <button type="button" className="primary-button" onClick={handleAtsCheck} disabled={busyKey === "ats"}>
-                {busyKey === "ats" ? "Checking..." : "Run ATS Check"}
-              </button>
+              <button type="button" className="primary-button" onClick={handleAtsCheck} disabled={busyKey === "ats"}>{busyKey === "ats" ? "Checking..." : "Run ATS Check"}</button>
+              <button type="button" className="secondary-button" onClick={handleOptimizeResume} disabled={busyKey === "optimize"}>{busyKey === "optimize" ? "Optimizing..." : "Auto ATS Score Improvement"}</button>
             </div>
-
-            {atsReport && (
-              <div className="ats-results">
-                <div className="score-display">
-                  <div className="score-circle" style={{ "--score": atsReport.score }}>
-                    <span className="score-number">{atsReport.score}</span>
-                    <span className="score-label">ATS Score</span>
-                  </div>
-                  <p>Keyword Match: {atsReport.keywordMatchPercent || 0}%</p>
-                </div>
-                <div className="ats-feedback">
-                  <div className="feedback-section">
-                    <h4>Section Completeness</h4>
-                    <p>
-                      {atsReport?.sectionCompleteness?.percent ?? "N/A"}%
-                      {atsReport?.sectionCompleteness?.completed !== undefined
-                        ? ` (${atsReport.sectionCompleteness.completed}/${atsReport.sectionCompleteness.total} sections)`
-                        : ""}
-                    </p>
-                  </div>
-
-                  <div className="feedback-section">
-                    <h4>Matched Keywords</h4>
-                    <div className="keyword-tags">
-                      {parseAtsSuggestions(atsReport.matchedKeywords).length === 0 ? (
-                        <p className="preview-empty">No keyword matches found yet.</p>
-                      ) : (
-                        parseAtsSuggestions(atsReport.matchedKeywords).map((item) => (
-                          <span key={item} className="keyword-tag">
-                            {item}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="feedback-section">
-                    <h4>Missing Keywords</h4>
-                    <div className="keyword-tags">
-                      {parseAtsSuggestions(atsReport.missingKeywords).length === 0 ? (
-                        <p className="preview-empty">No missing keywords detected.</p>
-                      ) : (
-                        parseAtsSuggestions(atsReport.missingKeywords).map((item) => (
-                          <span key={item} className="keyword-tag">
-                            {item}
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="feedback-section">
-                    <h4>Issues</h4>
-                    <ul>
-                      {parseAtsSuggestions(atsReport.issues).map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="feedback-section">
-                    <h4>Warnings</h4>
-                    <ul>
-                      {parseAtsSuggestions(atsReport.warnings).map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="feedback-section">
-                    <h4>Suggestions</h4>
-                    <ul>
-                      {parseAtsSuggestions(atsReport.suggestions).map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
+            {atsReport ? <p className="library-note">ATS Score: {atsReport.score} | Match: {atsReport.keywordMatchPercent || 0}% | Missing: {(atsReport.missingKeywords || []).slice(0, 10).join(", ")}</p> : null}
           </section>
         )}
 
-        {activeSection === "optimizer" && (
+        {activeSection === "job-match" && (
           <section className="resume-builder-section">
-            <div className="section-header">
-              <h2>Job-Specific Resume Optimizer</h2>
-              <p>Optimizes your profile and experience bullets against a target job description.</p>
-            </div>
+            <div className="section-header"><h2>Job Match</h2><p>Keyword and skill matching against target JD.</p></div>
             <div className="job-optimizer">
-              <textarea
-                rows={9}
-                value={jobDescription}
-                onChange={(event) => setJobDescription(event.target.value)}
-                placeholder="Paste the full job description here..."
-              />
-              <button
-                type="button"
-                className="primary-button"
-                onClick={handleOptimizeResume}
-                disabled={busyKey === "optimize"}
-              >
-                {busyKey === "optimize" ? "Optimizing..." : "Optimize Resume"}
-              </button>
+              <textarea rows={9} value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} />
+              <button type="button" className="primary-button" onClick={handleOptimizeResume} disabled={busyKey === "optimize"}>{busyKey === "optimize" ? "Optimizing..." : "Optimize Resume For Job"}</button>
             </div>
-            {resumeData?.optimization && (
-              <div className="optimization-results">
-                <h4>Optimization Applied</h4>
-                <div className="optimized-content">
-                  <h5>Applied Keywords</h5>
-                  <p>{(resumeData.optimization.appliedKeywords || []).join(", ") || "No additional keywords returned."}</p>
-                  {atsReport?.score ? <p>Updated ATS Score: {atsReport.score}</p> : null}
-                </div>
-              </div>
-            )}
+            <div className="optimization-results"><h4>Missing Skill Suggestions</h4><p>{missingSkills.length ? missingSkills.join(", ") : "No missing skills detected."}</p></div>
             {renderPreview()}
           </section>
         )}
 
-        {activeSection === "cover" && (
+        {activeSection === "cover-letter" && (
           <section className="resume-builder-section">
-            <div className="section-header">
-              <h2>Cover Letter Generator</h2>
-              <p>Create a role-specific cover letter with resume highlights.</p>
-            </div>
-
-            <div className="cover-letter-types">
-              {COVER_LETTER_TYPES.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`secondary-button ${coverLetterType === item.id ? "active-type" : ""}`}
-                  onClick={() => setCoverLetterType(item.id)}
-                  aria-pressed={coverLetterType === item.id}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="job-optimizer">
-              <textarea
-                rows={7}
-                value={jobDescription}
-                onChange={(event) => setJobDescription(event.target.value)}
-                placeholder="Optional: paste job description to improve letter quality."
-              />
-              <button type="button" className="primary-button" onClick={handleCoverLetter} disabled={busyKey === "cover-letter"}>
-                {busyKey === "cover-letter" ? "Generating..." : "Generate Cover Letter"}
-              </button>
-            </div>
-
-            {coverLetter && (
-              <div className="cover-letter-preview">
-                <h4>{COVER_LETTER_TYPES.find((item) => item.id === coverLetterType)?.label} Letter</h4>
-                <div className="letter-content">
-                  {String(coverLetter.content || "")
-                    .split(/\n+/)
-                    .filter(Boolean)
-                    .map((line, index) => (
-                      <p key={`${line}-${index}`}>{line}</p>
-                    ))}
-                </div>
-                <div className="keyword-tags">
-                  {(coverLetter.highlights || []).map((highlight) => (
-                    <span key={highlight} className="keyword-tag">
-                      {highlight}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div className="section-header"><h2>Cover Letter</h2><p>Generate role-specific cover letters.</p></div>
+            <div className="cover-letter-types">{COVER_LETTER_TYPES.map((item) => <button key={item.id} type="button" className={`secondary-button ${coverLetterType === item.id ? "active-type" : ""}`} onClick={() => setCoverLetterType(item.id)}>{item.label}</button>)}</div>
+            <button type="button" className="primary-button" onClick={handleCoverLetter} disabled={busyKey === "cover-letter"}>{busyKey === "cover-letter" ? "Generating..." : "Generate Cover Letter"}</button>
+            {coverLetter ? <textarea rows={10} value={coverLetter.content || ""} onChange={() => {}} readOnly /> : null}
           </section>
         )}
 
-        {activeSection === "interview" && (
+        {activeSection === "linkedin" && (
+          <section className="resume-builder-section">
+            <div className="section-header"><h2>LinkedIn Generator</h2><p>Generate headline and About section.</p></div>
+            <div className="inline-actions">
+              <button type="button" className="primary-button" onClick={handleLinkedInGenerate}>Generate LinkedIn Profile</button>
+              <button type="button" className="secondary-button" onClick={() => copyText(linkedInProfile)} disabled={!linkedInProfile}>Copy LinkedIn Text</button>
+            </div>
+            <textarea rows={12} value={linkedInProfile} onChange={(e) => setLinkedInProfile(e.target.value)} />
+          </section>
+        )}
+
+        {activeSection === "recruiter-email" && (
+          <section className="resume-builder-section">
+            <div className="section-header"><h2>Recruiter Email Generator</h2><p>Create recruiter outreach email from your resume profile.</p></div>
+            <div className="inline-actions">
+              <button type="button" className="primary-button" onClick={handleRecruiterEmail}>Generate Recruiter Email</button>
+              <button type="button" className="secondary-button" onClick={() => copyText(recruiterEmail)} disabled={!recruiterEmail}>Copy Email</button>
+            </div>
+            <textarea rows={12} value={recruiterEmail} onChange={(e) => setRecruiterEmail(e.target.value)} />
+          </section>
+        )}
+
+        {activeSection === "interview-prep" && (
           <section className="resume-builder-section interview-prep">
-            <div className="section-header">
-              <h2>Interview Preparation</h2>
-              <p>Generate role-specific questions, tips, and skill practice topics.</p>
-            </div>
-            <button type="button" className="primary-button" onClick={handleInterviewPrep} disabled={busyKey === "interview"}>
-              {busyKey === "interview" ? "Preparing..." : "Generate Interview Prep"}
-            </button>
-            {interviewPrep && (
+            <div className="section-header"><h2>Interview Prep</h2><p>Generate interview questions and tips.</p></div>
+            <button type="button" className="primary-button" onClick={handleInterviewPrep} disabled={busyKey === "interview"}>{busyKey === "interview" ? "Preparing..." : "Generate Interview Prep"}</button>
+            {interviewPrep ? (
               <div className="interview-content">
-                <div className="interview-section">
-                  <h4>Questions</h4>
-                  <ul>
-                    {(interviewPrep.questions || []).map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="interview-section">
-                  <h4>Tips</h4>
-                  <ul>
-                    {(interviewPrep.tips || []).map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="interview-section">
-                  <h4>Skill Practice</h4>
-                  <div className="course-tags">
-                    {(interviewPrep.skillCourses || []).map((item) => (
-                      <span key={item} className="course-tag">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                <div className="interview-section"><h4>Questions</h4><ul>{(interviewPrep.questions || []).map((item) => <li key={item}>{item}</li>)}</ul></div>
+                <div className="interview-section"><h4>Tips</h4><ul>{(interviewPrep.tips || []).map((item) => <li key={item}>{item}</li>)}</ul></div>
               </div>
-            )}
+            ) : null}
           </section>
         )}
 
-        {activeSection === "library" && (
+        {activeSection === "my-resumes" && (
           <section className="resume-builder-section">
-            <div className="section-header">
-              <h2>My Resumes</h2>
-              <p>Open, duplicate, delete, and continue editing saved drafts.</p>
-            </div>
-            {!isAuthenticated ? (
-              <p className="library-note">You are not logged in. Drafts are being saved to local storage on this device.</p>
-            ) : null}
+            <div className="section-header"><h2>My Resumes</h2><p>Open, duplicate, rename, delete, and continue editing drafts.</p></div>
             <div className="saved-resume-grid">
-              {savedResumes.length === 0 ? (
-                <p className="library-note">No resumes saved yet.</p>
-              ) : (
-                savedResumes.map((item) => {
-                  const itemId = item?._id || item?.id || "";
-                  const isSelected = selectedResumeId === itemId;
-                  return (
-                    <article key={itemId} className={`saved-resume-card ${isSelected ? "selected" : ""}`}>
-                      <h4>{item.name || "Untitled Resume"}</h4>
-                      <p>{item.resumeType || "professional"} - {item.template || "simple-ats"}</p>
-                      <p className="saved-meta">
-                        Updated: {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "Unknown"}
-                      </p>
-                      <div className="saved-actions">
-                        <button type="button" className="secondary-button" onClick={() => openDraft(item)}>
-                          Open
-                        </button>
-                        <button type="button" className="secondary-button" onClick={() => duplicateDraft(item)}>
-                          Duplicate
-                        </button>
-                        <button type="button" className="secondary-button" onClick={() => renameDraft(item)}>
-                          Rename
-                        </button>
-                        <button type="button" className="secondary-button danger" onClick={() => deleteDraft(item)}>
-                          Delete
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })
-              )}
+              {savedResumes.length === 0 ? <p className="library-note">No resumes saved yet.</p> : savedResumes.map((item) => {
+                const itemId = item?._id || item?.id || "";
+                const isSelected = selectedResumeId === itemId;
+                return (
+                  <article key={itemId} className={`saved-resume-card ${isSelected ? "selected" : ""}`}>
+                    <h4>{item.name || "Untitled Resume"}</h4>
+                    <p>{item.resumeType || "professional"} - {item.template || "simple-ats"}</p>
+                    <p className="saved-meta">Updated: {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : "Unknown"}</p>
+                    <div className="saved-actions">
+                      <button type="button" className="secondary-button" onClick={() => openDraft(item)}>Open</button>
+                      <button type="button" className="secondary-button" onClick={() => duplicateDraft(item)}>Duplicate</button>
+                      <button type="button" className="secondary-button" onClick={() => renameDraft(item)}>Rename</button>
+                      <button type="button" className="secondary-button danger" onClick={() => deleteDraft(item)}>Delete</button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
@@ -1713,20 +1119,11 @@ const ResumeBuilder = () => {
 
       <aside className="resume-actions-bar" aria-label="Resume actions">
         <div className="download-options">
-          <button type="button" onClick={exportPdf}>
-            Download PDF
-          </button>
-          <button type="button" onClick={exportDoc}>
-            Download Word (.docx)
-          </button>
+          <button type="button" onClick={exportPdf}>Download PDF</button>
+          <button type="button" onClick={exportDoc}>Download Word (.docx)</button>
         </div>
         <div className="share-options">
-          <button type="button" onClick={copySummary}>
-            Copy Resume Text
-          </button>
-          <button type="button" onClick={shareWhatsApp}>
-            Share on WhatsApp
-          </button>
+          <button type="button" onClick={() => copyText(formatResumeText(previewResume))}>Copy Resume Text</button>
         </div>
       </aside>
     </div>
@@ -1734,4 +1131,3 @@ const ResumeBuilder = () => {
 };
 
 export default ResumeBuilder;
-

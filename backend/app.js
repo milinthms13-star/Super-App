@@ -146,6 +146,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/appdata', appDataRoutes);
 app.use('/api/app-data', appDataRoutes);
 app.use('/api/business-builder', require('./routes/businessBuilderRoutes'));
+app.use('/api/video-studio', require('./routes/videoStudio'));
+app.use('/api/photo-studio', require('./routes/photoStudio'));
 
 app.use('/api/messaging/v4/reactions', require('./routes/messageReactionsRoutes'));
 app.use('/api/messaging/v4/edits', require('./routes/messageEditRoutes'));
@@ -178,6 +180,7 @@ app.use('/api/health', require('./routes/health'));
 app.use('/api', require('./routes/healthcare'));
 app.use('/api/localmarket', require('./routes/localmarket'));
 app.use('/api/localservices', require('./routes/localservices'));
+app.use('/api/resumebuilder', require('./routes/resumebuilder'));
 app.use('/api/messaging', require('./routes/messaging'));
 app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));

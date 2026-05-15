@@ -164,11 +164,10 @@ const normalizeResumeFromForm = (formData = {}, options = {}) => {
   const experience = parseExperience(formData.experience);
   const projects = parseProjects(formData.projects);
 
+  const skillSummary = skills.length ? `with expertise in ${skills.slice(0, 6).join(', ')} and ` : '';
   const profile =
     cleanText(formData.summary) ||
-    `Results-focused ${cleanText(formData.targetJob) || 'professional'} with expertise in ${skills
-      .slice(0, 6)
-      .join(', ')} and a track record of delivering measurable outcomes.`;
+    `Results-focused ${cleanText(formData.targetJob) || 'professional'} ${skillSummary}a track record of delivering measurable outcomes.`;
 
   return {
     header: {

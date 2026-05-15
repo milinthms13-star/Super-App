@@ -1,0 +1,268 @@
+.photostudio-shell {
+  max-width: 1420px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 7rem;
+  color: #1e293b;
+}
+
+.photostudio-hero,
+.photostudio-card {
+  background: #fff;
+  border: 1px solid #dbe4ef;
+  border-radius: 22px;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.photostudio-hero {
+  padding: 1.35rem;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.15), transparent 36%),
+    linear-gradient(145deg, #eff6ff 0%, #f8fafc 100%);
+}
+
+.photostudio-hero h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 2.7vw, 2.8rem);
+}
+
+.photostudio-hero p {
+  color: #475569;
+  max-width: 74ch;
+}
+
+.photostudio-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.photostudio-pill-row span {
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  background: rgba(37, 99, 235, 0.08);
+  border-radius: 999px;
+  padding: 0.33rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.photostudio-nav {
+  margin: 1rem 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.55rem;
+}
+
+.photostudio-nav button {
+  border: 1px solid #cdd8e6;
+  background: #fff;
+  border-radius: 14px;
+  padding: 0.72rem 0.75rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.photostudio-nav button.active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+}
+
+.photostudio-status {
+  margin-bottom: 0.85rem;
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid;
+  font-weight: 600;
+}
+
+.photostudio-status.success {
+  color: #166534;
+  border-color: rgba(22, 101, 52, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.photostudio-status.error {
+  color: #991b1b;
+  border-color: rgba(153, 27, 27, 0.35);
+  background: rgba(248, 113, 113, 0.13);
+}
+
+.photostudio-card {
+  padding: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.photostudio-card h2,
+.photostudio-card h3 {
+  margin-top: 0;
+}
+
+.photostudio-grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.photostudio-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.photostudio-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.photostudio-grid article {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 0.85rem;
+}
+
+.photostudio-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.68rem;
+}
+
+.photostudio-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.photostudio-form input,
+.photostudio-form textarea,
+.photostudio-form select {
+  border: 1px solid #d6dfec;
+  border-radius: 10px;
+  padding: 0.65rem 0.72rem;
+  font: inherit;
+}
+
+.photostudio-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.58rem;
+}
+
+.photostudio-inline-actions button,
+.photostudio-form button,
+.photostudio-grid article button {
+  border: 1px solid #c5d4ea;
+  background: #f8fbff;
+  color: #1d4ed8;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.58rem 0.8rem;
+  cursor: pointer;
+}
+
+.photostudio-inline-actions button.active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.photostudio-tag-wall {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.photostudio-tag-wall span {
+  border-radius: 999px;
+  border: 1px solid #c4d4ec;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 0.23rem 0.62rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.photostudio-tag-wall span.premium {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.photostudio-upload-drop {
+  border: 2px dashed #93c5fd;
+  border-radius: 16px;
+  padding: 1.15rem;
+  background: rgba(37, 99, 235, 0.06);
+  cursor: pointer;
+  margin-bottom: 0.8rem;
+}
+
+.photostudio-upload-drop.drag-over {
+  border-color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.photostudio-hidden-input {
+  display: none;
+}
+
+.photostudio-filter-chip {
+  border: 1px solid #c4d4ec;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 0.28rem 0.68rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.photostudio-filter-chip.selected {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #1d4ed8;
+}
+
+.photostudio-filter-chip.premium {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.photostudio-before-after {
+  position: relative;
+  width: 100%;
+  min-height: 280px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #dbe4ef;
+  background: #f8fafc;
+}
+
+.photostudio-before-after img {
+  width: 100%;
+  display: block;
+}
+
+.photostudio-before-after img.after {
+  position: absolute;
+  inset: 0;
+}
+
+.photostudio-preview-image {
+  width: 100%;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  margin-top: 0.55rem;
+}
+
+.checkbox-inline {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem !important;
+}
+
+@media (max-width: 980px) {
+  .photostudio-grid.two,
+  .photostudio-grid.three {
+    grid-template-columns: 1fr;
+  }
+}

@@ -99,8 +99,13 @@ afterEach(async () => {
 }, 30000);
 
 afterAll(async () => {
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.connection.dropDatabase();
+  // mongoose connection may not exist if setup failed early (e.g. test runner crashed before connecting)
+  if (mongoose.connection && mongoose.connection.readyState !== 0) {
+    try {
+      await mongoose.connection.dropDatabase();
+    } catch (_err) {
+      // ignore teardown issues in partially-initialized test runs
+    }
     await mongoose.connection.close();
   }
 
@@ -108,3 +113,4 @@ afterAll(async () => {
     await mongoServer.stop();
   }
 }, 60000);
+
