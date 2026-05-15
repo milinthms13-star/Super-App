@@ -835,6 +835,40 @@ const buildAreaScoreRows = (signDetails, language) => {
   });
 };
 
+const buildYearlyOverview = (signDetails, language) => {
+  const signLabel = signDetails?.label || 'Your sign';
+  if (language === 'ml') {
+    return [
+      `${signLabel}-inu ee varshakaalathile mukhyamaya theme sthiratha, dhairyam, mathrukayude samavathikkalanu.`,
+      'Masam prathi phala nirdeshanangalude vediyil, oru kaaryathinu adhikam pradhanam kodukkaruthu. Samaya kramam sheri aayi anusarichu nadakkuka.',
+      'Quarter-wise review cheythu, budgetum sambandha samvathsaramum sthiramaayi nilanirthuka.',
+    ];
+  }
+
+  return [
+    `For ${signLabel}, this yearly horoscope points to steady momentum with clearly defined timing and practical priorities.`,
+    'Use the month-by-month forecasts to pace decisions, avoid overcommitment, and preserve energy for the strongest windows.',
+    'Review progress every quarter and adjust plans based on what feels stable rather than what feels urgent.',
+  ];
+};
+
+const buildTotalOverview = (signDetails, language) => {
+  const signLabel = signDetails?.label || 'Your sign';
+  if (language === 'ml') {
+    return [
+      `${signLabel}-inu ee sampoorna horoscope jeevitha mekhakalil ninnulla duranthangalum sadhyakalum oru roadmap ayi tharunnu.`,
+      'Ee reportil career, dhana, aarogyam, bandham, padanam, yathra, aathmeeya samathwam ennivaril nirdesham undu.',
+      'Kurachu karyangalil balam koottuka; kuranja karyangalil sampoorna prathikaaramum samadhanavum thedikka.',
+    ];
+  }
+
+  return [
+    `This total horoscope gives ${signLabel} a rounded life-area roadmap with key themes for career, finances, health, relationships, learning, travel, and inner balance.`,
+    'Pay attention to the areas where strength is natural and where you need extra support or structure.',
+    'Use the life-area summaries as a priority map and build a simple action plan around the most important areas.',
+  ];
+};
+
 const writeWrappedParagraph = (doc, text, options = {}) => {
   const {
     fontSize = 10.5,
@@ -915,6 +949,16 @@ const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year', language = 'en
         { gap: 0.5 }
       );
 
+      const yearlyOverview = buildYearlyOverview(signDetails, normalizedLanguage);
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(
+        normalizedLanguage === 'ml' ? 'Varshika phala saaramsam' : 'Yearly Horoscope Summary'
+      );
+      doc.moveDown(0.35);
+      yearlyOverview.forEach((line) => {
+        writeWrappedParagraph(doc, line, { gap: 0.35 });
+      });
+
       doc.addPage();
       doc.fillColor('#0f172a').fontSize(14).text(copy.monthwiseHeading);
       doc.moveDown(0.35);
@@ -963,6 +1007,28 @@ const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year', language = 'en
             : 'Strengthen relationships through direct communication and predictable follow-up. For health, protect sleep quality and maintain regular movement even during busy weeks.',
           { gap: 0.45 }
         );
+      });
+
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(
+        normalizedLanguage === 'ml' ? 'Yearly horoscope guide' : 'How to use this yearly horoscope'
+      );
+      doc.moveDown(0.35);
+      const yearlyUsageLines =
+        normalizedLanguage === 'ml'
+          ? [
+              'Masam prathi phala ennathu arinjitt, oru goal-ku oru action set cheyyuka.',
+              'Strong months-il expansion kaanichu, moderate months-il review sahayikkuka.',
+              'Quarter-wise progress check cheythu new milestones fix cheyyuka.',
+            ]
+          : [
+              'Set one clear action for each month and review progress weekly.',
+              'Use stronger months for momentum and moderate months for review and refinement.',
+              'Check progress every quarter and adjust the plan with what feels stable.',
+            ];
+      yearlyUsageLines.forEach((line) => {
+        ensurePdfSpace(doc, 22);
+        doc.fontSize(11).fillColor('#1f2937').text(`- ${line}`);
       });
 
       doc.addPage();
@@ -1043,6 +1109,16 @@ const buildHoroscopePdfBuffer = (sign = 'aries', period = 'year', language = 'en
           : 'This chart summarizes your long-horizon strength across major life areas. Expand where scores are high, and build systems, support, and patience where scores are moderate.',
         { gap: 0.5 }
       );
+
+      const totalOverview = buildTotalOverview(signDetails, normalizedLanguage);
+      doc.addPage();
+      doc.fillColor('#0f172a').fontSize(14).text(
+        normalizedLanguage === 'ml' ? 'Sampoorna horoscope overview' : 'Total Horoscope Summary'
+      );
+      doc.moveDown(0.35);
+      totalOverview.forEach((line) => {
+        writeWrappedParagraph(doc, line, { gap: 0.35 });
+      });
 
       doc.addPage();
       doc.fillColor('#0f172a').fontSize(14).text(copy.totalAreasHeading);
