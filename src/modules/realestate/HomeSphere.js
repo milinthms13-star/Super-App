@@ -185,6 +185,8 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     return movedToDashboard;
   };
 
+  const handlePostPropertyClick = () => redirectToSellerDashboard();
+
   const handleFavoriteToggle = (propertyId) => {
     const fullId = `realestate-${propertyId}`;
     if (favoriteIds.has(fullId)) {

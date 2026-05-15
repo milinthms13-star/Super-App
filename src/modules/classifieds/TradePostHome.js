@@ -110,6 +110,12 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
     [favorites]
   );
 
+  const canPostAd =
+    currentUser?.registrationType === "entrepreneur" ||
+    currentUser?.role === "business" ||
+    currentUser?.registrationType === "admin" ||
+    currentUser?.role === "admin";
+
   const handlePostAdClick = () => {
     const didNavigate = onNavigateToDashboard?.("seller");
     if (didNavigate === false) {
