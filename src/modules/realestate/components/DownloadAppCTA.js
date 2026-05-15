@@ -1,10 +1,5 @@
 import React from "react";
 
-/**
- * DownloadAppCTA
- * Simple call-to-action for mobile app download.
- * Appears at the bottom of the public homepage.
- */
 const DownloadAppCTA = () => {
   return (
     <section className="homesphere-download-cta">
@@ -18,21 +13,19 @@ const DownloadAppCTA = () => {
               className="realestate-secondary-button"
               onClick={() => window.open("https://apps.apple.com", "_blank")}
             >
-              📱 App Store
+              Download on App Store
             </button>
             <button
               type="button"
               className="realestate-secondary-button"
               onClick={() => window.open("https://play.google.com", "_blank")}
             >
-              🤖 Google Play
+              Get it on Google Play
             </button>
           </div>
         </div>
-        <div className="homesphere-cta-image">
-          <div className="homesphere-phone-mockup">
-            📱 App preview
-          </div>
+        <div className="homesphere-cta-image" aria-hidden="true">
+          <div className="homesphere-phone-mockup">Mobile App Preview</div>
         </div>
       </article>
     </section>

@@ -3,7 +3,7 @@ import { useApp } from '../../contexts/AppContext';
 import './CallWindow.css';
 import { getAvatarLabel, getEntityId } from './utils';
 
-const rtcConfiguration = {
+const DEFAULT_RTC_CONFIGURATION = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -18,6 +18,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
   const [sharedBackgroundMode, setSharedBackgroundMode] = useState('one-side');
   const [callDuration, setCallDuration] = useState(0);
   const [callStatus, setCallStatus] = useState(call.status || 'initiating');
+  const [rtcConfiguration, setRtcConfiguration] = useState(DEFAULT_RTC_CONFIGURATION);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -33,6 +34,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
   const readySignalSentRef = useRef(false);
   const offerSentRef = useRef(false);
   const sharedBackgroundModeRef = useRef('one-side');
+  const rtcConfigurationRef = useRef(DEFAULT_RTC_CONFIGURATION);
 
   const currentUserId = getEntityId(call.currentUserId || currentUser);
   const callId = getEntityId(call._id || call.callId);
@@ -48,6 +50,47 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
   useEffect(() => {
     setCallStatus(call.status || 'initiating');
   }, [call.status]);
+
+  useEffect(() => {
+    rtcConfigurationRef.current = rtcConfiguration;
+  }, [rtcConfiguration]);
+
+  useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+
+    const loadIceServers = async () => {
+      try {
+        const token = localStorage.getItem('token') || '';
+        const response = await fetch('/api/messaging/calls/ice-servers', {
+          method: 'GET',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        const nextIceServers = payload?.data?.iceServers;
+        if (!isActive || !Array.isArray(nextIceServers) || nextIceServers.length === 0) {
+          return;
+        }
+
+        setRtcConfiguration({ iceServers: nextIceServers });
+      } catch (_error) {
+        // Keep default STUN fallback when ICE config endpoint is unavailable.
+      }
+    };
+
+    loadIceServers();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     setCallDuration(0);
@@ -267,7 +310,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
     }
 
     const stream = await ensureLocalStream();
-    const peerConnection = new RTCPeerConnection(rtcConfiguration);
+    const peerConnection = new RTCPeerConnection(rtcConfigurationRef.current);
     peerConnectionRef.current = peerConnection;
 
     stream.getTracks().forEach((track) => {
@@ -495,6 +538,7 @@ const CallWindow = ({ call, socket, onEndCall, onAcceptCall, onDeclineCall }) =>
   }, [
     call.status,
     cleanupCall,
+    emitSignal,
     emitReadySignal,
     ensurePeerConnection,
     isCaller,

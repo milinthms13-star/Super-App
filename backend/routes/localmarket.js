@@ -184,7 +184,7 @@ router.delete("/products/:productId", authenticate, async (req, res) => {
   }
 });
 
-// CREATE order
+// CREATE order (shop-cart flow)
 router.post("/orders", authenticate, async (req, res) => {
   try {
     const { shopId, items, subtotal, discount, deliveryCharge, deliveryType, deliveryAddress, paymentMethod, promoCode, specialInstructions } = req.body;
@@ -212,6 +212,69 @@ router.post("/orders", authenticate, async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// CREATE list-based order request (no shop selected by user)
+router.post("/orders/request", authenticate, async (req, res) => {
+  try {
+    const {
+      requestedItemsText,
+      preferredShopName,
+      deliveryType,
+      deliveryAddress,
+      phone,
+      paymentMethod,
+      specialInstructions,
+    } = req.body;
+
+    if (!requestedItemsText || !String(requestedItemsText).trim()) {
+      return res.status(400).json({ success: false, error: "requestedItemsText is required" });
+    }
+
+    if (!deliveryType) {
+      return res.status(400).json({ success: false, error: "deliveryType is required" });
+    }
+
+    // For now: compute fixed platform fee + delivery-to-partner charge.
+    // Later this can use distance/address or shop config.
+    const platformFee = 1299;
+    const deliveryChargeToPartner = 0;
+
+    const orderId = `LM-${Date.now()}`;
+    const order = await createOrder({
+      orderId,
+      userId: getAuthenticatedUserId(req),
+      // shopId intentionally omitted (set later by delivery partner)
+      items: [],
+      subtotal: 0,
+      discount: 0,
+      deliveryCharge: 0,
+      total: 0,
+      deliveryType,
+      deliveryAddress,
+      paymentMethod: paymentMethod || "Cash on Delivery",
+      promoCode: undefined,
+      specialInstructions: specialInstructions || "",
+      estimatedDelivery: deliveryType === "Home Delivery" ? "30-45 mins" : "20 mins",
+      requestedItemsText: String(requestedItemsText),
+      preferredShopName: String(preferredShopName || ""),
+      platformFee,
+      deliveryChargeToPartner,
+      paymentScheme: "COUNTER_PAY",
+      counterPayment: {
+        shopAmount: 0,
+        deliveryAmount: deliveryChargeToPartner,
+        platformFeeAmount: platformFee,
+        currency: "INR",
+      },
+      status: "Requested",
+    });
+
+    res.status(201).json({ success: true, data: order });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 
 // GET user orders
 router.get("/orders", authenticate, async (req, res) => {

@@ -152,6 +152,46 @@ const PREVIEW_ENABLED_MODULES = [
   "astrology",
 ];
 
+const TOGGLE_CONTROLLED_MODULE_IDS = [
+  "ecommerce",
+  "messaging",
+  "classifieds",
+  "realestate",
+  "socialmedia",
+  "matrimonial",
+  "localmarket",
+  "localservices",
+  "hyperlocal",
+  "tourism",
+  "hotelbooking",
+  "bustrainbooking",
+  "ridesharing",
+  "gulfservices",
+  "businessbuilder",
+  "businessservices",
+  "freelancer",
+  "resumebuilder",
+  "jobportal",
+  "skilllearning",
+  "education",
+  "nilaaihub",
+  "finance",
+  "billpay",
+  "fooddelivery",
+  "healthcare",
+  "reminderalert",
+  "sosalert",
+  "devadarshan",
+  "astrology",
+  "diary",
+];
+
+const MODULE_ACCESS_PARENT_MAP = {
+  cart: "ecommerce",
+  orders: "ecommerce",
+  returns: "ecommerce",
+};
+
 const normalizeEnabledModules = (moduleIds = []) =>
   Array.from(
     new Set(
@@ -262,8 +302,8 @@ function AppShell() {
   const toggleControlledModuleIds = useMemo(
     () =>
       new Set(
-        businessCategories
-          .map((category) => normalizeModuleId(category?.id))
+        [...TOGGLE_CONTROLLED_MODULE_IDS, ...businessCategories.map((category) => category?.id)]
+          .map((moduleId) => normalizeModuleId(moduleId))
           .filter(Boolean)
       ),
     [businessCategories]
@@ -282,11 +322,14 @@ function AppShell() {
     }
 
     const activeRouteModule = getProtectedModuleFromPathname(location.pathname);
-    if (!toggleControlledModuleIds.has(activeRouteModule)) {
+    const accessControlModule =
+      MODULE_ACCESS_PARENT_MAP[activeRouteModule] || activeRouteModule;
+
+    if (!toggleControlledModuleIds.has(accessControlModule)) {
       return;
     }
 
-    if (!enabledModules.includes(activeRouteModule)) {
+    if (!enabledModules.includes(accessControlModule)) {
       navigate(defaultAuthenticatedPath, { replace: true });
     }
   }, [
@@ -676,6 +719,8 @@ function AppShell() {
       setIsLoggedIn(true);
 
       const currentRouteModule = getProtectedModuleFromPathname(location.pathname);
+      const currentAccessModule =
+        MODULE_ACCESS_PARENT_MAP[currentRouteModule] || currentRouteModule;
       const currentPathIsProtected = ROUTABLE_MODULES.has(currentRouteModule);
       const defaultPathForRole =
         resolvedRegistrationType === "admin"
@@ -689,9 +734,9 @@ function AppShell() {
           : normalizedPendingModule && enabledModules.includes(normalizedPendingModule)
             ? normalizedPendingModule
             : currentPathIsProtected &&
-                (!toggleControlledModuleIds.has(currentRouteModule) ||
-                  enabledModules.includes(currentRouteModule))
-              ? currentRouteModule
+                (!toggleControlledModuleIds.has(currentAccessModule) ||
+                  enabledModules.includes(currentAccessModule))
+              ? currentAccessModule
               : "dashboard";
 
       setPendingModule("");

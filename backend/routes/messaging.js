@@ -31,6 +31,7 @@ const DEFAULT_TIME_RESTRICTIONS = {
   daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
   timezone: 'Asia/Kolkata',
 };
+const DEFAULT_STUN_SERVERS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
 
 const normalizeObjectId = (value) => {
   if (!value) {
@@ -80,6 +81,35 @@ const getDirectChatRecipientId = (chat, currentUserId) => {
   );
 
   return normalizeObjectId(otherParticipant);
+};
+
+const parseIceServerUrls = (value) =>
+  String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const buildCallIceServers = () => {
+  const stunServers = parseIceServerUrls(process.env.WEBRTC_STUN_SERVERS);
+  const turnServers = parseIceServerUrls(process.env.WEBRTC_TURN_URLS);
+  const turnUsername = String(process.env.WEBRTC_TURN_USERNAME || '').trim();
+  const turnCredential = String(process.env.WEBRTC_TURN_CREDENTIAL || '').trim();
+
+  const iceServers = [
+    {
+      urls: stunServers.length ? stunServers : DEFAULT_STUN_SERVERS,
+    },
+  ];
+
+  if (turnServers.length && turnUsername && turnCredential) {
+    iceServers.push({
+      urls: turnServers,
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return iceServers;
 };
 
 const buildMessageExportPayload = (chat, messages = []) => ({
@@ -1948,6 +1978,22 @@ router.get('/stats', authenticate, attachMessagingUser, async (req, res, next) =
 });
 
 // ============ CALL ROUTES ============
+
+// Fetch ICE server configuration for WebRTC calls
+router.get('/calls/ice-servers', authenticate, attachMessagingUser, async (_req, res) => {
+  const iceServers = buildCallIceServers();
+  return res.json({
+    success: true,
+    data: {
+      iceServers,
+      hasTurn: iceServers.some((server) =>
+        (Array.isArray(server.urls) ? server.urls : [server.urls]).some((url) =>
+          String(url || '').toLowerCase().startsWith('turn:')
+        )
+      ),
+    },
+  });
+});
 
 // Initiate a call
 router.post('/calls/initiate', authenticate, attachMessagingUser, async (req, res, next) => {

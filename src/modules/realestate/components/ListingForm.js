@@ -18,37 +18,85 @@ const ListingForm = ({
   return (
     <article className="realestate-surface-card">
       <div className="realestate-section-heading">
-        <h2>{editListingId ? "Edit listing" : "Publish a property"}</h2>
-        <p>Production-ready listing form with legal, media, and location metadata.</p>
+        <h2>{editListingId ? "Edit ad" : "Post an ad"}</h2>
+        <p>{listingForm.postingType === "property" ? "List a property for sale or rent" : "Tell us what you're looking for"}</p>
       </div>
 
       <form className="realestate-form-grid" onSubmit={onSubmit}>
+        {/* POSTING TYPE TOGGLE */}
+        <div className="realestate-posting-type-toggle">
+          <label className="realestate-toggle-option">
+            <input
+              type="radio"
+              name="postingType"
+              value="property"
+              checked={listingForm.postingType === "property"}
+              onChange={onInputChange}
+            />
+            <span>🏠 I'm Selling/Renting</span>
+          </label>
+          <label className="realestate-toggle-option">
+            <input
+              type="radio"
+              name="postingType"
+              value="requirement"
+              checked={listingForm.postingType === "requirement"}
+              onChange={onInputChange}
+            />
+            <span>🔍 I'm Looking For</span>
+          </label>
+        </div>
+
+        {/* COMMON FIELDS */}
         <label className="realestate-field">
           <span>Title</span>
-          <input name="title" value={listingForm.title} onChange={onInputChange} />
+          <input name="title" value={listingForm.title} onChange={onInputChange} placeholder={listingForm.postingType === "property" ? "Property title" : "What are you looking for?"} />
           {fieldErrors.title ? <small className="realestate-field-error">{fieldErrors.title}</small> : null}
         </label>
 
         <label className="realestate-field">
           <span>Intent</span>
           <select name="intent" value={listingForm.intent} onChange={onInputChange}>
-            <option value="sale">Sale</option>
-            <option value="rent">Rent</option>
-            <option value="project">Project</option>
+            <option value="sale">{listingForm.postingType === "property" ? "Sale" : "Looking to Buy"}</option>
+            <option value="rent">{listingForm.postingType === "property" ? "Rent" : "Looking to Rent"}</option>
           </select>
         </label>
 
-        <label className="realestate-field">
-          <span>Price</span>
-          <input name="priceLabel" value={listingForm.priceLabel} onChange={onInputChange} placeholder="Ex: 96 Lakhs" />
-          {fieldErrors.priceLabel ? <small className="realestate-field-error">{fieldErrors.priceLabel}</small> : null}
-        </label>
+        {/* PROPERTY POSTING FIELDS */}
+        {listingForm.postingType === "property" ? (
+          <>
+            <label className="realestate-field">
+              <span>Price</span>
+              <input name="priceLabel" value={listingForm.priceLabel} onChange={onInputChange} placeholder="Ex: 96 Lakhs" />
+              {fieldErrors.priceLabel ? <small className="realestate-field-error">{fieldErrors.priceLabel}</small> : null}
+            </label>
+          </>
+        ) : (
+          <>
+            <label className="realestate-field">
+              <span>Budget (Min)</span>
+              <input name="minBudget" value={listingForm.minBudget} onChange={onInputChange} placeholder="Ex: 20 Lakhs" />
+            </label>
+
+            <label className="realestate-field">
+              <span>Budget (Max)</span>
+              <input name="maxBudget" value={listingForm.maxBudget} onChange={onInputChange} placeholder="Ex: 50 Lakhs" />
+            </label>
+          </>
+        )}
 
         <label className="realestate-field">
           <span>Location</span>
           <input name="location" value={listingForm.location} onChange={onInputChange} />
           {fieldErrors.location ? <small className="realestate-field-error">{fieldErrors.location}</small> : null}
         </label>
+
+        {listingForm.postingType === "requirement" && (
+          <label className="realestate-field">
+            <span>Other Preferred Areas</span>
+            <textarea name="preferredLocations" value={listingForm.preferredLocations} onChange={onInputChange} placeholder="List any other areas you're interested in" rows="2" />
+          </label>
+        )}
 
         <label className="realestate-field">
           <span>Locality</span>
@@ -184,9 +232,26 @@ const ListingForm = ({
         </label>
 
         <label className="realestate-field">
-          <span>Amenities (comma separated)</span>
-          <input name="amenitiesInput" value={listingForm.amenitiesInput} onChange={onInputChange} />
+          <span>{listingForm.postingType === "property" ? "Amenities (comma separated)" : "Must-have amenities"}</span>
+          <input 
+            name={listingForm.postingType === "property" ? "amenitiesInput" : "mustHaveAmenities"} 
+            value={listingForm.postingType === "property" ? listingForm.amenitiesInput : listingForm.mustHaveAmenities} 
+            onChange={onInputChange} 
+            placeholder={listingForm.postingType === "property" ? "WiFi, Parking, Gym..." : "Swimming pool, Gym, Security..."}
+          />
         </label>
+
+        {listingForm.postingType === "requirement" && (
+          <label className="realestate-field">
+            <span>Preferred Move-in Date</span>
+            <input 
+              type="date"
+              name="moveInDate" 
+              value={listingForm.moveInDate} 
+              onChange={onInputChange} 
+            />
+          </label>
+        )}
 
         <label className="realestate-field">
           <span>Nearby school (km)</span>

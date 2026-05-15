@@ -1086,7 +1086,7 @@ const AstrologyHome = () => {
           <div className="astro-hero-actions">
             <button type="button" className="astrology-save-button" onClick={() => { setActiveSection("today"); setShowFullPrediction(true); }}>View Full Prediction</button>
             <button type="button" className="astrology-secondary-button" onClick={() => { setActiveSection("today"); setShowFullPrediction(false); }}>
-              {localize("à´‡à´¨àµà´¨à´¤àµà´¤àµ† à´œàµà´¯àµ‹à´¤à´¿à´· à´«à´²à´‚ à´•à´¾à´£àµà´•", "à´‡à´¨àµà´¨à´¤àµà´¤àµ† à´œàµà´¯àµ‹à´¤à´¿à´· à´«à´²à´‚ à´•à´¾à´£àµà´•", language)}
+              {localize("Today's Horoscope", "ഇന്നത്തെ ജ്യോതിഷ ഫലം കാണുക", language)}
             </button>
           </div>
         </article>

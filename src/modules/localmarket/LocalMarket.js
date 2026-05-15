@@ -26,6 +26,8 @@ import CartModal from "./components/CartModal";
 import OrdersList from "./components/OrdersList";
 import ReviewModal from "./components/ReviewModal";
 import ShopOwnerDashboard from "./components/ShopOwnerDashboard";
+import RequestListModal from "./components/RequestListModal";
+import DeliveryDashboard from "./components/DeliveryDashboard";
 
 const getAuthToken = () =>
   window.localStorage.getItem("token") ||
@@ -56,6 +58,9 @@ function LocalMarket() {
   const [cart, setCart] = useState([]);
   const [showCheckout, setShowCheckout] = useState(false);
   const [orderForm, setOrderForm] = useState(DEFAULT_ORDER_FORM);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+
   const [promoCodeInput, setPromoCodeInput] = useState("");
   const [appliedPromo, setAppliedPromo] = useState("");
   const [promoUsageKey, setPromoUsageKey] = useState("");
@@ -425,6 +430,7 @@ function LocalMarket() {
   };
 
   const onPlaceOrder = async () => {
+
     const errors = validateCheckout();
     setCheckoutValidationErrors(errors);
     if (errors.length > 0) {
@@ -625,6 +631,36 @@ function LocalMarket() {
     }
   };
 
+  const onSubmitRequestList = async (payload) => {
+    if (!authToken) {
+      notify("error", "Please log in before placing an order.");
+      return;
+    }
+
+    setRequestSubmitting(true);
+    try {
+      const data = await localMarketService.createOrderRequest({
+        requestedItemsText: payload.requestedItemsText,
+        preferredShopName: payload.preferredShopName,
+        deliveryType: payload.deliveryType,
+        deliveryAddress: payload.deliveryAddress,
+        phone: payload.phone,
+        paymentMethod: payload.paymentMethod,
+        specialInstructions: payload.specialInstructions,
+      });
+
+      const normalizedOrder = normalizeOrder(data);
+      setOrders((previousOrders) => [normalizedOrder, ...previousOrders]);
+      setShowRequestModal(false);
+      setCurrentTab("orders");
+      notify("success", "Request submitted successfully.");
+    } catch (error) {
+      notify("error", "Could not submit request. Please try again.");
+    } finally {
+      setRequestSubmitting(false);
+    }
+  };
+
   return (
     <div className="local-market">
       <div className="lm-header">
@@ -641,29 +677,40 @@ function LocalMarket() {
       {currentRole === "buyer" ? (
         <div className="lm-buyer-view">
           {currentTab === "browse" ? (
-            <ShopList
-              shops={filteredShops}
-              loading={shopsLoading}
-              error={shopsError}
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              filterType={filterType}
-              onFilterTypeChange={setFilterType}
-              sortBy={sortBy}
-              onSortByChange={setSortBy}
-              onlyOpenNow={onlyOpenNow}
-              onOnlyOpenNowChange={setOnlyOpenNow}
-              onlyOffers={onlyOffers}
-              onOnlyOffersChange={setOnlyOffers}
-              onOpenShop={(shopId) => {
-                setSelectedShopId(shopId);
-                setCurrentTab("products");
-              }}
-              ordersCount={orders.length}
-              cartCount={cart.length}
-              onShowOrders={() => setCurrentTab("orders")}
-              onShowCart={() => setShowCheckout(true)}
-            />
+            <>
+              <ShopList
+                shops={filteredShops}
+                loading={shopsLoading}
+                error={shopsError}
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+                filterType={filterType}
+                onFilterTypeChange={setFilterType}
+                sortBy={sortBy}
+                onSortByChange={setSortBy}
+                onlyOpenNow={onlyOpenNow}
+                onOnlyOpenNowChange={setOnlyOpenNow}
+                onlyOffers={onlyOffers}
+                onOnlyOffersChange={setOnlyOffers}
+                onOpenShop={(shopId) => {
+                  setSelectedShopId(shopId);
+                  setCurrentTab("products");
+                }}
+                ordersCount={orders.length}
+                cartCount={cart.length}
+                onShowOrders={() => setCurrentTab("orders")}
+                onShowCart={() => setShowCheckout(true)}
+              />
+
+              <div className="lm-request-list-cta">
+                <button
+                  className="lm-btn lm-btn-primary"
+                  onClick={() => setShowRequestModal(true)}
+                >
+                  Request List (No shop browsing)
+                </button>
+              </div>
+            </>
           ) : null}
 
           {currentTab === "products" ? (
@@ -716,12 +763,7 @@ function LocalMarket() {
       ) : null}
 
       {currentRole === "delivery" ? (
-        <div className="lm-orders-section">
-          <h2>Delivery Partner Dashboard</h2>
-          <p className="lm-empty">
-            Assigned orders, pickup/drop workflow, route map, and earnings are planned for the next phase.
-          </p>
-        </div>
+        <DeliveryDashboard onNotify={notify} />
       ) : null}
 
       {currentRole === "admin" ? (
@@ -753,6 +795,14 @@ function LocalMarket() {
           onPlaceOrder={onPlaceOrder}
           validationErrors={checkoutValidationErrors}
           checkoutLoading={checkoutLoading}
+        />
+      ) : null}
+
+      {showRequestModal ? (
+        <RequestListModal
+          onClose={() => setShowRequestModal(false)}
+          onSubmit={onSubmitRequestList}
+          submitting={requestSubmitting}
         />
       ) : null}
 

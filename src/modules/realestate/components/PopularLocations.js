@@ -1,19 +1,24 @@
 import React from "react";
 
-/**
- * PopularLocations
- * Shows trending/popular locations as a horizontal carousel.
- * Helps users discover property hotspots without scrolling.
- */
+const LOCATION_GRADIENTS = [
+  "linear-gradient(135deg, #8dc5b6 0%, #2c7a7b 100%)",
+  "linear-gradient(135deg, #7ca2e0 0%, #3048a1 100%)",
+  "linear-gradient(135deg, #f0c27b 0%, #8c6239 100%)",
+  "linear-gradient(135deg, #77c5d5 0%, #2f4f8f 100%)",
+  "linear-gradient(135deg, #f2a7a7 0%, #8f4651 100%)",
+  "linear-gradient(135deg, #a8d28e 0%, #3d7f4d 100%)",
+  "linear-gradient(135deg, #b99ae0 0%, #5d3d8f 100%)",
+  "linear-gradient(135deg, #f5c38b 0%, #b57a2f 100%)",
+];
+
 const PopularLocations = ({ locations, onLocationClick }) => {
-  // Show top 8 locations with property counts
   const topLocations = locations
     .filter((loc) => loc !== "All")
     .slice(0, 8)
     .map((loc, idx) => ({
       name: loc,
-      count: Math.floor(Math.random() * 500) + 10, // Mock count
-      image: `https://images.unsplash.com/photo-${1500000000000 + idx * 100000}?w=300&h=200&fit=crop`,
+      count: 48 + idx * 13,
+      gradient: LOCATION_GRADIENTS[idx % LOCATION_GRADIENTS.length],
     }));
 
   return (
@@ -32,12 +37,9 @@ const PopularLocations = ({ locations, onLocationClick }) => {
               onClick={() => onLocationClick?.(location.name)}
             >
               <div className="homesphere-location-image">
-                {/* Mock image */}
                 <div
                   className="homesphere-location-image-placeholder"
-                  style={{
-                    backgroundColor: `hsl(${Math.random() * 360}, 70%, 60%)`,
-                  }}
+                  style={{ background: location.gradient }}
                 />
               </div>
               <div className="homesphere-location-content">

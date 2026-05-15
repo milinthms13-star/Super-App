@@ -1,31 +1,26 @@
 import React from "react";
 
-/**
- * PropertyCategories
- * Shows property types/categories to help users filter quickly.
- * Image-focused with quick access to each type.
- */
-const PropertyCategories = ({ propertyTypes, onTypeClick }) => {
+const PropertyCategories = ({ onTypeClick }) => {
   const categories = [
     {
       type: "Apartments",
-      emoji: "🏢",
-      description: "Flats & studios",
+      icon: "APT",
+      description: "Flats and studio homes",
     },
     {
       type: "Houses",
-      emoji: "🏠",
-      description: "Villas & bungalows",
+      icon: "HSE",
+      description: "Villas and bungalows",
     },
     {
       type: "Land",
-      emoji: "🏗️",
-      description: "Plots & layouts",
+      icon: "LND",
+      description: "Plots and layouts",
     },
     {
       type: "Commercial",
-      emoji: "🏪",
-      description: "Office & retail",
+      icon: "COM",
+      description: "Office and retail spaces",
     },
   ];
 
@@ -44,7 +39,7 @@ const PropertyCategories = ({ propertyTypes, onTypeClick }) => {
               className="homesphere-category-card"
               onClick={() => onTypeClick?.(cat.type)}
             >
-              <div className="homesphere-category-emoji">{cat.emoji}</div>
+              <div className="homesphere-category-emoji">{cat.icon}</div>
               <strong>{cat.type}</strong>
               <span>{cat.description}</span>
             </button>

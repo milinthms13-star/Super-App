@@ -66,6 +66,16 @@ export const localMarketService = {
     return data.data;
   },
 
+  // List-based order request (no shop selected by buyer)
+  createOrderRequest: async (orderRequestData) => {
+    const { data } = await axios.post(
+      `${API_BASE_URL}/orders/request`,
+      orderRequestData,
+      getAuthHeaders()
+    );
+    return data.data;
+  },
+
   getMyOrders: async () => {
     const { data } = await axios.get(`${API_BASE_URL}/orders`, getAuthHeaders());
     return data.data;
@@ -80,6 +90,7 @@ export const localMarketService = {
     const { data } = await axios.put(`${API_BASE_URL}/orders/${orderId}/status`, { status }, getAuthHeaders());
     return data.data;
   },
+
 
   // Reviews
   addOrderReview: async (orderId, reviewData) => {

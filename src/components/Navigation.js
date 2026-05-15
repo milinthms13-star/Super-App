@@ -7,7 +7,7 @@ import GlobalSearch from "./GlobalSearch";
 import "../styles/NavigationEnhanced.css";
 import "../styles/PlatformPolish.css";
 
-const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard", "diary", "quicklinks", "maps", "support", "finance", "freelancer", "billpay", "skilllearning", "devadarshan", "hyperlocal", "localservices"]);
+const ALWAYS_VISIBLE_MODULE_IDS = new Set(["dashboard"]);
 const USER_IMAGE_KEYS = ["photoURL", "avatar", "photo", "profileImage", "picture"];
 const MODULE_ID_ALIASES = {
   quicklink: "quicklinks",
@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary"],
+    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder"],
   },
   utilities: {
     label: "Utilities",
@@ -139,7 +139,6 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
           isModuleVisible(module.id) &&
           (!isSeller ||
             module.id === "dashboard" ||
-            ALWAYS_VISIBLE_MODULE_IDS.has(module.id) ||
             module.sellerVisible === true ||
             subscribedCategoryIds.includes(module.id))
       );
@@ -228,13 +227,8 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 
     return Object.entries(categorized).filter(([_, catData]) => catData.modules.length > 0);
   };
+  const moreNavModules = getMoreNavModules();
   const categorizedMoreModules = getCategorizedModules();
-  const uncategorizedMoreModules = getMoreNavModules().filter(
-    (module) =>
-      !Object.values(MODULE_CATEGORIES).some((category) =>
-        category.modules.includes(module.id)
-      )
-  );
 
   const handleSOSButtonClick = () => {
     if (!showSosButton) {
@@ -348,7 +342,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                 </button>
               ))}
 
-              {getMoreNavModules().length > 0 && (
+              {moreNavModules.length > 0 && (
                 <div className="nav-more-wrapper" ref={moreMenuRef}>
                   <button
                     type="button"
@@ -387,26 +381,32 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                           ))}
                         </div>
                       ))}
-                      {categorizedMoreModules.length === 0 &&
-                        uncategorizedMoreModules.map((module) => (
-                          <button
-                            key={module.id}
-                            type="button"
-                            className={`nav-category-link ${
-                              currentModule === module.id ? "active" : ""
-                            }`}
-                            onClick={() => handleModuleClick(module.id)}
-                          >
-                            <span className="nav-category-icon">{module.icon || "•"}</span>
-                            <span>{module.label}</span>
-                          </button>
-                        ))}
-                      {categorizedMoreModules.length === 0 &&
-                        uncategorizedMoreModules.length === 0 && (
-                          <div className="nav-empty-state">
-                            No additional modules enabled
+                      {moreNavModules.length > 0 && (
+                        <div className="nav-categories-group">
+                          <div className="nav-category-header">
+                            <span className="nav-category-header-icon">✦</span>
+                            All Modules
                           </div>
-                        )}
+                          {moreNavModules.map((module) => (
+                            <button
+                              key={`all-${module.id}`}
+                              type="button"
+                              className={`nav-category-link ${
+                                currentModule === module.id ? "active" : ""
+                              }`}
+                              onClick={() => handleModuleClick(module.id)}
+                            >
+                              <span className="nav-category-icon">{module.icon || "•"}</span>
+                              <span>{module.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {moreNavModules.length === 0 && (
+                        <div className="nav-empty-state">
+                          No additional modules enabled
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

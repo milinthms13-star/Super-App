@@ -8,8 +8,11 @@ const PropertyCard = ({
   onSelect,
   onEdit,
   onFavoriteToggle,
+  hasSubscription = false,
+  onSubscribeClick,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const isRequirement = property.postingType === "requirement";
   
   const trustSignals = [
     Boolean(property.verified),
@@ -62,10 +65,16 @@ const PropertyCard = ({
         
         {/* OVERLAY BADGES */}
         <div className="realestate-property-badges-overlay">
-          <span className={`realestate-badge ${property.verified ? "verified" : "pending"}`}>
-            {property.verified ? "✓ Verified" : "Pending"}
-          </span>
-          {property.featured && <span className="realestate-badge featured">⭐ Featured</span>}
+          {isRequirement ? (
+            <span className="realestate-badge requirement">🔍 Looking For</span>
+          ) : (
+            <>
+              <span className={`realestate-badge ${property.verified ? "verified" : "pending"}`}>
+                {property.verified ? "✓ Verified" : "Pending"}
+              </span>
+              {property.featured && <span className="realestate-badge featured">⭐ Featured</span>}
+            </>
+          )}
         </div>
 
         {/* FAVORITE BUTTON (STICKY TOP RIGHT) */}
@@ -90,8 +99,24 @@ const PropertyCard = ({
       {/* QUICK INFO - ALWAYS VISIBLE */}
       <div className="realestate-property-quick-info">
         <div className="realestate-price-and-location">
-          <strong className="realestate-price">{property.priceLabel}</strong>
-          <span className="realestate-location">{property.location}</span>
+          {isRequirement ? (
+            <>
+              <strong className="realestate-price">
+                {property.minBudget && property.maxBudget 
+                  ? `${property.minBudget} - ${property.maxBudget}`
+                  : property.maxBudget 
+                  ? `Up to ${property.maxBudget}`
+                  : "Budget negotiable"
+                }
+              </strong>
+              <span className="realestate-location">📍 {property.location}</span>
+            </>
+          ) : (
+            <>
+              <strong className="realestate-price">{property.priceLabel}</strong>
+              <span className="realestate-location">{property.location}</span>
+            </>
+          )}
         </div>
         
         {/* MAIN CTA AND MINI BADGES */}
@@ -117,21 +142,61 @@ const PropertyCard = ({
         <div className="realestate-property-details-expanded">
           <h3>{property.title}</h3>
           
-          <div className="realestate-property-specs">
-            <span>🏠 {property.type}</span>
-            <span>🛏️ {property.bedrooms || "Studio"}</span>
-            <span>📐 {property.area}</span>
-          </div>
+          {isRequirement ? (
+            <>
+              <div className="realestate-property-specs">
+                <span>🏠 {property.type}</span>
+                <span>🛏️ {property.bedrooms || "Any"}</span>
+                <span>🔖 {property.intent === "sale" ? "Looking to Buy" : "Looking to Rent"}</span>
+              </div>
 
-          <div className="realestate-property-highlights">
-            <div className="realestate-emi-badge">
-              <strong>₹{(emiEstimate / 100000).toFixed(1)}L/mo</strong>
-              <span>EMI estimate</span>
-            </div>
-            <div className="realestate-possession-badge">
-              <span>{possessionLabel}</span>
-            </div>
-          </div>
+              <div className="realestate-property-highlights">
+                <div className="realestate-budget-badge">
+                  <strong>Budget: {property.minBudget && property.maxBudget ? `${property.minBudget} - ${property.maxBudget}` : property.maxBudget ? `Up to ${property.maxBudget}` : "Flexible"}</strong>
+                  <span>{property.moveInDate ? `Move-in: ${property.moveInDate}` : "Timeline flexible"}</span>
+                </div>
+              </div>
+
+              {property.mustHaveAmenities && (
+                <div className="realestate-property-amenities-preview">
+                  <strong style={{ display: "block", marginBottom: "0.3rem" }}>Must-haves:</strong>
+                  {property.mustHaveAmenities.split(",").slice(0, 3).map((amenity, idx) => (
+                    <span key={idx}>{amenity.trim()}</span>
+                  ))}
+                  {property.mustHaveAmenities.split(",").length > 3 && (
+                    <span>+{property.mustHaveAmenities.split(",").length - 3} more</span>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="realestate-property-specs">
+                <span>🏠 {property.type}</span>
+                <span>🛏️ {property.bedrooms || "Studio"}</span>
+                <span>📐 {property.area}</span>
+              </div>
+
+              <div className="realestate-property-highlights">
+                <div className="realestate-emi-badge">
+                  <strong>₹{(emiEstimate / 100000).toFixed(1)}L/mo</strong>
+                  <span>EMI estimate</span>
+                </div>
+                <div className="realestate-possession-badge">
+                  <span>{possessionLabel}</span>
+                </div>
+              </div>
+
+              <div className="realestate-property-amenities-preview">
+                {property.amenities?.slice(0, 3).map((amenity) => (
+                  <span key={amenity}>{amenity}</span>
+                ))}
+                {property.amenities?.length > 3 && (
+                  <span>+{property.amenities.length - 3} more</span>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="realestate-property-amenities-preview">
             {property.amenities?.slice(0, 3).map((amenity) => (
@@ -143,8 +208,24 @@ const PropertyCard = ({
           </div>
 
           <div className="realestate-property-footer">
-            <span>{property.furnishing}</span>
-            <span>{property.listedBy}</span>
+            {hasSubscription ? (
+              <>
+                <span className="realestate-contact-info">👤 {property.listedBy}</span>
+                {property.phone && <span className="realestate-contact-info">📱 {property.phone}</span>}
+                {property.supperappId && <span className="realestate-contact-info">🆔 {property.supperappId}</span>}
+              </>
+            ) : (
+              <button
+                type="button"
+                className="realestate-subscription-unlock-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSubscribeClick?.();
+                }}
+              >
+                🔒 Subscribe to view contact
+              </button>
+            )}
           </div>
         </div>
       ) : null}

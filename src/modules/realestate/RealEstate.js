@@ -802,26 +802,13 @@ const RealEstate = () => {
             <button type="button" className="realestate-primary-button" onClick={() => setActiveRole("buyer")}>
               Explore listings
             </button>
-            {allowedRoleModes.includes("owner") ? (
-              <button
-                type="button"
-                className="realestate-secondary-button"
-                onClick={() => setActiveRole("owner")}
-              >
-                Post property
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="realestate-upgrade-seller-button"
-                onClick={() => {
-                  pushToast("Upgrade your account to seller status to start posting properties.", "info");
-                  // TODO: Open upgrade modal or redirect to upgrade page
-                }}
-              >
-                🚀 Become a seller
-              </button>
-            )}
+            <button
+              type="button"
+              className="realestate-secondary-button"
+              onClick={() => setActiveRole("owner")}
+            >
+              📤 Post an ad
+            </button>
           </div>
           <div className="realestate-hero-tags">
             <span>Verified listings</span>
@@ -831,37 +818,12 @@ const RealEstate = () => {
         </div>
 
         <div className="realestate-hero-panel">
-          {!allowedRoleModes.includes("owner") ? (
-            <div className="realestate-seller-upgrade-card">
-              <h2>🚀 Ready to Sell?</h2>
-              <p>Join thousands of sellers earning through HomeSphere</p>
-              <ul>
-                <li>✓ Post unlimited properties</li>
-                <li>✓ Connect with verified buyers</li>
-                <li>✓ Get instant leads & notifications</li>
-                <li>✓ Complete property management suite</li>
-              </ul>
-              <button
-                type="button"
-                className="realestate-upgrade-seller-button"
-                onClick={() => {
-                  // Open upgrade modal or redirect
-                  pushToast("Redirecting to seller account setup...", "info");
-                }}
-              >
-                Upgrade to Seller
-              </button>
-            </div>
-          ) : (
-            <div>
-              <h2>Why HomeSphere</h2>
-              <ul>
-                <li>Verified properties and trusted leads.</li>
-                <li>Easy search for homes, rentals and land.</li>
-                <li>Chat, book visits and close deals quickly.</li>
-              </ul>
-            </div>
-          )}
+          <h2>Why HomeSphere</h2>
+          <ul>
+            <li>Post properties & ads instantly</li>
+            <li>Easy search for homes, rentals and land.</li>
+            <li>Chat, book visits and close deals quickly.</li>
+          </ul>
         </div>
       </section>
 
@@ -997,6 +959,10 @@ const RealEstate = () => {
                     onSelect={setSelectedPropertyId}
                     onEdit={handleEditListing}
                     onFavoriteToggle={handleFavoriteToggle}
+                    hasSubscription={currentUser?.subscriptionStatus === "active" || currentUser?.isPremium}
+                    onSubscribeClick={() => {
+                      pushToast("Subscribe to view contact details of property posters!", "info");
+                    }}
                   />
                 ))}
               </div>

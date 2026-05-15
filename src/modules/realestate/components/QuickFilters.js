@@ -12,7 +12,6 @@ const QuickFilters = ({
   return (
     <section className="homesphere-quick-filters">
       <div className="homesphere-filters-row">
-        {/* FILTER CHIPS */}
         <div className="homesphere-filter-chips">
           <button
             type="button"
@@ -20,7 +19,7 @@ const QuickFilters = ({
             onClick={onVerifiedToggle}
             title="Show only verified properties"
           >
-            ✓ Verified
+            Verified only
           </button>
           <button
             type="button"
@@ -28,15 +27,12 @@ const QuickFilters = ({
             onClick={onReadyToggle}
             title="Show only ready-to-move properties"
           >
-            ⚡ Ready to move
+            Ready to move
           </button>
         </div>
 
-        {/* SORT + RESULTS */}
         <div className="homesphere-filters-meta">
-          <span className="homesphere-result-count">
-            {resultCount} properties found
-          </span>
+          <span className="homesphere-result-count">{resultCount} properties found</span>
           <select
             className="homesphere-sort-select"
             value={sortBy}

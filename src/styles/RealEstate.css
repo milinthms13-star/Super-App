@@ -380,6 +380,45 @@
   gap: 1rem;
 }
 
+/* Posting Type Toggle */
+.realestate-posting-type-toggle {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #f0f9ff 0%, #f8fafc 100%);
+  border-radius: 12px;
+  border: 1px solid var(--realestate-border);
+}
+
+.realestate-toggle-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.realestate-toggle-option input[type="radio"] {
+  cursor: pointer;
+  accent-color: var(--realestate-primary);
+}
+
+.realestate-toggle-option input[type="radio"]:checked + span {
+  font-weight: 700;
+  color: var(--realestate-primary);
+}
+
+.realestate-toggle-option:has(input[type="radio"]:checked) {
+  background: rgba(15, 118, 110, 0.1);
+  border-color: var(--realestate-primary);
+}
+
 .realestate-field {
   display: flex;
   flex-direction: column;
@@ -1966,6 +2005,12 @@
   padding: 0.35rem 0.65rem;
 }
 
+.realestate-badge.requirement {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(139, 92, 246, 0.9)) !important;
+  color: #fff !important;
+  border: none !important;
+}
+
 .realestate-favorite-btn {
   position: absolute;
   top: 0.75rem;
@@ -2095,6 +2140,28 @@
   flex: 1;
 }
 
+.realestate-budget-badge {
+  background: linear-gradient(135deg, #f0f4ff 0%, #e9e4ff 100%);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  padding: 0.8rem;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.realestate-budget-badge strong {
+  display: block;
+  color: #4f46e5;
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+
+.realestate-budget-badge span {
+  color: var(--realestate-muted);
+  display: block;
+}
+
 .realestate-emi-badge strong {
   display: block;
   color: var(--realestate-primary);
@@ -2133,6 +2200,34 @@
   border-top: 1px solid var(--realestate-border);
 }
 
+/* Subscription Paywall for Contact Details */
+.realestate-subscription-unlock-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.realestate-subscription-unlock-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+}
+
+.realestate-contact-info {
+  color: var(--realestate-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Mobile Adjustments */
 @media (max-width: 720px) {
   .realestate-property-card.image-first {
@@ -2155,5 +2250,554 @@
   .realestate-property-badges-overlay .realestate-badge {
     font-size: 0.7rem;
     padding: 0.25rem 0.5rem;
+  }
+}
+
+/* ============================================================
+   HOMESPHERE PREMIUM REDESIGN
+   ============================================================ */
+.homesphere-shell {
+  --homesphere-bg: #081f2c;
+  --homesphere-bg-soft: #0f3346;
+  --homesphere-card: #f7f2e6;
+  --homesphere-card-soft: #fffaf0;
+  --homesphere-ink: #13323f;
+  --homesphere-muted: #4f6876;
+  --homesphere-gold: #c9a449;
+  --homesphere-gold-soft: #efd78f;
+  --homesphere-line: rgba(19, 50, 63, 0.15);
+  --homesphere-shadow: 0 22px 40px rgba(2, 12, 18, 0.18);
+  position: relative;
+  padding: clamp(0.8rem, 2vw, 1.4rem);
+  background:
+    radial-gradient(circle at 10% -20%, rgba(73, 170, 147, 0.16), transparent 42%),
+    radial-gradient(circle at 95% 10%, rgba(201, 164, 73, 0.14), transparent 35%),
+    linear-gradient(180deg, #0a2f3f 0%, #082732 100%);
+}
+
+.homesphere-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.homesphere-hero,
+.homesphere-listings-container,
+.homesphere-detail-card,
+.homesphere-surface-card,
+.homesphere-quick-filters {
+  border-radius: 24px;
+  border: 1px solid var(--homesphere-line);
+  background: var(--homesphere-card);
+  box-shadow: var(--homesphere-shadow);
+}
+
+.homesphere-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr);
+  gap: clamp(1rem, 2vw, 1.7rem);
+  padding: clamp(1.1rem, 2.2vw, 1.8rem);
+  margin-bottom: 1rem;
+}
+
+.homesphere-hero-content h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.45rem);
+  letter-spacing: -0.02em;
+  color: var(--homesphere-ink);
+}
+
+.homesphere-hero-content p {
+  margin: 0.65rem 0 0;
+  font-size: clamp(0.92rem, 1.6vw, 1.05rem);
+  line-height: 1.65;
+  color: var(--homesphere-muted);
+  max-width: 64ch;
+}
+
+.homesphere-hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 164, 73, 0.38);
+  background: rgba(201, 164, 73, 0.12);
+  color: #6e4f15;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  padding: 0.38rem 0.74rem;
+}
+
+.homesphere-intent-toggle {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.homesphere-toggle-btn {
+  border: 1px solid rgba(19, 50, 63, 0.2);
+  border-radius: 999px;
+  min-height: 40px;
+  padding: 0.45rem 0.92rem;
+  font-weight: 700;
+  color: var(--homesphere-ink);
+  background: rgba(255, 255, 255, 0.64);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.homesphere-toggle-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(19, 50, 63, 0.32);
+}
+
+.homesphere-toggle-btn.active {
+  border-color: rgba(201, 164, 73, 0.5);
+  color: #5d430f;
+  background: linear-gradient(135deg, rgba(201, 164, 73, 0.28), rgba(201, 164, 73, 0.08));
+}
+
+.homesphere-search-row {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.65rem;
+}
+
+.homesphere-search-input,
+.homesphere-search-select {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 14px;
+  border: 1px solid rgba(19, 50, 63, 0.2);
+  background: #fff;
+  color: var(--homesphere-ink);
+  padding: 0.65rem 0.88rem;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.homesphere-search-input:focus,
+.homesphere-search-select:focus,
+.homesphere-message-composer textarea:focus,
+.homesphere-review-form textarea:focus,
+.homesphere-review-form select:focus,
+.homesphere-review-section > label textarea:focus {
+  border-color: rgba(15, 120, 105, 0.42);
+  box-shadow: 0 0 0 3px rgba(15, 120, 105, 0.11);
+}
+
+.homesphere-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.homesphere-hero-actions .realestate-primary-button,
+.homesphere-hero-actions .realestate-secondary-button {
+  min-height: 44px;
+}
+
+.homesphere-hero-panel {
+  border-radius: 20px;
+  border: 1px solid rgba(19, 50, 63, 0.14);
+  background:
+    linear-gradient(160deg, rgba(19, 50, 63, 0.9) 0%, rgba(15, 73, 83, 0.92) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent);
+  color: #f8f6ef;
+  padding: 1rem;
+}
+
+.homesphere-hero-panel h2 {
+  margin: 0;
+  font-size: 1.06rem;
+}
+
+.homesphere-hero-stats {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.homesphere-stat-tile {
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.7rem;
+}
+
+.homesphere-stat-tile strong {
+  display: block;
+  font-size: 1.1rem;
+  color: #ffeec3;
+}
+
+.homesphere-stat-tile span {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.8rem;
+}
+
+.homesphere-quick-filters {
+  padding: 0.78rem 0.95rem;
+  margin-bottom: 1rem;
+  background: var(--homesphere-card-soft);
+}
+
+.homesphere-filters-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.homesphere-filter-chips {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.homesphere-chip {
+  border: 1px solid rgba(19, 50, 63, 0.18);
+  background: #fff;
+  color: var(--homesphere-ink);
+  border-radius: 999px;
+  min-height: 36px;
+  padding: 0.42rem 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.homesphere-chip.active {
+  border-color: rgba(201, 164, 73, 0.48);
+  background: linear-gradient(135deg, rgba(201, 164, 73, 0.26), rgba(201, 164, 73, 0.06));
+  color: #6f5118;
+}
+
+.homesphere-filters-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-left: auto;
+}
+
+.homesphere-result-count {
+  color: var(--homesphere-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.homesphere-sort-select {
+  border: 1px solid rgba(19, 50, 63, 0.2);
+  border-radius: 12px;
+  min-height: 36px;
+  padding: 0.35rem 0.55rem;
+  background: #fff;
+  color: var(--homesphere-ink);
+}
+
+.homesphere-main-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.homesphere-listings-section,
+.homesphere-detail-panel {
+  min-width: 0;
+}
+
+.homesphere-listings-container {
+  padding: 1rem;
+  background: var(--homesphere-card-soft);
+}
+
+.homesphere-listings-header h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.2vw, 1.5rem);
+  color: var(--homesphere-ink);
+}
+
+.homesphere-listings-header p {
+  margin: 0.28rem 0 0.82rem;
+  color: var(--homesphere-muted);
+  font-size: 0.9rem;
+}
+
+.homesphere-property-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.homesphere-detail-panel {
+  position: sticky;
+  top: 0.95rem;
+}
+
+.homesphere-detail-card {
+  padding: 1rem;
+  background: var(--homesphere-card-soft);
+}
+
+.homesphere-empty-state,
+.homesphere-detail-empty {
+  border: 1px dashed rgba(19, 50, 63, 0.28);
+  border-radius: 18px;
+  padding: 1rem;
+  text-align: center;
+  background: #fff;
+}
+
+.homesphere-empty-state h3,
+.homesphere-detail-empty h3 {
+  margin: 0;
+  color: var(--homesphere-ink);
+}
+
+.homesphere-empty-state p,
+.homesphere-detail-empty p {
+  color: var(--homesphere-muted);
+}
+
+.homesphere-chat-section,
+.homesphere-review-section {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.homesphere-message-composer,
+.homesphere-review-form {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.homesphere-message-composer textarea,
+.homesphere-review-form textarea,
+.homesphere-review-form select,
+.homesphere-review-section > label textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(19, 50, 63, 0.2);
+  background: #fff;
+  padding: 0.66rem 0.76rem;
+  color: var(--homesphere-ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.homesphere-review-form label,
+.homesphere-review-section > label {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.homesphere-review-form label span,
+.homesphere-review-section > label span {
+  color: var(--homesphere-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.homesphere-review-list {
+  display: grid;
+  gap: 0.58rem;
+}
+
+.homesphere-review-item {
+  border: 1px solid rgba(19, 50, 63, 0.16);
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: #fff;
+}
+
+.homesphere-review-item strong {
+  color: var(--homesphere-ink);
+}
+
+.homesphere-review-item span,
+.homesphere-review-item p,
+.homesphere-no-reviews {
+  color: var(--homesphere-muted);
+}
+
+.homesphere-surface-card {
+  padding: 1rem;
+  background: var(--homesphere-card-soft);
+}
+
+.homesphere-location-card,
+.homesphere-category-card,
+.homesphere-agent-card {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.homesphere-category-emoji {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #f5f0df;
+  background: linear-gradient(145deg, #0f5360, #12333f);
+}
+
+.homesphere-agent-avatar {
+  background: linear-gradient(145deg, #12333f 0%, #19816d 100%);
+  color: #fffbe9;
+}
+
+.homesphere-cta-card {
+  background:
+    linear-gradient(135deg, rgba(14, 65, 76, 0.95), rgba(11, 40, 52, 0.96)) !important;
+  color: #f6f2e7;
+}
+
+.homesphere-cta-content h2,
+.homesphere-cta-content p {
+  color: inherit;
+}
+
+.homesphere-app-buttons .realestate-secondary-button {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #f7f4ea;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.homesphere-phone-mockup {
+  color: #11313f;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border: 1px solid rgba(19, 50, 63, 0.2);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(201, 164, 73, 0.36), transparent 40%),
+    linear-gradient(140deg, #f2e8ce 0%, #fbf6e8 100%);
+}
+
+.homesphere-toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  display: grid;
+  gap: 0.5rem;
+  z-index: 1000;
+}
+
+.homesphere-toast {
+  padding: 0.6rem 0.78rem;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0d2a36;
+  background: #f5e8bb;
+  border: 1px solid rgba(15, 50, 63, 0.2);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+}
+
+.homesphere-toast-success {
+  background: #d8f2e8;
+}
+
+.homesphere-toast-error {
+  background: #f6d8d8;
+}
+
+@media (max-width: 1200px) {
+  .homesphere-main-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .homesphere-detail-panel {
+    position: static;
+  }
+
+  .homesphere-property-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .homesphere-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .homesphere-search-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .homesphere-hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .homesphere-property-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .homesphere-filters-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .homesphere-sort-select {
+    max-width: 190px;
+  }
+
+  .homesphere-app-buttons {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .homesphere-shell {
+    padding: 0.68rem;
+  }
+
+  .homesphere-hero,
+  .homesphere-quick-filters,
+  .homesphere-listings-container,
+  .homesphere-detail-card,
+  .homesphere-surface-card {
+    border-radius: 16px;
+  }
+
+  .homesphere-hero-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .homesphere-filters-row,
+  .homesphere-filter-chips,
+  .homesphere-filters-meta {
+    width: 100%;
+  }
+
+  .homesphere-filters-meta {
+    flex-wrap: wrap;
+  }
+
+  .homesphere-sort-select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .homesphere-toast-stack {
+    right: 0.68rem;
+    left: 0.68rem;
+    bottom: 0.68rem;
+  }
+
+  .homesphere-toast {
+    text-align: center;
   }
 }

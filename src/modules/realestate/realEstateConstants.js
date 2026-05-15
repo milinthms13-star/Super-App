@@ -95,6 +95,7 @@ export const TITLE_DEED_OPTIONS = [
 ];
 
 export const DEFAULT_LISTING_FORM = {
+  postingType: "property", // "property" (selling) or "requirement" (buyer looking for)
   title: "",
   intent: "sale",
   priceLabel: "",
@@ -136,6 +137,12 @@ export const DEFAULT_LISTING_FORM = {
   buildingPermit: false,
   encumbranceCertificate: false,
   description: "",
+  // Requirement-specific fields (shown when postingType === "requirement")
+  maxBudget: "",
+  minBudget: "",
+  preferredLocations: "",
+  mustHaveAmenities: "",
+  moveInDate: "",
 };
 
 const buildSeedMedia = (image, video, floorPlan, brochure, mapPreview) => [

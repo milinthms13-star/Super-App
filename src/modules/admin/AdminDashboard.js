@@ -454,6 +454,7 @@ const AdminDashboard = ({
               "businessbuilder",
               "businessservices",
               "freelancer",
+              "resumebuilder",
               "jobportal",
               "skilllearning",
               "education",

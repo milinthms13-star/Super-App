@@ -21,6 +21,7 @@ import AutoRelist from "./AutoRelist";
 import ScheduledPosting from "./ScheduledPosting";
 import BulkImport from "./BulkImport";
 import QuickDuplicate from "./QuickDuplicate";
+import TradePostHome from "./TradePostHome";
 
 // Map component - uses environment variable for API key
 const MapComponent = ({ location, latitude = 0, longitude = 0 }) => {
@@ -1694,8 +1695,11 @@ const Classifieds = () => {
 
       {statusMessage ? <div className="classifieds-status-banner">{statusMessage}</div> : null}
 
-      <section className="classifieds-layout">
-        <div className="classifieds-main-column">
+      {isBuyerView ? (
+        <TradePostHome onNavigateToDashboard={() => setActiveRole("seller")} />
+      ) : (
+        <section className="classifieds-layout">
+          <div className="classifieds-main-column">
           <article className="classifieds-surface-card classifieds-filter-card">
             <div className="classifieds-section-heading">
               <h2>Search and filters</h2>
@@ -3229,6 +3233,7 @@ const Classifieds = () => {
           </article>
         </aside>
       </section>
+      )}
 
       {lightboxOpen && (
         <ImageLightbox

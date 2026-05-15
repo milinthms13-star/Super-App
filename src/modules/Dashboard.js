@@ -1099,21 +1099,12 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
       description: t(module.descriptionKey, module.fallbackDescription),
     }))
     .filter((module) => {
-      // Show all modules when enabled list is absent or has no recognized IDs.
+      // Only show modules explicitly enabled by admin toggles.
       if (!hasRecognizedEnabledModules) {
-        return true;
+        return false;
       }
 
-      return (
-        module.id === "finance" ||
-        module.id === "freelancer" ||
-        module.id === "billpay" ||
-        module.id === "skilllearning" ||
-        module.id === "devadarshan" ||
-        module.id === "localservices" ||
-        module.id === "hyperlocal" ||
-        normalizedEnabledModuleIds.includes(module.id)
-      );
+      return normalizedEnabledModuleIds.includes(module.id);
     })
     .filter(
       (module) =>
@@ -1122,6 +1113,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "freelancer" ||
         module.id === "billpay" ||
         module.id === "skilllearning" ||
+        module.id === "resumebuilder" ||
         module.id === "devadarshan" ||
         module.id === "localservices" ||
         module.id === "hyperlocal" ||

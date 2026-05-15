@@ -15,8 +15,48 @@ const LocalMarketOrderSchema = new mongoose.Schema(
     shopId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Shop",
-      required: true,
+      required: false,
     },
+
+    // List-based requests (no shop selected by user)
+    requestedItemsText: {
+      type: String,
+      default: "",
+    },
+    preferredShopName: {
+      type: String,
+      default: "",
+    },
+
+    // Delivery partner assignment
+    deliveryPartnerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
+    },
+
+    // Counter payment breakdown (user pays shop + delivery boy + platform fee)
+    paymentScheme: {
+      type: String,
+      enum: ["COUNTER_PAY"],
+      default: "COUNTER_PAY",
+    },
+    platformFee: {
+      type: Number,
+      default: 0,
+    },
+    deliveryChargeToPartner: {
+      type: Number,
+      default: 0,
+    },
+    counterPayment: {
+      shopAmount: { type: Number, default: 0 },
+      deliveryAmount: { type: Number, default: 0 },
+      platformFeeAmount: { type: Number, default: 0 },
+      paidAt: Date,
+      currency: { type: String, default: "INR" },
+    },
+
     items: [
       {
         productId: mongoose.Schema.Types.ObjectId,
@@ -44,9 +84,21 @@ const LocalMarketOrderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Order Confirmed", "Being Prepared", "Ready for Pickup", "Out for Delivery", "Delivered", "Cancelled"],
+      enum: [
+        "Order Confirmed",
+        "Being Prepared",
+        "Ready for Pickup",
+        "Out for Delivery",
+        "Delivered",
+        "Cancelled",
+        // List-based request flow
+        "Requested",
+        "AcceptedByDelivery",
+        "Shopping",
+      ],
       default: "Order Confirmed",
     },
+
     paymentMethod: {
       type: String,
       enum: ["UPI", "Card", "Wallet", "Cash on Delivery", "Net Banking"],

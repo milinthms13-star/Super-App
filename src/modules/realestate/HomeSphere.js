@@ -9,13 +9,11 @@ import PropertyCategories from "./components/PropertyCategories";
 import VerifiedAgents from "./components/VerifiedAgents";
 import DownloadAppCTA from "./components/DownloadAppCTA";
 import {
-  DEFAULT_LISTING_FORM,
   HOME_LOAN_PARTNERS,
   REAL_ESTATE_SEED_PROPERTIES,
 } from "./realEstateConstants";
 import {
   calculateEMI,
-  formatDateTime,
   normalizeProperty,
 } from "./realEstateUtils";
 
@@ -93,6 +91,25 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     () => ["All", ...new Set(properties.map((property) => property.type))],
     [properties]
   );
+
+  const heroStats = useMemo(() => {
+    const verifiedCount = properties.filter((property) => property.verified).length;
+    const readyCount = properties.filter((property) => property.readyToMove).length;
+    const avgPrice =
+      properties.length > 0
+        ? Math.round(
+            properties.reduce((total, property) => total + (property.priceValue || 0), 0) /
+              properties.length
+          )
+        : 0;
+
+    return {
+      total: properties.length,
+      verified: verifiedCount,
+      ready: readyCount,
+      avgPrice,
+    };
+  }, [properties]);
 
   // Apply filters
   const filteredProperties = useMemo(() => {
@@ -236,11 +253,12 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
 
   return (
     <div className="realestate-shell homesphere-shell">
-      {/* COMPACT SEARCH HERO */}
+      {/* PREMIUM SEARCH HERO */}
       <section className="homesphere-hero">
         <div className="homesphere-hero-content">
-          <h1>Find verified homes, rentals and land</h1>
-          <p>Search fast, connect with trusted sellers, and act on property leads immediately.</p>
+          <div className="homesphere-hero-kicker">HomeSphere Premium</div>
+          <h1>Find your next home with confidence</h1>
+          <p>Search verified homes, rentals, and plots in one clean space. Discover faster, compare better, and connect instantly.</p>
 
           {/* INTENT TOGGLE */}
           <div className="homesphere-intent-toggle">
@@ -291,7 +309,46 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                   {type}
                 </option>
               ))}
-            </select>
+              </select>
+          </div>
+
+          <div className="homesphere-hero-actions">
+            <button
+              type="button"
+              className="realestate-primary-button"
+              onClick={() => onNavigateToDashboard?.("seller")}
+            >
+              Post Property
+            </button>
+            <button
+              type="button"
+              className="realestate-secondary-button"
+              onClick={() => setIntentFilter("all")}
+            >
+              Explore Listings
+            </button>
+          </div>
+        </div>
+
+        <div className="homesphere-hero-panel">
+          <h2>Market snapshot</h2>
+          <div className="homesphere-hero-stats">
+            <div className="homesphere-stat-tile">
+              <strong>{heroStats.total}</strong>
+              <span>Active listings</span>
+            </div>
+            <div className="homesphere-stat-tile">
+              <strong>{heroStats.verified}</strong>
+              <span>Verified homes</span>
+            </div>
+            <div className="homesphere-stat-tile">
+              <strong>{heroStats.ready}</strong>
+              <span>Ready to move</span>
+            </div>
+            <div className="homesphere-stat-tile">
+              <strong>{heroStats.avgPrice.toLocaleString("en-IN")}</strong>
+              <span>Avg budget (lakhs)</span>
+            </div>
           </div>
         </div>
       </section>
@@ -307,177 +364,188 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
         resultCount={sortedProperties.length}
       />
 
-      {/* FEATURED LISTINGS GRID */}
-      <section className="homesphere-listings-section">
-        <article className="homesphere-listings-container">
-          {sortedProperties.length === 0 ? (
-            <div className="homesphere-empty-state">
-              <h3>No properties match your search</h3>
-              <p>Try adjusting filters or exploring all listings</p>
-              <button
-                type="button"
-                className="realestate-inline-button"
-                onClick={() => {
-                  setSearchText("");
-                  setVerifiedOnly(false);
-                  setReadyToMoveOnly(false);
-                  setTypeFilter("All");
-                  setLocationFilter("All");
-                }}
-              >
-                Clear all filters
-              </button>
+      <div className="homesphere-main-layout">
+        {/* FEATURED LISTINGS GRID */}
+        <section className="homesphere-listings-section">
+          <article className="homesphere-listings-container">
+            <div className="homesphere-listings-header">
+              <h2>Featured properties</h2>
+              <p>Tap a listing to open complete details and owner actions.</p>
             </div>
-          ) : (
-            <div className="homesphere-property-grid">
-              {sortedProperties.map((property) => (
-                <PropertyCard
-                  key={property.id}
-                  property={property}
-                  isActive={selectedProperty?.id === property.id}
-                  isFavorite={favoriteIds.has(`realestate-${property.id}`)}
-                  onSelect={setSelectedPropertyId}
-                  onFavoriteToggle={handleFavoriteToggle}
-                />
-              ))}
-            </div>
-          )}
-        </article>
-      </section>
+            {sortedProperties.length === 0 ? (
+              <div className="homesphere-empty-state">
+                <h3>No properties match your search</h3>
+                <p>Try adjusting filters or exploring all listings</p>
+                <button
+                  type="button"
+                  className="realestate-inline-button"
+                  onClick={() => {
+                    setSearchText("");
+                    setVerifiedOnly(false);
+                    setReadyToMoveOnly(false);
+                    setTypeFilter("All");
+                    setLocationFilter("All");
+                  }}
+                >
+                  Clear all filters
+                </button>
+              </div>
+            ) : (
+              <div className="homesphere-property-grid">
+                {sortedProperties.map((property) => (
+                  <PropertyCard
+                    key={property.id}
+                    property={property}
+                    isActive={selectedProperty?.id === property.id}
+                    isFavorite={favoriteIds.has(`realestate-${property.id}`)}
+                    onSelect={setSelectedPropertyId}
+                    onFavoriteToggle={handleFavoriteToggle}
+                    hasSubscription={currentUser?.subscriptionStatus === "active" || currentUser?.isPremium}
+                    onSubscribeClick={() => {
+                      // TODO: Open subscription modal
+                      alert("Subscribe to view contact details of property posters!");
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </article>
+        </section>
 
-      {/* PROPERTY DETAIL PANEL (STICKY RIGHT) */}
-      <aside className="homesphere-detail-panel">
-        <article className="homesphere-detail-card">
-          {selectedProperty ? (
-            <PropertyDetailTabs
-              property={selectedProperty}
-              canManage={false}
-              loanCalculator={
-                <LoanCalculator
-                  loanAmount={loanAmount}
-                  setLoanAmount={setLoanAmount}
-                  loanTenure={loanTenure}
-                  setLoanTenure={setLoanTenure}
-                  loanInterest={loanInterest}
-                  setLoanInterest={setLoanInterest}
-                  loanEligibility={{}}
-                  setLoanEligibility={() => {}}
-                  bankComparison={bankComparison}
-                  loanEstimateResult={loanEstimateResult}
-                  onEstimate={handleLoanEstimate}
-                  loading={false}
-                />
-              }
-              uiMessages={{
-                messages: (
-                  <section className="homesphere-chat-section">
-                    <div className="realestate-section-heading">
-                      <h3>Contact owner</h3>
-                    </div>
-                    <div className="homesphere-message-composer">
-                      <textarea
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Ask about the property..."
-                        rows="3"
-                      />
-                      <button
-                        type="button"
-                        className="realestate-primary-button"
-                        onClick={handleSendMessage}
-                        disabled={asyncState.enquiry}
-                      >
-                        {asyncState.enquiry ? "Sending..." : "Send message"}
-                      </button>
-                    </div>
-                  </section>
-                ),
-                reviews: (
-                  <section className="homesphere-review-section">
-                    <div className="realestate-section-heading">
-                      <h3>Reviews & Report</h3>
-                    </div>
-                    <div className="homesphere-review-list">
-                      {selectedProperty?.reviews?.length ? (
-                        selectedProperty.reviews.map((review, idx) => (
-                          <div key={idx} className="homesphere-review-item">
-                            <strong>{review.author}</strong>
-                            <span>{review.score}/5</span>
-                            <p>{review.comment}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="homesphere-no-reviews">No reviews yet</p>
-                      )}
-                    </div>
-                    <div className="homesphere-review-form">
-                      <label>
-                        <span>Rating</span>
-                        <select
-                          value={reviewRating}
-                          onChange={(e) => setReviewRating(e.target.value)}
-                        >
-                          {["5", "4", "3", "2", "1"].map((s) => (
-                            <option key={s} value={s}>
-                              {s} / 5
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>Comment</span>
+        {/* PROPERTY DETAIL PANEL (STICKY RIGHT) */}
+        <aside className="homesphere-detail-panel">
+          <article className="homesphere-detail-card">
+            {selectedProperty ? (
+              <PropertyDetailTabs
+                property={selectedProperty}
+                canManage={false}
+                loanCalculator={
+                  <LoanCalculator
+                    loanAmount={loanAmount}
+                    setLoanAmount={setLoanAmount}
+                    loanTenure={loanTenure}
+                    setLoanTenure={setLoanTenure}
+                    loanInterest={loanInterest}
+                    setLoanInterest={setLoanInterest}
+                    loanEligibility={{}}
+                    setLoanEligibility={() => {}}
+                    bankComparison={bankComparison}
+                    loanEstimateResult={loanEstimateResult}
+                    onEstimate={handleLoanEstimate}
+                    loading={false}
+                  />
+                }
+                uiMessages={{
+                  messages: (
+                    <section className="homesphere-chat-section">
+                      <div className="realestate-section-heading">
+                        <h3>Contact owner</h3>
+                      </div>
+                      <div className="homesphere-message-composer">
                         <textarea
-                          value={reviewComment}
-                          onChange={(e) => setReviewComment(e.target.value)}
-                          placeholder="Share your experience..."
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Ask about the property..."
+                          rows="3"
+                        />
+                        <button
+                          type="button"
+                          className="realestate-primary-button"
+                          onClick={handleSendMessage}
+                          disabled={asyncState.enquiry}
+                        >
+                          {asyncState.enquiry ? "Sending..." : "Send message"}
+                        </button>
+                      </div>
+                    </section>
+                  ),
+                  reviews: (
+                    <section className="homesphere-review-section">
+                      <div className="realestate-section-heading">
+                        <h3>Reviews and Report</h3>
+                      </div>
+                      <div className="homesphere-review-list">
+                        {selectedProperty?.reviews?.length ? (
+                          selectedProperty.reviews.map((review, idx) => (
+                            <div key={idx} className="homesphere-review-item">
+                              <strong>{review.author}</strong>
+                              <span>{review.score}/5</span>
+                              <p>{review.comment}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="homesphere-no-reviews">No reviews yet</p>
+                        )}
+                      </div>
+                      <div className="homesphere-review-form">
+                        <label>
+                          <span>Rating</span>
+                          <select
+                            value={reviewRating}
+                            onChange={(e) => setReviewRating(e.target.value)}
+                          >
+                            {["5", "4", "3", "2", "1"].map((s) => (
+                              <option key={s} value={s}>
+                                {s} / 5
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span>Comment</span>
+                          <textarea
+                            value={reviewComment}
+                            onChange={(e) => setReviewComment(e.target.value)}
+                            placeholder="Share your experience..."
+                            rows="2"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="realestate-inline-button"
+                          onClick={handleReviewSubmit}
+                          disabled={asyncState.review}
+                        >
+                          {asyncState.review ? "Submitting..." : "Submit review"}
+                        </button>
+                      </div>
+                      <label>
+                        <span>Report concern</span>
+                        <textarea
+                          value={reportReason}
+                          onChange={(e) => setReportReason(e.target.value)}
+                          placeholder="Why is this listing suspicious?"
                           rows="2"
                         />
                       </label>
                       <button
                         type="button"
-                        className="realestate-inline-button"
-                        onClick={handleReviewSubmit}
-                        disabled={asyncState.review}
+                        className="realestate-inline-button danger"
+                        onClick={handleReportSubmit}
+                        disabled={asyncState.report}
                       >
-                        {asyncState.review ? "Submitting..." : "Submit review"}
+                        {asyncState.report ? "Reporting..." : "Report listing"}
                       </button>
-                    </div>
-                    <label>
-                      <span>Report concern</span>
-                      <textarea
-                        value={reportReason}
-                        onChange={(e) => setReportReason(e.target.value)}
-                        placeholder="Why is this listing suspicious?"
-                        rows="2"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="realestate-inline-button danger"
-                      onClick={handleReportSubmit}
-                      disabled={asyncState.report}
-                    >
-                      {asyncState.report ? "Reporting..." : "Report listing"}
-                    </button>
-                  </section>
-                ),
-              }}
-            />
-          ) : (
-            <div className="homesphere-detail-empty">
-              <h3>Select a property</h3>
-              <p>Click any listing to view details, schedule a visit, and contact the owner.</p>
-              <button
-                type="button"
-                className="realestate-primary-button"
-                onClick={() => onNavigateToDashboard?.("seller")}
-              >
-                Post your property
-              </button>
-            </div>
-          )}
-        </article>
-      </aside>
+                    </section>
+                  ),
+                }}
+              />
+            ) : (
+              <div className="homesphere-detail-empty">
+                <h3>Select a property</h3>
+                <p>Click any listing to view details, schedule a visit, and contact the owner.</p>
+                <button
+                  type="button"
+                  className="realestate-primary-button"
+                  onClick={() => onNavigateToDashboard?.("seller")}
+                >
+                  Post your property
+                </button>
+              </div>
+            )}
+          </article>
+        </aside>
+      </div>
 
       {/* TOAST NOTIFICATIONS */}
       <div className="homesphere-toast-stack">
