@@ -100,17 +100,37 @@ afterEach(async () => {
 
 afterAll(async () => {
   // mongoose connection may not exist if setup failed early (e.g. test runner crashed before connecting)
-  if (mongoose.connection && mongoose.connection.readyState !== 0) {
+  if (mongoose.connection) {
     try {
-      await mongoose.connection.dropDatabase();
-    } catch (_err) {
-      // ignore teardown issues in partially-initialized test runs
+      const readyState = mongoose.connection.readyState;
+      // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+      if (readyState === 1) {
+        try {
+          await mongoose.connection.dropDatabase();
+        } catch (_err) {
+          // ignore teardown issues in partially-initialized test runs
+        }
+        // Avoid triggering mongoose internals twice (can cause teardown crash)
+        if (typeof mongoose.connection.close === 'function') {
+          await mongoose.connection.close();
+        }
+      } else if (readyState === 2) {
+        // Still connecting; just wait for it or disconnect best-effort.
+        await mongoose.connection.asPromise().catch(() => {});
+        if (typeof mongoose.connection.close === 'function') {
+          await mongoose.connection.close().catch(() => {});
+        }
+      } else if (readyState === 3) {
+        // Disconnecting: do nothing (best-effort)
+      }
+    } catch (_e) {
+      // Never fail the whole test run on teardown race conditions.
     }
-    await mongoose.connection.close();
   }
 
   if (mongoServer) {
     await mongoServer.stop();
   }
 }, 60000);
+
 

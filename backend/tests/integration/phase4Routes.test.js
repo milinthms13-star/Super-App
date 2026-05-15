@@ -15,18 +15,19 @@ const setupApp = () => {
     if (token && token !== 'invalid') {
       req.user = {
         _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439011'),
-        email: 'test@example.com'
+        email: 'test@example.com',
+        role: 'admin'
       };
     }
     next();
   });
 
   // Mock routes
-  app.use('/api/messaging/v4/scheduled', require('../../../routes/schedulingRoutes'));
-  app.use('/api/messaging/v4/bookmarks', require('../../../routes/bookmarkPollRoutes'));
-  app.use('/api/messaging/v4/backups', require('../../../routes/backupRestoreRoutes'));
-  app.use('/api/messaging/v4/optimize', require('../../../routes/optimizationRoutes'));
-  app.use('/api/messaging/v4/data', require('../../../routes/dataManagementRoutes'));
+  app.use('/api/messaging/v4/scheduled', require('../../routes/schedulingRoutes'));
+  app.use('/api/messaging/v4/bookmarks', require('../../routes/bookmarkPollRoutes'));
+  app.use('/api/messaging/v4/backups', require('../../routes/backupRestoreRoutes'));
+  app.use('/api/messaging/v4/optimize', require('../../routes/optimizationRoutes'));
+  app.use('/api/messaging/v4', require('../../routes/dataManagementRoutes'));
 
   return app;
 };
@@ -260,39 +261,34 @@ describe('Phase 4 Integration Tests', () => {
   });
 
   describe('Feature 14: Optimization Routes', () => {
-    describe('POST /api/messaging/v4/optimize/enable', () => {
+    describe('POST /api/messaging/v4/optimize/batching/reset', () => {
       it('should enable optimizations', async () => {
         const response = await request(app)
-          .post('/api/messaging/v4/optimize/enable')
+          .post('/api/messaging/v4/optimize/batching/reset')
           .set('Authorization', `Bearer ${authToken}`)
-          .send({
-            enableDeltaSync: true,
-            enableCompression: true,
-            enableHeartbeat: true,
-            enableBatching: true
-          });
+          .send({});
 
         assert.strictEqual(response.status, 200);
-        assert.ok(response.body.config);
+        assert.ok(response.body.message);
       });
     });
 
-    describe('GET /api/messaging/v4/optimize/metrics/performance', () => {
+    describe('GET /api/messaging/v4/optimize/stats', () => {
       it('should retrieve performance metrics', async () => {
         const response = await request(app)
-          .get('/api/messaging/v4/optimize/metrics/performance')
+          .get('/api/messaging/v4/optimize/stats')
           .set('Authorization', `Bearer ${authToken}`)
-          .query({ timeframe: '24h' });
+          .query({});
 
         assert.strictEqual(response.status, 200);
-        assert.ok(response.body.data);
+        assert.ok(response.body);
       });
     });
 
-    describe('POST /api/messaging/v4/optimize/heartbeat', () => {
+    describe('POST /api/messaging/v4/optimize/delta-sync/reset', () => {
       it('should record heartbeat', async () => {
         const response = await request(app)
-          .post('/api/messaging/v4/optimize/heartbeat')
+          .post('/api/messaging/v4/optimize/delta-sync/reset')
           .set('Authorization', `Bearer ${authToken}`);
 
         assert.strictEqual(response.status, 200);

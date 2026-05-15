@@ -18,6 +18,19 @@ class OptimizationService {
    */
   async recordMetric(userId, eventType, duration, additionalData = {}) {
     try {
+      // Backward-compatible input shape:
+      // recordMetric({ userId, eventType, duration, ...additionalData })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        ('userId' in userId || 'eventType' in userId || 'duration' in userId)
+      ) {
+        const payload = userId;
+        const { userId: uid, eventType: evt, duration: dur, ...rest } = payload;
+        return this.recordMetric(uid, evt, dur, rest);
+      }
+
       const metric = new OptimizationMetrics({
         userId,
         eventType,
@@ -259,23 +272,39 @@ class OptimizationService {
    * Detect duplicate messages
    */
   async detectDuplicates(clientMessageId, chatId, userId) {
+    let returnBooleanOnly = false;
     try {
+      if (
+        clientMessageId &&
+        typeof clientMessageId === 'object' &&
+        !Array.isArray(clientMessageId) &&
+        ('clientMessageId' in clientMessageId || 'chatId' in clientMessageId || 'userId' in clientMessageId)
+      ) {
+        const payload = clientMessageId;
+        clientMessageId = payload.clientMessageId;
+        chatId = payload.chatId;
+        userId = payload.userId;
+        returnBooleanOnly = true;
+      }
+
       const message = await Message.findOne({
         clientMessageId,
         chatId,
         senderId: userId,
       });
 
-      return {
+      const result = {
         isDuplicate: !!message,
         message: message || null,
       };
+      return returnBooleanOnly ? result.isDuplicate : result;
     } catch (error) {
       logger.error('Error detecting duplicates:', error);
-      return {
+      const fallback = {
         isDuplicate: false,
         error: error.message,
       };
+      return returnBooleanOnly ? false : fallback;
     }
   }
 
@@ -284,6 +313,18 @@ class OptimizationService {
    */
   async getPerformanceMetrics(userId, timeframe = '24h') {
     try {
+      // Backward-compatible input shape:
+      // getPerformanceMetrics({ userId, timeframe })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        ('userId' in userId || 'timeframe' in userId)
+      ) {
+        const payload = userId;
+        return this.getPerformanceMetrics(payload.userId, payload.timeframe || timeframe);
+      }
+
       const now = new Date();
       let fromDate = new Date();
 
@@ -344,6 +385,18 @@ class OptimizationService {
    */
   async getLatencyStats(userId, chatId = null) {
     try {
+      // Backward-compatible input shape:
+      // getLatencyStats({ userId, chatId })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        ('userId' in userId || 'chatId' in userId)
+      ) {
+        const payload = userId;
+        return this.getLatencyStats(payload.userId, payload.chatId || null);
+      }
+
       const query = {
         userId,
         eventType: { $in: ['message-send', 'message-receive', 'read-receipt'] },

@@ -74,12 +74,18 @@ const initializeWebSocket = (server, options = {}) => {
     cors: {
       origin: (origin, callback) => {
         const normalizedOrigin = normalizeOrigin(origin);
-        const isAllowed =
+        let isAllowed =
           !origin ||
           normalizedOrigin.includes('localhost') ||
           normalizedOrigin.includes('127.0.0.1') ||
           allowedSocketOrigins.length === 0 ||
           allowedSocketOriginSet.has(normalizedOrigin);
+
+        // In non-production, be permissive to reduce development friction (log a warning)
+        if (!isAllowed && process.env.NODE_ENV !== 'production') {
+          console.warn(`[WebSocket] Allowing non-registered origin in non-production: ${normalizedOrigin}`);
+          isAllowed = true;
+        }
 
         callback(isAllowed ? null : new Error('Socket origin not allowed'), isAllowed);
       },
@@ -662,6 +668,150 @@ const initializeWebSocket = (server, options = {}) => {
       } catch (error) {
         console.error('[WebSocket] Status request error:', error);
       }
+    });
+
+    // ============== REMOTE KARAOKE DUET EVENTS ==============
+
+    /**
+     * Join duet room
+     * @event karaoke:room:join
+     * @param {object} data - { roomCode }
+     */
+    socket.on('karaoke:room:join', async (data = {}) => {
+      try {
+        const roomCode = String(data.roomCode || '').trim().toUpperCase();
+        if (!roomCode) {
+          socket.emit('karaoke:error', { message: 'roomCode is required.' });
+          return;
+        }
+
+        const KaraokeDuetRoom = require('../models/KaraokeDuetRoom');
+        const room = await KaraokeDuetRoom.findOne({ roomCode });
+        if (!room) {
+          socket.emit('karaoke:error', { message: 'Room not found.' });
+          return;
+        }
+
+        const isParticipant = Array.isArray(room.participants)
+          && room.participants.some((participant) => String(participant.userId) === socket.userId);
+
+        if (!isParticipant) {
+          socket.emit('karaoke:error', { message: 'Only participants can join karaoke socket room.' });
+          return;
+        }
+
+        socket.join(`karaoke:${roomCode}`);
+        socket.emit('karaoke:room:joined', {
+          roomCode,
+          userId: socket.userId,
+          timestamp: new Date(),
+        });
+
+        socket.broadcast.to(`karaoke:${roomCode}`).emit('karaoke:peer:joined', {
+          roomCode,
+          userId: socket.userId,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        socket.emit('karaoke:error', {
+          message: 'Failed to join karaoke room.',
+          details: error.message,
+        });
+      }
+    });
+
+    /**
+     * Leave duet room
+     * @event karaoke:room:leave
+     * @param {object} data - { roomCode }
+     */
+    socket.on('karaoke:room:leave', (data = {}) => {
+      const roomCode = String(data.roomCode || '').trim().toUpperCase();
+      if (!roomCode) {
+        return;
+      }
+      socket.leave(`karaoke:${roomCode}`);
+      socket.broadcast.to(`karaoke:${roomCode}`).emit('karaoke:peer:left', {
+        roomCode,
+        userId: socket.userId,
+        timestamp: new Date(),
+      });
+    });
+
+    /**
+     * Relay WebRTC signaling payload between duet peers
+     * @event karaoke:signal
+     * @param {object} data - { roomCode, targetUserId?, type, payload }
+     */
+    socket.on('karaoke:signal', (data = {}) => {
+      const roomCode = String(data.roomCode || '').trim().toUpperCase();
+      const type = String(data.type || '').trim();
+      const payload = data.payload || {};
+      const targetUserId = String(data.targetUserId || '').trim();
+
+      if (!roomCode || !type) {
+        socket.emit('karaoke:error', { message: 'roomCode and signal type are required.' });
+        return;
+      }
+
+      const eventPayload = {
+        roomCode,
+        type,
+        payload,
+        fromUserId: socket.userId,
+        timestamp: new Date(),
+      };
+
+      if (targetUserId) {
+        const sockets = Array.from(userSockets.get(targetUserId) || []);
+        if (sockets.length > 0) {
+          io.to(sockets).emit('karaoke:signal', eventPayload);
+        }
+        return;
+      }
+
+      socket.broadcast.to(`karaoke:${roomCode}`).emit('karaoke:signal', eventPayload);
+    });
+
+    /**
+     * Broadcast timeline sync from any participant
+     * @event karaoke:sync
+     * @param {object} data - { roomCode, timecodeMs, beatCount, trackPositionMs }
+     */
+    socket.on('karaoke:sync', (data = {}) => {
+      const roomCode = String(data.roomCode || '').trim().toUpperCase();
+      if (!roomCode) {
+        return;
+      }
+
+      socket.broadcast.to(`karaoke:${roomCode}`).emit('karaoke:sync', {
+        roomCode,
+        fromUserId: socket.userId,
+        timecodeMs: Number(data.timecodeMs || 0),
+        beatCount: Number(data.beatCount || 0),
+        trackPositionMs: Number(data.trackPositionMs || 0),
+        timestamp: new Date(),
+      });
+    });
+
+    /**
+     * Notify peer recording state
+     * @event karaoke:recording-state
+     * @param {object} data - { roomCode, state, mutedPeerMonitor }
+     */
+    socket.on('karaoke:recording-state', (data = {}) => {
+      const roomCode = String(data.roomCode || '').trim().toUpperCase();
+      if (!roomCode) {
+        return;
+      }
+
+      socket.broadcast.to(`karaoke:${roomCode}`).emit('karaoke:recording-state', {
+        roomCode,
+        fromUserId: socket.userId,
+        state: String(data.state || 'idle'),
+        mutedPeerMonitor: Boolean(data.mutedPeerMonitor),
+        timestamp: new Date(),
+      });
     });
 
     // ============== CONNECTION TERMINATION ==============

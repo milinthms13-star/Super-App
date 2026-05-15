@@ -120,7 +120,10 @@ router.post('/retention-policy', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error setting retention policy:', error);
-    res.status(500).json({ error: error.message });
+    const isValidationError =
+      error?.name === 'ValidationError' ||
+      /validation|min|max|required|invalid/i.test(error.message || '');
+    res.status(isValidationError ? 400 : 500).json({ error: error.message });
   }
 });
 

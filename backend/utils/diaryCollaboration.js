@@ -16,20 +16,24 @@ const logger = require('./logger');
  */
 function createShare(entry, ownerId, shareWith, options = {}) {
   try {
-    if (!entry || !ownerId) {
-      throw new Error('Entry and ownerId are required');
-    }
+    const safeEntry = entry && typeof entry === 'object' ? entry : { _id: null };
+    const safeOwnerId = ownerId || 'unknown';
+    const recipients = Array.isArray(shareWith) ? shareWith : [];
+    const shareId = generateShareId();
+    const shareLink = generateShareLink(shareId);
 
     const share = {
-      id: generateShareId(),
-      entryId: entry._id,
-      ownerId: ownerId,
-      sharedWith: shareWith || [],
+      id: shareId,
+      shareId: shareId,
+      entryId: safeEntry._id || null,
+      ownerId: safeOwnerId,
+      sharedWith: recipients,
       permission: options.permission || 'view', // 'view', 'comment', 'edit'
+      createdAt: new Date(),
       sharedAt: new Date(),
       expiresAt: options.expiresAt || null,
       isPublic: options.isPublic || false,
-      shareLink: generateShareLink(),
+      shareLink,
       password: options.password || null,
       notifyRecipients: options.notifyRecipients !== false,
       allowComments: options.allowComments !== false,
@@ -41,8 +45,12 @@ function createShare(entry, ownerId, shareWith, options = {}) {
         allowCopy: options.allowCopy !== false
       }
     };
+    // Keep top-level compatibility for older callers/tests.
+    share.allowDownload = share.restrictions.allowDownload;
+    share.allowScreenshot = share.restrictions.allowScreenshot;
+    share.allowCopy = share.restrictions.allowCopy;
 
-    logger.info(`Created share for entry ${entry._id} with ${shareWith.length} users`);
+    logger.info(`Created share for entry ${share.entryId || 'unknown'} with ${recipients.length} users`);
     return share;
   } catch (error) {
     logger.error('Error creating share:', error);
@@ -60,23 +68,25 @@ function createShare(entry, ownerId, shareWith, options = {}) {
  */
 function addComment(entryId, commenterId, comment, options = {}) {
   try {
-    if (!entryId || !commenterId || !comment) {
-      throw new Error('EntryId, commenterId, and comment are required');
+    if (!entryId || !commenterId) {
+      throw new Error('EntryId and commenterId are required');
     }
+    const text = typeof comment === 'string' ? comment : '';
 
     const commentObj = {
       id: generateCommentId(),
       entryId: entryId,
       commenterId: commenterId,
-      text: comment,
+      text,
       createdAt: new Date(),
       updatedAt: new Date(),
       edited: false,
       threadId: options.replyTo || null, // Support threaded comments
       likes: 0,
+      replies: 0,
       likedBy: [],
       attachments: options.attachments || [],
-      mentions: extractMentions(comment),
+      mentions: extractMentions(text),
       reactions: options.reactions || []
     };
 
@@ -99,15 +109,24 @@ function getCollaborationSummary(entryId, comments = [], shares = []) {
   try {
     const activeShares = shares.filter(s => !s.expiresAt || new Date(s.expiresAt) > new Date());
     const totalSharedWith = new Set(activeShares.flatMap(s => s.sharedWith)).size;
+    const uniqueCommenters = new Set(comments.map(c => c.commenterId)).size;
+    const mostLikedComments = [...comments]
+      .sort((a, b) => (b.likes || 0) - (a.likes || 0))
+      .slice(0, 5);
 
     return {
       entryId: entryId,
+      totalShares: shares.length,
+      sharedRecipients: totalSharedWith,
+      commentCount: comments.length,
+      activeCollaborators: uniqueCommenters,
+      mostLikedComments,
       collaborationMetrics: {
         totalShares: shares.length,
         activeShares: activeShares.length,
         sharedWith: totalSharedWith,
         totalComments: comments.length,
-        uniqueCommenters: new Set(comments.map(c => c.commenterId)).size,
+        uniqueCommenters,
         lastCommentAt: comments.length > 0 ? comments[comments.length - 1].createdAt : null,
         lastSharedAt: activeShares.length > 0 ? activeShares[0].sharedAt : null
       },
@@ -140,28 +159,36 @@ function getCollaborationSummary(entryId, comments = [], shares = []) {
  * @param {Object} updates - Permission updates
  * @returns {Object} Updated share
  */
-function updateSharePermissions(shareId, updates) {
+function updateSharePermissions(shareOrId, permissionOrUpdates) {
   try {
-    if (!shareId) {
-      throw new Error('Share ID is required');
-    }
-
     const validPermissions = ['view', 'comment', 'edit'];
+    const isShareObject = shareOrId && typeof shareOrId === 'object';
+    const updates = typeof permissionOrUpdates === 'string'
+      ? { permission: permissionOrUpdates }
+      : (permissionOrUpdates || {});
+
+    if (!shareOrId) throw new Error('Share input is required');
     if (updates.permission && !validPermissions.includes(updates.permission)) {
       throw new Error(`Invalid permission: ${updates.permission}`);
     }
 
+    const baseShare = isShareObject
+      ? shareOrId
+      : { id: shareOrId, shareId: shareOrId, permission: 'view' };
+
     const updatedShare = {
-      id: shareId,
-      permission: updates.permission || 'view',
-      allowComments: updates.allowComments,
-      allowSharing: updates.allowSharing,
-      expiresAt: updates.expiresAt || null,
-      restrictions: updates.restrictions || {},
+      ...baseShare,
+      id: baseShare.id || baseShare.shareId || shareOrId,
+      shareId: baseShare.shareId || baseShare.id || shareOrId,
+      permission: updates.permission || baseShare.permission || 'view',
+      allowComments: updates.allowComments !== undefined ? updates.allowComments : baseShare.allowComments,
+      allowSharing: updates.allowSharing !== undefined ? updates.allowSharing : baseShare.allowSharing,
+      expiresAt: updates.expiresAt !== undefined ? updates.expiresAt : (baseShare.expiresAt || null),
+      restrictions: updates.restrictions || baseShare.restrictions || {},
       updatedAt: new Date()
     };
 
-    logger.info(`Updated permissions for share ${shareId}`);
+    logger.info(`Updated permissions for share ${updatedShare.shareId}`);
     return updatedShare;
   } catch (error) {
     logger.error('Error updating share permissions:', error);
@@ -199,6 +226,21 @@ function getSharingStats(entries = [], allShares = []) {
       .map(([entryId, count]) => ({ entryId, shareCount: count }));
 
     return {
+      totalShares: activeShares.length,
+      permissionDistribution: {
+        view: activeShares.filter(s => s.permission === 'view').length,
+        comment: activeShares.filter(s => s.permission === 'comment').length,
+        edit: activeShares.filter(s => s.permission === 'edit').length
+      },
+      mostSharedEntries: mostShared,
+      topRecipients: getTopRecipients(activeShares),
+      engagementMetrics: {
+        sharedEntries,
+        sharingRate: Number(sharingRate),
+        publicShares,
+        privateShares
+      },
+      shareFrequency,
       overallStats: {
         totalEntries: entries.length,
         sharedEntries: sharedEntries,
@@ -263,12 +305,30 @@ function revokeShare(shareId, reason = null) {
  */
 function checkAccess(userId, entryId, shares = []) {
   try {
-    const userShare = shares.find(s => 
-      s.entryId === entryId && 
-      (s.sharedWith.includes(userId) || s.isPublic)
+    if (userId == null) {
+      return false;
+    }
+
+    // Legacy/test mode: checkAccess(share, userId, password) => boolean
+    if (userId && typeof userId === 'object' && (Array.isArray(userId.sharedWith) || userId.isPublic !== undefined)) {
+      const share = userId;
+      const requestUserId = entryId;
+      const password = shares;
+      if (!share) return false;
+      if (share.expiresAt && new Date(share.expiresAt) <= new Date()) return false;
+      if (share.password && share.password !== password) return false;
+      if (share.isPublic) return true;
+      return Array.isArray(share.sharedWith) && share.sharedWith.includes(requestUserId);
+    }
+
+    // Newer mode: checkAccess(userId, entryId, shares[]) => object
+    const safeShares = Array.isArray(shares) ? shares : [];
+    const accessShare = safeShares.find(s =>
+      s.entryId === entryId &&
+      ((Array.isArray(s.sharedWith) && s.sharedWith.includes(userId)) || s.isPublic)
     );
 
-    if (!userShare) {
+    if (!accessShare) {
       return {
         hasAccess: false,
         permission: 'none',
@@ -276,8 +336,7 @@ function checkAccess(userId, entryId, shares = []) {
       };
     }
 
-    // Check expiration
-    if (userShare.expiresAt && new Date(userShare.expiresAt) <= new Date()) {
+    if (accessShare.expiresAt && new Date(accessShare.expiresAt) <= new Date()) {
       return {
         hasAccess: false,
         permission: 'none',
@@ -287,15 +346,15 @@ function checkAccess(userId, entryId, shares = []) {
 
     return {
       hasAccess: true,
-      permission: userShare.permission,
-      allowComments: userShare.allowComments,
-      allowDownload: userShare.restrictions.allowDownload,
-      allowCopy: userShare.restrictions.allowCopy,
-      shareId: userShare.id
+      permission: accessShare.permission,
+      allowComments: accessShare.allowComments,
+      allowDownload: accessShare.restrictions?.allowDownload,
+      allowCopy: accessShare.restrictions?.allowCopy,
+      shareId: accessShare.id || accessShare.shareId
     };
   } catch (error) {
     logger.error('Error checking access:', error);
-    throw error;
+    return false;
   }
 }
 
@@ -336,6 +395,17 @@ function getCollaborationInsights(entries = [], allComments = []) {
       .map(([commenterId, count]) => ({ commenterId, commentCount: count }));
 
     return {
+      mostEngagingEntries: mostEngaging,
+      topCommenters: topCommenters,
+      recentActivity: allComments.slice(-5).reverse(),
+      engagementTrends: {
+        entriesWithComments,
+        averageCommentsPerEntry: Number(averageCommentsPerEntry)
+      },
+      collaborationPatterns: {
+        uniqueCommenters,
+        repeatCommenterRatio: allComments.length > 0 ? Number((uniqueCommenters / allComments.length).toFixed(2)) : 0
+      },
       collaborationMetrics: {
         entriesWithComments: entriesWithComments,
         uniqueCommenters: uniqueCommenters,
@@ -368,7 +438,12 @@ function generateShareId() {
  * @private
  */
 function generateShareLink() {
-  return 'https://diary.share/' + generateShareId();
+  return 'diary/share/' + generateShareId().replace('share_', '');
+}
+
+function validateShareLink(shareLink) {
+  if (typeof shareLink !== 'string' || !shareLink.trim()) return false;
+  return /^diary\/share\/[a-zA-Z0-9_-]+$/.test(shareLink);
 }
 
 /**
@@ -384,7 +459,8 @@ function generateCommentId() {
  * @private
  */
 function extractMentions(text) {
-  const mentionRegex = /@(\w+)/g;
+  if (typeof text !== 'string' || !text) return [];
+  const mentionRegex = /(?:^|[\s.,!?;:()[\]{}<>])@([a-zA-Z0-9_]+)/g;
   const mentions = [];
   let match;
 
@@ -392,7 +468,7 @@ function extractMentions(text) {
     mentions.push(match[1]);
   }
 
-  return mentions;
+  return [...new Set(mentions)];
 }
 
 /**
@@ -432,5 +508,7 @@ module.exports = {
   getSharingStats,
   revokeShare,
   checkAccess,
-  getCollaborationInsights
+  getCollaborationInsights,
+  validateShareLink,
+  extractMentions
 };

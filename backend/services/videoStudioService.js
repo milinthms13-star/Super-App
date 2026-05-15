@@ -40,15 +40,26 @@ const extractJson = (text) => {
   }
 };
 
-const safeOpenAI = async (messages, maxTokens = 1100) => {
+const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
   if (!openai) return null;
-  const response = await openai.chat.completions.create({
-    model: process.env.OPENAI_VIDEO_MODEL || 'gpt-4o-mini',
-    messages,
-    max_tokens: maxTokens,
-    temperature: 0.7,
-  });
-  return response?.choices?.[0]?.message?.content?.trim() || null;
+
+  const aiCall = (async () => {
+    const response = await openai.chat.completions.create({
+      model: process.env.OPENAI_VIDEO_MODEL || 'gpt-4o-mini',
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.7,
+    });
+    return response?.choices?.[0]?.message?.content?.trim() || null;
+  })();
+
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs));
+
+  try {
+    return await Promise.race([aiCall, timeout]);
+  } catch (error) {
+    return null;
+  }
 };
 
 const fallbackParseStory = ({ story, storyMode, voiceType, language }) => {

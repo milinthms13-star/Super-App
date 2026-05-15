@@ -22,6 +22,7 @@ router.post('/create', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Please provide a story prompt.' });
     }
 
+    const start = Date.now();
     const project = await createStudioProject({
       storyPrompt,
       languageId,
@@ -33,6 +34,13 @@ router.post('/create', async (req, res) => {
       ageFilter,
       storySource,
     });
+
+    const elapsed = Date.now() - start;
+    logger.info(`Video studio create completed in ${elapsed}ms`);
+    if (!project) {
+      logger.warn('Video studio create returned no project body');
+      return res.status(500).json({ success: false, error: 'AI pipeline returned no project.' });
+    }
 
     res.json({ success: true, project });
   } catch (error) {

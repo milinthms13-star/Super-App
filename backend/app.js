@@ -148,6 +148,8 @@ app.use('/api/app-data', appDataRoutes);
 app.use('/api/business-builder', require('./routes/businessBuilderRoutes'));
 app.use('/api/video-studio', require('./routes/videoStudio'));
 app.use('/api/photo-studio', require('./routes/photoStudio'));
+app.use('/api/dance-duet', require('./routes/danceDuet'));
+app.use('/api/karaoke-duet', require('./routes/karaokeDuet'));
 
 app.use('/api/messaging/v4/reactions', require('./routes/messageReactionsRoutes'));
 app.use('/api/messaging/v4/edits', require('./routes/messageEditRoutes'));

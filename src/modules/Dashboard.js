@@ -249,6 +249,22 @@ case "astrology":
           <path d="M8 7V5h2l1-1h2l1 1h2v2" />
         </svg>
       );
+  case "karaokeduet":
+      return (
+        <svg {...common}>
+          <path d="M8 18V8a3 3 0 1 1 2.2 2.9V18" />
+          <path d="M16 18V8a3 3 0 1 1 2.2 2.9V18" />
+          <path d="M5 18h14" />
+        </svg>
+      );
+  case "beautyai":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="3" />
+          <path d="M7 19a5 5 0 0 1 10 0" />
+          <path d="M4 12h2M18 12h2M12 2v2" />
+        </svg>
+      );
   case "external":
       return (
         <svg {...common}>
@@ -406,6 +422,42 @@ const MODULE_CONFIG = [
     stats: "AI + AR creator suite",
     gradient: "linear-gradient(135deg, #0EA5A7 0%, #2563EB 45%, #1D4ED8 100%)",
     emoji: "📸",
+  },
+  {
+    id: "karaokeduet",
+    nameKey: "modules.karaokeduet",
+    fallbackName: "Remote Karaoke Duet",
+    icon: "karaokeduet",
+    descriptionKey: "dashboard.moduleDescriptions.karaokeduet",
+    fallbackDescription:
+      "Two-location karaoke duet with live sync, local take recording, and final MP3/WAV server-side mix.",
+    stats: "Live duet + final mix export",
+    gradient: "linear-gradient(135deg, #0B3C5D 0%, #2563EB 46%, #22D3EE 100%)",
+    emoji: "🎤",
+  },
+  {
+    id: "danceduet",
+    nameKey: "modules.danceduet",
+    fallbackName: "AI Dance Duet",
+    icon: "photostudio",
+    descriptionKey: "dashboard.moduleDescriptions.danceduet",
+    fallbackDescription:
+      "Merge two dance videos into one AI-powered duet with shared stage styles, background removal, and MP4 export.",
+    stats: "Dance merge studio",
+    gradient: "linear-gradient(135deg, #8B5CF6 0%, #EC4899 45%, #F59E0B 100%)",
+    emoji: "💃",
+  },
+  {
+    id: "beautyai",
+    nameKey: "modules.beautyai",
+    fallbackName: "Nila Beauty AI",
+    icon: "beautyai",
+    descriptionKey: "dashboard.moduleDescriptions.beautyai",
+    fallbackDescription:
+      "AI beauty planner with selfie analysis, daily skincare routines, safety guardrails, and premium lifestyle recommendations.",
+    stats: "Daily skin + beauty guidance",
+    gradient: "linear-gradient(135deg, #0F766E 0%, #14B8A6 45%, #FB923C 100%)",
+    emoji: "BA",
   },
   {
     id: "jobportal",
@@ -667,6 +719,8 @@ const MODULE_CATEGORY_MAP = {
   freelancer: "business",
   jobportal: "business",
   photostudio: "business",
+  karaokeduet: "business",
+  beautyai: "business",
   skilllearning: "business",
   resumebuilder: "business",
   education: "business",
@@ -1135,6 +1189,8 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "skilllearning" ||
         module.id === "resumebuilder" ||
         module.id === "photostudio" ||
+        module.id === "karaokeduet" ||
+        module.id === "beautyai" ||
         module.id === "devadarshan" ||
         module.id === "localservices" ||
         module.id === "hyperlocal" ||
@@ -2103,4 +2159,5 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
 };
 
 export default Dashboard;
+
 

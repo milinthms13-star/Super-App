@@ -1,0 +1,136 @@
+.auto-dance-duet-page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  color: #f4f4f4;
+}
+
+.hero-panel {
+  margin-bottom: 24px;
+  padding: 24px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #1f1f2d 0%, #2b2b44 100%);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+.hero-panel h1 {
+  margin: 0 0 12px;
+  font-size: 2.4rem;
+  letter-spacing: -0.03em;
+}
+
+.hero-panel p {
+  margin: 0;
+  color: #d7d7e4;
+  max-width: 760px;
+}
+
+.dance-form {
+  display: grid;
+  gap: 20px;
+  background: #11111c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 24px;
+}
+
+.field-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.field-grid label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.field-grid input,
+.field-grid select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 12px 14px;
+  background: #141426;
+  color: #f0f0f7;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.checkbox-field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-weight: 500;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+
+.primary-button,
+.secondary-button {
+  padding: 12px 22px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.primary-button {
+  background: #7c5cff;
+  color: white;
+}
+
+.secondary-button {
+  background: transparent;
+  color: #f4f4f4;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.status-text {
+  color: #b8b8d0;
+  min-width: 240px;
+}
+
+.error-box {
+  border: 1px solid #ff4d6d;
+  background: rgba(255, 77, 109, 0.1);
+  color: #ffb6c1;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.result-panel {
+  margin-top: 24px;
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border-radius: 18px;
+  background: #161627;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.result-panel h2 {
+  margin: 0;
+}
+
+.result-video {
+  width: 100%;
+  border-radius: 16px;
+  background: #000;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}

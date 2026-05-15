@@ -1502,6 +1502,10 @@ exports.updateIncidentStatusPriority3 = async (req, res) => {
     incident.statusHistory = incident.statusHistory || [];
     incident.statusHistory.push(statusRecord);
     incident.currentStatus = status;
+    // Backward compatibility with legacy incident status consumers.
+    if (status === 'resolved' || status === 'escalated') {
+      incident.status = status;
+    }
     incident.lastStatusUpdate = new Date();
     incident.lastUpdatedBy = responderEmail || userEmail || 'system';
 
@@ -1530,6 +1534,7 @@ exports.updateIncidentStatusPriority3 = async (req, res) => {
       message: 'Status updated successfully',
       data: {
         incidentId: incident._id,
+        status,
         previousStatus,
         newStatus: status,
         statusHistory: incident.statusHistory,

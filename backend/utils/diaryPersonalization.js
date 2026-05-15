@@ -192,6 +192,18 @@ function getPersonalizedPrompts(preferences, entries = [], analytics = null) {
       }
       return { text: '', category: 'general' };
     }).filter((prompt) => prompt.text);
+
+    if (mapped.length < 3) {
+      const fallbacks = getDefaultPrompts().slice(0, 10 - mapped.length);
+      for (const fallback of fallbacks) {
+        if (mapped.length >= 10) break;
+        if (!mapped.some((p) => p.text === fallback.text)) {
+          mapped.push(fallback);
+        }
+        if (mapped.length >= 3) break;
+      }
+    }
+
     return mapped.slice(0, 10);
   } catch (error) {
     logger.error('Error getting personalized prompts:', error);

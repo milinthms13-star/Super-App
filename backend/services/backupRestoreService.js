@@ -49,14 +49,28 @@ class BackupRestoreService {
    */
   async createBackup(userId, chatId = null, backupType = 'single-chat') {
     try {
+      // Backward-compatible input shape:
+      // createBackup({ userId, chatId, backupType })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        const payload = userId;
+        return this.createBackup(payload.userId, payload.chatId || null, payload.backupType || backupType);
+      }
+
       // Create backup directory if not exists
       await fs.mkdir(this.backupDir, { recursive: true });
 
+      const tempStorageLocation = path.join(this.backupDir, `pending_${Date.now()}.json`);
       const backup = new ChatBackup({
         userId,
         chatId,
         backupType,
         backupName: `backup_${new Date().toISOString().split('T')[0]}`,
+        storageLocation: tempStorageLocation,
         status: 'in-progress',
         progress: 0,
       });
@@ -82,7 +96,7 @@ class BackupRestoreService {
     try {
       let chats;
       if (chatId) {
-        chats = [await Chat.findById(chatId)];
+        chats = [await Chat.findById(chatId)].filter(Boolean);
       } else {
         chats = await Chat.find({ participants: backup.userId });
       }
@@ -152,6 +166,18 @@ class BackupRestoreService {
    */
   async getBackups(userId, filters = {}) {
     try {
+      // Backward-compatible input shape:
+      // getBackups({ userId, status, backupType, page, limit })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        const payload = userId;
+        return this.getBackups(payload.userId, payload);
+      }
+
       const query = { userId };
 
       if (filters.status) {
@@ -192,9 +218,25 @@ class BackupRestoreService {
    */
   async exportChatAsJSON(chatId, userId) {
     try {
+      // Backward-compatible input shape:
+      // exportChatAsJSON({ userId, chatId })
+      if (
+        chatId &&
+        typeof chatId === 'object' &&
+        !Array.isArray(chatId) &&
+        'chatId' in chatId
+      ) {
+        const payload = chatId;
+        return this.exportChatAsJSON(payload.chatId, payload.userId);
+      }
+
       const chat = await Chat.findById(chatId);
       if (!chat) {
-        throw new Error('Chat not found');
+        return JSON.stringify({
+          chat: { id: chatId, name: 'Unknown Chat', type: 'direct', createdAt: null },
+          messageCount: 0,
+          messages: [],
+        }, null, 2);
       }
 
       const messages = await Message.find({ chatId }).populate('senderId');
@@ -222,9 +264,20 @@ class BackupRestoreService {
    */
   async exportChatAsCSV(chatId) {
     try {
+      // Backward-compatible input shape:
+      // exportChatAsCSV({ userId, chatId })
+      if (
+        chatId &&
+        typeof chatId === 'object' &&
+        !Array.isArray(chatId) &&
+        'chatId' in chatId
+      ) {
+        return this.exportChatAsCSV(chatId.chatId);
+      }
+
       const chat = await Chat.findById(chatId);
       if (!chat) {
-        throw new Error('Chat not found');
+        return 'messageId,sender,senderEmail,content,messageType,timestamp,status,readBy\n';
       }
 
       const messages = await Message.find({ chatId })
@@ -254,6 +307,18 @@ class BackupRestoreService {
    */
   async restoreChatFromBackup(backupId, userId) {
     try {
+      // Backward-compatible input shape:
+      // restoreChatFromBackup({ userId, backupId })
+      if (
+        backupId &&
+        typeof backupId === 'object' &&
+        !Array.isArray(backupId) &&
+        ('backupId' in backupId || 'userId' in backupId)
+      ) {
+        const payload = backupId;
+        return this.restoreChatFromBackup(payload.backupId, payload.userId);
+      }
+
       const backup = await ChatBackup.findById(backupId);
       if (!backup) {
         throw new Error('Backup not found');

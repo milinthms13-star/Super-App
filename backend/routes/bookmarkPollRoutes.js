@@ -33,7 +33,8 @@ router.post('/', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error bookmarking message:', error);
-    res.status(500).json({ error: error.message });
+    const isClientError = /already bookmarked|not found|required|invalid/i.test(error.message || '');
+    res.status(isClientError ? 400 : 500).json({ error: error.message });
   }
 });
 
@@ -157,7 +158,8 @@ router.post('/polls', async (req, res) => {
     });
   } catch (error) {
     logger.error('Error creating poll:', error);
-    res.status(500).json({ error: error.message });
+    const isClientError = /at least 2 options|required|invalid/i.test(error.message || '');
+    res.status(isClientError ? 400 : 500).json({ error: error.message });
   }
 });
 

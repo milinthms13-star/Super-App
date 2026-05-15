@@ -71,7 +71,7 @@ async function addTagToVersion(userId, entryId, versionId, versionNumber, tagDat
     const existing = Array.isArray(existingTags) ? existingTags[0] : null;
 
     if (existing) {
-      throw new Error(`Tag '${tagData.name}' already exists for this version`);
+      throw new Error(`Version is already tagged as '${tagData.name}'`);
     }
 
     const tagConfig = PREDEFINED_TAGS[normalizedName] || {};

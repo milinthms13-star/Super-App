@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 const assert = require('assert');
-const schedulingService = require('../../../services/schedulingService');
-const bookmarkPollService = require('../../../services/bookmarkPollService');
-const backupRestoreService = require('../../../services/backupRestoreService');
-const optimizationService = require('../../../services/optimizationService');
-const dataManagementService = require('../../../services/dataManagementService');
+const schedulingService = require('../../services/schedulingService');
+const bookmarkPollService = require('../../services/bookmarkPollService');
+const backupRestoreService = require('../../services/backupRestoreService');
+const optimizationService = require('../../services/optimizationService');
+const dataManagementService = require('../../services/dataManagementService');
 
 describe('Phase 4 E2E Workflows', () => {
   const userId = new mongoose.Types.ObjectId();

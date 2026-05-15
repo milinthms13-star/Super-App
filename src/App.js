@@ -63,6 +63,9 @@ const Healthcare = React.lazy(() => import("./modules/healthcare/Healthcare"));
 const BusTrainBooking = React.lazy(() => import("./modules/bustrainbooking/BusTrainBooking"));
 const ResumeBuilder = React.lazy(() => import("./modules/resumebuilder/ResumeBuilder"));
 const PhotoStudioAIAR = React.lazy(() => import("./modules/photostudio/PhotoStudioAIAR"));
+const RemoteKaraokeDuet = React.lazy(() => import("./modules/karaokeduet/RemoteKaraokeDuet"));
+const AutoDanceDuet = React.lazy(() => import("./modules/danceduet/AutoDanceDuet"));
+const NilaBeautyAI = React.lazy(() => import("./modules/beautyai/NilaBeautyAI"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
 const JobPortal = React.lazy(() => import("./modules/jobportal/JobPortal"));
 const Education = React.lazy(() => import("./modules/education/Education"));
@@ -154,6 +157,9 @@ const PREVIEW_ENABLED_MODULES = [
   "astrology",
   "kidsstoryvideomaker",
   "photostudio",
+  "karaokeduet",
+  "danceduet",
+  "beautyai",
 ];
 
 const TOGGLE_CONTROLLED_MODULE_IDS = [
@@ -176,6 +182,9 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "freelancer",
   "resumebuilder",
   "photostudio",
+  "karaokeduet",
+  "danceduet",
+  "beautyai",
   "jobportal",
   "skilllearning",
   "education",
@@ -1218,6 +1227,9 @@ function AppShell() {
               <Route path="bustrainbooking" element={<BusTrainBooking />} />
               <Route path="resumebuilder" element={<ResumeBuilder />} />
               <Route path="photo-studio-ai-ar" element={<PhotoStudioAIAR />} />
+              <Route path="dance-duet" element={<AutoDanceDuet />} />
+              <Route path="remote-karaoke-duet" element={<RemoteKaraokeDuet />} />
+              <Route path="nila-beauty-ai" element={<NilaBeautyAI />} />
               <Route path="businessservices" element={<BusinessServices />} />
               <Route path="jobportal" element={<JobPortal />} />
               <Route path="education" element={<Education />} />

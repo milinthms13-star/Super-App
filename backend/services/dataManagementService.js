@@ -17,6 +17,22 @@ class DataManagementService {
    */
   async getDetailedStatistics(userId, dateRange = {}) {
     try {
+      // Backward-compatible input shape:
+      // getDetailedStatistics({ userId, from, to })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        ('userId' in userId || 'from' in userId || 'to' in userId || 'fromDate' in userId || 'toDate' in userId)
+      ) {
+        const payload = userId;
+        const range = {
+          from: payload.from || payload.fromDate || null,
+          to: payload.to || payload.toDate || null,
+        };
+        return this.getDetailedStatistics(payload.userId, range);
+      }
+
       const query = { $or: [{ senderId: userId }, { participants: userId }] };
 
       if (dateRange.from || dateRange.to) {
@@ -63,6 +79,18 @@ class DataManagementService {
    */
   async getMostActiveChats(userId, limit = 10) {
     try {
+      // Backward-compatible input shape:
+      // getMostActiveChats({ userId, limit })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        const payload = userId;
+        return this.getMostActiveChats(payload.userId, payload.limit || limit);
+      }
+
       const activeChats = await Chat.aggregate([
         {
           $match: {
@@ -102,6 +130,19 @@ class DataManagementService {
    */
   async getMessageTrends(userId, timeframe = 'month') {
     try {
+      // Backward-compatible input shape:
+      // getMessageTrends({ userId, timeframe })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        const payload = userId;
+        const result = await this.getMessageTrends(payload.userId, payload.timeframe || timeframe);
+        return result.trends || [];
+      }
+
       const now = new Date();
       let groupFormat = '%Y-%m-%d';
       let matchDate = new Date();
@@ -182,6 +223,19 @@ class DataManagementService {
    */
   async setRetentionPolicy(userId, policyConfig) {
     try {
+      // Backward-compatible input shape:
+      // setRetentionPolicy({ userId, ...policyConfig })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        const payload = userId;
+        const { userId: uid, ...cfg } = payload;
+        return this.setRetentionPolicy(uid, cfg);
+      }
+
       let policy = await DataRetentionPolicy.findOne({ userId });
 
       if (!policy) {
@@ -214,6 +268,17 @@ class DataManagementService {
    */
   async getRetentionPolicy(userId) {
     try {
+      // Backward-compatible input shape:
+      // getRetentionPolicy({ userId })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        return this.getRetentionPolicy(userId.userId);
+      }
+
       let policy = await DataRetentionPolicy.findOne({ userId });
 
       if (!policy) {
@@ -236,6 +301,18 @@ class DataManagementService {
    */
   async archiveOldMessages(userId, olderThanDays = 365) {
     try {
+      // Backward-compatible input shape:
+      // archiveOldMessages({ userId, olderThanDays })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        const payload = userId;
+        return this.archiveOldMessages(payload.userId, payload.olderThanDays || olderThanDays);
+      }
+
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
@@ -285,6 +362,17 @@ class DataManagementService {
    */
   async exportUserData(userId) {
     try {
+      // Backward-compatible input shape:
+      // exportUserData({ userId })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        return this.exportUserData(userId.userId);
+      }
+
       const user = await require('../models/User').findById(userId);
       const chats = await Chat.find({
         $or: [{ participants: userId }, { owner: userId }],
@@ -293,10 +381,10 @@ class DataManagementService {
 
       const exportData = {
         user: {
-          id: user._id,
-          username: user.username,
-          email: user.email,
-          createdAt: user.createdAt,
+          id: user?._id || userId,
+          username: user?.username || 'unknown',
+          email: user?.email || null,
+          createdAt: user?.createdAt || null,
         },
         statistics: await this.getDetailedStatistics(userId),
         chats: chats.map((chat) => ({

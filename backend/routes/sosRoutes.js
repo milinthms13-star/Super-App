@@ -84,11 +84,11 @@ router.get(
   sosController.getUserIncidents
 );
 
-// Update incident status (resolved/escalated)
+// Update incident status (Priority 3 real-time handler with backwards compatibility)
 router.patch(
   '/incident/:incidentId/status',
   authMiddleware,
-  sosController.updateIncidentStatus
+  sosController.updateIncidentStatusPriority3
 );
 
 // ========== PHASE 2: AUDIO RECORDING ==========
@@ -179,9 +179,6 @@ router.get('/groups/stats', authMiddleware, sosController.getGroupStats);
  * PRIORITY 3 FEATURES: Real-Time Status Updates & Responder Coordination
  * =============================================================================
  */
-
-// Update incident status (responder updates, tracked in statusHistory)
-router.patch('/incident/:incidentId/status', authMiddleware, sosController.updateIncidentStatusPriority3);
 
 // Get full incident status timeline
 router.get('/incident/:incidentId/timeline', authMiddleware, sosController.getIncidentTimeline);

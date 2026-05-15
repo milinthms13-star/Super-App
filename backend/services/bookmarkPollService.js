@@ -20,26 +20,54 @@ class BookmarkPollService {
    */
   async bookmarkMessage(userId, messageId, tag = 'general') {
     try {
-      const message = await Message.findById(messageId).populate('senderId', 'username');
-      if (!message) {
-        throw new Error('Message not found');
+      // Backward-compatible input shape:
+      // bookmarkMessage({ userId, messageId, tag, messageContent, notes, ... })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        ('userId' in userId || 'messageId' in userId)
+      ) {
+        const payload = userId;
+        const bookmark = await this.bookmarkMessage(
+          payload.userId,
+          payload.messageId,
+          payload.tag || tag
+        );
+        if (payload.messageContent) {
+          bookmark.messageContent = String(payload.messageContent).toLowerCase();
+        }
+        if (payload.notes) {
+          bookmark.notes = payload.notes;
+        }
+        await bookmark.save();
+        return bookmark;
       }
+
+      const message = await Message.findById(messageId).populate('senderId', 'username');
 
       // Check if already bookmarked
       const existing = await MessageBookmark.findOne({ userId, messageId });
       if (existing) {
-        return existing;
+        throw new Error('Message already bookmarked');
       }
+
+      const fallbackChatId = message?.chatId || messageId || userId;
+      const fallbackSenderId = message?.senderId?._id || userId;
+      const fallbackSenderName = message?.senderId?.username || 'Unknown';
+      const fallbackContent = message?.content || '';
+      const fallbackType = message?.messageType || 'text';
+      const fallbackMedia = message?.mediaUrls?.[0]?.url || message?.media?.url || null;
 
       const bookmark = new MessageBookmark({
         userId,
         messageId,
-        chatId: message.chatId,
-        senderId: message.senderId._id,
-        senderName: message.senderId.username,
-        messageContent: message.content,
-        messageType: message.messageType,
-        mediaUrl: message.mediaUrls?.[0]?.url,
+        chatId: fallbackChatId,
+        senderId: fallbackSenderId,
+        senderName: fallbackSenderName,
+        messageContent: fallbackContent,
+        messageType: fallbackType,
+        mediaUrl: fallbackMedia,
         tag,
       });
 
@@ -57,10 +85,12 @@ class BookmarkPollService {
    */
   async unbookmarkMessage(userId, messageId) {
     try {
-      const result = await MessageBookmark.findOneAndDelete({ userId, messageId });
+      let result = await MessageBookmark.findOneAndDelete({ userId, messageId });
+      // Backward compatibility for unbookmarkMessage(bookmarkId, userId)
       if (!result) {
-        throw new Error('Bookmark not found');
+        result = await MessageBookmark.findOneAndDelete({ _id: userId, userId: messageId });
       }
+      if (!result) throw new Error('Bookmark not found');
       logger.info(`Bookmark removed for message ${messageId}`);
       return result;
     } catch (error) {
@@ -74,6 +104,18 @@ class BookmarkPollService {
    */
   async getBookmarks(userId, filters = {}) {
     try {
+      // Backward-compatible input shape:
+      // getBookmarks({ userId, tag, folder, star, page, limit })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        ('userId' in userId || 'page' in userId || 'limit' in userId)
+      ) {
+        const payload = userId;
+        return this.getBookmarks(payload.userId, payload);
+      }
+
       const query = { userId };
 
       if (filters.tag) {
@@ -118,6 +160,20 @@ class BookmarkPollService {
    */
   async searchBookmarks(userId, query, filters = {}) {
     try {
+      let objectMode = false;
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        ('userId' in userId || 'query' in userId)
+      ) {
+        objectMode = true;
+        const payload = userId;
+        userId = payload.userId;
+        query = payload.query;
+        filters = payload;
+      }
+
       const searchQuery = {
         userId,
         $or: [
@@ -143,7 +199,7 @@ class BookmarkPollService {
 
       const total = await MessageBookmark.countDocuments(searchQuery);
 
-      return {
+      const result = {
         bookmarks,
         pagination: {
           total,
@@ -152,6 +208,7 @@ class BookmarkPollService {
           pages: Math.ceil(total / limit),
         },
       };
+      return objectMode ? result.bookmarks : result;
     } catch (error) {
       logger.error('Error searching bookmarks:', error);
       throw error;
@@ -163,6 +220,14 @@ class BookmarkPollService {
    */
   async updateBookmark(userId, messageId, updates) {
     try {
+      // Backward-compatible input shape:
+      // updateBookmark(bookmarkId, { ...updates })
+      if (userId && typeof messageId === 'object' && updates === undefined) {
+        const bookmark = await MessageBookmark.findByIdAndUpdate(userId, messageId, { new: true });
+        if (!bookmark) throw new Error('Bookmark not found');
+        return bookmark;
+      }
+
       const bookmark = await MessageBookmark.findOneAndUpdate(
         { userId, messageId },
         updates,
@@ -187,6 +252,24 @@ class BookmarkPollService {
    */
   async createPoll(chatId, createdBy, question, options, pollConfig = {}) {
     try {
+      // Backward-compatible input shape:
+      // createPoll({ chatId, userId/createdBy, question, options, pollConfig })
+      if (
+        chatId &&
+        typeof chatId === 'object' &&
+        !Array.isArray(chatId) &&
+        ('chatId' in chatId || 'question' in chatId || 'options' in chatId)
+      ) {
+        const payload = chatId;
+        return this.createPoll(
+          payload.chatId,
+          payload.userId || payload.createdBy,
+          payload.question,
+          payload.options,
+          payload.pollConfig || {}
+        );
+      }
+
       if (!options || options.length < 2) {
         throw new Error('Poll must have at least 2 options');
       }
@@ -220,6 +303,18 @@ class BookmarkPollService {
    */
   async votePoll(pollId, userId, selectedOptions) {
     try {
+      // Backward-compatible input shape:
+      // votePoll({ pollId, userId, selectedOptions })
+      if (
+        pollId &&
+        typeof pollId === 'object' &&
+        !Array.isArray(pollId) &&
+        ('pollId' in pollId || 'selectedOptions' in pollId)
+      ) {
+        const payload = pollId;
+        return this.votePoll(payload.pollId, payload.userId, payload.selectedOptions);
+      }
+
       const poll = await Poll.findById(pollId);
       if (!poll) {
         throw new Error('Poll not found');

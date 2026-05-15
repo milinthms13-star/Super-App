@@ -1,0 +1,200 @@
+.karaoke-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.2rem 1rem 4rem;
+  color: #1f2937;
+}
+
+.karaoke-hero {
+  background:
+    radial-gradient(circle at 12% 8%, rgba(251, 191, 36, 0.28), transparent 40%),
+    radial-gradient(circle at 85% 15%, rgba(16, 185, 129, 0.22), transparent 38%),
+    linear-gradient(145deg, #fef7e7 0%, #f5fbff 100%);
+  border: 1px solid #d7e4f5;
+  border-radius: 24px;
+  padding: 1.3rem;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+}
+
+.karaoke-hero h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 2.4vw, 2.6rem);
+  letter-spacing: 0.01em;
+}
+
+.karaoke-hero p {
+  margin-top: 0.6rem;
+  max-width: 80ch;
+  color: #475569;
+}
+
+.karaoke-status {
+  margin-top: 0.9rem;
+  border-radius: 12px;
+  border: 1px solid;
+  padding: 0.7rem 0.84rem;
+  font-weight: 600;
+}
+
+.karaoke-status.success {
+  color: #14532d;
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.karaoke-status.error {
+  color: #991b1b;
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.karaoke-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.karaoke-card {
+  background: #fff;
+  border: 1px solid #d8e3f3;
+  border-radius: 18px;
+  padding: 1rem;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.karaoke-card h2,
+.karaoke-card h3 {
+  margin-top: 0;
+}
+
+.karaoke-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.7rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.karaoke-card input,
+.karaoke-card textarea {
+  border: 1px solid #cfdcee;
+  border-radius: 10px;
+  padding: 0.62rem 0.7rem;
+  font: inherit;
+}
+
+.karaoke-card textarea {
+  min-height: 120px;
+}
+
+.karaoke-card button {
+  border: 1px solid #1d4ed8;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 10px;
+  padding: 0.56rem 0.8rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.karaoke-card button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.karaoke-invite {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  border: 1px dashed #8fb7f0;
+  background: rgba(219, 234, 254, 0.45);
+}
+
+.invite-link {
+  margin: 0;
+  word-break: break-all;
+  color: #1e3a8a;
+  font-size: 0.88rem;
+}
+
+.karaoke-room-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.8rem;
+}
+
+.karaoke-room-meta span {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  border: 1px solid #dbeafe;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.karaoke-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.karaoke-live-panel {
+  border: 1px solid #d7e4f5;
+  border-radius: 14px;
+  background: linear-gradient(155deg, #f8fafc 0%, #f0f9ff 100%);
+  padding: 0.9rem;
+  display: grid;
+  grid-template-columns: 1fr minmax(220px, 360px);
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.karaoke-timecode {
+  margin: 0;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.karaoke-lyrics-line {
+  margin: 0.4rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.karaoke-record-grid {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.karaoke-record-grid article {
+  border: 1px solid #dbe6f5;
+  border-radius: 12px;
+  padding: 0.82rem;
+  background: #fff;
+}
+
+.karaoke-final ul {
+  margin: 0.3rem 0 0;
+  padding-left: 1rem;
+}
+
+.karaoke-final a {
+  color: #0f4c81;
+  font-weight: 700;
+}
+
+@media (max-width: 960px) {
+  .karaoke-grid,
+  .karaoke-record-grid,
+  .karaoke-live-panel {
+    grid-template-columns: 1fr;
+  }
+}
