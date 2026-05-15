@@ -107,6 +107,7 @@ const LivePlaceExplorer = () => {
   const [statusMessage, setStatusMessage] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isGeneratingGuide, setIsGeneratingGuide] = useState(false);
+  const [placeCategory, setPlaceCategory] = useState("");
   const [favoritePlaceIds, setFavoritePlaceIds] = useState([]);
 
   const favoritePlaces = useMemo(

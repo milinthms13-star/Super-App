@@ -266,3 +266,96 @@
     grid-template-columns: 1fr;
   }
 }
+
+.photostudio-360-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.photostudio-360-viewer {
+  min-height: 300px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid #dbe4ef;
+  background: #eef4ff;
+}
+
+.viewer-360,
+.viewer-360-fallback {
+  width: 100%;
+  min-height: 260px;
+  background-size: cover;
+  background-position: center;
+  border-radius: 18px;
+  position: relative;
+  animation: pan-360 24s linear infinite;
+  box-shadow: inset 0 0 40px rgba(15, 23, 42, 0.08);
+}
+
+.viewer-360::after,
+.viewer-360-fallback::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.08), transparent 55%);
+}
+
+@keyframes pan-360 {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.photostudio-360-style-grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.photostudio-360-style-grid button {
+  border: 1px solid #c5d4ea;
+  background: #f8fbff;
+  border-radius: 14px;
+  padding: 0.9rem 0.95rem;
+  text-align: left;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.photostudio-360-style-grid button.active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.photostudio-360-style-grid button strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.photostudio-360-style-grid button span {
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.photostudio-360-hint {
+  color: #334155;
+  font-size: 0.94rem;
+  margin-top: 0.45rem;
+}
+
+.photostudio-360-actions {
+  margin-top: 0.9rem;
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.photostudio-360-actions button {
+  border-color: #c5d4ea;
+  background: #e0efff;
+  color: #1d4ed8;
+}

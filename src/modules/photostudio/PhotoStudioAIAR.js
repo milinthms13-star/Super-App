@@ -8,6 +8,7 @@ const NAV_TABS = [
   { id: "home", label: "Photo Studio Home" },
   { id: "editor", label: "Edit Photo" },
   { id: "ar", label: "AR Camera" },
+  { id: "studio360", label: "360 Studio" },
   { id: "ai", label: "AI Tools" },
   { id: "bgremove", label: "Background Remove" },
   { id: "collage", label: "Collage" },
@@ -56,6 +57,25 @@ const DEFAULT_PLAN_RULES = {
   allowFreeWatermarkRemoval: false,
 };
 
+const SUPPORTED_IMAGE_MIME = /^image\//i;
+const AVAILABLE_360_STYLES = [
+  {
+    value: "spherical",
+    label: "Spherical Panorama",
+    description: "Best for landscape, travel and wide-angle compositions.",
+  },
+  {
+    value: "immersive",
+    label: "Immersive Photo Dome",
+    description: "Perfect for square or portrait portraits with dramatic depth.",
+  },
+  {
+    value: "cinematic",
+    label: "Cinematic 360 Banner",
+    description: "Ideal for wide shots, motion scenes and premium story visuals.",
+  },
+];
+
 const toTagList = (value = "") =>
   String(value || "")
     .split(/[,\n]+/)
@@ -76,6 +96,8 @@ const PhotoStudioAIAR = () => {
   const [dragOver, setDragOver] = useState(false);
   const [saveTitle, setSaveTitle] = useState("");
   const [exportUnlock, setExportUnlock] = useState(false);
+  const [studio360Style, setStudio360Style] = useState("spherical");
+  const [studio360Result, setStudio360Result] = useState(null);
 
   const [arConfig, setArConfig] = useState({
     effectId: "live-face-filter",
@@ -161,6 +183,15 @@ const PhotoStudioAIAR = () => {
   const monetization = meta?.monetization || {};
   const sdkList = meta?.features?.sdkRecommendations || [];
   const templateCategories = meta?.features?.templateCategories || [];
+
+  const studio360StyleAdvice = useMemo(() => {
+    const rule = AVAILABLE_360_STYLES.find((item) => item.value === studio360Style);
+    return rule?.description || "Choose a 360° style and render your image into a premium panorama.";
+  }, [studio360Style]);
+
+  useEffect(() => {
+    setStudio360Result(null);
+  }, [currentAssetUrl]);
 
   const loadMeta = useCallback(async () => {
     if (!isAuthenticated) {
@@ -269,6 +300,10 @@ const PhotoStudioAIAR = () => {
   const uploadFile = useCallback(
     async (file, source = "gallery") => {
       if (!file) return;
+      if (!SUPPORTED_IMAGE_MIME.test(file.type)) {
+        pushStatus("error", "Only image uploads are supported in Photo Studio. Please select a photo file.");
+        return;
+      }
       await withBusy("upload", async () => {
         try {
           const formData = new FormData();
@@ -424,6 +459,34 @@ const PhotoStudioAIAR = () => {
       }
     });
   }, [arConfig, pushStatus, request, withBusy]);
+
+  const handleGenerate360 = useCallback(async () => {
+    if (!currentAssetUrl) {
+      pushStatus("error", "Upload an image first to generate the 360 experience.");
+      return;
+    }
+
+    await withBusy("ai-360", async () => {
+      try {
+        const result = await request("post", "/photo-studio/ai/360-style", {
+          assetUrl: currentAssetUrl,
+          style: studio360Style,
+          storageProvider: "auto",
+        });
+
+        const outputUrl = result?.result?.outputUrl;
+        if (outputUrl) {
+          setStudio360Result(outputUrl);
+          pushHistoryUrl(outputUrl);
+          pushStatus("success", "360° image created successfully.");
+        } else {
+          pushStatus("error", "360° render completed but no output was returned.");
+        }
+      } catch (error) {
+        pushStatus("error", error?.response?.data?.message || "360° generation failed.");
+      }
+    });
+  }, [currentAssetUrl, pushHistoryUrl, pushStatus, request, studio360Style, withBusy]);
 
   const handleRenderTemplate = useCallback(async () => {
     if (!selectedTemplateId) {
@@ -646,7 +709,7 @@ const PhotoStudioAIAR = () => {
             ref={fileInputRef}
             className="photostudio-hidden-input"
             type="file"
-            accept="image/*,video/mp4,video/webm,video/quicktime"
+            accept="image/*"
             onChange={(event) => uploadFile(event.target.files?.[0], "file-picker")}
           />
           <input
@@ -962,6 +1025,74 @@ const PhotoStudioAIAR = () => {
               <p>Mode: {arSession?.recordMode || "N/A"}</p>
               <p>Permissions: {(arSession?.permissionRequired || []).join(", ") || "camera"}</p>
               <p>Try-on supported: {String(arSession?.supportsTryOn || false)}</p>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {tab === "studio360" ? (
+        <section className="photostudio-card photostudio-360-card">
+          <h2>360 Studio</h2>
+          <div className="photostudio-grid two">
+            <div className="photostudio-form">
+              <label>
+                360 Style
+                <select value={studio360Style} onChange={(event) => setStudio360Style(event.target.value)}>
+                  {AVAILABLE_360_STYLES.map((style) => (
+                    <option key={style.value} value={style.value}>
+                      {style.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div>
+                <label>Choose 360 style</label>
+                <div className="photostudio-360-style-grid">
+                  {AVAILABLE_360_STYLES.map((style) => (
+                    <button
+                      key={style.value}
+                      type="button"
+                      className={studio360Style === style.value ? "active" : ""}
+                      onClick={() => setStudio360Style(style.value)}
+                    >
+                      <strong>{style.label}</strong>
+                      <span>{style.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button type="button" onClick={handleGenerate360} disabled={busyKey === "ai-360"}>
+                {busyKey === "ai-360" ? "Rendering 360..." : "Generate 360° Image"}
+              </button>
+              <p className="photostudio-360-hint">{studio360StyleAdvice}</p>
+            </div>
+            <div>
+              <h3>Preview</h3>
+              <div className="photostudio-360-viewer">
+                {studio360Result ? (
+                  <div
+                    className="viewer-360"
+                    style={{ backgroundImage: `url(${studio360Result})` }}
+                  />
+                ) : currentAssetUrl ? (
+                  <div
+                    className="viewer-360 viewer-360-fallback"
+                    style={{ backgroundImage: `url(${currentAssetUrl})` }}
+                  />
+                ) : (
+                  <p>Upload a photo to preview 360 mode.</p>
+                )}
+              </div>
+              {studio360Result ? (
+                <div className="photostudio-360-actions">
+                  <button
+                    type="button"
+                    onClick={() => window.open(studio360Result, "_blank")}
+                  >
+                    Open 360° Output
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>

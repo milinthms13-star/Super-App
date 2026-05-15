@@ -69,6 +69,13 @@ const VoiceFriend = React.lazy(() => import("./modules/voicefriend/VoiceFriend")
 const LivePlaceExplorer = React.lazy(() => import("./modules/liveplaceexplorer/LivePlaceExplorer"));
 const NilaBeautyAI = React.lazy(() => import("./modules/beautyai/NilaBeautyAI"));
 const SmartKitchenRecipeHub = React.lazy(() => import("./modules/kitchen/SmartKitchenRecipeHub"));
+const AIBusinessOS = React.lazy(() => import("./modules/aibusinessos/AIBusinessOS"));
+const GulfJobsMigration = React.lazy(() => import("./modules/gulfjobsmigration/GulfJobsMigration"));
+const WomenSafetyFamily = React.lazy(() => import("./modules/womensafetyfamily/WomenSafetyFamily"));
+const DevotionalEcosystem = React.lazy(() => import("./modules/devotionalecosystem/DevotionalEcosystem"));
+const HyperlocalAICommerce = React.lazy(() => import("./modules/hyperlocalaicommerce/HyperlocalAICommerce"));
+const NilaAIStudio = React.lazy(() => import("./modules/nilaaistudio/NilaAIStudio"));
+const TrustLayer = React.lazy(() => import("./modules/trustlayer/TrustLayer"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
 const JobPortal = React.lazy(() => import("./modules/jobportal/JobPortal"));
 const Education = React.lazy(() => import("./modules/education/Education"));
@@ -166,6 +173,13 @@ const PREVIEW_ENABLED_MODULES = [
   "liveplaceexplorer",
   "beautyai",
   "kitchen",
+  "aibusinessos",
+  "gulfjobsmigration",
+  "womensafetyfamily",
+  "devotionalecosystem",
+  "hyperlocalaicommerce",
+  "nilaaistudio",
+  "trustlayer",
 ];
 
 const TOGGLE_CONTROLLED_MODULE_IDS = [
@@ -194,6 +208,13 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "liveplaceexplorer",
   "beautyai",
   "kitchen",
+  "aibusinessos",
+  "gulfjobsmigration",
+  "womensafetyfamily",
+  "devotionalecosystem",
+  "hyperlocalaicommerce",
+  "nilaaistudio",
+  "trustlayer",
   "jobportal",
   "skilllearning",
   "education",
@@ -1243,6 +1264,13 @@ function AppShell() {
               <Route path="remote-karaoke-duet" element={<RemoteKaraokeDuet />} />
               <Route path="nila-beauty-ai" element={<NilaBeautyAI />} />
               <Route path="smart-kitchen-recipe-hub" element={<SmartKitchenRecipeHub />} />
+              <Route path="ai-business-os" element={<AIBusinessOS />} />
+              <Route path="kerala-gulf-jobs-migration" element={<GulfJobsMigration />} />
+              <Route path="women-safety-family-protection" element={<WomenSafetyFamily />} />
+              <Route path="devotional-ecosystem" element={<DevotionalEcosystem />} />
+              <Route path="hyperlocal-ai-commerce" element={<HyperlocalAICommerce />} />
+              <Route path="nila-ai-studio" element={<NilaAIStudio />} />
+              <Route path="trust-layer" element={<TrustLayer />} />
               <Route path="businessservices" element={<BusinessServices />} />
               <Route path="jobportal" element={<JobPortal />} />
               <Route path="education" element={<Education />} />

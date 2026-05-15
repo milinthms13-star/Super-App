@@ -45,6 +45,20 @@
   font-weight: 600;
 }
 
+.upload-note,
+.file-note {
+  color: #a9b0d9;
+  font-size: 0.9rem;
+}
+
+.upload-note-block {
+  padding-bottom: 10px;
+}
+
+.file-note {
+  margin-top: 6px;
+}
+
 .field-grid input,
 .field-grid select {
   width: 100%;
@@ -60,6 +74,12 @@
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   align-items: end;
+}
+
+.helper-row {
+  color: #c8cbeb;
+  font-size: 0.95rem;
+  padding: 8px 0 0;
 }
 
 .checkbox-field {

@@ -25,7 +25,7 @@ router.get('/meta', authenticate, async (_req, res) => {
     success: true,
     module: 'AI Dance Duet',
     description: 'Upload two dance videos and merge them into one shared performance clip with a unified stage or split-screen layout.',
-    features: ['AI duet merge', 'side-by-side and shared background layouts', 'optional green/blue screen removal', 'MP4 export'],
+    features: ['AI duet merge', 'side-by-side and shared background layouts', 'immersive 360° stage mode', 'optional green/blue screen removal', 'MP4 export'],
   });
 });
 

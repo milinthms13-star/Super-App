@@ -517,6 +517,90 @@ const MODULE_CONFIG = [
     emoji: "KH",
   },
   {
+    id: "aibusinessos",
+    nameKey: "modules.aibusinessos",
+    fallbackName: "AI Business Operating System",
+    icon: "businessbuilder",
+    descriptionKey: "dashboard.moduleDescriptions.aibusinessos",
+    fallbackDescription:
+      "AI operating stack for SMEs with invoice, GST billing, CRM, inventory, marketing, and analytics automation.",
+    stats: "SME AI infra",
+    gradient: "linear-gradient(135deg, #0F172A 0%, #1D4ED8 45%, #0EA5A7 100%)",
+    emoji: "OS",
+  },
+  {
+    id: "gulfjobsmigration",
+    nameKey: "modules.gulfjobsmigration",
+    fallbackName: "Kerala + Gulf Jobs Migration",
+    icon: "gulfservices",
+    descriptionKey: "dashboard.moduleDescriptions.gulfjobsmigration",
+    fallbackDescription:
+      "End-to-end job and migration support with document verification, visa tracking, interview AI, and overseas onboarding.",
+    stats: "Kerala-GCC talent flow",
+    gradient: "linear-gradient(135deg, #0F4C81 0%, #1E3A8A 45%, #22D3EE 100%)",
+    emoji: "GM",
+  },
+  {
+    id: "womensafetyfamily",
+    nameKey: "modules.womensafetyfamily",
+    fallbackName: "Women Safety + Family Protection",
+    icon: "sosalert",
+    descriptionKey: "dashboard.moduleDescriptions.womensafetyfamily",
+    fallbackDescription:
+      "Family safety ecosystem with SOS tracking, trusted circles, child safety, and elderly care alerts.",
+    stats: "Safety-first network",
+    gradient: "linear-gradient(135deg, #7F1D1D 0%, #E11D48 45%, #FB7185 100%)",
+    emoji: "SF",
+  },
+  {
+    id: "devotionalecosystem",
+    nameKey: "modules.devotionalecosystem",
+    fallbackName: "Devotional Ecosystem",
+    icon: "devadarshan",
+    descriptionKey: "dashboard.moduleDescriptions.devotionalecosystem",
+    fallbackDescription:
+      "Temple bookings, vazhipadu, festival alerts, donations, streaming, and pilgrimage planning in one devotional stack.",
+    stats: "Daily devotional engagement",
+    gradient: "linear-gradient(135deg, #7C2D12 0%, #EA580C 45%, #F59E0B 100%)",
+    emoji: "DE",
+  },
+  {
+    id: "hyperlocalaicommerce",
+    nameKey: "modules.hyperlocalaicommerce",
+    fallbackName: "Hyperlocal AI Commerce",
+    icon: "localmarket",
+    descriptionKey: "dashboard.moduleDescriptions.hyperlocalaicommerce",
+    fallbackDescription:
+      "AI commerce engine for local conversion with voice shopping, captioning, recommendations, and offer optimization.",
+    stats: "Conversion boost layer",
+    gradient: "linear-gradient(135deg, #064E3B 0%, #059669 45%, #10B981 100%)",
+    emoji: "HC",
+  },
+  {
+    id: "nilaaistudio",
+    nameKey: "modules.nilaaistudio",
+    fallbackName: "Nila AI Studio",
+    icon: "photostudio",
+    descriptionKey: "dashboard.moduleDescriptions.nilaaistudio",
+    fallbackDescription:
+      "Unified AI creator platform for story videos, reels, dubbing, avatars, and business promo generation.",
+    stats: "Creator growth engine",
+    gradient: "linear-gradient(135deg, #312E81 0%, #7C3AED 45%, #EC4899 100%)",
+    emoji: "NS",
+  },
+  {
+    id: "trustlayer",
+    nameKey: "modules.trustlayer",
+    fallbackName: "Trust Layer",
+    icon: "sosalert",
+    descriptionKey: "dashboard.moduleDescriptions.trustlayer",
+    fallbackDescription:
+      "Platform-wide verification, trust scores, fraud detection, community reporting, and AI moderation safeguards.",
+    stats: "Fraud defense core",
+    gradient: "linear-gradient(135deg, #111827 0%, #374151 45%, #6B7280 100%)",
+    emoji: "TL",
+  },
+  {
     id: "jobportal",
     nameKey: "modules.jobportal",
     fallbackName: "NilaJobs",
@@ -781,6 +865,11 @@ const MODULE_CATEGORY_MAP = {
   karaokeduet: "business",
   beautyai: "business",
   kitchen: "business",
+  aibusinessos: "business",
+  gulfjobsmigration: "business",
+  hyperlocalaicommerce: "business",
+  nilaaistudio: "business",
+  trustlayer: "business",
   skilllearning: "business",
   resumebuilder: "business",
   education: "business",
@@ -790,6 +879,8 @@ const MODULE_CATEGORY_MAP = {
   healthcare: "utility",
   devadarshan: "utility",
   localservices: "utility",
+  womensafetyfamily: "utility",
+  devotionalecosystem: "utility",
   reminderalert: "utility",
   sosalert: "utility",
   astrology: "utility",
@@ -1253,6 +1344,13 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "karaokeduet" ||
         module.id === "beautyai" ||
         module.id === "kitchen" ||
+        module.id === "aibusinessos" ||
+        module.id === "gulfjobsmigration" ||
+        module.id === "womensafetyfamily" ||
+        module.id === "devotionalecosystem" ||
+        module.id === "hyperlocalaicommerce" ||
+        module.id === "nilaaistudio" ||
+        module.id === "trustlayer" ||
         module.id === "devadarshan" ||
         module.id === "localservices" ||
         module.id === "hyperlocal" ||

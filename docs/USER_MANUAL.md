@@ -7,6 +7,7 @@
   - [Local Market](#local-market)
   - [Ecommerce](#ecommerce)
   - [Classifieds](#classifieds)
+  - [Wallet/Payments](#walletpayments)
 - [Social & Communication](#social--communication)
   - [Social Media](#social-media)
   - [Messaging & Chatrooms](#messaging--chatrooms)
@@ -14,12 +15,24 @@
   - [Personal Diary](#personal-diary)
   - [Reminder Alert](#reminder-alert)
   - [SOS](#sos)
+  - [Health Module](#health-module)
 - [Niche Services](#niche-services)
   - [Ride Sharing](#ride-sharing)
   - [Real Estate](#real-estate)
   - [Matrimonial](#matrimonial)
   - [Astrology](#astrology)
 - [Support & Admin](#support--admin)
+  - [Support/Help](#supporthelp)
+  - [User Management](#user-management)
+  - [Admin Dashboard](#admin-dashboard)
+- [Strategic Investor Modules](#strategic-investor-modules)
+  - [AI Business Operating System](#ai-business-operating-system)
+  - [Kerala + Gulf Jobs Migration](#kerala--gulf-jobs-migration)
+  - [Women Safety + Family Protection](#women-safety--family-protection)
+  - [Devotional Ecosystem](#devotional-ecosystem)
+  - [Hyperlocal AI Commerce](#hyperlocal-ai-commerce)
+  - [Nila AI Studio](#nila-ai-studio)
+  - [Trust Layer](#trust-layer)
 - [FAQs](#faqs)
 
 ## Introduction
@@ -94,6 +107,22 @@ MalabarBazaar is a comprehensive mobile/web app for local services, marketplace,
 3. Manage via SellerStore.js.
 *Docs: CLASSIFIEDS_QUICKSTART.md, CLASSIFIEDS_ENHANCEMENTS.md.*
 
+### Wallet/Payments
+**Purpose**: Secure wallet-based payments and payment-related account actions.
+
+**Key Features**:
+- Wallet balance and transaction history
+- Payment flow used across modules (e.g., Ecommerce checkout, FoodDelivery checkout)
+- Refunds and payment status tracking (where supported by module flows)
+
+**Usage**:
+1. Open the relevant module (e.g., Ecommerce or Food Delivery).
+2. Choose Wallet as the payment method at checkout.
+3. Confirm payment; check transaction/order status in that module’s page.
+4. For payment issues/refunds, use Support/Help.
+
+*Tip*: Keep an eye on OTP/login notifications so purchases don’t fail due to authentication issues.
+
 ## Social & Communication
 
 ### Social Media
@@ -156,6 +185,20 @@ MalabarBazaar is a comprehensive mobile/web app for local services, marketplace,
 **Usage**:
 1. Shake/tap SOSAlert → Auto-share location/contacts.
 
+### Health Module
+**Purpose**: Health-related utilities and user health experience.
+
+**Key Features**:
+- Health workflows integrated into the app’s utility area
+- Supports user needs that may include diary/voice/health-related behaviors
+
+**Usage**:
+1. Open Health Module from Utilities/dashboard.
+2. Follow the module flow to create/view health-related content.
+3. Use connected features (e.g., diary/voice entry) where enabled.
+
+*Note*: If you’re looking for detailed implementation specifics, check the module’s production/gap docs in `docs/`.
+
 ## Niche Services
 
 ### Ride Sharing
@@ -172,7 +215,8 @@ MalabarBazaar is a comprehensive mobile/web app for local services, marketplace,
 ### Real Estate
 **Purpose**: Property listings/search.
 
-**Usage**: Browse/filter properties → Contact.
+**Usage**:
+1. Browse/filter properties → Contact.
 *realestate.js route.*
 
 ### Matrimonial
@@ -181,16 +225,112 @@ MalabarBazaar is a comprehensive mobile/web app for local services, marketplace,
 **Key Features**:
 - Filters, matching algo
 
-**Usage**: Create profile → Search/matches.
+**Usage**:
+1. Create profile → Search/matches.
 
 ### Astrology
 **Purpose**: Horoscopes/profiles.
 
-**Usage**: AstrologyHome → Daily horoscope.
+**Usage**:
+1. AstrologyHome → Daily horoscope.
 
 ## Support & Admin
-- **Support**: CreateTicket → Track tickets.
-- **Admin**: AdminDashboard (analytics/users/moderation).
+
+### Support/Help
+**Purpose**: Help center and issue reporting.
+
+**Key Features**:
+- CreateTicket → Track tickets
+- Support workflow for user issues
+
+**Usage**:
+1. Open Support/Help.
+2. CreateTicket with description/screenshots if required.
+3. Track ticket status until resolution.
+
+### User Management
+**Purpose**: Administrative and platform-level user account operations.
+
+**Key Features**:
+- Account visibility and administrative management workflows
+- Supports Admin Dashboard moderation/admin actions
+
+**Usage**:
+- Admin Dashboard → User Management:
+  - Search users
+  - Review account actions
+  - Apply moderation/admin changes (where configured)
+
+### Admin Dashboard
+**Purpose**: Admin analytics and moderation console.
+
+**Key Features**:
+- AdminDashboard (analytics/users/moderation)
+- Operational monitoring for platform health
+
+**Usage**:
+1. Open Admin Dashboard.
+2. Use analytics panels for platform overview.
+3. Use moderation panels to review/report actions.
+
+## Strategic Investor Modules
+
+### AI Business Operating System
+**Purpose**: Business AI infrastructure for local shops and SMEs.
+
+**Highlights**:
+- AI invoice + GST billing
+- CRM, inventory, staff attendance
+- WhatsApp marketing and AI sales analytics
+- SaaS-style recurring monetization
+
+### Kerala + Gulf Jobs Migration
+**Purpose**: End-to-end migration journey for Kerala to GCC candidates.
+
+**Highlights**:
+- Document verification and visa tracking
+- Interview AI practice
+- Employer verification and onboarding support
+
+### Women Safety + Family Protection
+**Purpose**: Safety ecosystem for women, children, and elderly users.
+
+**Highlights**:
+- SOS live tracking and trusted circle escalation
+- Emergency recording
+- Child and elderly protection alerts
+
+### Devotional Ecosystem
+**Purpose**: Daily devotional utility and temple engagement.
+
+**Highlights**:
+- Virtual queue and vazhipadu booking
+- Festival alerts and donation flows
+- Pilgrimage planning and devotional streaming
+
+### Hyperlocal AI Commerce
+**Purpose**: AI acceleration layer for local commerce conversion.
+
+**Highlights**:
+- AI recommendations and seller co-pilot
+- Voice shopping and WhatsApp ordering
+- Local offer optimization
+
+### Nila AI Studio
+**Purpose**: Unified generative creator platform.
+
+**Highlights**:
+- Story-to-cartoon videos
+- AI reels, dubbing, avatars, and business promo maker
+- Creator and business monetization pathways
+
+### Trust Layer
+**Purpose**: Cross-platform trust, safety, and moderation architecture.
+
+**Highlights**:
+- Verified users and sellers
+- Trust score + fraud detection
+- AI moderation and community reporting
 
 ## FAQs
 - **Login issues?** Check OTP spam; use social login (TODO_SOCIAL_LOGIN.md).
@@ -201,4 +341,3 @@ MalabarBazaar is a comprehensive mobile/web app for local services, marketplace,
 **Feedback/Updates**: Check TODO_ALL_MODULES_PROGRESS.md. For devs: backend/server.js, src/App.js.
 
 *Last Updated: Auto-generated by BLACKBOXAI. Generated from project structure.*
-

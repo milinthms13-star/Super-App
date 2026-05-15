@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import './AutoDanceDuet.css';
 
-const layoutOptions = [
-  { value: 'side-by-side', label: 'Side-by-side duel' },
+const stageOptions = [
+  { value: 'side-by-side', label: 'Side-by-side duet' },
   { value: 'same-background', label: 'Shared stage background' },
+  { value: 'immersive-360', label: 'Immersive 360° stage' },
 ];
 
 const colorOptions = [
@@ -17,7 +18,7 @@ const AutoDanceDuet = () => {
   const [video1File, setVideo1File] = useState(null);
   const [video2File, setVideo2File] = useState(null);
   const [backgroundFile, setBackgroundFile] = useState(null);
-  const [layout, setLayout] = useState('side-by-side');
+  const [stageMode, setStageMode] = useState('side-by-side');
   const [backgroundColor, setBackgroundColor] = useState('black');
   const [removeBackground, setRemoveBackground] = useState(false);
   const [status, setStatus] = useState('Ready to create your dance duet.');
@@ -45,7 +46,7 @@ const AutoDanceDuet = () => {
       if (backgroundFile) {
         formData.append('backgroundImage', backgroundFile);
       }
-      formData.append('mode', layout);
+      formData.append('mode', stageMode);
       formData.append('backgroundColor', backgroundColor);
       formData.append('removeBackground', String(removeBackground));
 
@@ -84,31 +85,36 @@ const AutoDanceDuet = () => {
       <section className="hero-panel">
         <div>
           <h1>AI Dance Duet Studio</h1>
-          <p>Create a premium dance merge experience by combining two dancer videos into one synchronized performance.</p>
+          <p>Create a premium dance merge experience by combining two dancer videos into one synchronized performance with immersive 360° stage options.</p>
         </div>
       </section>
-
       <form className="dance-form" onSubmit={handleSubmit}>
+        <div className="upload-note-block">
+          <p className="upload-note">Max upload size: 180 MB per video. Ideal duration: 10-30 seconds. For immersive results, choose <strong>Immersive 360° stage</strong> and optionally add a background image.</p>
+        </div>
         <div className="field-grid">
           <label>
             Primary dancer video
             <input type="file" accept="video/*" onChange={handleFileChange(setVideo1File)} />
+            {video1File && <span className="file-note">Selected: {video1File.name}</span>}
           </label>
           <label>
             Secondary dancer video
             <input type="file" accept="video/*" onChange={handleFileChange(setVideo2File)} />
+            {video2File && <span className="file-note">Selected: {video2File.name}</span>}
           </label>
           <label>
             Optional stage background image
             <input type="file" accept="image/png,image/jpeg" onChange={handleFileChange(setBackgroundFile)} />
+            {backgroundFile && <span className="file-note">Selected: {backgroundFile.name}</span>}
           </label>
         </div>
 
         <div className="settings-row">
           <div>
-            <label>Layout</label>
-            <select value={layout} onChange={(ev) => setLayout(ev.target.value)}>
-              {layoutOptions.map((option) => (
+            <label>Stage style</label>
+            <select value={stageMode} onChange={(ev) => setStageMode(ev.target.value)}>
+              {stageOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -136,6 +142,10 @@ const AutoDanceDuet = () => {
             />
             <label htmlFor="removeBackground">Attempt green/blue screen removal</label>
           </div>
+        </div>
+
+        <div className="helper-row">
+          <p>For best results, upload two high-quality dancer clips of similar length. Use green or blue clothing for background removal.</p>
         </div>
 
         <div className="action-row">

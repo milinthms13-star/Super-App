@@ -1,53 +1,37 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
+import { buildApiUrl } from "../../utils/api";
+import { getStoredAuthToken } from "../../utils/auth";
 import "./NilaBeautyAI.css";
 
-const MAIN_CONCERNS = [
-  "Acne",
-  "Pigmentation",
-  "Dark circles",
-  "Wrinkles",
-  "Tanning",
-  "Hair fall",
-];
-
-const QUICK_CARDS = [
-  "Skin Care",
-  "Hair Care",
-  "Makeup",
-  "Bridal Care",
-  "Men Grooming",
-  "Home Remedies",
-];
-
-const MOCK_PRODUCTS = {
-  low: ["Gentle face wash", "Niacinamide serum (budget)", "SPF 30 sunscreen"],
-  medium: ["Ceramide cleanser", "Vitamin C serum", "SPF 50 PA++++ sunscreen"],
-  high: ["Barrier repair cleanser", "Retinol night serum", "Broad-spectrum matte sunscreen"],
-};
-
-const FLOW_STEPS = [
-  "Upload Selfie",
-  "Profile Questions",
-  "AI Analysis",
-  "Routine Plan",
-  "Progress Tracking",
-];
-
-const budgetKeyFromValue = (value = "medium") => {
-  if (value === "low") return "low";
-  if (value === "high") return "high";
-  return "medium";
-};
+const MAIN_CONCERNS = ["Acne", "Pigmentation", "Dark circles", "Wrinkles", "Tanning", "Hair fall"];
+const QUICK_CARDS = ["Skin Care", "Hair Care", "Makeup", "Bridal Care", "Men Grooming", "Home Remedies"];
+const FLOW_STEPS = ["Upload Selfie", "Profile Questions", "AI Analysis", "Routine Plan", "Progress Tracking"];
 
 const NilaBeautyAI = () => {
   const selfieInputRef = useRef(null);
+  const token = getStoredAuthToken();
+
+  const [selfieFile, setSelfieFile] = useState(null);
   const [selfieSource, setSelfieSource] = useState("");
   const [selfiePreview, setSelfiePreview] = useState("");
+  const [selfieConsent, setSelfieConsent] = useState(false);
   const [reportReady, setReportReady] = useState(false);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState({ type: "", text: "" });
+  const [busyKey, setBusyKey] = useState("");
   const [activeTab, setActiveTab] = useState("home");
+  const [todaysTip, setTodaysTip] = useState("");
+  const [tips, setTips] = useState([]);
+  const [adminTipForm, setAdminTipForm] = useState({
+    title: "",
+    text: "",
+    category: "general",
+    language: "en",
+  });
+  const [subscriptionRules, setSubscriptionRules] = useState(null);
+  const [isAdminControlsVisible, setIsAdminControlsVisible] = useState(false);
   const [checklistDays, setChecklistDays] = useState(
-    Array.from({ length: 7 }, (_, day) => ({ day: day + 1, done: false }))
+    Array.from({ length: 7 }, (_, index) => ({ day: index + 1, done: false, note: "" }))
   );
 
   const [form, setForm] = useState({
@@ -72,100 +56,242 @@ const NilaBeautyAI = () => {
     donts: [],
     products: [],
     remedies: [],
+    severeConcernDetected: false,
+    warning: "",
   });
 
-  const todaysTip = useMemo(() => {
-    const tips = [
-      "Apply sunscreen 15 minutes before stepping out.",
-      "Patch-test new products for 24 hours before full use.",
-      "Hydrate and keep your routine minimal during humid days.",
-      "Avoid harsh scrubbing when active acne is present.",
-    ];
-    return tips[new Date().getDate() % tips.length];
-  }, []);
+  const request = useMemo(
+    () =>
+      axios.create({
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }),
+    [token]
+  );
 
   const progressCount = useMemo(
     () => checklistDays.filter((item) => item.done).length,
     [checklistDays]
   );
 
+  const withBusy = useCallback(async (key, fn) => {
+    setBusyKey(key);
+    try {
+      await fn();
+    } finally {
+      setBusyKey("");
+    }
+  }, []);
+
+  const pushStatus = useCallback((type, text) => {
+    setStatus({ type, text });
+  }, []);
+
   const handleFile = async (file, source) => {
     if (!file) return;
+    if (!String(file.type || "").startsWith("image/")) {
+      pushStatus("error", "Please upload an image file.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      pushStatus("error", "Image is too large. Keep selfie under 8MB.");
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
+      setSelfieFile(file);
       setSelfiePreview(String(reader.result || ""));
       setSelfieSource(source);
-      setStatus("Selfie uploaded. Continue with profile questions.");
       setReportReady(false);
       setActiveTab("builder");
+      pushStatus("success", "Selfie uploaded. Continue with profile questions.");
     };
     reader.readAsDataURL(file);
   };
 
-  const runAnalysis = () => {
-    if (!selfiePreview) {
-      setStatus("Upload a selfie first to generate AI beauty tips.");
+  const loadTips = useCallback(async () => {
+    await withBusy("tips", async () => {
+      try {
+        const response = await request.get(buildApiUrl("/beauty-ai/tips/today"), {
+          params: { language: "en" },
+        });
+        const tipText = response.data?.todayTip?.text || "Hydrate and keep your skincare routine consistent.";
+        setTodaysTip(tipText);
+        setTips(response.data?.tips || []);
+      } catch (error) {
+        pushStatus("error", error?.response?.data?.message || "Failed to load beauty tips.");
+      }
+    });
+  }, [pushStatus, request, withBusy]);
+
+  const loadProgress = useCallback(async () => {
+    await withBusy("progress", async () => {
+      try {
+        const response = await request.get(buildApiUrl("/beauty-ai/progress-log/mine"));
+        const logs = Array.isArray(response.data?.logs) ? response.data.logs : [];
+        setChecklistDays((current) =>
+          current.map((item) => {
+            const found = logs.find((log) => Number(log.day) === Number(item.day));
+            return found ? { ...item, done: Boolean(found.done), note: found.note || "" } : item;
+          })
+        );
+      } catch (_error) {
+        // Ignore noisy errors for first-time users with no logs.
+      }
+    });
+  }, [request, withBusy]);
+
+  const loadAdminSettings = useCallback(async () => {
+    await withBusy("admin-settings", async () => {
+      try {
+        const response = await request.get(buildApiUrl("/beauty-ai/admin/subscription-rules"));
+        setSubscriptionRules(response.data?.subscriptionRules || null);
+        setIsAdminControlsVisible(true);
+      } catch (_error) {
+        setIsAdminControlsVisible(false);
+      }
+    });
+  }, [request, withBusy]);
+
+  useEffect(() => {
+    loadTips();
+    loadProgress();
+  }, [loadProgress, loadTips]);
+
+  useEffect(() => {
+    if (activeTab === "admin") {
+      loadAdminSettings();
+    }
+  }, [activeTab, loadAdminSettings]);
+
+  const runAnalysis = useCallback(async () => {
+    if (!selfiePreview || !selfieFile) {
+      pushStatus("error", "Upload a selfie first to generate AI beauty tips.");
+      return;
+    }
+    if (!selfieConsent) {
+      pushStatus("error", "Please confirm selfie consent to continue.");
       return;
     }
 
-    const concernSet = [form.concern];
-    if (form.concern !== "Acne") concernSet.push("Acne");
-    if (form.eventMode === "Bridal prep") concernSet.push("Tanning");
+    await withBusy("analysis", async () => {
+      try {
+        const analysisResponse = await request.post(buildApiUrl("/beauty-ai/analyze-selfie"), {
+          ...form,
+          selfieConsent,
+          selfieMeta: {
+            fileName: selfieFile.name,
+            fileSize: selfieFile.size,
+            mimeType: selfieFile.type,
+          },
+        });
 
-    const routineMorning = [
-      "Gentle cleanse",
-      "Hydrating serum",
-      "Moisturizer",
-      "Broad-spectrum sunscreen",
-    ];
-    const routineNight = [
-      "Double cleanse",
-      "Target treatment for concern",
-      "Moisturizer",
-      "Lip and under-eye care",
-    ];
-    const weekly = [
-      "2x soothing mask",
-      "1x exfoliation (mild, if tolerated)",
-      "Hair oil + scalp cleanse schedule",
-    ];
+        const analysis = analysisResponse.data?.analysis;
+        if (!analysis) {
+          throw new Error("Analysis response is empty.");
+        }
 
-    const nextReport = {
-      skinType: form.knownSkinType === "Not sure" ? "Combination (AI-estimated)" : form.knownSkinType,
-      skinScore: 74,
-      concernsDetected: concernSet,
-      morningRoutine: routineMorning,
-      nightRoutine: routineNight,
-      weeklyPlan: weekly,
-      dos: [
-        "Patch-test all new products.",
-        "Use sunscreen daily, even on cloudy days.",
-        "Keep pillow covers and makeup tools clean.",
-      ],
-      donts: [
-        "Do not use steroid creams without doctor advice.",
-        "Do not over-layer active ingredients on one night.",
-        "Avoid aggressive bleaching routines.",
-      ],
-      products: MOCK_PRODUCTS[budgetKeyFromValue(form.budget)],
-      remedies: [
-        "Aloe vera gel (patch-tested) for soothing",
-        "Cold green tea compress for puffy under-eye area",
-        "Honey + yogurt mask once weekly (if no allergy)",
-      ],
-    };
+        const planResponse = await request.post(buildApiUrl("/beauty-ai/generate-plan"), {
+          ...form,
+          skinScore: analysis.skinScore,
+          concern: form.concern,
+          eventMode: form.eventMode,
+        });
+        const plan = planResponse.data?.plan;
+        if (!plan) {
+          throw new Error("Plan response is empty.");
+        }
 
-    setReport(nextReport);
-    setReportReady(true);
-    setStatus("AI report generated. Review routine and safety guidance.");
-    setActiveTab("report");
-  };
+        const productResponse = await request.get(buildApiUrl("/beauty-ai/products/recommendations"), {
+          params: {
+            budget: form.budget,
+            concern: form.concern,
+          },
+        });
 
-  const toggleDay = (dayNumber) => {
-    setChecklistDays((current) =>
-      current.map((item) => (item.day === dayNumber ? { ...item, done: !item.done } : item))
-    );
-  };
+        setReport({
+          skinType: plan.skinType || analysis.skinType,
+          skinScore: analysis.skinScore || plan.skinScore || 0,
+          concernsDetected: Array.isArray(plan.concernsDetected) ? plan.concernsDetected : [],
+          morningRoutine: Array.isArray(plan.morningRoutine) ? plan.morningRoutine : [],
+          nightRoutine: Array.isArray(plan.nightRoutine) ? plan.nightRoutine : [],
+          weeklyPlan: Array.isArray(plan.weeklyPlan) ? plan.weeklyPlan : [],
+          dos: Array.isArray(plan.dos) ? plan.dos : [],
+          donts: Array.isArray(plan.donts) ? plan.donts : [],
+          products: Array.isArray(productResponse.data?.products)
+            ? productResponse.data.products
+            : Array.isArray(plan.products)
+              ? plan.products
+              : [],
+          remedies: Array.isArray(plan.remedies) ? plan.remedies : [],
+          severeConcernDetected: Boolean(analysis.severeConcernDetected),
+          warning: analysis.warning || "",
+        });
+
+        setReportReady(true);
+        setActiveTab("report");
+        pushStatus("success", "AI report generated. Review routine and safety guidance.");
+      } catch (error) {
+        pushStatus("error", error?.response?.data?.message || error.message || "Failed to generate AI beauty report.");
+      }
+    });
+  }, [form, pushStatus, request, selfieConsent, selfieFile, selfiePreview, withBusy]);
+
+  const toggleDay = useCallback(
+    async (dayNumber) => {
+      const currentItem = checklistDays.find((item) => item.day === dayNumber);
+      const nextDone = !currentItem?.done;
+
+      setChecklistDays((current) =>
+        current.map((item) => (item.day === dayNumber ? { ...item, done: nextDone } : item))
+      );
+
+      try {
+        await request.post(buildApiUrl("/beauty-ai/progress-log"), {
+          day: dayNumber,
+          done: nextDone,
+          note: nextDone ? "Challenge completed" : "",
+          skinScore: report.skinScore,
+        });
+      } catch (_error) {
+        // Roll back UI state if API fails.
+        setChecklistDays((current) =>
+          current.map((item) => (item.day === dayNumber ? { ...item, done: !nextDone } : item))
+        );
+        pushStatus("error", "Could not update progress log.");
+      }
+    },
+    [checklistDays, pushStatus, report.skinScore, request]
+  );
+
+  const saveAdminTip = useCallback(async () => {
+    await withBusy("save-tip", async () => {
+      try {
+        await request.post(buildApiUrl("/beauty-ai/admin/tip-library"), adminTipForm);
+        setAdminTipForm({ title: "", text: "", category: "general", language: "en" });
+        pushStatus("success", "Tip added to beauty tip library.");
+        loadTips();
+      } catch (error) {
+        pushStatus("error", error?.response?.data?.message || "Failed to add tip.");
+      }
+    });
+  }, [adminTipForm, loadTips, pushStatus, request, withBusy]);
+
+  const saveSubscriptionRules = useCallback(async () => {
+    if (!subscriptionRules) return;
+    await withBusy("save-rules", async () => {
+      try {
+        const response = await request.put(
+          buildApiUrl("/beauty-ai/admin/subscription-rules"),
+          subscriptionRules
+        );
+        setSubscriptionRules(response.data?.subscriptionRules || subscriptionRules);
+        pushStatus("success", "Subscription rules updated.");
+      } catch (error) {
+        pushStatus("error", error?.response?.data?.message || "Failed to update subscription rules.");
+      }
+    });
+  }, [pushStatus, request, subscriptionRules, withBusy]);
 
   return (
     <section className="beauty-shell">
@@ -173,8 +299,8 @@ const NilaBeautyAI = () => {
         <p className="beauty-kicker">Lifestyle Module</p>
         <h1>Nila Beauty AI</h1>
         <p>
-          Selfie-based beauty guidance module with skin insights, daily routines, safety rules, admin controls,
-          and monetization readiness.
+          Selfie-based beauty guidance with skin insights, routine plans, progress tracking, safety rules,
+          and API-backed admin controls.
         </p>
       </header>
 
@@ -196,7 +322,9 @@ const NilaBeautyAI = () => {
         </button>
       </nav>
 
-      {status ? <div className="beauty-status">{status}</div> : null}
+      {status.text ? (
+        <div className={`beauty-status ${status.type === "error" ? "error" : ""}`}>{status.text}</div>
+      ) : null}
 
       {activeTab === "home" ? (
         <section className="beauty-card">
@@ -214,11 +342,24 @@ const NilaBeautyAI = () => {
                 className="beauty-hidden"
                 onChange={(event) => handleFile(event.target.files?.[0], "camera-or-gallery")}
               />
-              <button type="button" className="beauty-primary ghost" onClick={runAnalysis}>
-                Get AI Beauty Tips
+              <button
+                type="button"
+                className="beauty-primary ghost"
+                onClick={runAnalysis}
+                disabled={busyKey === "analysis"}
+              >
+                {busyKey === "analysis" ? "Analyzing..." : "Get AI Beauty Tips"}
               </button>
               <p>Source: {selfieSource || "None"}</p>
               {selfiePreview ? <img src={selfiePreview} alt="Selfie preview" className="beauty-preview" /> : null}
+              <label className="beauty-consent">
+                <input
+                  type="checkbox"
+                  checked={selfieConsent}
+                  onChange={(event) => setSelfieConsent(event.target.checked)}
+                />
+                I consent to selfie analysis for beauty guidance.
+              </label>
             </div>
             <div>
               <h3>Quick Cards</h3>
@@ -229,7 +370,7 @@ const NilaBeautyAI = () => {
               </div>
               <article className="beauty-tip">
                 <h3>Today's Beauty Tip</h3>
-                <p>{todaysTip}</p>
+                <p>{todaysTip || "Loading tip..."}</p>
               </article>
             </div>
           </div>
@@ -312,19 +453,19 @@ const NilaBeautyAI = () => {
                 Event date (optional)
                 <input type="date" value={form.eventDate} onChange={(event) => setForm((cur) => ({ ...cur, eventDate: event.target.value }))} />
               </label>
-              <button type="button" className="beauty-primary" onClick={runAnalysis}>
-                Build My Beauty Plan
+              <button type="button" className="beauty-primary" onClick={runAnalysis} disabled={busyKey === "analysis"}>
+                {busyKey === "analysis" ? "Building..." : "Build My Beauty Plan"}
               </button>
             </div>
             <div>
               <h3>Detected AI Features</h3>
               <ul className="beauty-list">
-                <li>Skin type detection</li>
-                <li>Acne / pigmentation / dark circles detection</li>
+                <li>Skin type estimation and concern mapping</li>
+                <li>Acne / pigmentation / dark circles signals</li>
                 <li>Daily morning + night routine generation</li>
-                <li>Weather and event-based beauty suggestions</li>
                 <li>Budget-aware product recommendations</li>
                 <li>Natural remedy alternatives</li>
+                <li>Progress log sync across sessions</li>
               </ul>
             </div>
           </div>
@@ -340,7 +481,7 @@ const NilaBeautyAI = () => {
               <div>
                 <p><strong>Skin score:</strong> {report.skinScore}/100</p>
                 <p><strong>Skin type:</strong> {report.skinType}</p>
-                <p><strong>Main concerns:</strong> {report.concernsDetected.join(", ")}</p>
+                <p><strong>Main concerns:</strong> {report.concernsDetected.join(", ") || "General care"}</p>
 
                 <h3>Morning Routine</h3>
                 <ul className="beauty-list">{report.morningRoutine.map((item) => <li key={item}>{item}</li>)}</ul>
@@ -381,6 +522,7 @@ const NilaBeautyAI = () => {
             </p>
             <p>Patch-test products/remedies. Avoid unsafe bleaching and steroid-cream self-medication.</p>
             <p>Face photos should not be stored without explicit user consent.</p>
+            {report.warning ? <p><strong>Safety alert:</strong> {report.warning}</p> : null}
           </div>
         </section>
       ) : null}
@@ -397,6 +539,73 @@ const NilaBeautyAI = () => {
                 <li>Control subscription plans and premium reports</li>
                 <li>Run push campaigns and user analytics</li>
               </ul>
+
+              {isAdminControlsVisible ? (
+                <div className="beauty-admin-panel">
+                  <h3>Add Tip to Library</h3>
+                  <label>
+                    Title
+                    <input
+                      value={adminTipForm.title}
+                      onChange={(event) => setAdminTipForm((cur) => ({ ...cur, title: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    Tip text
+                    <input
+                      value={adminTipForm.text}
+                      onChange={(event) => setAdminTipForm((cur) => ({ ...cur, text: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    Category
+                    <input
+                      value={adminTipForm.category}
+                      onChange={(event) => setAdminTipForm((cur) => ({ ...cur, category: event.target.value }))}
+                    />
+                  </label>
+                  <button type="button" className="beauty-primary" onClick={saveAdminTip} disabled={busyKey === "save-tip"}>
+                    {busyKey === "save-tip" ? "Saving..." : "Save Tip"}
+                  </button>
+
+                  {subscriptionRules ? (
+                    <div className="beauty-subscription-editor">
+                      <h3>Subscription Rules</h3>
+                      <label>
+                        Free daily analysis limit
+                        <input
+                          type="number"
+                          value={subscriptionRules.free.dailyAnalysisLimit}
+                          onChange={(event) =>
+                            setSubscriptionRules((cur) => ({
+                              ...cur,
+                              free: { ...cur.free, dailyAnalysisLimit: Number(event.target.value || 0) },
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Premium daily analysis limit
+                        <input
+                          type="number"
+                          value={subscriptionRules.premium.dailyAnalysisLimit}
+                          onChange={(event) =>
+                            setSubscriptionRules((cur) => ({
+                              ...cur,
+                              premium: { ...cur.premium, dailyAnalysisLimit: Number(event.target.value || 0) },
+                            }))
+                          }
+                        />
+                      </label>
+                      <button type="button" className="beauty-primary" onClick={saveSubscriptionRules} disabled={busyKey === "save-rules"}>
+                        {busyKey === "save-rules" ? "Updating..." : "Update Rules"}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p>Admin API controls visible only for admin users.</p>
+              )}
             </article>
             <article>
               <h3>Revenue Streams</h3>
@@ -407,6 +616,12 @@ const NilaBeautyAI = () => {
                 <li>Salon/bridal booking commission</li>
                 <li>Sponsored brand placements</li>
                 <li>Dermatologist consultation referrals</li>
+              </ul>
+              <h3>Tip Library Preview</h3>
+              <ul className="beauty-list">
+                {tips.slice(0, 4).map((tip) => (
+                  <li key={tip.id || tip.title}>{tip.title}: {tip.text}</li>
+                ))}
               </ul>
             </article>
           </div>
@@ -440,7 +655,7 @@ const NilaBeautyAI = () => {
               </ul>
             </article>
             <article>
-              <h3>API Contract (Starter)</h3>
+              <h3>API Contract (Live)</h3>
               <ul className="beauty-list">
                 <li>POST `/beauty-ai/analyze-selfie`</li>
                 <li>POST `/beauty-ai/generate-plan`</li>

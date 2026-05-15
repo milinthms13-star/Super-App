@@ -600,6 +600,7 @@ router.get('/meta', authenticate, async (req, res) => {
         'face-retouch',
         'image-upscaler',
         'caption-hashtag-generator',
+        '360-style',
       ],
       templateCategories: TEMPLATE_CATEGORIES,
       sdkRecommendations: SDK_OPTIONS,
@@ -937,6 +938,105 @@ router.post('/ai/upscale', authenticate, async (req, res, next) => {
         sourceUrl: assetUrl,
         outputUrl: uploaded.url,
         scale,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.post('/ai/360-style', authenticate, async (req, res, next) => {
+  try {
+    const payload = req.body || {};
+    const assetUrl = String(payload.assetUrl || payload.sourceUrl || '').trim();
+    if (!assetUrl) {
+      return res.status(400).json({ success: false, message: 'assetUrl (or sourceUrl) is required.' });
+    }
+
+    const style = String(payload.style || 'spherical').trim().toLowerCase();
+    const sourceBuffer = await readAssetBuffer(assetUrl);
+    const meta = await sharp(sourceBuffer).metadata();
+
+    const canvasWidth = 2048;
+    const canvasHeight = 1024;
+    const blurRadius = style === 'immersive' ? 18 : style === 'cinematic' ? 12 : 16;
+    const baseBuffer = await sharp(sourceBuffer)
+      .resize({ width: canvasWidth, height: canvasHeight, fit: 'cover' })
+      .blur(blurRadius)
+      .toBuffer();
+
+    const overlaySize =
+      style === 'cinematic'
+        ? { width: 1360, height: 760 }
+        : style === 'immersive'
+        ? { width: 1120, height: 1120 }
+        : { width: 1024, height: 1024 };
+    const overlayImage = await sharp(sourceBuffer)
+      .resize({ width: overlaySize.width, height: overlaySize.height, fit: 'cover' })
+      .toBuffer();
+
+    const overlayPosition =
+      style === 'cinematic'
+        ? { top: 90, left: 344 }
+        : style === 'immersive'
+        ? { top: 32, left: 464 }
+        : { top: 12, left: 512 };
+
+    const styleText =
+      style === 'immersive'
+        ? 'Immersive 360°'
+        : style === 'cinematic'
+        ? 'Cinematic 360°'
+        : 'Spherical 360°';
+
+    const extraFrame =
+      style === 'cinematic'
+        ? `<rect x="0" y="0" width="100%" height="128" fill="rgba(0,0,0,0.24)" />
+           <rect x="0" y="${canvasHeight - 128}" width="100%" height="128" fill="rgba(0,0,0,0.24)" />`
+        : style === 'immersive'
+        ? `<ellipse cx="${canvasWidth / 2}" cy="${canvasHeight * 0.7}" rx="760" ry="260" fill="rgba(255,255,255,0.08)" />
+           <circle cx="${canvasWidth / 2}" cy="${canvasHeight * 0.35}" r="240" fill="rgba(255,255,255,0.05)" />`
+        : '';
+
+    const overlaySvg = `
+      <svg width="${canvasWidth}" height="${canvasHeight}">
+        <defs>
+          <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="rgba(255,255,255,0.18)" />
+            <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="100%" height="100%" fill="url(#glow)" />
+        ${extraFrame}
+        <text x="${canvasWidth / 2}" y="980" text-anchor="middle" font-size="52" fill="rgba(255,255,255,0.92)" font-family="Arial, sans-serif" font-weight="700">${sanitizeText(styleText)}</text>
+      </svg>
+    `;
+
+    const composedBuffer = await sharp(baseBuffer)
+      .composite([
+        { input: overlayImage, top: overlayPosition.top, left: overlayPosition.left, blend: 'over' },
+        { input: Buffer.from(overlaySvg), top: 0, left: 0 },
+      ])
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+
+    const uploaded = await uploadWithProviderPreference({
+      buffer: composedBuffer,
+      mimeType: 'image/jpeg',
+      originalName: `360-style-${Date.now()}.jpg`,
+      provider: String(payload.storageProvider || 'auto').toLowerCase(),
+      folder: 'ai-360-style',
+    });
+
+    return res.json({
+      success: true,
+      result: {
+        sourceUrl: assetUrl,
+        outputUrl: uploaded.url,
+        mode: '360-style',
+        style,
+        width: canvasWidth,
+        height: canvasHeight,
       },
     });
   } catch (error) {

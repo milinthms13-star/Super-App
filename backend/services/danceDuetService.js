@@ -86,6 +86,7 @@ const mergeDanceDuet = async ({
     throw new Error('Both dance videos are required.');
   }
 
+  const stageMode = String(mode || 'side-by-side').trim();
   await ensureUploadsRoot();
   const sessionId = uuidv4();
   const video1Path = await saveUploadedFile(video1Buffer, `${sessionId}-video1.mp4`, 'inputs');
@@ -120,14 +121,13 @@ const mergeDanceDuet = async ({
     buildInputFilters({ inputIndex: 1, label: 'v1', removeBackground: Boolean(removeBgColor), chromaColor: removeBgColor }),
   ];
 
-  const backgroundIndex = useBackgroundImage ? 2 : 2;
+  const backgroundIndex = 2;
   videoFilters.push(`[${backgroundIndex}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2[bgout]`);
 
-  if (mode === 'same-background') {
-    videoFilters.push(
-      '[bgout][v0]overlay=60:0[tmp0];' +
-      '[tmp0][v1]overlay=700:0[outv]'
-    );
+  if (stageMode === 'same-background') {
+    videoFilters.push('[bgout][v0]overlay=60:0[tmp0];[tmp0][v1]overlay=700:0[outv]');
+  } else if (stageMode === 'immersive-360') {
+    videoFilters.push('[bgout][v0]overlay=80:24[tmp0];[tmp0][v1]overlay=700:24[outv]');
   } else {
     videoFilters.push('[v0][v1]hstack=inputs=2[outv]');
   }
