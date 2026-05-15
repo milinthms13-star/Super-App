@@ -55,9 +55,14 @@ const app = express();
 const uploadsDirectory = path.join(__dirname, 'uploads');
 const DEFAULT_FRONTEND_ORIGINS = [
   'https://super-app-7j9x.onrender.com',
+  'https://super-app-api.onrender.com',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
+];
+const DEFAULT_FRONTEND_ORIGIN_PATTERNS = [
+  /^https:\/\/super-app-[a-z0-9-]+\.onrender\.com$/i,
+  /^https:\/\/.+\.onrender\.com$/i,
 ];
 
 const normalizeOrigin = (origin) =>
@@ -81,11 +86,15 @@ const allowedOriginSet = new Set(configuredFrontendOrigins);
 
 const corsOrigin = (origin, callback) => {
   const normalizedOrigin = normalizeOrigin(origin);
+  const matchesDefaultPattern = DEFAULT_FRONTEND_ORIGIN_PATTERNS.some((pattern) =>
+    pattern.test(normalizedOrigin)
+  );
 
   if (
     !origin ||
     normalizedOrigin.includes('localhost') ||
     normalizedOrigin.includes('127.0.0.1') ||
+    matchesDefaultPattern ||
     configuredFrontendOrigins.length === 0 ||
     configuredFrontendOrigins.includes('*') ||
     allowedOriginSet.has(normalizedOrigin)
@@ -98,14 +107,16 @@ const corsOrigin = (origin, callback) => {
   callback(new Error('Not allowed by CORS'));
 };
 
+const corsOptions = {
+  origin: corsOrigin,
+  credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+};
+
 app.use(helmet());
 app.use(compression());
-app.use(
-  cors({
-    origin: corsOrigin,
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
