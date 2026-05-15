@@ -207,8 +207,19 @@ const ListingForm = ({
         </label>
 
         <label className="realestate-field">
-          <span>Photo URLs (one per line)</span>
+          <span className="realestate-field-label-row">
+            <span>Photo URLs (one per line)</span>
+            <span className="realestate-helper-links">
+              <a href="https://imgbb.com/upload" target="_blank" rel="noopener noreferrer">
+                Upload via ImgBB
+              </a>
+              <a href="https://postimages.org/" target="_blank" rel="noopener noreferrer">
+                Upload via Postimages
+              </a>
+            </span>
+          </span>
           <textarea rows="3" name="mediaGalleryInput" value={listingForm.mediaGalleryInput} onChange={onInputChange} />
+          <small className="realestate-field-hint">Upload there, then paste each direct image URL on a new line.</small>
         </label>
 
         <label className="realestate-field">
@@ -323,4 +334,3 @@ const ListingForm = ({
 };
 
 export default ListingForm;
-

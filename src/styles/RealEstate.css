@@ -442,6 +442,34 @@
   resize: vertical;
 }
 
+.realestate-field-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+}
+
+.realestate-helper-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.realestate-helper-links a {
+  color: var(--realestate-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.realestate-field-hint {
+  color: var(--realestate-muted);
+  font-weight: 500;
+  font-size: 0.76rem;
+}
+
 .realestate-field-error {
   color: var(--realestate-danger);
   font-weight: 600;
