@@ -25,16 +25,12 @@ try {
 }
 
 const MAX_STORY_LENGTH = 7000;
-const UNSAFE_THEME_PATTERNS = [
-  /suicide/i,
-  /self[-\s]?harm/i,
-  /weapon/i,
-  /gore/i,
-  /kill/i,
-  /terror/i,
-  /abuse/i,
-  /explicit/i,
-  /adult content/i,
+const UNSAFE_THEME_RULES = [
+  { code: 'self_harm', reason: 'self-harm or suicide', pattern: /suicide|self[-\s]?harm/i },
+  { code: 'weapons', reason: 'weapons', pattern: /weapon/i },
+  { code: 'graphic_violence', reason: 'graphic violence', pattern: /gore|kill|terror/i },
+  { code: 'abuse', reason: 'abuse', pattern: /abuse/i },
+  { code: 'adult', reason: 'adult content', pattern: /explicit|adult content/i },
 ];
 
 const ensureUploadsRoot = async () => {
@@ -66,8 +62,28 @@ const extractJson = (text) => {
 
 const sanitizeText = (value = '') => String(value).replace(/\u0000/g, '').trim();
 
-const containsUnsafeTheme = (value = '') =>
-  UNSAFE_THEME_PATTERNS.some((pattern) => pattern.test(value));
+const getSafetyAssessment = (value = '') => {
+  const cleanValue = sanitizeText(value);
+  const reasons = UNSAFE_THEME_RULES
+    .filter((rule) => rule.pattern.test(cleanValue))
+    .map((rule) => ({ code: rule.code, reason: rule.reason }));
+
+  return {
+    blocked: reasons.length > 0,
+    reasons,
+  };
+};
+
+const createSafetyError = (context, assessment) => {
+  const error = new Error(`Safe mode blocked this ${context} due to unsafe themes.`);
+  error.code = 'SAFETY_FAILED';
+  error.status = 422;
+  error.safety = {
+    context,
+    reasons: assessment?.reasons || [],
+  };
+  return error;
+};
 
 const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
   if (!openai) return null;
@@ -396,8 +412,11 @@ const createAutopilotProject = async ({
   if (!cleanSubject) {
     throw new Error('Subject is required.');
   }
-  if (safeMode && containsUnsafeTheme(cleanSubject)) {
-    throw new Error('Safe mode blocked this subject due to unsafe themes.');
+  if (safeMode) {
+    const assessment = getSafetyAssessment(cleanSubject);
+    if (assessment.blocked) {
+      throw createSafetyError('subject', assessment);
+    }
   }
 
   const script = await buildScriptFromSubject({ subject: cleanSubject, languageId, storyMode, ageFilter });
@@ -448,8 +467,15 @@ const regenerateProjectStage = async (projectId, stage, options = {}) => {
   const normalizedStage = sanitizeText(stage).toLowerCase();
 
   if (normalizedStage === 'script') {
+    const safeSubject = sanitizeText(options.subject || project.subject || project.storyTitle);
+    if (project.safeMode) {
+      const assessment = getSafetyAssessment(safeSubject);
+      if (assessment.blocked) {
+        throw createSafetyError('subject', assessment);
+      }
+    }
     const script = await buildScriptFromSubject({
-      subject: options.subject || project.subject || project.storyTitle,
+      subject: safeSubject,
       languageId: project.language,
       storyMode: project.storyMode,
       ageFilter: project.ageFilter,
@@ -548,6 +574,21 @@ const patchStudioProject = async (projectId, patch = {}) => {
   updatedProject.storyPrompt = sanitizeText(updatedProject.storyPrompt || updatedProject.script?.synopsis || project.storyPrompt);
   updatedProject.narration = sanitizeText(updatedProject.narration || updatedProject.script?.narration || project.narration);
 
+  if (updatedProject.safeMode) {
+    const safetyInput = [
+      updatedProject.storyPrompt,
+      updatedProject.script?.synopsis,
+      updatedProject.narration,
+    ]
+      .map((value) => sanitizeText(value))
+      .filter(Boolean)
+      .join(' ');
+    const assessment = getSafetyAssessment(safetyInput);
+    if (assessment.blocked) {
+      throw createSafetyError('project_patch', assessment);
+    }
+  }
+
   return saveStudioProject(updatedProject);
 };
 
@@ -561,8 +602,11 @@ const createStudioProject = async ({ storyTitle, storyPrompt, languageId, styleI
   if (normalizedStoryPrompt.length > MAX_STORY_LENGTH) {
     throw new Error(`Story prompt exceeds ${MAX_STORY_LENGTH} characters.`);
   }
-  if (safeMode && containsUnsafeTheme(normalizedStoryPrompt)) {
-    throw new Error('Safe mode blocked this prompt due to unsafe themes.');
+  if (safeMode) {
+    const assessment = getSafetyAssessment(normalizedStoryPrompt);
+    if (assessment.blocked) {
+      throw createSafetyError('story_prompt', assessment);
+    }
   }
 
   const project = {

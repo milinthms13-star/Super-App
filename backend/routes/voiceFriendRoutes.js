@@ -1,6 +1,9 @@
 const express = require('express');
 const logger = require('../utils/logger');
 const voiceFriendService = require('../services/voiceFriendService');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
 
@@ -102,6 +105,31 @@ router.post('/speech', async (req, res) => {
   } catch (error) {
     logger.error('Error generating Voice Friend speech:', error);
     res.status(500).json({ success: false, message: 'Unable to generate speech at this time.' });
+  }
+});
+
+// POST /api/ai-voice-friend/avatar - upload avatar image for friend
+const avatarUploadRoot = path.join(__dirname, '../uploads/voicefriend');
+try { fs.mkdirSync(avatarUploadRoot, { recursive: true }); } catch (e) { /* ignore */ }
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, avatarUploadRoot),
+  filename: (req, file, cb) => {
+    const safe = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+    cb(null, safe);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 3 * 1024 * 1024 } });
+
+router.post('/avatar', upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+    const fileName = req.file.filename;
+    const publicUrl = `/uploads/voicefriend/${fileName}`;
+    res.json({ success: true, data: { url: publicUrl } });
+  } catch (error) {
+    logger.error('Avatar upload failed:', error);
+    res.status(500).json({ success: false, message: 'Avatar upload failed' });
   }
 });
 

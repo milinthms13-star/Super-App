@@ -1,6 +1,30 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BACKEND_BASE_URL, buildApiUrl } from "../../utils/api";
 import "./KidsStoryVideoMaker.css";
+import {
+  LOCAL_CHARACTER_PRESET_KEY,
+  LOCAL_PROJECT_LIBRARY_KEY,
+  MAX_STORY_LENGTH,
+  MAX_UPLOAD_SIZE_BYTES,
+  MIN_STORY_LENGTH,
+  buildSubtitlesFromScenes,
+  getSafetyFailure,
+  loadLocalCollection,
+  normalizeMediaUrl,
+  normalizeProjectForLocal,
+  normalizeScenesForRender,
+  sanitizeText,
+  saveLocalCollection,
+  validateScenesForRender,
+} from "./storyStudioUtils";
+import {
+  VideoStudioApiError,
+  createAutopilotProject,
+  createProject,
+  getProjectDownloadLink,
+  patchProject,
+  regenerateStage,
+  renderProject,
+} from "./videoStudioApi";
 
 const LANGUAGE_OPTIONS = [
   { id: "english", label: "English", code: "en-US" },
@@ -75,25 +99,6 @@ const STORY_TEMPLATES = [
 
 const DEFAULT_STORY_PROMPT = STORY_TEMPLATES[0].prompt;
 
-const LOCAL_SCHEMA_VERSION = 2;
-const LOCAL_PROJECT_LIBRARY_KEY = "kids-story-video-project-library-v1";
-const LOCAL_CHARACTER_PRESET_KEY = "kids-story-character-presets-v1";
-const MAX_STORY_LENGTH = 7000;
-const MIN_STORY_LENGTH = 40;
-const MAX_UPLOAD_SIZE_BYTES = 500 * 1024;
-
-const UNSAFE_THEME_PATTERNS = [
-  /suicide/i,
-  /self[-\s]?harm/i,
-  /weapon/i,
-  /gore/i,
-  /kill/i,
-  /terror/i,
-  /abuse/i,
-  /explicit/i,
-  /adult content/i,
-];
-
 const getStyleDescription = (styleId) => {
   const style = STYLE_OPTIONS.find((item) => item.id === styleId);
   return style ? style.description : "An expressive animation style for kids.";
@@ -102,159 +107,6 @@ const getStyleDescription = (styleId) => {
 const getModeDescription = (modeId) => {
   const mode = STORY_MODES.find((item) => item.id === modeId);
   return mode ? `${mode.label} stories with age-appropriate pacing and tone.` : "A kid-safe story mode.";
-};
-
-const sanitizeText = (value = "") => String(value).replace(/\u0000/g, "").trim();
-
-const hasUnsafeThemes = (value = "") => UNSAFE_THEME_PATTERNS.some((pattern) => pattern.test(value));
-
-const parseApiResponse = async (response) => {
-  const text = await response.text();
-  if (!text) {
-    const emptyError = new Error(
-      `Video service returned empty response (${response.status}). Please verify backend API availability.`
-    );
-    emptyError.status = response.status;
-    throw emptyError;
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(text);
-  } catch (_error) {
-    throw new Error("Server returned invalid JSON.");
-  }
-
-  if (!response.ok) {
-    const requestError = new Error(payload?.error || payload?.message || `Request failed (${response.status}).`);
-    requestError.status = response.status;
-    throw requestError;
-  }
-
-  return payload;
-};
-
-const buildSubtitlesFromScenes = (scenes = []) => {
-  let offset = 0;
-  return scenes.map((scene, index) => {
-    const duration = Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4));
-    const subtitle = {
-      start: offset,
-      end: offset + duration,
-      text: `${sanitizeText(scene?.title || `Scene ${index + 1}`)}: ${sanitizeText(
-        scene?.description || scene?.summary || ""
-      )}`.trim(),
-    };
-    offset += duration;
-    return subtitle;
-  });
-};
-
-const normalizeSceneForRender = (scene, index) => ({
-  id: index + 1,
-  title: sanitizeText(scene?.title || `Scene ${index + 1}`),
-  description: sanitizeText(scene?.description || scene?.summary || ""),
-  dialogue: sanitizeText(scene?.dialogue || ""),
-  emotion: sanitizeText(scene?.emotion || "wonder"),
-  background: sanitizeText(scene?.background || ""),
-  weather: sanitizeText(scene?.weather || ""),
-  timeOfDay: sanitizeText(scene?.timeOfDay || ""),
-  cameraActions: sanitizeText(scene?.cameraActions || "soft pan"),
-  durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
-  characters: Array.isArray(scene?.characters) ? scene.characters : [],
-});
-
-const normalizeScenesForRender = (scenes = []) =>
-  (Array.isArray(scenes) ? scenes : []).map((scene, index) => normalizeSceneForRender(scene, index));
-
-const validateScenesForRender = (scenes = []) => {
-  if (!Array.isArray(scenes) || scenes.length === 0) {
-    return "Please generate at least one scene before rendering.";
-  }
-
-  for (let index = 0; index < scenes.length; index += 1) {
-    const scene = scenes[index];
-    if (!sanitizeText(scene?.title)) {
-      return `Scene ${index + 1} is missing title.`;
-    }
-    if (!sanitizeText(scene?.description || scene?.summary)) {
-      return `Scene ${index + 1} is missing description.`;
-    }
-    const duration = Number(scene?.durationSeconds) || 4;
-    if (duration < 2 || duration > 15) {
-      return `Scene ${index + 1} duration must be between 2 and 15 seconds.`;
-    }
-  }
-
-  return "";
-};
-
-const loadLocalCollection = (key) => {
-  const raw = window.localStorage.getItem(key);
-  if (!raw) {
-    return [];
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (_error) {
-    return [];
-  }
-
-  if (Array.isArray(parsed)) {
-    return parsed;
-  }
-
-  if (
-    parsed &&
-    typeof parsed === "object" &&
-    Number(parsed.version) >= 1 &&
-    Array.isArray(parsed.items)
-  ) {
-    return parsed.items;
-  }
-
-  return [];
-};
-
-const saveLocalCollection = (key, items = []) => {
-  window.localStorage.setItem(
-    key,
-    JSON.stringify({
-      version: LOCAL_SCHEMA_VERSION,
-      items: Array.isArray(items) ? items : [],
-      updatedAt: new Date().toISOString(),
-    })
-  );
-};
-
-const normalizeMediaUrl = (value = "", preferredOrigin = "") => {
-  const rawValue = sanitizeText(value);
-  if (!rawValue) {
-    return "";
-  }
-
-  if (/^(https?:|data:|blob:)/i.test(rawValue)) {
-    return rawValue;
-  }
-
-  if (rawValue.startsWith("//")) {
-    return `${window.location.protocol}${rawValue}`;
-  }
-
-  const safePreferredOrigin = sanitizeText(preferredOrigin).replace(/\/+$/, "");
-  if (rawValue.startsWith("/")) {
-    if (safePreferredOrigin) {
-      return `${safePreferredOrigin}${rawValue}`;
-    }
-    return `${BACKEND_BASE_URL}${rawValue}`;
-  }
-
-  if (safePreferredOrigin) {
-    return `${safePreferredOrigin}/${rawValue}`;
-  }
-  return `${BACKEND_BASE_URL}/${rawValue}`;
 };
 
 const FALLBACK_SCENE_TITLES = ["Beginning", "Adventure", "Challenge", "Magic", "Celebration"];
@@ -340,50 +192,12 @@ const createClientFallbackProject = ({
 
 const getSceneId = (scene, index) => String(scene?.id || index + 1);
 
-const normalizeProjectForLocal = (project, overrides = {}) => {
-  const scenes = Array.isArray(overrides.scenes)
-    ? overrides.scenes
-    : Array.isArray(project?.scenes)
-      ? project.scenes
-      : [];
-
-  return {
-    projectId: project?.projectId || `local-${Date.now()}`,
-    title: sanitizeText(overrides.title || project?.title || "AI Kids Story Video Generator"),
-    storyPrompt: sanitizeText(overrides.storyPrompt || project?.storyPrompt || ""),
-    storySource: overrides.storySource || project?.storySource || "paste",
-    language: overrides.language || project?.language || "english",
-    style: overrides.style || project?.style || "cartoon",
-    videoSize: overrides.videoSize || project?.videoSize || "youtube",
-    voiceType: overrides.voiceType || project?.voiceType || "kid-female",
-    storyMode: overrides.storyMode || project?.storyMode || "bedtime",
-    safeMode:
-      typeof overrides.safeMode === "boolean"
-        ? overrides.safeMode
-        : typeof project?.safeMode === "boolean"
-          ? project.safeMode
-          : true,
-    ageFilter: overrides.ageFilter || project?.ageFilter || "5-8",
-    narration: overrides.narration || project?.narration || "",
-    scenes,
-    subtitles: Array.isArray(project?.subtitles) ? project.subtitles : [],
-    characters: Array.isArray(project?.characters) ? project.characters : [],
-    promptHints: Array.isArray(project?.promptHints) ? project.promptHints : [],
-    createdAt: project?.createdAt || new Date().toISOString(),
-    renderedAt: project?.renderedAt || null,
-    videoUrl: overrides.videoUrl || project?.videoUrl || "",
-    premiumExport:
-      typeof overrides.premiumExport === "boolean"
-        ? overrides.premiumExport
-        : Boolean(project?.premiumExport),
-    savedAt: new Date().toISOString(),
-  };
-};
-
 const KidsStoryVideoMaker = () => {
   const recognitionRef = useRef(null);
   const voiceTargetRef = useRef("");
   const mainContentRef = useRef(null);
+  const voiceCatalogReadyRef = useRef(false);
+  const requestControllersRef = useRef({});
   const [subjectInput, setSubjectInput] = useState("Rabbit and Tortoise");
   const [storyTitle, setStoryTitle] = useState("AI Kids Story Video Generator");
   const [storyPrompt, setStoryPrompt] = useState(DEFAULT_STORY_PROMPT);
@@ -413,6 +227,13 @@ const KidsStoryVideoMaker = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [projectLibrary, setProjectLibrary] = useState([]);
   const [characterPresets, setCharacterPresets] = useState([]);
+  const [dirtySections, setDirtySections] = useState({
+    script: false,
+    characters: false,
+    scenes: false,
+    voice: false,
+    music: false,
+  });
 
   const languageLabel = useMemo(
     () => LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.label || "English",
@@ -448,6 +269,41 @@ const KidsStoryVideoMaker = () => {
     return { value: 35, label: "Project generated" };
   }, [generatedProject, generatedScenes.length, videoUrl]);
 
+  const hasUnsavedEdits = Object.values(dirtySections).some(Boolean);
+
+  const markSectionDirty = (section) => {
+    setDirtySections((current) => ({ ...current, [section]: true }));
+  };
+
+  const clearSectionDirty = (section) => {
+    setDirtySections((current) => ({ ...current, [section]: false }));
+  };
+
+  const formatSafetyError = (apiError) => {
+    if (!(apiError instanceof VideoStudioApiError) || !apiError.safety?.reasons?.length) {
+      return apiError?.message || "Request failed.";
+    }
+    const reasons = apiError.safety.reasons.map((item) => item.reason).join(", ");
+    return `Safety guardrail blocked this request: ${reasons}.`;
+  };
+
+  const runCancelableRequest = async (key, requestFactory) => {
+    const currentController = requestControllersRef.current[key];
+    if (currentController) {
+      currentController.abort();
+    }
+
+    const controller = new AbortController();
+    requestControllersRef.current[key] = controller;
+    try {
+      return await requestFactory(controller.signal);
+    } finally {
+      if (requestControllersRef.current[key] === controller) {
+        delete requestControllersRef.current[key];
+      }
+    }
+  };
+
   useEffect(() => {
     setProjectLibrary(loadLocalCollection(LOCAL_PROJECT_LIBRARY_KEY));
   }, []);
@@ -459,6 +315,7 @@ const KidsStoryVideoMaker = () => {
   useEffect(() => {
     return () => {
       window.speechSynthesis?.cancel();
+      Object.values(requestControllersRef.current).forEach((controller) => controller?.abort?.());
       if (recognitionRef.current?.abort) {
         recognitionRef.current.abort();
       }
@@ -512,6 +369,25 @@ const KidsStoryVideoMaker = () => {
     recognitionRef.current = recognition;
     setSpeechSupported(true);
   }, [languageId]);
+
+  useEffect(() => {
+    if (!window.speechSynthesis) {
+      return undefined;
+    }
+
+    const handleVoicesChanged = () => {
+      voiceCatalogReadyRef.current = true;
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      voiceCatalogReadyRef.current = true;
+    }
+
+    window.speechSynthesis.addEventListener?.("voiceschanged", handleVoicesChanged);
+    return () => {
+      window.speechSynthesis.removeEventListener?.("voiceschanged", handleVoicesChanged);
+    };
+  }, []);
 
   const persistProjectLibrary = (items) => {
     setProjectLibrary(items);
@@ -576,6 +452,7 @@ const KidsStoryVideoMaker = () => {
           }
         : current
     );
+    markSectionDirty("characters");
     setError("");
     setMessage(`Applied character preset: ${preset.title || "Preset"}`);
   };
@@ -644,6 +521,13 @@ const KidsStoryVideoMaker = () => {
     setPremiumHD(Boolean(normalized.premiumExport));
     setVideoUrl(normalizeMediaUrl(normalized.videoUrl || ""));
     setSubjectInput(incomingProject.subject || subjectInput);
+    setDirtySections({
+      script: false,
+      characters: false,
+      scenes: false,
+      voice: false,
+      music: false,
+    });
     setError("");
     setMessage(successText);
   };
@@ -653,15 +537,9 @@ const KidsStoryVideoMaker = () => {
       return;
     }
 
-    const response = await fetch(
-      buildApiUrl(`/video-studio/projects/${generatedProject.projectId}`),
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(partialPayload),
-      }
+    const { payload } = await runCancelableRequest("patch-project", (signal) =>
+      patchProject(generatedProject.projectId, partialPayload, { signal })
     );
-    const payload = await parseApiResponse(response);
     if (!payload.success || !payload.project) {
       throw new Error(payload.error || payload.message || "Failed to update project.");
     }
@@ -681,22 +559,22 @@ const KidsStoryVideoMaker = () => {
     setMessage("Generating full script, characters, scenes, animation plan, and voice map...");
 
     try {
-      const response = await fetch(buildApiUrl("/video-studio/autopilot/create"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: cleanSubject,
-          languageId,
-          styleId,
+      const { payload } = await runCancelableRequest("autopilot-create", (signal) =>
+        createAutopilotProject(
+          {
+            subject: cleanSubject,
+            languageId,
+            styleId,
           voiceType,
           videoSizeId,
           storyMode,
-          safeMode,
-          ageFilter,
-          sceneCount: generatedScenes.length || 5,
-        }),
-      });
-      const payload = await parseApiResponse(response);
+            safeMode,
+            ageFilter,
+            sceneCount: generatedScenes.length || 5,
+          },
+          { signal }
+        )
+      );
       if (!payload.success || !payload.project) {
         throw new Error(payload.error || payload.message || "Autopilot generation failed.");
       }
@@ -704,7 +582,7 @@ const KidsStoryVideoMaker = () => {
       applyProjectSnapshotToStudio(payload.project, "Autopilot project generated. You can edit every stage.");
       setActiveTab("characters");
     } catch (err) {
-      setError(err.message || "Unable to generate autopilot project.");
+      setError(formatSafetyError(err));
     } finally {
       setIsAutopilotGenerating(false);
     }
@@ -750,28 +628,46 @@ const KidsStoryVideoMaker = () => {
       return;
     }
 
+    const stageToDirtySection = {
+      script: "script",
+      characters: "characters",
+      scenes: "scenes",
+      voice: "voice",
+      music: "music",
+    };
+    const dirtyKey = stageToDirtySection[stage];
+    if (dirtyKey && dirtySections[dirtyKey]) {
+      const confirmed = window.confirm(
+        `You have unsaved ${dirtyKey} edits. Regenerating ${stage} will overwrite them. Continue?`
+      );
+      if (!confirmed) {
+        setMessage("Regeneration cancelled to preserve unsaved edits.");
+        setError("");
+        return;
+      }
+    }
+
     setIsStageRegenerating(stage);
     setError("");
     setMessage(`Regenerating ${stage} stage...`);
     try {
-      const response = await fetch(
-        buildApiUrl(`/video-studio/projects/${generatedProject.projectId}/regenerate/${stage}`),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+      const { payload } = await runCancelableRequest(`regenerate-${stage}`, (signal) =>
+        regenerateStage(
+          generatedProject.projectId,
+          stage,
+          {
             subject: subjectInput,
             sceneCount: generatedScenes.length || 5,
-          }),
-        }
+          },
+          { signal }
+        )
       );
-      const payload = await parseApiResponse(response);
       if (!payload.success || !payload.project) {
         throw new Error(payload.error || payload.message || `Failed to regenerate ${stage}.`);
       }
       applyProjectSnapshotToStudio(payload.project, `${stage} stage regenerated.`);
     } catch (err) {
-      setError(err.message || `Unable to regenerate ${stage}.`);
+      setError(formatSafetyError(err));
     } finally {
       setIsStageRegenerating("");
     }
@@ -825,8 +721,10 @@ const KidsStoryVideoMaker = () => {
       return;
     }
 
-    if (safeMode && hasUnsafeThemes(storyContent)) {
-      setError("Safe mode blocked this prompt. Please remove unsafe themes and try again.");
+    const localSafety = getSafetyFailure(storyContent);
+    if (safeMode && localSafety.blocked) {
+      const reasons = localSafety.reasons.map((item) => item.reason).join(", ");
+      setError(`Safe mode blocked this prompt due to: ${reasons}.`);
       setMessage("");
       return;
     }
@@ -836,24 +734,23 @@ const KidsStoryVideoMaker = () => {
     setIsGenerating(true);
 
     try {
-      const response = await fetch(buildApiUrl("/video-studio/create"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storyTitle: safeTitle,
-          storyPrompt: storyContent,
-          languageId,
+      const { payload, response } = await runCancelableRequest("create-project", (signal) =>
+        createProject(
+          {
+            storyTitle: safeTitle,
+            storyPrompt: storyContent,
+            languageId,
           styleId,
           voiceType,
           videoSizeId,
           storyMode,
-          safeMode,
-          ageFilter,
-          storySource,
-        }),
-      });
-
-      const payload = await parseApiResponse(response);
+            safeMode,
+            ageFilter,
+            storySource,
+          },
+          { signal }
+        )
+      );
       if (!payload.success || !payload.project) {
         throw new Error(payload.error || payload.message || "AI pipeline generation failed.");
       }
@@ -887,7 +784,7 @@ const KidsStoryVideoMaker = () => {
         Number(err?.status) >= 500;
 
       if (!isServiceIssue) {
-        setError(err.message || "Unable to generate the AI story project.");
+        setError(formatSafetyError(err));
         return;
       }
 
@@ -908,6 +805,13 @@ const KidsStoryVideoMaker = () => {
       setGeneratedScenes(fallbackProject.scenes || []);
       setStoryTitle(fallbackProject.title || safeTitle);
       setVideoUrl("");
+      setDirtySections({
+        script: false,
+        characters: false,
+        scenes: false,
+        voice: false,
+        music: false,
+      });
       setError("");
       setMessage(
         `AI service is unavailable right now (${err.message || "unknown error"}). Loaded local storyboard fallback.`
@@ -937,6 +841,7 @@ const KidsStoryVideoMaker = () => {
           }
         : current
     );
+    markSectionDirty("scenes");
   };
 
   const handleSceneDurationChange = (sceneId, value) => {
@@ -969,6 +874,7 @@ const KidsStoryVideoMaker = () => {
           }
         : current
     );
+    markSectionDirty("scenes");
     setMessage("Scene order updated. Save scene edits to persist.");
     setError("");
   };
@@ -1013,13 +919,9 @@ const KidsStoryVideoMaker = () => {
     setIsRendering(true);
 
     try {
-      const response = await fetch(buildApiUrl("/video-studio/render"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project: renderProject, premiumHD }),
-      });
-
-      const payload = await parseApiResponse(response);
+      const { payload, response } = await runCancelableRequest("render-video", (signal) =>
+        renderProject({ project: renderProject, premiumHD }, { signal })
+      );
       if (!payload.success) {
         throw new Error(payload.error || payload.message || "Video render failed.");
       }
@@ -1042,7 +944,7 @@ const KidsStoryVideoMaker = () => {
       setMessage("Video rendered successfully. Preview and export your MP4.");
       setActiveTab("export");
     } catch (err) {
-      setError(err.message || "Unable to render the video.");
+      setError(formatSafetyError(err));
     } finally {
       setIsRendering(false);
     }
@@ -1072,13 +974,35 @@ const KidsStoryVideoMaker = () => {
       setError("Unable to play narration aloud.");
     };
 
-    const voices = speech.getVoices();
-    const voice = voices.find((item) => item.lang.toLowerCase().startsWith(utterance.lang.toLowerCase()));
-    if (voice) {
-      utterance.voice = voice;
+    const applyVoiceAndSpeak = () => {
+      const voices = speech.getVoices();
+      const voice = voices.find((item) =>
+        item.lang.toLowerCase().startsWith(utterance.lang.toLowerCase())
+      );
+      if (voice) {
+        utterance.voice = voice;
+      }
+      speech.speak(utterance);
+    };
+
+    if (!voiceCatalogReadyRef.current && speech.getVoices().length === 0) {
+      setTimeout(() => {
+        applyVoiceAndSpeak();
+      }, 120);
+      return;
     }
 
-    speech.speak(utterance);
+    applyVoiceAndSpeak();
+  };
+
+  const handleStopNarration = () => {
+    if (!window.speechSynthesis) {
+      return;
+    }
+    window.speechSynthesis.cancel();
+    setIsNarrating(false);
+    setMessage("Narration stopped.");
+    setError("");
   };
 
   const handleCopyNarration = async () => {
@@ -1110,6 +1034,7 @@ const KidsStoryVideoMaker = () => {
         },
       };
     });
+    markSectionDirty("voice");
   };
 
   const handleMusicPlanFieldChange = (field, value) => {
@@ -1131,9 +1056,10 @@ const KidsStoryVideoMaker = () => {
         musicPlan: nextMusicPlan,
       };
     });
+    markSectionDirty("music");
   };
 
-  const handleDownloadVideo = () => {
+  const handleDownloadVideo = async () => {
     if (!videoUrl) {
       setError("Render the video first to download it.");
       return;
@@ -1143,13 +1069,40 @@ const KidsStoryVideoMaker = () => {
       .replace(/[^a-z0-9]/gi, "_")
       .toLowerCase();
 
-    const link = document.createElement("a");
-    link.href = videoUrl;
-    link.download = `${baseTitle || "kids_story_video"}.mp4`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setMessage("Download started. Your MP4 is ready.");
+    const triggerDownload = (url) => {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${baseTitle || "kids_story_video"}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+
+    try {
+      triggerDownload(videoUrl);
+      setMessage("Download started. Your MP4 is ready.");
+      setError("");
+    } catch (_error) {
+      if (!generatedProject?.projectId) {
+        setError("Download failed. Please try again.");
+        return;
+      }
+
+      try {
+        const { payload } = await runCancelableRequest("download-link", (signal) =>
+          getProjectDownloadLink(generatedProject.projectId, { signal })
+        );
+        const resolvedUrl = normalizeMediaUrl(payload?.downloadUrl || payload?.videoUrl || "");
+        if (!resolvedUrl) {
+          throw new Error("No download URL is available for this project.");
+        }
+        triggerDownload(resolvedUrl);
+        setMessage("Download started using fallback URL.");
+        setError("");
+      } catch (innerError) {
+        setError(innerError?.message || "Unable to download this video right now.");
+      }
+    }
   };
 
   const handleDownloadProjectJson = () => {
@@ -1226,7 +1179,7 @@ const KidsStoryVideoMaker = () => {
     ].slice(0, 30);
 
     persistProjectLibrary(nextItems);
-    setMessage("Project saved in My Projects.");
+    setMessage("Project saved locally in My Projects. Use Save stage edits to persist to server.");
     setError("");
     setActiveTab("myprojects");
   };
@@ -1318,6 +1271,12 @@ const KidsStoryVideoMaker = () => {
         ))}
       </section>
 
+      {hasUnsavedEdits && (
+        <div className="save-state-banner" role="status" aria-live="polite">
+          You have unsaved edits in this project. Save stage edits to persist to server before regeneration.
+        </div>
+      )}
+
       <div className="studio-grid">
         <aside className="studio-sidebar">
           <div className="studio-card sidebar-card">
@@ -1369,7 +1328,7 @@ const KidsStoryVideoMaker = () => {
           </div>
         </aside>
 
-        <main className="studio-main">
+        <main className="studio-main" ref={mainContentRef}>
           {activeTab === "dashboard" && (
             <div className="studio-card dashboard-card">
               <h2>Dashboard</h2>
@@ -1579,6 +1538,7 @@ const KidsStoryVideoMaker = () => {
                           : current
                       );
                       setStoryPrompt(nextSynopsis);
+                      markSectionDirty("script");
                     }}
                   />
                   <label>Moral Message</label>
@@ -1592,6 +1552,7 @@ const KidsStoryVideoMaker = () => {
                           ? { ...current, script: { ...(current.script || {}), moral: nextMoral } }
                           : current
                       );
+                      markSectionDirty("script");
                     }}
                   />
                   <div className="story-actions">
@@ -1606,6 +1567,7 @@ const KidsStoryVideoMaker = () => {
                             },
                             "Script edits saved."
                           );
+                          clearSectionDirty("script");
                         } catch (err) {
                           setError(err.message || "Unable to save script edits.");
                         }
@@ -1681,6 +1643,7 @@ const KidsStoryVideoMaker = () => {
                         { characters: generatedProject?.characters || [] },
                         "Character edits saved."
                       );
+                      clearSectionDirty("characters");
                     } catch (err) {
                       setError(err.message || "Unable to save characters.");
                     }
@@ -1742,6 +1705,7 @@ const KidsStoryVideoMaker = () => {
                             characters[index] = { ...characters[index], name: event.target.value };
                             return { ...current, characters };
                           });
+                          markSectionDirty("characters");
                         }}
                       />
                       <label>Appearance</label>
@@ -1755,6 +1719,7 @@ const KidsStoryVideoMaker = () => {
                             characters[index] = { ...characters[index], appearance: event.target.value };
                             return { ...current, characters };
                           });
+                          markSectionDirty("characters");
                         }}
                       />
                       <label>Voice</label>
@@ -1768,6 +1733,7 @@ const KidsStoryVideoMaker = () => {
                             characters[index] = { ...characters[index], voiceProfile: event.target.value };
                             return { ...current, characters };
                           });
+                          markSectionDirty("characters");
                         }}
                       />
                       <div className="studio-toggle-row">
@@ -1784,6 +1750,7 @@ const KidsStoryVideoMaker = () => {
                               };
                               return { ...current, characters };
                             });
+                            markSectionDirty("characters");
                           }}
                         >
                           {character.locked !== false ? "Locked" : "Unlocked"}
@@ -1815,6 +1782,7 @@ const KidsStoryVideoMaker = () => {
                   onClick={async () => {
                     try {
                       await patchCurrentProject({ scenes: generatedScenes }, "Scene edits saved.");
+                      clearSectionDirty("scenes");
                     } catch (err) {
                       setError(err.message || "Unable to save scenes.");
                     }
@@ -1968,6 +1936,80 @@ const KidsStoryVideoMaker = () => {
                   {isStageRegenerating === "music" ? "Regenerating..." : "Regenerate Music + SFX"}
                 </button>
               </div>
+              {generatedProject?.voicePlan && (
+                <div className="advanced-panel">
+                  <h3>Voice Plan</h3>
+                  <label>Narrator voice</label>
+                  <input
+                    type="text"
+                    value={generatedProject.voicePlan?.narrator?.voice || ""}
+                    onChange={(event) => handleVoicePlanFieldChange("voice", event.target.value)}
+                  />
+                  <label>Narrator language</label>
+                  <input
+                    type="text"
+                    value={generatedProject.voicePlan?.narrator?.language || ""}
+                    onChange={(event) => handleVoicePlanFieldChange("language", event.target.value)}
+                  />
+                  <label>Narrator text</label>
+                  <textarea
+                    rows={3}
+                    value={generatedProject.voicePlan?.narrator?.text || ""}
+                    onChange={(event) => handleVoicePlanFieldChange("text", event.target.value)}
+                  />
+                  <button
+                    className="secondary-button"
+                    onClick={async () => {
+                      try {
+                        await patchCurrentProject({ voicePlan: generatedProject.voicePlan }, "Voice plan saved.");
+                        clearSectionDirty("voice");
+                      } catch (err) {
+                        setError(formatSafetyError(err));
+                      }
+                    }}
+                    disabled={!generatedProject?.projectId}
+                  >
+                    Save Voice Plan
+                  </button>
+                </div>
+              )}
+              {generatedProject?.musicPlan && (
+                <div className="advanced-panel">
+                  <h3>Music + SFX Plan</h3>
+                  <label>Background track</label>
+                  <input
+                    type="text"
+                    value={generatedProject.musicPlan?.backgroundTrack || ""}
+                    onChange={(event) => handleMusicPlanFieldChange("backgroundTrack", event.target.value)}
+                  />
+                  <label>Mix style</label>
+                  <input
+                    type="text"
+                    value={generatedProject.musicPlan?.mixStyle || ""}
+                    onChange={(event) => handleMusicPlanFieldChange("mixStyle", event.target.value)}
+                  />
+                  <label>Sound effects (comma separated)</label>
+                  <input
+                    type="text"
+                    value={Array.isArray(generatedProject.musicPlan?.sfx) ? generatedProject.musicPlan.sfx.join(", ") : ""}
+                    onChange={(event) => handleMusicPlanFieldChange("sfx", event.target.value)}
+                  />
+                  <button
+                    className="secondary-button"
+                    onClick={async () => {
+                      try {
+                        await patchCurrentProject({ musicPlan: generatedProject.musicPlan }, "Music plan saved.");
+                        clearSectionDirty("music");
+                      } catch (err) {
+                        setError(formatSafetyError(err));
+                      }
+                    }}
+                    disabled={!generatedProject?.projectId}
+                  >
+                    Save Music Plan
+                  </button>
+                </div>
+              )}
               <div className="narration-summary-card">
                 <h3>Narration script</h3>
                 <p>{generatedProject?.narration || "Narration appears after generating the pipeline."}</p>
@@ -1975,6 +2017,9 @@ const KidsStoryVideoMaker = () => {
               <div className="audio-actions">
                 <button className="secondary-button" onClick={handlePlayNarration} disabled={!generatedProject}>
                   {isNarrating ? "Playing narration..." : "Listen to narration"}
+                </button>
+                <button className="secondary-button" onClick={handleStopNarration} disabled={!isNarrating}>
+                  Stop narration
                 </button>
                 <button className="secondary-button" onClick={handleCopyNarration} disabled={!generatedProject?.narration}>
                   Copy narration

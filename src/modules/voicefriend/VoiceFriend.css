@@ -233,6 +233,46 @@
   font-size: 0.95rem;
 }
 
+.voice-friend-button { /* slightly smaller action buttons */
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.typing-indicator {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background: #4f46e5;
+  border-radius: 50%;
+  opacity: 0.25;
+  animation: blink 1s infinite ease-in-out;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-6px); }
+}
+
+.voice-friend-waveform { margin: 12px 0; min-height: 14px; transition: opacity 220ms ease-in-out; opacity: 0; }
+.voice-friend-waveform.active { opacity: 1; }
+.voice-friend-waveform.inactive { opacity: 0.0001; }
+.voice-friend-waveform .wave {
+  height: 10px;
+  background: linear-gradient(90deg,#4f46e5,#60a5fa,#c7d2fe);
+  border-radius: 6px;
+  animation: slide 1s linear infinite;
+}
+@keyframes slide {
+  0% { background-position: 0% 50%; }
+ 100% { background-position: 100% 50%; }
+}
+
 .voice-friend-button {
   border: 1px solid #d1d5db;
   background: #ffffff;

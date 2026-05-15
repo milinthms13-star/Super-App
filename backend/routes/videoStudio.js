@@ -19,6 +19,19 @@ const buildRequestOrigin = (req) => {
   return `${protocol}://${host}`;
 };
 
+const respondVideoStudioError = (res, error, fallbackMessage) => {
+  if (error?.code === 'SAFETY_FAILED') {
+    return res.status(error.status || 422).json({
+      success: false,
+      code: 'SAFETY_FAILED',
+      error: error.message || fallbackMessage,
+      safety: error.safety || { reasons: [] },
+    });
+  }
+
+  return res.status(500).json({ success: false, error: error.message || fallbackMessage });
+};
+
 router.post('/create', async (req, res) => {
   try {
     const {
@@ -74,7 +87,7 @@ router.post('/create', async (req, res) => {
     res.json({ success: true, project });
   } catch (error) {
     logger.error('Video studio create error:', error);
-    res.status(500).json({ success: false, error: 'Failed to create AI video project.' });
+    respondVideoStudioError(res, error, 'Failed to create AI video project.');
   }
 });
 
@@ -103,6 +116,13 @@ router.post('/render', async (req, res) => {
     const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
       ? relativeVideoUrl
       : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
+
+    await patchStudioProject(resolvedProject.projectId, {
+      videoUrl: relativeVideoUrl,
+      renderedAt: new Date().toISOString(),
+      premiumExport: Boolean(premiumHD),
+      scenes: resolvedProject.scenes,
+    });
 
     res.json({
       success: true,
@@ -150,7 +170,7 @@ router.post('/autopilot/create', async (req, res) => {
     res.json({ success: true, project });
   } catch (error) {
     logger.error('Video studio autopilot create error:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to generate autonomous story project.' });
+    respondVideoStudioError(res, error, 'Failed to generate autonomous story project.');
   }
 });
 
@@ -170,7 +190,7 @@ router.patch('/projects/:projectId', async (req, res) => {
     res.json({ success: true, project });
   } catch (error) {
     logger.error('Video studio patch project error:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to update project.' });
+    respondVideoStudioError(res, error, 'Failed to update project.');
   }
 });
 
@@ -180,7 +200,32 @@ router.post('/projects/:projectId/regenerate/:stage', async (req, res) => {
     res.json({ success: true, project });
   } catch (error) {
     logger.error('Video studio regenerate stage error:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to regenerate stage.' });
+    respondVideoStudioError(res, error, 'Failed to regenerate stage.');
+  }
+});
+
+router.get('/projects/:projectId/download', async (req, res) => {
+  try {
+    const project = await getStudioProject(req.params.projectId);
+    const rawVideoUrl = String(project?.videoUrl || '').trim();
+    if (!rawVideoUrl) {
+      return res.status(404).json({ success: false, error: 'No rendered video is available for this project yet.' });
+    }
+
+    const origin = buildRequestOrigin(req);
+    const absoluteVideoUrl = /^https?:\/\//i.test(rawVideoUrl)
+      ? rawVideoUrl
+      : `${origin}${rawVideoUrl.startsWith('/') ? '' : '/'}${rawVideoUrl}`;
+
+    res.json({
+      success: true,
+      projectId: project.projectId,
+      videoUrl: absoluteVideoUrl,
+      downloadUrl: absoluteVideoUrl,
+    });
+  } catch (error) {
+    logger.error('Video studio download link error:', error);
+    res.status(404).json({ success: false, error: error.message || 'Project not found.' });
   }
 });
 

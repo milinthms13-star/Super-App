@@ -75,6 +75,8 @@ const VoiceFriend = () => {
   const [editingPersona, setEditingPersona] = useState(false);
   const recognition = useRef(null);
   const audioPlayerRef = useRef(null);
+  const avatarInputRef = useRef(null);
+  const lastAssistantTextRef = useRef('');
 
   const selectedFriend = useMemo(
     () => AI_FRIENDS.find((friend) => friend.id === friendId) || AI_FRIENDS[0],
@@ -176,6 +178,12 @@ const VoiceFriend = () => {
         if (parsed?.userName) {
           setUserName(parsed.userName);
         }
+        if (parsed?.friendCustomName) {
+          setFriendCustomName(parsed.friendCustomName);
+        }
+        if (parsed?.friendCustomAvatar) {
+          setFriendCustomAvatar(parsed.friendCustomAvatar);
+        }
         if (parsed?.sessionId) {
           initSession(parsed.sessionId, parsed.friendId, parsed.userName);
           return;
@@ -216,6 +224,8 @@ const VoiceFriend = () => {
     if (!text || !sessionId) {
       return false;
     }
+    // prevent concurrent audio generation requests
+    if (audioLoading) return false;
 
     try {
       setAudioLoading(true);
@@ -295,14 +305,25 @@ const VoiceFriend = () => {
         { sessionId, message: trimmed, persona, mood, language, friendId, userName },
         { headers: buildRequestHeaders() }
       );
-
       const aiText = response?.data?.data?.response || 'I am here with you. Please continue.';
-      const assistantMessage = { role: 'assistant', content: aiText };
-      setConversation((prev) => [...prev, assistantMessage]);
+      // avoid appending duplicate assistant responses (race/retry protection)
+      if (String(lastAssistantTextRef.current || '').trim() !== String(aiText || '').trim()) {
+        const assistantMessage = { role: 'assistant', content: aiText };
+        setConversation((prev) => [...prev, assistantMessage]);
+        lastAssistantTextRef.current = aiText;
+        // clear last text after short time to allow repeated valid replies
+        setTimeout(() => { lastAssistantTextRef.current = ''; }, 15000);
+      } else {
+        console.warn('Duplicate assistant response suppressed');
+      }
       setStatus('Conversation updated.');
-      const played = await playResponseAudio(aiText);
-      if (!played) {
-        speakText(aiText);
+
+      // play audio but avoid starting multiple concurrent audio requests
+      if (!audioLoading) {
+        const played = await playResponseAudio(aiText);
+        if (!played) {
+          speakText(aiText);
+        }
       }
     } catch (error) {
       setStatus('Sorry, I could not process that message right now.');
@@ -321,7 +342,7 @@ const VoiceFriend = () => {
       STORAGE_KEY,
       JSON.stringify({ sessionId, friendId, userName, persona, mood, language, conversation, friendCustomName, friendCustomAvatar })
     );
-  }, [sessionId, persona, mood, language, conversation]);
+  }, [sessionId, friendId, userName, persona, mood, language, conversation, friendCustomName, friendCustomAvatar]);
 
   useEffect(() => {
     return () => {
@@ -408,6 +429,23 @@ const VoiceFriend = () => {
         <div>
           <strong>{item.role === 'assistant' ? selectedFriend.name : userName || 'You'}</strong>
           <p>{item.content}</p>
+          {item.role === 'assistant' && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="voice-friend-button"
+                onClick={async () => {
+                  setStatus('Playing response...');
+                  setBusy(true);
+                  const played = await playResponseAudio(item.content);
+                  if (!played) speakText(item.content);
+                  setBusy(false);
+                }}
+              >
+                Replay
+              </button>
+            </div>
+          )}
         </div>
       </div>
     ));
@@ -436,18 +474,71 @@ const VoiceFriend = () => {
                 <img src={friendCustomAvatar || selectedFriend.avatar} alt={`${friendCustomName || selectedFriend.name} avatar`} className="voice-friend-persona-img" />
                 <div className="voice-friend-persona-meta">
                   <div className="voice-friend-persona-bio">{selectedFriend.style}</div>
-                  <button
-                    type="button"
-                    className="voice-friend-button"
-                    onClick={() => {
-                      const newName = window.prompt('Set friend name', friendCustomName || selectedFriend.name);
-                      const newAvatar = window.prompt('Set avatar URL (leave blank to use default)', friendCustomAvatar || selectedFriend.avatar);
-                      if (newName !== null) setFriendCustomName(String(newName || '').trim());
-                      if (newAvatar !== null) setFriendCustomAvatar(String(newAvatar || '').trim());
-                    }}
-                  >
-                    Edit name/face
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      value={friendCustomName}
+                      onChange={(e) => setFriendCustomName(e.target.value)}
+                      placeholder={selectedFriend.name}
+                      style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb' }}
+                    />
+
+                    <button
+                      type="button"
+                      className="voice-friend-button"
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      Upload face
+                    </button>
+
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        // attempt upload to backend
+                        try {
+                          const fd = new FormData();
+                          fd.append('avatar', file);
+                          const resp = await axios.post(buildApiUrl('/ai-voice-friend/avatar'), fd, { headers: { ...buildRequestHeaders(), 'Content-Type': 'multipart/form-data' } });
+                          const url = resp?.data?.data?.url;
+                          if (url) {
+                            setFriendCustomAvatar(url);
+                            return;
+                          }
+                        } catch (err) {
+                          console.warn('Avatar upload failed, falling back to local image', err);
+                        }
+
+                        // fallback: local data URL
+                        const reader = new FileReader();
+                        reader.onload = () => setFriendCustomAvatar(String(reader.result || ''));
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+
+                    <button
+                      type="button"
+                      className="voice-friend-button"
+                      onClick={() => {
+                        if (!window.confirm('Clear custom name and avatar?')) return;
+                        setFriendCustomName('');
+                        setFriendCustomAvatar('');
+                        try {
+                          const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+                          delete stored.friendCustomName;
+                          delete stored.friendCustomAvatar;
+                          localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+                        } catch (e) {
+                          // ignore
+                        }
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -508,6 +599,18 @@ const VoiceFriend = () => {
       </div>
 
       <div className="voice-friend-status">{status}</div>
+
+      {busy && (
+        <div className="voice-friend-typing">
+          <div className="typing-indicator">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      )}
+
+      <div className={`voice-friend-waveform ${playingAudio || audioLoading ? 'active' : 'inactive'}`} aria-hidden>
+        <div className="wave" />
+      </div>
 
       <div className="voice-friend-chat-panel">{conversationList}</div>
 

@@ -107,6 +107,16 @@
   gap: 24px;
 }
 
+.save-state-banner {
+  margin-bottom: 18px;
+  border: 1px solid #f1d4b0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fff7ee;
+  color: #7f4b11;
+  font-weight: 700;
+}
+
 .studio-sidebar {
   display: flex;
   flex-direction: column;
@@ -220,6 +230,14 @@ textarea {
   font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid #2b83cc;
+  outline-offset: 2px;
 }
 
 .primary-button {
@@ -682,5 +700,16 @@ textarea {
 @media (max-width: 720px) {
   .studio-tab {
     flex: 1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
