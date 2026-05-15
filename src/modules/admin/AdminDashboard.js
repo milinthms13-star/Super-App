@@ -95,6 +95,7 @@ const AdminDashboard = ({
   businessCategories,
   globeMartCategories,
   registrationApplications,
+  registeredAccounts = [],
   onReviewRegistration,
   onCreateGlobeMartCategory,
   onAddGlobeMartSubcategory,
@@ -853,6 +854,46 @@ const AdminDashboard = ({
                       ? "Updating..."
                       : "Refund Completed"}
                   </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="admin-panel">
+        <div className="admin-panel-header">
+          <h2>Platform Users</h2>
+          <p>All registered users, entrepreneurs, businesses, and admins visible on the platform.</p>
+        </div>
+
+        <div className="registration-table">
+          {registeredAccounts.length === 0 ? (
+            <p className="empty-state">No registered users found yet.</p>
+          ) : (
+            registeredAccounts.map((account, index) => (
+              <article
+                className="registration-card"
+                key={`${account.email || "account"}-${index}`}
+              >
+                <div className="registration-topline">
+                  <div>
+                    <h3>{account.name || "Unnamed user"}</h3>
+                    <p>{account.email || "Email not provided"}</p>
+                  </div>
+                  <span className="registration-status">
+                    {account.registrationType || account.role || account.roles?.[0] || "user"}
+                  </span>
+                </div>
+                <p>{account.phone || "Phone not provided"}</p>
+                <p>{account.location || "Location not provided"}</p>
+                {account.businessName ? <p>Business: {account.businessName}</p> : null}
+                <div className="registration-tags">
+                  {(Array.isArray(account.roles) ? account.roles : [])
+                    .filter(Boolean)
+                    .map((roleItem) => (
+                      <span key={`${account.email || "account"}-${roleItem}`}>{roleItem}</span>
+                    ))}
                 </div>
               </article>
             ))

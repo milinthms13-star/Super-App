@@ -1163,6 +1163,7 @@ function AppShell() {
                       businessCategories={businessCategories}
                       globeMartCategories={globeMartCategories}
                       registrationApplications={registrationApplications}
+                      registeredAccounts={registeredAccounts}
                       onReviewRegistration={handleReviewRegistration}
                       onCreateGlobeMartCategory={handleCreateGlobeMartCategory}
                       onAddGlobeMartSubcategory={handleAddGlobeMartSubcategory}

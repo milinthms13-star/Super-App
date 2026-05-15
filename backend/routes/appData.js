@@ -208,10 +208,18 @@ const persistEnabledModules = async (moduleIds = []) => {
 const getRegisteredAccountsFromDB = async () => {
   try {
     const users = await User.find(
-      { registrationType: { $in: ['user', 'entrepreneur', 'business'] } },
+      {
+        $or: [
+          { registrationType: { $in: ['user', 'entrepreneur', 'business', 'admin'] } },
+          { role: 'admin' },
+          { roles: 'admin' },
+        ],
+      },
       {
         email: 1,
         name: 1,
+        role: 1,
+        registrationType: 1,
         roles: 1,
         businessName: 1,
         phone: 1,
@@ -223,6 +231,8 @@ const getRegisteredAccountsFromDB = async () => {
     return users.map(user => ({
       email: user.email,
       name: user.name || '',
+      role: user.role || '',
+      registrationType: user.registrationType || '',
       roles: user.roles || [user.role || 'user'],
       businessName: user.businessName || '',
       phone: user.phone || '',
