@@ -62,6 +62,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
   const moreMenuRef = useRef(null);
+  const userMenuRef = useRef(null);
 
   const displayUser = loggedInUser || currentUser;
   const profileImageSrc =
@@ -161,23 +162,30 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   }, [profileImageSrc]);
 
   useEffect(() => {
-    if (!showMoreMenu) {
+    if (!showMoreMenu && !showUserMenu) {
       return undefined;
     }
 
     const handleOutsideClick = (event) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+      const target = event.target;
+      const clickedInsideMore = moreMenuRef.current?.contains(target);
+      const clickedInsideUser = userMenuRef.current?.contains(target);
+
+      if (!clickedInsideMore && showMoreMenu) {
         setShowMoreMenu(false);
+      }
+      if (!clickedInsideUser && showUserMenu) {
+        setShowUserMenu(false);
       }
     };
 
-    document.addEventListener("click", handleOutsideClick);
-    document.addEventListener("touchstart", handleOutsideClick);
+    document.addEventListener("mousedown", handleOutsideClick, true);
+    document.addEventListener("touchstart", handleOutsideClick, true);
     return () => {
-      document.removeEventListener("click", handleOutsideClick);
-      document.removeEventListener("touchstart", handleOutsideClick);
+      document.removeEventListener("mousedown", handleOutsideClick, true);
+      document.removeEventListener("touchstart", handleOutsideClick, true);
     };
-  }, [showMoreMenu]);
+  }, [showMoreMenu, showUserMenu]);
 
   useEffect(() => {
     const widget = document.getElementById("google_translate_element");
@@ -202,12 +210,14 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     navigate(getPathForModule(moduleId, getPathForModule(defaultHomeModule)));
     setIsSidebarOpen(false);
     setShowMoreMenu(false);
+    setShowUserMenu(false);
   };
 
   const handleMoreToggle = (event) => {
     event.preventDefault();
     event.stopPropagation();
     setShowMoreMenu((prev) => !prev);
+    setShowUserMenu(false);
   };
 
   // Get modules to show in primary nav (limit 5) and rest in "More" dropdown
@@ -287,7 +297,15 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
               >
                 {t("navigation.translate", "Translate")}
               </button>
-              <div className="user-profile" onClick={() => setShowUserMenu(!showUserMenu)}>
+              <div
+                className="user-profile"
+                ref={userMenuRef}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setShowUserMenu((prev) => !prev);
+                  setShowMoreMenu(false);
+                }}
+              >
                 <span className="user-avatar">
                   {profileImageSrc && !avatarLoadError ? (
                     <img
@@ -304,7 +322,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                 <span className="dropdown-icon">v</span>
 
                 {showUserMenu && (
-                  <div className="user-menu">
+                  <div className="user-menu" onClick={(event) => event.stopPropagation()}>
                     <div className="user-menu-item">
                       <strong>{displayUser.email}</strong>
                     </div>
