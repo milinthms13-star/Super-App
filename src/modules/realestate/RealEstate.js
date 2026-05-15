@@ -871,7 +871,7 @@ const RealEstate = () => {
 
   return (
     <div className="realestate-shell">
-      {!sellerWorkspaceMode ? (
+      {!sellerWorkspaceMode && !isBuyerMode ? (
         <>
           <section className="realestate-hero">
             <div className="realestate-hero-copy">
