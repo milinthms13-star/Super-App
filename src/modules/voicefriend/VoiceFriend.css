@@ -207,6 +207,32 @@
   font-size: 0.92rem;
 }
 
+.voice-friend-persona-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.voice-friend-persona-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 2px solid rgba(0,0,0,0.06);
+}
+
+.voice-friend-persona-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-friend-persona-bio {
+  color: #475569;
+  font-size: 0.95rem;
+}
+
 .voice-friend-button {
   border: 1px solid #d1d5db;
   background: #ffffff;

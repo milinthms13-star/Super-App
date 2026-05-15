@@ -70,6 +70,9 @@ const VoiceFriend = () => {
   const [speechSupported, setSpeechSupported] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [playingAudio, setPlayingAudio] = useState(false);
+  const [friendCustomName, setFriendCustomName] = useState('');
+  const [friendCustomAvatar, setFriendCustomAvatar] = useState('');
+  const [editingPersona, setEditingPersona] = useState(false);
   const recognition = useRef(null);
   const audioPlayerRef = useRef(null);
 
@@ -316,7 +319,7 @@ const VoiceFriend = () => {
 
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ sessionId, friendId, userName, persona, mood, language, conversation })
+      JSON.stringify({ sessionId, friendId, userName, persona, mood, language, conversation, friendCustomName, friendCustomAvatar })
     );
   }, [sessionId, persona, mood, language, conversation]);
 
@@ -414,14 +417,41 @@ const VoiceFriend = () => {
     <div className="voice-friend-page">
       <div className="voice-friend-header">
         <div className="voice-friend-profile">
-          <div className="voice-friend-profile-avatar" style={{ backgroundColor: selectedFriend.color }}>
-            {selectedFriend.name[0]}
+            <div
+              className="voice-friend-profile-avatar"
+              style={{
+                backgroundColor: selectedFriend.color,
+                backgroundImage: friendCustomAvatar ? `url(${friendCustomAvatar})` : undefined,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            >
+              {!friendCustomAvatar && (friendCustomName || selectedFriend.name)[0]}
+            </div>
+            <div className="voice-friend-profile-meta">
+              <h1>{friendCustomName || selectedFriend.name}</h1>
+              <p>{selectedFriend.personality}</p>
+
+              <div className="voice-friend-persona-card">
+                <img src={friendCustomAvatar || selectedFriend.avatar} alt={`${friendCustomName || selectedFriend.name} avatar`} className="voice-friend-persona-img" />
+                <div className="voice-friend-persona-meta">
+                  <div className="voice-friend-persona-bio">{selectedFriend.style}</div>
+                  <button
+                    type="button"
+                    className="voice-friend-button"
+                    onClick={() => {
+                      const newName = window.prompt('Set friend name', friendCustomName || selectedFriend.name);
+                      const newAvatar = window.prompt('Set avatar URL (leave blank to use default)', friendCustomAvatar || selectedFriend.avatar);
+                      if (newName !== null) setFriendCustomName(String(newName || '').trim());
+                      if (newAvatar !== null) setFriendCustomAvatar(String(newAvatar || '').trim());
+                    }}
+                  >
+                    Edit name/face
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="voice-friend-profile-meta">
-            <h1>{selectedFriend.name}</h1>
-            <p>{selectedFriend.personality}</p>
-          </div>
-        </div>
         <p>Emotion-aware chat companion with voice input and supportive guidance.</p>
         <div className="voice-friend-summary">
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
