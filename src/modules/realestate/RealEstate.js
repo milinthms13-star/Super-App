@@ -888,7 +888,22 @@ const RealEstate = () => {
       {/* HOMESPHERE FOR BUYERS */}
       {activeRole === "buyer" ? (
         <HomeSphere
-          onNavigateToDashboard={(role) => setActiveRole(role)}
+          onNavigateToDashboard={(role) => {
+            const requestedRole = String(role || "").toLowerCase();
+            const normalizedRole = requestedRole === "seller" ? "owner" : requestedRole;
+            if (allowedRoleModes.includes(normalizedRole)) {
+              setActiveRole(normalizedRole);
+              return true;
+            }
+
+            const fallbackRole = allowedRoleModes.find((mode) => mode !== "buyer");
+            if (fallbackRole) {
+              setActiveRole(fallbackRole);
+              return true;
+            }
+
+            return false;
+          }}
         />
       ) : null}
 

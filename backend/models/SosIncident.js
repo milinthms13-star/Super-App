@@ -14,7 +14,16 @@ const sosIncidentSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['standby', 'active', 'escalated', 'acknowledged', 'resolved', 'cancelled'],
-    default: 'active'
+    default: 'active',
+    set: (value) => (value === 'ongoing' ? 'active' : value)
+  },
+  latitude: {
+    type: Number,
+    default: null
+  },
+  longitude: {
+    type: Number,
+    default: null
   },
   location: {
     type: {
@@ -168,5 +177,31 @@ sosIncidentSchema.index({ userId: 1, lastStatusUpdate: -1 });
 // TTL index for old status history (optional cleanup)
 sosIncidentSchema.index({ 'statusHistory.timestamp': 1 }, { expireAfterSeconds: 7776000 }); // 90 days
 
-module.exports = mongoose.models.SosIncident || mongoose.model('SosIncident', sosIncidentSchema);
+sosIncidentSchema.pre('validate', function normalizeLocationAndStatus(next) {
+  if (this.status === 'ongoing') {
+    this.status = 'active';
+  }
 
+  const hasLatLng = Number.isFinite(this.latitude) && Number.isFinite(this.longitude);
+  const hasCoordinates =
+    this.location &&
+    Array.isArray(this.location.coordinates) &&
+    this.location.coordinates.length === 2 &&
+    Number.isFinite(this.location.coordinates[0]) &&
+    Number.isFinite(this.location.coordinates[1]);
+
+  if (hasLatLng && !hasCoordinates) {
+    this.location = this.location || {};
+    this.location.type = 'Point';
+    this.location.coordinates = [this.longitude, this.latitude];
+  }
+
+  if (!hasLatLng && hasCoordinates) {
+    this.longitude = this.location.coordinates[0];
+    this.latitude = this.location.coordinates[1];
+  }
+
+  next();
+});
+
+module.exports = mongoose.models.SosIncident || mongoose.model('SosIncident', sosIncidentSchema);

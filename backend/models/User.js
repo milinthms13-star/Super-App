@@ -1,5 +1,25 @@
 const mongoose = require('mongoose');
 
+const normalizeUsername = (value = '') => String(value)
+  .toLowerCase()
+  .replace(/[^a-z0-9_-]/g, '_')
+  .replace(/_+/g, '_')
+  .replace(/^_+|_+$/g, '');
+
+const deriveUsername = ({ username, email, name }) => {
+  const explicitUsername = normalizeUsername(username);
+  if (explicitUsername.length >= 3) {
+    return explicitUsername.slice(0, 20);
+  }
+
+  const emailLocalPart = String(email || '').split('@')[0];
+  const namePart = String(name || '').replace(/\s+/g, '_');
+  const baseCandidate = normalizeUsername(emailLocalPart || namePart || 'user');
+  const safeBase = baseCandidate.length >= 3 ? baseCandidate : `${baseCandidate}usr`;
+
+  return safeBase.slice(0, 20);
+};
+
 const UserSchema = new mongoose.Schema(
   {
     email: {
@@ -20,6 +40,9 @@ const UserSchema = new mongoose.Schema(
       minlength: 3,
       maxlength: 20,
       match: /^[a-zA-Z0-9_-]+$/,
+      default: function defaultUsername() {
+        return deriveUsername(this);
+      },
     },
     chatUsername: {
       type: String,
@@ -331,6 +354,20 @@ const UserSchema = new mongoose.Schema(
 
 UserSchema.index({ classifiedsTotalRating: -1 });
 UserSchema.index({ classifiedsReviewCount: 1 });
+
+UserSchema.pre('validate', function ensureUsername(next) {
+  if (!this.username || String(this.username).trim().length === 0) {
+    this.username = deriveUsername(this);
+  } else {
+    this.username = normalizeUsername(this.username).slice(0, 20);
+  }
+
+  if (this.username.length < 3) {
+    this.username = `${this.username}usr`.slice(0, 20);
+  }
+
+  next();
+});
 
 
 // Profile completion score (virtual)

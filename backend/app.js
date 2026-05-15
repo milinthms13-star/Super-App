@@ -233,6 +233,13 @@ app.use('/api/matrimonial', require('./routes/matrimonial-kyc'));
 
 app.use(errorHandler);
 
+app.use('/api', (_req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'API endpoint not found',
+  });
+});
+
 app.use(express.static(path.join(__dirname, '../build')));
 
 app.get('*', (req, res) => {

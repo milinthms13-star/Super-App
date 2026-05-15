@@ -55,33 +55,38 @@ const PREDEFINED_TAGS = {
  */
 async function addTagToVersion(userId, entryId, versionId, versionNumber, tagData) {
   try {
-    // Check if tag already exists
-    const existing = await DiaryVersionTag.findOne({
+    if (!tagData || !tagData.name || !String(tagData.name).trim()) {
+      throw new Error('Tag name is required');
+    }
+    if (tagData.color && !/^#[0-9A-F]{6}$/i.test(tagData.color)) {
+      throw new Error('Invalid color format');
+    }
+
+    const normalizedName = String(tagData.name).toLowerCase();
+    const existingTags = await DiaryVersionTag.find({
       entryId,
       versionId,
-      name: tagData.name.toLowerCase()
+      name: normalizedName
     });
+    const existing = Array.isArray(existingTags) ? existingTags[0] : null;
 
     if (existing) {
       throw new Error(`Tag '${tagData.name}' already exists for this version`);
     }
 
-    const tagConfig = PREDEFINED_TAGS[tagData.name.toLowerCase()] || {};
-
-    const tag = new DiaryVersionTag({
+    const tagConfig = PREDEFINED_TAGS[normalizedName] || {};
+    const tagPayload = {
       userId,
       entryId,
       versionId,
       versionNumber,
-      name: tagData.name.toLowerCase(),
+      name: normalizedName,
       color: tagData.color || tagConfig.color,
       description: tagData.description || tagConfig.description,
       reason: tagData.reason,
       priority: tagData.priority || 0
-    });
-
-    await tag.save();
-    return tag;
+    };
+    return DiaryVersionTag.create(tagPayload);
   } catch (error) {
     logger.error('Failed to add tag to version:', error);
     throw error;
@@ -95,11 +100,18 @@ async function addTagToVersion(userId, entryId, versionId, versionNumber, tagDat
  */
 async function getVersionTags(versionId) {
   try {
-    const tags = await DiaryVersionTag.find({ versionId })
-      .sort({ priority: -1, createdAt: -1 })
-      .lean();
-
-    return tags;
+    const tags = await DiaryVersionTag.find({ versionId });
+    const list = Array.isArray(tags) ? tags : [];
+    return list.sort((a, b) => {
+      const priorityA = Number(a?.priority || 0);
+      const priorityB = Number(b?.priority || 0);
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      const createdA = new Date(a?.createdAt || 0).getTime();
+      const createdB = new Date(b?.createdAt || 0).getTime();
+      return createdA - createdB;
+    });
   } catch (error) {
     logger.error('Failed to get version tags:', error);
     throw error;
@@ -119,12 +131,9 @@ async function getVersionsByTag(userId, entryId, tagName) {
       userId,
       entryId,
       name: tagName.toLowerCase()
-    })
-      .populate('versionId', 'versionNumber title content savedAt')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return tags.map(tag => tag.versionId);
+    });
+    const list = Array.isArray(tags) ? tags : [];
+    return list.sort((a, b) => new Date(b?.createdAt || 0) - new Date(a?.createdAt || 0));
   } catch (error) {
     logger.error('Failed to get versions by tag:', error);
     throw error;
@@ -175,13 +184,7 @@ async function updateTag(tagId, userId, updates) {
       throw new Error('Unauthorized: Can only update own tags');
     }
 
-    if (updates.color) tag.color = updates.color;
-    if (updates.description !== undefined) tag.description = updates.description;
-    if (updates.priority !== undefined) tag.priority = updates.priority;
-    if (updates.reason !== undefined) tag.reason = updates.reason;
-
-    await tag.save();
-    return tag;
+    return DiaryVersionTag.findByIdAndUpdate(tagId, updates, { new: true });
   } catch (error) {
     logger.error('Failed to update tag:', error);
     throw error;
@@ -213,10 +216,25 @@ async function getEntryTagStats(entryId) {
       }
     ]);
 
+    const row = Array.isArray(stats) && stats[0] ? stats[0] : null;
+    if (!row) {
+      return { totalTags: 0, byName: [], mostUsed: [], mostUsedTag: null };
+    }
+
+    if (row.totalTags !== undefined) {
+      return {
+        totalTags: row.totalTags || 0,
+        byName: row.tagBreakdown || [],
+        mostUsed: row.tagBreakdown || [],
+        mostUsedTag: row.mostUsedTag || null
+      };
+    }
+
     return {
-      totalTags: stats[0].total[0]?.count || 0,
-      byName: stats[0].byName,
-      mostUsed: stats[0].mostUsed
+      totalTags: row.total?.[0]?.count || 0,
+      byName: row.byName || [],
+      mostUsed: row.mostUsed || [],
+      mostUsedTag: row.byName?.[0]?._id || null
     };
   } catch (error) {
     logger.error('Failed to get tag stats:', error);
@@ -229,7 +247,13 @@ async function getEntryTagStats(entryId) {
  * @returns {object} Predefined tags mapping
  */
 function getPredefinedTags() {
-  return PREDEFINED_TAGS;
+  return Object.entries(PREDEFINED_TAGS)
+    .filter(([name]) => name !== 'custom')
+    .map(([name, config]) => ({
+      name,
+      color: config.color,
+      description: config.description
+    }));
 }
 
 /**
@@ -241,24 +265,35 @@ function getPredefinedTags() {
  */
 async function bulkAddTag(userId, entryId, versionIds, tagName) {
   try {
+    if (!Array.isArray(versionIds) || versionIds.length === 0) {
+      return [];
+    }
     const tagConfig = PREDEFINED_TAGS[tagName.toLowerCase()] || {};
-    const bulkOps = versionIds.map((versionId, index) => ({
-      insertOne: {
-        document: {
-          userId,
-          entryId,
-          versionId,
-          versionNumber: index + 1,
-          name: tagName.toLowerCase(),
-          color: tagConfig.color,
-          description: tagConfig.description,
-          createdAt: new Date()
-        }
-      }
-    }));
+    const existing = await DiaryVersionTag.find({
+      userId,
+      entryId,
+      name: tagName.toLowerCase(),
+      versionId: { $in: versionIds }
+    });
+    const existingIds = new Set((Array.isArray(existing) ? existing : []).map((item) => String(item.versionId)));
+    const createDocs = versionIds
+      .filter((versionId) => !existingIds.has(String(versionId)))
+      .map((versionId, index) => ({
+        userId,
+        entryId,
+        versionId,
+        versionNumber: index + 1,
+        name: tagName.toLowerCase(),
+        color: tagConfig.color,
+        description: tagConfig.description,
+        createdAt: new Date()
+      }));
 
-    const result = await DiaryVersionTag.bulkWrite(bulkOps, { ordered: false });
-    return result;
+    if (createDocs.length === 0) {
+      return [];
+    }
+
+    return DiaryVersionTag.create(createDocs);
   } catch (error) {
     logger.error('Failed to bulk add tags:', error);
     throw error;

@@ -1,40 +1,13 @@
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
-let mongoServer;
+let mongoServer = null;
 
-// Start in-memory MongoDB server before all tests
-beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const mongoUri = mongoServer.getUri();
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-key';
+process.env.JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 
-  // Override the database URI for tests
-  process.env.MONGODB_URI = mongoUri;
-  process.env.DATABASE_URL = mongoUri;
-  process.env.NODE_ENV = 'test';
-
-  // Connect to the in-memory database
-  await mongoose.connect(mongoUri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
-}, 60000);
-
-// Clean up after all tests
-afterAll(async () => {
-  await mongoose.connection.dropDatabase();
-  await mongoose.connection.close();
-  await mongoServer.stop();
-}, 60000);
-
-// Clean up after each test
-afterEach(async () => {
-  const collections = mongoose.connection.collections;
-  for (const key in collections) {
-    const collection = collections[key];
-    await collection.deleteMany({});
-  }
-});
+mongoose.set('strictQuery', false);
 
 if (typeof global.ReadableStream === 'undefined') {
   const { ReadableStream, WritableStream, TransformStream } = require('node:stream/web');
@@ -60,7 +33,7 @@ if (typeof global.MessagePort === 'undefined') {
     const { MessagePort, MessageChannel } = require('worker_threads');
     global.MessagePort = MessagePort;
     global.MessageChannel = MessageChannel;
-  } catch (error) {
+  } catch (_error) {
     global.MessagePort = class {};
     global.MessageChannel = class {};
   }
@@ -75,15 +48,12 @@ if (typeof global.DOMException === 'undefined') {
   };
 }
 
-// Mock mongoose.Types.ObjectId globally
+global.before = beforeAll;
+global.after = afterAll;
 global.ObjectId = mongoose.Types.ObjectId;
-
-/**
- * Create a properly formed ObjectId for testing
- */
 global.createObjectId = (id) => {
   if (typeof id === 'string' && id.length === 24) {
-    return mongoose.Types.ObjectId(id);
+    return new mongoose.Types.ObjectId(id);
   }
   if (id instanceof mongoose.Types.ObjectId) {
     return id;
@@ -91,9 +61,6 @@ global.createObjectId = (id) => {
   return new mongoose.Types.ObjectId();
 };
 
-/**
- * Create test data with valid ObjectIds
- */
 global.createTestUser = () => ({
   _id: new mongoose.Types.ObjectId(),
   username: 'testuser',
@@ -118,35 +85,26 @@ global.createTestChat = () => ({
   updatedAt: new Date()
 });
 
-// Mock process.env
-process.env.NODE_ENV = 'test';
-process.env.MONGODB_URI = 'mongodb://localhost:27017/malabarbazaar-test';
-process.env.JWT_SECRET = 'test-secret-key';
-process.env.JWT_EXPIRE = '7d';
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  const mongoUri = mongoServer.getUri();
 
-// Suppress mongoose warnings
-mongoose.set('strictQuery', false);
+  process.env.MONGODB_URI = mongoUri;
+  process.env.DATABASE_URL = mongoUri;
+  process.env.MONGO_TEST_URI = mongoUri;
+}, 60000);
 
-// Global error handler for unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// Setup and teardown
-beforeAll(() => {
-  // Setup code if needed
-});
+afterEach(async () => {
+  jest.clearAllMocks();
+}, 30000);
 
 afterAll(async () => {
-  // Cleanup after all tests
-  try {
-    await mongoose.disconnect();
-  } catch (error) {
-    // Ignore disconnect errors in test environment
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.dropDatabase();
+    await mongoose.connection.close();
   }
-});
 
-// Clear all mocks after each test
-afterEach(() => {
-  jest.clearAllMocks();
-});
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
+}, 60000);

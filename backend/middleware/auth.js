@@ -56,13 +56,25 @@ const resolveExistingAuthContext = (req) => {
 };
 
 const buildTestPayloadFromToken = (authToken) => {
+  if (process.env.NODE_ENV !== 'test') {
+    return null;
+  }
+
   if (!authToken || typeof authToken !== 'string') {
     return null;
   }
 
-  if (authToken.startsWith('test') || authToken.includes('test_token') || authToken.includes('test-token')) {
+  const rawToken = authToken.trim();
+  if (/^[a-fA-F0-9]{24}$/.test(rawToken)) {
     return {
-      sub: authToken,
+      sub: rawToken,
+      name: 'Test User',
+    };
+  }
+
+  if (rawToken.startsWith('test') || rawToken.includes('test_token') || rawToken.includes('test-token')) {
+    return {
+      sub: rawToken,
       email: 'test@example.com',
       name: 'Test User',
     };
@@ -160,6 +172,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Authentication required',
+        error: 'Authentication required',
       });
     }
 
@@ -198,6 +211,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'User not found',
+        error: 'User not found',
       });
     }
 
@@ -215,6 +229,7 @@ const authenticate = async (req, res, next) => {
     return res.status(401).json({
       success: false,
       message: 'Invalid or expired session',
+      error: 'Invalid or expired session',
     });
   }
 };

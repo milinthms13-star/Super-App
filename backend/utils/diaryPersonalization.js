@@ -179,8 +179,20 @@ function getPersonalizedPrompts(preferences, entries = [], analytics = null) {
     if (preferences.writing?.wordGoal && preferences.writing.wordGoal > 0) {
       prompts.push(`Today's word goal: ${preferences.writing.wordGoal} words`);
     }
-
-    return prompts.length > 0 ? prompts : getDefaultPrompts();
+    const basePrompts = prompts.length > 0 ? prompts : getDefaultPrompts();
+    const mapped = basePrompts.map((prompt) => {
+      if (typeof prompt === 'string') {
+        return { text: prompt, category: 'general' };
+      }
+      if (prompt && typeof prompt === 'object') {
+        return {
+          text: prompt.text || '',
+          category: prompt.category || 'general'
+        };
+      }
+      return { text: '', category: 'general' };
+    }).filter((prompt) => prompt.text);
+    return mapped.slice(0, 10);
   } catch (error) {
     logger.error('Error getting personalized prompts:', error);
     return getDefaultPrompts();
@@ -198,11 +210,13 @@ function getWritingMode(preferences) {
       return getDefaultWritingMode();
     }
 
-    const mode = preferences.writing?.defaultMode || 'full';
+    const mode = typeof preferences === 'string'
+      ? preferences
+      : preferences.writing?.defaultMode || 'full';
 
     const modes = {
       full: {
-        name: 'Full Interface',
+        name: 'full',
         description: 'Complete editor with all features',
         showToolbar: true,
         showSidebar: true,
@@ -216,7 +230,7 @@ function getWritingMode(preferences) {
         distraction: 'normal'
       },
       minimal: {
-        name: 'Minimal',
+        name: 'minimal',
         description: 'Clean, distraction-free interface',
         showToolbar: false,
         showSidebar: false,
@@ -230,7 +244,7 @@ function getWritingMode(preferences) {
         distraction: 'minimal'
       },
       focused: {
-        name: 'Focused',
+        name: 'focused',
         description: 'Center focused writing area',
         showToolbar: true,
         showSidebar: false,
@@ -244,7 +258,7 @@ function getWritingMode(preferences) {
         distraction: 'low'
       },
       typewriter: {
-        name: 'Typewriter',
+        name: 'typewriter',
         description: 'Old-school typewriter style',
         showToolbar: false,
         showSidebar: false,
@@ -257,11 +271,16 @@ function getWritingMode(preferences) {
         focusMode: true,
         distraction: 'minimal',
         typewriterScroll: true,
-        monospaceFont: true
+        monospaceFont: true,
+        fontFamily: '"Courier New", monospace'
       }
     };
 
-    return modes[mode] || modes.full;
+    const selected = modes[mode] || modes.full;
+    return {
+      ...selected,
+      name: mode && modes[mode] ? mode : 'full'
+    };
   } catch (error) {
     logger.error('Error getting writing mode:', error);
     return getDefaultWritingMode();
@@ -279,16 +298,27 @@ function getThemeConfig(preferences) {
       return getDefaultTheme();
     }
 
+    const fontSize = mapFontSize(preferences.theme.fontSize);
+    const fontFamily = mapFontFamily(preferences.theme.fontFamily);
+    const mode = preferences.theme.mode || 'light';
+    const primaryColor = preferences.theme.primaryColor || '#667eea';
+
     return {
-      mode: preferences.theme.mode,
+      mode,
+      primaryColor,
+      backgroundColor: mode === 'dark' ? '#111827' : '#ffffff',
+      textColor: mode === 'dark' ? '#f3f4f6' : '#111827',
+      fontSize,
+      fontFamily,
+      lineHeight: preferences.theme.lineHeight || 1.6,
       colors: {
-        primary: preferences.theme.primaryColor,
+        primary: primaryColor,
         accent: preferences.theme.accentColor
       },
       typography: {
-        fontSize: mapFontSize(preferences.theme.fontSize),
-        fontFamily: mapFontFamily(preferences.theme.fontFamily),
-        lineHeight: preferences.theme.lineHeight
+        fontSize,
+        fontFamily,
+        lineHeight: preferences.theme.lineHeight || 1.6
       }
     };
   } catch (error) {
@@ -303,16 +333,21 @@ function getThemeConfig(preferences) {
  * @param {string} deviceId - Device identifier
  * @returns {Object} Sync result
  */
-function syncPreferences(preferences, deviceId) {
+function syncPreferences(preferences, fromDeviceId, toDeviceId) {
   try {
-    if (!preferences || !deviceId) {
+    if (!preferences || !fromDeviceId) {
       throw new Error('Preferences and deviceId are required');
     }
 
+    const existingDevices = Array.isArray(preferences.syncedDevices) ? preferences.syncedDevices : [];
+    const syncedDevices = Array.from(new Set([fromDeviceId, toDeviceId, ...existingDevices].filter(Boolean)));
+
     return {
       userId: preferences.userId,
-      deviceId: deviceId,
+      deviceId: fromDeviceId,
       syncedAt: new Date(),
+      lastSyncedAt: new Date(),
+      syncedDevices,
       preferences: preferences,
       status: 'synced'
     };
@@ -329,11 +364,16 @@ function syncPreferences(preferences, deviceId) {
  */
 function exportPreferences(preferences) {
   try {
-    if (!preferences) {
-      throw new Error('Preferences object is required');
-    }
-
-    return JSON.stringify(preferences, null, 2);
+    const payload = preferences && typeof preferences === 'object' ? preferences : {};
+    return JSON.stringify(
+      {
+        version: payload.version || '1.0',
+        exportedAt: new Date().toISOString(),
+        ...payload
+      },
+      null,
+      2
+    );
   } catch (error) {
     logger.error('Error exporting preferences:', error);
     throw error;
@@ -345,13 +385,16 @@ function exportPreferences(preferences) {
  * @param {string} jsonString - JSON string of preferences
  * @returns {Object} Imported preferences
  */
-function importPreferences(jsonString) {
+function importPreferences(jsonString, existingPreferences = null) {
   try {
     if (!jsonString) {
       throw new Error('JSON string is required');
     }
 
-    const preferences = JSON.parse(jsonString);
+    const imported = JSON.parse(jsonString);
+    const preferences = existingPreferences
+      ? updatePreferences(existingPreferences, imported)
+      : imported;
     preferences.updatedAt = new Date();
 
     return preferences;
@@ -367,14 +410,14 @@ function importPreferences(jsonString) {
  */
 function getDefaultPrompts() {
   return [
-    'What happened today that mattered?',
-    'How are you feeling right now?',
-    'What are you grateful for?',
-    'What challenged you today?',
-    'What made you smile today?',
-    'What would your future self want to know?',
-    'What did you learn today?',
-    'What are you looking forward to?'
+    { text: 'What happened today that mattered?', category: 'reflection' },
+    { text: 'How are you feeling right now?', category: 'wellbeing' },
+    { text: 'What are you grateful for?', category: 'gratitude' },
+    { text: 'What challenged you today?', category: 'growth' },
+    { text: 'What made you smile today?', category: 'joy' },
+    { text: 'What would your future self want to know?', category: 'future' },
+    { text: 'What did you learn today?', category: 'learning' },
+    { text: 'What are you looking forward to?', category: 'planning' }
   ];
 }
 
@@ -400,7 +443,7 @@ function generateMoodPrompts(customMoods = []) {
  */
 function getDefaultWritingMode() {
   return {
-    name: 'Full Interface',
+    name: 'full',
     description: 'Complete editor with all features',
     showToolbar: true,
     showSidebar: true,
@@ -415,6 +458,12 @@ function getDefaultWritingMode() {
 function getDefaultTheme() {
   return {
     mode: 'light',
+    primaryColor: '#667eea',
+    backgroundColor: '#ffffff',
+    textColor: '#111827',
+    fontSize: '16px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    lineHeight: 1.6,
     colors: {
       primary: '#667eea',
       accent: '#764ba2'
@@ -425,6 +474,42 @@ function getDefaultTheme() {
       lineHeight: 1.6
     }
   };
+}
+
+function validatePreferences(preferences) {
+  if (!preferences || typeof preferences !== 'object') {
+    return false;
+  }
+
+  const themeMode = preferences.theme?.mode;
+  const writingMode = preferences.writing?.defaultMode;
+  const fontSize = preferences.theme?.fontSize;
+  const wordGoal = preferences.writing?.wordGoal;
+
+  if (themeMode && !['light', 'dark', 'auto'].includes(themeMode)) {
+    return false;
+  }
+
+  if (writingMode && !['full', 'minimal', 'focused', 'typewriter'].includes(writingMode)) {
+    return false;
+  }
+
+  if (fontSize && !['small', 'medium', 'large'].includes(fontSize)) {
+    return false;
+  }
+
+  if (wordGoal !== undefined && (!Number.isFinite(wordGoal) || wordGoal < 0)) {
+    return false;
+  }
+
+  return true;
+}
+
+function getDefaultPreferences() {
+  const defaults = createPreferences('default-user', {});
+  defaults.writing.wordGoal = 300;
+  defaults.version = '1.0';
+  return defaults;
 }
 
 /**
@@ -462,5 +547,7 @@ module.exports = {
   getThemeConfig,
   syncPreferences,
   exportPreferences,
-  importPreferences
+  importPreferences,
+  validatePreferences,
+  getDefaultPreferences
 };

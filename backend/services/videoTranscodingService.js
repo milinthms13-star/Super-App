@@ -36,6 +36,8 @@ class VideoTranscodingService {
    */
   static async saveAndTranscodeVideo(base64Video, mimeType = 'video/webm', onProgress = null) {
     try {
+      await fs.mkdir(VIDEOS_DIR, { recursive: true });
+
       // Validate input
       if (!base64Video || base64Video.length === 0) {
         throw new Error('No video data provided');

@@ -1,4 +1,5 @@
 const ContactGroup = require('../models/ContactGroup');
+const mongoose = require('mongoose');
 const logger = require('../utils/logger');
 
 /**
@@ -283,8 +284,13 @@ class ContactGroupService {
    */
   static async getGroupStats(userId) {
     try {
+      const normalizedUserId =
+        mongoose.Types.ObjectId.isValid(userId)
+          ? new mongoose.Types.ObjectId(userId)
+          : userId;
+
       const stats = await ContactGroup.aggregate([
-        { $match: { userId } },
+        { $match: { userId: normalizedUserId } },
         {
           $group: {
             _id: null,

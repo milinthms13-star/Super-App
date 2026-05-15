@@ -174,6 +174,13 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
     return ["All", ...Array.from(locs)];
   }, [listings]);
 
+  const handlePostAdClick = () => {
+    const didNavigate = onNavigateToDashboard?.("seller");
+    if (didNavigate === false) {
+      pushToast("Posting is available after enabling seller access.", "info");
+    }
+  };
+
   return (
     <div className="tradepost-home">
       {/* HERO SECTION */}
@@ -214,7 +221,7 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
             <button
               type="button"
               className="tradepost-primary-button"
-              onClick={() => onNavigateToDashboard?.("seller")}
+              onClick={handlePostAdClick}
             >
               Post an ad
             </button>
@@ -250,7 +257,7 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
                 <button
                   type="button"
                   className="tradepost-primary-button"
-                  onClick={() => onNavigateToDashboard?.("seller")}
+                  onClick={handlePostAdClick}
                 >
                   Post the first ad
                 </button>
@@ -385,7 +392,7 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
                 <button
                   type="button"
                   className="classifieds-primary-button"
-                  onClick={() => onNavigateToDashboard?.("seller")}
+                  onClick={handlePostAdClick}
                 >
                   Post your ad
                 </button>

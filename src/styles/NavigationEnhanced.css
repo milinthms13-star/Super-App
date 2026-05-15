@@ -82,6 +82,8 @@
   gap: 0.75rem;
   /* Keep overflow visible so the More dropdown is not clipped. */
   overflow: visible;
+  position: relative;
+  z-index: 10003;
   scrollbar-width: none;
   padding: 0.2rem 0.05rem 0.45rem;
   max-width: 100%;
@@ -203,15 +205,16 @@
   border: 1px solid rgba(255, 215, 0, 0.2);
   border-radius: 16px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
-  z-index: 11000;
-  min-width: 320px;
-  max-width: 380px;
+  z-index: 12000;
+  min-width: 340px;
+  max-width: 420px;
   overflow: hidden;
   animation: slideDownFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   max-height: 70vh;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 215, 0, 0.3) rgba(255, 215, 0, 0.1);
+  pointer-events: auto;
 }
 
 @keyframes slideDownFade {
@@ -800,7 +803,8 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  z-index: 9999;
+  overflow: visible;
+  z-index: 12000;
 }
 
 .nav-link.polished {

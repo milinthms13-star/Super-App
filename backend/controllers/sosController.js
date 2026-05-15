@@ -257,14 +257,29 @@ exports.verifyContactOTP = async (req, res) => {
  */
 exports.createTrackingLink = async (req, res) => {
   try {
-    const { incidentId } = req.body;
+    const { incidentId, reason, longitude, latitude, accuracy, channels = [] } = req.body;
     const userId = req.user.id;
 
-    // Verify incident belongs to user
-    const incident = await SOSIncident.findOne({
-      _id: incidentId,
-      userId,
-    });
+    let incident = null;
+
+    if (incidentId) {
+      // Verify incident belongs to user
+      incident = await SOSIncident.findOne({
+        _id: incidentId,
+        userId,
+      });
+    } else if (reason && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))) {
+      // Backward compatibility for tests/clients that use this endpoint to create an incident.
+      incident = await SOSIncident.create({
+        userId,
+        reason,
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        accuracy: Number.isFinite(Number(accuracy)) ? Number(accuracy) : null,
+        status: 'active',
+        channels: Array.isArray(channels) ? channels : [],
+      });
+    }
 
     if (!incident) {
       return res.status(404).json({
@@ -281,7 +296,7 @@ exports.createTrackingLink = async (req, res) => {
 
     const trackingLink = await TrackingLink.create({
       token,
-      incidentId,
+      incidentId: incident._id,
       userId,
       expiresAt,
       active: true,
@@ -292,6 +307,8 @@ exports.createTrackingLink = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'Tracking link created',
+      incident,
+      incidentId: incident._id,
       trackingLink: {
         token,
         url: publicURL,
@@ -1253,6 +1270,7 @@ exports.getContactGroup = async (req, res) => {
         name: group.name,
         description: group.description,
         contacts: group.contacts,
+        contactCount: group.contactCount,
         priority: group.priority,
         usageCount: group.usageCount,
         isDefault: group.metadata?.isDefault,
@@ -1294,7 +1312,14 @@ exports.updateContactGroup = async (req, res) => {
     });
   } catch (error) {
     logger.error('Update group failed:', error);
-    res.status(error.message.includes('not found') ? 404 : 500).json({
+    const normalizedMessage = String(error.message || '').toLowerCase();
+    const statusCode = normalizedMessage.includes('not found')
+      ? 404
+      : normalizedMessage.includes('empty') || normalizedMessage.includes('at least one')
+        ? 400
+        : 500;
+
+    res.status(statusCode).json({
       error: error.message,
     });
   }

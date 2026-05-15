@@ -316,7 +316,12 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
             <button
               type="button"
               className="realestate-primary-button"
-              onClick={() => onNavigateToDashboard?.("seller")}
+              onClick={() => {
+                const movedToDashboard = onNavigateToDashboard?.("seller");
+                if (!movedToDashboard) {
+                  pushToast("Posting is available after enabling seller access.", "info");
+                }
+              }}
             >
               Post Property
             </button>
@@ -537,7 +542,12 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                 <button
                   type="button"
                   className="realestate-primary-button"
-                  onClick={() => onNavigateToDashboard?.("seller")}
+                  onClick={() => {
+                    const movedToDashboard = onNavigateToDashboard?.("seller");
+                    if (!movedToDashboard) {
+                      pushToast("Posting is available after enabling seller access.", "info");
+                    }
+                  }}
                 >
                   Post your property
                 </button>
