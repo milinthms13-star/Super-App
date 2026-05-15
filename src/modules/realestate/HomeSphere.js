@@ -181,7 +181,8 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
       return false;
     }
 
-    const movedToDashboard = onNavigateToDashboard?.("owner", { postingType });
+    // Use "seller" so both legacy and current real-estate shells route correctly.
+    const movedToDashboard = onNavigateToDashboard?.("seller", { postingType });
     if (!movedToDashboard) {
       pushToast("Posting workspace is currently unavailable. Please try again.", "info");
     }

@@ -93,6 +93,9 @@ const MODULE_ID_ALIASES = {
   decorators: "localservices",
   photographers: "localservices",
   "business-builder": "businessbuilder",
+  homesphere: "realestate",
+  homosphere: "realestate",
+  "home-sphere": "realestate",
 };
 
 export const normalizeModuleId = (moduleId = "") => {
