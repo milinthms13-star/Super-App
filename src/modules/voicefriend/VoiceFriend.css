@@ -1,0 +1,137 @@
+.voice-friend-page {
+  max-width: 1024px;
+  margin: 0 auto;
+  padding: 24px;
+  color: #111827;
+}
+
+.voice-friend-header h1 {
+  margin-bottom: 8px;
+  font-size: 2rem;
+}
+
+.voice-friend-header p {
+  margin: 0;
+  color: #4b5563;
+}
+
+.voice-friend-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.voice-friend-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-friend-control-group label {
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.voice-friend-control-group select {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.voice-friend-status {
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  color: #334155;
+  margin-bottom: 18px;
+}
+
+.voice-friend-chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 320px;
+  margin-bottom: 18px;
+}
+
+.voice-friend-bubble {
+  max-width: 100%;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+}
+
+.voice-friend-bubble.assistant {
+  align-self: flex-start;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.voice-friend-bubble.user {
+  align-self: flex-end;
+  background: #d1fae5;
+  border-color: #86efac;
+}
+
+.voice-friend-bubble strong {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+}
+
+.voice-friend-input-row {
+  display: grid;
+  gap: 12px;
+}
+
+.voice-friend-input-row textarea {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 16px;
+  padding: 14px 16px;
+  min-height: 96px;
+  resize: vertical;
+  font-size: 1rem;
+}
+
+.voice-friend-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.voice-friend-button {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+  padding: 12px 18px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.voice-friend-button.primary {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: #ffffff;
+}
+
+.voice-friend-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.voice-friend-note {
+  margin-top: 16px;
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .voice-friend-controls {
+    grid-template-columns: 1fr;
+  }
+}

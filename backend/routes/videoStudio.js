@@ -7,6 +7,7 @@ const router = express.Router();
 router.post('/create', async (req, res) => {
   try {
     const {
+      storyTitle,
       storyPrompt,
       languageId,
       styleId,
@@ -18,13 +19,26 @@ router.post('/create', async (req, res) => {
       storySource,
     } = req.body;
 
-    if (!storyPrompt || !storyPrompt.trim()) {
+    const normalizedStoryPrompt = String(storyPrompt || '').trim();
+    const normalizedStoryTitle = String(storyTitle || '').trim();
+
+    if (!normalizedStoryPrompt) {
       return res.status(400).json({ success: false, error: 'Please provide a story prompt.' });
+    }
+    if (normalizedStoryPrompt.length < 40) {
+      return res.status(400).json({ success: false, error: 'Story prompt is too short. Provide at least 40 characters.' });
+    }
+    if (normalizedStoryPrompt.length > 7000) {
+      return res.status(400).json({ success: false, error: 'Story prompt is too long. Keep it under 7000 characters.' });
+    }
+    if (normalizedStoryTitle.length > 120) {
+      return res.status(400).json({ success: false, error: 'Story title is too long. Keep it under 120 characters.' });
     }
 
     const start = Date.now();
     const project = await createStudioProject({
-      storyPrompt,
+      storyTitle: normalizedStoryTitle,
+      storyPrompt: normalizedStoryPrompt,
       languageId,
       styleId,
       voiceType,
@@ -54,6 +68,12 @@ router.post('/render', async (req, res) => {
     const { project, premiumHD } = req.body;
     if (!project || !project.projectId) {
       return res.status(400).json({ success: false, error: 'A valid project is required for rendering.' });
+    }
+    if (!Array.isArray(project.scenes) || project.scenes.length === 0) {
+      return res.status(400).json({ success: false, error: 'At least one scene is required for rendering.' });
+    }
+    if (project.scenes.length > 20) {
+      return res.status(400).json({ success: false, error: 'Too many scenes requested. Keep it at 20 scenes or fewer.' });
     }
 
     const result = await renderVideo(project, Boolean(premiumHD));

@@ -255,6 +255,67 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.template-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.template-chip {
+  border: 1px solid #ded7ff;
+  background: #f7f5ff;
+  color: #46359a;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.char-counter {
+  margin: 8px 0 18px;
+  color: #6855a2;
+  font-size: 0.9rem;
+}
+
+.char-counter.danger {
+  color: #9e1e2d;
+}
+
+.pipeline-progress-card {
+  margin-top: 20px;
+  border-radius: 18px;
+  background: #f5f1ff;
+  padding: 14px;
+}
+
+.pipeline-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: #46359a;
+  font-weight: 700;
+}
+
+.pipeline-progress-track {
+  height: 10px;
+  background: #e5ddff;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.pipeline-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #5f41ff 0%, #13b1b8 100%);
+  border-radius: 999px;
+}
+
+.pipeline-progress-card p {
+  margin: 10px 0 0;
+  color: #5f4f92;
+}
+
 .message {
   margin-top: 18px;
   padding: 16px;
@@ -418,6 +479,62 @@ textarea {
   border-radius: 22px;
   background: #f5f2ff;
   color: #423c7b;
+}
+
+.audio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.project-library-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin-top: 16px;
+}
+
+.project-library-card {
+  background: #ffffff;
+  border: 1px solid #ece7ff;
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 10px 28px rgba(94, 78, 159, 0.08);
+}
+
+.project-library-card h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  color: #2f2857;
+}
+
+.project-library-card p {
+  margin: 0;
+  color: #5b557f;
+}
+
+.project-library-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.project-library-meta span {
+  background: #f3efff;
+  color: #4c3fa0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.project-library-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .video-preview-card {

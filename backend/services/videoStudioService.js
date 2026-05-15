@@ -22,6 +22,19 @@ try {
   openai = null;
 }
 
+const MAX_STORY_LENGTH = 7000;
+const UNSAFE_THEME_PATTERNS = [
+  /suicide/i,
+  /self[-\s]?harm/i,
+  /weapon/i,
+  /gore/i,
+  /kill/i,
+  /terror/i,
+  /abuse/i,
+  /explicit/i,
+  /adult content/i,
+];
+
 const ensureUploadsRoot = async () => {
   try {
     await access(uploadsRoot);
@@ -39,6 +52,11 @@ const extractJson = (text) => {
     return null;
   }
 };
+
+const sanitizeText = (value = '') => String(value).replace(/\u0000/g, '').trim();
+
+const containsUnsafeTheme = (value = '') =>
+  UNSAFE_THEME_PATTERNS.some((pattern) => pattern.test(value));
 
 const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
   if (!openai) return null;
@@ -62,7 +80,7 @@ const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
   }
 };
 
-const fallbackParseStory = ({ story, storyMode, voiceType, language }) => {
+const fallbackParseStory = ({ story, storyMode, voiceType, language, storyTitle }) => {
   const lines = story
     .split(/[\.\?\!]+/)
     .map((line) => line.trim())
@@ -103,7 +121,7 @@ const fallbackParseStory = ({ story, storyMode, voiceType, language }) => {
   }));
 
   return {
-    title: `AI Kids Animation Studio: ${storiesToTitle(story)}`,
+    title: storyTitle || `AI Kids Animation Studio: ${storiesToTitle(story)}`,
     mode: storyMode || 'bedtime',
     themes: [storyMode || 'magical storytelling'],
     language,
@@ -125,11 +143,24 @@ const storiesToTitle = (story) => {
   return cleaned.length > 30 ? `${cleaned.slice(0, 30)}...` : cleaned;
 };
 
-const createStudioProject = async ({ storyPrompt, languageId, styleId, voiceType, videoSizeId, storyMode, safeMode, ageFilter, storySource }) => {
+const createStudioProject = async ({ storyTitle, storyPrompt, languageId, styleId, voiceType, videoSizeId, storyMode, safeMode, ageFilter, storySource }) => {
+  const normalizedStoryPrompt = sanitizeText(storyPrompt);
+  const normalizedStoryTitle = sanitizeText(storyTitle);
+
+  if (!normalizedStoryPrompt) {
+    throw new Error('Story prompt is required.');
+  }
+  if (normalizedStoryPrompt.length > MAX_STORY_LENGTH) {
+    throw new Error(`Story prompt exceeds ${MAX_STORY_LENGTH} characters.`);
+  }
+  if (safeMode && containsUnsafeTheme(normalizedStoryPrompt)) {
+    throw new Error('Safe mode blocked this prompt due to unsafe themes.');
+  }
+
   const project = {
     projectId: uuidv4(),
     createdAt: new Date().toISOString(),
-    storyPrompt,
+    storyPrompt: normalizedStoryPrompt,
     storySource,
     language: languageId,
     style: styleId,
@@ -143,7 +174,7 @@ const createStudioProject = async ({ storyPrompt, languageId, styleId, voiceType
 
   const systemPrompt = `You are a children-friendly animation production engine for an AI Kids Animation Studio. Parse the user story into scenes, characters, emotions, camera actions, and safe multimedia prompts.`;
   const userPrompt = `Story:
-${storyPrompt}
+${normalizedStoryPrompt}
 
 Mode: ${storyMode}
 Language: ${languageId}
@@ -168,10 +199,31 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
     projectBody = {
       ...project,
       ...parsed,
+      title: normalizedStoryTitle || sanitizeText(parsed.title) || `AI Kids Animation Studio: ${storiesToTitle(normalizedStoryPrompt)}`,
       promptHints: parsed.promptHints || [],
     };
   } else {
-    projectBody = { ...project, ...fallbackParseStory({ story: storyPrompt, storyMode, voiceType, language: languageId }) };
+    projectBody = {
+      ...project,
+      ...fallbackParseStory({
+        story: normalizedStoryPrompt,
+        storyMode,
+        voiceType,
+        language: languageId,
+        storyTitle: normalizedStoryTitle,
+      }),
+    };
+  }
+
+  projectBody.scenes = Array.isArray(projectBody.scenes) ? projectBody.scenes.slice(0, 20) : [];
+  if (!projectBody.scenes.length) {
+    projectBody.scenes = fallbackParseStory({
+      story: normalizedStoryPrompt,
+      storyMode,
+      voiceType,
+      language: languageId,
+      storyTitle: normalizedStoryTitle,
+    }).scenes;
   }
 
   projectBody.promptHints = projectBody.promptHints || projectBody.scenes.map((scene) => ({
@@ -179,6 +231,14 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
     animationPrompt: `Slow zoom, slight pan, blink, gentle movement`,
     backgroundPrompt: `Soft pastel ${projectBody.mode} background with props and warm lighting`,
   }));
+
+  if (!Array.isArray(projectBody.subtitles) || !projectBody.subtitles.length) {
+    projectBody.subtitles = projectBody.scenes.map((scene, index) => ({
+      start: index * 4,
+      end: index * 4 + 4,
+      text: `${scene.title || `Scene ${index + 1}`}: ${scene.description || ''}`.trim(),
+    }));
+  }
 
   const narrationScript = await buildNarration(projectBody);
   projectBody.narration = narrationScript;
@@ -299,6 +359,9 @@ const renderVideo = async (project, premiumHD = false) => {
 
   const resolution = getResolution(project.videoSize);
   const sceneAssets = await createSceneImages(project, outputDir);
+  if (!sceneAssets.length) {
+    throw new Error('No scene assets were generated for rendering.');
+  }
   const listPath = path.join(outputDir, 'scenes.txt');
   const listContent = sceneAssets
     .map((scene) => `file '${scene.path.replace(/\\/g, '/')}\nduration ${scene.duration}`)
@@ -306,6 +369,7 @@ const renderVideo = async (project, premiumHD = false) => {
 
   await writeFile(listPath, listContent, 'utf-8');
   const subtitlePath = await buildSubtitleFile(project, outputDir);
+  const subtitleFileName = path.basename(subtitlePath).replace(/\\/g, '/');
 
   const quality = premiumHD ? '24' : '23';
   const outputFile = path.join(outputDir, 'story-render.mp4');
@@ -324,7 +388,7 @@ const renderVideo = async (project, premiumHD = false) => {
     '-c:a', 'aac',
     '-b:a', '128k',
     '-shortest',
-    '-vf', `subtitles=${subtitlePath.replace(/\\/g, '/')}:force_style='FontName=Arial,FontSize=24,PrimaryColour=&Hffffff&'`,
+    '-vf', `subtitles=${subtitleFileName}:force_style='FontName=Arial,FontSize=24,PrimaryColour=&Hffffff&'`,
     outputFile,
   ];
 

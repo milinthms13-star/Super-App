@@ -1,0 +1,184 @@
+.kitchen-shell {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 1.2rem 1rem 6rem;
+  color: #1f2937;
+}
+
+.kitchen-hero,
+.kitchen-card {
+  border: 1px solid #d9e6da;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+}
+
+.kitchen-hero {
+  padding: 1.2rem;
+  background:
+    radial-gradient(circle at top left, rgba(22, 163, 74, 0.17), transparent 40%),
+    linear-gradient(145deg, #f6fff9 0%, #fff9ec 100%);
+}
+
+.kitchen-hero h1 {
+  margin: 0;
+  font-size: clamp(1.65rem, 2.7vw, 2.6rem);
+}
+
+.kitchen-tabs {
+  margin: 0.95rem 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.kitchen-tabs button {
+  border: 1px solid #cadbcf;
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.62rem 0.58rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.kitchen-tabs button.active {
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.12);
+  color: #166534;
+}
+
+.kitchen-status {
+  margin-bottom: 0.82rem;
+  padding: 0.62rem 0.72rem;
+  border: 1px solid;
+  border-radius: 11px;
+  font-weight: 600;
+}
+
+.kitchen-status.success {
+  border-color: rgba(22, 101, 52, 0.32);
+  background: rgba(34, 197, 94, 0.11);
+  color: #166534;
+}
+
+.kitchen-status.error {
+  border-color: rgba(153, 27, 27, 0.32);
+  background: rgba(248, 113, 113, 0.12);
+  color: #991b1b;
+}
+
+.kitchen-card {
+  padding: 1rem;
+  margin-bottom: 0.95rem;
+}
+
+.kitchen-card h2,
+.kitchen-card h3 {
+  margin-top: 0;
+}
+
+.kitchen-grid {
+  display: grid;
+  gap: 0.82rem;
+}
+
+.kitchen-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.kitchen-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.kitchen-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.62rem;
+}
+
+.kitchen-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.kitchen-form input,
+.kitchen-form textarea,
+.kitchen-form select,
+.kitchen-card input,
+.kitchen-card textarea,
+.kitchen-card select {
+  border: 1px solid #d3dfd4;
+  border-radius: 10px;
+  padding: 0.6rem 0.65rem;
+  font: inherit;
+}
+
+.kitchen-card button {
+  border: 1px solid #c4d7c6;
+  background: #f3fff2;
+  color: #166534;
+  border-radius: 10px;
+  padding: 0.52rem 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.kitchen-chip-wall {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.kitchen-chip-wall span {
+  border: 1px solid #c8dec9;
+  border-radius: 999px;
+  padding: 0.22rem 0.64rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: #effbf0;
+  color: #166534;
+}
+
+.kitchen-list-item {
+  border: 1px solid #dfebe1;
+  border-radius: 12px;
+  padding: 0.68rem;
+  margin-bottom: 0.54rem;
+}
+
+.kitchen-inline-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.45rem !important;
+}
+
+.kitchen-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.kitchen-actions-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.kitchen-step {
+  border: 1px solid #dce8dd;
+  border-radius: 12px;
+  padding: 0.72rem;
+  background: #f8fff8;
+  font-weight: 600;
+}
+
+@media (max-width: 980px) {
+  .kitchen-grid.two,
+  .kitchen-grid.three {
+    grid-template-columns: 1fr;
+  }
+}
+

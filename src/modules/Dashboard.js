@@ -265,6 +265,15 @@ case "astrology":
           <path d="M4 12h2M18 12h2M12 2v2" />
         </svg>
       );
+  case "kitchen":
+      return (
+        <svg {...common}>
+          <path d="M5 4v8a3 3 0 0 0 6 0V4" />
+          <path d="M8 4v8" />
+          <path d="M14 4v16" />
+          <path d="M17 4c1.7 2 1.7 6 0 8" />
+        </svg>
+      );
   case "external":
       return (
         <svg {...common}>
@@ -424,6 +433,18 @@ const MODULE_CONFIG = [
     emoji: "📸",
   },
   {
+    id: "kidsstoryvideomaker",
+    nameKey: "modules.kidsstoryvideomaker",
+    fallbackName: "Kids Story Video Maker",
+    icon: "photostudio",
+    descriptionKey: "dashboard.moduleDescriptions.kidsstoryvideomaker",
+    fallbackDescription:
+      "Create kid-friendly story videos with scenes, narration flow, and easy sharing for family learning time.",
+    stats: "Story video creator",
+    gradient: "linear-gradient(135deg, #1D4ED8 0%, #0EA5A7 45%, #F59E0B 100%)",
+    emoji: "KS",
+  },
+  {
     id: "karaokeduet",
     nameKey: "modules.karaokeduet",
     fallbackName: "Remote Karaoke Duet",
@@ -448,6 +469,30 @@ const MODULE_CONFIG = [
     emoji: "💃",
   },
   {
+    id: "voicefriend",
+    nameKey: "modules.voicefriend",
+    fallbackName: "AI Voice Friend",
+    icon: "messaging",
+    descriptionKey: "dashboard.moduleDescriptions.voicefriend",
+    fallbackDescription:
+      "A compassionate voice chat companion with emotion-aware responses, motivational support, and safe guidance.",
+    stats: "Emotional AI companion",
+    gradient: "linear-gradient(135deg, #2563EB 0%, #60A5FA 45%, #86EFAC 100%)",
+    emoji: "🗣️",
+  },
+  {
+    id: "liveplaceexplorer",
+    nameKey: "modules.liveplaceexplorer",
+    fallbackName: "Live Place Explorer",
+    icon: "tourism",
+    descriptionKey: "dashboard.moduleDescriptions.liveplaceexplorer",
+    fallbackDescription:
+      "Search places, view 360° street imagery, weather, nearby photos and AI travel guidance.",
+    stats: "Explore live places",
+    gradient: "linear-gradient(135deg, #0F766E 0%, #0EA5A7 45%, #3B82F6 100%)",
+    emoji: "🧭",
+  },
+  {
     id: "beautyai",
     nameKey: "modules.beautyai",
     fallbackName: "Nila Beauty AI",
@@ -458,6 +503,18 @@ const MODULE_CONFIG = [
     stats: "Daily skin + beauty guidance",
     gradient: "linear-gradient(135deg, #0F766E 0%, #14B8A6 45%, #FB923C 100%)",
     emoji: "BA",
+  },
+  {
+    id: "kitchen",
+    nameKey: "modules.kitchen",
+    fallbackName: "Smart Kitchen & Recipe Hub",
+    icon: "kitchen",
+    descriptionKey: "dashboard.moduleDescriptions.kitchen",
+    fallbackDescription:
+      "Kitchen tips + AI recipe generation from home ingredients, step cooking mode, grocery lists, and community recipe sharing.",
+    stats: "AI cooking + kitchen utility",
+    gradient: "linear-gradient(135deg, #166534 0%, #16A34A 45%, #F59E0B 100%)",
+    emoji: "KH",
   },
   {
     id: "jobportal",
@@ -709,6 +766,7 @@ const MODULE_CATEGORY_MAP = {
   socialmedia: "core",
   matrimonial: "core",
   tourism: "travel",
+  liveplaceexplorer: "travel",
   hotelbooking: "travel",
   bustrainbooking: "travel",
   ridesharing: "travel",
@@ -719,8 +777,10 @@ const MODULE_CATEGORY_MAP = {
   freelancer: "business",
   jobportal: "business",
   photostudio: "business",
+  kidsstoryvideomaker: "business",
   karaokeduet: "business",
   beautyai: "business",
+  kitchen: "business",
   skilllearning: "business",
   resumebuilder: "business",
   education: "business",
@@ -1189,8 +1249,10 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "skilllearning" ||
         module.id === "resumebuilder" ||
         module.id === "photostudio" ||
+        module.id === "kidsstoryvideomaker" ||
         module.id === "karaokeduet" ||
         module.id === "beautyai" ||
+        module.id === "kitchen" ||
         module.id === "devadarshan" ||
         module.id === "localservices" ||
         module.id === "hyperlocal" ||

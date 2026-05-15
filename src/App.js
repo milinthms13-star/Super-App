@@ -65,7 +65,10 @@ const ResumeBuilder = React.lazy(() => import("./modules/resumebuilder/ResumeBui
 const PhotoStudioAIAR = React.lazy(() => import("./modules/photostudio/PhotoStudioAIAR"));
 const RemoteKaraokeDuet = React.lazy(() => import("./modules/karaokeduet/RemoteKaraokeDuet"));
 const AutoDanceDuet = React.lazy(() => import("./modules/danceduet/AutoDanceDuet"));
+const VoiceFriend = React.lazy(() => import("./modules/voicefriend/VoiceFriend"));
+const LivePlaceExplorer = React.lazy(() => import("./modules/liveplaceexplorer/LivePlaceExplorer"));
 const NilaBeautyAI = React.lazy(() => import("./modules/beautyai/NilaBeautyAI"));
+const SmartKitchenRecipeHub = React.lazy(() => import("./modules/kitchen/SmartKitchenRecipeHub"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
 const JobPortal = React.lazy(() => import("./modules/jobportal/JobPortal"));
 const Education = React.lazy(() => import("./modules/education/Education"));
@@ -159,7 +162,10 @@ const PREVIEW_ENABLED_MODULES = [
   "photostudio",
   "karaokeduet",
   "danceduet",
+  "voicefriend",
+  "liveplaceexplorer",
   "beautyai",
+  "kitchen",
 ];
 
 const TOGGLE_CONTROLLED_MODULE_IDS = [
@@ -184,7 +190,10 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "photostudio",
   "karaokeduet",
   "danceduet",
+  "voicefriend",
+  "liveplaceexplorer",
   "beautyai",
+  "kitchen",
   "jobportal",
   "skilllearning",
   "education",
@@ -198,6 +207,7 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "sosalert",
   "devadarshan",
   "astrology",
+  "quicklinks",
   "diary",
 ];
 
@@ -1228,8 +1238,11 @@ function AppShell() {
               <Route path="resumebuilder" element={<ResumeBuilder />} />
               <Route path="photo-studio-ai-ar" element={<PhotoStudioAIAR />} />
               <Route path="dance-duet" element={<AutoDanceDuet />} />
+              <Route path="voice-friend" element={<VoiceFriend />} />
+              <Route path="live-place-explorer" element={<LivePlaceExplorer />} />
               <Route path="remote-karaoke-duet" element={<RemoteKaraokeDuet />} />
               <Route path="nila-beauty-ai" element={<NilaBeautyAI />} />
+              <Route path="smart-kitchen-recipe-hub" element={<SmartKitchenRecipeHub />} />
               <Route path="businessservices" element={<BusinessServices />} />
               <Route path="jobportal" element={<JobPortal />} />
               <Route path="education" element={<Education />} />
