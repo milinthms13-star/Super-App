@@ -162,19 +162,16 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
   }, [profileImageSrc]);
 
   useEffect(() => {
-    if (!showMoreMenu && !showUserMenu) {
-      return undefined;
-    }
-
     const handleOutsideClick = (event) => {
       const target = event.target;
+
       const clickedInsideMore = moreMenuRef.current?.contains(target);
       const clickedInsideUser = userMenuRef.current?.contains(target);
 
-      if (!clickedInsideMore && showMoreMenu) {
+      if (showMoreMenu && !clickedInsideMore) {
         setShowMoreMenu(false);
       }
-      if (!clickedInsideUser && showUserMenu) {
+      if (showUserMenu && !clickedInsideUser) {
         setShowUserMenu(false);
       }
     };

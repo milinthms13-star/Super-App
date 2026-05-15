@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import "../../styles/RealEstate.css";
 import FiltersPanel from "./components/FiltersPanel";
@@ -108,6 +109,7 @@ const RealEstate = () => {
   const [listingForm, setListingForm] = useState(DEFAULT_LISTING_FORM);
   const [listingFieldErrors, setListingFieldErrors] = useState({});
   const [editListingId, setEditListingId] = useState("");
+  const location = useLocation();
   const [selectedService, setSelectedService] = useState(CONSTRUCTION_SERVICES[0].id);
   const [loanAmount, setLoanAmount] = useState("72");
   const [loanTenure, setLoanTenure] = useState("20");
@@ -814,14 +816,51 @@ const RealEstate = () => {
   const isBuyerMode = activeRole === "buyer";
   const buyerQuickStats = dashboardStats.slice(0, 3);
 
-  const handleOpenSellerWorkspace = () => {
-    if (allowedRoleModes.includes("owner")) {
-      setActiveRole("owner");
-      setSellerWorkspaceMode(true);
-      return;
+  const openSellerWorkspace = useCallback((options = {}) => {
+    if (!allowedRoleModes.includes("owner")) {
+      pushToast("Enable seller access to post properties.", "info");
+      return false;
     }
-    pushToast("Enable seller access to post properties.", "info");
+
+    setActiveRole("owner");
+    setSellerWorkspaceMode(true);
+    if (options?.postingType === "property" || options?.postingType === "requirement") {
+      setEditListingId("");
+      setListingFieldErrors({});
+      setListingForm({
+        ...DEFAULT_LISTING_FORM,
+        postingType: options.postingType,
+        title: "",
+        description: "",
+        priceLabel: "",
+        minBudget: "",
+        maxBudget: "",
+        preferredLocations: "",
+        mustHaveAmenities: "",
+        moveInDate: "",
+      });
+    }
+    return true;
+  }, [allowedRoleModes, pushToast]);
+
+  const handleOpenSellerWorkspace = () => {
+    openSellerWorkspace({ postingType: "property" });
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const shouldOpenPost =
+      params.get("post") === "1" ||
+      params.get("action") === "post" ||
+      params.get("view") === "post";
+    const postingType = ["property", "requirement"].includes(params.get("postingType"))
+      ? params.get("postingType")
+      : "property";
+
+    if (shouldOpenPost) {
+      openSellerWorkspace({ postingType });
+    }
+  }, [location.search, openSellerWorkspace]);
 
   const scrollToBuyerListings = () => {
     if (typeof document === "undefined") return;
@@ -854,7 +893,7 @@ const RealEstate = () => {
             ))}
           </div>
         </section>
-      ) : (
+      ) : !sellerWorkspaceMode ? (
         <>
           <section className="realestate-hero">
             <div className="realestate-hero-copy">
@@ -905,7 +944,7 @@ const RealEstate = () => {
             ))}
           </section>
         </>
-      )}
+      ) : null}
       <section className="realestate-role-section" style={{ display: isBuyerMode || sellerWorkspaceMode ? "none" : "block" }}>
         <div className="realestate-section-heading">
           <h2>Role-based experience</h2>
@@ -961,29 +1000,11 @@ const RealEstate = () => {
         <HomeSphere
           onNavigateToDashboard={(role, options = {}) => {
             const normalizedRole = String(role || "").toLowerCase() === "seller" ? "owner" : String(role || "").toLowerCase();
-            if (!allowedRoleModes.includes(normalizedRole || "owner")) {
+            if (normalizedRole !== "owner") {
               pushToast("Enable seller access to post properties.", "info");
               return false;
             }
-            setActiveRole(normalizedRole || "owner");
-            setSellerWorkspaceMode(true);
-            if (options?.postingType === "property" || options?.postingType === "requirement") {
-              setEditListingId("");
-              setListingFieldErrors({});
-              setListingForm({
-                ...DEFAULT_LISTING_FORM,
-                postingType: options.postingType,
-                title: "",
-                description: "",
-                priceLabel: "",
-                minBudget: "",
-                maxBudget: "",
-                preferredLocations: "",
-                mustHaveAmenities: "",
-                moveInDate: "",
-              });
-            }
-            return true;
+            return openSellerWorkspace({ postingType: options?.postingType || "property" });
           }}
         />
       ) : null}
@@ -1090,7 +1111,8 @@ const RealEstate = () => {
             </>
           ) : null}
 
-          <article className="realestate-operations-grid">
+          {!sellerWorkspaceMode ? (
+            <article className="realestate-operations-grid">
             <LeadBoard
               activeRole={activeRole}
               leadBoard={leadBoard}
@@ -1141,6 +1163,7 @@ const RealEstate = () => {
               ) : null}
             </section>
           </article>
+          ) : null}
 
           <ListingForm
             activeRole={activeRole}
