@@ -2,56 +2,34 @@ import React from "react";
 
 const PopularCategories = ({ onCategoryClick }) => {
   const categories = [
-    {
-      type: "Vehicles",
-      icon: "🚗",
-      description: "Cars, bikes, and more",
-    },
-    {
-      type: "Electronics",
-      icon: "📱",
-      description: "Phones, laptops, gadgets",
-    },
-    {
-      type: "Jobs",
-      icon: "💼",
-      description: "Employment opportunities",
-    },
-    {
-      type: "Properties",
-      icon: "🏠",
-      description: "Real estate listings",
-    },
-    {
-      type: "Services",
-      icon: "🔧",
-      description: "Professional services",
-    },
-    {
-      type: "Home Appliances",
-      icon: "🏠",
-      description: "Kitchen and home items",
-    },
+    { type: "Vehicles", code: "VH", description: "Cars, bikes, and commercial vehicles" },
+    { type: "Electronics", code: "EL", description: "Phones, laptops, accessories, gadgets" },
+    { type: "Jobs", code: "JB", description: "Local hiring and freelance opportunities" },
+    { type: "Properties", code: "PR", description: "Homes, flats, plots, and rentals" },
+    { type: "Services", code: "SV", description: "Repairs, tutors, logistics, and more" },
+    { type: "Home Appliances", code: "HA", description: "Fridge, AC, kitchen and utility items" },
   ];
 
   return (
     <section className="tradepost-popular-categories">
       <article className="tradepost-surface-card">
         <div className="classifieds-section-heading">
-          <h2>Popular Categories</h2>
-          <p>Browse by category</p>
+          <h2>Popular categories</h2>
+          <p>Explore high-demand marketplaces in one tap.</p>
         </div>
         <div className="tradepost-categories-grid">
-          {categories.map((cat) => (
+          {categories.map((category) => (
             <button
-              key={cat.type}
+              key={category.type}
               type="button"
               className="tradepost-category-card"
-              onClick={() => onCategoryClick?.(cat.type)}
+              onClick={() => onCategoryClick?.(category.type)}
             >
-              <div className="tradepost-category-emoji">{cat.icon}</div>
-              <strong>{cat.type}</strong>
-              <span>{cat.description}</span>
+              <div className="tradepost-category-icon" aria-hidden="true">
+                {category.code}
+              </div>
+              <strong>{category.type}</strong>
+              <span>{category.description}</span>
             </button>
           ))}
         </div>

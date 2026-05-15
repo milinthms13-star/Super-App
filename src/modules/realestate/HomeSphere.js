@@ -169,6 +169,22 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     [favorites]
   );
 
+  const canPostProperty =
+    currentUser?.registrationType === "entrepreneur" || currentUser?.role === "business";
+
+  const redirectToSellerDashboard = () => {
+    if (!canPostProperty) {
+      pushToast("Upgrade to a seller account to post property listings.", "info");
+      return false;
+    }
+
+    const movedToDashboard = onNavigateToDashboard?.("seller");
+    if (!movedToDashboard) {
+      pushToast("Posting is available after enabling seller access.", "info");
+    }
+    return movedToDashboard;
+  };
+
   const handleFavoriteToggle = (propertyId) => {
     const fullId = `realestate-${propertyId}`;
     if (favoriteIds.has(fullId)) {
@@ -316,12 +332,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
             <button
               type="button"
               className="realestate-primary-button"
-              onClick={() => {
-                const movedToDashboard = onNavigateToDashboard?.("seller");
-                if (!movedToDashboard) {
-                  pushToast("Posting is available after enabling seller access.", "info");
-                }
-              }}
+              onClick={redirectToSellerDashboard}
             >
               Post Property
             </button>
@@ -333,6 +344,11 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
               Explore Listings
             </button>
           </div>
+          {!canPostProperty ? (
+            <div className="homesphere-hero-note">
+              Upgrade to a seller account to post property listings.
+            </div>
+          ) : null}
         </div>
 
         <div className="homesphere-hero-panel">
@@ -542,12 +558,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                 <button
                   type="button"
                   className="realestate-primary-button"
-                  onClick={() => {
-                    const movedToDashboard = onNavigateToDashboard?.("seller");
-                    if (!movedToDashboard) {
-                      pushToast("Posting is available after enabling seller access.", "info");
-                    }
-                  }}
+                  onClick={redirectToSellerDashboard}
                 >
                   Post your property
                 </button>

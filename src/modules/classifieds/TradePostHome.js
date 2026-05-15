@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import ListingCard from "./components/ListingCard";
 import ListingDetailTabs from "./components/ListingDetailTabs";
@@ -7,7 +7,6 @@ import PopularCategories from "./components/PopularCategories";
 import VerifiedSellers from "./components/VerifiedSellers";
 import DownloadAppCTA from "./components/DownloadAppCTA";
 import {
-  DEFAULT_AD_FORM,
   TRADEPOST_SEED_LISTINGS,
 } from "./classifiedsConstants";
 import {
@@ -89,6 +88,17 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
     if (sortBy === "newest") return copy.reverse();
     return copy; // featured
   }, [filteredListings, sortBy]);
+
+  useEffect(() => {
+    if (sortedListings.length === 0) {
+      setSelectedListingId("");
+      return;
+    }
+
+    if (!selectedListingId || !sortedListings.some((listing) => listing.id === selectedListingId)) {
+      setSelectedListingId(sortedListings[0].id);
+    }
+  }, [sortedListings, selectedListingId]);
 
   const selectedListing = useMemo(
     () => listings.find((l) => l.id === selectedListingId),
@@ -174,6 +184,27 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
     return ["All", ...Array.from(locs)];
   }, [listings]);
 
+  const averagePriceLabel = useMemo(() => {
+    if (!filteredListings.length) return "Rs 0";
+    const avgPrice =
+      filteredListings.reduce((sum, listing) => sum + Number(listing.price || 0), 0) /
+      filteredListings.length;
+    return `Rs ${Math.round(avgPrice).toLocaleString("en-IN")}`;
+  }, [filteredListings]);
+
+  const verifiedCount = useMemo(
+    () => filteredListings.filter((listing) => listing.verified).length,
+    [filteredListings]
+  );
+
+  const activeFilterCount = [
+    categoryFilter !== "All",
+    locationFilter !== "All",
+    conditionFilter !== "All",
+    verifiedOnly,
+    Boolean(searchText.trim()),
+  ].filter(Boolean).length;
+
   const handlePostAdClick = () => {
     const didNavigate = onNavigateToDashboard?.("seller");
     if (didNavigate === false) {
@@ -181,60 +212,138 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
     }
   };
 
+  const resetFilters = () => {
+    setSearchText("");
+    setCategoryFilter("All");
+    setLocationFilter("All");
+    setConditionFilter("All");
+    setVerifiedOnly(false);
+    setSortBy("featured");
+  };
+
   return (
-    <div className="tradepost-home">
-      {/* HERO SECTION */}
-      <section className="tradepost-hero">
+    <div className="tradepost-home tradepost-premium">
+      <section className="tradepost-hero tradepost-hero-premium">
         <div className="tradepost-hero-content">
-          <p className="tradepost-eyebrow">TradePost classifieds</p>
-          <h1>Local buying, selling, discovery, and direct buyer-seller conversations in one flow.</h1>
-          <div className="tradepost-search-row">
-            <input
-              type="text"
-              placeholder="Search listings..."
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="tradepost-search-input"
-            />
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="tradepost-filter-select"
-            >
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-            <select
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              className="tradepost-filter-select"
-            >
-              {locations.map((loc) => (
-                <option key={loc} value={loc}>
-                  {loc}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="tradepost-primary-button"
-              onClick={handlePostAdClick}
-            >
-              Post an ad
-            </button>
+          <p className="tradepost-eyebrow">TradePost Premium</p>
+          <h1>Discover trusted local deals and post your listing in minutes.</h1>
+          <p className="tradepost-hero-subtext">
+            Premium discovery experience with instant search, verified sellers, and mobile-first
+            buyer and seller flows.
+          </p>
+
+          <div className="tradepost-hero-stats">
+            <article className="tradepost-hero-stat">
+              <span>Live listings</span>
+              <strong>{filteredListings.length}</strong>
+            </article>
+            <article className="tradepost-hero-stat">
+              <span>Verified sellers</span>
+              <strong>{verifiedCount}</strong>
+            </article>
+            <article className="tradepost-hero-stat">
+              <span>Average price</span>
+              <strong>{averagePriceLabel}</strong>
+            </article>
+          </div>
+
+          <div className="tradepost-search-shell">
+            <div className="tradepost-search-row">
+              <input
+                type="text"
+                placeholder="Search products, brands, or categories"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                className="tradepost-search-input"
+              />
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="tradepost-filter-select"
+              >
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                className="tradepost-filter-select"
+              >
+                {locations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="tradepost-primary-button"
+                onClick={handlePostAdClick}
+              >
+                Post an ad
+              </button>
+            </div>
+            <div className="tradepost-search-meta">
+              <span>{sortedListings.length} results</span>
+              <span>{activeFilterCount} filters active</span>
+              <button type="button" className="tradepost-clear-button" onClick={resetFilters}>
+                Reset filters
+              </button>
+            </div>
           </div>
         </div>
+
+        <aside className="tradepost-hero-sidepanel">
+          <h3>Quick browse</h3>
+          <p>Jump straight into top categories with one tap.</p>
+          <div className="tradepost-hero-categories">
+            {categories
+              .filter((cat) => cat !== "All")
+              .slice(0, 6)
+              .map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  className={`tradepost-hero-category ${categoryFilter === category ? "active" : ""}`}
+                  onClick={() => setCategoryFilter(category)}
+                >
+                  {category}
+                </button>
+              ))}
+          </div>
+          <button
+            type="button"
+            className="tradepost-secondary-button"
+            onClick={() => {
+              setCategoryFilter("All");
+              setLocationFilter("All");
+            }}
+          >
+            View all categories
+          </button>
+        </aside>
       </section>
 
-      {/* QUICK FILTERS */}
       <QuickFilters
         filters={[
-          { label: "Verified only", active: verifiedOnly, onClick: () => setVerifiedOnly(!verifiedOnly) },
-          { label: "New condition", active: conditionFilter === "New", onClick: () => setConditionFilter(conditionFilter === "New" ? "All" : "New") },
-          { label: "Used condition", active: conditionFilter === "Used", onClick: () => setConditionFilter(conditionFilter === "Used" ? "All" : "Used") },
+          {
+            label: "Verified only",
+            active: verifiedOnly,
+            onClick: () => setVerifiedOnly(!verifiedOnly),
+          },
+          {
+            label: "New condition",
+            active: conditionFilter === "New",
+            onClick: () => setConditionFilter(conditionFilter === "New" ? "All" : "New"),
+          },
+          {
+            label: "Used condition",
+            active: conditionFilter === "Used",
+            onClick: () => setConditionFilter(conditionFilter === "Used" ? "All" : "Used"),
+          },
         ]}
         sortOptions={[
           { value: "featured", label: "Featured" },
@@ -246,9 +355,16 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
         onSortChange={setSortBy}
       />
 
-      {/* MAIN CONTENT GRID */}
       <div className="tradepost-main-grid">
         <section className="tradepost-listings-section">
+          <header className="tradepost-listings-header">
+            <div>
+              <h2>Fresh listings near you</h2>
+              <p>Curated from TradePost sellers with trust indicators and instant messaging.</p>
+            </div>
+            <p className="tradepost-last-updated">Updated {formatDateTime(new Date().toISOString())}</p>
+          </header>
+
           <article className="tradepost-listings-grid">
             {sortedListings.length === 0 ? (
               <div className="tradepost-no-listings">
@@ -283,7 +399,6 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
           </article>
         </section>
 
-        {/* LISTING DETAIL PANEL (STICKY RIGHT) */}
         <aside className="tradepost-detail-panel">
           <article className="tradepost-detail-card">
             {selectedListing ? (
@@ -402,7 +517,15 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
         </aside>
       </div>
 
-      {/* TOAST NOTIFICATIONS */}
+      <section className="tradepost-mobile-quickbar" aria-label="Mobile quick actions">
+        <button type="button" className="tradepost-mobile-action" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+          Search
+        </button>
+        <button type="button" className="tradepost-mobile-action primary" onClick={handlePostAdClick}>
+          Post ad
+        </button>
+      </section>
+
       <div className="tradepost-toast-stack">
         {toasts.map((toast) => (
           <div
@@ -414,15 +537,12 @@ const TradePostHome = ({ onNavigateToDashboard }) => {
         ))}
       </div>
 
-      {/* POPULAR CATEGORIES SECTION */}
       <PopularCategories
         onCategoryClick={(category) => setCategoryFilter(category)}
       />
 
-      {/* VERIFIED SELLERS SECTION */}
       <VerifiedSellers />
 
-      {/* DOWNLOAD APP CTA */}
       <DownloadAppCTA />
     </div>
   );

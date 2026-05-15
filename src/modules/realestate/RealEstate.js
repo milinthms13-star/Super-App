@@ -895,13 +895,6 @@ const RealEstate = () => {
               setActiveRole(normalizedRole);
               return true;
             }
-
-            const fallbackRole = allowedRoleModes.find((mode) => mode !== "buyer");
-            if (fallbackRole) {
-              setActiveRole(fallbackRole);
-              return true;
-            }
-
             return false;
           }}
         />
