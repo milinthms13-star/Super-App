@@ -18,6 +18,36 @@ const MOOD_OPTIONS = [
   { id: 'sad', label: 'Sad' },
 ];
 
+const AI_FRIENDS = [
+  {
+    id: 'nila',
+    name: 'Nila',
+    avatar: '/avatars/nila.png',
+    voice: 'female-soft',
+    personality: 'Caring and emotional',
+    color: '#c7d2fe',
+    label: 'Comforting companion',
+  },
+  {
+    id: 'arjun',
+    name: 'Arjun',
+    avatar: '/avatars/arjun.png',
+    voice: 'male-calm',
+    personality: 'Protective and motivating',
+    color: '#a7f3d0',
+    label: 'Motivating buddy',
+  },
+  {
+    id: 'anya',
+    name: 'Anya',
+    avatar: '/avatars/anya.png',
+    voice: 'female-warm',
+    personality: 'Empathetic and soothing',
+    color: '#fbcfe8',
+    label: 'Soothing guide',
+  },
+];
+
 const STORAGE_KEY = 'voiceFriendState';
 
 const buildRequestHeaders = () => {
@@ -27,6 +57,8 @@ const buildRequestHeaders = () => {
 
 const VoiceFriend = () => {
   const [sessionId, setSessionId] = useState(null);
+  const [friendId, setFriendId] = useState('nila');
+  const [userName, setUserName] = useState('');
   const [persona, setPersona] = useState('supportive');
   const [mood, setMood] = useState('neutral');
   const [language, setLanguage] = useState('en');
@@ -36,7 +68,15 @@ const VoiceFriend = () => {
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [playingAudio, setPlayingAudio] = useState(false);
   const recognition = useRef(null);
+  const audioPlayerRef = useRef(null);
+
+  const selectedFriend = useMemo(
+    () => AI_FRIENDS.find((friend) => friend.id === friendId) || AI_FRIENDS[0],
+    [friendId]
+  );
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -72,9 +112,12 @@ const VoiceFriend = () => {
     };
   }, [language]);
 
-  const initSession = useCallback(async (existingSessionId) => {
+  const initSession = useCallback(async (existingSessionId, initialFriendId, initialUserName) => {
     try {
       setBusy(true);
+      const sessionFriendId = initialFriendId || friendId;
+      const sessionUserName = initialUserName || userName;
+
       if (existingSessionId) {
         try {
           const historyResponse = await axios.get(
@@ -85,9 +128,11 @@ const VoiceFriend = () => {
           if (historyResponse?.data?.success) {
             const sessionData = historyResponse.data.data;
             setSessionId(sessionData.sessionId);
+            setFriendId(sessionData.friendId || sessionFriendId);
             setPersona(sessionData.persona || persona);
             setMood(sessionData.mood || mood);
             setLanguage(sessionData.language || language);
+            setUserName(sessionData.userName || sessionUserName || '');
             setConversation(sessionData.messages || []);
             setStatus('Restored your previous Voice Friend session.');
             return;
@@ -100,7 +145,7 @@ const VoiceFriend = () => {
       setConversation([]);
       const response = await axios.post(
         buildApiUrl('/ai-voice-friend/init'),
-        { persona, mood, language },
+        { persona, mood, language, friendId: sessionFriendId, userName: sessionUserName },
         { headers: buildRequestHeaders() }
       );
 
@@ -115,17 +160,25 @@ const VoiceFriend = () => {
     } finally {
       setBusy(false);
     }
-  }, [persona, mood, language]);
+  }, [persona, mood, language, friendId, userName]);
 
   useEffect(() => {
     const savedState = localStorage.getItem(STORAGE_KEY);
     if (savedState) {
       try {
         const parsed = JSON.parse(savedState);
+        if (parsed?.friendId) {
+          setFriendId(parsed.friendId);
+        }
+        if (parsed?.userName) {
+          setUserName(parsed.userName);
+        }
         if (parsed?.sessionId) {
-          initSession(parsed.sessionId);
+          initSession(parsed.sessionId, parsed.friendId, parsed.userName);
           return;
         }
+        initSession(undefined, parsed.friendId, parsed.userName);
+        return;
       } catch (error) {
         console.warn('Unable to restore Voice Friend state:', error);
       }
@@ -133,15 +186,84 @@ const VoiceFriend = () => {
     initSession();
   }, [initSession]);
 
+  const stopAudioPlayback = useCallback(() => {
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      URL.revokeObjectURL(audioPlayerRef.current.src);
+      audioPlayerRef.current = null;
+    }
+    setPlayingAudio(false);
+  }, []);
+
   const speakText = useCallback((text) => {
     if (!window.speechSynthesis) return;
+    stopAudioPlayback();
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = language || 'en-IN';
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
+    utterance.onend = () => setPlayingAudio(false);
+    utterance.onerror = () => setPlayingAudio(false);
+    setPlayingAudio(true);
     window.speechSynthesis.speak(utterance);
-  }, [language]);
+  }, [language, stopAudioPlayback]);
+
+  const playResponseAudio = useCallback(async (text) => {
+    if (!text || !sessionId) {
+      return false;
+    }
+
+    try {
+      setAudioLoading(true);
+      stopAudioPlayback();
+      const response = await axios.post(
+        buildApiUrl('/ai-voice-friend/speech'),
+        {
+          text,
+          friendId,
+          voice: selectedFriend.voice,
+          language,
+        },
+        { headers: buildRequestHeaders() }
+      );
+
+      const audioBase64 = response?.data?.data?.audio;
+      const mimeType = response?.data?.data?.mimeType || 'audio/mpeg';
+      if (!audioBase64) {
+        return false;
+      }
+
+      const binary = atob(audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      const blob = new Blob([bytes], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioPlayerRef.current = audio;
+      setPlayingAudio(true);
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        audioPlayerRef.current = null;
+        setPlayingAudio(false);
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        audioPlayerRef.current = null;
+        setPlayingAudio(false);
+      };
+      await audio.play();
+      return true;
+    } catch (error) {
+      console.warn('Voice Friend TTS playback failed:', error);
+      return false;
+    } finally {
+      setAudioLoading(false);
+    }
+  }, [friendId, language, selectedFriend.voice, sessionId, stopAudioPlayback]);
 
   const sendMessage = async () => {
     if (busy) {
@@ -167,7 +289,7 @@ const VoiceFriend = () => {
     try {
       const response = await axios.post(
         buildApiUrl('/ai-voice-friend/message'),
-        { sessionId, message: trimmed, persona, mood, language },
+        { sessionId, message: trimmed, persona, mood, language, friendId, userName },
         { headers: buildRequestHeaders() }
       );
 
@@ -175,7 +297,10 @@ const VoiceFriend = () => {
       const assistantMessage = { role: 'assistant', content: aiText };
       setConversation((prev) => [...prev, assistantMessage]);
       setStatus('Conversation updated.');
-      speakText(aiText);
+      const played = await playResponseAudio(aiText);
+      if (!played) {
+        speakText(aiText);
+      }
     } catch (error) {
       setStatus('Sorry, I could not process that message right now.');
     } finally {
@@ -191,9 +316,22 @@ const VoiceFriend = () => {
 
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ sessionId, persona, mood, language, conversation })
+      JSON.stringify({ sessionId, friendId, userName, persona, mood, language, conversation })
     );
   }, [sessionId, persona, mood, language, conversation]);
+
+  useEffect(() => {
+    return () => {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        URL.revokeObjectURL(audioPlayerRef.current.src);
+        audioPlayerRef.current = null;
+      }
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   const handleVoiceStart = () => {
     if (!recognition.current) {
@@ -232,29 +370,86 @@ const VoiceFriend = () => {
     await initSession();
   };
 
+  const lastAssistantResponseText = useMemo(() => {
+    for (let i = conversation.length - 1; i >= 0; i -= 1) {
+      if (conversation[i].role === 'assistant') {
+        return conversation[i].content;
+      }
+    }
+    return '';
+  }, [conversation]);
+
+  const handleReplayLastResponse = async () => {
+    if (!lastAssistantResponseText) {
+      setStatus('No response available to replay yet.');
+      return;
+    }
+
+    setStatus('Replaying the last response...');
+    setBusy(true);
+    const played = await playResponseAudio(lastAssistantResponseText);
+    if (!played) {
+      speakText(lastAssistantResponseText);
+    }
+    setBusy(false);
+  };
+
   const conversationList = useMemo(() => {
     return conversation.map((item, index) => (
       <div key={`${item.role}-${index}`} className={`voice-friend-bubble ${item.role}`}>
-        <strong>{item.role === 'assistant' ? 'Nila Friend' : 'You'}</strong>
-        <p>{item.content}</p>
+        {item.role === 'assistant' && (
+          <div className="voice-friend-bubble-avatar" style={{ backgroundColor: selectedFriend.color }}>
+            {selectedFriend.name[0]}
+          </div>
+        )}
+        <div>
+          <strong>{item.role === 'assistant' ? selectedFriend.name : userName || 'You'}</strong>
+          <p>{item.content}</p>
+        </div>
       </div>
     ));
-  }, [conversation]);
+  }, [conversation, selectedFriend, userName]);
 
   return (
     <div className="voice-friend-page">
       <div className="voice-friend-header">
-        <h1>AI Voice Friend</h1>
+        <div className="voice-friend-profile">
+          <div className="voice-friend-profile-avatar" style={{ backgroundColor: selectedFriend.color }}>
+            {selectedFriend.name[0]}
+          </div>
+          <div className="voice-friend-profile-meta">
+            <h1>{selectedFriend.name}</h1>
+            <p>{selectedFriend.personality}</p>
+          </div>
+        </div>
         <p>Emotion-aware chat companion with voice input and supportive guidance.</p>
         <div className="voice-friend-summary">
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
           <span><strong>Mood:</strong> {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
           <span><strong>Language:</strong> {language.toUpperCase()}</span>
+          <span><strong>Voice input:</strong> {speechSupported ? 'Supported' : 'Unavailable'}</span>
+          <span><strong>Audio:</strong> {audioLoading ? 'Loading...' : playingAudio ? 'Playing response' : 'Ready'}</span>
           <span><strong>Messages:</strong> {conversation.length}</span>
         </div>
       </div>
 
       <div className="voice-friend-controls">
+        <div className="voice-friend-control-group">
+          <label>Friend</label>
+          <select value={friendId} onChange={(e) => setFriendId(e.target.value)}>
+            {AI_FRIENDS.map((option) => (
+              <option key={option.id} value={option.id}>{option.name} — {option.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="voice-friend-control-group">
+          <label>Your name</label>
+          <input
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+            placeholder="Enter your name"
+          />
+        </div>
         <div className="voice-friend-control-group">
           <label>Persona</label>
           <select value={persona} onChange={(e) => setPersona(e.target.value)}>
@@ -299,6 +494,9 @@ const VoiceFriend = () => {
           </button>
           <button type="submit" className="voice-friend-button primary" disabled={busy || (!messageText.trim() && !listening)}>
             {busy ? 'Sending...' : 'Send'}
+          </button>
+          <button type="button" className="voice-friend-button" onClick={handleReplayLastResponse} disabled={busy || audioLoading || !lastAssistantResponseText}>
+            {audioLoading ? 'Loading audio...' : playingAudio ? 'Replaying...' : 'Replay'}
           </button>
           <button type="button" className="voice-friend-button" onClick={handleResetSession} disabled={busy}>
             Reset

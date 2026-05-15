@@ -1,7 +1,20 @@
 const voiceFriendService = require('./voiceFriendService');
 
 describe('VoiceFriendService', () => {
+  const mockSpeechBuffer = Buffer.from('dummy-audio');
+  const mockSpeechArrayBuffer = mockSpeechBuffer.buffer.slice(
+    mockSpeechBuffer.byteOffset,
+    mockSpeechBuffer.byteOffset + mockSpeechBuffer.byteLength
+  );
+  const mockSpeechCreate = jest.fn().mockResolvedValue({
+    arrayBuffer: jest.fn().mockResolvedValue(mockSpeechArrayBuffer),
+  });
   const mockAiClient = {
+    audio: {
+      speech: {
+        create: mockSpeechCreate,
+      },
+    },
     chat: {
       completions: {
         create: jest.fn().mockResolvedValue({
@@ -38,6 +51,18 @@ describe('VoiceFriendService', () => {
     expect(session.messages.length).toBe(2);
     expect(session.messages[0]).toMatchObject({ role: 'user', content: 'Hello' });
     expect(session.messages[1]).toMatchObject({ role: 'assistant', content: 'I am here with you.' });
+  });
+
+  test('generateSpeech returns base64 audio from OpenAI TTS', async () => {
+    const result = await voiceFriendService.generateSpeech({ text: 'Hello friend', friendId: 'nila', language: 'en' });
+
+    expect(result).toBe(mockSpeechBuffer.toString('base64'));
+    expect(mockSpeechCreate).toHaveBeenCalledWith(expect.objectContaining({
+      model: expect.any(String),
+      voice: expect.any(String),
+      input: 'Hello friend',
+      format: 'mp3',
+    }));
   });
 
   test('sendMessage throws when the session is missing', async () => {

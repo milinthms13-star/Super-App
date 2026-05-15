@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { buildApiUrl } from "../../utils/api";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { BACKEND_BASE_URL, buildApiUrl } from "../../utils/api";
 import "./KidsStoryVideoMaker.css";
 
 const LANGUAGE_OPTIONS = [
@@ -75,7 +75,9 @@ const STORY_TEMPLATES = [
 
 const DEFAULT_STORY_PROMPT = STORY_TEMPLATES[0].prompt;
 
+const LOCAL_SCHEMA_VERSION = 2;
 const LOCAL_PROJECT_LIBRARY_KEY = "kids-story-video-project-library-v1";
+const LOCAL_CHARACTER_PRESET_KEY = "kids-story-character-presets-v1";
 const MAX_STORY_LENGTH = 7000;
 const MIN_STORY_LENGTH = 40;
 const MAX_UPLOAD_SIZE_BYTES = 500 * 1024;
@@ -130,6 +132,129 @@ const parseApiResponse = async (response) => {
   }
 
   return payload;
+};
+
+const buildSubtitlesFromScenes = (scenes = []) => {
+  let offset = 0;
+  return scenes.map((scene, index) => {
+    const duration = Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4));
+    const subtitle = {
+      start: offset,
+      end: offset + duration,
+      text: `${sanitizeText(scene?.title || `Scene ${index + 1}`)}: ${sanitizeText(
+        scene?.description || scene?.summary || ""
+      )}`.trim(),
+    };
+    offset += duration;
+    return subtitle;
+  });
+};
+
+const normalizeSceneForRender = (scene, index) => ({
+  id: index + 1,
+  title: sanitizeText(scene?.title || `Scene ${index + 1}`),
+  description: sanitizeText(scene?.description || scene?.summary || ""),
+  dialogue: sanitizeText(scene?.dialogue || ""),
+  emotion: sanitizeText(scene?.emotion || "wonder"),
+  background: sanitizeText(scene?.background || ""),
+  weather: sanitizeText(scene?.weather || ""),
+  timeOfDay: sanitizeText(scene?.timeOfDay || ""),
+  cameraActions: sanitizeText(scene?.cameraActions || "soft pan"),
+  durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
+  characters: Array.isArray(scene?.characters) ? scene.characters : [],
+});
+
+const normalizeScenesForRender = (scenes = []) =>
+  (Array.isArray(scenes) ? scenes : []).map((scene, index) => normalizeSceneForRender(scene, index));
+
+const validateScenesForRender = (scenes = []) => {
+  if (!Array.isArray(scenes) || scenes.length === 0) {
+    return "Please generate at least one scene before rendering.";
+  }
+
+  for (let index = 0; index < scenes.length; index += 1) {
+    const scene = scenes[index];
+    if (!sanitizeText(scene?.title)) {
+      return `Scene ${index + 1} is missing title.`;
+    }
+    if (!sanitizeText(scene?.description || scene?.summary)) {
+      return `Scene ${index + 1} is missing description.`;
+    }
+    const duration = Number(scene?.durationSeconds) || 4;
+    if (duration < 2 || duration > 15) {
+      return `Scene ${index + 1} duration must be between 2 and 15 seconds.`;
+    }
+  }
+
+  return "";
+};
+
+const loadLocalCollection = (key) => {
+  const raw = window.localStorage.getItem(key);
+  if (!raw) {
+    return [];
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (_error) {
+    return [];
+  }
+
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    Number(parsed.version) >= 1 &&
+    Array.isArray(parsed.items)
+  ) {
+    return parsed.items;
+  }
+
+  return [];
+};
+
+const saveLocalCollection = (key, items = []) => {
+  window.localStorage.setItem(
+    key,
+    JSON.stringify({
+      version: LOCAL_SCHEMA_VERSION,
+      items: Array.isArray(items) ? items : [],
+      updatedAt: new Date().toISOString(),
+    })
+  );
+};
+
+const normalizeMediaUrl = (value = "", preferredOrigin = "") => {
+  const rawValue = sanitizeText(value);
+  if (!rawValue) {
+    return "";
+  }
+
+  if (/^(https?:|data:|blob:)/i.test(rawValue)) {
+    return rawValue;
+  }
+
+  if (rawValue.startsWith("//")) {
+    return `${window.location.protocol}${rawValue}`;
+  }
+
+  const safePreferredOrigin = sanitizeText(preferredOrigin).replace(/\/+$/, "");
+  if (rawValue.startsWith("/")) {
+    if (safePreferredOrigin) {
+      return `${safePreferredOrigin}${rawValue}`;
+    }
+    return `${BACKEND_BASE_URL}${rawValue}`;
+  }
+
+  if (safePreferredOrigin) {
+    return `${safePreferredOrigin}/${rawValue}`;
+  }
+  return `${BACKEND_BASE_URL}/${rawValue}`;
 };
 
 const FALLBACK_SCENE_TITLES = ["Beginning", "Adventure", "Challenge", "Magic", "Celebration"];
@@ -256,6 +381,10 @@ const normalizeProjectForLocal = (project, overrides = {}) => {
 };
 
 const KidsStoryVideoMaker = () => {
+  const recognitionRef = useRef(null);
+  const voiceTargetRef = useRef("");
+  const mainContentRef = useRef(null);
+  const [subjectInput, setSubjectInput] = useState("Rabbit and Tortoise");
   const [storyTitle, setStoryTitle] = useState("AI Kids Story Video Generator");
   const [storyPrompt, setStoryPrompt] = useState(DEFAULT_STORY_PROMPT);
   const [storySource, setStorySource] = useState("paste");
@@ -275,10 +404,15 @@ const KidsStoryVideoMaker = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
   const [isNarrating, setIsNarrating] = useState(false);
+  const [isAutopilotGenerating, setIsAutopilotGenerating] = useState(false);
+  const [isStageRegenerating, setIsStageRegenerating] = useState("");
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [voiceListeningTarget, setVoiceListeningTarget] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [projectLibrary, setProjectLibrary] = useState([]);
+  const [characterPresets, setCharacterPresets] = useState([]);
 
   const languageLabel = useMemo(
     () => LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.label || "English",
@@ -315,23 +449,332 @@ const KidsStoryVideoMaker = () => {
   }, [generatedProject, generatedScenes.length, videoUrl]);
 
   useEffect(() => {
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem(LOCAL_PROJECT_LIBRARY_KEY) || "[]");
-      setProjectLibrary(Array.isArray(parsed) ? parsed : []);
-    } catch (_error) {
-      setProjectLibrary([]);
-    }
+    setProjectLibrary(loadLocalCollection(LOCAL_PROJECT_LIBRARY_KEY));
+  }, []);
+
+  useEffect(() => {
+    setCharacterPresets(loadLocalCollection(LOCAL_CHARACTER_PRESET_KEY));
   }, []);
 
   useEffect(() => {
     return () => {
       window.speechSynthesis?.cancel();
+      if (recognitionRef.current?.abort) {
+        recognitionRef.current.abort();
+      }
     };
   }, []);
 
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechSupported(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.lang =
+      LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US";
+
+    recognition.onresult = (event) => {
+      const transcript = sanitizeText(event?.results?.[0]?.[0]?.transcript || "");
+      if (!transcript) {
+        setMessage("No speech detected. Please try again.");
+        return;
+      }
+
+      if (voiceTargetRef.current === "subject") {
+        setSubjectInput(transcript);
+        setMessage("Voice subject captured. Tap One Click Story Movie.");
+      } else if (voiceTargetRef.current === "story") {
+        setStorySource("paste");
+        setStoryPrompt((prev) => sanitizeText(`${prev ? `${prev} ` : ""}${transcript}`));
+        setUploadedText("");
+        setMessage("Voice story text captured.");
+      }
+      setError("");
+    };
+
+    recognition.onerror = () => {
+      setError("Voice recognition failed. Please try again or type manually.");
+      setMessage("");
+      setVoiceListeningTarget("");
+    };
+
+    recognition.onend = () => {
+      voiceTargetRef.current = "";
+      setVoiceListeningTarget("");
+    };
+
+    recognitionRef.current = recognition;
+    setSpeechSupported(true);
+  }, [languageId]);
+
   const persistProjectLibrary = (items) => {
     setProjectLibrary(items);
-    window.localStorage.setItem(LOCAL_PROJECT_LIBRARY_KEY, JSON.stringify(items));
+    saveLocalCollection(LOCAL_PROJECT_LIBRARY_KEY, items);
+  };
+
+  const persistCharacterPresets = (items) => {
+    setCharacterPresets(items);
+    saveLocalCollection(LOCAL_CHARACTER_PRESET_KEY, items);
+  };
+
+  useEffect(() => {
+    const focusTarget = mainContentRef.current?.querySelector("h2");
+    if (focusTarget && typeof focusTarget.focus === "function") {
+      focusTarget.setAttribute("tabindex", "-1");
+      focusTarget.focus();
+    }
+  }, [activeTab]);
+
+  const handleSaveCharacterPreset = () => {
+    const currentCharacters = generatedProject?.characters;
+    if (!Array.isArray(currentCharacters) || !currentCharacters.length) {
+      setError("Generate characters before saving a preset.");
+      setMessage("");
+      return;
+    }
+
+    const preset = {
+      id: `preset-${Date.now()}`,
+      title: sanitizeText(generatedProject?.storyTitle || generatedProject?.title || subjectInput || "Character Pack"),
+      createdAt: new Date().toISOString(),
+      characters: currentCharacters.map((character) => ({
+        id: character.id || `char-${Math.random().toString(36).slice(2, 9)}`,
+        name: character.name || "Character",
+        role: character.role || "Story role",
+        appearance: character.appearance || "",
+        voiceProfile: character.voiceProfile || voiceType,
+        emotionStyle: character.emotionStyle || "friendly",
+        locked: character.locked !== false,
+      })),
+    };
+
+    const next = [preset, ...characterPresets.filter((item) => item.id !== preset.id)].slice(0, 20);
+    persistCharacterPresets(next);
+    setError("");
+    setMessage("Character preset saved.");
+  };
+
+  const handleApplyCharacterPreset = (preset) => {
+    if (!preset?.characters?.length) {
+      return;
+    }
+
+    setGeneratedProject((current) =>
+      current
+        ? {
+            ...current,
+            characters: preset.characters.map((character) => ({
+              ...character,
+              locked: character.locked !== false,
+            })),
+          }
+        : current
+    );
+    setError("");
+    setMessage(`Applied character preset: ${preset.title || "Preset"}`);
+  };
+
+  const handleDeleteCharacterPreset = (presetId) => {
+    const next = characterPresets.filter((preset) => preset.id !== presetId);
+    persistCharacterPresets(next);
+    setError("");
+    setMessage("Character preset removed.");
+  };
+
+  const applyProjectSnapshotToStudio = (incomingProject, successText = "Project loaded.") => {
+    if (!incomingProject) {
+      return;
+    }
+
+    const normalized = normalizeProjectForLocal(incomingProject, {
+      title: incomingProject.storyTitle || incomingProject.title || storyTitle,
+      storyPrompt:
+        incomingProject.storyPrompt ||
+        incomingProject.script?.synopsis ||
+        incomingProject.story?.synopsis ||
+        storyPrompt,
+      storySource: incomingProject.storySource || "paste",
+      language: incomingProject.language || languageId,
+      style: incomingProject.style || styleId,
+      videoSize: incomingProject.videoSize || videoSizeId,
+      voiceType: incomingProject.voiceType || voiceType,
+      storyMode: incomingProject.storyMode || storyMode,
+      safeMode:
+        typeof incomingProject.safeMode === "boolean" ? incomingProject.safeMode : safeMode,
+      ageFilter: incomingProject.ageFilter || ageFilter,
+      scenes: Array.isArray(incomingProject.scenes) ? incomingProject.scenes : [],
+      videoUrl: normalizeMediaUrl(incomingProject.videoUrl || ""),
+      premiumExport: Boolean(incomingProject.premiumExport),
+    });
+
+    const enrichedProject = {
+      ...normalized,
+      subject: incomingProject.subject || subjectInput,
+      script: incomingProject.script || null,
+      voicePlan: incomingProject.voicePlan || null,
+      musicPlan: incomingProject.musicPlan || null,
+      animationPlan: incomingProject.animationPlan || null,
+      editCapabilities: Array.isArray(incomingProject.editCapabilities)
+        ? incomingProject.editCapabilities
+        : [],
+      storyTitle: incomingProject.storyTitle || normalized.title,
+    };
+
+    setGeneratedProject(enrichedProject);
+    setGeneratedScenes(normalized.scenes || []);
+    setStoryTitle(normalized.title || storyTitle);
+    setStoryPrompt(normalized.storyPrompt || storyPrompt);
+    setStorySource(normalized.storySource || "paste");
+    setUploadedText(
+      (normalized.storySource || "paste") === "upload" ? normalized.storyPrompt || "" : ""
+    );
+    setLanguageId(normalized.language || languageId);
+    setStyleId(normalized.style || styleId);
+    setVideoSizeId(normalized.videoSize || videoSizeId);
+    setVoiceType(normalized.voiceType || voiceType);
+    setStoryMode(normalized.storyMode || storyMode);
+    setAgeFilter(normalized.ageFilter || ageFilter);
+    setSafeMode(typeof normalized.safeMode === "boolean" ? normalized.safeMode : safeMode);
+    setPremiumHD(Boolean(normalized.premiumExport));
+    setVideoUrl(normalizeMediaUrl(normalized.videoUrl || ""));
+    setSubjectInput(incomingProject.subject || subjectInput);
+    setError("");
+    setMessage(successText);
+  };
+
+  const patchCurrentProject = async (partialPayload, successText = "Project updated.") => {
+    if (!generatedProject?.projectId) {
+      return;
+    }
+
+    const response = await fetch(
+      buildApiUrl(`/video-studio/projects/${generatedProject.projectId}`),
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(partialPayload),
+      }
+    );
+    const payload = await parseApiResponse(response);
+    if (!payload.success || !payload.project) {
+      throw new Error(payload.error || payload.message || "Failed to update project.");
+    }
+    applyProjectSnapshotToStudio(payload.project, successText);
+  };
+
+  const handleAutopilotGenerate = async () => {
+    const cleanSubject = sanitizeText(subjectInput);
+    if (!cleanSubject) {
+      setError("Please enter a story subject like Rabbit and Tortoise.");
+      setMessage("");
+      return;
+    }
+
+    setIsAutopilotGenerating(true);
+    setError("");
+    setMessage("Generating full script, characters, scenes, animation plan, and voice map...");
+
+    try {
+      const response = await fetch(buildApiUrl("/video-studio/autopilot/create"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: cleanSubject,
+          languageId,
+          styleId,
+          voiceType,
+          videoSizeId,
+          storyMode,
+          safeMode,
+          ageFilter,
+          sceneCount: generatedScenes.length || 5,
+        }),
+      });
+      const payload = await parseApiResponse(response);
+      if (!payload.success || !payload.project) {
+        throw new Error(payload.error || payload.message || "Autopilot generation failed.");
+      }
+
+      applyProjectSnapshotToStudio(payload.project, "Autopilot project generated. You can edit every stage.");
+      setActiveTab("characters");
+    } catch (err) {
+      setError(err.message || "Unable to generate autopilot project.");
+    } finally {
+      setIsAutopilotGenerating(false);
+    }
+  };
+
+  const handleVoiceInput = (target) => {
+    if (!recognitionRef.current || !speechSupported) {
+      setError("Voice input is not supported in this browser.");
+      setMessage("");
+      return;
+    }
+
+    try {
+      if (voiceListeningTarget) {
+        recognitionRef.current.stop();
+        voiceTargetRef.current = "";
+        setVoiceListeningTarget("");
+        setMessage("Voice capture stopped.");
+        return;
+      }
+
+      voiceTargetRef.current = target;
+      setVoiceListeningTarget(target);
+      setError("");
+      setMessage(
+        target === "subject"
+          ? "Listening... Say a subject like Rabbit and Tortoise."
+          : "Listening... Say your full story prompt."
+      );
+      recognitionRef.current.lang =
+        LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US";
+      recognitionRef.current.start();
+    } catch (_error) {
+      setVoiceListeningTarget("");
+      setError("Unable to start microphone. Please allow mic permission.");
+      setMessage("");
+    }
+  };
+
+  const handleRegenerateStage = async (stage) => {
+    if (!generatedProject?.projectId) {
+      setError("Generate a project first.");
+      return;
+    }
+
+    setIsStageRegenerating(stage);
+    setError("");
+    setMessage(`Regenerating ${stage} stage...`);
+    try {
+      const response = await fetch(
+        buildApiUrl(`/video-studio/projects/${generatedProject.projectId}/regenerate/${stage}`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject: subjectInput,
+            sceneCount: generatedScenes.length || 5,
+          }),
+        }
+      );
+      const payload = await parseApiResponse(response);
+      if (!payload.success || !payload.project) {
+        throw new Error(payload.error || payload.message || `Failed to regenerate ${stage}.`);
+      }
+      applyProjectSnapshotToStudio(payload.project, `${stage} stage regenerated.`);
+    } catch (err) {
+      setError(err.message || `Unable to regenerate ${stage}.`);
+    } finally {
+      setIsStageRegenerating("");
+    }
   };
 
   const handleUploadStory = async (event) => {
@@ -414,6 +857,13 @@ const KidsStoryVideoMaker = () => {
       if (!payload.success || !payload.project) {
         throw new Error(payload.error || payload.message || "AI pipeline generation failed.");
       }
+      const serviceOrigin = (() => {
+        try {
+          return new URL(response.url).origin;
+        } catch (_error) {
+          return "";
+        }
+      })();
 
       const project = normalizeProjectForLocal(payload.project, {
         title: safeTitle,
@@ -421,11 +871,15 @@ const KidsStoryVideoMaker = () => {
         storySource,
       });
 
-      setGeneratedProject(project);
-      setGeneratedScenes(project.scenes || []);
-      setStoryTitle(project.title || safeTitle);
-      setVideoUrl(project.videoUrl || "");
-      setMessage("AI project generated. Review scenes and render your video.");
+      const resolvedVideoUrl = normalizeMediaUrl(project.videoUrl, serviceOrigin);
+      applyProjectSnapshotToStudio(
+        {
+          ...payload.project,
+          ...project,
+          videoUrl: resolvedVideoUrl,
+        },
+        "AI project generated. Review scenes and render your video."
+      );
       setActiveTab("scenes");
     } catch (err) {
       const isServiceIssue =
@@ -474,7 +928,49 @@ const KidsStoryVideoMaker = () => {
     });
 
     setGeneratedScenes(nextScenes);
-    setGeneratedProject((current) => (current ? { ...current, scenes: nextScenes } : current));
+    setGeneratedProject((current) =>
+      current
+        ? {
+            ...current,
+            scenes: nextScenes,
+            subtitles: buildSubtitlesFromScenes(nextScenes),
+          }
+        : current
+    );
+  };
+
+  const handleSceneDurationChange = (sceneId, value) => {
+    const duration = Math.max(2, Math.min(15, Number(value) || 4));
+    handleSceneFieldChange(sceneId, "durationSeconds", duration);
+  };
+
+  const handleMoveScene = (fromIndex, direction) => {
+    const toIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
+    if (toIndex < 0 || toIndex >= generatedScenes.length) {
+      return;
+    }
+
+    const reordered = [...generatedScenes];
+    const [picked] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, picked);
+
+    const normalized = reordered.map((scene, index) => ({
+      ...scene,
+      id: index + 1,
+    }));
+
+    setGeneratedScenes(normalized);
+    setGeneratedProject((current) =>
+      current
+        ? {
+            ...current,
+            scenes: normalized,
+            subtitles: buildSubtitlesFromScenes(normalized),
+          }
+        : current
+    );
+    setMessage("Scene order updated. Save scene edits to persist.");
+    setError("");
   };
 
   const handleRenderVideo = async () => {
@@ -483,11 +979,25 @@ const KidsStoryVideoMaker = () => {
       return;
     }
 
+    const normalizedScenes = normalizeScenesForRender(generatedScenes);
+    const sceneValidationError = validateScenesForRender(normalizedScenes);
+    if (sceneValidationError) {
+      setError(sceneValidationError);
+      return;
+    }
+
+    const normalizedStoryPrompt = sanitizeText(storyText);
+    if (!normalizedStoryPrompt) {
+      setError("Story text is missing. Please add a story before rendering.");
+      return;
+    }
+
     const renderProject = {
       ...generatedProject,
       title: sanitizeText(storyTitle || generatedProject.title || "AI Kids Story Video Generator"),
-      storyPrompt: sanitizeText(storyText),
-      scenes: generatedScenes,
+      storyPrompt: normalizedStoryPrompt,
+      scenes: normalizedScenes,
+      subtitles: buildSubtitlesFromScenes(normalizedScenes),
       premiumExport: premiumHD,
       safeMode,
       style: styleId,
@@ -497,11 +1007,6 @@ const KidsStoryVideoMaker = () => {
       storyMode,
       ageFilter,
     };
-
-    if (!Array.isArray(renderProject.scenes) || renderProject.scenes.length === 0) {
-      setError("Please generate at least one scene before rendering.");
-      return;
-    }
 
     setError("");
     setMessage("Rendering your MP4 with AI visuals and subtitles...");
@@ -518,15 +1023,22 @@ const KidsStoryVideoMaker = () => {
       if (!payload.success) {
         throw new Error(payload.error || payload.message || "Video render failed.");
       }
+      const serviceOrigin = (() => {
+        try {
+          return new URL(response.url).origin;
+        } catch (_error) {
+          return "";
+        }
+      })();
 
       const nextProject = {
         ...renderProject,
         renderedAt: new Date().toISOString(),
-        videoUrl: payload.videoUrl,
+        videoUrl: normalizeMediaUrl(payload.videoUrl, serviceOrigin),
       };
 
       setGeneratedProject(nextProject);
-      setVideoUrl(payload.videoUrl);
+      setVideoUrl(nextProject.videoUrl);
       setMessage("Video rendered successfully. Preview and export your MP4.");
       setActiveTab("export");
     } catch (err) {
@@ -584,6 +1096,43 @@ const KidsStoryVideoMaker = () => {
     }
   };
 
+  const handleVoicePlanFieldChange = (field, value) => {
+    setGeneratedProject((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        voicePlan: {
+          ...(current.voicePlan || {}),
+          narrator: {
+            ...((current.voicePlan && current.voicePlan.narrator) || {}),
+            [field]: value,
+          },
+        },
+      };
+    });
+  };
+
+  const handleMusicPlanFieldChange = (field, value) => {
+    setGeneratedProject((current) => {
+      if (!current) return current;
+
+      const nextMusicPlan = { ...(current.musicPlan || {}) };
+      if (field === "sfx") {
+        nextMusicPlan.sfx = String(value || "")
+          .split(",")
+          .map((item) => sanitizeText(item))
+          .filter(Boolean);
+      } else {
+        nextMusicPlan[field] = value;
+      }
+
+      return {
+        ...current,
+        musicPlan: nextMusicPlan,
+      };
+    });
+  };
+
   const handleDownloadVideo = () => {
     if (!videoUrl) {
       setError("Render the video first to download it.");
@@ -601,6 +1150,39 @@ const KidsStoryVideoMaker = () => {
     link.click();
     link.remove();
     setMessage("Download started. Your MP4 is ready.");
+  };
+
+  const handleDownloadProjectJson = () => {
+    if (!generatedProject) {
+      setError("Generate a project first.");
+      return;
+    }
+
+    const exportPayload = {
+      ...generatedProject,
+      title: storyTitle,
+      storyPrompt: storyText,
+      scenes: generatedScenes,
+      exportedAt: new Date().toISOString(),
+    };
+
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const baseName = sanitizeText(storyTitle || "kids_story_project")
+      .replace(/[^a-z0-9]/gi, "_")
+      .toLowerCase();
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${baseName || "kids_story_project"}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setMessage("Project JSON downloaded.");
+    setError("");
   };
 
   const handleSaveProject = () => {
@@ -625,9 +1207,22 @@ const KidsStoryVideoMaker = () => {
       premiumExport: premiumHD,
     });
 
+    const enrichedSnapshot = {
+      ...snapshot,
+      subject: generatedProject.subject || subjectInput,
+      storyTitle: generatedProject.storyTitle || snapshot.title,
+      script: generatedProject.script || null,
+      voicePlan: generatedProject.voicePlan || null,
+      musicPlan: generatedProject.musicPlan || null,
+      animationPlan: generatedProject.animationPlan || null,
+      editCapabilities: Array.isArray(generatedProject.editCapabilities)
+        ? generatedProject.editCapabilities
+        : [],
+    };
+
     const nextItems = [
-      snapshot,
-      ...projectLibrary.filter((item) => item.projectId !== snapshot.projectId),
+      enrichedSnapshot,
+      ...projectLibrary.filter((item) => item.projectId !== enrichedSnapshot.projectId),
     ].slice(0, 30);
 
     persistProjectLibrary(nextItems);
@@ -638,25 +1233,10 @@ const KidsStoryVideoMaker = () => {
 
   const handleLoadProject = (project) => {
     const snapshot = normalizeProjectForLocal(project);
-
-    setGeneratedProject(snapshot);
-    setGeneratedScenes(snapshot.scenes || []);
-    setStoryTitle(snapshot.title || "AI Kids Story Video Generator");
-    setStoryPrompt(snapshot.storyPrompt || "");
-    setUploadedText(snapshot.storySource === "upload" ? snapshot.storyPrompt || "" : "");
-    setStorySource(snapshot.storySource || "paste");
-    setLanguageId(snapshot.language || LANGUAGE_OPTIONS[0].id);
-    setStyleId(snapshot.style || STYLE_OPTIONS[0].id);
-    setVideoSizeId(snapshot.videoSize || VIDEO_SIZE_OPTIONS[0].id);
-    setVoiceType(snapshot.voiceType || VOICE_OPTIONS[0].id);
-    setStoryMode(snapshot.storyMode || STORY_MODES[0].id);
-    setAgeFilter(snapshot.ageFilter || AGE_FILTERS[1].id);
-    setSafeMode(typeof snapshot.safeMode === "boolean" ? snapshot.safeMode : true);
-    setPremiumHD(Boolean(snapshot.premiumExport));
-    setVideoUrl(snapshot.videoUrl || "");
-
-    setError("");
-    setMessage(`Loaded project: ${snapshot.title}`);
+    applyProjectSnapshotToStudio(
+      { ...project, ...snapshot },
+      `Loaded project: ${snapshot.title}`
+    );
     setActiveTab("scenes");
   };
 
@@ -826,6 +1406,55 @@ const KidsStoryVideoMaker = () => {
               <h2>Create</h2>
               <p>Paste your story or upload text. AI builds scenes, dialogue, and narration automatically.</p>
 
+              <label htmlFor="subjectInput">One-click story subject</label>
+              <input
+                id="subjectInput"
+                type="text"
+                value={subjectInput}
+                onChange={(event) => setSubjectInput(event.target.value)}
+                placeholder="Example: Rabbit and Tortoise"
+              />
+              <div className="story-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => handleVoiceInput("subject")}
+                  disabled={!speechSupported}
+                >
+                  {voiceListeningTarget === "subject"
+                    ? "Stop Subject Mic"
+                    : speechSupported
+                      ? "Speak Subject"
+                      : "Voice Unsupported"}
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => handleVoiceInput("story")}
+                  disabled={!speechSupported}
+                >
+                  {voiceListeningTarget === "story"
+                    ? "Stop Story Mic"
+                    : speechSupported
+                      ? "Speak Story"
+                      : "Voice Unsupported"}
+                </button>
+              </div>
+              <div className="story-actions">
+                <button
+                  className="primary-button"
+                  onClick={handleAutopilotGenerate}
+                  disabled={isAutopilotGenerating}
+                >
+                  {isAutopilotGenerating ? "Creating full AI movie pipeline..." : "One Click Story Movie"}
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => handleRegenerateStage("script")}
+                  disabled={!generatedProject?.projectId || isStageRegenerating === "script"}
+                >
+                  {isStageRegenerating === "script" ? "Regenerating script..." : "Regenerate Script"}
+                </button>
+              </div>
+
               <label htmlFor="storyTitle">Project title</label>
               <input
                 id="storyTitle"
@@ -931,6 +1560,64 @@ const KidsStoryVideoMaker = () => {
 
               <p className="style-hint">{getStyleDescription(styleId)}</p>
 
+              {generatedProject?.script && (
+                <div className="advanced-panel">
+                  <h3>AI Script Writer Output (Editable)</h3>
+                  <label>Synopsis</label>
+                  <textarea
+                    rows={3}
+                    value={generatedProject.script?.synopsis || ""}
+                    onChange={(event) => {
+                      const nextSynopsis = event.target.value;
+                      setGeneratedProject((current) =>
+                        current
+                          ? {
+                              ...current,
+                              script: { ...(current.script || {}), synopsis: nextSynopsis },
+                              storyPrompt: nextSynopsis,
+                            }
+                          : current
+                      );
+                      setStoryPrompt(nextSynopsis);
+                    }}
+                  />
+                  <label>Moral Message</label>
+                  <input
+                    type="text"
+                    value={generatedProject.script?.moral || ""}
+                    onChange={(event) => {
+                      const nextMoral = event.target.value;
+                      setGeneratedProject((current) =>
+                        current
+                          ? { ...current, script: { ...(current.script || {}), moral: nextMoral } }
+                          : current
+                      );
+                    }}
+                  />
+                  <div className="story-actions">
+                    <button
+                      className="secondary-button"
+                      onClick={async () => {
+                        try {
+                          await patchCurrentProject(
+                            {
+                              script: generatedProject.script,
+                              storyPrompt: generatedProject.script?.synopsis || storyPrompt,
+                            },
+                            "Script edits saved."
+                          );
+                        } catch (err) {
+                          setError(err.message || "Unable to save script edits.");
+                        }
+                      }}
+                      disabled={!generatedProject?.projectId}
+                    >
+                      Save Script Edits
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="story-actions">
                 <button className="primary-button" onClick={handleGenerateProject} disabled={isGenerating}>
                   {isGenerating ? "Building AI storyboard..." : "Generate Story Pipeline"}
@@ -978,6 +1665,62 @@ const KidsStoryVideoMaker = () => {
             <div className="studio-card characters-card">
               <h2>Characters</h2>
               <p>AI character consistency keeps the same face, costume, palette, and voice across scenes.</p>
+              <div className="story-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => handleRegenerateStage("characters")}
+                  disabled={!generatedProject?.projectId || isStageRegenerating === "characters"}
+                >
+                  {isStageRegenerating === "characters" ? "Regenerating..." : "Regenerate Characters"}
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={async () => {
+                    try {
+                      await patchCurrentProject(
+                        { characters: generatedProject?.characters || [] },
+                        "Character edits saved."
+                      );
+                    } catch (err) {
+                      setError(err.message || "Unable to save characters.");
+                    }
+                  }}
+                  disabled={!generatedProject?.projectId}
+                >
+                  Save Character Edits
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={handleSaveCharacterPreset}
+                  disabled={!generatedProject?.characters?.length}
+                >
+                  Save Character Preset
+                </button>
+              </div>
+              {characterPresets.length > 0 && (
+                <div className="project-library-grid" style={{ marginBottom: 16 }}>
+                  {characterPresets.map((preset) => (
+                    <article key={preset.id} className="project-library-card">
+                      <h3>{preset.title || "Character Preset"}</h3>
+                      <p>Characters: {preset.characters?.length || 0}</p>
+                      <div className="project-library-actions">
+                        <button
+                          className="secondary-button"
+                          onClick={() => handleApplyCharacterPreset(preset)}
+                        >
+                          Apply
+                        </button>
+                        <button
+                          className="download-button"
+                          onClick={() => handleDeleteCharacterPreset(preset.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
               {generatedProject ? (
                 <div className="character-grid">
                   {(generatedProject.characters || []).map((character, index) => (
@@ -988,7 +1731,64 @@ const KidsStoryVideoMaker = () => {
                         <span>{character.role || "Story role"}</span>
                         <span>{character.voiceProfile || voiceType}</span>
                       </div>
-                      <p>{character.appearance || "Child-safe design and consistent visual personality."}</p>
+                      <label>Name</label>
+                      <input
+                        type="text"
+                        value={character.name || ""}
+                        onChange={(event) => {
+                          setGeneratedProject((current) => {
+                            if (!current) return current;
+                            const characters = [...(current.characters || [])];
+                            characters[index] = { ...characters[index], name: event.target.value };
+                            return { ...current, characters };
+                          });
+                        }}
+                      />
+                      <label>Appearance</label>
+                      <textarea
+                        rows={2}
+                        value={character.appearance || ""}
+                        onChange={(event) => {
+                          setGeneratedProject((current) => {
+                            if (!current) return current;
+                            const characters = [...(current.characters || [])];
+                            characters[index] = { ...characters[index], appearance: event.target.value };
+                            return { ...current, characters };
+                          });
+                        }}
+                      />
+                      <label>Voice</label>
+                      <input
+                        type="text"
+                        value={character.voiceProfile || ""}
+                        onChange={(event) => {
+                          setGeneratedProject((current) => {
+                            if (!current) return current;
+                            const characters = [...(current.characters || [])];
+                            characters[index] = { ...characters[index], voiceProfile: event.target.value };
+                            return { ...current, characters };
+                          });
+                        }}
+                      />
+                      <div className="studio-toggle-row">
+                        <span>Character Lock</span>
+                        <button
+                          className={`pill-toggle ${character.locked !== false ? "on" : "off"}`}
+                          onClick={() => {
+                            setGeneratedProject((current) => {
+                              if (!current) return current;
+                              const characters = [...(current.characters || [])];
+                              characters[index] = {
+                                ...characters[index],
+                                locked: characters[index]?.locked === false,
+                              };
+                              return { ...current, characters };
+                            });
+                          }}
+                        >
+                          {character.locked !== false ? "Locked" : "Unlocked"}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1002,6 +1802,28 @@ const KidsStoryVideoMaker = () => {
             <div className="studio-card scenes-card">
               <h2>Scenes</h2>
               <p>Review and edit the storyboard before rendering.</p>
+              <div className="story-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => handleRegenerateStage("scenes")}
+                  disabled={!generatedProject?.projectId || isStageRegenerating === "scenes"}
+                >
+                  {isStageRegenerating === "scenes" ? "Regenerating..." : "Regenerate Scenes"}
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={async () => {
+                    try {
+                      await patchCurrentProject({ scenes: generatedScenes }, "Scene edits saved.");
+                    } catch (err) {
+                      setError(err.message || "Unable to save scenes.");
+                    }
+                  }}
+                  disabled={!generatedProject?.projectId}
+                >
+                  Save Scene Edits
+                </button>
+              </div>
               <div className="preview-grid">
                 {generatedScenes.length ? (
                   generatedScenes.map((scene, index) => {
@@ -1011,6 +1833,22 @@ const KidsStoryVideoMaker = () => {
                         <div className="scene-title-row">
                           <span className="scene-number">Scene {sceneId}</span>
                           <span className="scene-emotion">{scene.emotion || "gentle"}</span>
+                        </div>
+                        <div className="story-actions">
+                          <button
+                            className="secondary-button"
+                            onClick={() => handleMoveScene(index, "up")}
+                            disabled={index === 0}
+                          >
+                            Move Up
+                          </button>
+                          <button
+                            className="secondary-button"
+                            onClick={() => handleMoveScene(index, "down")}
+                            disabled={index === generatedScenes.length - 1}
+                          >
+                            Move Down
+                          </button>
                         </div>
 
                         <label htmlFor={`scene-title-${sceneId}`}>Title</label>
@@ -1037,6 +1875,58 @@ const KidsStoryVideoMaker = () => {
                           onChange={(event) => handleSceneFieldChange(sceneId, "dialogue", event.target.value)}
                         />
 
+                        <div className="create-grid">
+                          <div>
+                            <label htmlFor={`scene-duration-${sceneId}`}>Duration (seconds)</label>
+                            <input
+                              id={`scene-duration-${sceneId}`}
+                              type="number"
+                              min={2}
+                              max={15}
+                              value={scene.durationSeconds || 4}
+                              onChange={(event) => handleSceneDurationChange(sceneId, event.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor={`scene-weather-${sceneId}`}>Weather</label>
+                            <input
+                              id={`scene-weather-${sceneId}`}
+                              type="text"
+                              value={scene.weather || ""}
+                              onChange={(event) => handleSceneFieldChange(sceneId, "weather", event.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="create-grid">
+                          <div>
+                            <label htmlFor={`scene-time-${sceneId}`}>Time</label>
+                            <input
+                              id={`scene-time-${sceneId}`}
+                              type="text"
+                              value={scene.timeOfDay || ""}
+                              onChange={(event) => handleSceneFieldChange(sceneId, "timeOfDay", event.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor={`scene-camera-${sceneId}`}>Camera</label>
+                            <input
+                              id={`scene-camera-${sceneId}`}
+                              type="text"
+                              value={scene.cameraActions || ""}
+                              onChange={(event) => handleSceneFieldChange(sceneId, "cameraActions", event.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <label htmlFor={`scene-bg-${sceneId}`}>Background</label>
+                        <textarea
+                          id={`scene-bg-${sceneId}`}
+                          rows={2}
+                          value={scene.background || ""}
+                          onChange={(event) => handleSceneFieldChange(sceneId, "background", event.target.value)}
+                        />
+
                         <div className="scene-meta">Camera: {scene.cameraActions || "soft pan"}</div>
                       </article>
                     );
@@ -1061,6 +1951,22 @@ const KidsStoryVideoMaker = () => {
                     ))}
                   </select>
                 </div>
+              </div>
+              <div className="story-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => handleRegenerateStage("voice")}
+                  disabled={!generatedProject?.projectId || isStageRegenerating === "voice"}
+                >
+                  {isStageRegenerating === "voice" ? "Regenerating..." : "Regenerate Voice Plan"}
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => handleRegenerateStage("music")}
+                  disabled={!generatedProject?.projectId || isStageRegenerating === "music"}
+                >
+                  {isStageRegenerating === "music" ? "Regenerating..." : "Regenerate Music + SFX"}
+                </button>
               </div>
               <div className="narration-summary-card">
                 <h3>Narration script</h3>
@@ -1121,8 +2027,18 @@ const KidsStoryVideoMaker = () => {
                 <button className="primary-button" onClick={handleRenderVideo} disabled={!generatedProject || isRendering}>
                   {isRendering ? "Rendering video..." : "Render MP4"}
                 </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => handleRegenerateStage("animation")}
+                  disabled={!generatedProject?.projectId || isStageRegenerating === "animation"}
+                >
+                  {isStageRegenerating === "animation" ? "Regenerating..." : "Regenerate Animation Plan"}
+                </button>
                 <button className="download-button" onClick={handleDownloadVideo} disabled={!videoUrl}>
                   Download MP4
+                </button>
+                <button className="secondary-button" onClick={handleDownloadProjectJson} disabled={!generatedProject}>
+                  Download Project JSON
                 </button>
                 <button className="secondary-button" onClick={handleSaveProject} disabled={!generatedProject}>
                   Save Project

@@ -6,11 +6,19 @@ const router = express.Router();
 
 router.post('/init', async (req, res) => {
   try {
-    const { persona = 'supportive', mood = 'neutral', language = 'en' } = req.body || {};
+    const {
+      persona = 'supportive',
+      mood = 'neutral',
+      language = 'en',
+      friendId = 'nila',
+      userName,
+    } = req.body || {};
     const session = voiceFriendService.createSession({
       persona,
       mood,
       language,
+      friendId,
+      userName: userName || req.user?.name || null,
       userId: req.user?._id || null,
     });
 
@@ -21,6 +29,8 @@ router.post('/init', async (req, res) => {
         persona: session.persona,
         mood: session.mood,
         language: session.language,
+        friendId: session.friendId,
+        friendName: session.friendName,
       },
       message: 'Voice Friend session started',
     });
@@ -32,7 +42,15 @@ router.post('/init', async (req, res) => {
 
 router.post('/message', async (req, res) => {
   try {
-    const { sessionId, message, persona, mood, language = 'en' } = req.body || {};
+    const {
+      sessionId,
+      message,
+      persona,
+      mood,
+      language = 'en',
+      friendId,
+      userName,
+    } = req.body || {};
 
     if (!sessionId || !message) {
       return res.status(400).json({
@@ -47,6 +65,8 @@ router.post('/message', async (req, res) => {
       persona,
       mood,
       language,
+      friendId,
+      userName: userName || req.user?.name || null,
     });
 
     res.json({
@@ -57,6 +77,31 @@ router.post('/message', async (req, res) => {
   } catch (error) {
     logger.error('Error sending Voice Friend message:', error);
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+router.post('/speech', async (req, res) => {
+  try {
+    const { text, friendId = 'nila', voice, language = 'en' } = req.body || {};
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Text is required to generate speech.' });
+    }
+
+    const audioBase64 = await voiceFriendService.generateSpeech({ text, friendId, voice, language });
+    if (!audioBase64) {
+      return res.status(500).json({ success: false, message: 'Speech generation failed.' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        audio: audioBase64,
+        mimeType: 'audio/mpeg',
+      },
+    });
+  } catch (error) {
+    logger.error('Error generating Voice Friend speech:', error);
+    res.status(500).json({ success: false, message: 'Unable to generate speech at this time.' });
   }
 });
 
@@ -76,6 +121,9 @@ router.get('/history/:sessionId', async (req, res) => {
         persona: session.persona,
         mood: session.mood,
         language: session.language,
+        friendId: session.friendId,
+        friendName: session.friendName,
+        friendPersonality: session.friendPersonality,
         messages: session.messages,
       },
     });

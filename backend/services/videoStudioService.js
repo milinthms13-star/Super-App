@@ -9,11 +9,13 @@ const { v4: uuidv4 } = require('uuid');
 const ffmpegPath = require('ffmpeg-static');
 
 const writeFile = promisify(fs.writeFile);
+const readFile = promisify(fs.readFile);
 const mkdir = promisify(fs.mkdir);
 const access = promisify(fs.access);
 const stat = promisify(fs.stat);
 
 const uploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
+const projectStoreRoot = path.join(uploadsRoot, 'projects');
 
 let openai;
 try {
@@ -40,6 +42,15 @@ const ensureUploadsRoot = async () => {
     await access(uploadsRoot);
   } catch (_) {
     await mkdir(uploadsRoot, { recursive: true });
+  }
+};
+
+const ensureProjectStoreRoot = async () => {
+  await ensureUploadsRoot();
+  try {
+    await access(projectStoreRoot);
+  } catch (_) {
+    await mkdir(projectStoreRoot, { recursive: true });
   }
 };
 
@@ -143,6 +154,403 @@ const storiesToTitle = (story) => {
   return cleaned.length > 30 ? `${cleaned.slice(0, 30)}...` : cleaned;
 };
 
+const clampSceneCount = (value) => {
+  const count = Number(value) || 5;
+  return Math.max(3, Math.min(12, count));
+};
+
+const buildFallbackScript = ({ subject, languageId, storyMode, ageFilter }) => {
+  const cleanSubject = sanitizeText(subject || 'Magical friendship story');
+  const classicRabbit = /rabbit|hare/i.test(cleanSubject);
+  const classicTortoise = /tortoise|turtle/i.test(cleanSubject);
+
+  const title = classicRabbit && classicTortoise
+    ? 'The Rabbit and the Tortoise'
+    : `Story of ${cleanSubject}`;
+
+  const synopsis = classicRabbit && classicTortoise
+    ? 'A speedy rabbit laughs at a calm tortoise, but the race teaches everyone that steady effort wins.'
+    : `A child-safe ${storyMode} story about ${cleanSubject}, with teamwork, courage, and kindness.`;
+
+  const moral = classicRabbit && classicTortoise
+    ? 'Slow and steady wins the race.'
+    : 'Kindness, patience, and smart effort help us succeed.';
+
+  const scenes = [
+    { beat: 'Opening', summary: `Introduce ${cleanSubject} in a warm, playful setting.` },
+    { beat: 'Challenge', summary: 'A challenge appears and characters react with different emotions.' },
+    { beat: 'Journey', summary: 'Characters try, fail, learn, and support each other.' },
+    { beat: 'Climax', summary: 'The key moment proves the main lesson with clear action.' },
+    { beat: 'Ending', summary: `Celebrate growth with the moral: ${moral}` },
+  ];
+
+  return {
+    title,
+    synopsis,
+    moral,
+    language: languageId,
+    audience: ageFilter,
+    sceneBeats: scenes,
+    narration: `${title}. ${synopsis} ${moral}`,
+  };
+};
+
+const buildScriptFromSubject = async ({ subject, languageId, storyMode, ageFilter }) => {
+  const cleanSubject = sanitizeText(subject || '');
+  if (!cleanSubject) {
+    throw new Error('Subject is required.');
+  }
+
+  const systemPrompt = 'You are an expert kids screenplay writer. Output strict JSON only.';
+  const userPrompt = `Create a safe kids screenplay for topic: "${cleanSubject}".
+Language: ${languageId}
+Mode: ${storyMode}
+Age group: ${ageFilter}
+Return JSON with keys:
+title, synopsis, moral, narration, sceneBeats[] where each beat has beat and summary.
+Keep language simple and family-friendly.`;
+
+  const response = await safeOpenAI([
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ], 900);
+
+  const parsed = response ? extractJson(response) : null;
+  if (!parsed || !Array.isArray(parsed.sceneBeats) || !parsed.sceneBeats.length) {
+    return buildFallbackScript({ subject: cleanSubject, languageId, storyMode, ageFilter });
+  }
+
+  return {
+    title: sanitizeText(parsed.title) || `Story of ${cleanSubject}`,
+    synopsis: sanitizeText(parsed.synopsis) || buildFallbackScript({ subject: cleanSubject, languageId, storyMode, ageFilter }).synopsis,
+    moral: sanitizeText(parsed.moral) || 'Kindness and effort always matter.',
+    narration: sanitizeText(parsed.narration) || '',
+    language: languageId,
+    audience: ageFilter,
+    sceneBeats: parsed.sceneBeats
+      .map((beat, index) => ({
+        beat: sanitizeText(beat?.beat) || `Scene ${index + 1}`,
+        summary: sanitizeText(beat?.summary) || '',
+      }))
+      .filter((beat) => beat.summary),
+  };
+};
+
+const buildCharactersFromScript = ({ script, subject, voiceType }) => {
+  const text = `${script?.title || ''} ${script?.synopsis || ''} ${subject || ''}`;
+  const hasRabbit = /rabbit|hare/i.test(text);
+  const hasTortoise = /tortoise|turtle/i.test(text);
+
+  const baseCharacters = [];
+  if (hasRabbit) {
+    baseCharacters.push({
+      id: 'char-rabbit',
+      name: 'Rabbit',
+      role: 'Fast Challenger',
+      appearance: 'white rabbit, red scarf, playful eyes',
+      emotionStyle: 'energetic and expressive',
+      voiceProfile: voiceType || 'kid-female',
+      locked: true,
+    });
+  }
+  if (hasTortoise) {
+    baseCharacters.push({
+      id: 'char-tortoise',
+      name: 'Tortoise',
+      role: 'Steady Hero',
+      appearance: 'green tortoise, gentle smile, simple cap',
+      emotionStyle: 'calm and determined',
+      voiceProfile: voiceType || 'warm-male',
+      locked: true,
+    });
+  }
+
+  if (!baseCharacters.length) {
+    baseCharacters.push(
+      {
+        id: 'char-hero',
+        name: 'Hero',
+        role: 'Main Character',
+        appearance: 'friendly animated hero with colorful outfit',
+        emotionStyle: 'curious and brave',
+        voiceProfile: voiceType || 'kid-female',
+        locked: true,
+      },
+      {
+        id: 'char-guide',
+        name: 'Guide',
+        role: 'Mentor',
+        appearance: 'wise companion with warm smile',
+        emotionStyle: 'supportive and calm',
+        voiceProfile: 'soft-female',
+        locked: true,
+      }
+    );
+  }
+
+  return baseCharacters;
+};
+
+const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCount = 5 }) => {
+  const targetCount = clampSceneCount(sceneCount);
+  const beats = Array.isArray(script?.sceneBeats) && script.sceneBeats.length
+    ? script.sceneBeats
+    : buildFallbackScript({ subject: script?.title || 'Story', languageId: script?.language, storyMode, ageFilter: script?.audience }).sceneBeats;
+
+  const primaryNames = (characters || []).map((char) => char.name).join(', ') || 'Story characters';
+  const weatherOptions = ['sunny', 'golden evening', 'soft cloudy', 'gentle rain', 'starlit night'];
+
+  return Array.from({ length: targetCount }).map((_, index) => {
+    const beat = beats[index % beats.length];
+    return {
+      id: index + 1,
+      title: beat.beat || `Scene ${index + 1}`,
+      description: beat.summary || 'Story progression scene',
+      dialogue: `"${beat.summary || 'Let us continue the story.'}"`,
+      emotion: index === targetCount - 1 ? 'joyful' : index === 2 ? 'brave' : 'wonder',
+      background: `${storyMode || 'bedtime'} world with child-safe ${styleId || 'cartoon'} art`,
+      weather: weatherOptions[index % weatherOptions.length],
+      timeOfDay: index < 2 ? 'Morning' : index < targetCount - 1 ? 'Afternoon' : 'Evening',
+      cameraActions: ['wide shot', 'medium shot', 'close-up', 'tracking shot', 'crane reveal'][index % 5],
+      animationPrompt: `Animate ${primaryNames} with smooth family-friendly motion, lip sync, and expressive faces.`,
+      characters: (characters || []).map((char) => ({ name: char.name, role: char.role })),
+      durationSeconds: 4,
+    };
+  });
+};
+
+const buildVoicePlan = ({ script, characters, languageId, voiceType }) => ({
+  narrator: {
+    voice: voiceType || 'kid-female',
+    language: languageId || 'english',
+    text: sanitizeText(script?.narration || script?.synopsis || ''),
+  },
+  characterVoices: (characters || []).map((char) => ({
+    characterId: char.id,
+    name: char.name,
+    voice: char.voiceProfile || voiceType || 'kid-female',
+    emotionStyle: char.emotionStyle || 'neutral',
+  })),
+  lipSyncEngine: 'wav2lip-ready',
+});
+
+const buildMusicPlan = ({ storyMode }) => ({
+  backgroundTrack: `${storyMode || 'bedtime'}-friendly soundtrack`,
+  sfx: ['footsteps', 'birds', 'wind', 'crowd-cheer'],
+  mixStyle: 'soft-dynamic-kids-mix',
+});
+
+const buildAnimationPlan = ({ scenes }) => ({
+  engine: 'anim-diff-ready',
+  timeline: (scenes || []).map((scene) => ({
+    sceneId: scene.id,
+    action: scene.animationPrompt || 'gentle movement',
+    durationSeconds: scene.durationSeconds || 4,
+  })),
+});
+
+const buildSubtitlesFromScenes = (scenes = []) =>
+  scenes.map((scene, index) => ({
+    start: index * (scene.durationSeconds || 4),
+    end: index * (scene.durationSeconds || 4) + (scene.durationSeconds || 4),
+    text: `${scene.title}: ${scene.description}`,
+  }));
+
+const getProjectFilePath = (projectId) => path.join(projectStoreRoot, `${safeFileName(projectId)}.json`);
+
+const saveStudioProject = async (project) => {
+  await ensureProjectStoreRoot();
+  const safeProjectId = sanitizeText(project?.projectId || uuidv4());
+  const payload = {
+    ...project,
+    projectId: safeProjectId,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeFile(getProjectFilePath(safeProjectId), JSON.stringify(payload, null, 2), 'utf-8');
+  return payload;
+};
+
+const getStudioProject = async (projectId) => {
+  await ensureProjectStoreRoot();
+  const safeProjectId = sanitizeText(projectId);
+  if (!safeProjectId) {
+    throw new Error('Project ID is required.');
+  }
+  const filePath = getProjectFilePath(safeProjectId);
+  const content = await readFile(filePath, 'utf-8');
+  return JSON.parse(content);
+};
+
+const createAutopilotProject = async ({
+  subject,
+  languageId,
+  styleId,
+  voiceType,
+  videoSizeId,
+  storyMode,
+  safeMode,
+  ageFilter,
+  sceneCount,
+}) => {
+  const cleanSubject = sanitizeText(subject || '');
+  if (!cleanSubject) {
+    throw new Error('Subject is required.');
+  }
+  if (safeMode && containsUnsafeTheme(cleanSubject)) {
+    throw new Error('Safe mode blocked this subject due to unsafe themes.');
+  }
+
+  const script = await buildScriptFromSubject({ subject: cleanSubject, languageId, storyMode, ageFilter });
+  const characters = buildCharactersFromScript({ script, subject: cleanSubject, voiceType });
+  const scenes = buildScenesFromScript({ script, characters, styleId, storyMode, sceneCount });
+  const voicePlan = buildVoicePlan({ script, characters, languageId, voiceType });
+  const musicPlan = buildMusicPlan({ storyMode });
+  const animationPlan = buildAnimationPlan({ scenes });
+
+  const project = {
+    projectId: uuidv4(),
+    createdAt: new Date().toISOString(),
+    workflowType: 'autonomous-story-to-animation',
+    subject: cleanSubject,
+    storyTitle: script.title,
+    storyPrompt: script.synopsis,
+    language: languageId,
+    style: styleId,
+    videoSize: videoSizeId,
+    voiceType,
+    storyMode,
+    safeMode: Boolean(safeMode),
+    ageFilter,
+    premiumExport: false,
+    script,
+    characters,
+    scenes,
+    subtitles: buildSubtitlesFromScenes(scenes),
+    narration: script.narration || voicePlan.narrator.text,
+    voicePlan,
+    musicPlan,
+    animationPlan,
+    editCapabilities: [
+      'script',
+      'characters',
+      'scenes',
+      'voice',
+      'music',
+      'timeline',
+    ],
+  };
+
+  return saveStudioProject(project);
+};
+
+const regenerateProjectStage = async (projectId, stage, options = {}) => {
+  const project = await getStudioProject(projectId);
+  const normalizedStage = sanitizeText(stage).toLowerCase();
+
+  if (normalizedStage === 'script') {
+    const script = await buildScriptFromSubject({
+      subject: options.subject || project.subject || project.storyTitle,
+      languageId: project.language,
+      storyMode: project.storyMode,
+      ageFilter: project.ageFilter,
+    });
+    project.script = script;
+    project.storyTitle = script.title;
+    project.storyPrompt = script.synopsis;
+    project.narration = script.narration || project.narration;
+  } else if (normalizedStage === 'characters') {
+    project.characters = buildCharactersFromScript({
+      script: project.script,
+      subject: project.subject,
+      voiceType: project.voiceType,
+    });
+  } else if (normalizedStage === 'scenes') {
+    project.scenes = buildScenesFromScript({
+      script: project.script,
+      characters: project.characters,
+      styleId: project.style,
+      storyMode: project.storyMode,
+      sceneCount: options.sceneCount || project.scenes?.length || 5,
+    });
+    project.subtitles = buildSubtitlesFromScenes(project.scenes);
+    project.animationPlan = buildAnimationPlan({ scenes: project.scenes });
+  } else if (normalizedStage === 'voice') {
+    project.voicePlan = buildVoicePlan({
+      script: project.script,
+      characters: project.characters,
+      languageId: project.language,
+      voiceType: project.voiceType,
+    });
+    project.narration = project.script?.narration || project.voicePlan?.narrator?.text || project.narration;
+  } else if (normalizedStage === 'music') {
+    project.musicPlan = buildMusicPlan({ storyMode: project.storyMode });
+  } else if (normalizedStage === 'animation') {
+    project.animationPlan = buildAnimationPlan({ scenes: project.scenes });
+  } else {
+    throw new Error(`Unsupported stage "${stage}".`);
+  }
+
+  return saveStudioProject(project);
+};
+
+const patchStudioProject = async (projectId, patch = {}) => {
+  const project = await getStudioProject(projectId);
+  const updatedProject = {
+    ...project,
+    ...patch,
+    script: typeof patch.script === 'object' && patch.script
+      ? { ...project.script, ...patch.script }
+      : project.script,
+    voicePlan: typeof patch.voicePlan === 'object' && patch.voicePlan
+      ? { ...project.voicePlan, ...patch.voicePlan }
+      : project.voicePlan,
+    musicPlan: typeof patch.musicPlan === 'object' && patch.musicPlan
+      ? { ...project.musicPlan, ...patch.musicPlan }
+      : project.musicPlan,
+    animationPlan: typeof patch.animationPlan === 'object' && patch.animationPlan
+      ? { ...project.animationPlan, ...patch.animationPlan }
+      : project.animationPlan,
+  };
+
+  if (Array.isArray(patch.characters)) {
+    updatedProject.characters = patch.characters.map((character, index) => ({
+      ...character,
+      id: sanitizeText(character?.id || `char-${index + 1}`),
+      name: sanitizeText(character?.name || `Character ${index + 1}`),
+      role: sanitizeText(character?.role || 'Story role'),
+      appearance: sanitizeText(character?.appearance || ''),
+      voiceProfile: sanitizeText(character?.voiceProfile || updatedProject.voiceType || 'kid-female'),
+      emotionStyle: sanitizeText(character?.emotionStyle || 'friendly'),
+      locked: character?.locked !== false,
+    }));
+  }
+  if (Array.isArray(patch.scenes)) {
+    const normalizedScenes = patch.scenes.map((scene, index) => ({
+      ...scene,
+      id: index + 1,
+      title: sanitizeText(scene?.title || `Scene ${index + 1}`),
+      description: sanitizeText(scene?.description || ''),
+      dialogue: sanitizeText(scene?.dialogue || ''),
+      emotion: sanitizeText(scene?.emotion || 'wonder'),
+      background: sanitizeText(scene?.background || ''),
+      weather: sanitizeText(scene?.weather || ''),
+      timeOfDay: sanitizeText(scene?.timeOfDay || ''),
+      cameraActions: sanitizeText(scene?.cameraActions || ''),
+      durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
+      characters: Array.isArray(scene?.characters) ? scene.characters : [],
+    }));
+    updatedProject.scenes = normalizedScenes;
+    updatedProject.subtitles = buildSubtitlesFromScenes(normalizedScenes);
+    updatedProject.animationPlan = buildAnimationPlan({ scenes: normalizedScenes });
+  }
+
+  updatedProject.storyTitle = sanitizeText(updatedProject.storyTitle || updatedProject.script?.title || project.storyTitle);
+  updatedProject.storyPrompt = sanitizeText(updatedProject.storyPrompt || updatedProject.script?.synopsis || project.storyPrompt);
+  updatedProject.narration = sanitizeText(updatedProject.narration || updatedProject.script?.narration || project.narration);
+
+  return saveStudioProject(updatedProject);
+};
+
 const createStudioProject = async ({ storyTitle, storyPrompt, languageId, styleId, voiceType, videoSizeId, storyMode, safeMode, ageFilter, storySource }) => {
   const normalizedStoryPrompt = sanitizeText(storyPrompt);
   const normalizedStoryTitle = sanitizeText(storyTitle);
@@ -243,7 +651,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
   const narrationScript = await buildNarration(projectBody);
   projectBody.narration = narrationScript;
 
-  return projectBody;
+  return saveStudioProject(projectBody);
 };
 
 const buildNarration = async (project) => {
@@ -313,7 +721,8 @@ const createSceneImages = async (project, directory) => {
     const svg = buildSceneSvg(scene, project, resolution.width, resolution.height);
     const imagePath = path.join(directory, `scene-${scene.id}.png`);
     await sharp(Buffer.from(svg)).png().toFile(imagePath);
-    sceneFiles.push({ path: imagePath, duration: 4 });
+    const sceneDuration = Math.max(2, Math.min(15, Number(scene.durationSeconds) || 4));
+    sceneFiles.push({ path: imagePath, duration: sceneDuration });
   }
 
   return sceneFiles;
@@ -404,4 +813,8 @@ const renderVideo = async (project, premiumHD = false) => {
 module.exports = {
   createStudioProject,
   renderVideo,
+  createAutopilotProject,
+  getStudioProject,
+  regenerateProjectStage,
+  patchStudioProject,
 };

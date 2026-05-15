@@ -1,0 +1,315 @@
+{
+  "projectId": "e7a5277d-9a29-47c4-b34f-ad37b2d51689",
+  "createdAt": "2026-05-15T19:49:47.419Z",
+  "workflowType": "autonomous-story-to-animation",
+  "subject": "Rabbit and Tortoise",
+  "storyTitle": "The Rabbit and the Tortoise",
+  "storyPrompt": "A speedy rabbit laughs at a calm tortoise, but the race teaches everyone that steady effort wins.",
+  "language": "english",
+  "style": "cartoon",
+  "videoSize": "youtube",
+  "voiceType": "kid-female",
+  "storyMode": "moral",
+  "safeMode": true,
+  "ageFilter": "5-8",
+  "premiumExport": false,
+  "script": {
+    "title": "The Rabbit and the Tortoise",
+    "synopsis": "A speedy rabbit laughs at a calm tortoise, but the race teaches everyone that steady effort wins.",
+    "moral": "Slow and steady wins the race.",
+    "language": "english",
+    "audience": "5-8",
+    "sceneBeats": [
+      {
+        "beat": "Opening",
+        "summary": "Introduce Rabbit and Tortoise in a warm, playful setting."
+      },
+      {
+        "beat": "Challenge",
+        "summary": "A challenge appears and characters react with different emotions."
+      },
+      {
+        "beat": "Journey",
+        "summary": "Characters try, fail, learn, and support each other."
+      },
+      {
+        "beat": "Climax",
+        "summary": "The key moment proves the main lesson with clear action."
+      },
+      {
+        "beat": "Ending",
+        "summary": "Celebrate growth with the moral: Slow and steady wins the race."
+      }
+    ],
+    "narration": "The Rabbit and the Tortoise. A speedy rabbit laughs at a calm tortoise, but the race teaches everyone that steady effort wins. Slow and steady wins the race."
+  },
+  "characters": [
+    {
+      "id": "char-rabbit",
+      "name": "Rabbit",
+      "role": "Fast Challenger",
+      "appearance": "white rabbit, red scarf, playful eyes",
+      "emotionStyle": "energetic and expressive",
+      "voiceProfile": "kid-female",
+      "locked": true
+    },
+    {
+      "id": "char-tortoise",
+      "name": "Tortoise",
+      "role": "Steady Hero",
+      "appearance": "green tortoise, gentle smile, simple cap",
+      "emotionStyle": "calm and determined",
+      "voiceProfile": "kid-female",
+      "locked": true
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Opening",
+      "description": "Introduce Rabbit and Tortoise in a warm, playful setting.",
+      "dialogue": "\"Introduce Rabbit and Tortoise in a warm, playful setting.\"",
+      "emotion": "wonder",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "sunny",
+      "timeOfDay": "Morning",
+      "cameraActions": "wide shot",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4
+    },
+    {
+      "id": 2,
+      "title": "Challenge",
+      "description": "A challenge appears and characters react with different emotions.",
+      "dialogue": "\"A challenge appears and characters react with different emotions.\"",
+      "emotion": "wonder",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "golden evening",
+      "timeOfDay": "Morning",
+      "cameraActions": "medium shot",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4
+    },
+    {
+      "id": 3,
+      "title": "Journey",
+      "description": "Characters try, fail, learn, and support each other.",
+      "dialogue": "\"Characters try, fail, learn, and support each other.\"",
+      "emotion": "brave",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "soft cloudy",
+      "timeOfDay": "Afternoon",
+      "cameraActions": "close-up",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4
+    },
+    {
+      "id": 4,
+      "title": "Climax",
+      "description": "The key moment proves the main lesson with clear action.",
+      "dialogue": "\"The key moment proves the main lesson with clear action.\"",
+      "emotion": "wonder",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "gentle rain",
+      "timeOfDay": "Afternoon",
+      "cameraActions": "tracking shot",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4
+    },
+    {
+      "id": 5,
+      "title": "Ending",
+      "description": "Celebrate growth with the moral: Slow and steady wins the race.",
+      "dialogue": "\"Celebrate growth with the moral: Slow and steady wins the race.\"",
+      "emotion": "wonder",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "starlit night",
+      "timeOfDay": "Afternoon",
+      "cameraActions": "crane reveal",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4
+    },
+    {
+      "id": 6,
+      "title": "Opening",
+      "description": "Introduce Rabbit and Tortoise in a warm, playful setting.",
+      "dialogue": "\"Introduce Rabbit and Tortoise in a warm, playful setting.\"",
+      "emotion": "joyful",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "sunny",
+      "timeOfDay": "Evening",
+      "cameraActions": "wide shot",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4
+    }
+  ],
+  "subtitles": [
+    {
+      "start": 0,
+      "end": 4,
+      "text": "Opening: Introduce Rabbit and Tortoise in a warm, playful setting."
+    },
+    {
+      "start": 4,
+      "end": 8,
+      "text": "Challenge: A challenge appears and characters react with different emotions."
+    },
+    {
+      "start": 8,
+      "end": 12,
+      "text": "Journey: Characters try, fail, learn, and support each other."
+    },
+    {
+      "start": 12,
+      "end": 16,
+      "text": "Climax: The key moment proves the main lesson with clear action."
+    },
+    {
+      "start": 16,
+      "end": 20,
+      "text": "Ending: Celebrate growth with the moral: Slow and steady wins the race."
+    },
+    {
+      "start": 20,
+      "end": 24,
+      "text": "Opening: Introduce Rabbit and Tortoise in a warm, playful setting."
+    }
+  ],
+  "narration": "The Rabbit and the Tortoise. A speedy rabbit laughs at a calm tortoise, but the race teaches everyone that steady effort wins. Slow and steady wins the race.",
+  "voicePlan": {
+    "narrator": {
+      "voice": "kid-female",
+      "language": "english",
+      "text": "The Rabbit and the Tortoise. A speedy rabbit laughs at a calm tortoise, but the race teaches everyone that steady effort wins. Slow and steady wins the race."
+    },
+    "characterVoices": [
+      {
+        "characterId": "char-rabbit",
+        "name": "Rabbit",
+        "voice": "kid-female",
+        "emotionStyle": "energetic and expressive"
+      },
+      {
+        "characterId": "char-tortoise",
+        "name": "Tortoise",
+        "voice": "kid-female",
+        "emotionStyle": "calm and determined"
+      }
+    ],
+    "lipSyncEngine": "wav2lip-ready"
+  },
+  "musicPlan": {
+    "backgroundTrack": "moral-friendly soundtrack",
+    "sfx": [
+      "footsteps",
+      "birds",
+      "wind",
+      "crowd-cheer"
+    ],
+    "mixStyle": "soft-dynamic-kids-mix"
+  },
+  "animationPlan": {
+    "engine": "anim-diff-ready",
+    "timeline": [
+      {
+        "sceneId": 1,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 2,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 3,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 4,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 5,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 6,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      }
+    ]
+  },
+  "editCapabilities": [
+    "script",
+    "characters",
+    "scenes",
+    "voice",
+    "music",
+    "timeline"
+  ],
+  "updatedAt": "2026-05-15T19:49:47.446Z"
+}

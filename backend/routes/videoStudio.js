@@ -1,8 +1,23 @@
 const express = require('express');
+const fs = require('fs');
 const logger = require('../utils/logger');
-const { createStudioProject, renderVideo } = require('../services/videoStudioService');
+const {
+  createStudioProject,
+  renderVideo,
+  createAutopilotProject,
+  getStudioProject,
+  regenerateProjectStage,
+  patchStudioProject,
+} = require('../services/videoStudioService');
 
 const router = express.Router();
+
+const buildRequestOrigin = (req) => {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || req.protocol || 'https';
+  const host = req.get('host');
+  return `${protocol}://${host}`;
+};
 
 router.post('/create', async (req, res) => {
   try {
@@ -65,22 +80,107 @@ router.post('/create', async (req, res) => {
 
 router.post('/render', async (req, res) => {
   try {
-    const { project, premiumHD } = req.body;
-    if (!project || !project.projectId) {
+    const { project, projectId, premiumHD } = req.body;
+    const resolvedProject = project || (projectId ? await getStudioProject(projectId) : null);
+    if (!resolvedProject || !resolvedProject.projectId) {
       return res.status(400).json({ success: false, error: 'A valid project is required for rendering.' });
     }
-    if (!Array.isArray(project.scenes) || project.scenes.length === 0) {
+    if (!Array.isArray(resolvedProject.scenes) || resolvedProject.scenes.length === 0) {
       return res.status(400).json({ success: false, error: 'At least one scene is required for rendering.' });
     }
-    if (project.scenes.length > 20) {
+    if (resolvedProject.scenes.length > 20) {
       return res.status(400).json({ success: false, error: 'Too many scenes requested. Keep it at 20 scenes or fewer.' });
     }
 
-    const result = await renderVideo(project, Boolean(premiumHD));
-    res.json({ success: true, videoUrl: result.videoUrl, projectId: result.projectId });
+    const result = await renderVideo(resolvedProject, Boolean(premiumHD));
+    if (!result?.outputFile || !fs.existsSync(result.outputFile)) {
+      logger.error(`Video studio render produced missing output file for project ${resolvedProject.projectId}`);
+      return res.status(500).json({ success: false, error: 'Render completed but output video was not found.' });
+    }
+
+    const relativeVideoUrl = String(result.videoUrl || '');
+    const origin = buildRequestOrigin(req);
+    const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
+      ? relativeVideoUrl
+      : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
+
+    res.json({
+      success: true,
+      videoUrl: absoluteVideoUrl,
+      videoPath: relativeVideoUrl,
+      projectId: result.projectId,
+    });
   } catch (error) {
     logger.error('Video studio render error:', error);
     res.status(500).json({ success: false, error: error.message || 'Video rendering failed.' });
+  }
+});
+
+router.post('/autopilot/create', async (req, res) => {
+  try {
+    const {
+      subject,
+      languageId = 'english',
+      styleId = 'cartoon',
+      voiceType = 'kid-female',
+      videoSizeId = 'youtube',
+      storyMode = 'bedtime',
+      safeMode = true,
+      ageFilter = '5-8',
+      sceneCount = 5,
+    } = req.body || {};
+
+    const normalizedSubject = String(subject || '').trim();
+    if (!normalizedSubject) {
+      return res.status(400).json({ success: false, error: 'Please provide a subject like "Rabbit and Tortoise".' });
+    }
+
+    const project = await createAutopilotProject({
+      subject: normalizedSubject,
+      languageId,
+      styleId,
+      voiceType,
+      videoSizeId,
+      storyMode,
+      safeMode,
+      ageFilter,
+      sceneCount,
+    });
+
+    res.json({ success: true, project });
+  } catch (error) {
+    logger.error('Video studio autopilot create error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to generate autonomous story project.' });
+  }
+});
+
+router.get('/projects/:projectId', async (req, res) => {
+  try {
+    const project = await getStudioProject(req.params.projectId);
+    res.json({ success: true, project });
+  } catch (error) {
+    logger.error('Video studio get project error:', error);
+    res.status(404).json({ success: false, error: error.message || 'Project not found.' });
+  }
+});
+
+router.patch('/projects/:projectId', async (req, res) => {
+  try {
+    const project = await patchStudioProject(req.params.projectId, req.body || {});
+    res.json({ success: true, project });
+  } catch (error) {
+    logger.error('Video studio patch project error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to update project.' });
+  }
+});
+
+router.post('/projects/:projectId/regenerate/:stage', async (req, res) => {
+  try {
+    const project = await regenerateProjectStage(req.params.projectId, req.params.stage, req.body || {});
+    res.json({ success: true, project });
+  } catch (error) {
+    logger.error('Video studio regenerate stage error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to regenerate stage.' });
   }
 });
 
