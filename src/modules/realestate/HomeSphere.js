@@ -6,7 +6,6 @@ import QuickFilters from "./components/QuickFilters";
 import LoanCalculator from "./components/LoanCalculator";
 import PopularLocations from "./components/PopularLocations";
 import PropertyCategories from "./components/PropertyCategories";
-import DownloadAppCTA from "./components/DownloadAppCTA";
 import {
   HOME_LOAN_PARTNERS,
   REAL_ESTATE_SEED_PROPERTIES,
@@ -615,9 +614,6 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
         propertyTypes={propertyTypes}
         onTypeClick={(type) => setTypeFilter(type)}
       />
-
-      {/* DOWNLOAD APP CTA */}
-      <DownloadAppCTA />
     </div>
   );
 };
