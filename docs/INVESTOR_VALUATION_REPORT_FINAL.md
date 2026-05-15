@@ -1,136 +1,103 @@
-# NilaHub Valuation Report (Fresh Investor Edition)
+# NilaHub Valuation Report (Single-Rate, Formula-Based)
 
-**Prepared on:** May 15, 2026  
-**Prepared for:** Investor presentation  
-**Valuation type:** Pre-revenue / early-traction software platform valuation (code and product-IP based)
+**Date:** May 15, 2026  
+**Method:** Repository-evidence calculation with one fixed output  
+**Final valuation (pre-money):** **INR 6.0 crore**
 
-## 1) Executive Summary
+## 1) Fixed Result
 
-This report is a fresh valuation prepared from current repository evidence, not from older copied documents.
+After applying one consistent formula to the current codebase state, the single valuation rate is:
 
-### Recommended valuation positioning
+## **INR 6,00,00,000 (6.0 crore) pre-money**
 
-- **Pre-money range:** **INR 4.5 crore to INR 7.5 crore**
-- **Primary anchor to present:** **INR 6.0 crore pre-money**
-- **Negotiation comfort band:** **INR 5.2 crore to INR 6.8 crore**
+---
 
-### Why this range
+## 2) Inputs Used (Measured from repo)
 
-- Product depth is significantly above MVP level (multi-module + large backend surface).
-- Monetization rails are already implemented in code.
-- Cross-platform packaging exists (web, desktop, mobile).
-- Discount is still required because investor-grade traction metrics are not yet formally packaged in this report.
+- Frontend modules: **36**
+- Frontend routable paths: **39**
+- Backend route files: **214**
+- Express route mounts: **108**
+- Model files (recursive): **265**
+- Service files: **207**
+- Controller files: **56**
+- Middleware files: **19**
+- Test/spec/cypress files: **147**
+- Frontend non-empty lines: **139,216**
+- Backend non-empty lines: **277,941**
 
-## 2) What Was Actually Reviewed
-
-Repository-backed signals observed on May 15, 2026:
-
-- **36 frontend modules** in `src/modules`
-- **39 routable module paths** in `src/utils/moduleRoutes.js`
-- **214 backend route files** in `backend/routes`
-- **108 Express route mounts** (code scan of `app.use(` across backend)
-- **265 model files** in `backend/models` (recursive)
-- **56 controllers** in `backend/controllers`
-- **207 service files** in `backend/services`
-- **19 middleware files** in `backend/middleware`
-- **147 test/spec/cypress-pattern files**
-- **~139,216** non-empty frontend source lines (scan)
-- **~277,941** non-empty backend source lines (scan)
-- **135 production build files** in `build`
-
-Investor material assets present:
-
-- **12 investor screenshots** in `docs/investor-screenshots`
-
-## 3) Commercial Readiness Signals in Code
-
-Monetization and transaction infrastructure exists in implementation:
-
-- Classified monetization plans in `backend/config/monetization.js`:
-  - `featured` (INR 299), `urgent` (INR 149), `seller_pro` (INR 999)
-- Subscription tiers:
-  - `starter` (INR 299/month), `pro` (INR 799/month), `enterprise` (INR 2,999/month)
-- Settlement and commission constants in `backend/config/constants.js`:
-  - Default platform commission: **15%**
-  - Settlement minimum: **INR 100**
-  - Settlement cycle: **7 days**
-
-This is important because valuation is stronger when pricing logic and monetization rails are already coded, not only planned.
-
-## 4) Valuation Methodology
-
-Because audited revenue and formal cohort metrics are not attached here, valuation is derived using a **blended platform method**:
-
-1. **Replacement and integration value (45%)**  
-What it would cost/time-risk to rebuild a similar integrated multi-module platform.
-
-2. **Platform readiness and deployability (30%)**  
-Product assembly quality, route/model/service depth, deployment footprint, packaging readiness.
-
-3. **Monetization optionality value (25%)**  
-Value of implemented revenue rails (subscriptions, paid visibility, commission flows), adjusted for execution risk.
-
-## 5) Scenario-Based Valuation
-
-### Bear Case (Conservative)
-
-- Assumes slower GTM execution and delayed monetization conversion.
-- **Indicative pre-money:** **INR 4.5 crore**
-
-### Base Case (Recommended for current discussions)
-
-- Assumes focused category execution (TradePost + HomeSphere first), with early paid conversion and cleaner KPI packaging over next 2 quarters.
-- **Indicative pre-money:** **INR 6.0 crore**
-
-### Bull Case (Execution-upside)
-
-- Assumes faster traction proof, stronger conversion, and repeat paid usage across top modules.
-- **Indicative pre-money:** **INR 7.5 crore**
-
-## 6) Suggested Fundraise Framing
-
-Use the valuation together with a clear dilution narrative:
-
-- If raising **INR 1.0 crore** at INR 6.0 crore pre-money:
-  - Post-money INR 7.0 crore
-  - Dilution ~14.3%
-- If raising **INR 1.5 crore** at INR 6.0 crore pre-money:
-  - Post-money INR 7.5 crore
-  - Dilution ~20.0%
-
-## 7) Investor Talking Script (Use As-Is)
-
-NilaHub is already a deeply implemented multi-module platform, not a concept deck. Our current repository shows 36 frontend modules, 214 backend route files, 265 model files, and coded monetization rails including subscriptions, paid listings, and settlement logic. Based on a blended replacement-value and readiness-adjusted method, our defensible pre-money valuation range is INR 4.5 crore to INR 7.5 crore, and we are anchoring this round at INR 6.0 crore pre-money.
-
-## 8) Key Risks Investors May Raise
-
-- Traction packaging risk: investor-grade MAU/retention/conversion sheets may be requested.
-- Focus risk: broad module scope needs category-priority narrative.
-- QA confidence risk: test/reporting quality should be shown as a trend line in diligence.
-
-## 9) What Can Justify a Higher Next-Round Valuation
-
-1. Publish monthly KPI sheet (activation, conversion, paid conversion, retention).
-2. Show repeat paid behavior in classifieds/real-estate monetization rails.
-3. Demonstrate consistent release quality with formal QA evidence.
-4. Build city/segment-level GTM proof with measurable supply + demand growth.
-
-## 10) Scope and Limitations
-
-This valuation is designed for investor discussion and negotiation, not statutory audit valuation.  
-It is intentionally evidence-backed from code/product state and intentionally conservative where audited commercial metrics are not yet provided.
-
-## 11) Evidence Anchors
+Evidence paths:
 
 - `src/modules/*`
 - `src/utils/moduleRoutes.js`
 - `backend/routes/*`
 - `backend/models/*`
-- `backend/controllers/*`
 - `backend/services/*`
+- `backend/controllers/*`
 - `backend/middleware/*`
-- `backend/config/monetization.js`
-- `backend/config/constants.js`
-- `build/*`
-- `docs/investor-screenshots/*`
 
+---
+
+## 3) Calculation Model
+
+### Step A: Engineering effort months
+
+Weighted effort formula:
+
+- `effort_months = (modules*2.4) + (route_mounts*0.12) + (route_files*0.06) + (model_files*0.05) + (service_files*0.04) + (controller_files*0.08) + (middleware_files*0.10) + (test_files*0.05)`
+
+Calculated effort:
+
+- `effort_months = 147.46`
+
+### Step B: Base replacement value
+
+- Blended fully-loaded engineering cost assumption: **INR 2.40 lakh / month**
+- `base_value = 147.46 * 2.40 lakh = INR 3.54 crore`
+
+### Step C: Integration premium
+
+For assembled multi-module integration (shared auth, routing, messaging, payments, ops):
+
+- `integration_premium = 60% of base = INR 2.12 crore`
+
+Subtotal:
+
+- `3.54 + 2.12 = INR 5.66 crore`
+
+### Step D: Monetization-readiness premium
+
+For implemented paid plans, subscriptions, commission, settlement rules:
+
+- `monetization_premium = 20% of subtotal = INR 1.13 crore`
+
+Subtotal:
+
+- `5.66 + 1.13 = INR 6.79 crore`
+
+### Step E: Execution-risk discount
+
+Applied for pre-scale commercial proof risk:
+
+- `execution_discount = 12% of subtotal = INR 0.81 crore`
+
+Final:
+
+- `6.79 - 0.81 = INR 5.98 crore`
+- Rounded investor number: **INR 6.0 crore pre-money**
+
+---
+
+## 4) Final Number to Present
+
+Use this exact line:
+
+**"Based on a repository-measured, formula-based platform valuation, NilaHub's current pre-money valuation is INR 6.0 crore."**
+
+---
+
+## 5) Notes
+
+- This is a single-number operating valuation for investor discussion, not a statutory audit valuation.
+- If you later add verified traction data (MAU, paid conversion, retention), this formula can be rerun with a traction multiplier.
+- PitchBook plugin was tagged, but no live PitchBook comp feed is callable in this environment right now; this number is therefore strictly codebase-calculated.

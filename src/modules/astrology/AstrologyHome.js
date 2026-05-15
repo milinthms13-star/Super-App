@@ -1149,9 +1149,27 @@ const AstrologyHome = () => {
                   <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {getNakshatraDisplayName(panchangam?.nakshatra || profileApi.profileDraft.nakshatra || getNakshatraFromSign(selectedSign), language)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
                   <article className="astrology-panel astro-result-card">
                     <h4>Horoscope actions</h4>
-                    <button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate horoscope report</button>
-                    <button type="button" className="astrology-secondary-button" disabled={downloadingHoroscopePeriod !== ""} onClick={() => handleDownloadHoroscopeReport("year")}>{downloadingHoroscopePeriod === "year" ? "Downloading yearly..." : "Download yearly horoscope"}</button>
-                    <button type="button" className="astrology-secondary-button" disabled={downloadingHoroscopePeriod !== ""} onClick={() => handleDownloadHoroscopeReport("total")}>{downloadingHoroscopePeriod === "total" ? "Downloading total..." : "Download total horoscope"}</button>
+<button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate horoscope report</button>
+                    <button
+                      type="button"
+                      className="astrology-secondary-button"
+                      disabled={downloadingHoroscopePeriod !== ""}
+                      onClick={() => handleDownloadHoroscopeReport("year")}
+                    >
+                      {downloadingHoroscopePeriod === "year"
+                        ? "Downloading yearly..."
+                        : "Download yearly horoscope"}
+                    </button>
+                    <button
+                      type="button"
+                      className="astrology-secondary-button"
+                      disabled={downloadingHoroscopePeriod !== ""}
+                      onClick={() => handleDownloadHoroscopeReport("total")}
+                    >
+                      {downloadingHoroscopePeriod === "total"
+                        ? "Downloading total..."
+                        : "Download total horoscope"}
+                    </button>
                   </article>
                   {showFullPrediction ? <HoroscopeCard sign={selectedSignDetails} horoscope={reading} loading={loading} notice={readingNotice || signsNotice} /> : null}
                 </>

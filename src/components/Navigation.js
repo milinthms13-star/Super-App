@@ -171,11 +171,11 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
       }
     };
 
-    document.addEventListener("mousedown", handleOutsideClick, true);
-    document.addEventListener("touchstart", handleOutsideClick, true);
+    document.addEventListener("click", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
     return () => {
-      document.removeEventListener("mousedown", handleOutsideClick, true);
-      document.removeEventListener("touchstart", handleOutsideClick, true);
+      document.removeEventListener("click", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
     };
   }, [showMoreMenu]);
 
@@ -202,6 +202,12 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     navigate(getPathForModule(moduleId, getPathForModule(defaultHomeModule)));
     setIsSidebarOpen(false);
     setShowMoreMenu(false);
+  };
+
+  const handleMoreToggle = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setShowMoreMenu((prev) => !prev);
   };
 
   // Get modules to show in primary nav (limit 5) and rest in "More" dropdown
@@ -348,14 +354,11 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
                 ))}
 
                 {moreNavModules.length > 0 && (
-                  <div className="nav-more-wrapper" ref={moreMenuRef}>
+                  <div className="nav-more-wrapper" ref={moreMenuRef} onClick={(event) => event.stopPropagation()}>
                     <button
                       type="button"
                       className={`nav-more-btn polished ${showMoreMenu ? "active" : ""}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setShowMoreMenu((prev) => !prev);
-                      }}
+                      onClick={handleMoreToggle}
                       title="View more modules"
                       aria-expanded={showMoreMenu}
                       aria-haspopup="menu"

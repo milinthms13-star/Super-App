@@ -10,7 +10,6 @@ import AdminPanel from "./components/AdminPanel";
 import LoanCalculator from "./components/LoanCalculator";
 import PropertyDetailTabs from "./components/PropertyDetailTabs";
 import HomeSphere from "./HomeSphere";
-import SellerDashboard from "./components/SellerDashboard";
 
 
 import {
@@ -118,6 +117,7 @@ const RealEstate = () => {
   const [maintenanceRequest, setMaintenanceRequest] = useState("");
   const [maintenanceType, setMaintenanceType] = useState(TENANT_UTILITIES[0]);
   const [toasts, setToasts] = useState([]);
+  const [sellerWorkspaceMode, setSellerWorkspaceMode] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [asyncState, setAsyncState] = useState({
     listingSubmit: false,
@@ -817,6 +817,7 @@ const RealEstate = () => {
   const handleOpenSellerWorkspace = () => {
     if (allowedRoleModes.includes("owner")) {
       setActiveRole("owner");
+      setSellerWorkspaceMode(true);
       return;
     }
     pushToast("Enable seller access to post properties.", "info");
@@ -836,11 +837,11 @@ const RealEstate = () => {
             <h1>Find your next home in fewer clicks</h1>
             <p>Search, filter, and contact sellers directly from listings.</p>
             <div className="realestate-buyer-quickbar-actions">
-              <button type="button" className="realestate-primary-button" onClick={scrollToBuyerListings}>
-                Explore listings
-              </button>
-              <button type="button" className="realestate-secondary-button" onClick={handleOpenSellerWorkspace}>
-                Post an ad
+                <button type="button" className="realestate-primary-button" onClick={scrollToBuyerListings}>
+                  Explore listings
+                </button>
+                <button type="button" className="realestate-secondary-button" onClick={handleOpenSellerWorkspace}>
+                  Post an ad
               </button>
             </div>
           </div>
@@ -860,7 +861,14 @@ const RealEstate = () => {
               <h1>Find verified homes, rentals and land in one place.</h1>
               <p>Search fast, connect with trusted sellers, and act on property leads immediately.</p>
               <div className="realestate-hero-actions">
-                <button type="button" className="realestate-primary-button" onClick={() => setActiveRole("buyer")}>
+                <button
+                  type="button"
+                  className="realestate-primary-button"
+                  onClick={() => {
+                    setSellerWorkspaceMode(false);
+                    setActiveRole("buyer");
+                  }}
+                >
                   Explore listings
                 </button>
                 <button
@@ -898,7 +906,7 @@ const RealEstate = () => {
           </section>
         </>
       )}
-      <section className="realestate-role-section" style={{ display: isBuyerMode ? "none" : "block" }}>
+      <section className="realestate-role-section" style={{ display: isBuyerMode || sellerWorkspaceMode ? "none" : "block" }}>
         <div className="realestate-section-heading">
           <h2>Role-based experience</h2>
           <p>Switch between buyer, seller, broker, builder, and admin journeys without leaving the marketplace.</p>
@@ -912,6 +920,7 @@ const RealEstate = () => {
               onClick={() => {
                 if (allowedRoleModes.includes(roleMode.id)) {
                   setActiveRole(roleMode.id);
+                  setSellerWorkspaceMode(false);
                 } else {
                   pushToast(`Your account cannot access the ${roleMode.title} workspace.`, "info");
                 }
@@ -925,7 +934,7 @@ const RealEstate = () => {
         </div>
       </section>
 
-      <section className="realestate-ecosystem-grid" style={{ display: isBuyerMode ? "none" : "block" }}>
+      <section className="realestate-ecosystem-grid" style={{ display: isBuyerMode || sellerWorkspaceMode ? "none" : "block" }}>
         <article className="realestate-surface-card">
           <div className="realestate-section-heading">
             <h2>Real Estate Ecosystem</h2>
@@ -952,7 +961,12 @@ const RealEstate = () => {
         <HomeSphere
           onNavigateToDashboard={(role, options = {}) => {
             const normalizedRole = String(role || "").toLowerCase() === "seller" ? "owner" : String(role || "").toLowerCase();
+            if (!allowedRoleModes.includes(normalizedRole || "owner")) {
+              pushToast("Enable seller access to post properties.", "info");
+              return false;
+            }
             setActiveRole(normalizedRole || "owner");
+            setSellerWorkspaceMode(true);
             if (options?.postingType === "property" || options?.postingType === "requirement") {
               setEditListingId("");
               setListingFieldErrors({});
@@ -974,82 +988,107 @@ const RealEstate = () => {
         />
       ) : null}
 
+      {!isBuyerMode && sellerWorkspaceMode ? (
+        <section className="realestate-surface-card">
+          <div className="realestate-section-heading">
+            <h2>HomeSphere posting workspace</h2>
+            <p>Create your ad directly here without opening the old mixed marketplace view.</p>
+          </div>
+          <div className="realestate-inline-actions">
+            <button
+              type="button"
+              className="realestate-inline-button"
+              onClick={() => {
+                setSellerWorkspaceMode(false);
+                setActiveRole("buyer");
+              }}
+            >
+              Back to buyer listings
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <section className="realestate-main-grid" style={{ display: isBuyerMode ? "none" : "grid" }}>
         <div className="realestate-left-column">
-          {selectedProperty ? null : (
+          {!sellerWorkspaceMode && selectedProperty ? null : (
             <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>
           )}
-          <FiltersPanel
-            filters={draftFilters}
-            onChange={handleFilterDraftChange}
-            onApply={handleApplyFilters}
-            onReset={handleResetFilters}
-            locations={locations}
-            propertyTypes={propertyTypes}
-            amenities={allAmenities}
-            maxPrice={maxPrice}
-            maxArea={maxArea}
-          />
+          {!sellerWorkspaceMode ? (
+            <>
+              <FiltersPanel
+                filters={draftFilters}
+                onChange={handleFilterDraftChange}
+                onApply={handleApplyFilters}
+                onReset={handleResetFilters}
+                locations={locations}
+                propertyTypes={propertyTypes}
+                amenities={allAmenities}
+                maxPrice={maxPrice}
+                maxArea={maxArea}
+              />
 
-          <article className="realestate-listing-card">
-            <div className="realestate-section-heading">
-              <h2>Marketplace inventory</h2>
-              <p>{filteredProperties.length} properties match the current search.</p>
-            </div>
-            {filteredProperties.length === 0 ? (
-              <div className="realestate-empty-state realestate-empty-state-actions">
-                <h3>No properties match these filters</h3>
-                <p>Try widening your budget, reducing minimum area, or relaxing nearby constraints.</p>
-                <div className="realestate-inline-actions">
-                  <button type="button" className="realestate-inline-button" onClick={handleResetFilters}>
-                    Reset all filters
-                  </button>
-                  <button
-                    type="button"
-                    className="realestate-inline-button"
-                    onClick={() =>
-                      handleApplyFilters({
-                        ...buildDefaultFilters(maxPrice),
-                        verifiedFilter: "verified-only",
-                        nearbyFilter: "metro",
-                      })
-                    }
-                  >
-                    Show verified near metro
-                  </button>
-                  <button
-                    type="button"
-                    className="realestate-inline-button"
-                    onClick={() => {
-                      setDraftFilters((state) => ({ ...state, searchText: "", amenityFilter: "all", locationFilter: "All" }));
-                      handleApplyFilters({ ...filters, searchText: "", amenityFilter: "all", locationFilter: "All" });
-                    }}
-                  >
-                    Relax text + amenity filters
-                  </button>
+              <article className="realestate-listing-card">
+                <div className="realestate-section-heading">
+                  <h2>Marketplace inventory</h2>
+                  <p>{filteredProperties.length} properties match the current search.</p>
                 </div>
-              </div>
-            ) : (
-              <div className="realestate-property-grid">
-                {filteredProperties.map((property) => (
-                  <PropertyCard
-                    key={property.id}
-                    property={property}
-                    isActive={selectedProperty?.id === property.id}
-                    isFavorite={favoriteIds.has(`realestate-${property.id}`)}
-                    canManage={canManageProperty(property)}
-                    onSelect={setSelectedPropertyId}
-                    onEdit={handleEditListing}
-                    onFavoriteToggle={handleFavoriteToggle}
-                    hasSubscription={currentUser?.subscriptionStatus === "active" || currentUser?.isPremium}
-                    onSubscribeClick={() => {
-                      pushToast("Subscribe to view contact details of property posters!", "info");
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </article>
+                {filteredProperties.length === 0 ? (
+                  <div className="realestate-empty-state realestate-empty-state-actions">
+                    <h3>No properties match these filters</h3>
+                    <p>Try widening your budget, reducing minimum area, or relaxing nearby constraints.</p>
+                    <div className="realestate-inline-actions">
+                      <button type="button" className="realestate-inline-button" onClick={handleResetFilters}>
+                        Reset all filters
+                      </button>
+                      <button
+                        type="button"
+                        className="realestate-inline-button"
+                        onClick={() =>
+                          handleApplyFilters({
+                            ...buildDefaultFilters(maxPrice),
+                            verifiedFilter: "verified-only",
+                            nearbyFilter: "metro",
+                          })
+                        }
+                      >
+                        Show verified near metro
+                      </button>
+                      <button
+                        type="button"
+                        className="realestate-inline-button"
+                        onClick={() => {
+                          setDraftFilters((state) => ({ ...state, searchText: "", amenityFilter: "all", locationFilter: "All" }));
+                          handleApplyFilters({ ...filters, searchText: "", amenityFilter: "all", locationFilter: "All" });
+                        }}
+                      >
+                        Relax text + amenity filters
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="realestate-property-grid">
+                    {filteredProperties.map((property) => (
+                      <PropertyCard
+                        key={property.id}
+                        property={property}
+                        isActive={selectedProperty?.id === property.id}
+                        isFavorite={favoriteIds.has(`realestate-${property.id}`)}
+                        canManage={canManageProperty(property)}
+                        onSelect={setSelectedPropertyId}
+                        onEdit={handleEditListing}
+                        onFavoriteToggle={handleFavoriteToggle}
+                        hasSubscription={currentUser?.subscriptionStatus === "active" || currentUser?.isPremium}
+                        onSubscribeClick={() => {
+                          pushToast("Subscribe to view contact details of property posters!", "info");
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </article>
+            </>
+          ) : null}
 
           <article className="realestate-operations-grid">
             <LeadBoard
@@ -1119,7 +1158,7 @@ const RealEstate = () => {
           ) : null}
         </div>
 
-        <aside className="realestate-right-column">
+        <aside className="realestate-right-column" style={{ display: sellerWorkspaceMode ? "none" : "block" }}>
           <article className="realestate-detail-card">
               <h1 className="sr-only">homesphere turns property discovery into a verified marketplace</h1>
             <PropertyDetailTabs
