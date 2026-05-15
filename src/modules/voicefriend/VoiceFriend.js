@@ -25,6 +25,7 @@ const AI_FRIENDS = [
     avatar: '/avatars/nila.png',
     voice: 'female-soft',
     personality: 'Caring and emotional',
+    style: 'calm and gentle',
     color: '#c7d2fe',
     label: 'Comforting companion',
   },
@@ -34,6 +35,7 @@ const AI_FRIENDS = [
     avatar: '/avatars/arjun.png',
     voice: 'male-calm',
     personality: 'Protective and motivating',
+    style: 'warm and encouraging',
     color: '#a7f3d0',
     label: 'Motivating buddy',
   },
@@ -43,6 +45,7 @@ const AI_FRIENDS = [
     avatar: '/avatars/anya.png',
     voice: 'female-warm',
     personality: 'Empathetic and soothing',
+    style: 'soft and comforting',
     color: '#fbcfe8',
     label: 'Soothing guide',
   },
@@ -72,10 +75,16 @@ const VoiceFriend = () => {
   const [playingAudio, setPlayingAudio] = useState(false);
   const [friendCustomName, setFriendCustomName] = useState('');
   const [friendCustomAvatar, setFriendCustomAvatar] = useState('');
+  const [persistData, setPersistData] = useState(true);
+  const [hasPendingSessionSettings, setHasPendingSessionSettings] = useState(false);
   const [editingPersona, setEditingPersona] = useState(false);
   const recognition = useRef(null);
   const audioPlayerRef = useRef(null);
   const avatarInputRef = useRef(null);
+  const messageAbortControllerRef = useRef(null);
+  const speechAbortControllerRef = useRef(null);
+  const chatPanelRef = useRef(null);
+  const sessionMetaRef = useRef({ friendId: 'nila', userName: '', persona: 'supportive', mood: 'neutral', language: 'en' });
   const lastAssistantTextRef = useRef('');
 
   const selectedFriend = useMemo(
@@ -84,15 +93,23 @@ const VoiceFriend = () => {
   );
 
   useEffect(() => {
+    if (recognition.current?.abort) {
+      try {
+        recognition.current.abort();
+      } catch (err) {
+        // ignore stale abort errors
+      }
+    }
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       setSpeechSupported(true);
-      recognition.current = new SpeechRecognition();
-      recognition.current.continuous = false;
-      recognition.current.interimResults = false;
-      recognition.current.lang = language || 'en-IN';
+      const instance = new SpeechRecognition();
+      instance.continuous = false;
+      instance.interimResults = false;
+      instance.lang = language || 'en-IN';
 
-      recognition.current.onresult = (event) => {
+      instance.onresult = (event) => {
         const transcript = event.results?.[0]?.[0]?.transcript;
         if (transcript) {
           setMessageText(transcript);
@@ -100,19 +117,31 @@ const VoiceFriend = () => {
         }
       };
 
-      recognition.current.onerror = () => {
+      instance.onerror = (event) => {
         setListening(false);
-        setStatus('Voice recognition failed. Try again or type your message.');
+        if (event?.error === 'not-allowed' || event?.error === 'permission-denied') {
+          setStatus('Microphone access was denied. Please allow access in your browser settings.');
+        } else if (event?.error === 'no-speech') {
+          setStatus('No speech was detected. Try speaking a little louder.');
+        } else {
+          setStatus('Voice recognition failed. Try again or type your message.');
+        }
       };
 
-      recognition.current.onend = () => {
+      instance.onend = () => {
         setListening(false);
       };
+
+      recognition.current = instance;
     }
 
     return () => {
       if (recognition.current?.abort) {
-        recognition.current.abort();
+        try {
+          recognition.current.abort();
+        } catch (err) {
+          // ignore stale abort errors
+        }
       }
     };
   }, [language]);

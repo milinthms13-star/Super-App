@@ -898,7 +898,7 @@ const KidsStoryVideoMaker = () => {
       return;
     }
 
-    const renderProject = {
+    const renderPayload = {
       ...generatedProject,
       title: sanitizeText(storyTitle || generatedProject.title || "AI Kids Story Video Generator"),
       storyPrompt: normalizedStoryPrompt,
@@ -920,7 +920,7 @@ const KidsStoryVideoMaker = () => {
 
     try {
       const { payload, response } = await runCancelableRequest("render-video", (signal) =>
-        renderProject({ project: renderProject, premiumHD }, { signal })
+        renderProject({ project: renderPayload, premiumHD }, { signal })
       );
       if (!payload.success) {
         throw new Error(payload.error || payload.message || "Video render failed.");
@@ -934,7 +934,7 @@ const KidsStoryVideoMaker = () => {
       })();
 
       const nextProject = {
-        ...renderProject,
+        ...renderPayload,
         renderedAt: new Date().toISOString(),
         videoUrl: normalizeMediaUrl(payload.videoUrl, serviceOrigin),
       };
