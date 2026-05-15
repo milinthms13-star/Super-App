@@ -972,11 +972,7 @@ const RealEstate = () => {
       {isBuyerMode ? (
         <HomeSphere
           onNavigateToDashboard={(role, options = {}) => {
-            const normalizedRole = String(role || "").toLowerCase() === "seller" ? "owner" : String(role || "").toLowerCase();
-            if (normalizedRole !== "owner") {
-              pushToast("Enable seller access to post properties.", "info");
-              return false;
-            }
+            // Allow owners, brokers, and third-party users to open the posting workspace.
             return openSellerWorkspace({ postingType: options?.postingType || "property" });
           }}
         />
