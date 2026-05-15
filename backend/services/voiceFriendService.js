@@ -1,14 +1,22 @@
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const { OpenAI } = require('openai');
 const logger = require('../utils/logger');
 
-let openai;
-try {
-  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-} catch (error) {
-  logger.warn('OpenAI client not initialized for VoiceFriendService:', error.message);
-  openai = null;
-}
+let openai = null;
+
+const createOpenAIClient = () => {
+  if (!process.env.OPENAI_API_KEY) {
+    logger.warn('OpenAI API key missing for VoiceFriendService');
+    return null;
+  }
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+};
+
+openai = createOpenAIClient();
+
+const setOpenAIClient = (client) => {
+  openai = client;
+};
 
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6; // 6 hours
@@ -42,7 +50,7 @@ Always avoid medical, legal, or safety-critical advice. If the user asks for hel
 
 const createSession = ({ userId, persona = 'supportive', mood = 'neutral', language = 'en' }) => {
   cleanOldSessions();
-  const sessionId = uuidv4();
+  const sessionId = crypto.randomUUID();
   const session = {
     sessionId,
     userId: userId || null,
@@ -130,4 +138,5 @@ module.exports = {
   createSession,
   getSession,
   sendMessage,
+  setOpenAIClient,
 };

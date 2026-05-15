@@ -15,6 +15,21 @@
   color: #4b5563;
 }
 
+.voice-friend-summary {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #475569;
+  font-size: 0.95rem;
+}
+
+.voice-friend-summary span {
+  background: #eef2ff;
+  border-radius: 9999px;
+  padding: 6px 12px;
+}
+
 .voice-friend-controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

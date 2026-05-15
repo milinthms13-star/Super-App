@@ -18,6 +18,8 @@ const MOOD_OPTIONS = [
   { id: 'sad', label: 'Sad' },
 ];
 
+const STORAGE_KEY = 'voiceFriendState';
+
 const buildRequestHeaders = () => {
   const token = getStoredAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -62,11 +64,40 @@ const VoiceFriend = () => {
         setListening(false);
       };
     }
+
+    return () => {
+      if (recognition.current?.abort) {
+        recognition.current.abort();
+      }
+    };
   }, [language]);
 
-  const initSession = useCallback(async () => {
+  const initSession = useCallback(async (existingSessionId) => {
     try {
       setBusy(true);
+      if (existingSessionId) {
+        try {
+          const historyResponse = await axios.get(
+            buildApiUrl(`/ai-voice-friend/history/${existingSessionId}`),
+            { headers: buildRequestHeaders() }
+          );
+
+          if (historyResponse?.data?.success) {
+            const sessionData = historyResponse.data.data;
+            setSessionId(sessionData.sessionId);
+            setPersona(sessionData.persona || persona);
+            setMood(sessionData.mood || mood);
+            setLanguage(sessionData.language || language);
+            setConversation(sessionData.messages || []);
+            setStatus('Restored your previous Voice Friend session.');
+            return;
+          }
+        } catch (restoreError) {
+          console.warn('Voice Friend session restore failed:', restoreError.message);
+        }
+      }
+
+      setConversation([]);
       const response = await axios.post(
         buildApiUrl('/ai-voice-friend/init'),
         { persona, mood, language },
@@ -87,11 +118,24 @@ const VoiceFriend = () => {
   }, [persona, mood, language]);
 
   useEffect(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed?.sessionId) {
+          initSession(parsed.sessionId);
+          return;
+        }
+      } catch (error) {
+        console.warn('Unable to restore Voice Friend state:', error);
+      }
+    }
     initSession();
   }, [initSession]);
 
   const speakText = useCallback((text) => {
     if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = language || 'en-IN';
     utterance.rate = 1.0;
@@ -100,9 +144,17 @@ const VoiceFriend = () => {
   }, [language]);
 
   const sendMessage = async () => {
+    if (busy) {
+      return;
+    }
+
     const trimmed = String(messageText || '').trim();
-    if (!trimmed || !sessionId) {
-      setStatus('Please type a message before sending.');
+    if (!trimmed) {
+      setStatus('Please type or speak a message before sending.');
+      return;
+    }
+    if (!sessionId) {
+      setStatus('Setting up your Voice Friend session. Please wait a moment.');
       return;
     }
 
@@ -131,9 +183,27 @@ const VoiceFriend = () => {
     }
   };
 
+  useEffect(() => {
+    if (!sessionId) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ sessionId, persona, mood, language, conversation })
+    );
+  }, [sessionId, persona, mood, language, conversation]);
+
   const handleVoiceStart = () => {
     if (!recognition.current) {
       setStatus('Voice input is not supported in this browser.');
+      return;
+    }
+    if (listening) {
+      recognition.current.stop();
+      setListening(false);
+      setStatus('Voice capture stopped.');
       return;
     }
     try {
@@ -151,6 +221,17 @@ const VoiceFriend = () => {
     sendMessage();
   };
 
+  const handleResetSession = async () => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setConversation([]);
+    setMessageText('');
+    setStatus('Resetting Voice Friend session...');
+    localStorage.removeItem(STORAGE_KEY);
+    await initSession();
+  };
+
   const conversationList = useMemo(() => {
     return conversation.map((item, index) => (
       <div key={`${item.role}-${index}`} className={`voice-friend-bubble ${item.role}`}>
@@ -165,6 +246,12 @@ const VoiceFriend = () => {
       <div className="voice-friend-header">
         <h1>AI Voice Friend</h1>
         <p>Emotion-aware chat companion with voice input and supportive guidance.</p>
+        <div className="voice-friend-summary">
+          <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
+          <span><strong>Mood:</strong> {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
+          <span><strong>Language:</strong> {language.toUpperCase()}</span>
+          <span><strong>Messages:</strong> {conversation.length}</span>
+        </div>
       </div>
 
       <div className="voice-friend-controls">
@@ -207,11 +294,14 @@ const VoiceFriend = () => {
           rows={3}
         />
         <div className="voice-friend-actions">
-          <button type="button" className="voice-friend-button" onClick={handleVoiceStart} disabled={busy || listening}>
-            {listening ? 'Listening...' : speechSupported ? 'Speak' : 'Voice Unsupported'}
+          <button type="button" className="voice-friend-button" onClick={handleVoiceStart} disabled={busy}>
+            {listening ? 'Stop Listening' : speechSupported ? 'Speak' : 'Voice Unsupported'}
           </button>
-          <button type="submit" className="voice-friend-button primary" disabled={busy || !messageText.trim()}>
-            Send
+          <button type="submit" className="voice-friend-button primary" disabled={busy || (!messageText.trim() && !listening)}>
+            {busy ? 'Sending...' : 'Send'}
+          </button>
+          <button type="button" className="voice-friend-button" onClick={handleResetSession} disabled={busy}>
+            Reset
           </button>
         </div>
       </form>
