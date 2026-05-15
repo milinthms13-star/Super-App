@@ -542,6 +542,166 @@ const getFinanceAdvice = (sign) =>
     pisces: "Use a simple savings rule to avoid emotional spending.",
   }[sign] || "Keep spending simple and aligned to your plan.");
 
+const clampScore = (value, min = 0, max = 100) =>
+  Math.min(max, Math.max(min, Math.round(Number(value) || 0)));
+
+const SIGN_FOCUS_THEMES = {
+  aries: {
+    theme: "decisive action",
+    workAction: "finish one difficult task before lunch",
+    moneyAction: "delay non-essential spending for 24 hours",
+    relationshipAction: "use direct but respectful words in key conversations",
+  },
+  taurus: {
+    theme: "steady consistency",
+    workAction: "follow your schedule and avoid last-minute switching",
+    moneyAction: "review subscriptions and trim one leak",
+    relationshipAction: "show support through practical help",
+  },
+  gemini: {
+    theme: "clear communication",
+    workAction: "send follow-up messages on pending items",
+    moneyAction: "track small daily expenses before planning bigger buys",
+    relationshipAction: "clarify expectations early instead of assuming",
+  },
+  cancer: {
+    theme: "emotional stability",
+    workAction: "set boundaries and protect your focus windows",
+    moneyAction: "prioritize family essentials before optional spends",
+    relationshipAction: "listen first, then respond calmly",
+  },
+  leo: {
+    theme: "visible leadership",
+    workAction: "lead one task and delegate one task",
+    moneyAction: "postpone image-based purchases this week",
+    relationshipAction: "balance confidence with appreciation",
+  },
+  virgo: {
+    theme: "systems and precision",
+    workAction: "improve one process and document it",
+    moneyAction: "update your budget and set a strict cap",
+    relationshipAction: "avoid overcorrecting and speak with warmth",
+  },
+  libra: {
+    theme: "balanced choices",
+    workAction: "prioritize quality over speed in one important task",
+    moneyAction: "set a comfort-spend limit before shopping",
+    relationshipAction: "address unresolved points diplomatically",
+  },
+  scorpio: {
+    theme: "focused depth",
+    workAction: "resolve one sensitive issue without delay",
+    moneyAction: "recheck debt, dues, and payment dates",
+    relationshipAction: "replace suspicion with clear questions",
+  },
+  sagittarius: {
+    theme: "structured expansion",
+    workAction: "start one new learning action tied to your goals",
+    moneyAction: "split funds into essentials, growth, and reserve",
+    relationshipAction: "be honest without being blunt",
+  },
+  capricorn: {
+    theme: "discipline and long-term planning",
+    workAction: "commit to a realistic milestone and complete it",
+    moneyAction: "protect cash flow and avoid risky commitments",
+    relationshipAction: "share plans early to prevent confusion",
+  },
+  aquarius: {
+    theme: "innovative clarity",
+    workAction: "pitch one practical improvement idea",
+    moneyAction: "use a digital tracker for all transactions today",
+    relationshipAction: "communicate unconventional ideas patiently",
+  },
+  pisces: {
+    theme: "grounded intuition",
+    workAction: "time-block your day to reduce distractions",
+    moneyAction: "follow a fixed savings rule before spending",
+    relationshipAction: "speak feelings clearly instead of hinting",
+  },
+};
+
+const getSignFocusTheme = (sign) =>
+  SIGN_FOCUS_THEMES[sign] || {
+    theme: "steady progress",
+    workAction: "complete pending priorities one by one",
+    moneyAction: "keep spending aligned to essentials",
+    relationshipAction: "keep communication calm and clear",
+  };
+
+const getFutureClarityMetrics = (sign, energyScore) => {
+  const signWeight = {
+    aries: 2,
+    taurus: 4,
+    gemini: 6,
+    cancer: 8,
+    leo: 10,
+    virgo: 12,
+    libra: 14,
+    scorpio: 16,
+    sagittarius: 18,
+    capricorn: 20,
+    aquarius: 22,
+    pisces: 24,
+  }[sign] || 11;
+
+  const normalizedEnergy = clampScore(energyScore, 1, 10);
+  const momentum = clampScore(48 + signWeight + normalizedEnergy * 2, 35, 95);
+  const stability = clampScore(44 + Math.floor(signWeight / 2) + normalizedEnergy * 2, 32, 93);
+  const caution = clampScore(72 - normalizedEnergy * 3 + (signWeight % 6), 12, 88);
+
+  return { momentum, stability, caution };
+};
+
+const getActionOutcomeScenarios = (sign) => {
+  const focus = getSignFocusTheme(sign);
+  return [
+    {
+      title: "Work and Goals",
+      action: focus.workAction,
+      ifDone:
+        "Likely outcome: stronger momentum, faster closure on pending tasks, and less pressure by evening.",
+      ifSkipped:
+        "Likely outcome: delay spillover into the next day and avoidable stress around unfinished priorities.",
+    },
+    {
+      title: "Money and Decisions",
+      action: focus.moneyAction,
+      ifDone:
+        "Likely outcome: better control over cash flow and more confidence for upcoming financial choices.",
+      ifSkipped:
+        "Likely outcome: impulse-led decisions may reduce flexibility later this week.",
+    },
+    {
+      title: "Relationships and Communication",
+      action: focus.relationshipAction,
+      ifDone:
+        "Likely outcome: cleaner conversations, improved trust, and fewer misunderstandings.",
+      ifSkipped:
+        "Likely outcome: small communication gaps can become bigger emotional friction.",
+    },
+  ];
+};
+
+const getFutureTimelineCards = (sign) => {
+  const focus = getSignFocusTheme(sign);
+  return [
+    {
+      window: "Next 48 hours",
+      guidance: `Stay close to ${focus.theme}. Keep plans simple and avoid over-committing.`,
+    },
+    {
+      window: "Next 7 days",
+      guidance:
+        "Consistency matters more than intensity. Small daily actions will produce visible results by week end.",
+    },
+    {
+      window: "Next 30 days",
+      guidance:
+        "If you keep discipline in work, money, and communication, this period can become a clear growth cycle.",
+    },
+  ];
+};
+
 const getRemedyTips = (sign) => [
   ({
     aries: "Recite Ganapathi mantra before starting major work.",
@@ -785,6 +945,18 @@ const AstrologyHome = () => {
   });
 
   const todayEnergyScore = ((getLuckyNumber(selectedSign) + new Date().getDate()) % 10) || 10;
+  const futureClarityMetrics = useMemo(
+    () => getFutureClarityMetrics(selectedSign, todayEnergyScore),
+    [selectedSign, todayEnergyScore]
+  );
+  const actionOutcomeScenarios = useMemo(
+    () => getActionOutcomeScenarios(selectedSign),
+    [selectedSign]
+  );
+  const futureTimelineCards = useMemo(
+    () => getFutureTimelineCards(selectedSign),
+    [selectedSign]
+  );
   const birthAstroPreview = useMemo(
     () =>
       calculateBirthAstroProfile(
@@ -1146,7 +1318,60 @@ const AstrologyHome = () => {
                   <article className="astrology-panel astro-result-card"><h4>Career advice</h4><p>{getCareerAdvice(selectedSign)}</p></article>
                   <article className="astrology-panel astro-result-card"><h4>Finance advice</h4><p>{getFinanceAdvice(selectedSign)}</p></article>
                   <article className="astrology-panel astro-result-card"><h4>Remedies</h4><ul>{getRemedyTips(selectedSign).map((tip) => <li key={tip}>{tip}</li>)}</ul></article>
-                  <article className="astrology-panel astro-result-card"><h4>Panchangam</h4><ul><li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li><li>Nakshatra: {getNakshatraDisplayName(panchangam?.nakshatra || profileApi.profileDraft.nakshatra || getNakshatraFromSign(selectedSign), language)}</li><li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li></ul><button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button></article>
+                  <article className="astrology-panel astro-result-card">
+                    <h4>Panchangam</h4>
+                    <ul>
+                      <li>Tithi: {panchangam?.tithi || "Shukla Paksha Tritiya"}</li>
+                      <li>Nakshatra: {getNakshatraDisplayName(panchangam?.nakshatra || profileApi.profileDraft.nakshatra || getNakshatraFromSign(selectedSign), language)}</li>
+                      <li>Rahu Kalam: {panchangam?.rahuKalam || "10:30 AM - 12:00 PM"}</li>
+                    </ul>
+                    <button type="button" className="astrology-save-button" onClick={handleQuickSave}>Save report</button>
+                  </article>
+                  <article className="astrology-panel astro-result-card astro-span-2 astro-future-clarity-card">
+                    <h4>Future clarity dashboard</h4>
+                    <p>Use this directional map for planning. If you act with consistency, outcomes usually improve in the same cycle.</p>
+                    <div className="astro-future-metric-grid">
+                      <div className="astro-future-metric-card">
+                        <span>Momentum</span>
+                        <strong>{futureClarityMetrics.momentum}%</strong>
+                        <div className="astro-future-meter"><span style={{ width: `${futureClarityMetrics.momentum}%` }} /></div>
+                      </div>
+                      <div className="astro-future-metric-card">
+                        <span>Stability</span>
+                        <strong>{futureClarityMetrics.stability}%</strong>
+                        <div className="astro-future-meter"><span style={{ width: `${futureClarityMetrics.stability}%` }} /></div>
+                      </div>
+                      <div className="astro-future-metric-card">
+                        <span>Caution</span>
+                        <strong>{futureClarityMetrics.caution}%</strong>
+                        <div className="astro-future-meter is-caution"><span style={{ width: `${futureClarityMetrics.caution}%` }} /></div>
+                      </div>
+                    </div>
+                  </article>
+                  <article className="astrology-panel astro-result-card astro-span-2">
+                    <h4>If you do this, this is likely to happen</h4>
+                    <div className="astro-outcome-grid">
+                      {actionOutcomeScenarios.map((scenario) => (
+                        <article key={scenario.title} className="astro-outcome-card">
+                          <h5>{scenario.title}</h5>
+                          <p className="astro-outcome-action"><strong>Action:</strong> {scenario.action}</p>
+                          <p><span className="astro-outcome-badge is-positive">Likely if done</span>{scenario.ifDone}</p>
+                          <p><span className="astro-outcome-badge is-warning">If ignored</span>{scenario.ifSkipped}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </article>
+                  <article className="astrology-panel astro-result-card astro-span-2">
+                    <h4>Future timeline</h4>
+                    <div className="astro-timeline-grid">
+                      {futureTimelineCards.map((item) => (
+                        <article key={item.window} className="astro-timeline-card">
+                          <strong>{item.window}</strong>
+                          <p>{item.guidance}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </article>
                   <article className="astrology-panel astro-result-card">
                     <h4>Horoscope actions</h4>
 <button type="button" className="astrology-save-button" onClick={handleGenerateReport}>Generate horoscope report</button>
@@ -1171,7 +1396,17 @@ const AstrologyHome = () => {
                         : "Download total horoscope"}
                     </button>
                   </article>
-                  {showFullPrediction ? <HoroscopeCard sign={selectedSignDetails} horoscope={reading} loading={loading} notice={readingNotice || signsNotice} /> : null}
+                  {showFullPrediction ? (
+                    <HoroscopeCard
+                      sign={selectedSignDetails}
+                      horoscope={reading}
+                      loading={loading}
+                      notice={readingNotice || signsNotice}
+                      energyScore={todayEnergyScore}
+                      futureTimeline={futureTimelineCards}
+                      actionScenarios={actionOutcomeScenarios}
+                    />
+                  ) : null}
                 </>
               ) : (
                 <article className="astrology-panel astro-result-card astro-span-2">
@@ -1343,4 +1578,3 @@ const AstrologyHome = () => {
 };
 
 export default AstrologyHome;
-

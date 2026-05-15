@@ -397,6 +397,11 @@
   margin: 0 0 8px;
 }
 
+.astro-result-card h5 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
 .astro-result-card p,
 .astro-result-card li,
 .astrology-history-empty {
@@ -412,6 +417,239 @@
   padding-left: 18px;
   display: grid;
   gap: 6px;
+}
+
+.astro-future-clarity-card {
+  background:
+    radial-gradient(circle at 96% 0%, rgba(200, 155, 60, 0.24), transparent 36%),
+    radial-gradient(circle at 0% 95%, rgba(15, 85, 80, 0.16), transparent 36%),
+    #fff6e6;
+}
+
+.astro-future-metric-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.astro-future-metric-card {
+  border: 1px solid var(--astro-border);
+  border-radius: 12px;
+  background: #fffdf7;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.astro-future-metric-card span {
+  font-size: 0.82rem;
+  color: var(--astro-muted);
+}
+
+.astro-future-meter {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(15, 85, 80, 0.16);
+  overflow: hidden;
+}
+
+.astro-future-meter span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #0f5550, #c89b3c);
+  border-radius: inherit;
+}
+
+.astro-future-meter.is-caution span {
+  background: linear-gradient(90deg, #c1782d, #ad412f);
+}
+
+.astro-outcome-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.astro-outcome-card {
+  border: 1px solid var(--astro-border);
+  border-radius: 12px;
+  background: #fffdf7;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.astro-outcome-card p {
+  display: grid;
+  gap: 6px;
+}
+
+.astro-outcome-action {
+  color: var(--astro-ink);
+}
+
+.astro-outcome-badge {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.astro-outcome-badge.is-positive {
+  color: #175639;
+  background: rgba(23, 86, 57, 0.14);
+}
+
+.astro-outcome-badge.is-warning {
+  color: #8a4d18;
+  background: rgba(138, 77, 24, 0.16);
+}
+
+.astro-timeline-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.astro-timeline-card {
+  border: 1px solid var(--astro-border);
+  border-radius: 12px;
+  background: #fffdf7;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.astrology-card {
+  --astrology-accent: var(--astro-gold);
+  grid-column: span 2;
+  border: 1px solid var(--astro-border);
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(255, 253, 247, 0.98), rgba(255, 244, 221, 0.95));
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.astrology-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.astrology-card-kicker {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #704f16;
+  background: rgba(200, 155, 60, 0.2);
+}
+
+.astrology-card-header h2 {
+  margin: 6px 0 0;
+  font-size: 1.2rem;
+}
+
+.astrology-card-meta {
+  display: grid;
+  justify-items: end;
+  text-align: right;
+  gap: 4px;
+}
+
+.astrology-card-meta span {
+  font-size: 0.8rem;
+  color: var(--astro-muted);
+}
+
+.astrology-card-meta strong {
+  color: #165248;
+}
+
+.astrology-card-loading,
+.astrology-card-notice,
+.astrology-card-body {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.astrology-card-body {
+  color: var(--astro-ink);
+}
+
+.astrology-card-signal-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.astrology-card-signal {
+  border: 1px solid var(--astro-border);
+  background: #fffdf7;
+  border-radius: 10px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.astrology-card-signal strong {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--astro-muted);
+}
+
+.astrology-card-signal em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--astro-ink);
+}
+
+.astrology-card-outcomes,
+.astrology-card-timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.astrology-card-outcomes h3 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.astrology-card-outcome,
+.astrology-card-timeline > div {
+  border: 1px solid var(--astro-border);
+  border-radius: 10px;
+  background: #fffdf7;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.astrology-card-outcome p,
+.astrology-card-outcome small,
+.astrology-card-timeline p {
+  margin: 0;
+  color: var(--astro-muted);
+}
+
+.astrology-card-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--astro-muted);
+  font-size: 0.8rem;
+  border-top: 1px dashed rgba(19, 53, 52, 0.2);
+  padding-top: 8px;
 }
 
 .astro-span-2 {
@@ -569,6 +807,20 @@
 
   .astro-span-2 {
     grid-column: auto;
+  }
+
+  .astro-future-metric-grid,
+  .astro-outcome-grid,
+  .astro-timeline-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .astrology-card {
+    grid-column: auto;
+  }
+
+  .astrology-card-signal-row {
+    grid-template-columns: 1fr;
   }
 }
 
