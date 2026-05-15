@@ -922,16 +922,25 @@ function AppShell() {
   );
 
   const handleToggleModule = useCallback(async (moduleId) => {
-    const response = await axios.patch(
-      `${API_BASE_URL}/app-data/enabled-modules/${moduleId}`,
-      {}
-    );
+    try {
+      const response = await axios.patch(
+        `${API_BASE_URL}/app-data/enabled-modules/${moduleId}`,
+        {}
+      );
 
-    if (!response.data?.success) {
-      throw new Error("Module update failed.");
+      if (!response.data?.success) {
+        throw new Error("Module update failed.");
+      }
+
+      setEnabledModules(normalizeEnabledModules(response.data.data?.enabledModules));
+      setAppDataError("");
+      return true;
+    } catch (error) {
+      setAppDataError(
+        error.response?.data?.message || "Module visibility could not be updated."
+      );
+      return false;
     }
-
-    setEnabledModules(normalizeEnabledModules(response.data.data?.enabledModules));
   }, []);
 
   const handleReviewRegistration = useCallback(async (applicationId, action, reason) => {

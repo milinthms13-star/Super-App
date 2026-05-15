@@ -172,7 +172,11 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     };
 
     document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
   }, [showMoreMenu]);
 
   useEffect(() => {
@@ -330,34 +334,35 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
               {t("common.menu", "Menu")}
             </button>
 
-            <div className="nav-menu" aria-label="Primary navigation">
-              {getPrimaryNavModules().map((module) => (
-                <button
-                  key={module.id}
-                  className={`nav-link polished ${currentModule === module.id ? "nav-link-active" : ""}`}
-                  onClick={() => handleModuleClick(module.id)}
-                  aria-current={currentModule === module.id ? "page" : undefined}
-                >
-                  {module.label}
-                </button>
-              ))}
-
-              {moreNavModules.length > 0 && (
-                <div className="nav-more-wrapper" ref={moreMenuRef}>
+            <div className="nav-menu-wrapper">
+              <div className="nav-menu" aria-label="Primary navigation">
+                {getPrimaryNavModules().map((module) => (
                   <button
-                    type="button"
-                    className={`nav-more-btn polished ${showMoreMenu ? "active" : ""}`}
-                    onClick={() => setShowMoreMenu((prev) => !prev)}
-                    title="View more modules"
-                    aria-expanded={showMoreMenu}
-                    aria-haspopup="menu"
+                    key={module.id}
+                    className={`nav-link polished ${currentModule === module.id ? "nav-link-active" : ""}`}
+                    onClick={() => handleModuleClick(module.id)}
+                    aria-current={currentModule === module.id ? "page" : undefined}
                   >
-                    <span>More</span>
-                    <span className="more-indicator">▼</span>
+                    {module.label}
                   </button>
+                ))}
 
-                  {showMoreMenu && (
-                    <div className="nav-categories-dropdown" role="menu">
+                {moreNavModules.length > 0 && (
+                  <div className="nav-more-wrapper" ref={moreMenuRef}>
+                    <button
+                      type="button"
+                      className={`nav-more-btn polished ${showMoreMenu ? "active" : ""}`}
+                      onClick={() => setShowMoreMenu((prev) => !prev)}
+                      title="View more modules"
+                      aria-expanded={showMoreMenu}
+                      aria-haspopup="menu"
+                    >
+                      <span>More</span>
+                      <span className="more-indicator">▼</span>
+                    </button>
+
+                    {showMoreMenu && (
+                      <div className="nav-categories-dropdown" role="menu">
                       {categorizedMoreModules.map(([catKey, catData]) => (
                         <div key={catKey} className="nav-categories-group">
                           <div className="nav-category-header">

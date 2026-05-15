@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const Joi = require('joi');
 const multer = require('multer');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, hasAdminPrivileges } = require('../middleware/auth');
 const {
   createListingLimiter,
   messageLimiter,
@@ -1369,7 +1369,7 @@ const findRealEstateVisitConflict = (properties = [], candidateVisit = {}, owner
 };
 
 const adminOnly = (req, res, next) => {
-  if (req.user?.email?.trim().toLowerCase() !== ADMIN_EMAIL) {
+  if (!hasAdminPrivileges(req.user)) {
     return res.status(403).json({
       success: false,
       message: 'Admin access required',
