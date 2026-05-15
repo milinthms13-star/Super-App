@@ -32,11 +32,11 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/'
   ],
-  // Force a deterministic CJS environment for ESM-only dependencies (e.g. uuid v9+).
-  // We map uuid to its CommonJS build.
+  // uuid v14 is ESM-only; map to a test-safe CJS mock so legacy CJS tests can run.
   moduleNameMapper: {
-    '^uuid$': 'uuid/dist-node/index.js',
-    '^uuid/(.*)$': 'uuid/dist-node/$1'
+    '^uuid$': '<rootDir>/tests/mocks/uuid.js',
+    '^uuid/(.*)$': '<rootDir>/tests/mocks/uuid.js',
+    '^ffmpeg-static$': '<rootDir>/tests/mocks/ffmpeg-static.js'
   }
 };
 

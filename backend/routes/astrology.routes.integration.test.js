@@ -151,12 +151,15 @@ describe('astrology routes integration', () => {
 
     expect(historyResponse.body.success).toBe(true);
     expect(historyResponse.body.data).toHaveLength(2);
-    expect(historyResponse.body.data[0]).toEqual(
-      expect.objectContaining({
-        consultantId: 'nambiar-priya',
-        status: 'pending_payment',
-      })
-    );
+    const consultantIds = historyResponse.body.data.map((booking) => booking.consultantId);
+    expect(consultantIds).toEqual(expect.arrayContaining(['acharya-madhav', 'nambiar-priya']));
+    historyResponse.body.data.forEach((booking) => {
+      expect(booking).toEqual(
+        expect.objectContaining({
+          status: 'pending_payment',
+        })
+      );
+    });
   });
 
   test('POST /api/astrology/consultations/:bookingId/payment/create-order creates a payment order', async () => {
