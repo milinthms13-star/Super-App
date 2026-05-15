@@ -817,11 +817,6 @@ const RealEstate = () => {
   const buyerQuickStats = dashboardStats.slice(0, 3);
 
   const openSellerWorkspace = useCallback((options = {}) => {
-    if (!allowedRoleModes.includes("owner")) {
-      pushToast("Enable seller access to post properties.", "info");
-      return false;
-    }
-
     setActiveRole("owner");
     setSellerWorkspaceMode(true);
     setSelectedPropertyId("");
@@ -842,7 +837,7 @@ const RealEstate = () => {
       });
     }
     return true;
-  }, [allowedRoleModes, pushToast]);
+  }, [pushToast]);
 
   const handleOpenSellerWorkspace = () => {
     openSellerWorkspace({ postingType: "property" });

@@ -167,18 +167,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     [favorites]
   );
 
-  const canPostProperty =
-    currentUser?.registrationType === "entrepreneur" ||
-    currentUser?.role === "business" ||
-    currentUser?.registrationType === "admin" ||
-    currentUser?.role === "admin";
-
-  const redirectToWorkspace = ({ postingType = "property", requireSeller = false } = {}) => {
-    if (requireSeller && !canPostProperty) {
-      pushToast("Upgrade to a seller account to post property listings.", "info");
-      return false;
-    }
-
+  const redirectToWorkspace = ({ postingType = "property" } = {}) => {
     // Use "seller" so both legacy and current real-estate shells route correctly.
     const movedToDashboard = onNavigateToDashboard?.("seller", { postingType });
     if (!movedToDashboard) {
@@ -187,10 +176,8 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     return movedToDashboard;
   };
 
-  const handlePostPropertyClick = () =>
-    redirectToWorkspace({ postingType: "property", requireSeller: true });
-  const handlePostRequirementClick = () =>
-    redirectToWorkspace({ postingType: "requirement", requireSeller: false });
+  const handlePostPropertyClick = () => redirectToWorkspace({ postingType: "property" });
+  const handlePostRequirementClick = () => redirectToWorkspace({ postingType: "requirement" });
 
   const handleFavoriteToggle = (propertyId) => {
     const fullId = `realestate-${propertyId}`;
