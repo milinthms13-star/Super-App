@@ -858,11 +858,11 @@ const RealEstate = () => {
     }
   }, [location.search, openSellerWorkspace]);
 
-  const scrollToBuyerListings = () => {
-    if (typeof document === "undefined") return;
-    const target = document.querySelector(".homesphere-listings-container");
+  useEffect(() => {
+    if (!isBuyerMode || typeof document === "undefined") return;
+    const target = document.querySelector(".homesphere-shell");
     target?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  }, [isBuyerMode]);
 
   return (
     <div className="realestate-shell">

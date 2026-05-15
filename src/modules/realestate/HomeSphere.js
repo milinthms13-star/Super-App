@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
 import PropertyCard from "./components/PropertyCard";
 import PropertyDetailTabs from "./components/PropertyDetailTabs";
@@ -89,6 +89,13 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     () => ["All", ...new Set(properties.map((property) => property.type))],
     [properties]
   );
+
+  const listingSectionRef = useRef(null);
+
+  const handleExploreListings = () => {
+    setIntentFilter("all");
+    listingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const heroStats = useMemo(() => {
     const verifiedCount = properties.filter((property) => property.verified).length;
@@ -340,7 +347,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
             <button
               type="button"
               className="realestate-secondary-button"
-              onClick={() => setIntentFilter("all")}
+              onClick={handleExploreListings}
             >
               Explore Listings
             </button>
@@ -385,7 +392,7 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
         {/* FEATURED LISTINGS GRID */}
         <section className="homesphere-listings-section">
           <article className="homesphere-listings-container">
-            <div className="homesphere-listings-header">
+            <div className="homesphere-listings-header" ref={listingSectionRef}>
               <h2>Featured properties</h2>
               <p>Tap a listing to open complete details and owner actions.</p>
             </div>

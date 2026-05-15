@@ -6893,6 +6893,7 @@ input:checked + .toggle-slider:before {
   height: 300px;
   border-radius: 50%;
   border: 40px solid rgba(15, 118, 110, 0.08);
+  pointer-events: none;
 }
 
 .classifieds-eyebrow {
