@@ -891,7 +891,8 @@ const renderVideo = async (project, premiumHD = false) => {
   }
 
   await ensureUploadsRoot();
-  const outputDir = path.join(uploadsRoot, project.projectId || uuidv4());
+  const safeProjectId = safeFileName(project.projectId || uuidv4());
+  const outputDir = path.join(uploadsRoot, safeProjectId);
   await mkdir(outputDir, { recursive: true });
 
   const resolution = getResolution(project.videoSize);
@@ -901,7 +902,7 @@ const renderVideo = async (project, premiumHD = false) => {
   }
   const listPath = path.join(outputDir, 'scenes.txt');
   const listContent = sceneAssets
-    .map((scene) => `file '${scene.path.replace(/\\/g, '/')}\nduration ${scene.duration}`)
+    .map((scene) => `file '${scene.path.replace(/\\/g, '/')}'\\nduration ${scene.duration}`)
     .join('\n') + `\nfile '${sceneAssets[sceneAssets.length - 1].path.replace(/\\/g, '/')}'\n`;
 
   await writeFile(listPath, listContent, 'utf-8');
@@ -931,7 +932,7 @@ const renderVideo = async (project, premiumHD = false) => {
 
   await runFfmpeg(ffmpegArgs, outputDir);
 
-  const videoUrl = `/uploads/video-studio/${path.basename(outputDir)}/story-render.mp4`;
+  const videoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
   const metadataPath = path.join(outputDir, 'project.json');
   await writeFile(metadataPath, JSON.stringify({ ...project, renderedAt: new Date().toISOString(), videoUrl }, null, 2), 'utf-8');
 

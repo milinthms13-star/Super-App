@@ -181,15 +181,15 @@ class OptimizationCleanupJob {
         const memUsage = process.memoryUsage();
         const heapPercentage = (memUsage.heapUsed / memUsage.heapTotal) * 100;
 
-        if (heapPercentage > 85) {
+        if (heapPercentage > 88) {
           logger.warn('Memory pressure detected:', {
             heapPercentage: heapPercentage.toFixed(2),
             heapUsed: (memUsage.heapUsed / 1024 / 1024).toFixed(2) + ' MB',
             heapTotal: (memUsage.heapTotal / 1024 / 1024).toFixed(2) + ' MB'
           });
 
-          // Clear old delta sync states if approaching memory limit
-          if (heapPercentage > 90) {
+          // Only clear delta sync states in extreme low-memory conditions.
+          if (heapPercentage > 95) {
             const statsBefore = deltaSync.getStats();
             deltaSync.clearAllStates();
             const statsAfter = deltaSync.getStats();
