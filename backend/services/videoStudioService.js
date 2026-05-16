@@ -85,6 +85,71 @@ const createSafetyError = (context, assessment) => {
   return error;
 };
 
+const buildSafetyReasonLabel = (categoryKey = '') =>
+  String(categoryKey || '')
+    .replace(/[\/_.-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const getModerationSafetyAssessment = async (value = '') => {
+  const cleanValue = sanitizeText(value);
+  if (!openai || !cleanValue) {
+    return { blocked: false, reasons: [] };
+  }
+
+  try {
+    const moderation = await openai.moderations.create({
+      model: process.env.OPENAI_MODERATION_MODEL || 'omni-moderation-latest',
+      input: cleanValue.slice(0, 12000),
+    });
+
+    const result = moderation?.results?.[0];
+    if (!result?.flagged) {
+      return { blocked: false, reasons: [] };
+    }
+
+    const categories = result?.categories && typeof result.categories === 'object' ? result.categories : {};
+    const reasons = Object.entries(categories)
+      .filter(([, flagged]) => Boolean(flagged))
+      .map(([code]) => ({
+        code: `model_${String(code).replace(/[^\w/.-]/g, '_')}`,
+        reason: buildSafetyReasonLabel(code) || 'unsafe content',
+      }));
+
+    if (!reasons.length) {
+      reasons.push({
+        code: 'model_flagged',
+        reason: 'unsafe content',
+      });
+    }
+
+    return { blocked: true, reasons };
+  } catch (_error) {
+    // Fallback safely to keyword checks when moderation endpoint is unavailable.
+    return { blocked: false, reasons: [] };
+  }
+};
+
+const getCombinedSafetyAssessment = async (value = '') => {
+  const keywordAssessment = getSafetyAssessment(value);
+  const moderationAssessment = await getModerationSafetyAssessment(value);
+
+  const reasons = [];
+  const seen = new Set();
+  [...keywordAssessment.reasons, ...moderationAssessment.reasons].forEach((reason) => {
+    const key = `${reason.code}:${reason.reason}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      reasons.push(reason);
+    }
+  });
+
+  return {
+    blocked: reasons.length > 0,
+    reasons,
+  };
+};
+
 const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
   if (!openai) return null;
 
@@ -413,7 +478,7 @@ const createAutopilotProject = async ({
     throw new Error('Subject is required.');
   }
   if (safeMode) {
-    const assessment = getSafetyAssessment(cleanSubject);
+    const assessment = await getCombinedSafetyAssessment(cleanSubject);
     if (assessment.blocked) {
       throw createSafetyError('subject', assessment);
     }
@@ -469,7 +534,7 @@ const regenerateProjectStage = async (projectId, stage, options = {}) => {
   if (normalizedStage === 'script') {
     const safeSubject = sanitizeText(options.subject || project.subject || project.storyTitle);
     if (project.safeMode) {
-      const assessment = getSafetyAssessment(safeSubject);
+      const assessment = await getCombinedSafetyAssessment(safeSubject);
       if (assessment.blocked) {
         throw createSafetyError('subject', assessment);
       }
@@ -583,7 +648,7 @@ const patchStudioProject = async (projectId, patch = {}) => {
       .map((value) => sanitizeText(value))
       .filter(Boolean)
       .join(' ');
-    const assessment = getSafetyAssessment(safetyInput);
+    const assessment = await getCombinedSafetyAssessment(safetyInput);
     if (assessment.blocked) {
       throw createSafetyError('project_patch', assessment);
     }
@@ -603,7 +668,7 @@ const createStudioProject = async ({ storyTitle, storyPrompt, languageId, styleI
     throw new Error(`Story prompt exceeds ${MAX_STORY_LENGTH} characters.`);
   }
   if (safeMode) {
-    const assessment = getSafetyAssessment(normalizedStoryPrompt);
+    const assessment = await getCombinedSafetyAssessment(normalizedStoryPrompt);
     if (assessment.blocked) {
       throw createSafetyError('story_prompt', assessment);
     }
@@ -806,6 +871,25 @@ const runFfmpeg = async (args, cwd) => {
 };
 
 const renderVideo = async (project, premiumHD = false) => {
+  if (project?.safeMode) {
+    const safetyInput = [
+      project?.title,
+      project?.storyPrompt,
+      project?.narration,
+      ...(Array.isArray(project?.scenes)
+        ? project.scenes.flatMap((scene) => [scene?.title, scene?.description, scene?.dialogue])
+        : []),
+    ]
+      .map((value) => sanitizeText(value))
+      .filter(Boolean)
+      .join(' ');
+
+    const assessment = await getCombinedSafetyAssessment(safetyInput);
+    if (assessment.blocked) {
+      throw createSafetyError('render_project', assessment);
+    }
+  }
+
   await ensureUploadsRoot();
   const outputDir = path.join(uploadsRoot, project.projectId || uuidv4());
   await mkdir(outputDir, { recursive: true });

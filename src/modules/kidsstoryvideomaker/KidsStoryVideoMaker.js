@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import "./KidsStoryVideoMaker.css";
 import {
   LOCAL_CHARACTER_PRESET_KEY,
@@ -25,6 +26,9 @@ import {
   regenerateStage,
   renderProject,
 } from "./videoStudioApi";
+import SceneCards from "./components/SceneCards";
+import TimelineCards from "./components/TimelineCards";
+import CharacterCards from "./components/CharacterCards";
 
 const LANGUAGE_OPTIONS = [
   { id: "english", label: "English", code: "en-US" },
@@ -193,6 +197,7 @@ const createClientFallbackProject = ({
 const getSceneId = (scene, index) => String(scene?.id || index + 1);
 
 const KidsStoryVideoMaker = () => {
+  const { t } = useTranslation();
   const recognitionRef = useRef(null);
   const voiceTargetRef = useRef("");
   const mainContentRef = useRef(null);
@@ -462,6 +467,29 @@ const KidsStoryVideoMaker = () => {
     persistCharacterPresets(next);
     setError("");
     setMessage("Character preset removed.");
+  };
+
+  const handleCharacterFieldChange = (index, field, value) => {
+    setGeneratedProject((current) => {
+      if (!current) return current;
+      const characters = [...(current.characters || [])];
+      characters[index] = { ...characters[index], [field]: value };
+      return { ...current, characters };
+    });
+    markSectionDirty("characters");
+  };
+
+  const handleCharacterLockToggle = (index) => {
+    setGeneratedProject((current) => {
+      if (!current) return current;
+      const characters = [...(current.characters || [])];
+      characters[index] = {
+        ...characters[index],
+        locked: characters[index]?.locked === false,
+      };
+      return { ...current, characters };
+    });
+    markSectionDirty("characters");
   };
 
   const applyProjectSnapshotToStudio = (incomingProject, successText = "Project loaded.") => {
@@ -1253,13 +1281,13 @@ const KidsStoryVideoMaker = () => {
 
       <section className="studio-tabs">
         {[
-          { id: "dashboard", label: "Dashboard" },
-          { id: "create", label: "Create" },
-          { id: "characters", label: "Characters" },
-          { id: "scenes", label: "Scenes" },
-          { id: "audio", label: "Audio" },
-          { id: "export", label: "Export" },
-          { id: "myprojects", label: "My Projects" },
+          { id: "dashboard", label: t("kidsstory.tabs.dashboard", { defaultValue: "Dashboard" }) },
+          { id: "create", label: t("kidsstory.tabs.create", { defaultValue: "Create" }) },
+          { id: "characters", label: t("kidsstory.tabs.characters", { defaultValue: "Characters" }) },
+          { id: "scenes", label: t("kidsstory.tabs.scenes", { defaultValue: "Scenes" }) },
+          { id: "audio", label: t("kidsstory.tabs.audio", { defaultValue: "Audio" }) },
+          { id: "export", label: t("kidsstory.tabs.export", { defaultValue: "Export" }) },
+          { id: "myprojects", label: t("kidsstory.tabs.myProjects", { defaultValue: "My Projects" }) },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1685,80 +1713,12 @@ const KidsStoryVideoMaker = () => {
                 </div>
               )}
               {generatedProject ? (
-                <div className="character-grid">
-                  {(generatedProject.characters || []).map((character, index) => (
-                    <div key={index} className="character-card">
-                      <div className="character-avatar">{character.name?.charAt(0) || "C"}</div>
-                      <div className="character-details">
-                        <strong>{character.name || `Character ${index + 1}`}</strong>
-                        <span>{character.role || "Story role"}</span>
-                        <span>{character.voiceProfile || voiceType}</span>
-                      </div>
-                      <label>Name</label>
-                      <input
-                        type="text"
-                        value={character.name || ""}
-                        onChange={(event) => {
-                          setGeneratedProject((current) => {
-                            if (!current) return current;
-                            const characters = [...(current.characters || [])];
-                            characters[index] = { ...characters[index], name: event.target.value };
-                            return { ...current, characters };
-                          });
-                          markSectionDirty("characters");
-                        }}
-                      />
-                      <label>Appearance</label>
-                      <textarea
-                        rows={2}
-                        value={character.appearance || ""}
-                        onChange={(event) => {
-                          setGeneratedProject((current) => {
-                            if (!current) return current;
-                            const characters = [...(current.characters || [])];
-                            characters[index] = { ...characters[index], appearance: event.target.value };
-                            return { ...current, characters };
-                          });
-                          markSectionDirty("characters");
-                        }}
-                      />
-                      <label>Voice</label>
-                      <input
-                        type="text"
-                        value={character.voiceProfile || ""}
-                        onChange={(event) => {
-                          setGeneratedProject((current) => {
-                            if (!current) return current;
-                            const characters = [...(current.characters || [])];
-                            characters[index] = { ...characters[index], voiceProfile: event.target.value };
-                            return { ...current, characters };
-                          });
-                          markSectionDirty("characters");
-                        }}
-                      />
-                      <div className="studio-toggle-row">
-                        <span>Character Lock</span>
-                        <button
-                          className={`pill-toggle ${character.locked !== false ? "on" : "off"}`}
-                          onClick={() => {
-                            setGeneratedProject((current) => {
-                              if (!current) return current;
-                              const characters = [...(current.characters || [])];
-                              characters[index] = {
-                                ...characters[index],
-                                locked: characters[index]?.locked === false,
-                              };
-                              return { ...current, characters };
-                            });
-                            markSectionDirty("characters");
-                          }}
-                        >
-                          {character.locked !== false ? "Locked" : "Unlocked"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <CharacterCards
+                  characters={generatedProject.characters || []}
+                  voiceType={voiceType}
+                  onCharacterChange={handleCharacterFieldChange}
+                  onCharacterToggleLock={handleCharacterLockToggle}
+                />
               ) : (
                 <p>Generate the story pipeline to preview your AI characters.</p>
               )}
@@ -1793,115 +1753,13 @@ const KidsStoryVideoMaker = () => {
                 </button>
               </div>
               <div className="preview-grid">
-                {generatedScenes.length ? (
-                  generatedScenes.map((scene, index) => {
-                    const sceneId = getSceneId(scene, index);
-                    return (
-                      <article key={sceneId} className="scene-card">
-                        <div className="scene-title-row">
-                          <span className="scene-number">Scene {sceneId}</span>
-                          <span className="scene-emotion">{scene.emotion || "gentle"}</span>
-                        </div>
-                        <div className="story-actions">
-                          <button
-                            className="secondary-button"
-                            onClick={() => handleMoveScene(index, "up")}
-                            disabled={index === 0}
-                          >
-                            Move Up
-                          </button>
-                          <button
-                            className="secondary-button"
-                            onClick={() => handleMoveScene(index, "down")}
-                            disabled={index === generatedScenes.length - 1}
-                          >
-                            Move Down
-                          </button>
-                        </div>
-
-                        <label htmlFor={`scene-title-${sceneId}`}>Title</label>
-                        <input
-                          id={`scene-title-${sceneId}`}
-                          type="text"
-                          value={scene.title || ""}
-                          onChange={(event) => handleSceneFieldChange(sceneId, "title", event.target.value)}
-                        />
-
-                        <label htmlFor={`scene-description-${sceneId}`}>Description</label>
-                        <textarea
-                          id={`scene-description-${sceneId}`}
-                          rows={4}
-                          value={scene.description || scene.summary || ""}
-                          onChange={(event) => handleSceneFieldChange(sceneId, "description", event.target.value)}
-                        />
-
-                        <label htmlFor={`scene-dialogue-${sceneId}`}>Dialogue</label>
-                        <textarea
-                          id={`scene-dialogue-${sceneId}`}
-                          rows={3}
-                          value={scene.dialogue || ""}
-                          onChange={(event) => handleSceneFieldChange(sceneId, "dialogue", event.target.value)}
-                        />
-
-                        <div className="create-grid">
-                          <div>
-                            <label htmlFor={`scene-duration-${sceneId}`}>Duration (seconds)</label>
-                            <input
-                              id={`scene-duration-${sceneId}`}
-                              type="number"
-                              min={2}
-                              max={15}
-                              value={scene.durationSeconds || 4}
-                              onChange={(event) => handleSceneDurationChange(sceneId, event.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor={`scene-weather-${sceneId}`}>Weather</label>
-                            <input
-                              id={`scene-weather-${sceneId}`}
-                              type="text"
-                              value={scene.weather || ""}
-                              onChange={(event) => handleSceneFieldChange(sceneId, "weather", event.target.value)}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="create-grid">
-                          <div>
-                            <label htmlFor={`scene-time-${sceneId}`}>Time</label>
-                            <input
-                              id={`scene-time-${sceneId}`}
-                              type="text"
-                              value={scene.timeOfDay || ""}
-                              onChange={(event) => handleSceneFieldChange(sceneId, "timeOfDay", event.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor={`scene-camera-${sceneId}`}>Camera</label>
-                            <input
-                              id={`scene-camera-${sceneId}`}
-                              type="text"
-                              value={scene.cameraActions || ""}
-                              onChange={(event) => handleSceneFieldChange(sceneId, "cameraActions", event.target.value)}
-                            />
-                          </div>
-                        </div>
-
-                        <label htmlFor={`scene-bg-${sceneId}`}>Background</label>
-                        <textarea
-                          id={`scene-bg-${sceneId}`}
-                          rows={2}
-                          value={scene.background || ""}
-                          onChange={(event) => handleSceneFieldChange(sceneId, "background", event.target.value)}
-                        />
-
-                        <div className="scene-meta">Camera: {scene.cameraActions || "soft pan"}</div>
-                      </article>
-                    );
-                  })
-                ) : (
-                  <p>No scenes yet. Use Create to build your video pipeline.</p>
-                )}
+                <SceneCards
+                  scenes={generatedScenes}
+                  getSceneId={getSceneId}
+                  onMoveScene={handleMoveScene}
+                  onFieldChange={handleSceneFieldChange}
+                  onDurationChange={handleSceneDurationChange}
+                />
               </div>
             </div>
           )}
@@ -2054,18 +1912,7 @@ const KidsStoryVideoMaker = () => {
               </div>
 
               <div className="timeline-grid">
-                {generatedScenes.length ? generatedScenes.map((scene, index) => {
-                  const sceneId = getSceneId(scene, index);
-                  return (
-                    <div key={sceneId} className="timeline-card">
-                      <div className="timeline-number">{sceneId}</div>
-                      <div>
-                        <strong>{scene.title || `Scene ${sceneId}`}</strong>
-                        <p>{scene.description || scene.summary}</p>
-                      </div>
-                    </div>
-                  );
-                }) : <p>Create the project to build your scene timeline.</p>}
+                <TimelineCards scenes={generatedScenes} getSceneId={getSceneId} />
               </div>
 
               <div className="project-actions export-actions">

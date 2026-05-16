@@ -92,6 +92,43 @@ const VoiceFriend = () => {
     [friendId]
   );
 
+  const markPendingSessionSettings = useCallback(() => {
+    setHasPendingSessionSettings(true);
+  }, []);
+
+  const handleFriendIdChange = (value) => {
+    setFriendId(value);
+    markPendingSessionSettings();
+  };
+
+  const handleUserNameChange = (value) => {
+    setUserName(value);
+    markPendingSessionSettings();
+  };
+
+  const handlePersonaChange = (value) => {
+    setPersona(value);
+    markPendingSessionSettings();
+  };
+
+  const handleMoodChange = (value) => {
+    setMood(value);
+    markPendingSessionSettings();
+  };
+
+  const handleLanguageChange = (value) => {
+    setLanguage(value);
+    markPendingSessionSettings();
+  };
+
+  const applySessionSettings = async () => {
+    if (busy) return;
+    setStatus('Applying updated Voice Friend settings...');
+    setBusy(true);
+    await initSession(undefined, friendId, userName);
+    setBusy(false);
+  };
+
   useEffect(() => {
     if (recognition.current?.abort) {
       try {
@@ -169,6 +206,14 @@ const VoiceFriend = () => {
             setUserName(sessionData.userName || sessionUserName || '');
             setConversation(sessionData.messages || []);
             setStatus('Restored your previous Voice Friend session.');
+            sessionMetaRef.current = {
+              friendId: sessionData.friendId || sessionFriendId,
+              userName: sessionData.userName || sessionUserName || '',
+              persona: sessionData.persona || persona,
+              mood: sessionData.mood || mood,
+              language: sessionData.language || language,
+            };
+            setHasPendingSessionSettings(false);
             return;
           }
         } catch (restoreError) {
@@ -186,6 +231,14 @@ const VoiceFriend = () => {
       if (response?.data?.success) {
         setSessionId(response.data.data.sessionId);
         setStatus('Voice Friend session ready. Start the conversation when you are ready.');
+        sessionMetaRef.current = {
+          friendId: sessionFriendId,
+          userName: sessionUserName || '',
+          persona,
+          mood,
+          language,
+        };
+        setHasPendingSessionSettings(false);
       } else {
         setStatus('Unable to start Voice Friend session. Please refresh.');
       }
@@ -201,24 +254,40 @@ const VoiceFriend = () => {
     if (savedState) {
       try {
         const parsed = JSON.parse(savedState);
-        if (parsed?.friendId) {
-          setFriendId(parsed.friendId);
-        }
-        if (parsed?.userName) {
-          setUserName(parsed.userName);
-        }
-        if (parsed?.friendCustomName) {
-          setFriendCustomName(parsed.friendCustomName);
-        }
-        if (parsed?.friendCustomAvatar) {
-          setFriendCustomAvatar(parsed.friendCustomAvatar);
-        }
-        if (parsed?.sessionId) {
-          initSession(parsed.sessionId, parsed.friendId, parsed.userName);
+        const savedAt = parsed?.savedAt ? new Date(parsed.savedAt).getTime() : Date.now();
+        const expiryMs = 1000 * 60 * 60 * 24; // 24 hours
+        if (Date.now() - savedAt > expiryMs) {
+          localStorage.removeItem(STORAGE_KEY);
+        } else {
+          setPersistData(parsed?.persistData !== undefined ? parsed.persistData : true);
+          if (parsed?.friendId) {
+            setFriendId(parsed.friendId);
+          }
+          if (parsed?.userName) {
+            setUserName(parsed.userName);
+          }
+          if (parsed?.persona) {
+            setPersona(parsed.persona);
+          }
+          if (parsed?.mood) {
+            setMood(parsed.mood);
+          }
+          if (parsed?.language) {
+            setLanguage(parsed.language);
+          }
+          if (parsed?.friendCustomName) {
+            setFriendCustomName(parsed.friendCustomName);
+          }
+          if (parsed?.friendCustomAvatar) {
+            setFriendCustomAvatar(parsed.friendCustomAvatar);
+          }
+          if (parsed?.sessionId) {
+            initSession(parsed.sessionId, parsed.friendId, parsed.userName);
+            return;
+          }
+          initSession(undefined, parsed.friendId, parsed.userName);
           return;
         }
-        initSession(undefined, parsed.friendId, parsed.userName);
-        return;
       } catch (error) {
         console.warn('Unable to restore Voice Friend state:', error);
       }
@@ -229,7 +298,13 @@ const VoiceFriend = () => {
   const stopAudioPlayback = useCallback(() => {
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
-      URL.revokeObjectURL(audioPlayerRef.current.src);
+      try {
+        if (audioPlayerRef.current.src?.startsWith('blob:')) {
+          URL.revokeObjectURL(audioPlayerRef.current.src);
+        }
+      } catch (err) {
+        // ignore cleanup errors
+      }
       audioPlayerRef.current = null;
     }
     setPlayingAudio(false);
@@ -256,6 +331,10 @@ const VoiceFriend = () => {
     // prevent concurrent audio generation requests
     if (audioLoading) return false;
 
+    speechAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    speechAbortControllerRef.current = controller;
+
     try {
       setAudioLoading(true);
       stopAudioPlayback();
@@ -267,7 +346,7 @@ const VoiceFriend = () => {
           voice: selectedFriend.voice,
           language,
         },
-        { headers: buildRequestHeaders() }
+        { headers: buildRequestHeaders(), signal: controller.signal }
       );
 
       const audioBase64 = response?.data?.data?.audio;
@@ -276,36 +355,30 @@ const VoiceFriend = () => {
         return false;
       }
 
-      const binary = atob(audioBase64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-
-      const blob = new Blob([bytes], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
+      const audio = new Audio(`data:${mimeType};base64,${audioBase64}`);
       audioPlayerRef.current = audio;
       setPlayingAudio(true);
       audio.onended = () => {
-        URL.revokeObjectURL(url);
         audioPlayerRef.current = null;
         setPlayingAudio(false);
       };
       audio.onerror = () => {
-        URL.revokeObjectURL(url);
         audioPlayerRef.current = null;
         setPlayingAudio(false);
       };
       await audio.play();
       return true;
     } catch (error) {
+      if (axios.isCancel?.(error) || error?.name === 'CanceledError') {
+        console.warn('TTS request canceled', error);
+        return false;
+      }
       console.warn('Voice Friend TTS playback failed:', error);
       return false;
     } finally {
       setAudioLoading(false);
     }
-  }, [friendId, language, selectedFriend.voice, sessionId, stopAudioPlayback]);
+  }, [friendId, language, selectedFriend.voice, sessionId, audioLoading, stopAudioPlayback]);
 
   const sendMessage = async () => {
     if (busy) {
@@ -322,32 +395,39 @@ const VoiceFriend = () => {
       return;
     }
 
-    const userMessage = { role: 'user', content: trimmed };
+    const requestSessionId = sessionId;
+    const userMessage = { role: 'user', content: trimmed, timestamp: new Date().toISOString() };
     setConversation((prev) => [...prev, userMessage]);
     setMessageText('');
     setStatus('Thinking...');
     setBusy(true);
 
+    messageAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    messageAbortControllerRef.current = controller;
+
     try {
       const response = await axios.post(
         buildApiUrl('/ai-voice-friend/message'),
         { sessionId, message: trimmed, persona, mood, language, friendId, userName },
-        { headers: buildRequestHeaders() }
+        { headers: buildRequestHeaders(), signal: controller.signal }
       );
-      const aiText = response?.data?.data?.response || 'I am here with you. Please continue.';
-      // avoid appending duplicate assistant responses (race/retry protection)
+
+      if (sessionId !== requestSessionId) {
+        return;
+      }
+
+      const aiText = response?.data?.data?.response || `I hear you${userName ? `, ${userName}` : ''}. Please continue.`;
       if (String(lastAssistantTextRef.current || '').trim() !== String(aiText || '').trim()) {
-        const assistantMessage = { role: 'assistant', content: aiText };
+        const assistantMessage = { role: 'assistant', content: aiText, timestamp: new Date().toISOString() };
         setConversation((prev) => [...prev, assistantMessage]);
         lastAssistantTextRef.current = aiText;
-        // clear last text after short time to allow repeated valid replies
         setTimeout(() => { lastAssistantTextRef.current = ''; }, 15000);
       } else {
         console.warn('Duplicate assistant response suppressed');
       }
       setStatus('Conversation updated.');
 
-      // play audio but avoid starting multiple concurrent audio requests
       if (!audioLoading) {
         const played = await playResponseAudio(aiText);
         if (!played) {
@@ -355,29 +435,59 @@ const VoiceFriend = () => {
         }
       }
     } catch (error) {
+      if (axios.isCancel?.(error) || error?.name === 'CanceledError') {
+        setStatus('Message canceled. Session was reset or a new request started.');
+        return;
+      }
       setStatus('Sorry, I could not process that message right now.');
     } finally {
-      setBusy(false);
+      if (sessionId === requestSessionId) {
+        setBusy(false);
+      }
     }
   };
 
   useEffect(() => {
     if (!sessionId) {
-      localStorage.removeItem(STORAGE_KEY);
+      if (persistData) {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+      return;
+    }
+
+    if (!persistData) {
       return;
     }
 
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ sessionId, friendId, userName, persona, mood, language, conversation, friendCustomName, friendCustomAvatar })
+      JSON.stringify({
+        savedAt: new Date().toISOString(),
+        persistData,
+        sessionId,
+        friendId,
+        userName,
+        persona,
+        mood,
+        language,
+        conversation,
+        friendCustomName,
+        friendCustomAvatar,
+      })
     );
-  }, [sessionId, friendId, userName, persona, mood, language, conversation, friendCustomName, friendCustomAvatar]);
+  }, [sessionId, friendId, userName, persona, mood, language, conversation, friendCustomName, friendCustomAvatar, persistData]);
 
   useEffect(() => {
     return () => {
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
-        URL.revokeObjectURL(audioPlayerRef.current.src);
+        try {
+          if (audioPlayerRef.current.src?.startsWith('blob:')) {
+            URL.revokeObjectURL(audioPlayerRef.current.src);
+          }
+        } catch (err) {
+          // ignore cleanup errors
+        }
         audioPlayerRef.current = null;
       }
       if (window.speechSynthesis) {
@@ -385,6 +495,12 @@ const VoiceFriend = () => {
       }
     };
   }, []);
+
+  const abortPendingRequests = useCallback(() => {
+    messageAbortControllerRef.current?.abort();
+    speechAbortControllerRef.current?.abort();
+    stopAudioPlayback();
+  }, [stopAudioPlayback]);
 
   const handleVoiceStart = () => {
     if (!recognition.current) {
@@ -413,13 +529,16 @@ const VoiceFriend = () => {
   };
 
   const handleResetSession = async () => {
+    abortPendingRequests();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setConversation([]);
     setMessageText('');
     setStatus('Resetting Voice Friend session...');
-    localStorage.removeItem(STORAGE_KEY);
+    if (persistData) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
     await initSession();
   };
 
@@ -430,6 +549,12 @@ const VoiceFriend = () => {
       }
     }
     return '';
+  }, [conversation]);
+
+  useEffect(() => {
+    if (chatPanelRef.current) {
+      chatPanelRef.current.scrollTop = chatPanelRef.current.scrollHeight;
+    }
   }, [conversation]);
 
   const handleReplayLastResponse = async () => {
@@ -448,37 +573,44 @@ const VoiceFriend = () => {
   };
 
   const conversationList = useMemo(() => {
-    return conversation.map((item, index) => (
-      <div key={`${item.role}-${index}`} className={`voice-friend-bubble ${item.role}`}>
-        {item.role === 'assistant' && (
-          <div className="voice-friend-bubble-avatar" style={{ backgroundColor: selectedFriend.color }}>
-            {selectedFriend.name[0]}
-          </div>
-        )}
-        <div>
-          <strong>{item.role === 'assistant' ? selectedFriend.name : userName || 'You'}</strong>
-          <p>{item.content}</p>
+    return conversation.map((item, index) => {
+      const timestampText = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      return (
+        <div key={`${item.role}-${index}`} className={`voice-friend-bubble ${item.role}`} role="listitem">
           {item.role === 'assistant' && (
-            <div style={{ marginTop: 8 }}>
-              <button
-                type="button"
-                className="voice-friend-button"
-                onClick={async () => {
-                  setStatus('Playing response...');
-                  setBusy(true);
-                  const played = await playResponseAudio(item.content);
-                  if (!played) speakText(item.content);
-                  setBusy(false);
-                }}
-              >
-                Replay
-              </button>
+            <div className="voice-friend-bubble-avatar" style={{ backgroundColor: selectedFriend.color }}>
+              {selectedFriend.name[0]}
             </div>
           )}
+          <div className="voice-friend-bubble-content">
+            <div className="voice-friend-bubble-header">
+              <strong>{item.role === 'assistant' ? selectedFriend.name : userName || 'You'}</strong>
+              {timestampText && <time dateTime={item.timestamp}>{timestampText}</time>}
+            </div>
+            <p>{item.content}</p>
+            {item.role === 'assistant' && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="voice-friend-button"
+                  aria-label={`Replay voice friend response from ${timestampText || 'recently'}`}
+                  onClick={async () => {
+                    setStatus('Playing response...');
+                    setBusy(true);
+                    const played = await playResponseAudio(item.content);
+                    if (!played) speakText(item.content);
+                    setBusy(false);
+                  }}
+                >
+                  Replay
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    ));
-  }, [conversation, selectedFriend, userName]);
+      );
+    });
+  }, [conversation, selectedFriend, userName, playResponseAudio, speakText]);
 
   return (
     <div className="voice-friend-page">
@@ -586,7 +718,7 @@ const VoiceFriend = () => {
       <div className="voice-friend-controls">
         <div className="voice-friend-control-group">
           <label>Friend</label>
-          <select value={friendId} onChange={(e) => setFriendId(e.target.value)}>
+          <select value={friendId} onChange={(e) => handleFriendIdChange(e.target.value)}>
             {AI_FRIENDS.map((option) => (
               <option key={option.id} value={option.id}>{option.name} — {option.label}</option>
             ))}
@@ -596,13 +728,13 @@ const VoiceFriend = () => {
           <label>Your name</label>
           <input
             value={userName}
-            onChange={(e) => setUserName(e.target.value)}
+            onChange={(e) => handleUserNameChange(e.target.value)}
             placeholder="Enter your name"
           />
         </div>
         <div className="voice-friend-control-group">
           <label>Persona</label>
-          <select value={persona} onChange={(e) => setPersona(e.target.value)}>
+          <select value={persona} onChange={(e) => handlePersonaChange(e.target.value)}>
             {VOICE_PERSONAS.map((option) => (
               <option key={option.id} value={option.id}>{option.label}</option>
             ))}
@@ -610,7 +742,7 @@ const VoiceFriend = () => {
         </div>
         <div className="voice-friend-control-group">
           <label>Mood</label>
-          <select value={mood} onChange={(e) => setMood(e.target.value)}>
+          <select value={mood} onChange={(e) => handleMoodChange(e.target.value)}>
             {MOOD_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>{option.label}</option>
             ))}
@@ -618,13 +750,32 @@ const VoiceFriend = () => {
         </div>
         <div className="voice-friend-control-group">
           <label>Language</label>
-          <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+          <select value={language} onChange={(e) => handleLanguageChange(e.target.value)}>
             <option value="en">English</option>
             <option value="hi">Hindi</option>
             <option value="ml">Malayalam</option>
             <option value="kn">Kannada</option>
           </select>
         </div>
+        <div className="voice-friend-control-group">
+          <label>
+            <input
+              type="checkbox"
+              checked={persistData}
+              onChange={(e) => setPersistData(e.target.checked)}
+              aria-label="Persist Voice Friend state across visits"
+            />
+            Persist session data across visits
+          </label>
+          <p className="voice-friend-control-note">Keeps your friend name, avatar, and conversation history for 24 hours when enabled.</p>
+        </div>
+        {hasPendingSessionSettings && (
+          <div className="voice-friend-control-group">
+            <button type="button" className="voice-friend-button primary" onClick={applySessionSettings} disabled={busy}>
+              Apply updated session settings
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="voice-friend-status">{status}</div>
@@ -641,7 +792,9 @@ const VoiceFriend = () => {
         <div className="wave" />
       </div>
 
-      <div className="voice-friend-chat-panel">{conversationList}</div>
+      <div className="voice-friend-chat-panel" role="list" aria-live="polite" ref={chatPanelRef}>
+        {conversationList}
+      </div>
 
       <form className="voice-friend-input-row" onSubmit={handleSend}>
         <textarea

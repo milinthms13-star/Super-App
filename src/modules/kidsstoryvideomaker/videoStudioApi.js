@@ -1,4 +1,9 @@
 import { buildApiUrl } from "../../utils/api";
+import {
+  assertPayloadSuccess,
+  assertProjectShape,
+  assertRenderResponse,
+} from "./videoStudioContracts";
 
 const DEFAULT_TIMEOUT_MS = 25000;
 
@@ -106,10 +111,22 @@ export const requestVideoStudio = async (
 };
 
 export const createProject = (requestBody, options = {}) =>
-  requestVideoStudio("/video-studio/create", { method: "POST", body: requestBody, retries: 1, ...options });
+  requestVideoStudio("/video-studio/create", { method: "POST", body: requestBody, retries: 1, ...options }).then(
+    (result) => {
+      assertPayloadSuccess(result.payload, "create response");
+      assertProjectShape(result.payload.project, "create project");
+      return result;
+    }
+  );
 
 export const createAutopilotProject = (requestBody, options = {}) =>
-  requestVideoStudio("/video-studio/autopilot/create", { method: "POST", body: requestBody, retries: 1, ...options });
+  requestVideoStudio("/video-studio/autopilot/create", { method: "POST", body: requestBody, retries: 1, ...options }).then(
+    (result) => {
+      assertPayloadSuccess(result.payload, "autopilot response");
+      assertProjectShape(result.payload.project, "autopilot project");
+      return result;
+    }
+  );
 
 export const patchProject = (projectId, requestBody, options = {}) =>
   requestVideoStudio(`/video-studio/projects/${projectId}`, {
@@ -117,6 +134,10 @@ export const patchProject = (projectId, requestBody, options = {}) =>
     body: requestBody,
     retries: 1,
     ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "patch response");
+    assertProjectShape(result.payload.project, "patched project");
+    return result;
   });
 
 export const regenerateStage = (projectId, stage, requestBody, options = {}) =>
@@ -125,10 +146,27 @@ export const regenerateStage = (projectId, stage, requestBody, options = {}) =>
     body: requestBody,
     retries: 1,
     ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "regenerate response");
+    assertProjectShape(result.payload.project, "regenerated project");
+    return result;
   });
 
 export const renderProject = (requestBody, options = {}) =>
-  requestVideoStudio("/video-studio/render", { method: "POST", body: requestBody, retries: 0, timeoutMs: 120000, ...options });
+  requestVideoStudio("/video-studio/render", { method: "POST", body: requestBody, retries: 0, timeoutMs: 120000, ...options }).then(
+    (result) => {
+      assertRenderResponse(result.payload);
+      return result;
+    }
+  );
 
 export const getProjectDownloadLink = (projectId, options = {}) =>
-  requestVideoStudio(`/video-studio/projects/${projectId}/download`, { method: "GET", retries: 1, ...options });
+  requestVideoStudio(`/video-studio/projects/${projectId}/download`, { method: "GET", retries: 1, ...options }).then(
+    (result) => {
+      assertPayloadSuccess(result.payload, "download response");
+      if (!result.payload?.downloadUrl && !result.payload?.videoUrl) {
+        throw new Error("Invalid download response: missing downloadUrl.");
+      }
+      return result;
+    }
+  );

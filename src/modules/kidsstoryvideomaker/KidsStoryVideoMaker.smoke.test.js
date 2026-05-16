@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import "../../i18n";
 import KidsStoryVideoMaker from "./KidsStoryVideoMaker";
 
 const okResponse = (payload, url = "http://localhost/api/video-studio/create") => ({

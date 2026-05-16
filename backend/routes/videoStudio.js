@@ -32,6 +32,46 @@ const respondVideoStudioError = (res, error, fallbackMessage) => {
   return res.status(500).json({ success: false, error: error.message || fallbackMessage });
 };
 
+const validateRenderScene = (scene, index) => {
+  const id = index + 1;
+  const title = String(scene?.title || '').trim();
+  const description = String(scene?.description || '').trim();
+  const dialogue = String(scene?.dialogue || '').trim();
+  const durationSeconds = Number(scene?.durationSeconds);
+
+  if (!title) return `Scene ${id} is missing title.`;
+  if (!description) return `Scene ${id} is missing description.`;
+  if (!dialogue) return `Scene ${id} is missing dialogue.`;
+  if (!Number.isFinite(durationSeconds) || durationSeconds < 2 || durationSeconds > 15) {
+    return `Scene ${id} duration must be between 2 and 15 seconds.`;
+  }
+
+  return '';
+};
+
+const validateRenderProjectPayload = (project) => {
+  if (!project || typeof project !== 'object') {
+    return 'A valid project payload is required.';
+  }
+  if (!project.projectId || !String(project.projectId).trim()) {
+    return 'Project ID is required for rendering.';
+  }
+  if (!Array.isArray(project.scenes) || project.scenes.length === 0) {
+    return 'At least one scene is required for rendering.';
+  }
+  if (project.scenes.length > 20) {
+    return 'Too many scenes requested. Keep it at 20 scenes or fewer.';
+  }
+  for (let index = 0; index < project.scenes.length; index += 1) {
+    const validationError = validateRenderScene(project.scenes[index], index);
+    if (validationError) {
+      return validationError;
+    }
+  }
+
+  return '';
+};
+
 router.post('/create', async (req, res) => {
   try {
     const {
@@ -95,14 +135,9 @@ router.post('/render', async (req, res) => {
   try {
     const { project, projectId, premiumHD } = req.body;
     const resolvedProject = project || (projectId ? await getStudioProject(projectId) : null);
-    if (!resolvedProject || !resolvedProject.projectId) {
-      return res.status(400).json({ success: false, error: 'A valid project is required for rendering.' });
-    }
-    if (!Array.isArray(resolvedProject.scenes) || resolvedProject.scenes.length === 0) {
-      return res.status(400).json({ success: false, error: 'At least one scene is required for rendering.' });
-    }
-    if (resolvedProject.scenes.length > 20) {
-      return res.status(400).json({ success: false, error: 'Too many scenes requested. Keep it at 20 scenes or fewer.' });
+    const payloadError = validateRenderProjectPayload(resolvedProject);
+    if (payloadError) {
+      return res.status(400).json({ success: false, error: payloadError });
     }
 
     const result = await renderVideo(resolvedProject, Boolean(premiumHD));
@@ -132,7 +167,7 @@ router.post('/render', async (req, res) => {
     });
   } catch (error) {
     logger.error('Video studio render error:', error);
-    res.status(500).json({ success: false, error: error.message || 'Video rendering failed.' });
+    respondVideoStudioError(res, error, 'Video rendering failed.');
   }
 });
 

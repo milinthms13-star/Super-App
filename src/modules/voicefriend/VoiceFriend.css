@@ -84,6 +84,12 @@
   background: #ffffff;
 }
 
+.voice-friend-control-note {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin: 6px 0 0;
+}
+
 .voice-friend-status {
   padding: 14px 16px;
   background: #f8fafc;

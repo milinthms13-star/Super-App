@@ -9,6 +9,16 @@ Kid-focused story-to-video module with end-to-end flow:
 3. Render MP4
 4. Download or save locally
 
+## Module structure
+
+- `KidsStoryVideoMaker.js`: container orchestration and stage actions
+- `components/CharacterCards.js`: character edit UI
+- `components/SceneCards.js`: scene edit UI
+- `components/TimelineCards.js`: export timeline UI
+- `videoStudioApi.js`: API transport (abort/retry/timeout + response parsing)
+- `videoStudioContracts.js`: strict runtime contracts/normalization
+- `storyStudioUtils.js`: local schema, validation, shared helpers
+
 ## Frontend API contract
 
 Base path: `/api/video-studio`
@@ -49,6 +59,12 @@ Structured safety response shape:
 }
 ```
 
+Backend safety now combines:
+
+- keyword guardrails
+- OpenAI moderation check (`omni-moderation-latest` by default)
+- structured per-reason error payloads across create/autopilot/regenerate/patch/render
+
 ## Local storage schema
 
 - Project library key: `kids-story-video-project-library-v1`
@@ -68,3 +84,14 @@ Structured safety response shape:
 - "Save stage edits" persists to backend (`PATCH /projects/:projectId`).
 - "Save Project" stores a local snapshot for My Projects on this device.
 - Render uses subtitles generated from scene durations.
+
+## Tests
+
+- Unit:
+  - `storyStudioUtils.test.js`
+  - `videoStudioApi.test.js`
+  - `videoStudioContracts.test.js`
+- Smoke component:
+  - `KidsStoryVideoMaker.smoke.test.js`
+- E2E:
+  - `cypress/e2e/kidsstoryvideomaker.cy.js`
