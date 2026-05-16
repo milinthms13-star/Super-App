@@ -1,7 +1,3 @@
-const request = require('supertest');
-const app = require('../app');
-const fs = require('fs');
-
 jest.mock('../services/videoStudioService', () => ({
   createStudioProject: jest.fn(),
   createAutopilotProject: jest.fn(),
@@ -11,6 +7,15 @@ jest.mock('../services/videoStudioService', () => ({
   regenerateProjectStage: jest.fn(),
 }));
 
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+}));
+
+const request = require('supertest');
+const app = require('../app');
+const fs = require('fs');
+
 const {
   createStudioProject,
   createAutopilotProject,
@@ -18,10 +23,6 @@ const {
   renderVideo,
   patchStudioProject,
 } = require('../services/videoStudioService');
-
-jest.mock('fs', () => ({
-  existsSync: jest.fn(),
-}));
 
 describe('Video studio routes', () => {
   beforeEach(() => {
@@ -106,7 +107,7 @@ describe('Video studio routes', () => {
   });
 
   test('returns safety error 422 when service rejects with SAFETY_FAILED', async () => {
-    createStudioProject.mockRejectedValue({
+    createAutopilotProject.mockRejectedValue({
       code: 'SAFETY_FAILED',
       status: 422,
       message: 'Blocked content',

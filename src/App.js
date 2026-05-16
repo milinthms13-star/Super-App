@@ -518,7 +518,8 @@ function AppShell() {
       auth: {
         token: authToken,
       },
-      withCredentials: true,
+      withCredentials: false,
+      transports: ["websocket"],
     });
 
     socket.on("sos:incoming", (payload) => {

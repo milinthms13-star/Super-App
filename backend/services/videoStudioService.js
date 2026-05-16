@@ -232,18 +232,18 @@ const fallbackParseStory = ({ story, storyMode, voiceType, language, storyTitle 
 
   const characters = [
     {
-      name: 'Minku Rabbit',
+      name: 'Ari',
       role: 'Hero',
-      appearance: 'white rabbit with a purple vest and glowing eyes',
+      appearance: 'curious young explorer with a bright backpack',
       voiceProfile: 'kid-friendly playful narrator',
-      colorPalette: ['lavender', 'peach', 'sky blue'],
+      colorPalette: ['sky blue', 'sunny yellow', 'mint'],
     },
     {
-      name: 'Luna Fairy',
+      name: 'Milo',
       role: 'Guide',
-      appearance: 'sparkling fairy with pastel wings and a lantern',
+      appearance: 'friendly sidekick with expressive eyes and a warm smile',
       voiceProfile: 'soft storytelling voice',
-      colorPalette: ['rose gold', 'mint', 'cream'],
+      colorPalette: ['peach', 'teal', 'cream'],
     },
   ];
 
@@ -283,20 +283,9 @@ const clampSceneCount = (value) => {
 
 const buildFallbackScript = ({ subject, languageId, storyMode, ageFilter }) => {
   const cleanSubject = sanitizeText(subject || 'Magical friendship story');
-  const classicRabbit = /rabbit|hare/i.test(cleanSubject);
-  const classicTortoise = /tortoise|turtle/i.test(cleanSubject);
-
-  const title = classicRabbit && classicTortoise
-    ? 'The Rabbit and the Tortoise'
-    : `Story of ${cleanSubject}`;
-
-  const synopsis = classicRabbit && classicTortoise
-    ? 'A speedy rabbit laughs at a calm tortoise, but the race teaches everyone that steady effort wins.'
-    : `A child-safe ${storyMode} story about ${cleanSubject}, with teamwork, courage, and kindness.`;
-
-  const moral = classicRabbit && classicTortoise
-    ? 'Slow and steady wins the race.'
-    : 'Kindness, patience, and smart effort help us succeed.';
+  const title = `Story of ${cleanSubject}`;
+  const synopsis = `A child-safe ${storyMode} story about ${cleanSubject}, with teamwork, curiosity, and kindness.`;
+  const moral = 'Kindness, patience, and smart effort help us succeed.';
 
   const scenes = [
     { beat: 'Opening', summary: `Introduce ${cleanSubject} in a warm, playful setting.` },
@@ -422,13 +411,15 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
   const primaryNames = (characters || []).map((char) => char.name).join(', ') || 'Story characters';
   const primaryA = characters?.[0]?.name || 'Hero';
   const primaryB = characters?.[1]?.name || 'Friend';
+  const coreTopic = sanitizeText(script?.title || script?.synopsis || 'our mission');
+  const moralLine = sanitizeText(script?.moral || 'teamwork and patience matter');
   const weatherOptions = ['sunny', 'golden evening', 'soft cloudy', 'gentle rain', 'starlit night'];
   const sceneDialogueTemplates = [
-    `${primaryA}: Today is the day. I can do this fast!\n${primaryB}: Let us do our best, one steady step at a time.`,
-    `${primaryA}: I am already ahead!\n${primaryB}: I will stay calm and keep moving forward.`,
-    `${primaryA}: Maybe I can rest for a minute.\n${primaryB}: I will not stop now. Focus and continue.`,
-    `${primaryA}: Oh no, I wasted time.\n${primaryB}: Steady effort is helping me reach the goal.`,
-    `${primaryA}: I learned a big lesson today.\n${primaryB}: Patience and consistency can win the race.`,
+    `${primaryA}: Let's begin our ${coreTopic} adventure.\n${primaryB}: Yes, we can solve this together.`,
+    `${primaryA}: This challenge is bigger than I expected.\n${primaryB}: We can break it into small steps.`,
+    `${primaryA}: I found a new clue.\n${primaryB}: Great, let us keep exploring and stay brave.`,
+    `${primaryA}: We are close now.\n${primaryB}: One more good decision and we can finish it.`,
+    `${primaryA}: We did it and learned something important.\n${primaryB}: ${moralLine}`,
   ];
 
   return Array.from({ length: targetCount }).map((_, index) => {

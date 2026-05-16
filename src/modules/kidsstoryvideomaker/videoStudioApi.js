@@ -142,12 +142,12 @@ export const requestVideoStudio = async (
       for (let index = 0; index < requestUrls.length; index += 1) {
         const requestUrl = requestUrls[index];
         try {
+          const hasBody = typeof body !== "undefined";
+          const requestHeaders = hasBody ? { "Content-Type": "application/json" } : undefined;
           const response = await fetch(requestUrl, {
             method,
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: body ? JSON.stringify(body) : undefined,
+            headers: requestHeaders,
+            body: hasBody ? JSON.stringify(body) : undefined,
             signal: controller.signal,
           });
 

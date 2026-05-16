@@ -164,18 +164,18 @@ const createClientFallbackProject = ({
     themes: [storyMode],
     characters: [
       {
-        name: "Minku Rabbit",
+        name: "Ari",
         role: "Hero",
-        appearance: "white rabbit with a purple vest and glowing eyes",
+        appearance: "curious explorer with a bright backpack",
         voiceProfile: "kid-friendly playful narrator",
-        colorPalette: ["lavender", "peach", "sky blue"],
+        colorPalette: ["sky blue", "sunny yellow", "mint"],
       },
       {
-        name: "Luna Fairy",
+        name: "Milo",
         role: "Guide",
-        appearance: "sparkling fairy with pastel wings and a lantern",
+        appearance: "friendly sidekick with expressive eyes and a warm smile",
         voiceProfile: "soft storytelling voice",
-        colorPalette: ["rose gold", "mint", "cream"],
+        colorPalette: ["peach", "teal", "cream"],
       },
     ],
     scenes,
@@ -205,7 +205,7 @@ const KidsStoryVideoMaker = () => {
   const voiceCatalogReadyRef = useRef(false);
   const requestControllersRef = useRef({});
   const renderProgressIntervalRef = useRef(null);
-  const [subjectInput, setSubjectInput] = useState("Rabbit and Tortoise");
+  const [subjectInput, setSubjectInput] = useState("Space adventure with a lost star");
   const [storyTitle, setStoryTitle] = useState("AI Kids Story Video Generator");
   const [storyPrompt, setStoryPrompt] = useState(DEFAULT_STORY_PROMPT);
   const [storySource, setStorySource] = useState("paste");
@@ -633,7 +633,7 @@ const KidsStoryVideoMaker = () => {
   const handleAutopilotGenerate = async () => {
     const cleanSubject = sanitizeText(subjectInput);
     if (!cleanSubject) {
-      setError("Please enter a story subject like Rabbit and Tortoise.");
+      setError("Please enter any story subject, like space adventure, jungle mystery, or robot school.");
       setMessage("");
       return;
     }
@@ -693,7 +693,7 @@ const KidsStoryVideoMaker = () => {
       setError("");
       setMessage(
         target === "subject"
-          ? "Listening... Say a subject like Rabbit and Tortoise."
+          ? "Listening... Say any story subject."
           : "Listening... Say your full story prompt."
       );
       recognitionRef.current.lang =
@@ -1500,7 +1500,7 @@ const KidsStoryVideoMaker = () => {
                 type="text"
                 value={subjectInput}
                 onChange={(event) => setSubjectInput(event.target.value)}
-                placeholder="Example: Rabbit and Tortoise"
+                placeholder="Example: Space explorer and moon dragon"
               />
               <div className="story-actions">
                 <button

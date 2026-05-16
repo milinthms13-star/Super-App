@@ -17,6 +17,10 @@ const normalizeOrigin = (origin) =>
   String(origin || '')
     .trim()
     .replace(/\/$/, '');
+const DEFAULT_SOCKET_ORIGIN_PATTERNS = [
+  /^https:\/\/super-app-[a-z0-9-]+\.onrender\.com$/i,
+  /^https:\/\/.+\.onrender\.com$/i,
+];
 
 const resolveCallRelayTarget = async (callId, senderUserId, preferredTargetId = '') => {
   if (!callId) {
@@ -74,10 +78,14 @@ const initializeWebSocket = (server, options = {}) => {
     cors: {
       origin: (origin, callback) => {
         const normalizedOrigin = normalizeOrigin(origin);
+        const matchesDefaultPattern = DEFAULT_SOCKET_ORIGIN_PATTERNS.some((pattern) =>
+          pattern.test(normalizedOrigin)
+        );
         let isAllowed =
           !origin ||
           normalizedOrigin.includes('localhost') ||
           normalizedOrigin.includes('127.0.0.1') ||
+          matchesDefaultPattern ||
           allowedSocketOrigins.length === 0 ||
           allowedSocketOriginSet.has(normalizedOrigin);
 
