@@ -363,6 +363,7 @@ router.post('/render-cartoon', async (req, res) => {
         projectId: result.projectId,
         renderMode: result.renderMode || 'real-cartoon-backend',
         ttsEnabled: Boolean(result.ttsEnabled),
+        aiImagesEnabled: Boolean(result.aiImagesEnabled),
         ...getStudioCapabilities(),
       });
     } finally {

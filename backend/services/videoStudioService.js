@@ -1552,41 +1552,66 @@ const buildCartoonSceneFilter = (scene, resolution) => {
 const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution, project }) => {
   const clipPath = path.join(outputDir, `scene-${String(sceneIndex).padStart(2, '0')}-cartoon.mp4`);
   const ttsPath = path.join(outputDir, `scene-${String(sceneIndex).padStart(2, '0')}-voice.mp3`);
+  const stillPath = path.join(outputDir, `scene-${String(sceneIndex).padStart(2, '0')}-still.png`);
   const dialogueForVoice = scene.lines.map((line) => `${line.speaker}: ${line.text}`).join(' ').slice(0, 4096);
   const synthesizedPath = await synthesizeSpeechToFile({
     text: dialogueForVoice,
     voiceCandidate: project?.voiceType,
     outputPath: ttsPath,
   });
+  const generatedByAi = await generateRealCartoonSceneImage(scene, project, stillPath, resolution);
+  const duration = Math.max(2, Number(scene.duration) || 6);
+  const fps = 24;
+  const frames = Math.max(1, Math.floor(duration * fps));
 
-  const args = [
-    '-y',
-    '-f', 'lavfi',
-    '-i', `color=c=0x9ee7ff:s=${resolution.width}x${resolution.height}:r=24:d=${scene.duration}`,
-  ];
+  const args = ['-y'];
+  if (generatedByAi) {
+    args.push('-loop', '1', '-i', stillPath);
+  } else {
+    args.push(
+      '-f', 'lavfi',
+      '-i', `color=c=0x9ee7ff:s=${resolution.width}x${resolution.height}:r=24:d=${duration}`
+    );
+  }
 
   if (synthesizedPath) {
     args.push('-i', synthesizedPath);
   } else {
-    args.push('-f', 'lavfi', '-i', `sine=frequency=450:duration=${scene.duration}:sample_rate=44100`);
+    args.push('-f', 'lavfi', '-i', `sine=frequency=450:duration=${duration}:sample_rate=44100`);
   }
 
-  args.push(
-    '-vf', buildCartoonSceneFilter(scene, resolution),
-    '-t', `${scene.duration}`,
-    '-c:v', 'libx264',
-    '-pix_fmt', 'yuv420p',
-    '-r', '24',
-    '-c:a', 'aac',
-    '-shortest',
-    clipPath
-  );
+  if (generatedByAi) {
+    const zoomFilter = `zoompan=z='min(1.12,1+0.0012*on)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${resolution.width}x${resolution.height}:fps=${fps}`;
+    const fadeOutStart = Math.max(0, duration - 0.35);
+    args.push(
+      '-t', `${duration}`,
+      '-vf', `${zoomFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${fadeOutStart}:d=0.3`,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-r', `${fps}`,
+      '-c:a', 'aac',
+      '-shortest',
+      clipPath
+    );
+  } else {
+    args.push(
+      '-vf', buildCartoonSceneFilter(scene, resolution),
+      '-t', `${duration}`,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-r', `${fps}`,
+      '-c:a', 'aac',
+      '-shortest',
+      clipPath
+    );
+  }
 
   await runFfmpeg(args, outputDir);
   return {
     path: clipPath,
-    duration: scene.duration,
+    duration,
     usedTts: Boolean(synthesizedPath),
+    usedAiImage: Boolean(generatedByAi),
   };
 };
 
@@ -1660,6 +1685,7 @@ const renderCartoonVideo = async (project, premiumHD = false) => {
   const videoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
   const totalDuration = clipResults.reduce((sum, clip) => sum + (Number(clip.duration) || 0), 0);
   const usedTts = clipResults.some((clip) => clip.usedTts);
+  const usedAiImages = clipResults.some((clip) => clip.usedAiImage);
 
   const metadataPath = path.join(outputDir, 'project.json');
   await writeFile(metadataPath, JSON.stringify({
@@ -1668,6 +1694,7 @@ const renderCartoonVideo = async (project, premiumHD = false) => {
     videoUrl,
     renderMode: 'real-cartoon-backend',
     renderAudioMode: usedTts ? 'character-dialogue' : 'ambient-fallback',
+    renderVisualMode: usedAiImages ? 'ai-cartoon-stills' : 'shape-fallback',
     totalDurationSeconds: totalDuration,
     freeMode: isFreeMode,
   }, null, 2), 'utf-8');
@@ -1678,6 +1705,7 @@ const renderCartoonVideo = async (project, premiumHD = false) => {
     outputFile,
     renderMode: 'real-cartoon-backend',
     ttsEnabled: usedTts,
+    aiImagesEnabled: usedAiImages,
   };
 };
 
