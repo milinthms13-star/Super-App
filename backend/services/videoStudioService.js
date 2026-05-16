@@ -1279,9 +1279,42 @@ const buildTtsModelFallbackList = () => {
   const preferred = sanitizeText(process.env.OPENAI_VIDEO_TTS_MODEL || 'gpt-4o-mini-tts');
   return Array.from(new Set([preferred, 'gpt-4o-mini-tts', 'tts-1', 'tts-1-hd']));
 };
+const ttsProviderByOutputPath = new Map();
 
-const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
-  if (!openai) {
+const windowsTtsEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ENABLE_WINDOWS_TTS || '1').toLowerCase()
+);
+
+const resolveWindowsVoiceName = (voiceCandidate = '') => {
+  const normalized = sanitizeText(voiceCandidate).toLowerCase();
+  if (/male|david|mark|guy|onyx|echo|alloy/.test(normalized)) {
+    return 'Microsoft David Desktop';
+  }
+  return 'Microsoft Zira Desktop';
+};
+
+const runPowerShellScript = async (scriptContent, cwd) => {
+  const encodedScript = Buffer.from(String(scriptContent || ''), 'utf16le').toString('base64');
+  return new Promise((resolve, reject) => {
+    const command = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedScript], {
+      cwd,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    command.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    command.on('close', (code) => {
+      if (code !== 0) {
+        return reject(new Error(`PowerShell TTS failed with code ${code}: ${stderr}`));
+      }
+      resolve();
+    });
+  });
+};
+
+const synthesizeSpeechWithWindowsTts = async ({ text, voiceCandidate, outputPath }) => {
+  if (process.platform !== 'win32' || !windowsTtsEnabled) {
     return null;
   }
 
@@ -1290,26 +1323,90 @@ const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
     return null;
   }
 
-  const voice = resolveNarrationVoice(voiceCandidate);
-  const modelsToTry = buildTtsModelFallbackList();
+  const outputDir = path.dirname(outputPath);
+  const outputBase = path.basename(outputPath, path.extname(outputPath));
+  const wavePath = path.join(outputDir, `${outputBase}-windows-tts.wav`);
+  const voiceName = resolveWindowsVoiceName(voiceCandidate);
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    'Add-Type -AssemblyName System.Speech',
+    '$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer',
+    'try {',
+    `  $voiceName = '${String(voiceName).replace(/'/g, "''")}'`,
+    '  if ($voiceName) {',
+    '    try { $synth.SelectVoice($voiceName) } catch {}',
+    '  }',
+    '  $synth.Rate = 0',
+    '  $synth.Volume = 100',
+    `  $synth.SetOutputToWaveFile('${wavePath.replace(/'/g, "''")}')`,
+    `  $synth.Speak('${content.replace(/'/g, "''")}')`,
+    '} finally {',
+    '  $synth.Dispose()',
+    '}',
+  ].join('\n');
 
-  for (const model of modelsToTry) {
-    try {
-      const response = await openai.audio.speech.create({
-        model,
-        voice,
-        input: content,
-        format: 'mp3',
-      });
-
-      const audioBuffer = await normalizeOpenAIAudioBuffer(response);
-      if (audioBuffer?.length) {
-        await writeFile(outputPath, audioBuffer);
-        return outputPath;
-      }
-    } catch (_error) {
-      // Try next model.
+  try {
+    await runPowerShellScript(script, outputDir);
+    if (!fs.existsSync(wavePath)) {
+      return null;
     }
+    await runFfmpeg([
+      '-y',
+      '-i', wavePath,
+      '-c:a', 'libmp3lame',
+      '-b:a', '128k',
+      outputPath,
+    ], outputDir);
+    try {
+      fs.unlinkSync(wavePath);
+    } catch (_error) {
+      // Ignore cleanup failures for temporary speech files.
+    }
+    return outputPath;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
+  const content = sanitizeText(text).slice(0, 4096);
+  if (!content) {
+    return null;
+  }
+
+  const voice = resolveNarrationVoice(voiceCandidate);
+  if (openai) {
+    const modelsToTry = buildTtsModelFallbackList();
+
+    for (const model of modelsToTry) {
+      try {
+        const response = await openai.audio.speech.create({
+          model,
+          voice,
+          input: content,
+          format: 'mp3',
+        });
+
+        const audioBuffer = await normalizeOpenAIAudioBuffer(response);
+        if (audioBuffer?.length) {
+          await writeFile(outputPath, audioBuffer);
+          ttsProviderByOutputPath.set(outputPath, 'openai-tts');
+          return outputPath;
+        }
+      } catch (_error) {
+        // Try next model.
+      }
+    }
+  }
+
+  const windowsSpeechPath = await synthesizeSpeechWithWindowsTts({
+    text: content,
+    voiceCandidate,
+    outputPath,
+  });
+  if (windowsSpeechPath) {
+    ttsProviderByOutputPath.set(outputPath, 'windows-offline-tts');
+    return windowsSpeechPath;
   }
 
   return null;
@@ -1428,7 +1525,7 @@ const extractSceneDialogueTurns = (scene, project) => {
 };
 
 const buildCharacterDialogueAudio = async (project, outputDir, totalDurationSeconds) => {
-  if (!openai || !Array.isArray(project?.scenes) || !project.scenes.length) {
+  if (!Array.isArray(project?.scenes) || !project.scenes.length) {
     return null;
   }
 
@@ -1504,9 +1601,6 @@ const buildNarrationAudio = async (project, outputDir) => {
   );
 
   if (!narrationText) {
-    return null;
-  }
-  if (!openai) {
     return null;
   }
   return synthesizeSpeechToFile({
@@ -2005,7 +2099,9 @@ const generateVoice = async (projectId, sceneId) => {
     projectId: project.projectId,
     sceneId: Number(scene.id || sceneId),
     voiceUrl: `/uploads/video-studio/${safeProjectId}/${path.basename(outputPath)}`,
-    provider: synthesizedPath ? 'openai-tts' : 'procedural-fallback',
+    provider: synthesizedPath
+      ? (ttsProviderByOutputPath.get(outputPath) || 'openai-tts')
+      : 'procedural-fallback',
   };
 };
 
