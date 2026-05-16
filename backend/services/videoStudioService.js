@@ -1483,14 +1483,6 @@ const runFfmpeg = async (args, cwd) => {
   });
 };
 
-const escapeFfmpegDrawtext = (value = '') => sanitizeText(value)
-  .replace(/\\/g, '\\\\')
-  .replace(/:/g, '\\:')
-  .replace(/'/g, "\\'")
-  .replace(/%/g, '\\%')
-  .replace(/\n+/g, ' ')
-  .slice(0, 220);
-
 const normalizeScenesForCartoonRenderer = (project = {}) => {
   const rawScenes = Array.isArray(project?.scenes) ? project.scenes : [];
   return rawScenes
@@ -1516,39 +1508,44 @@ const normalizeScenesForCartoonRenderer = (project = {}) => {
 const buildCartoonSceneFilter = (scene, resolution) => {
   const width = Number(resolution?.width || 1280);
   const height = Number(resolution?.height || 720);
-  const title = escapeFfmpegDrawtext(scene.title);
-  const description = escapeFfmpegDrawtext(scene.description || scene.lines.map((line) => line.text).join(' '));
-  const firstLine = scene.lines[0] || { speaker: 'Narrator', text: scene.description || 'The story continues.' };
-  const dialogue = escapeFfmpegDrawtext(`${sanitizeText(firstLine.speaker)}: ${sanitizeText(firstLine.text)}`);
-  const characterOne = escapeFfmpegDrawtext(scene.characters[0]?.name || 'Hero');
-  const characterTwo = escapeFfmpegDrawtext(scene.characters[1]?.name || 'Friend');
   const skyColor = scene.emotion === 'joyful' ? '0xfff1a9' : scene.emotion === 'brave' ? '0xbce5ff' : '0x9ee7ff';
   const groundColor = scene.emotion === 'joyful' ? '0x7dd95f' : '0x8fd36a';
   const bubbleY = Math.max(0, height - 140);
+  const bubbleWidth = Math.max(300, width - 240);
+  const bubbleTailX = Math.max(200, Math.floor(width * 0.36));
+  const accentOne = scene.emotion === 'joyful' ? '0xfff7d6' : '0xe8f6ff';
+  const accentTwo = scene.emotion === 'brave' ? '0xd8f5ff' : '0xeef8e3';
 
   return [
     `drawbox=x=0:y=0:w=${width}:h=${height}:color=${skyColor}@1:t=fill`,
     `drawbox=x=0:y=${Math.max(0, height - 220)}:w=${width}:h=220:color=${groundColor}@1:t=fill`,
-    `drawbox=x=55:y=45:w=${Math.max(240, width - 110)}:h=110:color=white@0.76:t=fill`,
-    `drawtext=text='${title}':x=80:y=70:fontsize=46:fontcolor=0x17356b:box=0`,
+    `drawbox=x=55:y=45:w=${Math.max(240, width - 110)}:h=110:color=white@0.68:t=fill`,
+    `drawbox=x=70:y=62:w=${Math.max(80, width - 820)}:h=20:color=0x24508a@0.88:t=fill`,
+    `drawbox=x=70:y=92:w=${Math.max(120, width - 680)}:h=14:color=0x24508a@0.6:t=fill`,
     `drawbox=x=${Math.max(100, width - 230)}:y=70:w=90:h=90:color=0xffdd55@1:t=fill`,
     `drawbox=x=120:y=125:w=160:h=35:color=white@0.85:t=fill`,
     `drawbox=x=${Math.max(300, width - 500)}:y=115:w=190:h=35:color=white@0.85:t=fill`,
+    `drawbox=x=90:y=182:w=${Math.max(240, width - 590)}:h=22:color=0x31475e@0.3:t=fill`,
+    `drawbox=x=90:y=214:w=${Math.max(180, width - 760)}:h=18:color=0x31475e@0.22:t=fill`,
     `drawbox=x=250:y=310:w=150:h=190:color=0xff8ab3@1:t=fill`,
     `drawbox=x=220:y=195:w=210:h=150:color=0xffd2a6@1:t=fill`,
     `drawbox=x=262:y=245:w=28:h=28:color=black@1:t=fill`,
     `drawbox=x=358:y=245:w=28:h=28:color=black@1:t=fill`,
     `drawbox=x=290:y=292+mod(n\\,2)*8:w=72:h=18+mod(n\\,2)*10:color=0x7a1c1c@1:t=fill`,
-    `drawtext=text='${characterOne}':x=255:y=515:fontsize=30:fontcolor=white:box=1:boxcolor=0x17356b@0.85`,
+    `drawbox=x=250:y=515:w=150:h=34:color=0x17356b@0.85:t=fill`,
     `drawbox=x=${Math.max(520, width - 500)}:y=320:w=150:h=180:color=0x6cc4ff@1:t=fill`,
     `drawbox=x=${Math.max(490, width - 530)}:y=205:w=210:h=150:color=0xffd2a6@1:t=fill`,
     `drawbox=x=${Math.max(532, width - 488)}:y=255:w=28:h=28:color=black@1:t=fill`,
     `drawbox=x=${Math.max(628, width - 392)}:y=255:w=28:h=28:color=black@1:t=fill`,
     `drawbox=x=${Math.max(560, width - 460)}:y=302+mod(n\\,2)*8:w=72:h=18+mod(n\\,2)*10:color=0x7a1c1c@1:t=fill`,
-    `drawtext=text='${characterTwo}':x=${Math.max(525, width - 495)}:y=515:fontsize=30:fontcolor=white:box=1:boxcolor=0x17356b@0.85`,
-    `drawbox=x=120:y=${bubbleY}:w=${Math.max(300, width - 240)}:h=95:color=white@0.92:t=fill`,
-    `drawtext=text='${dialogue}':x=145:y=${bubbleY + 25}:fontsize=32:fontcolor=0x111111:box=0`,
-    `drawtext=text='${description}':x=95:y=172:fontsize=30:fontcolor=0x263238:box=1:boxcolor=white@0.6`,
+    `drawbox=x=${Math.max(520, width - 500)}:y=515:w=150:h=34:color=0x17356b@0.85:t=fill`,
+    `drawbox=x=120:y=${bubbleY}:w=${bubbleWidth}:h=95:color=white@0.92:t=fill`,
+    `drawbox=x=${bubbleTailX}:y=${bubbleY + 80}:w=26:h=30:color=white@0.92:t=fill`,
+    `drawbox=x=145:y=${bubbleY + 24}:w=${Math.max(150, bubbleWidth - 120)}:h=12:color=0x111111@0.55:t=fill`,
+    `drawbox=x=145:y=${bubbleY + 46}:w=${Math.max(180, bubbleWidth - 180)}:h=10:color=0x111111@0.42:t=fill`,
+    `drawbox=x=145:y=${bubbleY + 64}:w=${Math.max(130, bubbleWidth - 240)}:h=10:color=0x111111@0.32:t=fill`,
+    `drawbox=x=88:y=168:w=${Math.max(220, width - 620)}:h=66:color=${accentOne}@0.44:t=fill`,
+    `drawbox=x=98:y=176:w=${Math.max(180, width - 700)}:h=48:color=${accentTwo}@0.42:t=fill`,
   ].join(',');
 };
 
