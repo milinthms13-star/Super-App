@@ -497,7 +497,6 @@ const SmartKitchenRecipeHub = () => {
     };
   }, [stopListening]);
 
-  const currentStep = selectedRecipe?.steps?.[cookingIndex] || null;
   const trendyRecipes = recipes.slice(0, 6);
 
   return (

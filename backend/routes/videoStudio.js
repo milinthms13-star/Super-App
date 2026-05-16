@@ -94,6 +94,45 @@ const toAbsoluteVideoUrl = (origin, videoUrl = '', versionToken = '') => {
   return upsertVersionQuery(absoluteVideoUrl, versionToken);
 };
 
+const getLatestRenderedVideoForProject = (safeProjectId = '') => {
+  if (!safeProjectId) {
+    return null;
+  }
+
+  const projectDir = path.join(videoStudioUploadsRoot, safeProjectId);
+  if (!fs.existsSync(projectDir)) {
+    return null;
+  }
+
+  let entries = [];
+  try {
+    entries = fs.readdirSync(projectDir);
+  } catch (_error) {
+    return null;
+  }
+
+  const candidates = entries
+    .filter((name) => /^story-render(?:-\d+)?\.mp4$/i.test(String(name || '').trim()))
+    .map((name) => {
+      const filePath = path.join(projectDir, name);
+      try {
+        const stats = fs.statSync(filePath);
+        return {
+          name,
+          relativeUrl: `/uploads/video-studio/${safeProjectId}/${name}`,
+          mtimeMs: Number(stats.mtimeMs || 0),
+          mtimeIso: stats.mtime ? stats.mtime.toISOString() : '',
+        };
+      } catch (_error) {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  return candidates[0] || null;
+};
+
 const respondVideoStudioError = (res, error, fallbackMessage) => {
   if (error?.code === 'SAFETY_FAILED') {
     return res.status(error.status || 422).json({
@@ -632,15 +671,15 @@ router.get('/projects/:projectId/status', async (req, res) => {
     }
 
     const safeProjectId = toSafeProjectDirectoryName(project?.projectId || requestedProjectId);
-    const fallbackOutputPath = path.join(videoStudioUploadsRoot, safeProjectId, 'story-render.mp4');
-    const hasOutputFile = fs.existsSync(fallbackOutputPath);
-    const fileVersionToken = hasOutputFile ? toCacheBustToken(fs.statSync(fallbackOutputPath).mtime.toISOString()) : '';
+    const latestRender = getLatestRenderedVideoForProject(safeProjectId);
+    const hasOutputFile = Boolean(latestRender?.relativeUrl);
+    const fileVersionToken = latestRender?.mtimeIso ? toCacheBustToken(latestRender.mtimeIso) : '';
     const renderedAtToken = project?.renderedAt ? toCacheBustToken(project.renderedAt) : '';
     const versionToken = renderedAtToken || fileVersionToken || toCacheBustToken(new Date().toISOString());
     const rawVideoUrl = String(project?.videoUrl || '').trim();
     const hasVideo = Boolean(rawVideoUrl) || hasOutputFile;
     const origin = buildRequestOrigin(req);
-    const relativeVideoUrl = rawVideoUrl || (hasOutputFile ? `/uploads/video-studio/${safeProjectId}/story-render.mp4` : '');
+    const relativeVideoUrl = rawVideoUrl || (latestRender?.relativeUrl || '');
     const absoluteVideoUrl = toAbsoluteVideoUrl(origin, relativeVideoUrl, versionToken);
 
     const status = hasVideo
@@ -684,10 +723,10 @@ router.get('/projects/:projectId/download', async (req, res) => {
     let versionToken = project?.renderedAt ? toCacheBustToken(project.renderedAt) : '';
     if (!rawVideoUrl) {
       const safeProjectId = toSafeProjectDirectoryName(project?.projectId || requestedProjectId);
-      const fallbackOutputPath = path.join(videoStudioUploadsRoot, safeProjectId, 'story-render.mp4');
-      if (fs.existsSync(fallbackOutputPath)) {
-        rawVideoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
-        versionToken = toCacheBustToken(fs.statSync(fallbackOutputPath).mtime.toISOString());
+      const latestRender = getLatestRenderedVideoForProject(safeProjectId);
+      if (latestRender?.relativeUrl) {
+        rawVideoUrl = latestRender.relativeUrl;
+        versionToken = latestRender.mtimeIso ? toCacheBustToken(latestRender.mtimeIso) : versionToken;
       }
     }
 

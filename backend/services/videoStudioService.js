@@ -2043,7 +2043,9 @@ const renderCartoonVideo = async (project, premiumHD = false) => {
     .join('\n');
   await writeFile(concatListPath, `${concatLines}\n`, 'utf-8');
 
-  const outputFile = path.join(outputDir, 'story-render.mp4');
+  const renderToken = Date.now();
+  const outputFileName = `story-render-${renderToken}.mp4`;
+  const outputFile = path.join(outputDir, outputFileName);
   const concatArgs = [
     '-y',
     '-f', 'concat',
@@ -2061,7 +2063,7 @@ const renderCartoonVideo = async (project, premiumHD = false) => {
   concatArgs.push(outputFile);
   await runFfmpeg(concatArgs, outputDir);
 
-  const videoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
+  const videoUrl = `/uploads/video-studio/${safeProjectId}/${outputFileName}`;
   const totalDuration = clipResults.reduce((sum, clip) => sum + (Number(clip.duration) || 0), 0);
   const usedTts = clipResults.some((clip) => clip.usedTts);
   const usedAiImages = clipResults.some((clip) => clip.usedAiImage);
@@ -2133,7 +2135,9 @@ const renderVideo = async (project, premiumHD = false) => {
   const audioTrackPath = dialogueAudioPath || narrationAudioPath;
 
   const quality = premiumHD && !isLowMemoryMode ? '24' : (isLowMemoryMode ? '28' : '23');
-  const outputFile = path.join(outputDir, 'story-render.mp4');
+  const renderToken = Date.now();
+  const outputFileName = `story-render-${renderToken}.mp4`;
+  const outputFile = path.join(outputDir, outputFileName);
   const ambientAudioExpression = `aevalsrc=(0.016*sin(2*PI*220*t)+0.012*sin(2*PI*330*t)+0.008*sin(2*PI*440*t)):s=44100:d=${totalDuration}`;
 
   const ffmpegArgs = [
@@ -2167,7 +2171,7 @@ const renderVideo = async (project, premiumHD = false) => {
 
   await runFfmpeg(ffmpegArgs, outputDir);
 
-  const videoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
+  const videoUrl = `/uploads/video-studio/${safeProjectId}/${outputFileName}`;
   const metadataPath = path.join(outputDir, 'project.json');
   await writeFile(metadataPath, JSON.stringify({
     ...project,
