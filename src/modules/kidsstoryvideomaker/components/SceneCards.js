@@ -6,6 +6,8 @@ const SceneCards = React.memo(function SceneCards({
   onMoveScene,
   onFieldChange,
   onDurationChange,
+  onDuplicateScene,
+  onRemoveScene,
 }) {
   if (!scenes.length) {
     return <p>No scenes yet. Use Create to build your video pipeline.</p>;
@@ -29,6 +31,16 @@ const SceneCards = React.memo(function SceneCards({
             disabled={index === scenes.length - 1}
           >
             Move Down
+          </button>
+          <button className="secondary-button" onClick={() => onDuplicateScene(sceneId)}>
+            Duplicate
+          </button>
+          <button
+            className="download-button"
+            onClick={() => onRemoveScene(sceneId)}
+            disabled={scenes.length <= 1}
+          >
+            Remove
           </button>
         </div>
 

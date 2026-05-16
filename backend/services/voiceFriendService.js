@@ -204,7 +204,9 @@ const buildPersonaPrompt = (session) => {
       ? 'Encourage calm presence, grounding, and self-awareness with gentle wording.'
       : session.persona === 'playful'
         ? 'Keep the tone friendly, light, and caring while staying emotionally present.'
-        : 'Keep the tone supportive, loving, and reassuring.';
+        : session.persona === 'partner'
+          ? 'Speak like a trusted companion: deeply understanding, warm, and respectful while still emotionally supportive.'
+          : 'Keep the tone supportive, loving, and reassuring.';
   const languagePrompt = session.language && session.language !== 'en'
     ? `Answer naturally in ${session.language} when appropriate, while keeping the tone supportive and easy to understand.`
     : 'Answer naturally in English with a warm, conversational rhythm.';
@@ -244,7 +246,9 @@ const buildLocalSupportReply = (session, userMessage) => {
       ? 'Stay calm and present in every sentence.'
       : session.persona === 'playful'
         ? 'Stay light and warm while still being thoughtful.'
-        : 'Stay reassuring and supportive.';
+        : session.persona === 'partner'
+          ? 'Stay deeply understanding and affectionate, while being respectful and reassuring.'
+          : 'Stay reassuring and supportive.';
   const placeTip = favoritePlace
     ? ` Since you mentioned ${favoritePlace}, I also suggest checking the weather and keeping a little flexibility in your plan.`
     : '';
@@ -270,7 +274,11 @@ const buildLocalSupportReply = (session, userMessage) => {
   }
 
   if (/(family|mom|dad|sister|brother|friend|relationship|partner)/i.test(normalized)) {
-    return `${namePrefix}${scenarioHint}relationships can feel complicated. Start by naming one thing you need or want from the people around you, and I’ll help you figure out the kindest next step.`;
+    return `${namePrefix}${scenarioHint}relationships can feel complicated. Share one thing you would like to feel different about, and I’ll help you find a kind, gentle next step.`;
+  }
+
+  if (/(romantic|date|love|partner|relationship|mate)/i.test(normalized)) {
+    return `${namePrefix}${scenarioHint}that sounds like something close to your heart. Tell me one feeling you want to hold onto and one thing you’d like to make easier.`;
   }
 
   if (/(tired|sleep|rest|health|sick|wellness|exercise)/i.test(normalized)) {

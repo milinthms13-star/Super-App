@@ -363,6 +363,22 @@
   background: linear-gradient(to bottom, rgba(0,0,0,0.02), rgba(0,0,0,0.08));
 }
 
+.voice-friend-video-avatar::after {
+  content: '';
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90px;
+  height: 34px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 12px rgba(255,255,255,0.4);
+}
+
+.voice-friend-video-avatar .voice-friend-mouth {
+  bottom: 14px;
+}
+
 .voice-friend-mouth {
   position: absolute;
   bottom: 16px;

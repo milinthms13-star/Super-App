@@ -116,6 +116,28 @@ const getModeDescription = (modeId) => {
 
 const FALLBACK_SCENE_TITLES = ["Beginning", "Adventure", "Challenge", "Magic", "Celebration"];
 const FALLBACK_CAMERA_ACTIONS = ["soft zoom", "gentle pan", "wide reveal", "close-up", "dolly in"];
+const createDraftCharacter = (index = 0) => ({
+  id: `char-${Date.now()}-${index + 1}`,
+  name: `Character ${index + 1}`,
+  role: "Story role",
+  appearance: "friendly cartoon character",
+  voiceProfile: "kid-female",
+  emotionStyle: "friendly",
+  locked: true,
+});
+const createDraftScene = (index = 0) => ({
+  id: index + 1,
+  title: `Scene ${index + 1}`,
+  description: "Describe what happens in this scene.",
+  dialogue: "Narrator: Add dialogue here.",
+  emotion: "wonder",
+  background: "colorful cartoon world",
+  weather: "sunny",
+  timeOfDay: "Morning",
+  cameraActions: "soft pan",
+  durationSeconds: 4,
+  characters: [],
+});
 
 const createClientFallbackProject = ({
   storyTitle,
@@ -690,6 +712,32 @@ const KidsStoryVideoMaker = () => {
     markSectionDirty("characters");
   };
 
+  const handleAddCharacter = () => {
+    setGeneratedProject((current) => {
+      if (!current) return current;
+      const nextCharacters = [...(current.characters || []), createDraftCharacter((current.characters || []).length)];
+      return { ...current, characters: nextCharacters };
+    });
+    markSectionDirty("characters");
+    setMessage("Character added. Update details and save.");
+    setError("");
+  };
+
+  const handleRemoveCharacter = (index) => {
+    setGeneratedProject((current) => {
+      if (!current) return current;
+      const characters = [...(current.characters || [])];
+      if (characters.length <= 1) {
+        return current;
+      }
+      characters.splice(index, 1);
+      return { ...current, characters };
+    });
+    markSectionDirty("characters");
+    setMessage("Character removed. Save character edits to persist.");
+    setError("");
+  };
+
   const applyProjectSnapshotToStudio = (incomingProject, successText = "Project loaded.") => {
     if (!incomingProject) {
       return;
@@ -1104,6 +1152,75 @@ const KidsStoryVideoMaker = () => {
     );
     markSectionDirty("scenes");
     setMessage("Scene order updated. Save scene edits to persist.");
+    setError("");
+  };
+
+  const handleAddScene = () => {
+    const nextScenes = [...generatedScenes, createDraftScene(generatedScenes.length)].map((scene, index) => ({
+      ...scene,
+      id: index + 1,
+    }));
+    setGeneratedScenes(nextScenes);
+    setGeneratedProject((current) =>
+      current
+        ? {
+            ...current,
+            scenes: nextScenes,
+            subtitles: buildSubtitlesFromScenes(nextScenes),
+          }
+        : current
+    );
+    markSectionDirty("scenes");
+    setMessage("Scene added. Edit it and save scene edits.");
+    setError("");
+  };
+
+  const handleDuplicateScene = (sceneId) => {
+    const sourceIndex = generatedScenes.findIndex((scene, index) => getSceneId(scene, index) === String(sceneId));
+    if (sourceIndex < 0) {
+      return;
+    }
+    const sourceScene = generatedScenes[sourceIndex];
+    const duplicated = {
+      ...sourceScene,
+      title: `${sourceScene.title || `Scene ${sourceIndex + 1}`} Copy`,
+    };
+    const nextScenes = [...generatedScenes];
+    nextScenes.splice(sourceIndex + 1, 0, duplicated);
+    const normalized = nextScenes.map((scene, index) => ({ ...scene, id: index + 1 }));
+    setGeneratedScenes(normalized);
+    setGeneratedProject((current) =>
+      current
+        ? {
+            ...current,
+            scenes: normalized,
+            subtitles: buildSubtitlesFromScenes(normalized),
+          }
+        : current
+    );
+    markSectionDirty("scenes");
+    setMessage("Scene duplicated. Customize dialogue and details, then save.");
+    setError("");
+  };
+
+  const handleRemoveScene = (sceneId) => {
+    if (generatedScenes.length <= 1) {
+      return;
+    }
+    const filtered = generatedScenes.filter((scene, index) => getSceneId(scene, index) !== String(sceneId));
+    const normalized = filtered.map((scene, index) => ({ ...scene, id: index + 1 }));
+    setGeneratedScenes(normalized);
+    setGeneratedProject((current) =>
+      current
+        ? {
+            ...current,
+            scenes: normalized,
+            subtitles: buildSubtitlesFromScenes(normalized),
+          }
+        : current
+    );
+    markSectionDirty("scenes");
+    setMessage("Scene removed. Save scene edits to persist.");
     setError("");
   };
 
@@ -1946,6 +2063,9 @@ const KidsStoryVideoMaker = () => {
                 >
                   Save Character Preset
                 </button>
+                <button className="secondary-button" onClick={handleAddCharacter} disabled={!generatedProject}>
+                  Add Character
+                </button>
               </div>
               {characterPresets.length > 0 && (
                 <div className="project-library-grid" style={{ marginBottom: 16 }}>
@@ -1977,6 +2097,7 @@ const KidsStoryVideoMaker = () => {
                   voiceType={voiceType}
                   onCharacterChange={handleCharacterFieldChange}
                   onCharacterToggleLock={handleCharacterLockToggle}
+                  onCharacterRemove={handleRemoveCharacter}
                 />
               ) : (
                 <p>Generate the story pipeline to preview your AI characters.</p>
@@ -2010,6 +2131,9 @@ const KidsStoryVideoMaker = () => {
                 >
                   Save Scene Edits
                 </button>
+                <button className="secondary-button" onClick={handleAddScene} disabled={!generatedProject}>
+                  Add Scene
+                </button>
               </div>
               <div className="preview-grid">
                 <SceneCards
@@ -2018,6 +2142,8 @@ const KidsStoryVideoMaker = () => {
                   onMoveScene={handleMoveScene}
                   onFieldChange={handleSceneFieldChange}
                   onDurationChange={handleSceneDurationChange}
+                  onDuplicateScene={handleDuplicateScene}
+                  onRemoveScene={handleRemoveScene}
                 />
               </div>
             </div>

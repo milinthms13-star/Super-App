@@ -9,6 +9,7 @@ const VOICE_PERSONAS = [
   { id: 'motivational', label: 'Motivator' },
   { id: 'mindful', label: 'Mindful Guide' },
   { id: 'playful', label: 'Playful Friend' },
+  { id: 'partner', label: 'Trusted Companion' },
 ];
 
 const MOOD_OPTIONS = [
@@ -83,7 +84,7 @@ const VoiceFriend = () => {
   const [language, setLanguage] = useState('en');
   const [messageText, setMessageText] = useState('');
   const [conversation, setConversation] = useState([]);
-  const [status, setStatus] = useState('Welcome to your AI Voice Friend. Share what you feel or ask for encouragement.');
+  const [status, setStatus] = useState('Welcome to your AI Voice Friend. Share how you feel and I will listen like a caring partner.');
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -115,6 +116,16 @@ const VoiceFriend = () => {
     () => VOICE_OPTIONS.find((option) => option.id === voice) || VOICE_OPTIONS[0],
     [voice]
   );
+
+  const moodEmojiMap = {
+    neutral: '😌',
+    happy: '😊',
+    anxious: '🤔',
+    sad: '🥺',
+  };
+
+  const displayName = friendCustomName || selectedFriend.name;
+  const friendLabel = `${displayName} • ${selectedFriend.label}`;
 
   const markPendingSessionSettings = useCallback(() => {
     setHasPendingSessionSettings(true);
@@ -702,8 +713,8 @@ const VoiceFriend = () => {
               {!friendCustomAvatar && (friendCustomName || selectedFriend.name)[0]}
             </div>
             <div className="voice-friend-profile-meta">
-              <h1>{friendCustomName || selectedFriend.name}</h1>
-              <p>{selectedFriend.personality}</p>
+              <h1>{displayName}</h1>
+              <p>{friendLabel}</p>
 
               <div className="voice-friend-persona-card">
                 <img src={friendCustomAvatar || selectedFriend.avatar} alt={`${friendCustomName || selectedFriend.name} avatar`} className="voice-friend-persona-img" />
@@ -795,10 +806,10 @@ const VoiceFriend = () => {
         <p>Emotion-aware chat companion with voice input and supportive guidance.</p>
         <div className="voice-friend-summary">
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
-          <span><strong>Mood:</strong> {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
+          <span><strong>Mood:</strong> {moodEmojiMap[mood] || ''} {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
           <span><strong>Voice style:</strong> {selectedVoiceOption.label}</span>
           <span><strong>Language:</strong> {language.toUpperCase()}</span>
-          <span><strong>Scenario:</strong> {SCENARIO_OPTIONS.find((opt) => opt.id === scenario)?.label}</span>
+          <span><strong>Scene:</strong> {SCENARIO_OPTIONS.find((opt) => opt.id === scenario)?.label}</span>
           <span><strong>Voice input:</strong> {speechSupported ? 'Supported' : 'Unavailable'}</span>
           <span><strong>Audio:</strong> {audioLoading ? 'Loading...' : playingAudio ? 'Playing response' : 'Ready'}</span>
           <span><strong>Messages:</strong> {conversation.length}</span>

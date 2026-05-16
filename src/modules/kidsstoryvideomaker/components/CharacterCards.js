@@ -1,6 +1,12 @@
 import React from "react";
 
-const CharacterCards = React.memo(function CharacterCards({ characters, voiceType, onCharacterChange, onCharacterToggleLock }) {
+const CharacterCards = React.memo(function CharacterCards({
+  characters,
+  voiceType,
+  onCharacterChange,
+  onCharacterToggleLock,
+  onCharacterRemove,
+}) {
   return (
     <div className="character-grid">
       {(characters || []).map((character, index) => (
@@ -38,6 +44,13 @@ const CharacterCards = React.memo(function CharacterCards({ characters, voiceTyp
               {character.locked !== false ? "Locked" : "Unlocked"}
             </button>
           </div>
+          <button
+            className="download-button"
+            onClick={() => onCharacterRemove(index)}
+            disabled={(characters || []).length <= 1}
+          >
+            Remove Character
+          </button>
         </div>
       ))}
     </div>
