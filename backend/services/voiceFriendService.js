@@ -278,11 +278,11 @@ const buildLocalSupportReply = (session, userMessage) => {
   }
 
   if (message.length <= 2) {
-    return `${namePrefix}${scenarioHint}I am here with you. Tell me a little more, and I will offer support or a practical next step.`;
+    return `${namePrefix}${scenarioHint}I am here with you. Tell me a little more, and I will offer support or a practical next step. What would help you most right now?`;
   }
 
   const snippet = message.length > 90 ? `${message.slice(0, 87)}...` : message;
-  return `${namePrefix}${scenarioHint}I hear you. You said: "${snippet}". ${tone}`;
+  return `${namePrefix}${scenarioHint}I hear you. You said: "${snippet}". ${tone} What would help you most right now?`;
 };
 
 const createSession = ({ userId, persona = 'supportive', mood = 'neutral', language = 'en', friendId = 'nila', userName = null, friendCustomName = null, friendCustomAvatar = null, scenario = 'room' }) => {
