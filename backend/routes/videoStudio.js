@@ -15,7 +15,7 @@ const {
   animateScene,
   generateVoice,
   generateSfx,
-  lipSync,
+  lipSync, 
   composeFinalVideo,
 } = require('../services/videoStudioService');
 
