@@ -84,6 +84,7 @@ const VoiceFriend = () => {
   const messageAbortControllerRef = useRef(null);
   const speechAbortControllerRef = useRef(null);
   const chatPanelRef = useRef(null);
+  const hasInitializedRef = useRef(false);
   const sessionMetaRef = useRef({ friendId: 'nila', userName: '', persona: 'supportive', mood: 'neutral', language: 'en' });
   const lastAssistantTextRef = useRef('');
 
@@ -250,6 +251,11 @@ const VoiceFriend = () => {
   }, [persona, mood, language, friendId, userName]);
 
   useEffect(() => {
+    if (hasInitializedRef.current) {
+      return;
+    }
+    hasInitializedRef.current = true;
+
     const savedState = localStorage.getItem(STORAGE_KEY);
     if (savedState) {
       try {
