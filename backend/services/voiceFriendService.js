@@ -1,10 +1,15 @@
 const crypto = require('crypto');
 const { OpenAI } = require('openai');
 const logger = require('../utils/logger');
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 
 let openai = null;
 
 const createOpenAIClient = () => {
+  if (isFreeMode) {
+    logger.info('VoiceFriendService running in FREE_MODE; OpenAI disabled.');
+    return null;
+  }
   if (!process.env.OPENAI_API_KEY) {
     logger.warn('OpenAI API key missing for VoiceFriendService');
     return null;
@@ -277,6 +282,10 @@ const buildConversation = (session, userMessage) => {
 };
 
 const createAIResponse = async (messages) => {
+  if (isFreeMode) {
+    return null;
+  }
+
   if (!openai) {
     openai = createOpenAIClient();
     if (!openai) {
@@ -314,6 +323,10 @@ const createAIResponse = async (messages) => {
 };
 
 const generateSpeech = async ({ text, friendId = 'nila', voice, language = 'en' }) => {
+  if (isFreeMode) {
+    return null;
+  }
+
   if (!openai) {
     return null;
   }

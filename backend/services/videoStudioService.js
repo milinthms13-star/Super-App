@@ -16,10 +16,13 @@ const stat = promisify(fs.stat);
 
 const uploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
 const projectStoreRoot = path.join(uploadsRoot, 'projects');
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 
 let openai;
 try {
-  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  openai = !isFreeMode && process.env.OPENAI_API_KEY
+    ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    : null;
 } catch (error) {
   openai = null;
 }
@@ -131,7 +134,7 @@ const buildSafetyReasonLabel = (categoryKey = '') =>
 
 const getModerationSafetyAssessment = async (value = '') => {
   const cleanValue = sanitizeText(value);
-  if (!openai || !cleanValue) {
+  if (isFreeMode || !openai || !cleanValue) {
     return { blocked: false, reasons: [] };
   }
 
@@ -189,7 +192,7 @@ const getCombinedSafetyAssessment = async (value = '') => {
 };
 
 const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
-  if (!openai) return null;
+  if (isFreeMode || !openai) return null;
 
   const aiCall = (async () => {
     const response = await openai.chat.completions.create({
@@ -586,6 +589,8 @@ const createAutopilotProject = async ({
       'timeline',
     ],
     editableOptions: buildEditableOptions(),
+    freeMode: isFreeMode,
+    aiProviderEnabled: !isFreeMode && Boolean(process.env.OPENAI_API_KEY),
   };
 
   return saveStudioProject(project);
@@ -771,6 +776,8 @@ const createStudioProject = async ({ storyTitle, storyPrompt, languageId, styleI
     safeMode,
     ageFilter,
     premiumExport: false,
+    freeMode: isFreeMode,
+    aiProviderEnabled: !isFreeMode && Boolean(process.env.OPENAI_API_KEY),
   };
 
   const systemPrompt = `You are a children-friendly animation production engine for an AI Kids Animation Studio. Parse the user story into scenes, characters, emotions, camera actions, and safe multimedia prompts.`;
@@ -1076,7 +1083,7 @@ const buildTtsModelFallbackList = () => {
 };
 
 const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
-  if (!openai) {
+  if (isFreeMode || !openai) {
     return null;
   }
 
@@ -1189,7 +1196,7 @@ const extractSceneDialogueTurns = (scene, project) => {
 };
 
 const buildCharacterDialogueAudio = async (project, outputDir, totalDurationSeconds) => {
-  if (!openai || !Array.isArray(project?.scenes) || !project.scenes.length) {
+  if (isFreeMode || !openai || !Array.isArray(project?.scenes) || !project.scenes.length) {
     return null;
   }
 
@@ -1267,7 +1274,7 @@ const buildNarrationAudio = async (project, outputDir) => {
   if (!narrationText) {
     return null;
   }
-  if (!openai) {
+  if (isFreeMode || !openai) {
     return null;
   }
   return synthesizeSpeechToFile({
@@ -1379,6 +1386,7 @@ const renderVideo = async (project, premiumHD = false) => {
     renderedAt: new Date().toISOString(),
     videoUrl,
     renderAudioMode: dialogueAudioPath ? 'character-dialogue' : (narrationAudioPath ? 'narration' : 'silent'),
+    freeMode: isFreeMode,
   }, null, 2), 'utf-8');
 
   return { videoUrl, projectId: path.basename(outputDir), outputFile };

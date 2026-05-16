@@ -11,6 +11,7 @@ const {
 } = require('../services/videoStudioService');
 
 const router = express.Router();
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 
 const buildRequestOrigin = (req) => {
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
@@ -137,7 +138,7 @@ router.post('/create', async (req, res) => {
       return res.status(500).json({ success: false, error: 'AI pipeline returned no project.' });
     }
 
-    res.json({ success: true, project });
+    res.json({ success: true, project, freeMode: isFreeMode });
   } catch (error) {
     logger.error('Video studio create error:', error);
     respondVideoStudioError(res, error, 'Failed to create AI video project.');
@@ -177,6 +178,7 @@ router.post('/render', async (req, res) => {
       videoUrl: absoluteVideoUrl,
       videoPath: relativeVideoUrl,
       projectId: result.projectId,
+      freeMode: isFreeMode,
     });
   } catch (error) {
     logger.error('Video studio render error:', error);
@@ -215,7 +217,7 @@ router.post('/autopilot/create', async (req, res) => {
       sceneCount,
     });
 
-    res.json({ success: true, project });
+    res.json({ success: true, project, freeMode: isFreeMode });
   } catch (error) {
     logger.error('Video studio autopilot create error:', error);
     respondVideoStudioError(res, error, 'Failed to generate autonomous story project.');
@@ -225,7 +227,7 @@ router.post('/autopilot/create', async (req, res) => {
 router.get('/projects/:projectId', async (req, res) => {
   try {
     const project = await getStudioProject(req.params.projectId);
-    res.json({ success: true, project });
+    res.json({ success: true, project, freeMode: isFreeMode });
   } catch (error) {
     logger.error('Video studio get project error:', error);
     res.status(404).json({ success: false, error: error.message || 'Project not found.' });
@@ -235,7 +237,7 @@ router.get('/projects/:projectId', async (req, res) => {
 router.patch('/projects/:projectId', async (req, res) => {
   try {
     const project = await patchStudioProject(req.params.projectId, req.body || {});
-    res.json({ success: true, project });
+    res.json({ success: true, project, freeMode: isFreeMode });
   } catch (error) {
     logger.error('Video studio patch project error:', error);
     respondVideoStudioError(res, error, 'Failed to update project.');
@@ -245,7 +247,7 @@ router.patch('/projects/:projectId', async (req, res) => {
 router.post('/projects/:projectId/regenerate/:stage', async (req, res) => {
   try {
     const project = await regenerateProjectStage(req.params.projectId, req.params.stage, req.body || {});
-    res.json({ success: true, project });
+    res.json({ success: true, project, freeMode: isFreeMode });
   } catch (error) {
     logger.error('Video studio regenerate stage error:', error);
     respondVideoStudioError(res, error, 'Failed to regenerate stage.');
