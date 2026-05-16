@@ -14,7 +14,7 @@ class MessageBatcher {
     this.stats = {
       totalBatches: 0,
       totalMessages: 0,
-      messagesPerBatch: [],
+      totalMessagesInFlushedBatches: 0,
       compressionRatio: 0
     };
   }
@@ -85,7 +85,7 @@ class MessageBatcher {
       };
 
       this.stats.totalBatches++;
-      this.stats.messagesPerBatch.push(batch.length);
+      this.stats.totalMessagesInFlushedBatches += batch.length;
 
       // Clear batch
       this.batches.delete(userId);
@@ -144,7 +144,7 @@ class MessageBatcher {
   getStats() {
     const avgMessagesPerBatch =
       this.stats.totalBatches > 0
-        ? this.stats.totalMessages / this.stats.totalBatches
+        ? this.stats.totalMessagesInFlushedBatches / this.stats.totalBatches
         : 0;
 
     return {
@@ -152,7 +152,9 @@ class MessageBatcher {
       totalMessages: this.stats.totalMessages,
       avgMessagesPerBatch: avgMessagesPerBatch.toFixed(2),
       activeBatches: this.batches.size,
-      reductionPercentage: ((1 - 1 / avgMessagesPerBatch) * 100).toFixed(2)
+      reductionPercentage: avgMessagesPerBatch > 0
+        ? ((1 - 1 / avgMessagesPerBatch) * 100).toFixed(2)
+        : '0.00'
     };
   }
 
@@ -163,7 +165,7 @@ class MessageBatcher {
     this.stats = {
       totalBatches: 0,
       totalMessages: 0,
-      messagesPerBatch: [],
+      totalMessagesInFlushedBatches: 0,
       compressionRatio: 0
     };
   }

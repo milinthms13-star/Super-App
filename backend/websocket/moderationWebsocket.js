@@ -18,7 +18,7 @@ class ModerationWebSocketManager {
     this.wss = null;
     this.moderators = new Map(); // moderator -> { ws, userId, taskId, status }
     this.tasks = new Map(); // taskId -> { moderatorId, claimedAt, status }
-    this.reportSubscribers = new Map(); // reportId -> [moderator websockets]
+    this.reportSubscribers = new Map(); // reportId -> Set<moderator websocket>
     this.broadcastInterval = null;
   }
 
@@ -307,9 +307,9 @@ class ModerationWebSocketManager {
 
       // Add to subscribers
       if (!this.reportSubscribers.has(reportId)) {
-        this.reportSubscribers.set(reportId, []);
+        this.reportSubscribers.set(reportId, new Set());
       }
-      this.reportSubscribers.get(reportId).push(ws);
+      this.reportSubscribers.get(reportId).add(ws);
 
       ws.send(JSON.stringify({
         type: 'report_subscribed',
@@ -332,11 +332,8 @@ class ModerationWebSocketManager {
 
       if (this.reportSubscribers.has(reportId)) {
         const subs = this.reportSubscribers.get(reportId);
-        const idx = subs.indexOf(ws);
-        if (idx !== -1) {
-          subs.splice(idx, 1);
-        }
-        if (subs.length === 0) {
+        subs.delete(ws);
+        if (subs.size === 0) {
           this.reportSubscribers.delete(reportId);
         }
       }
@@ -390,11 +387,8 @@ class ModerationWebSocketManager {
 
       // Remove from subscribers
       for (const [reportId, subs] of this.reportSubscribers) {
-        const idx = subs.indexOf(ws);
-        if (idx !== -1) {
-          subs.splice(idx, 1);
-        }
-        if (subs.length === 0) {
+        subs.delete(ws);
+        if (subs.size === 0) {
           this.reportSubscribers.delete(reportId);
         }
       }

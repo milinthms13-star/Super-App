@@ -1,5 +1,6 @@
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
 const logger = require('../utils/logger');
 const {
   createStudioProject,
@@ -12,6 +13,9 @@ const {
 
 const router = express.Router();
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
+const videoStudioUploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
+
+const toSafeProjectDirectoryName = (value = '') => String(value).replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
 
 const buildRequestOrigin = (req) => {
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
@@ -256,8 +260,29 @@ router.post('/projects/:projectId/regenerate/:stage', async (req, res) => {
 
 router.get('/projects/:projectId/download', async (req, res) => {
   try {
-    const project = await getStudioProject(req.params.projectId);
-    const rawVideoUrl = String(project?.videoUrl || '').trim();
+    const requestedProjectId = String(req.params.projectId || '').trim();
+    if (!requestedProjectId) {
+      return res.status(400).json({ success: false, error: 'Project ID is required.' });
+    }
+
+    let project = null;
+    try {
+      project = await getStudioProject(requestedProjectId);
+    } catch (projectError) {
+      if (projectError?.code !== 'ENOENT') {
+        throw projectError;
+      }
+    }
+
+    let rawVideoUrl = String(project?.videoUrl || '').trim();
+    if (!rawVideoUrl) {
+      const safeProjectId = toSafeProjectDirectoryName(project?.projectId || requestedProjectId);
+      const fallbackOutputPath = path.join(videoStudioUploadsRoot, safeProjectId, 'story-render.mp4');
+      if (fs.existsSync(fallbackOutputPath)) {
+        rawVideoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
+      }
+    }
+
     if (!rawVideoUrl) {
       return res.status(404).json({ success: false, error: 'No rendered video is available for this project yet.' });
     }
@@ -269,7 +294,7 @@ router.get('/projects/:projectId/download', async (req, res) => {
 
     res.json({
       success: true,
-      projectId: project.projectId,
+      projectId: project?.projectId || requestedProjectId,
       videoUrl: absoluteVideoUrl,
       downloadUrl: absoluteVideoUrl,
     });

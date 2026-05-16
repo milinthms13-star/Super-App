@@ -12,6 +12,7 @@ const logger = require('../config/logger');
 class OptimizationCleanupJob {
   constructor() {
     this.jobs = [];
+    this.started = false;
   }
 
   /**
@@ -218,6 +219,11 @@ class OptimizationCleanupJob {
    * Start all jobs
    */
   startAll() {
+    if (this.started) {
+      logger.warn('Optimization cleanup jobs already started; skipping duplicate start');
+      return;
+    }
+
     try {
       logger.info('Starting optimization cleanup jobs...');
       this.startStaleBatchFlush();
@@ -226,6 +232,7 @@ class OptimizationCleanupJob {
       this.startOptimizationPerformanceReport();
       this.startPeriodicStatsReset();
       this.startMemoryPressureRelief();
+      this.started = true;
       logger.info('All optimization cleanup jobs started successfully');
     } catch (error) {
       logger.error('Error starting optimization jobs:', error);
@@ -240,6 +247,7 @@ class OptimizationCleanupJob {
       logger.info('Stopping optimization cleanup jobs...');
       this.jobs.forEach(job => job.stop());
       this.jobs = [];
+      this.started = false;
       logger.info('All optimization cleanup jobs stopped');
     } catch (error) {
       logger.error('Error stopping optimization jobs:', error);

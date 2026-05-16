@@ -355,7 +355,7 @@ const KidsStoryVideoMaker = () => {
     const code = String(err?.code || "").toUpperCase();
     const status = Number(err?.status || 0);
     const message = String(err?.message || "").toLowerCase();
-    if (code === "EMPTY_RESPONSE" || code === "REQUEST_TIMEOUT" || code === "NETWORK_ERROR") {
+    if (code === "EMPTY_RESPONSE" || code === "REQUEST_TIMEOUT" || code === "NETWORK_ERROR" || code === "INVALID_JSON") {
       return true;
     }
     if (status === 408 || status === 502 || status === 503 || status === 504) {

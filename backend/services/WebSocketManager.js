@@ -7,12 +7,18 @@ class WebSocketManager {
     this.clients = new Map(); // userId -> { ws, connected, lastPing }
     this.trackingSessions = new Map(); // trackingId -> { clients set }
     this.chatSessions = new Map(); // orderId -> { clients set }
+    this.heartbeatInterval = null;
+    this.initialized = false;
   }
 
   /**
    * Initialize WebSocket server
    */
   initialize(server) {
+    if (this.initialized) {
+      return;
+    }
+
     this.wss = new WebSocket.Server({
       server,
       path: '/api/fooddelivery/ws',
@@ -23,9 +29,14 @@ class WebSocketManager {
     });
 
     // Heartbeat to keep connections alive
-    setInterval(() => {
+    this.heartbeatInterval = setInterval(() => {
       this._heartbeat();
     }, 30000); // 30 seconds
+    if (typeof this.heartbeatInterval.unref === 'function') {
+      this.heartbeatInterval.unref();
+    }
+
+    this.initialized = true;
 
     console.log('WebSocket server initialized at /api/fooddelivery/ws');
   }
@@ -143,6 +154,23 @@ class WebSocketManager {
     if (client) {
       client.connected = false;
       this.clients.delete(userId);
+
+      // Prevent unbounded growth by removing disconnected users
+      // from tracking/chat subscriber sets.
+      for (const [trackingId, subscribers] of this.trackingSessions.entries()) {
+        subscribers.delete(userId);
+        if (subscribers.size === 0) {
+          this.trackingSessions.delete(trackingId);
+        }
+      }
+
+      for (const [orderId, subscribers] of this.chatSessions.entries()) {
+        subscribers.delete(userId);
+        if (subscribers.size === 0) {
+          this.chatSessions.delete(orderId);
+        }
+      }
+
       console.log(`User ${userId} disconnected`);
     }
   }

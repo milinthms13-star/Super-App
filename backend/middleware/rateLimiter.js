@@ -5,9 +5,37 @@
 
 const requestCounts = new Map();
 const CLEANUP_INTERVAL = 60000; // Clean up old entries every 60 seconds
+const CLEANUP_GRACE_MS = 5 * 60 * 1000; // Keep entries a little beyond reset
+const MAX_TRACKED_KEYS = 50000;
 
 const isRateLimitDisabled = (options = {}) =>
   process.env.DISABLE_RATE_LIMITS === 'true' || (process.env.NODE_ENV === 'test' && options.disableInTest !== false);
+
+const cleanupRequestCounts = () => {
+  const now = Date.now();
+
+  for (const [key, data] of requestCounts.entries()) {
+    const expiry = Number(data?.resetTime || data?.firstRequestTime || 0) + CLEANUP_GRACE_MS;
+    if (!expiry || now > expiry) {
+      requestCounts.delete(key);
+    }
+  }
+
+  // Hard cap map size to avoid memory blowups during abuse spikes.
+  if (requestCounts.size > MAX_TRACKED_KEYS) {
+    const overflow = requestCounts.size - MAX_TRACKED_KEYS;
+    const sorted = Array.from(requestCounts.entries())
+      .sort((a, b) => (a[1]?.firstRequestTime || 0) - (b[1]?.firstRequestTime || 0))
+      .slice(0, overflow);
+
+    sorted.forEach(([key]) => requestCounts.delete(key));
+  }
+};
+
+const cleanupTimer = setInterval(cleanupRequestCounts, CLEANUP_INTERVAL);
+if (typeof cleanupTimer.unref === 'function') {
+  cleanupTimer.unref();
+}
 
 /**
  * Create a rate limiter middleware
@@ -23,20 +51,6 @@ const createRateLimiter = (options = {}) => {
   const maxRequests = options.maxRequests || 100;
   const keyGenerator = options.keyGenerator || ((req) => req.ip || req.connection.remoteAddress);
   const handler = options.handler || defaultRateLimitHandler;
-
-  // Clean up old entries periodically
-  const cleanupTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [key, data] of requestCounts.entries()) {
-      if (now - data.firstRequestTime > windowMs * 2) {
-        requestCounts.delete(key);
-      }
-    }
-  }, CLEANUP_INTERVAL);
-
-  if (typeof cleanupTimer.unref === 'function') {
-    cleanupTimer.unref();
-  }
 
   if (isRateLimitDisabled(options)) {
     return (_req, _res, next) => next();
