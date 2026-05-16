@@ -301,6 +301,8 @@ const SmartKitchenRecipeHub = () => {
     [loadPendingCommunity, loadRecipes, pushStatus, request, withBusy]
   );
 
+  const currentStep = selectedRecipe?.steps?.[cookingIndex] || null;
+
   const processVoiceCommand = useCallback(
     (command) => {
       const raw = String(command || "").trim();
