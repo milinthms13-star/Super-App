@@ -7,6 +7,7 @@ const { OpenAI } = require('openai');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const ffmpegPath = require('ffmpeg-static');
+const logger = require('../utils/logger');
 
 const writeFile = promisify(fs.writeFile);
 const readFile = promisify(fs.readFile);
@@ -229,6 +230,132 @@ const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
   }
 };
 
+const CHARACTER_ROLE_PRESETS = [
+  {
+    key: 'rabbit',
+    pattern: /\b(rabbit|hare|bunny)\b/i,
+    id: 'char-rabbit',
+    name: 'Rabbit',
+    role: 'Fast Challenger',
+    appearance: 'white rabbit with long ears, expressive eyes, and a red scarf',
+    emotionStyle: 'energetic and expressive',
+    colorPalette: ['sunny yellow', 'white', 'coral'],
+    defaultVoice: 'kid-female',
+  },
+  {
+    key: 'tortoise',
+    pattern: /\b(tortoise|turtle)\b/i,
+    id: 'char-tortoise',
+    name: 'Tortoise',
+    role: 'Steady Hero',
+    appearance: 'green tortoise with a patterned shell and calm smile',
+    emotionStyle: 'calm and determined',
+    colorPalette: ['green', 'olive', 'teal'],
+    defaultVoice: 'warm-male',
+  },
+  {
+    key: 'rama',
+    pattern: /\bram(a)?\b/i,
+    id: 'char-rama',
+    name: 'Rama',
+    role: 'Prince Hero',
+    appearance: 'young prince with traditional dhoti, shoulder cloth, and royal ornaments',
+    emotionStyle: 'calm and courageous',
+    colorPalette: ['royal blue', 'gold', 'forest green'],
+    defaultVoice: 'warm-male',
+  },
+  {
+    key: 'sita',
+    pattern: /\bsita\b/i,
+    id: 'char-sita',
+    name: 'Sita',
+    role: 'Princess Heroine',
+    appearance: 'graceful princess in sari-style attire with floral ornaments and warm smile',
+    emotionStyle: 'gentle and wise',
+    colorPalette: ['saffron', 'rose', 'gold'],
+    defaultVoice: 'soft-female',
+  },
+  {
+    key: 'doctor',
+    pattern: /\b(doctor|dr\.)\b/i,
+    id: 'char-doctor',
+    name: 'Dr. Asha',
+    role: 'Doctor',
+    appearance: 'doctor in white coat with stethoscope and kind smile',
+    emotionStyle: 'caring and confident',
+    colorPalette: ['white', 'sky blue', 'silver'],
+    defaultVoice: 'soft-female',
+  },
+  {
+    key: 'farmer',
+    pattern: /\bfarmer\b/i,
+    id: 'char-farmer',
+    name: 'Farmer Kiran',
+    role: 'Farmer',
+    appearance: 'farmer with straw hat, earthy clothes, and warm smile',
+    emotionStyle: 'hardworking and friendly',
+    colorPalette: ['earth brown', 'leaf green', 'sunflower yellow'],
+    defaultVoice: 'warm-male',
+  },
+  {
+    key: 'lawyer',
+    pattern: /\b(lawyer|advocate)\b/i,
+    id: 'char-lawyer',
+    name: 'Lawyer Neel',
+    role: 'Lawyer',
+    appearance: 'lawyer in formal black coat with files and confident posture',
+    emotionStyle: 'thoughtful and fair',
+    colorPalette: ['black', 'navy', 'white'],
+    defaultVoice: 'warm-male',
+  },
+  {
+    key: 'teacher',
+    pattern: /\bteacher\b/i,
+    id: 'char-teacher',
+    name: 'Teacher Meera',
+    role: 'Teacher',
+    appearance: 'teacher with books, neat attire, and encouraging smile',
+    emotionStyle: 'wise and kind',
+    colorPalette: ['maroon', 'cream', 'teal'],
+    defaultVoice: 'soft-female',
+  },
+  {
+    key: 'police',
+    pattern: /\b(police|officer|constable)\b/i,
+    id: 'char-police',
+    name: 'Officer Arjun',
+    role: 'Police Officer',
+    appearance: 'police officer in uniform with badge and calm stance',
+    emotionStyle: 'brave and protective',
+    colorPalette: ['khaki', 'brown', 'gold'],
+    defaultVoice: 'warm-male',
+  },
+];
+
+const inferPresetCharactersFromText = (text = '', voiceType = '') => {
+  const normalized = sanitizeText(text).toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+
+  const matches = CHARACTER_ROLE_PRESETS.filter((preset) => preset.pattern.test(normalized));
+  const uniqueByName = new Map();
+  matches.forEach((preset) => {
+    uniqueByName.set(preset.name, {
+      id: preset.id,
+      name: preset.name,
+      role: preset.role,
+      appearance: preset.appearance,
+      emotionStyle: preset.emotionStyle,
+      voiceProfile: voiceType || preset.defaultVoice || 'kid-female',
+      colorPalette: preset.colorPalette || [],
+      locked: true,
+    });
+  });
+
+  return Array.from(uniqueByName.values());
+};
+
 const fallbackParseStory = ({ story, storyMode, voiceType, language, storyTitle }) => {
   const lines = story
     .split(/[\.\?\!]+/)
@@ -236,32 +363,51 @@ const fallbackParseStory = ({ story, storyMode, voiceType, language, storyTitle 
     .filter(Boolean);
 
   const rawScenes = lines.length ? lines.slice(0, 5) : ['A child discovers a magical secret.'];
+  const characters = inferPresetCharactersFromText(story, voiceType).map((char) => ({
+    ...char,
+    locked: true,
+  }));
+  if (!characters.length) {
+    characters.push(
+      {
+        name: 'Ari',
+        role: 'Hero',
+        appearance: 'curious young explorer with a bright backpack',
+        voiceProfile: 'kid-friendly playful narrator',
+        colorPalette: ['sky blue', 'sunny yellow', 'mint'],
+      },
+      {
+        name: 'Milo',
+        role: 'Guide',
+        appearance: 'friendly sidekick with expressive eyes and a warm smile',
+        voiceProfile: 'soft storytelling voice',
+        colorPalette: ['peach', 'teal', 'cream'],
+      }
+    );
+  }
+  const primaryA = characters[0]?.name || 'Hero';
+  const primaryB = characters[1]?.name || 'Friend';
+  const primaryC = characters[2]?.name || '';
+
   const scenes = rawScenes.map((text, index) => ({
     id: index + 1,
     title: ['Beginning', 'Adventure', 'Challenge', 'Magic', 'Daydream'][index] || `Scene ${index + 1}`,
     description: text,
     emotion: index === 0 ? 'curious' : index === 2 ? 'brave' : index === 4 ? 'joyful' : 'wonder',
-    characters: [{ name: 'Main Hero', role: 'Hero', voice: voiceType }],
+    characters: characters.map((character) => ({
+      name: character.name,
+      role: character.role,
+      voice: character.voiceProfile || voiceType,
+    })),
     cameraActions: ['soft zoom', 'gentle pan', 'wide exposure', 'close-up', 'dolly in'][index] || 'subtle move',
-    dialogue: `"${text}"`,
+    dialogue: [
+      `${primaryA}: ${text}`,
+      `${primaryB}: We can do this together.`,
+      primaryC ? `${primaryC}: Let us help each other and finish the mission.` : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
   }));
-
-  const characters = [
-    {
-      name: 'Ari',
-      role: 'Hero',
-      appearance: 'curious young explorer with a bright backpack',
-      voiceProfile: 'kid-friendly playful narrator',
-      colorPalette: ['sky blue', 'sunny yellow', 'mint'],
-    },
-    {
-      name: 'Milo',
-      role: 'Guide',
-      appearance: 'friendly sidekick with expressive eyes and a warm smile',
-      voiceProfile: 'soft storytelling voice',
-      colorPalette: ['peach', 'teal', 'cream'],
-    },
-  ];
 
   const subtitles = scenes.map((scene, index) => ({
     start: index * 4,
@@ -365,32 +511,7 @@ Keep language simple and family-friendly.`;
 
 const buildCharactersFromScript = ({ script, subject, voiceType }) => {
   const text = `${script?.title || ''} ${script?.synopsis || ''} ${subject || ''}`;
-  const hasRabbit = /rabbit|hare/i.test(text);
-  const hasTortoise = /tortoise|turtle/i.test(text);
-
-  const baseCharacters = [];
-  if (hasRabbit) {
-    baseCharacters.push({
-      id: 'char-rabbit',
-      name: 'Rabbit',
-      role: 'Fast Challenger',
-      appearance: 'white rabbit, red scarf, playful eyes',
-      emotionStyle: 'energetic and expressive',
-      voiceProfile: voiceType || 'kid-female',
-      locked: true,
-    });
-  }
-  if (hasTortoise) {
-    baseCharacters.push({
-      id: 'char-tortoise',
-      name: 'Tortoise',
-      role: 'Steady Hero',
-      appearance: 'green tortoise, gentle smile, simple cap',
-      emotionStyle: 'calm and determined',
-      voiceProfile: voiceType || 'warm-male',
-      locked: true,
-    });
-  }
+  const baseCharacters = inferPresetCharactersFromText(text, voiceType);
 
   if (!baseCharacters.length) {
     baseCharacters.push(
@@ -427,15 +548,16 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
   const primaryNames = (characters || []).map((char) => char.name).join(', ') || 'Story characters';
   const primaryA = characters?.[0]?.name || 'Hero';
   const primaryB = characters?.[1]?.name || 'Friend';
+  const primaryC = characters?.[2]?.name || '';
   const coreTopic = sanitizeText(script?.title || script?.synopsis || 'our mission');
   const moralLine = sanitizeText(script?.moral || 'teamwork and patience matter');
   const weatherOptions = ['sunny', 'golden evening', 'soft cloudy', 'gentle rain', 'starlit night'];
   const sceneDialogueTemplates = [
-    `${primaryA}: Let's begin our ${coreTopic} adventure.\n${primaryB}: Yes, we can solve this together.`,
-    `${primaryA}: This challenge is bigger than I expected.\n${primaryB}: We can break it into small steps.`,
-    `${primaryA}: I found a new clue.\n${primaryB}: Great, let us keep exploring and stay brave.`,
-    `${primaryA}: We are close now.\n${primaryB}: One more good decision and we can finish it.`,
-    `${primaryA}: We did it and learned something important.\n${primaryB}: ${moralLine}`,
+    `${primaryA}: Let's begin our ${coreTopic} adventure.\n${primaryB}: Yes, we can solve this together.${primaryC ? `\n${primaryC}: I will join and support this plan.` : ''}`,
+    `${primaryA}: This challenge is bigger than I expected.\n${primaryB}: We can break it into small steps.${primaryC ? `\n${primaryC}: I can handle one key part carefully.` : ''}`,
+    `${primaryA}: I found a new clue.\n${primaryB}: Great, let us keep exploring and stay brave.${primaryC ? `\n${primaryC}: Teamwork makes this easier for everyone.` : ''}`,
+    `${primaryA}: We are close now.\n${primaryB}: One more good decision and we can finish it.${primaryC ? `\n${primaryC}: Let us stay focused and kind.` : ''}`,
+    `${primaryA}: We did it and learned something important.\n${primaryB}: ${moralLine}${primaryC ? `\n${primaryC}: Together we achieved our goal.` : ''}`,
   ];
 
   return Array.from({ length: targetCount }).map((_, index) => {
@@ -1345,7 +1467,10 @@ const generateRealCartoonSceneImage = async (scene, project, imagePath, resoluti
       })
       .toFile(imagePath);
     return true;
-  } catch (_error) {
+  } catch (error) {
+    logger.warn(
+      `Video studio image generation failed for scene "${sanitizeText(scene?.title || scene?.id || 'unknown')}": ${sanitizeText(error?.message || 'unknown error')}`
+    );
     return false;
   }
 };
@@ -1898,6 +2023,20 @@ const pickPaletteColor = (palette = [], seed = 1, fallback = '0x9ee7ff') => {
 const buildCartoonSceneFilter = (scene, resolution) => {
   const width = Number(resolution?.width || 1280);
   const height = Number(resolution?.height || 720);
+  const characterText = Array.isArray(scene?.characters)
+    ? scene.characters.map((char) => `${sanitizeText(char?.name)} ${sanitizeText(char?.role)}`).join(' ')
+    : '';
+  const sceneText = [scene?.title, scene?.description, characterText, scene?.lines?.map((line) => line?.text).join(' ')]
+    .map((value) => sanitizeText(value))
+    .join(' ')
+    .toLowerCase();
+  const hasRabbit = /(rabbit|hare|bunny)/i.test(sceneText);
+  const hasTortoise = /(tortoise|turtle)/i.test(sceneText);
+  const hasRama = /\bram(a)?\b/i.test(sceneText);
+  const hasSita = /\bsita\b/i.test(sceneText);
+  const hasDoctor = /\b(doctor|dr\.)\b/i.test(sceneText);
+  const hasFarmer = /\bfarmer\b/i.test(sceneText);
+  const hasLawyer = /\b(lawyer|advocate)\b/i.test(sceneText);
   const sceneSeed = buildDeterministicSeed(scene?.title, scene?.description, scene?.emotion, scene?.lines?.map((line) => line?.text).join(' '));
   const skyPalette = scene.emotion === 'joyful'
     ? ['0xfff1a9', '0xffe8b8', '0xffefc7', '0xfbe6a2']
@@ -1930,6 +2069,57 @@ const buildCartoonSceneFilter = (scene, resolution) => {
   const motionB = (23 + ((sceneSeed >> 2) % 12)) / 10;
   const blinkPeriodA = (95 + (sceneSeed % 35)) / 100;
   const blinkPeriodB = (102 + ((sceneSeed >> 1) % 30)) / 100;
+  const rabbitEarColor = pickPaletteColor(['0xfff8f0', '0xfff0e8', '0xfff6ea'], sceneSeed >> 5, '0xfff8f0');
+  const rabbitInnerEarColor = pickPaletteColor(['0xffc9d9', '0xffb9d0', '0xffd3df'], sceneSeed >> 7, '0xffc9d9');
+  const tortoiseShellColor = pickPaletteColor(['0x6f9f44', '0x5f8f3d', '0x799b55'], sceneSeed >> 9, '0x6f9f44');
+  const tortoiseShellPattern = pickPaletteColor(['0x4f7030', '0x45682a', '0x567a36'], sceneSeed >> 11, '0x4f7030');
+
+  const rabbitEars = hasRabbit
+    ? [
+        `drawbox=x='252+18*sin(t*${motionA}+${phaseA})':y='132+6*sin(t*3+${phaseA})':w=38:h=78:color=${rabbitEarColor}@1:t=fill`,
+        `drawbox=x='346+18*sin(t*${motionA}+${phaseA})':y='132+6*sin(t*3+${phaseA})':w=38:h=78:color=${rabbitEarColor}@1:t=fill`,
+        `drawbox=x='262+18*sin(t*${motionA}+${phaseA})':y='146+6*sin(t*3+${phaseA})':w=18:h=54:color=${rabbitInnerEarColor}@1:t=fill`,
+        `drawbox=x='356+18*sin(t*${motionA}+${phaseA})':y='146+6*sin(t*3+${phaseA})':w=18:h=54:color=${rabbitInnerEarColor}@1:t=fill`,
+      ]
+    : [];
+  const tortoiseShell = hasTortoise
+    ? [
+        `drawbox=x='${characterTwoBodyX - 26}+16*sin(t*${motionB}+${phaseB})':y='336+8*sin(t*4.6+${phaseB})':w=204:h=132:color=${tortoiseShellColor}@0.95:t=fill`,
+        `drawbox=x='${characterTwoBodyX + 12}+16*sin(t*${motionB}+${phaseB})':y='364+8*sin(t*4.6+${phaseB})':w=48:h=38:color=${tortoiseShellPattern}@0.9:t=fill`,
+        `drawbox=x='${characterTwoBodyX + 78}+16*sin(t*${motionB}+${phaseB})':y='364+8*sin(t*4.6+${phaseB})':w=48:h=38:color=${tortoiseShellPattern}@0.9:t=fill`,
+        `drawbox=x='${characterTwoBodyX + 44}+16*sin(t*${motionB}+${phaseB})':y='410+8*sin(t*4.6+${phaseB})':w=48:h=38:color=${tortoiseShellPattern}@0.9:t=fill`,
+      ]
+    : [];
+  const ramaCrown = hasRama
+    ? [
+        `drawbox=x='272+18*sin(t*${motionA}+${phaseA})':y='168+6*sin(t*3+${phaseA})':w=108:h=24:color=0xe4b84f@1:t=fill`,
+        `drawbox=x='300+18*sin(t*${motionA}+${phaseA})':y='144+6*sin(t*3+${phaseA})':w=52:h=26:color=0xf2cf66@1:t=fill`,
+      ]
+    : [];
+  const sitaVeil = hasSita
+    ? [
+        `drawbox=x='${characterTwoHeadX - 6}+16*sin(t*${motionB}+${phaseB})':y='188+7*sin(t*4.6+${phaseB})':w=228:h=172:color=0xffb3c7@0.35:t=fill`,
+        `drawbox=x='${characterTwoBodyX + 8}+16*sin(t*${motionB}+${phaseB})':y='320+9*sin(t*4.6+${phaseB})':w=166:h=188:color=0xff8fb3@0.78:t=fill`,
+      ]
+    : [];
+  const doctorProps = hasDoctor
+    ? [
+        `drawbox=x='286+18*sin(t*${motionA}+${phaseA})':y='356+9*sin(t*4.6+${phaseA})':w=66:h=54:color=0xffffff@0.98:t=fill`,
+        `drawbox=x='309+18*sin(t*${motionA}+${phaseA})':y='346+9*sin(t*4.6+${phaseA})':w=20:h=10:color=0xcfd8dc@1:t=fill`,
+      ]
+    : [];
+  const farmerProps = hasFarmer
+    ? [
+        `drawbox=x='${characterTwoHeadX + 14}+16*sin(t*${motionB}+${phaseB})':y='182+7*sin(t*4.6+${phaseB})':w=176:h=22:color=0xc79b58@1:t=fill`,
+        `drawbox=x='${characterTwoHeadX + 44}+16*sin(t*${motionB}+${phaseB})':y='156+7*sin(t*4.6+${phaseB})':w=116:h=30:color=0xd9b06f@1:t=fill`,
+      ]
+    : [];
+  const lawyerProps = hasLawyer
+    ? [
+        `drawbox=x='${characterTwoBodyX + 12}+16*sin(t*${motionB}+${phaseB})':y='332+9*sin(t*4.6+${phaseB})':w=126:h=170:color=0x1e1e1e@0.94:t=fill`,
+        `drawbox=x='${characterTwoBodyX + 60}+16*sin(t*${motionB}+${phaseB})':y='352+9*sin(t*4.6+${phaseB})':w=30:h=134:color=0xffffff@0.72:t=fill`,
+      ]
+    : [];
 
   return [
     `drawbox=x=0:y=0:w=${width}:h=${height}:color=${skyColor}@1:t=fill`,
@@ -1954,6 +2144,13 @@ const buildCartoonSceneFilter = (scene, resolution) => {
     `drawbox=x='${characterTwoRightEyeX}+16*sin(t*${motionB}+${phaseB})':y='255+if(lt(mod(t\\,${blinkPeriodB})\\,0.1)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
     `drawbox=x='${characterTwoMouthX}+16*sin(t*${motionB}+${phaseB})':y='310+6*sin(t*11+${phaseB})':w=72:h='12+18*abs(sin(t*9.5))':color=0x7a1c1c@1:t=fill`,
     `drawbox=x='${characterTwoBodyX}+16*sin(t*${motionB}+${phaseB})':y='515+5*sin(t*${motionB}+${phaseB})':w=150:h=34:color=0x17356b@0.85:t=fill`,
+    ...rabbitEars,
+    ...tortoiseShell,
+    ...ramaCrown,
+    ...sitaVeil,
+    ...doctorProps,
+    ...farmerProps,
+    ...lawyerProps,
     `drawbox=x=120:y=${bubbleY}:w=${bubbleWidth}:h=95:color=white@0.92:t=fill`,
     `drawbox=x=${bubbleTailX}:y=${bubbleY + 80}:w=26:h=30:color=white@0.92:t=fill`,
     `drawbox=x=145:y=${bubbleY + 24}:w=${Math.max(150, bubbleWidth - 120)}:h=12:color=0x111111@0.55:t=fill`,
@@ -1975,6 +2172,11 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
     outputPath: ttsPath,
   });
   const generatedByAi = await generateRealCartoonSceneImage(scene, project, stillPath, resolution);
+  if (!generatedByAi && project?.requireSceneImages) {
+    throw new Error(
+      'AI character visuals are required for this render, but image generation failed. Check OPENAI_API_KEY, VIDEO_STUDIO_REAL_CARTOON_MODE, and image model access before retrying.'
+    );
+  }
   const duration = Math.max(2, Number(scene.duration) || 6);
   const fps = 24;
   const frames = Math.max(1, Math.floor(duration * fps));
@@ -2002,6 +2204,9 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
       `aevalsrc=(0.02*sin(2*PI*${baseFrequency}*t)+0.012*sin(2*PI*${overtoneFrequency}*t)):s=44100:d=${duration}`
     );
   }
+  const audioFilter = synthesizedPath
+    ? 'loudnorm=I=-16:TP=-1.5:LRA=11,volume=1.8,aresample=48000'
+    : 'volume=0.10,aresample=48000';
 
   if (generatedByAi) {
     const zoomFilter = [
@@ -2018,6 +2223,10 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
       '-pix_fmt', 'yuv420p',
       '-r', `${fps}`,
       '-c:a', 'aac',
+      '-af', audioFilter,
+      '-ar', '48000',
+      '-ac', '2',
+      '-b:a', '160k',
       '-shortest',
       clipPath
     );
@@ -2029,6 +2238,10 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
       '-pix_fmt', 'yuv420p',
       '-r', `${fps}`,
       '-c:a', 'aac',
+      '-af', audioFilter,
+      '-ar', '48000',
+      '-ac', '2',
+      '-b:a', '160k',
       '-shortest',
       clipPath
     );
@@ -2100,9 +2313,15 @@ const renderCartoonVideo = async (project, premiumHD = false) => {
     '-f', 'concat',
     '-safe', '0',
     '-i', concatListPath,
+    '-map', '0:v:0',
+    '-map', '0:a:0?',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac',
+    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11,volume=1.35,aresample=48000',
+    '-ar', '48000',
+    '-ac', '2',
+    '-b:a', '160k',
   ];
   if (premiumHD && !isLowMemoryMode) {
     concatArgs.push('-preset', 'medium');

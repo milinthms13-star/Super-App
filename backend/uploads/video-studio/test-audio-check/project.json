@@ -1,0 +1,47 @@
+{
+  "projectId": "test-audio-check",
+  "title": "Audio Check Story",
+  "videoSize": "youtube",
+  "voiceType": "kid-female",
+  "style": "cartoon",
+  "requireSceneImages": false,
+  "characters": [
+    {
+      "id": "c1",
+      "name": "Ari",
+      "role": "Hero"
+    },
+    {
+      "id": "c2",
+      "name": "Milo",
+      "role": "Guide"
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Test Scene",
+      "description": "Ari and Milo walk in a park and talk happily.",
+      "dialogue": "Ari: Hello Milo. Milo: Hello Ari, let us begin.",
+      "emotion": "joyful",
+      "duration": 3,
+      "characters": [
+        {
+          "name": "Ari",
+          "role": "Hero"
+        },
+        {
+          "name": "Milo",
+          "role": "Guide"
+        }
+      ]
+    }
+  ],
+  "renderedAt": "2026-05-16T18:51:35.807Z",
+  "videoUrl": "/uploads/video-studio/test-audio-check/story-render-1778957494561.mp4",
+  "renderMode": "real-cartoon-backend",
+  "renderAudioMode": "character-dialogue",
+  "renderVisualMode": "shape-fallback",
+  "totalDurationSeconds": 6,
+  "freeMode": false
+}

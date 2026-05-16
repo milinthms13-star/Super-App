@@ -34,6 +34,7 @@ steps:
       - --concurrency=1
       - --timeout=900
       - --max-instances=2
+      - --update-env-vars=VIDEO_STUDIO_REAL_CARTOON_MODE=1,VIDEO_STUDIO_ALLOW_AI_IN_FREE=1
 
 images:
   - asia-south1-docker.pkg.dev/$PROJECT_ID/superapp-containers/superapp-api:$COMMIT_SHA
