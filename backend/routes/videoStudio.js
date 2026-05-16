@@ -99,6 +99,11 @@ const formatMemoryUsage = () => {
   return `rss=${toMB(usage.rss)}MB heapUsed=${toMB(usage.heapUsed)}MB heapTotal=${toMB(usage.heapTotal)}MB external=${toMB(usage.external)}MB`;
 };
 
+const getRssMemoryMb = () => {
+  const usage = process.memoryUsage();
+  return Number((Number(usage.rss || 0) / 1024 / 1024).toFixed(1));
+};
+
 router.post('/create', async (req, res) => {
   try {
     const {
@@ -173,6 +178,21 @@ router.post('/create', async (req, res) => {
 
 router.post('/render', async (req, res) => {
   try {
+    const maxRssMb = Math.max(
+      256,
+      Number(process.env.VIDEO_STUDIO_MAX_RSS_MB) || (isFreeMode ? 420 : 1024)
+    );
+    const currentRssMb = getRssMemoryMb();
+    if (currentRssMb >= maxRssMb) {
+      logger.warn(
+        `Video studio render skipped due to high memory rss=${currentRssMb}MB threshold=${maxRssMb}MB`
+      );
+      return res.status(503).json({
+        success: false,
+        error: 'Renderer is temporarily busy due to memory pressure. Please retry in 30-60 seconds.',
+      });
+    }
+
     if (activeRenderCount >= maxParallelRenders) {
       return res.status(429).json({
         success: false,

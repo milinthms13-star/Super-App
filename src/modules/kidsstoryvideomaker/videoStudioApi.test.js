@@ -1,4 +1,4 @@
-import { VideoStudioApiError, requestVideoStudio } from "./videoStudioApi";
+import { VideoStudioApiError, requestVideoStudio, getProjectDownloadLink } from "./videoStudioApi";
 
 const jsonResponse = ({ ok = true, status = 200, payload, url = "http://localhost/api/video-studio/create" }) => ({
   ok,
@@ -68,5 +68,41 @@ describe("videoStudioApi", () => {
 
     expect(result.payload.success).toBe(true);
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("falls back to project metadata when download endpoint is unavailable", async () => {
+    process.env.REACT_APP_API_URL = "https://super-app-api.onrender.com";
+    process.env.REACT_APP_BACKEND_URL = "https://super-app-api.onrender.com";
+
+    global.fetch = jest.fn((requestUrl) => {
+      if (String(requestUrl || "").includes("/projects/p1/download")) {
+        return Promise.resolve(
+          jsonResponse({
+            ok: false,
+            status: 404,
+            payload: { success: false, error: "Not Found" },
+            url: requestUrl,
+          })
+        );
+      }
+
+      return Promise.resolve(
+        jsonResponse({
+          payload: {
+            success: true,
+            project: {
+              projectId: "p1",
+              videoUrl: "/uploads/video-studio/p1/story-render.mp4",
+            },
+          },
+          url: requestUrl,
+        })
+      );
+    });
+
+    const result = await getProjectDownloadLink("p1", { retries: 0 });
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.downloadUrl).toBe("/uploads/video-studio/p1/story-render.mp4");
+    expect(global.fetch).toHaveBeenCalled();
   });
 });

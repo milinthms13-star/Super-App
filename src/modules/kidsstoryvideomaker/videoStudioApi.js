@@ -264,16 +264,51 @@ export const renderProject = (requestBody, options = {}) =>
     }
   );
 
-export const getProjectDownloadLink = (projectId, options = {}) =>
-  requestVideoStudio(`/video-studio/projects/${projectId}/download`, { method: "GET", retries: 1, ...options }).then(
-    (result) => {
-      assertPayloadSuccess(result.payload, "download response");
-      if (!result.payload?.downloadUrl && !result.payload?.videoUrl) {
-        throw new Error("Invalid download response: missing downloadUrl.");
-      }
-      return result;
+export const getProjectDownloadLink = async (projectId, options = {}) => {
+  try {
+    const result = await requestVideoStudio(`/video-studio/projects/${projectId}/download`, {
+      method: "GET",
+      retries: 1,
+      ...options,
+    });
+
+    assertPayloadSuccess(result.payload, "download response");
+    if (!result.payload?.downloadUrl && !result.payload?.videoUrl) {
+      throw new Error("Invalid download response: missing downloadUrl.");
     }
-  );
+    return result;
+  } catch (error) {
+    const status = Number(error?.status || 0);
+    const code = String(error?.code || "");
+    const shouldFallback = status === 404 || code === "INVALID_JSON" || code === "EMPTY_RESPONSE";
+
+    if (!shouldFallback) {
+      throw error;
+    }
+
+    const projectResult = await requestVideoStudio(`/video-studio/projects/${projectId}`, {
+      method: "GET",
+      retries: 1,
+      ...options,
+    });
+
+    assertPayloadSuccess(projectResult.payload, "project response");
+    const downloadUrl = projectResult.payload.project?.videoUrl || projectResult.payload.project?.downloadUrl;
+    if (!downloadUrl) {
+      throw new Error("Project has no downloadable video URL.");
+    }
+
+    return {
+      ...projectResult,
+      payload: {
+        ...projectResult.payload,
+        success: true,
+        downloadUrl,
+        videoUrl: downloadUrl,
+      },
+    };
+  }
+};
 
 export const waitForRenderedVideo = async (
   projectId,

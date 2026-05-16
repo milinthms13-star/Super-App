@@ -17,6 +17,15 @@ const stat = promisify(fs.stat);
 const uploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
 const projectStoreRoot = path.join(uploadsRoot, 'projects');
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
+const isLowMemoryMode = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_LOW_MEMORY_MODE || (isFreeMode ? '1' : '0')).toLowerCase()
+);
+
+if (isLowMemoryMode) {
+  // Keep native image processing predictable on low-memory instances.
+  sharp.cache({ memory: 20, files: 0, items: 64 });
+  sharp.concurrency(1);
+}
 
 let openai;
 try {
@@ -900,6 +909,17 @@ Generate a single narration text for the entire video with kid-safe phrasing.`;
 };
 
 const getResolution = (videoSize) => {
+  if (isLowMemoryMode) {
+    switch (videoSize) {
+      case 'shorts':
+        return { width: 540, height: 960 };
+      case 'whatsapp':
+        return { width: 720, height: 720 };
+      default:
+        return { width: 854, height: 480 };
+    }
+  }
+
   switch (videoSize) {
     case 'shorts':
       return { width: 720, height: 1280 };
@@ -1005,7 +1025,10 @@ const createSceneImages = async (project, directory) => {
   for (const scene of project.scenes) {
     const svg = buildSceneSvg(scene, project, resolution.width, resolution.height);
     const imagePath = path.join(directory, `scene-${scene.id}.png`);
-    await sharp(Buffer.from(svg)).png().toFile(imagePath);
+    const pngOptions = isLowMemoryMode
+      ? { compressionLevel: 9, palette: true, effort: 4 }
+      : {};
+    await sharp(Buffer.from(svg)).png(pngOptions).toFile(imagePath);
     const sceneDuration = Math.max(2, Math.min(15, Number(scene.durationSeconds) || 4));
     totalDuration += sceneDuration;
     sceneFiles.push({ path: imagePath, duration: sceneDuration });
@@ -1281,11 +1304,17 @@ const runFfmpeg = async (args, cwd) => {
   }
 
   return new Promise((resolve, reject) => {
-    const ffmpeg = spawn(ffmpegPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    const ffmpegArgs = ['-hide_banner', '-loglevel', 'error', '-nostdin', ...args];
+    const ffmpeg = spawn(ffmpegPath, ffmpegArgs, { cwd, stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
+    const stderrLimit = 200000;
 
     ffmpeg.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
+      if (stderr.length >= stderrLimit) {
+        return;
+      }
+      const next = chunk.toString();
+      stderr = `${stderr}${next}`.slice(-stderrLimit);
     });
 
     ffmpeg.on('close', (code) => {
@@ -1335,12 +1364,13 @@ const renderVideo = async (project, premiumHD = false) => {
   await writeFile(listPath, listContent, 'utf-8');
   const subtitlePath = await buildSubtitleFile(project, outputDir);
   const subtitleFileName = path.basename(subtitlePath).replace(/\\/g, '/');
+  const useHardSubtitles = !isLowMemoryMode || ['1', 'true', 'yes', 'on'].includes(String(process.env.VIDEO_STUDIO_FREE_HARDSUBS || '').toLowerCase());
   const totalDuration = Math.max(2, Number(totalDurationSeconds) || sceneAssets.length * 4);
   const dialogueAudioPath = await buildCharacterDialogueAudio(project, outputDir, totalDuration);
   const narrationAudioPath = dialogueAudioPath ? null : await buildNarrationAudio(project, outputDir);
   const audioTrackPath = dialogueAudioPath || narrationAudioPath;
 
-  const quality = premiumHD ? '24' : '23';
+  const quality = premiumHD && !isLowMemoryMode ? '24' : (isLowMemoryMode ? '28' : '23');
   const outputFile = path.join(outputDir, 'story-render.mp4');
 
   const ffmpegArgs = [
@@ -1357,16 +1387,20 @@ const renderVideo = async (project, premiumHD = false) => {
   }
 
   ffmpegArgs.push(
+    '-threads', '1',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-crf', quality,
     '-r', '24',
     '-c:a', 'aac',
     '-b:a', '128k',
-    '-shortest',
-    '-vf', `subtitles=${subtitleFileName}:force_style='FontName=Arial,FontSize=24,PrimaryColour=&Hffffff&'`,
-    outputFile
+    '-shortest'
   );
+
+  if (useHardSubtitles) {
+    ffmpegArgs.push('-vf', `subtitles=${subtitleFileName}:force_style='FontName=Arial,FontSize=24,PrimaryColour=&Hffffff&'`);
+  }
+  ffmpegArgs.push(outputFile);
 
   await runFfmpeg(ffmpegArgs, outputDir);
 
