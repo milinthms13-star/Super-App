@@ -118,8 +118,8 @@ app.use(compression());
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(morgan('combined'));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json({ limit: '20mb', inflate: true }));
+app.use(express.urlencoded({ extended: true, limit: '20mb', inflate: true }));
 app.use(
   '/uploads',
   express.static(uploadsDirectory, {

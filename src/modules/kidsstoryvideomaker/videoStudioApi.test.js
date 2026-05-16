@@ -45,4 +45,28 @@ describe("videoStudioApi", () => {
       expect(error.safety?.context).toBe("story_prompt");
     }
   });
+
+  test("falls back to alternate API origin for network failures", async () => {
+    process.env.REACT_APP_API_URL = "https://unreachable.example.com/api";
+    process.env.REACT_APP_BACKEND_URL = "https://super-app-api.onrender.com";
+
+    global.fetch = jest
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          payload: { success: true, project: { projectId: "p2", title: "x", scenes: [{ title: "s", description: "d", dialogue: "n" }] } },
+          url: "https://super-app-api.onrender.com/api/video-studio/create",
+        })
+      );
+
+    const result = await requestVideoStudio("/video-studio/create", {
+      method: "POST",
+      body: { storyPrompt: "test" },
+      retries: 0,
+    });
+
+    expect(result.payload.success).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
 });

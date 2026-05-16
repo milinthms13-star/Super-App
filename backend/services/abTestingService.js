@@ -8,6 +8,8 @@ const mongoose = require('mongoose');
 
 class ABTestingService {
   static inMemoryEvents = [];
+  static MAX_IN_MEMORY_EVENTS = 5000;
+  static MAX_IN_MEMORY_EVENT_AGE_MS = 1000 * 60 * 60 * 6; // 6 hours
 
   /**
    * Define experiment variants with weights
@@ -121,6 +123,7 @@ class ABTestingService {
           ...eventPayload,
           _id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         });
+        this.pruneInMemoryEvents();
       }
 
       logger.info(`A/B Test event tracked: ${experimentName}/${variant}/${eventType}`);
@@ -165,6 +168,31 @@ class ABTestingService {
   /**
    * Get experiment results and statistical analysis
    */
+  static pruneInMemoryEvents() {
+    const now = Date.now();
+    const originalCount = this.inMemoryEvents.length;
+
+    this.inMemoryEvents = this.inMemoryEvents.filter((event) => {
+      const eventTime = event.timestamp ? new Date(event.timestamp).getTime() : now;
+      return now - eventTime <= this.MAX_IN_MEMORY_EVENT_AGE_MS;
+    });
+
+    if (this.inMemoryEvents.length > this.MAX_IN_MEMORY_EVENTS) {
+      const itemsToRemove = this.inMemoryEvents.length - this.MAX_IN_MEMORY_EVENTS;
+      this.inMemoryEvents.splice(0, itemsToRemove);
+    }
+
+    if (this.inMemoryEvents.length !== originalCount) {
+      logger.warn('Pruned stale in-memory A/B test events', {
+        before: originalCount,
+        after: this.inMemoryEvents.length,
+      });
+    }
+  }
+
+  /**
+   * Get experiment results and statistical analysis
+   */
   static async getExperimentResults(experimentName) {
     try {
       let events = [];
@@ -173,6 +201,7 @@ class ABTestingService {
         const Experiment = require('../models/Experiment');
         events = await Experiment.find({ experimentName });
       } else {
+        this.pruneInMemoryEvents();
         events = this.inMemoryEvents.filter((event) => event.experimentName === experimentName);
       }
 
@@ -265,6 +294,28 @@ class ABTestingService {
   /**
    * Get all active experiments
    */
+  static pruneInMemoryEvents() {
+    const now = Date.now();
+    const originalCount = this.inMemoryEvents.length;
+
+    this.inMemoryEvents = this.inMemoryEvents.filter((event) => {
+      const eventTime = event.timestamp ? new Date(event.timestamp).getTime() : now;
+      return now - eventTime <= this.MAX_IN_MEMORY_EVENT_AGE_MS;
+    });
+
+    if (this.inMemoryEvents.length > this.MAX_IN_MEMORY_EVENTS) {
+      const itemsToRemove = this.inMemoryEvents.length - this.MAX_IN_MEMORY_EVENTS;
+      this.inMemoryEvents.splice(0, itemsToRemove);
+    }
+
+    if (this.inMemoryEvents.length !== originalCount) {
+      logger.warn('Pruned stale in-memory A/B test events', {
+        before: originalCount,
+        after: this.inMemoryEvents.length,
+      });
+    }
+  }
+
   static async getActiveExperiments() {
     try {
       const experimentNames = Object.keys(this.experiments);

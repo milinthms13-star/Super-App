@@ -1,4 +1,4 @@
-import { buildApiUrl } from "../../utils/api";
+import { API_BASE_URL, buildApiUrl } from "../../utils/api";
 import {
   assertPayloadSuccess,
   assertProjectShape,
@@ -12,6 +12,64 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const isTransientStatus = (status) => status === 429 || status >= 500;
 
 const isAbortError = (error) => error?.name === "AbortError";
+const isLikelyNetworkError = (error) => {
+  if (!error) return false;
+  if (error instanceof TypeError) return true;
+  const message = String(error?.message || "").toLowerCase();
+  return /failed to fetch|networkerror|load failed|network request failed|cors/i.test(message);
+};
+
+const stripTrailingSlashes = (value = "") => String(value || "").trim().replace(/\/+$/, "");
+
+const normalizeApiBaseUrl = (value = "") => {
+  const normalizedValue = stripTrailingSlashes(value);
+  if (!normalizedValue) return "";
+  return /\/api$/i.test(normalizedValue) ? normalizedValue : `${normalizedValue}/api`;
+};
+
+const toAbsoluteApiUrl = (baseUrl, path = "") => {
+  const normalizedBase = normalizeApiBaseUrl(baseUrl);
+  const normalizedPath = String(path || "").startsWith("/") ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
+};
+
+const dedupeUrls = (urls = []) => Array.from(new Set(urls.filter(Boolean)));
+
+const buildVideoStudioRequestUrls = (path = "") => {
+  const candidates = [buildApiUrl(path)];
+  const runtimeOrigin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "";
+
+  if (runtimeOrigin && /^https?:\/\//i.test(runtimeOrigin)) {
+    candidates.push(toAbsoluteApiUrl(runtimeOrigin, path));
+  }
+
+  if (typeof process !== "undefined") {
+    candidates.push(toAbsoluteApiUrl(process.env.REACT_APP_BACKEND_URL || "", path));
+    candidates.push(toAbsoluteApiUrl(process.env.REACT_APP_API_URL || "", path));
+  }
+
+  if (/onrender\.com/i.test(API_BASE_URL) || /onrender\.com/i.test(runtimeOrigin)) {
+    candidates.push(toAbsoluteApiUrl("https://super-app-api.onrender.com", path));
+  }
+
+  return dedupeUrls(candidates);
+};
+
+const toNetworkError = (error, requestUrl) => {
+  const rawMessage = String(error?.message || "").trim();
+  const details =
+    rawMessage.length > 0 ? ` (${rawMessage})` : "";
+  return new VideoStudioApiError(
+    `Unable to reach video service at ${requestUrl}. Check API URL, backend uptime, or CORS configuration.${details}`,
+    {
+      status: 0,
+      code: "NETWORK_ERROR",
+    }
+  );
+};
 
 export class VideoStudioApiError extends Error {
   constructor(message, details = {}) {
@@ -62,6 +120,7 @@ export const requestVideoStudio = async (
   path,
   { method = "GET", body, signal, timeoutMs = DEFAULT_TIMEOUT_MS, retries = 1 } = {}
 ) => {
+  const requestUrls = buildVideoStudioRequestUrls(path);
   let attempt = 0;
   let lastError = null;
 
@@ -75,27 +134,47 @@ export const requestVideoStudio = async (
     }
 
     try {
-      const response = await fetch(buildApiUrl(path), {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
+      for (let index = 0; index < requestUrls.length; index += 1) {
+        const requestUrl = requestUrls[index];
+        try {
+          const response = await fetch(requestUrl, {
+            method,
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: body ? JSON.stringify(body) : undefined,
+            signal: controller.signal,
+          });
 
-      const payload = await parseApiResponse(response);
-      return { payload, response };
-    } catch (error) {
-      lastError = error;
-      if (isAbortError(error) && signal?.aborted) {
-        throw error;
+          const payload = await parseApiResponse(response);
+          return { payload, response };
+        } catch (error) {
+          if (isAbortError(error) && signal?.aborted) {
+            throw error;
+          }
+
+          const normalizedError = isLikelyNetworkError(error)
+            ? toNetworkError(error, requestUrl)
+            : error;
+
+          const status = Number(normalizedError?.status || 0);
+          const hasNextCandidate = index < requestUrls.length - 1;
+          const shouldTryNextCandidate =
+            hasNextCandidate &&
+            (isLikelyNetworkError(error) || status === 404 || status === 502 || status === 503 || status === 504);
+
+          lastError = normalizedError;
+          if (shouldTryNextCandidate) {
+            continue;
+          }
+
+          throw normalizedError;
+        }
       }
-
-      const status = Number(error?.status || 0);
-      const shouldRetry = !isAbortError(error) && attempt < retries && (status === 0 || isTransientStatus(status));
+      const status = Number(lastError?.status || 0);
+      const shouldRetry = !isAbortError(lastError) && attempt < retries && (status === 0 || isTransientStatus(status));
       if (!shouldRetry) {
-        throw error;
+        throw lastError;
       }
       await delay(350 * (attempt + 1));
     } finally {
