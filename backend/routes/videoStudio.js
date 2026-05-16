@@ -93,8 +93,8 @@ router.post('/create', async (req, res) => {
     if (!normalizedStoryPrompt) {
       return res.status(400).json({ success: false, error: 'Please provide a story prompt.' });
     }
-    if (normalizedStoryPrompt.length < 40) {
-      return res.status(400).json({ success: false, error: 'Story prompt is too short. Provide at least 40 characters.' });
+    if (normalizedStoryPrompt.length < 3) {
+      return res.status(400).json({ success: false, error: 'Story prompt is too short. Provide at least 3 characters.' });
     }
     if (normalizedStoryPrompt.length > 7000) {
       return res.status(400).json({ success: false, error: 'Story prompt is too long. Keep it under 7000 characters.' });
@@ -104,18 +104,31 @@ router.post('/create', async (req, res) => {
     }
 
     const start = Date.now();
-    const project = await createStudioProject({
-      storyTitle: normalizedStoryTitle,
-      storyPrompt: normalizedStoryPrompt,
-      languageId,
-      styleId,
-      voiceType,
-      videoSizeId,
-      storyMode,
-      safeMode,
-      ageFilter,
-      storySource,
-    });
+    const looksLikeTopicOnlyInput = normalizedStoryPrompt.length < 40;
+    const project = looksLikeTopicOnlyInput
+      ? await createAutopilotProject({
+        subject: normalizedStoryPrompt,
+        languageId,
+        styleId,
+        voiceType,
+        videoSizeId,
+        storyMode,
+        safeMode,
+        ageFilter,
+        sceneCount: 5,
+      })
+      : await createStudioProject({
+        storyTitle: normalizedStoryTitle,
+        storyPrompt: normalizedStoryPrompt,
+        languageId,
+        styleId,
+        voiceType,
+        videoSizeId,
+        storyMode,
+        safeMode,
+        ageFilter,
+        storySource,
+      });
 
     const elapsed = Date.now() - start;
     logger.info(`Video studio create completed in ${elapsed}ms`);

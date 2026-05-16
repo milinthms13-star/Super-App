@@ -61,6 +61,44 @@ const extractJson = (text) => {
 };
 
 const sanitizeText = (value = '') => String(value).replace(/\u0000/g, '').trim();
+const escapeXml = (value = '') =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+const wrapText = (value = '', maxCharsPerLine = 42, maxLines = 4) => {
+  const words = sanitizeText(value).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length <= maxCharsPerLine) {
+      line = next;
+      continue;
+    }
+    if (line) {
+      lines.push(line);
+    }
+    line = word;
+    if (lines.length >= maxLines - 1) {
+      break;
+    }
+  }
+  if (line && lines.length < maxLines) {
+    lines.push(line);
+  }
+  if (!lines.length) {
+    return [''];
+  }
+  if (words.join(' ').length > lines.join(' ').length) {
+    const lastIndex = lines.length - 1;
+    lines[lastIndex] = `${lines[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 3))}...`;
+  }
+  return lines;
+};
 
 const getSafetyAssessment = (value = '') => {
   const cleanValue = sanitizeText(value);
@@ -379,7 +417,16 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
     : buildFallbackScript({ subject: script?.title || 'Story', languageId: script?.language, storyMode, ageFilter: script?.audience }).sceneBeats;
 
   const primaryNames = (characters || []).map((char) => char.name).join(', ') || 'Story characters';
+  const primaryA = characters?.[0]?.name || 'Hero';
+  const primaryB = characters?.[1]?.name || 'Friend';
   const weatherOptions = ['sunny', 'golden evening', 'soft cloudy', 'gentle rain', 'starlit night'];
+  const sceneDialogueTemplates = [
+    `${primaryA}: Today is the day. I can do this fast!\n${primaryB}: Let us do our best, one steady step at a time.`,
+    `${primaryA}: I am already ahead!\n${primaryB}: I will stay calm and keep moving forward.`,
+    `${primaryA}: Maybe I can rest for a minute.\n${primaryB}: I will not stop now. Focus and continue.`,
+    `${primaryA}: Oh no, I wasted time.\n${primaryB}: Steady effort is helping me reach the goal.`,
+    `${primaryA}: I learned a big lesson today.\n${primaryB}: Patience and consistency can win the race.`,
+  ];
 
   return Array.from({ length: targetCount }).map((_, index) => {
     const beat = beats[index % beats.length];
@@ -387,7 +434,7 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
       id: index + 1,
       title: beat.beat || `Scene ${index + 1}`,
       description: beat.summary || 'Story progression scene',
-      dialogue: `"${beat.summary || 'Let us continue the story.'}"`,
+      dialogue: sceneDialogueTemplates[index % sceneDialogueTemplates.length],
       emotion: index === targetCount - 1 ? 'joyful' : index === 2 ? 'brave' : 'wonder',
       background: `${storyMode || 'bedtime'} world with child-safe ${styleId || 'cartoon'} art`,
       weather: weatherOptions[index % weatherOptions.length],
@@ -430,12 +477,28 @@ const buildAnimationPlan = ({ scenes }) => ({
   })),
 });
 
-const buildSubtitlesFromScenes = (scenes = []) =>
-  scenes.map((scene, index) => ({
-    start: index * (scene.durationSeconds || 4),
-    end: index * (scene.durationSeconds || 4) + (scene.durationSeconds || 4),
-    text: `${scene.title}: ${scene.description}`,
-  }));
+const buildEditableOptions = () => ({
+  script: ['title', 'synopsis', 'moral', 'narration', 'sceneBeats'],
+  characters: ['name', 'role', 'appearance', 'voiceProfile', 'emotionStyle', 'colorPalette'],
+  scenes: ['title', 'description', 'dialogue', 'emotion', 'background', 'weather', 'timeOfDay', 'cameraActions', 'durationSeconds', 'characters'],
+  voice: ['narrator.voice', 'narrator.language', 'narrator.text', 'characterVoices'],
+  music: ['backgroundTrack', 'sfx', 'mixStyle'],
+  timeline: ['subtitles', 'animationPlan.timeline', 'sceneOrder'],
+});
+
+const buildSubtitlesFromScenes = (scenes = []) => {
+  let cursor = 0;
+  return scenes.map((scene) => {
+    const duration = Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4));
+    const subtitle = {
+      start: cursor,
+      end: cursor + duration,
+      text: sanitizeText(`${scene?.title || 'Scene'}: ${scene?.description || ''}`),
+    };
+    cursor += duration;
+    return subtitle;
+  });
+};
 
 const getProjectFilePath = (projectId) => path.join(projectStoreRoot, `${safeFileName(projectId)}.json`);
 
@@ -522,6 +585,7 @@ const createAutopilotProject = async ({
       'music',
       'timeline',
     ],
+    editableOptions: buildEditableOptions(),
   };
 
   return saveStudioProject(project);
@@ -601,6 +665,9 @@ const patchStudioProject = async (projectId, patch = {}) => {
     animationPlan: typeof patch.animationPlan === 'object' && patch.animationPlan
       ? { ...project.animationPlan, ...patch.animationPlan }
       : project.animationPlan,
+    editableOptions: typeof patch.editableOptions === 'object' && patch.editableOptions
+      ? { ...(project.editableOptions || buildEditableOptions()), ...patch.editableOptions }
+      : (project.editableOptions || buildEditableOptions()),
   };
 
   if (Array.isArray(patch.characters)) {
@@ -634,10 +701,27 @@ const patchStudioProject = async (projectId, patch = {}) => {
     updatedProject.subtitles = buildSubtitlesFromScenes(normalizedScenes);
     updatedProject.animationPlan = buildAnimationPlan({ scenes: normalizedScenes });
   }
+  if (Array.isArray(patch.subtitles)) {
+    updatedProject.subtitles = patch.subtitles
+      .map((subtitle, index) => ({
+        start: Number(subtitle?.start),
+        end: Number(subtitle?.end),
+        text: sanitizeText(subtitle?.text || `Scene ${index + 1}`),
+      }))
+      .filter((subtitle) => Number.isFinite(subtitle.start) && Number.isFinite(subtitle.end) && subtitle.end > subtitle.start);
+  }
+  if (Array.isArray(patch.editCapabilities) && patch.editCapabilities.length) {
+    updatedProject.editCapabilities = patch.editCapabilities.map((entry) => sanitizeText(entry)).filter(Boolean);
+  }
 
   updatedProject.storyTitle = sanitizeText(updatedProject.storyTitle || updatedProject.script?.title || project.storyTitle);
   updatedProject.storyPrompt = sanitizeText(updatedProject.storyPrompt || updatedProject.script?.synopsis || project.storyPrompt);
-  updatedProject.narration = sanitizeText(updatedProject.narration || updatedProject.script?.narration || project.narration);
+  updatedProject.narration = sanitizeText(
+    updatedProject?.voicePlan?.narrator?.text
+    || updatedProject.narration
+    || updatedProject.script?.narration
+    || project.narration
+  );
 
   if (updatedProject.safeMode) {
     const safetyInput = [
@@ -743,22 +827,56 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
     }).scenes;
   }
 
+  if (!Array.isArray(projectBody.characters) || !projectBody.characters.length) {
+    projectBody.characters = buildCharactersFromScript({
+      script: {
+        title: projectBody.title || normalizedStoryTitle,
+        synopsis: normalizedStoryPrompt,
+      },
+      subject: normalizedStoryPrompt,
+      voiceType,
+    });
+  }
+
+  projectBody.scenes = projectBody.scenes.map((scene, index) => {
+    const fallbackDialogue = `${projectBody.characters?.[0]?.name || 'Hero'}: ${scene.description || 'Let us continue our story.'}`;
+    return {
+      ...scene,
+      id: index + 1,
+      title: sanitizeText(scene?.title || `Scene ${index + 1}`),
+      description: sanitizeText(scene?.description || ''),
+      dialogue: sanitizeText(scene?.dialogue || fallbackDialogue),
+      emotion: sanitizeText(scene?.emotion || 'wonder'),
+      durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
+      characters: Array.isArray(scene?.characters) && scene.characters.length
+        ? scene.characters
+        : projectBody.characters.map((char) => ({ name: char.name, role: char.role })),
+    };
+  });
+
   projectBody.promptHints = projectBody.promptHints || projectBody.scenes.map((scene) => ({
     imagePrompt: `A child-safe ${projectBody.style} scene of ${scene.description}`,
     animationPrompt: `Slow zoom, slight pan, blink, gentle movement`,
     backgroundPrompt: `Soft pastel ${projectBody.mode} background with props and warm lighting`,
   }));
 
-  if (!Array.isArray(projectBody.subtitles) || !projectBody.subtitles.length) {
-    projectBody.subtitles = projectBody.scenes.map((scene, index) => ({
-      start: index * 4,
-      end: index * 4 + 4,
-      text: `${scene.title || `Scene ${index + 1}`}: ${scene.description || ''}`.trim(),
-    }));
-  }
+  projectBody.subtitles = buildSubtitlesFromScenes(projectBody.scenes);
+
+  projectBody.editCapabilities = Array.isArray(projectBody.editCapabilities) && projectBody.editCapabilities.length
+    ? projectBody.editCapabilities
+    : ['script', 'characters', 'scenes', 'voice', 'music', 'timeline'];
+  projectBody.editableOptions = projectBody.editableOptions || buildEditableOptions();
 
   const narrationScript = await buildNarration(projectBody);
   projectBody.narration = narrationScript;
+  projectBody.voicePlan = buildVoicePlan({
+    script: { narration: narrationScript, synopsis: projectBody.storyPrompt },
+    characters: projectBody.characters,
+    languageId,
+    voiceType,
+  });
+  projectBody.musicPlan = projectBody.musicPlan || buildMusicPlan({ storyMode });
+  projectBody.animationPlan = projectBody.animationPlan || buildAnimationPlan({ scenes: projectBody.scenes });
 
   return saveStudioProject(projectBody);
 };
@@ -796,11 +914,65 @@ const getResolution = (videoSize) => {
 
 const safeFileName = (value) => value.replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
 
+const colorFromText = (value = '') => {
+  let hash = 0;
+  const text = String(value || 'character');
+  for (let index = 0; index < text.length; index += 1) {
+    hash = text.charCodeAt(index) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 68%, 78%)`;
+};
+
+const normalizeSceneCharacterList = (scene, project) => {
+  const sceneCharacters = Array.isArray(scene?.characters) && scene.characters.length
+    ? scene.characters
+    : (project?.characters || []).map((char) => ({ name: char.name, role: char.role }));
+
+  return sceneCharacters
+    .map((char, index) => ({
+      name: sanitizeText(char?.name || `Character ${index + 1}`),
+      role: sanitizeText(char?.role || 'Story role'),
+    }))
+    .slice(0, 3);
+};
+
 const buildSceneSvg = (scene, project, width, height) => {
   const background = scene.emotion === 'joyful' ? '#FFF0F7' : scene.emotion === 'brave' ? '#E5F8FF' : '#F7F3FF';
-  const title = scene.title || `Scene ${scene.id}`;
-  const description = scene.description || '';
-  const characters = scene.characters?.map((char) => char.name).join(', ') || 'Friendly characters';
+  const title = sanitizeText(scene.title || `Scene ${scene.id}`);
+  const description = sanitizeText(scene.description || '');
+  const dialogue = sanitizeText(scene.dialogue || '');
+  const characters = normalizeSceneCharacterList(scene, project);
+  const titleEscaped = escapeXml(title);
+  const descriptionLines = wrapText(description, 46, 4);
+  const dialogueLines = wrapText(dialogue, 40, 3);
+  const characterText = characters.map((char) => `${char.name} (${char.role})`).join(', ') || 'Friendly characters';
+  const characterEscaped = escapeXml(characterText);
+  const artStyle = escapeXml(`${sanitizeText(project?.style || 'cartoon')} style`);
+
+  const characterCards = characters.map((char, index) => {
+    const cardWidth = Math.min(320, Math.floor((width - 120) / Math.max(1, characters.length)) - 16);
+    const cardHeight = 120;
+    const cardX = 60 + index * (cardWidth + 16);
+    const cardY = height - 180;
+    const avatarColor = colorFromText(char.name);
+    const initial = escapeXml((char.name[0] || 'C').toUpperCase());
+    return `
+  <g>
+    <rect x="${cardX}" y="${cardY}" width="${cardWidth}" height="${cardHeight}" rx="18" fill="rgba(255,255,255,0.95)" stroke="#dbeafe" stroke-width="2" />
+    <circle cx="${cardX + 44}" cy="${cardY + 60}" r="30" fill="${avatarColor}" />
+    <text x="${cardX + 44}" y="${cardY + 70}" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#1f2937">${initial}</text>
+    <text x="${cardX + 84}" y="${cardY + 52}" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#1f2937">${escapeXml(char.name)}</text>
+    <text x="${cardX + 84}" y="${cardY + 82}" font-family="Arial, sans-serif" font-size="16" fill="#475569">${escapeXml(char.role)}</text>
+  </g>`;
+  }).join('\n');
+
+  const descriptionSvgLines = descriptionLines
+    .map((line, index) => `<text x="74" y="${248 + index * 34}" font-family="Arial, sans-serif" font-size="28" fill="#334155">${escapeXml(line)}</text>`)
+    .join('\n');
+  const dialogueSvgLines = dialogueLines
+    .map((line, index) => `<text x="${width - 430}" y="${228 + index * 30}" font-family="Arial, sans-serif" font-size="20" fill="#0f172a">${escapeXml(line)}</text>`)
+    .join('\n');
 
   return `
 <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
@@ -811,41 +983,298 @@ const buildSceneSvg = (scene, project, width, height) => {
     </linearGradient>
   </defs>
   <rect x="0" y="0" width="${width}" height="${height}" fill="url(#g)" rx="40" />
-  <rect x="40" y="40" width="${width - 80}" height="${height - 200}" fill="rgba(255,255,255,0.92)" rx="32" />
-  <text x="70" y="110" font-family="Inter, sans-serif" font-size="48" font-weight="700" fill="#3c2e8f">${title}</text>
-  <text x="70" y="180" font-family="Inter, sans-serif" font-size="24" fill="#5f4f92">${characters}</text>
-  <foreignObject x="70" y="220" width="${width - 160}" height="260">
-    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Inter, sans-serif; color: #2c234c; font-size: 18px; line-height: 1.6;">${description}</div>
-  </foreignObject>
-  <circle cx="${width - 120}" cy="120" r="60" fill="#f9e6ff" />
-  <text x="${width - 120}" y="135" text-anchor="middle" font-family="Inter, sans-serif" font-size="24" fill="#6a3b99">${scene.emotion}</text>
+  <rect x="30" y="${height - 280}" width="${width - 60}" height="260" fill="rgba(255,255,255,0.48)" />
+  <rect x="40" y="40" width="${width - 80}" height="${height - 240}" fill="rgba(255,255,255,0.95)" rx="32" />
+  <text x="70" y="110" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#1f3a8a">${titleEscaped}</text>
+  <text x="70" y="156" font-family="Arial, sans-serif" font-size="20" fill="#334155">${characterEscaped}</text>
+  <text x="70" y="188" font-family="Arial, sans-serif" font-size="17" fill="#64748b">${artStyle}</text>
+  ${descriptionSvgLines}
+  <rect x="${width - 450}" y="170" width="380" height="130" rx="18" fill="rgba(224,242,254,0.88)" stroke="#7dd3fc" stroke-width="2" />
+  <text x="${width - 430}" y="198" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#0369a1">Dialogue</text>
+  ${dialogueSvgLines}
+  ${characterCards}
+  <circle cx="${width - 100}" cy="100" r="54" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" />
+  <text x="${width - 100}" y="96" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#475569">Mood</text>
+  <text x="${width - 100}" y="118" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b">${escapeXml(sanitizeText(scene.emotion || 'wonder'))}</text>
 </svg>`;
 };
 
 const createSceneImages = async (project, directory) => {
   const resolution = getResolution(project.videoSize);
   const sceneFiles = [];
+  let totalDuration = 0;
 
   for (const scene of project.scenes) {
     const svg = buildSceneSvg(scene, project, resolution.width, resolution.height);
     const imagePath = path.join(directory, `scene-${scene.id}.png`);
     await sharp(Buffer.from(svg)).png().toFile(imagePath);
     const sceneDuration = Math.max(2, Math.min(15, Number(scene.durationSeconds) || 4));
+    totalDuration += sceneDuration;
     sceneFiles.push({ path: imagePath, duration: sceneDuration });
   }
 
-  return sceneFiles;
+  return {
+    sceneFiles,
+    totalDurationSeconds: totalDuration,
+  };
 };
 
 const buildSubtitleFile = async (project, directory) => {
   const srtPath = path.join(directory, 'story-subtitles.srt');
-  const lines = project.subtitles.map((subtitle, index) => {
+  const normalizedSubtitles = Array.isArray(project?.subtitles) && project.subtitles.length
+    ? project.subtitles
+    : buildSubtitlesFromScenes(project?.scenes || []);
+
+  const lines = normalizedSubtitles.map((subtitle, index) => {
     const start = new Date(subtitle.start * 1000).toISOString().substr(11, 12).replace('.', ',');
     const end = new Date(subtitle.end * 1000).toISOString().substr(11, 12).replace('.', ',');
-    return `${index + 1}\n${start} --> ${end}\n${subtitle.text}\n`;
+    return `${index + 1}\n${start} --> ${end}\n${sanitizeText(subtitle.text)}\n`;
   });
   await writeFile(srtPath, lines.join('\n'), 'utf-8');
   return srtPath;
+};
+
+const resolveNarrationVoice = (voiceCandidate = '') => {
+  const normalized = sanitizeText(voiceCandidate).toLowerCase();
+  const map = {
+    'kid-female': 'nova',
+    'kid-male': 'echo',
+    'female-soft': 'nova',
+    'female-warm': 'shimmer',
+    'male-calm': 'alloy',
+    'warm-male': 'alloy',
+    'soft-female': 'nova',
+  };
+
+  if (map[normalized]) {
+    return map[normalized];
+  }
+  if (['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].includes(normalized)) {
+    return normalized;
+  }
+  return 'nova';
+};
+
+const voiceCatalog = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+
+const normalizeOpenAIAudioBuffer = async (response) => {
+  if (Buffer.isBuffer(response)) {
+    return response;
+  }
+  if (response instanceof ArrayBuffer) {
+    return Buffer.from(response);
+  }
+  if (typeof response?.arrayBuffer === 'function') {
+    return Buffer.from(await response.arrayBuffer());
+  }
+  return null;
+};
+
+const buildTtsModelFallbackList = () => {
+  const preferred = sanitizeText(process.env.OPENAI_VIDEO_TTS_MODEL || 'gpt-4o-mini-tts');
+  return Array.from(new Set([preferred, 'gpt-4o-mini-tts', 'tts-1', 'tts-1-hd']));
+};
+
+const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
+  if (!openai) {
+    return null;
+  }
+
+  const content = sanitizeText(text).slice(0, 4096);
+  if (!content) {
+    return null;
+  }
+
+  const voice = resolveNarrationVoice(voiceCandidate);
+  const modelsToTry = buildTtsModelFallbackList();
+
+  for (const model of modelsToTry) {
+    try {
+      const response = await openai.audio.speech.create({
+        model,
+        voice,
+        input: content,
+        format: 'mp3',
+      });
+
+      const audioBuffer = await normalizeOpenAIAudioBuffer(response);
+      if (audioBuffer?.length) {
+        await writeFile(outputPath, audioBuffer);
+        return outputPath;
+      }
+    } catch (_error) {
+      // Try next model.
+    }
+  }
+
+  return null;
+};
+
+const findCharacterBySpeakerName = (project, speakerName) => {
+  const normalized = sanitizeText(speakerName).toLowerCase();
+  if (!normalized) return null;
+  return (project?.characters || []).find((char) => sanitizeText(char?.name).toLowerCase() === normalized) || null;
+};
+
+const resolveSpeakerVoice = (project, speakerName) => {
+  const normalizedSpeaker = sanitizeText(speakerName).toLowerCase();
+  const voicePlanVoices = Array.isArray(project?.voicePlan?.characterVoices) ? project.voicePlan.characterVoices : [];
+  const characterMatch = findCharacterBySpeakerName(project, speakerName);
+
+  const fromPlan = voicePlanVoices.find((voice) =>
+    sanitizeText(voice?.name).toLowerCase() === normalizedSpeaker
+    || (characterMatch && sanitizeText(voice?.characterId).toLowerCase() === sanitizeText(characterMatch?.id).toLowerCase())
+  );
+
+  const candidate = sanitizeText(
+    fromPlan?.voice
+    || characterMatch?.voiceProfile
+    || project?.voicePlan?.narrator?.voice
+    || project?.voiceType
+    || 'kid-female'
+  );
+
+  const mapped = resolveNarrationVoice(candidate);
+  return voiceCatalog.includes(mapped) ? mapped : 'nova';
+};
+
+const extractSceneDialogueTurns = (scene, project) => {
+  const rawDialogue = sanitizeText(scene?.dialogue || '');
+  const fallbackText = sanitizeText(scene?.description || '');
+  const sceneCharacters = normalizeSceneCharacterList(scene, project);
+  const characterNames = sceneCharacters.map((char) => char.name);
+  const turns = [];
+
+  if (rawDialogue.includes(':')) {
+    const lines = rawDialogue
+      .split(/\n+/)
+      .map((line) => sanitizeText(line))
+      .filter(Boolean);
+
+    lines.forEach((line) => {
+      const match = line.match(/^([^:]{1,40}):\s*(.+)$/);
+      if (match) {
+        turns.push({ speaker: sanitizeText(match[1]), text: sanitizeText(match[2]) });
+      } else if (line) {
+        turns.push({ speaker: characterNames[0] || 'Narrator', text: line });
+      }
+    });
+  } else if (rawDialogue) {
+    const sentences = rawDialogue
+      .split(/(?<=[.!?])\s+/)
+      .map((line) => sanitizeText(line))
+      .filter(Boolean)
+      .slice(0, 3);
+    sentences.forEach((line, index) => {
+      turns.push({
+        speaker: characterNames[index % Math.max(1, characterNames.length)] || 'Narrator',
+        text: line,
+      });
+    });
+  }
+
+  if (!turns.length && fallbackText) {
+    turns.push({
+      speaker: 'Narrator',
+      text: fallbackText,
+    });
+  }
+
+  return turns
+    .map((turn) => ({
+      speaker: sanitizeText(turn.speaker || 'Narrator').slice(0, 40),
+      text: sanitizeText(turn.text).slice(0, 240),
+    }))
+    .filter((turn) => turn.text);
+};
+
+const buildCharacterDialogueAudio = async (project, outputDir, totalDurationSeconds) => {
+  if (!openai || !Array.isArray(project?.scenes) || !project.scenes.length) {
+    return null;
+  }
+
+  const speechSegments = [];
+  let segmentIndex = 0;
+  const maxSegments = 32;
+
+  for (const scene of project.scenes) {
+    const turns = extractSceneDialogueTurns(scene, project);
+    for (const turn of turns) {
+      if (speechSegments.length >= maxSegments) {
+        break;
+      }
+
+      const voice = resolveSpeakerVoice(project, turn.speaker);
+      const segmentPath = path.join(outputDir, `dialogue-segment-${segmentIndex + 1}.mp3`);
+      const generatedPath = await synthesizeSpeechToFile({
+        text: turn.text,
+        voiceCandidate: voice,
+        outputPath: segmentPath,
+      });
+
+      if (generatedPath) {
+        speechSegments.push(generatedPath);
+      }
+      segmentIndex += 1;
+    }
+    if (speechSegments.length >= maxSegments) {
+      break;
+    }
+  }
+
+  if (!speechSegments.length) {
+    return null;
+  }
+
+  const concatListPath = path.join(outputDir, 'dialogue-track-list.txt');
+  const concatList = speechSegments.map((segmentPath) => `file '${segmentPath.replace(/\\/g, '/')}'`).join('\n');
+  await writeFile(concatListPath, `${concatList}\n`, 'utf-8');
+
+  const mergedTrackPath = path.join(outputDir, 'dialogue-track-raw.mp3');
+  await runFfmpeg([
+    '-y',
+    '-f', 'concat',
+    '-safe', '0',
+    '-i', concatListPath,
+    '-c:a', 'libmp3lame',
+    '-b:a', '128k',
+    mergedTrackPath,
+  ], outputDir);
+
+  const paddedTrackPath = path.join(outputDir, 'dialogue-track.mp3');
+  const targetDuration = Math.max(2, Number(totalDurationSeconds) || 10);
+  await runFfmpeg([
+    '-y',
+    '-i', mergedTrackPath,
+    '-af', 'apad',
+    '-t', `${targetDuration}`,
+    '-c:a', 'libmp3lame',
+    '-b:a', '128k',
+    paddedTrackPath,
+  ], outputDir);
+
+  return paddedTrackPath;
+};
+
+const buildNarrationAudio = async (project, outputDir) => {
+  const narrationText = sanitizeText(
+    project?.voicePlan?.narrator?.text
+    || project?.narration
+    || project?.script?.narration
+    || ''
+  );
+
+  if (!narrationText) {
+    return null;
+  }
+  if (!openai) {
+    return null;
+  }
+  return synthesizeSpeechToFile({
+    text: narrationText,
+    voiceCandidate: project?.voicePlan?.narrator?.voice || project?.voiceType,
+    outputPath: path.join(outputDir, 'narration.mp3'),
+  });
 };
 
 const runFfmpeg = async (args, cwd) => {
@@ -895,8 +1324,7 @@ const renderVideo = async (project, premiumHD = false) => {
   const outputDir = path.join(uploadsRoot, safeProjectId);
   await mkdir(outputDir, { recursive: true });
 
-  const resolution = getResolution(project.videoSize);
-  const sceneAssets = await createSceneImages(project, outputDir);
+  const { sceneFiles: sceneAssets, totalDurationSeconds } = await createSceneImages(project, outputDir);
   if (!sceneAssets.length) {
     throw new Error('No scene assets were generated for rendering.');
   }
@@ -905,9 +1333,14 @@ const renderVideo = async (project, premiumHD = false) => {
     .map((scene) => `file '${scene.path.replace(/\\/g, '/')}'\nduration ${scene.duration}`)
     .join('\n') + `\nfile '${sceneAssets[sceneAssets.length - 1].path.replace(/\\/g, '/')}'\n`;
 
+  project.subtitles = buildSubtitlesFromScenes(project.scenes || []);
   await writeFile(listPath, listContent, 'utf-8');
   const subtitlePath = await buildSubtitleFile(project, outputDir);
   const subtitleFileName = path.basename(subtitlePath).replace(/\\/g, '/');
+  const totalDuration = Math.max(2, Number(totalDurationSeconds) || sceneAssets.length * 4);
+  const dialogueAudioPath = await buildCharacterDialogueAudio(project, outputDir, totalDuration);
+  const narrationAudioPath = dialogueAudioPath ? null : await buildNarrationAudio(project, outputDir);
+  const audioTrackPath = dialogueAudioPath || narrationAudioPath;
 
   const quality = premiumHD ? '24' : '23';
   const outputFile = path.join(outputDir, 'story-render.mp4');
@@ -917,8 +1350,15 @@ const renderVideo = async (project, premiumHD = false) => {
     '-f', 'concat',
     '-safe', '0',
     '-i', listPath,
-    '-f', 'lavfi',
-    '-i', `aevalsrc=0:d=${sceneAssets.length * 4}`,
+  ];
+
+  if (audioTrackPath) {
+    ffmpegArgs.push('-i', audioTrackPath);
+  } else {
+    ffmpegArgs.push('-f', 'lavfi', '-i', `aevalsrc=0:d=${totalDuration}`);
+  }
+
+  ffmpegArgs.push(
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-crf', quality,
@@ -927,14 +1367,19 @@ const renderVideo = async (project, premiumHD = false) => {
     '-b:a', '128k',
     '-shortest',
     '-vf', `subtitles=${subtitleFileName}:force_style='FontName=Arial,FontSize=24,PrimaryColour=&Hffffff&'`,
-    outputFile,
-  ];
+    outputFile
+  );
 
   await runFfmpeg(ffmpegArgs, outputDir);
 
   const videoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
   const metadataPath = path.join(outputDir, 'project.json');
-  await writeFile(metadataPath, JSON.stringify({ ...project, renderedAt: new Date().toISOString(), videoUrl }, null, 2), 'utf-8');
+  await writeFile(metadataPath, JSON.stringify({
+    ...project,
+    renderedAt: new Date().toISOString(),
+    videoUrl,
+    renderAudioMode: dialogueAudioPath ? 'character-dialogue' : (narrationAudioPath ? 'narration' : 'silent'),
+  }, null, 2), 'utf-8');
 
   return { videoUrl, projectId: path.basename(outputDir), outputFile };
 };
