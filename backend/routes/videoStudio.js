@@ -208,7 +208,17 @@ router.post('/render', async (req, res) => {
     }
 
     const { project, projectId, premiumHD } = req.body;
-    const resolvedProject = project || (projectId ? await getStudioProject(projectId) : null);
+    const requestedProject = project || (projectId ? await getStudioProject(projectId) : null);
+    const resolvedProject = requestedProject
+      ? {
+        ...requestedProject,
+        renderMode: 'real-cartoon',
+        requireCharacters: true,
+        requireDialogueVoice: true,
+        requireLipSync: true,
+        requireSceneImages: true,
+      }
+      : requestedProject;
     const payloadError = validateRenderProjectPayload(resolvedProject);
     if (payloadError) {
       return res.status(400).json({ success: false, error: payloadError });

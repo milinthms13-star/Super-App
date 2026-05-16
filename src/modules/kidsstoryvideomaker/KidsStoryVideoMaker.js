@@ -195,6 +195,131 @@ const createClientFallbackProject = ({
   };
 };
 
+const buildCartoonRenderPayload = ({
+  project,
+  scenes,
+  storyTitle,
+  storyPrompt,
+  languageId,
+  styleId,
+  voiceType,
+  videoSizeId,
+  storyMode,
+  ageFilter,
+  safeMode,
+  premiumHD,
+}) => {
+  const projectCharacters =
+    Array.isArray(project?.characters) && project.characters.length
+      ? project.characters
+      : [
+          {
+            id: "hero",
+            name: "Hero",
+            role: "Main Character",
+            appearance: "bright-eyed child cartoon hero with colorful clothes",
+            voiceProfile: voiceType,
+            colorPalette: ["#ff8fb3", "#ffd166", "#7bdff2"],
+          },
+          {
+            id: "guide",
+            name: "Guide",
+            role: "Mentor",
+            appearance: "friendly smiling cartoon guide",
+            voiceProfile: "soft narrator",
+            colorPalette: ["#b8f2e6", "#f7d6e0", "#f6bd60"],
+          },
+        ];
+
+  const normalizedScenes = normalizeScenesForRender(scenes).map((scene, index) => {
+    const sceneCharacters =
+      Array.isArray(scene.characters) && scene.characters.length
+        ? scene.characters
+        : projectCharacters.slice(0, 2).map((character) => ({
+            name: character.name,
+            role: character.role,
+            appearance: character.appearance,
+            voiceProfile: character.voiceProfile || voiceType,
+          }));
+
+    const spokenLines = String(scene.dialogue || scene.description || "")
+      .split(/\n+/)
+      .map((line) => sanitizeText(line))
+      .filter(Boolean)
+      .map((line, lineIndex) => {
+        const match = line.match(/^([^:]{1,40}):\s*(.+)$/);
+        return {
+          speaker: match?.[1] || sceneCharacters[lineIndex % sceneCharacters.length]?.name || "Narrator",
+          text: match?.[2] || line,
+          emotion: scene.emotion || "wonder",
+        };
+      });
+
+    const cleanDialogue =
+      spokenLines.length > 0
+        ? spokenLines.map((line) => `${line.speaker}: ${line.text}`).join("\n")
+        : `Narrator: ${scene.description}`;
+
+    return {
+      ...scene,
+      characters: sceneCharacters,
+      dialogue: cleanDialogue,
+      spokenLines,
+      visualPrompt: [
+        `REAL CARTOON ANIMATION FRAME, ${styleId} kids cartoon style`,
+        `scene title: ${scene.title}`,
+        `background: ${scene.background || scene.description}`,
+        `characters visible on screen: ${sceneCharacters
+          .map(
+            (character) =>
+              `${character.name}, ${character.role}, ${character.appearance || "cartoon child character"}`
+          )
+          .join("; ")}`,
+        `emotion: ${scene.emotion || "happy wonder"}`,
+        `camera motion: ${scene.cameraActions || "gentle zoom and pan"}`,
+        "full body characters, expressive faces, mouth animation, child-safe, colorful, no text-only slide",
+      ].join(". "),
+      animationPlan: {
+        shotType: index === 0 ? "wide establishing shot" : "medium character shot",
+        cameraMotion: scene.cameraActions || "gentle zoom",
+        characterMotion: "characters blink, wave, walk slightly, and mouth opens while speaking",
+        lipSync: true,
+        renderMode: "cartoon_characters_not_slides",
+      },
+      audioPlan: {
+        narration: cleanDialogue,
+        spokenLines,
+        voiceType,
+        musicMood: storyMode,
+        sfx: ["soft whoosh transition", "gentle sparkle", "kid-friendly ambience"],
+      },
+      durationSeconds: Math.max(5, Number(scene.durationSeconds) || 6),
+    };
+  });
+
+  return {
+    ...project,
+    title: sanitizeText(storyTitle || project?.title || "AI Kids Story Video Generator"),
+    storyPrompt: sanitizeText(storyPrompt),
+    scenes: normalizedScenes,
+    characters: projectCharacters,
+    subtitles: buildSubtitlesFromScenes(normalizedScenes),
+    premiumExport: premiumHD,
+    safeMode,
+    style: styleId,
+    videoSize: videoSizeId,
+    language: languageId,
+    voiceType,
+    storyMode,
+    ageFilter,
+    renderMode: "real-cartoon",
+    requireCharacters: true,
+    requireDialogueVoice: true,
+    requireLipSync: true,
+    requireSceneImages: true,
+  };
+};
+
 const getSceneId = (scene, index) => String(scene?.id || index + 1);
 
 const KidsStoryVideoMaker = () => {
@@ -982,24 +1107,25 @@ const KidsStoryVideoMaker = () => {
       return;
     }
 
-    const renderPayload = {
-      ...generatedProject,
-      title: sanitizeText(storyTitle || generatedProject.title || "AI Kids Story Video Generator"),
-      storyPrompt: normalizedStoryPrompt,
+    const renderPayload = buildCartoonRenderPayload({
+      project: generatedProject,
       scenes: normalizedScenes,
-      subtitles: buildSubtitlesFromScenes(normalizedScenes),
-      premiumExport: premiumHD,
-      safeMode,
-      style: styleId,
-      videoSize: videoSizeId,
-      language: languageId,
+      storyTitle,
+      storyPrompt: normalizedStoryPrompt,
+      languageId,
+      styleId,
       voiceType,
+      videoSizeId,
       storyMode,
       ageFilter,
-    };
+      safeMode,
+      premiumHD,
+    });
 
     setError("");
-    setMessage("Rendering your MP4 with AI visuals and subtitles...");
+    setMessage(
+      "Rendering real cartoon characters with spoken dialogue, scene visuals, music, and subtitles..."
+    );
     setIsRendering(true);
     startRenderProgress();
 

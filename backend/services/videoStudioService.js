@@ -992,6 +992,11 @@ const normalizeSceneCharacterList = (scene, project) => {
 };
 
 const buildRealCartoonPrompt = (scene, project) => {
+  const customPrompt = sanitizeText(scene?.visualPrompt || '');
+  if (customPrompt) {
+    return customPrompt;
+  }
+
   const title = sanitizeText(scene?.title || 'Story scene');
   const description = sanitizeText(scene?.description || 'A family-friendly story moment.');
   const mood = sanitizeText(scene?.emotion || 'wonder');
@@ -1274,6 +1279,40 @@ const resolveSpeakerVoice = (project, speakerName) => {
 };
 
 const extractSceneDialogueTurns = (scene, project) => {
+  const spokenLineEntries = Array.isArray(scene?.spokenLines) ? scene.spokenLines : [];
+  if (spokenLineEntries.length) {
+    const normalizedTurns = spokenLineEntries
+      .map((entry, index) => {
+        if (typeof entry === 'string') {
+          const text = sanitizeText(entry);
+          if (!text) return null;
+          return {
+            speaker: index === 0 ? 'Narrator' : `Character ${index + 1}`,
+            text,
+          };
+        }
+
+        const speaker = sanitizeText(entry?.speaker || entry?.character || 'Narrator');
+        const text = sanitizeText(entry?.text || entry?.line || entry?.dialogue || '');
+        if (!text) {
+          return null;
+        }
+        return {
+          speaker: speaker || 'Narrator',
+          text,
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 8);
+
+    if (normalizedTurns.length) {
+      return normalizedTurns.map((turn) => ({
+        speaker: sanitizeText(turn.speaker || 'Narrator').slice(0, 40),
+        text: sanitizeText(turn.text).slice(0, 240),
+      }));
+    }
+  }
+
   const rawDialogue = sanitizeText(scene?.dialogue || '');
   const fallbackText = sanitizeText(scene?.description || '');
   const sceneCharacters = normalizeSceneCharacterList(scene, project);

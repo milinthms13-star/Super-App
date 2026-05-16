@@ -31,6 +31,7 @@ const AI_FRIENDS = [
     name: 'Nila',
     avatar: '/avatars/nila.png',
     voice: 'female-soft',
+    voiceLabel: 'Gentle tone',
     personality: 'Caring and emotional',
     style: 'calm and gentle',
     color: '#c7d2fe',
@@ -41,6 +42,7 @@ const AI_FRIENDS = [
     name: 'Arjun',
     avatar: '/avatars/arjun.png',
     voice: 'male-calm',
+    voiceLabel: 'Steady warm tone',
     personality: 'Protective and motivating',
     style: 'warm and encouraging',
     color: '#a7f3d0',
@@ -51,6 +53,7 @@ const AI_FRIENDS = [
     name: 'Anya',
     avatar: '/avatars/anya.png',
     voice: 'female-warm',
+    voiceLabel: 'Soft conversational tone',
     personality: 'Empathetic and soothing',
     style: 'soft and comforting',
     color: '#fbcfe8',
@@ -684,6 +687,7 @@ const VoiceFriend = () => {
                 <img src={friendCustomAvatar || selectedFriend.avatar} alt={`${friendCustomName || selectedFriend.name} avatar`} className="voice-friend-persona-img" />
                 <div className="voice-friend-persona-meta">
                   <div className="voice-friend-persona-bio">{selectedFriend.style}</div>
+                  <div className="voice-friend-persona-voice">Voice style: {selectedFriend.voiceLabel}</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input
                       value={friendCustomName}
@@ -770,6 +774,7 @@ const VoiceFriend = () => {
         <div className="voice-friend-summary">
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
           <span><strong>Mood:</strong> {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
+          <span><strong>Voice:</strong> {selectedFriend.voiceLabel}</span>
           <span><strong>Language:</strong> {language.toUpperCase()}</span>
           <span><strong>Scenario:</strong> {SCENARIO_OPTIONS.find((opt) => opt.id === scenario)?.label}</span>
           <span><strong>Voice input:</strong> {speechSupported ? 'Supported' : 'Unavailable'}</span>
