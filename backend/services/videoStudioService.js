@@ -20,6 +20,9 @@ const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_M
 const isLowMemoryMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_LOW_MEMORY_MODE || (isFreeMode ? '1' : '0')).toLowerCase()
 );
+const useRealCartoonImages = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (!isFreeMode ? '1' : '0')).toLowerCase()
+);
 
 if (isLowMemoryMode) {
   // Keep native image processing predictable on low-memory instances.
@@ -433,7 +436,7 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
 
   return Array.from({ length: targetCount }).map((_, index) => {
     const beat = beats[index % beats.length];
-    return {
+    return normalizeSceneForCinematicPipeline({
       id: index + 1,
       title: beat.beat || `Scene ${index + 1}`,
       description: beat.summary || 'Story progression scene',
@@ -446,7 +449,16 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
       animationPrompt: `Animate ${primaryNames} with smooth family-friendly motion, lip sync, and expressive faces.`,
       characters: (characters || []).map((char) => ({ name: char.name, role: char.role })),
       durationSeconds: 4,
-    };
+      cameraMotion: ['slow-zoom', 'push-in', 'orbit', 'tracking-left', 'crane-up'][index % 5],
+      transitionType: index === 0 ? 'fade-in' : (index === targetCount - 1 ? 'fade-out' : 'cross-dissolve'),
+      shotType: ['wide', 'medium', 'close-up', 'over-shoulder', 'wide'][index % 5],
+      backgroundMusicMood: index === targetCount - 1 ? 'victory' : 'curious',
+      soundEffects: ['wind', 'footsteps'],
+      characterPose: index === 0 ? 'introduce-characters' : 'action-pose',
+      mouthMovement: 'auto',
+      sceneLighting: index === targetCount - 1 ? 'golden-hour' : 'soft-cinematic',
+      animationStyle: '2d-cartoon',
+    }, index);
   });
 };
 
@@ -688,7 +700,7 @@ const patchStudioProject = async (projectId, patch = {}) => {
     }));
   }
   if (Array.isArray(patch.scenes)) {
-    const normalizedScenes = patch.scenes.map((scene, index) => ({
+    const normalizedScenes = patch.scenes.map((scene, index) => normalizeSceneForCinematicPipeline({
       ...scene,
       id: index + 1,
       title: sanitizeText(scene?.title || `Scene ${index + 1}`),
@@ -701,7 +713,7 @@ const patchStudioProject = async (projectId, patch = {}) => {
       cameraActions: sanitizeText(scene?.cameraActions || ''),
       durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
       characters: Array.isArray(scene?.characters) ? scene.characters : [],
-    }));
+    }, index));
     updatedProject.scenes = normalizedScenes;
     updatedProject.subtitles = buildSubtitlesFromScenes(normalizedScenes);
     updatedProject.animationPlan = buildAnimationPlan({ scenes: normalizedScenes });
@@ -847,7 +859,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
 
   projectBody.scenes = projectBody.scenes.map((scene, index) => {
     const fallbackDialogue = `${projectBody.characters?.[0]?.name || 'Hero'}: ${scene.description || 'Let us continue our story.'}`;
-    return {
+    return normalizeSceneForCinematicPipeline({
       ...scene,
       id: index + 1,
       title: sanitizeText(scene?.title || `Scene ${index + 1}`),
@@ -858,7 +870,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
       characters: Array.isArray(scene?.characters) && scene.characters.length
         ? scene.characters
         : projectBody.characters.map((char) => ({ name: char.name, role: char.role })),
-    };
+    }, index);
   });
 
   projectBody.promptHints = projectBody.promptHints || projectBody.scenes.map((scene) => ({
@@ -930,7 +942,31 @@ const getResolution = (videoSize) => {
   }
 };
 
+const getOpenAIImageSize = (width, height) => {
+  if (width === height) return '1024x1024';
+  return width > height ? '1536x1024' : '1024x1536';
+};
+
 const safeFileName = (value) => value.replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
+const parseList = (value) => String(value || '')
+  .split(',')
+  .map((entry) => sanitizeText(entry))
+  .filter(Boolean);
+
+const normalizeSceneForCinematicPipeline = (scene = {}, index = 0) => ({
+  ...scene,
+  characterPose: sanitizeText(scene?.characterPose || (index === 0 ? 'introduce-characters' : 'action-pose')),
+  mouthMovement: sanitizeText(scene?.mouthMovement || 'auto'),
+  sceneLighting: sanitizeText(scene?.sceneLighting || 'soft-cinematic'),
+  animationStyle: sanitizeText(scene?.animationStyle || '2d-cartoon'),
+  backgroundMusicMood: sanitizeText(scene?.backgroundMusicMood || 'warm-adventure'),
+  soundEffects: Array.isArray(scene?.soundEffects)
+    ? scene.soundEffects.map((entry) => sanitizeText(entry)).filter(Boolean)
+    : parseList(scene?.soundEffects || ''),
+  cameraMotion: sanitizeText(scene?.cameraMotion || 'slow-zoom'),
+  transitionType: sanitizeText(scene?.transitionType || 'cross-dissolve'),
+  shotType: sanitizeText(scene?.shotType || 'medium'),
+});
 
 const colorFromText = (value = '') => {
   let hash = 0;
@@ -953,6 +989,81 @@ const normalizeSceneCharacterList = (scene, project) => {
       role: sanitizeText(char?.role || 'Story role'),
     }))
     .slice(0, 3);
+};
+
+const buildRealCartoonPrompt = (scene, project) => {
+  const title = sanitizeText(scene?.title || 'Story scene');
+  const description = sanitizeText(scene?.description || 'A family-friendly story moment.');
+  const mood = sanitizeText(scene?.emotion || 'wonder');
+  const artStyle = sanitizeText(project?.style || 'cartoon');
+  const sceneCharacters = normalizeSceneCharacterList(scene, project);
+  const characterDetails = sceneCharacters
+    .map((char) => {
+      const full = (project?.characters || []).find(
+        (item) => sanitizeText(item?.name).toLowerCase() === sanitizeText(char.name).toLowerCase()
+      );
+      const appearance = sanitizeText(full?.appearance || `${char.name} as a cute cartoon character`);
+      return `${char.name} (${char.role}) - ${appearance}`;
+    })
+    .join('; ');
+
+  return [
+    'Create a single-frame 2D kids cartoon illustration for a video scene.',
+    `Scene title: ${title}.`,
+    `Description: ${description}.`,
+    `Mood: ${mood}.`,
+    `Art style: ${artStyle}, colorful, child-safe, friendly expressions, clean outlines.`,
+    `Characters: ${characterDetails || 'Main hero and supportive friend.'}`,
+    'No text, no subtitles, no watermarks, no logos.',
+    'Cinematic composition, high readability for children, warm lighting.',
+  ].join(' ');
+};
+
+const getImageBufferFromOpenAIResult = async (item) => {
+  if (!item) return null;
+  if (item.b64_json) {
+    return Buffer.from(item.b64_json, 'base64');
+  }
+  if (item.url) {
+    const response = await fetch(item.url);
+    if (!response.ok) {
+      return null;
+    }
+    const arr = await response.arrayBuffer();
+    return Buffer.from(arr);
+  }
+  return null;
+};
+
+const generateRealCartoonSceneImage = async (scene, project, imagePath, resolution) => {
+  if (!openai || isFreeMode || !useRealCartoonImages) {
+    return false;
+  }
+
+  try {
+    const response = await openai.images.generate({
+      model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1',
+      prompt: buildRealCartoonPrompt(scene, project),
+      size: getOpenAIImageSize(resolution.width, resolution.height),
+    });
+    const firstImage = response?.data?.[0];
+    const imageBuffer = await getImageBufferFromOpenAIResult(firstImage);
+    if (!imageBuffer?.length) {
+      return false;
+    }
+    await sharp(imageBuffer)
+      .resize(resolution.width, resolution.height, {
+        fit: 'cover',
+      })
+      .png({
+        compressionLevel: isLowMemoryMode ? 9 : 6,
+        palette: Boolean(isLowMemoryMode),
+      })
+      .toFile(imagePath);
+    return true;
+  } catch (_error) {
+    return false;
+  }
 };
 
 const buildSceneSvg = (scene, project, width, height) => {
@@ -1023,12 +1134,15 @@ const createSceneImages = async (project, directory) => {
   let totalDuration = 0;
 
   for (const scene of project.scenes) {
-    const svg = buildSceneSvg(scene, project, resolution.width, resolution.height);
     const imagePath = path.join(directory, `scene-${scene.id}.png`);
-    const pngOptions = isLowMemoryMode
-      ? { compressionLevel: 9, palette: true, effort: 4 }
-      : {};
-    await sharp(Buffer.from(svg)).png(pngOptions).toFile(imagePath);
+    const generatedByAi = await generateRealCartoonSceneImage(scene, project, imagePath, resolution);
+    if (!generatedByAi) {
+      const svg = buildSceneSvg(scene, project, resolution.width, resolution.height);
+      const pngOptions = isLowMemoryMode
+        ? { compressionLevel: 9, palette: true, effort: 4 }
+        : {};
+      await sharp(Buffer.from(svg)).png(pngOptions).toFile(imagePath);
+    }
     const sceneDuration = Math.max(2, Math.min(15, Number(scene.durationSeconds) || 4));
     totalDuration += sceneDuration;
     sceneFiles.push({ path: imagePath, duration: sceneDuration });
@@ -1372,6 +1486,7 @@ const renderVideo = async (project, premiumHD = false) => {
 
   const quality = premiumHD && !isLowMemoryMode ? '24' : (isLowMemoryMode ? '28' : '23');
   const outputFile = path.join(outputDir, 'story-render.mp4');
+  const ambientAudioExpression = `aevalsrc=(0.016*sin(2*PI*220*t)+0.012*sin(2*PI*330*t)+0.008*sin(2*PI*440*t)):s=44100:d=${totalDuration}`;
 
   const ffmpegArgs = [
     '-y',
@@ -1383,7 +1498,7 @@ const renderVideo = async (project, premiumHD = false) => {
   if (audioTrackPath) {
     ffmpegArgs.push('-i', audioTrackPath);
   } else {
-    ffmpegArgs.push('-f', 'lavfi', '-i', `aevalsrc=0:d=${totalDuration}`);
+    ffmpegArgs.push('-f', 'lavfi', '-i', ambientAudioExpression);
   }
 
   ffmpegArgs.push(
@@ -1417,6 +1532,234 @@ const renderVideo = async (project, premiumHD = false) => {
   return { videoUrl, projectId: path.basename(outputDir), outputFile };
 };
 
+const getProjectRenderDirectory = async (projectId) => {
+  await ensureUploadsRoot();
+  const safeProjectId = safeFileName(projectId || uuidv4());
+  const outputDir = path.join(uploadsRoot, safeProjectId);
+  await mkdir(outputDir, { recursive: true });
+  return { safeProjectId, outputDir };
+};
+
+const getSceneById = (project, sceneId) => {
+  const normalizedId = Number(sceneId);
+  if (!Number.isFinite(normalizedId)) {
+    return null;
+  }
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  return scenes.find((scene, index) => Number(scene?.id || index + 1) === normalizedId) || null;
+};
+
+const generateCharacterSheet = async (projectId, options = {}) => {
+  const project = await getStudioProject(projectId);
+  const { safeProjectId, outputDir } = await getProjectRenderDirectory(project.projectId);
+  const characters = Array.isArray(project.characters) ? project.characters : [];
+  const poses = Array.isArray(options.poses) && options.poses.length
+    ? options.poses.map((entry) => sanitizeText(entry)).filter(Boolean).slice(0, 4)
+    : ['front', 'side', 'action', 'sitting'];
+  const emotions = Array.isArray(options.emotions) && options.emotions.length
+    ? options.emotions.map((entry) => sanitizeText(entry)).filter(Boolean).slice(0, 6)
+    : ['happy', 'curious', 'brave', 'surprised', 'focused', 'celebrating'];
+
+  const sheets = [];
+  for (let index = 0; index < characters.length; index += 1) {
+    const character = characters[index];
+    const charName = sanitizeText(character?.name || `Character ${index + 1}`);
+    const entries = [];
+
+    for (let poseIndex = 0; poseIndex < poses.length; poseIndex += 1) {
+      const pose = poses[poseIndex];
+      const scene = normalizeSceneForCinematicPipeline({
+        id: poseIndex + 1,
+        title: `${charName} ${pose} pose`,
+        description: `${charName} reference art for ${pose} pose.`,
+        dialogue: `${charName} ${emotions[poseIndex % emotions.length]}.`,
+        emotion: emotions[poseIndex % emotions.length],
+        characters: [{ name: charName, role: sanitizeText(character?.role || 'Hero') }],
+        durationSeconds: 4,
+        shotType: 'medium',
+        cameraMotion: 'still',
+      }, poseIndex);
+
+      const fileName = `character-sheet-${safeFileName(charName)}-${safeFileName(pose)}.png`;
+      const imagePath = path.join(outputDir, fileName);
+      const generatedByAi = await generateRealCartoonSceneImage(scene, project, imagePath, getResolution(project.videoSize));
+      if (!generatedByAi) {
+        const { width, height } = getResolution(project.videoSize);
+        const svg = buildSceneSvg(scene, project, width, height);
+        await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toFile(imagePath);
+      }
+      entries.push({
+        pose,
+        emotion: scene.emotion,
+        imageUrl: `/uploads/video-studio/${safeProjectId}/${fileName}`,
+      });
+    }
+
+    sheets.push({
+      characterId: sanitizeText(character?.id || safeFileName(charName)),
+      name: charName,
+      appearance: sanitizeText(character?.appearance || ''),
+      entries,
+    });
+  }
+
+  await patchStudioProject(project.projectId, { characterSheets: sheets });
+  return {
+    projectId: project.projectId,
+    characterSheets: sheets,
+  };
+};
+
+const generateSceneImage = async (projectId, sceneId) => {
+  const project = await getStudioProject(projectId);
+  const scene = getSceneById(project, sceneId);
+  if (!scene) {
+    throw new Error('Scene not found.');
+  }
+  const { safeProjectId, outputDir } = await getProjectRenderDirectory(project.projectId);
+  const resolution = getResolution(project.videoSize);
+  const fileName = `scene-${safeFileName(String(scene.id || sceneId))}-still.png`;
+  const imagePath = path.join(outputDir, fileName);
+  const generatedByAi = await generateRealCartoonSceneImage(scene, project, imagePath, resolution);
+  if (!generatedByAi) {
+    const svg = buildSceneSvg(scene, project, resolution.width, resolution.height);
+    await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toFile(imagePath);
+  }
+  return {
+    projectId: project.projectId,
+    sceneId: Number(scene.id || sceneId),
+    source: generatedByAi ? 'ai-image' : 'template-fallback',
+    imageUrl: `/uploads/video-studio/${safeProjectId}/${fileName}`,
+  };
+};
+
+const generateVoice = async (projectId, sceneId) => {
+  const project = await getStudioProject(projectId);
+  const scene = getSceneById(project, sceneId);
+  if (!scene) {
+    throw new Error('Scene not found.');
+  }
+  const { safeProjectId, outputDir } = await getProjectRenderDirectory(project.projectId);
+  const outputPath = path.join(outputDir, `scene-${safeFileName(String(scene.id || sceneId))}-voice.mp3`);
+  const dialogueTurns = extractSceneDialogueTurns(scene, project);
+  const voiceText = dialogueTurns.map((turn) => turn.text).join(' ').slice(0, 4096);
+  const synthesizedPath = await synthesizeSpeechToFile({
+    text: voiceText,
+    voiceCandidate: project?.voiceType || project?.voicePlan?.narrator?.voice,
+    outputPath,
+  });
+
+  if (!synthesizedPath) {
+    const duration = Math.max(2, Math.min(15, Number(scene.durationSeconds) || 4));
+    await runFfmpeg([
+      '-y',
+      '-f', 'lavfi',
+      '-i', `aevalsrc=(0.02*sin(2*PI*260*t)+0.01*sin(2*PI*390*t)):s=44100:d=${duration}`,
+      '-c:a', 'libmp3lame',
+      '-b:a', '96k',
+      outputPath,
+    ], outputDir);
+  }
+
+  return {
+    projectId: project.projectId,
+    sceneId: Number(scene.id || sceneId),
+    voiceUrl: `/uploads/video-studio/${safeProjectId}/${path.basename(outputPath)}`,
+    provider: synthesizedPath ? 'openai-tts' : 'procedural-fallback',
+  };
+};
+
+const generateSfx = async (projectId, sceneId) => {
+  const project = await getStudioProject(projectId);
+  const scene = getSceneById(project, sceneId);
+  if (!scene) {
+    throw new Error('Scene not found.');
+  }
+  const { safeProjectId, outputDir } = await getProjectRenderDirectory(project.projectId);
+  const duration = Math.max(2, Math.min(15, Number(scene.durationSeconds) || 4));
+  const outputPath = path.join(outputDir, `scene-${safeFileName(String(scene.id || sceneId))}-sfx.mp3`);
+  await runFfmpeg([
+    '-y',
+    '-f', 'lavfi',
+    '-i', `anoisesrc=color=pink:amplitude=0.015:d=${duration}`,
+    '-af', 'highpass=f=120,lowpass=f=6500',
+    '-c:a', 'libmp3lame',
+    '-b:a', '96k',
+    outputPath,
+  ], outputDir);
+
+  return {
+    projectId: project.projectId,
+    sceneId: Number(scene.id || sceneId),
+    sfxUrl: `/uploads/video-studio/${safeProjectId}/${path.basename(outputPath)}`,
+    mood: sanitizeText(scene?.backgroundMusicMood || 'neutral'),
+  };
+};
+
+const animateScene = async (projectId, sceneId) => {
+  const project = await getStudioProject(projectId);
+  const scene = getSceneById(project, sceneId);
+  if (!scene) {
+    throw new Error('Scene not found.');
+  }
+  const stillResult = await generateSceneImage(project.projectId, scene.id || sceneId);
+  const { safeProjectId, outputDir } = await getProjectRenderDirectory(project.projectId);
+  const stillPath = path.join(outputDir, path.basename(stillResult.imageUrl));
+  const clipName = `scene-${safeFileName(String(scene.id || sceneId))}-animated.mp4`;
+  const clipPath = path.join(outputDir, clipName);
+  const resolution = getResolution(project.videoSize);
+  const duration = Math.max(2, Math.min(15, Number(scene.durationSeconds) || 4));
+  const fps = 24;
+  const frames = Math.max(1, Math.floor(duration * fps));
+  const zoomFilter = `zoompan=z='min(1.14,1+0.0014*on)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${resolution.width}x${resolution.height}:fps=${fps}`;
+  const fadeOutStart = Math.max(0, duration - 0.4);
+
+  await runFfmpeg([
+    '-y',
+    '-loop', '1',
+    '-i', stillPath,
+    '-f', 'lavfi',
+    '-i', `aevalsrc=(0.012*sin(2*PI*220*t)+0.008*sin(2*PI*330*t)):s=44100:d=${duration}`,
+    '-t', `${duration}`,
+    '-vf', `${zoomFilter},fade=t=in:st=0:d=0.25,fade=t=out:st=${fadeOutStart}:d=0.35`,
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac',
+    '-b:a', '96k',
+    '-shortest',
+    clipPath,
+  ], outputDir);
+
+  return {
+    projectId: project.projectId,
+    sceneId: Number(scene.id || sceneId),
+    animatedClipUrl: `/uploads/video-studio/${safeProjectId}/${clipName}`,
+    cameraMotion: sanitizeText(scene?.cameraMotion || 'slow-zoom'),
+  };
+};
+
+const lipSync = async (projectId, sceneId) => {
+  const animationResult = await animateScene(projectId, sceneId);
+  const voiceResult = await generateVoice(projectId, sceneId);
+  return {
+    projectId: animationResult.projectId,
+    sceneId: animationResult.sceneId,
+    animatedClipUrl: animationResult.animatedClipUrl,
+    voiceUrl: voiceResult.voiceUrl,
+    lipSyncStatus: 'proxy-mix',
+    note: 'Dedicated lip-sync engine integration (e.g., Wav2Lip/SadTalker) can replace this stage.',
+  };
+};
+
+const composeFinalVideo = async (projectId, options = {}) => {
+  const project = await getStudioProject(projectId);
+  const result = await renderVideo(project, Boolean(options.premiumHD));
+  return {
+    ...result,
+    composition: 'story-to-cinematic-pipeline',
+  };
+};
+
 module.exports = {
   createStudioProject,
   renderVideo,
@@ -1424,4 +1767,11 @@ module.exports = {
   getStudioProject,
   regenerateProjectStage,
   patchStudioProject,
+  generateCharacterSheet,
+  generateSceneImage,
+  animateScene,
+  generateVoice,
+  generateSfx,
+  lipSync,
+  composeFinalVideo,
 };

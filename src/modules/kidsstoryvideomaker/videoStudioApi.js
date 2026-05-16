@@ -352,3 +352,83 @@ export const waitForRenderedVideo = async (
     })
   );
 };
+
+export const generateCharacterSheet = (projectId, requestBody = {}, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/generate-character-sheet`, {
+    method: "POST",
+    body: requestBody,
+    retries: 0,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "character-sheet response");
+    return result;
+  });
+
+export const generateSceneImage = (projectId, sceneId, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/scenes/${sceneId}/generate-image`, {
+    method: "POST",
+    body: {},
+    retries: 0,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "scene-image response");
+    return result;
+  });
+
+export const animateScene = (projectId, sceneId, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/scenes/${sceneId}/animate`, {
+    method: "POST",
+    body: {},
+    retries: 0,
+    timeoutMs: RENDER_TIMEOUT_MS,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "animate-scene response");
+    return result;
+  });
+
+export const generateSceneVoice = (projectId, sceneId, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/scenes/${sceneId}/generate-voice`, {
+    method: "POST",
+    body: {},
+    retries: 0,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "scene-voice response");
+    return result;
+  });
+
+export const generateSceneSfx = (projectId, sceneId, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/scenes/${sceneId}/generate-sfx`, {
+    method: "POST",
+    body: {},
+    retries: 0,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "scene-sfx response");
+    return result;
+  });
+
+export const lipSyncScene = (projectId, sceneId, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/scenes/${sceneId}/lip-sync`, {
+    method: "POST",
+    body: {},
+    retries: 0,
+    timeoutMs: RENDER_TIMEOUT_MS,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "lip-sync response");
+    return result;
+  });
+
+export const composeFinalVideo = (projectId, requestBody = {}, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/compose-final-video`, {
+    method: "POST",
+    body: requestBody,
+    retries: 0,
+    timeoutMs: RENDER_TIMEOUT_MS,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "compose-final-video response");
+    return result;
+  });

@@ -9,6 +9,13 @@ const {
   getStudioProject,
   regenerateProjectStage,
   patchStudioProject,
+  generateCharacterSheet,
+  generateSceneImage,
+  animateScene,
+  generateVoice,
+  generateSfx,
+  lipSync,
+  composeFinalVideo,
 } = require('../services/videoStudioService');
 
 const router = express.Router();
@@ -269,7 +276,7 @@ router.post('/autopilot/create', async (req, res) => {
 
     const normalizedSubject = String(subject || '').trim();
     if (!normalizedSubject) {
-      return res.status(400).json({ success: false, error: 'Please provide a subject like "Rabbit and Tortoise".' });
+      return res.status(400).json({ success: false, error: 'Please provide any story subject, like "space adventure" or "jungle mystery".' });
     }
 
     const project = await createAutopilotProject({
@@ -318,6 +325,86 @@ router.post('/projects/:projectId/regenerate/:stage', async (req, res) => {
   } catch (error) {
     logger.error('Video studio regenerate stage error:', error);
     respondVideoStudioError(res, error, 'Failed to regenerate stage.');
+  }
+});
+
+router.post('/projects/:projectId/generate-character-sheet', async (req, res) => {
+  try {
+    const result = await generateCharacterSheet(req.params.projectId, req.body || {});
+    res.json({ success: true, ...result, freeMode: isFreeMode });
+  } catch (error) {
+    logger.error('Video studio generate-character-sheet error:', error);
+    respondVideoStudioError(res, error, 'Failed to generate character sheet.');
+  }
+});
+
+router.post('/projects/:projectId/scenes/:sceneId/generate-image', async (req, res) => {
+  try {
+    const result = await generateSceneImage(req.params.projectId, req.params.sceneId);
+    res.json({ success: true, ...result, freeMode: isFreeMode });
+  } catch (error) {
+    logger.error('Video studio generate-scene-image error:', error);
+    respondVideoStudioError(res, error, 'Failed to generate scene image.');
+  }
+});
+
+router.post('/projects/:projectId/scenes/:sceneId/animate', async (req, res) => {
+  try {
+    const result = await animateScene(req.params.projectId, req.params.sceneId);
+    res.json({ success: true, ...result, freeMode: isFreeMode });
+  } catch (error) {
+    logger.error('Video studio animate-scene error:', error);
+    respondVideoStudioError(res, error, 'Failed to animate scene.');
+  }
+});
+
+router.post('/projects/:projectId/scenes/:sceneId/generate-voice', async (req, res) => {
+  try {
+    const result = await generateVoice(req.params.projectId, req.params.sceneId);
+    res.json({ success: true, ...result, freeMode: isFreeMode });
+  } catch (error) {
+    logger.error('Video studio generate-voice error:', error);
+    respondVideoStudioError(res, error, 'Failed to generate voice track.');
+  }
+});
+
+router.post('/projects/:projectId/scenes/:sceneId/generate-sfx', async (req, res) => {
+  try {
+    const result = await generateSfx(req.params.projectId, req.params.sceneId);
+    res.json({ success: true, ...result, freeMode: isFreeMode });
+  } catch (error) {
+    logger.error('Video studio generate-sfx error:', error);
+    respondVideoStudioError(res, error, 'Failed to generate scene SFX.');
+  }
+});
+
+router.post('/projects/:projectId/scenes/:sceneId/lip-sync', async (req, res) => {
+  try {
+    const result = await lipSync(req.params.projectId, req.params.sceneId);
+    res.json({ success: true, ...result, freeMode: isFreeMode });
+  } catch (error) {
+    logger.error('Video studio lip-sync error:', error);
+    respondVideoStudioError(res, error, 'Failed to lip-sync scene.');
+  }
+});
+
+router.post('/projects/:projectId/compose-final-video', async (req, res) => {
+  try {
+    const result = await composeFinalVideo(req.params.projectId, req.body || {});
+    const relativeVideoUrl = String(result.videoUrl || '');
+    const origin = buildRequestOrigin(req);
+    const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
+      ? relativeVideoUrl
+      : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
+    res.json({
+      success: true,
+      ...result,
+      videoUrl: absoluteVideoUrl,
+      freeMode: isFreeMode,
+    });
+  } catch (error) {
+    logger.error('Video studio compose-final-video error:', error);
+    respondVideoStudioError(res, error, 'Failed to compose final video.');
   }
 });
 
