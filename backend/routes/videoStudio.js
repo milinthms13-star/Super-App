@@ -14,6 +14,8 @@ const {
 const router = express.Router();
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 const videoStudioUploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
+const maxParallelRenders = Math.max(1, Number(process.env.VIDEO_STUDIO_MAX_PARALLEL_RENDERS) || 1);
+let activeRenderCount = 0;
 
 const toSafeProjectDirectoryName = (value = '') => String(value).replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
 
@@ -55,6 +57,15 @@ const validateRenderScene = (scene, index) => {
 };
 
 const validateRenderProjectPayload = (project) => {
+  const maxScenes = Math.max(
+    3,
+    Number(process.env.VIDEO_STUDIO_MAX_SCENES) || (isFreeMode ? 8 : 20)
+  );
+  const maxDurationSeconds = Math.max(
+    30,
+    Number(process.env.VIDEO_STUDIO_MAX_DURATION_SECONDS) || (isFreeMode ? 120 : 240)
+  );
+
   if (!project || typeof project !== 'object') {
     return 'A valid project payload is required.';
   }
@@ -64,17 +75,28 @@ const validateRenderProjectPayload = (project) => {
   if (!Array.isArray(project.scenes) || project.scenes.length === 0) {
     return 'At least one scene is required for rendering.';
   }
-  if (project.scenes.length > 20) {
-    return 'Too many scenes requested. Keep it at 20 scenes or fewer.';
+  if (project.scenes.length > maxScenes) {
+    return `Too many scenes requested. Keep it at ${maxScenes} scenes or fewer.`;
   }
+  let totalDurationSeconds = 0;
   for (let index = 0; index < project.scenes.length; index += 1) {
     const validationError = validateRenderScene(project.scenes[index], index);
     if (validationError) {
       return validationError;
     }
+    totalDurationSeconds += Number(project.scenes[index]?.durationSeconds) || 0;
+  }
+  if (totalDurationSeconds > maxDurationSeconds) {
+    return `Total video duration is too high. Keep it at ${maxDurationSeconds} seconds or less.`;
   }
 
   return '';
+};
+
+const formatMemoryUsage = () => {
+  const usage = process.memoryUsage();
+  const toMB = (value) => Math.round((Number(value || 0) / 1024 / 1024) * 10) / 10;
+  return `rss=${toMB(usage.rss)}MB heapUsed=${toMB(usage.heapUsed)}MB heapTotal=${toMB(usage.heapTotal)}MB external=${toMB(usage.external)}MB`;
 };
 
 router.post('/create', async (req, res) => {
@@ -151,6 +173,13 @@ router.post('/create', async (req, res) => {
 
 router.post('/render', async (req, res) => {
   try {
+    if (activeRenderCount >= maxParallelRenders) {
+      return res.status(429).json({
+        success: false,
+        error: 'Video renderer is busy. Please retry in a moment.',
+      });
+    }
+
     const { project, projectId, premiumHD } = req.body;
     const resolvedProject = project || (projectId ? await getStudioProject(projectId) : null);
     const payloadError = validateRenderProjectPayload(resolvedProject);
@@ -158,32 +187,46 @@ router.post('/render', async (req, res) => {
       return res.status(400).json({ success: false, error: payloadError });
     }
 
-    const result = await renderVideo(resolvedProject, Boolean(premiumHD));
-    if (!result?.outputFile || !fs.existsSync(result.outputFile)) {
-      logger.error(`Video studio render produced missing output file for project ${resolvedProject.projectId}`);
-      return res.status(500).json({ success: false, error: 'Render completed but output video was not found.' });
+    activeRenderCount += 1;
+    logger.info(
+      `Video studio render started (active=${activeRenderCount}/${maxParallelRenders}) project=${resolvedProject.projectId} ${formatMemoryUsage()}`
+    );
+    const renderStart = Date.now();
+
+    try {
+      const result = await renderVideo(resolvedProject, Boolean(premiumHD));
+      if (!result?.outputFile || !fs.existsSync(result.outputFile)) {
+        logger.error(`Video studio render produced missing output file for project ${resolvedProject.projectId}`);
+        return res.status(500).json({ success: false, error: 'Render completed but output video was not found.' });
+      }
+
+      const relativeVideoUrl = String(result.videoUrl || '');
+      const origin = buildRequestOrigin(req);
+      const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
+        ? relativeVideoUrl
+        : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
+
+      await patchStudioProject(resolvedProject.projectId, {
+        videoUrl: relativeVideoUrl,
+        renderedAt: new Date().toISOString(),
+        premiumExport: Boolean(premiumHD),
+        scenes: resolvedProject.scenes,
+      });
+
+      logger.info(
+        `Video studio render completed in ${Date.now() - renderStart}ms project=${resolvedProject.projectId} ${formatMemoryUsage()}`
+      );
+
+      res.json({
+        success: true,
+        videoUrl: absoluteVideoUrl,
+        videoPath: relativeVideoUrl,
+        projectId: result.projectId,
+        freeMode: isFreeMode,
+      });
+    } finally {
+      activeRenderCount = Math.max(0, activeRenderCount - 1);
     }
-
-    const relativeVideoUrl = String(result.videoUrl || '');
-    const origin = buildRequestOrigin(req);
-    const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
-      ? relativeVideoUrl
-      : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
-
-    await patchStudioProject(resolvedProject.projectId, {
-      videoUrl: relativeVideoUrl,
-      renderedAt: new Date().toISOString(),
-      premiumExport: Boolean(premiumHD),
-      scenes: resolvedProject.scenes,
-    });
-
-    res.json({
-      success: true,
-      videoUrl: absoluteVideoUrl,
-      videoPath: relativeVideoUrl,
-      projectId: result.projectId,
-      freeMode: isFreeMode,
-    });
   } catch (error) {
     logger.error('Video studio render error:', error);
     respondVideoStudioError(res, error, 'Video rendering failed.');

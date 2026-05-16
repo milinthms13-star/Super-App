@@ -150,6 +150,31 @@ const safeUse = (mountPath, modulePath) => {
   }
 };
 
+const createLazyRouteMiddleware = (modulePath) => {
+  let loadedRouter = null;
+  let loadingPromise = null;
+
+  return async (req, res, next) => {
+    try {
+      if (!loadedRouter) {
+        if (!loadingPromise) {
+          loadingPromise = Promise.resolve().then(() => require(modulePath));
+        }
+        loadedRouter = await loadingPromise;
+        logger.info(`Lazy route loaded: ${modulePath}`);
+      }
+
+      return loadedRouter(req, res, next);
+    } catch (error) {
+      logger.error(`Lazy route load failed for ${modulePath}: ${error.message}`);
+      return res.status(503).json({
+        success: false,
+        error: 'Service temporarily unavailable. Please try again.',
+      });
+    }
+  };
+};
+
 const authRoutes = require('./routes/auth');
 const appDataRoutes = require('./routes/appData');
 
@@ -157,7 +182,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/appdata', appDataRoutes);
 app.use('/api/app-data', appDataRoutes);
 app.use('/api/business-builder', require('./routes/businessBuilderRoutes'));
-app.use('/api/video-studio', require('./routes/videoStudio'));
+app.use('/api/video-studio', createLazyRouteMiddleware('./routes/videoStudio'));
 app.use('/api/photo-studio', require('./routes/photoStudio'));
 app.use('/api/voice-input', require('./routes/voiceInput'));
 app.use('/api/ai-voice-friend', require('./routes/voiceFriendRoutes'));
