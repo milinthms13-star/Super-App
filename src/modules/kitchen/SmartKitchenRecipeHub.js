@@ -183,16 +183,17 @@ const SmartKitchenRecipeHub = () => {
     [pushStatus, request, withBusy]
   );
 
-  const generateRecipe = useCallback(async () => {
+  const generateRecipe = useCallback(async (override = {}) => {
     await withBusy("generate", async () => {
       try {
+        const form = { ...generatorForm, ...override };
         const payload = {
-          ...generatorForm,
-          ingredients: generatorForm.ingredients
+          ...form,
+          ingredients: form.ingredients
             .split(/[\n,]+/)
             .map((item) => item.trim())
             .filter(Boolean),
-          allergies: generatorForm.allergies
+          allergies: form.allergies
             .split(/[\n,]+/)
             .map((item) => item.trim())
             .filter(Boolean),
@@ -386,10 +387,23 @@ const SmartKitchenRecipeHub = () => {
         return;
       }
 
-      if (lower.includes("generate recipe")) {
+      const wantsRecipe = lower.includes("recipe") && (lower.includes("need") || lower.includes("want") || lower.includes("generate") || lower.includes("create") || lower.includes("show"));
+      if (wantsRecipe) {
+        let category = "Dinner";
+        if (lower.includes("breakfast")) category = "Breakfast";
+        else if (lower.includes("lunch")) category = "Lunch";
+        else if (lower.includes("dinner")) category = "Dinner";
+        else if (/(snack|snacks|tea)/.test(lower)) category = "Snacks";
+        else if (lower.includes("tiffin")) category = "Breakfast";
+
+        setGeneratorForm((current) => ({
+          ...current,
+          category,
+        }));
+
         setTab("generator");
-        generateRecipe();
-        speakText("Generating recipe.");
+        generateRecipe({ category });
+        speakText(`Generating ${category.toLowerCase()} recipe.`);
         return;
       }
 

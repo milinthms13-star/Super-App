@@ -1874,21 +1874,62 @@ const normalizeScenesForCartoonRenderer = (project = {}) => {
     });
 };
 
+const buildDeterministicSeed = (...parts) => {
+  const combined = parts
+    .map((part) => sanitizeText(part))
+    .filter(Boolean)
+    .join('|');
+  if (!combined) return 1;
+
+  let hash = 2166136261;
+  for (let index = 0; index < combined.length; index += 1) {
+    hash ^= combined.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0) || 1;
+};
+
+const pickPaletteColor = (palette = [], seed = 1, fallback = '0x9ee7ff') => {
+  if (!Array.isArray(palette) || !palette.length) return fallback;
+  const index = Math.abs(Number(seed) || 0) % palette.length;
+  return palette[index] || fallback;
+};
+
 const buildCartoonSceneFilter = (scene, resolution) => {
   const width = Number(resolution?.width || 1280);
   const height = Number(resolution?.height || 720);
-  const skyColor = scene.emotion === 'joyful' ? '0xfff1a9' : scene.emotion === 'brave' ? '0xbce5ff' : '0x9ee7ff';
-  const groundColor = scene.emotion === 'joyful' ? '0x7dd95f' : '0x8fd36a';
-  const bubbleY = Math.max(0, height - 140);
-  const bubbleWidth = Math.max(300, width - 240);
-  const bubbleTailX = Math.max(200, Math.floor(width * 0.36));
-  const accentOne = scene.emotion === 'joyful' ? '0xfff7d6' : '0xe8f6ff';
-  const accentTwo = scene.emotion === 'brave' ? '0xd8f5ff' : '0xeef8e3';
+  const sceneSeed = buildDeterministicSeed(scene?.title, scene?.description, scene?.emotion, scene?.lines?.map((line) => line?.text).join(' '));
+  const skyPalette = scene.emotion === 'joyful'
+    ? ['0xfff1a9', '0xffe8b8', '0xffefc7', '0xfbe6a2']
+    : scene.emotion === 'brave'
+      ? ['0xbce5ff', '0xb8ddff', '0xcde8ff', '0xadd7f7']
+      : ['0x9ee7ff', '0xa9ebf8', '0xb6ebff', '0x95ddf2'];
+  const groundPalette = scene.emotion === 'joyful'
+    ? ['0x7dd95f', '0x85d86e', '0x74cf58']
+    : ['0x8fd36a', '0x84c761', '0x97da72'];
+  const accentPalette = scene.emotion === 'brave'
+    ? ['0xd8f5ff', '0xd0efff', '0xe0f8ff']
+    : ['0xe8f6ff', '0xeef8e3', '0xf1fbef'];
+  const skyColor = pickPaletteColor(skyPalette, sceneSeed, '0x9ee7ff');
+  const groundColor = pickPaletteColor(groundPalette, sceneSeed >> 2, '0x8fd36a');
+  const accentOne = pickPaletteColor(accentPalette, sceneSeed >> 4, '0xe8f6ff');
+  const accentTwo = pickPaletteColor(accentPalette, sceneSeed >> 6, '0xeef8e3');
+  const bubbleY = Math.max(0, height - 140 - (sceneSeed % 16));
+  const bubbleWidth = Math.max(300, width - 240 - (sceneSeed % 120));
+  const bubbleTailX = Math.max(180, Math.floor(width * (0.28 + ((sceneSeed % 35) / 100))));
   const characterTwoBodyX = Math.max(520, width - 500);
   const characterTwoHeadX = Math.max(490, width - 530);
   const characterTwoLeftEyeX = Math.max(532, width - 488);
   const characterTwoRightEyeX = Math.max(628, width - 392);
   const characterTwoMouthX = Math.max(560, width - 460);
+  const characterOneOutfit = pickPaletteColor(['0xff8ab3', '0xf7a9ff', '0xff9f8a', '0xffb36d'], sceneSeed >> 1, '0xff8ab3');
+  const characterTwoOutfit = pickPaletteColor(['0x6cc4ff', '0x73d8ff', '0x6eb8ff', '0x84c7ff'], sceneSeed >> 3, '0x6cc4ff');
+  const phaseA = (sceneSeed % 17) / 10;
+  const phaseB = (sceneSeed % 23) / 9;
+  const motionA = (22 + (sceneSeed % 10)) / 10;
+  const motionB = (23 + ((sceneSeed >> 2) % 12)) / 10;
+  const blinkPeriodA = (95 + (sceneSeed % 35)) / 100;
+  const blinkPeriodB = (102 + ((sceneSeed >> 1) % 30)) / 100;
 
   return [
     `drawbox=x=0:y=0:w=${width}:h=${height}:color=${skyColor}@1:t=fill`,
@@ -1901,18 +1942,18 @@ const buildCartoonSceneFilter = (scene, resolution) => {
     `drawbox=x=${Math.max(300, width - 500)}:y=115:w=190:h=35:color=white@0.85:t=fill`,
     `drawbox=x=90:y=182:w=${Math.max(240, width - 590)}:h=22:color=0x31475e@0.3:t=fill`,
     `drawbox=x=90:y=214:w=${Math.max(180, width - 760)}:h=18:color=0x31475e@0.22:t=fill`,
-    `drawbox=x='250+18*sin(t*2.8)':y='310+10*sin(t*5)':w=150:h=190:color=0xff8ab3@1:t=fill`,
-    `drawbox=x='220+18*sin(t*2.8)':y='195+8*sin(t*5)':w=210:h=150:color=0xffd2a6@1:t=fill`,
-    `drawbox=x='262+18*sin(t*2.8)':y='245+if(lt(mod(t\\,1.2)\\,0.12)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
-    `drawbox=x='358+18*sin(t*2.8)':y='245+if(lt(mod(t\\,1.2)\\,0.12)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x='250+18*sin(t*${motionA}+${phaseA})':y='310+10*sin(t*5+${phaseA})':w=150:h=190:color=${characterOneOutfit}@1:t=fill`,
+    `drawbox=x='220+18*sin(t*${motionA}+${phaseA})':y='195+8*sin(t*5+${phaseA})':w=210:h=150:color=0xffd2a6@1:t=fill`,
+    `drawbox=x='262+18*sin(t*${motionA}+${phaseA})':y='245+if(lt(mod(t\\,${blinkPeriodA})\\,0.12)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x='358+18*sin(t*${motionA}+${phaseA})':y='245+if(lt(mod(t\\,${blinkPeriodA})\\,0.12)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
     `drawbox=x='290+18*sin(t*2.8)':y='300+6*sin(t*12)':w=72:h='12+18*abs(sin(t*10))':color=0x7a1c1c@1:t=fill`,
-    `drawbox=x='250+18*sin(t*2.8)':y='515+6*sin(t*2.8)':w=150:h=34:color=0x17356b@0.85:t=fill`,
-    `drawbox=x='${characterTwoBodyX}+16*sin(t*2.5+1.2)':y='320+9*sin(t*4.6+1.2)':w=150:h=180:color=0x6cc4ff@1:t=fill`,
-    `drawbox=x='${characterTwoHeadX}+16*sin(t*2.5+1.2)':y='205+7*sin(t*4.6+1.2)':w=210:h=150:color=0xffd2a6@1:t=fill`,
-    `drawbox=x='${characterTwoLeftEyeX}+16*sin(t*2.5+1.2)':y='255+if(lt(mod(t\\,1.15)\\,0.1)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
-    `drawbox=x='${characterTwoRightEyeX}+16*sin(t*2.5+1.2)':y='255+if(lt(mod(t\\,1.15)\\,0.1)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
-    `drawbox=x='${characterTwoMouthX}+16*sin(t*2.5+1.2)':y='310+6*sin(t*11+1.2)':w=72:h='12+18*abs(sin(t*9.5))':color=0x7a1c1c@1:t=fill`,
-    `drawbox=x='${characterTwoBodyX}+16*sin(t*2.5+1.2)':y='515+5*sin(t*2.5+1.2)':w=150:h=34:color=0x17356b@0.85:t=fill`,
+    `drawbox=x='250+18*sin(t*${motionA}+${phaseA})':y='515+6*sin(t*${motionA}+${phaseA})':w=150:h=34:color=0x17356b@0.85:t=fill`,
+    `drawbox=x='${characterTwoBodyX}+16*sin(t*${motionB}+${phaseB})':y='320+9*sin(t*4.6+${phaseB})':w=150:h=180:color=${characterTwoOutfit}@1:t=fill`,
+    `drawbox=x='${characterTwoHeadX}+16*sin(t*${motionB}+${phaseB})':y='205+7*sin(t*4.6+${phaseB})':w=210:h=150:color=0xffd2a6@1:t=fill`,
+    `drawbox=x='${characterTwoLeftEyeX}+16*sin(t*${motionB}+${phaseB})':y='255+if(lt(mod(t\\,${blinkPeriodB})\\,0.1)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x='${characterTwoRightEyeX}+16*sin(t*${motionB}+${phaseB})':y='255+if(lt(mod(t\\,${blinkPeriodB})\\,0.1)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x='${characterTwoMouthX}+16*sin(t*${motionB}+${phaseB})':y='310+6*sin(t*11+${phaseB})':w=72:h='12+18*abs(sin(t*9.5))':color=0x7a1c1c@1:t=fill`,
+    `drawbox=x='${characterTwoBodyX}+16*sin(t*${motionB}+${phaseB})':y='515+5*sin(t*${motionB}+${phaseB})':w=150:h=34:color=0x17356b@0.85:t=fill`,
     `drawbox=x=120:y=${bubbleY}:w=${bubbleWidth}:h=95:color=white@0.92:t=fill`,
     `drawbox=x=${bubbleTailX}:y=${bubbleY + 80}:w=26:h=30:color=white@0.92:t=fill`,
     `drawbox=x=145:y=${bubbleY + 24}:w=${Math.max(150, bubbleWidth - 120)}:h=12:color=0x111111@0.55:t=fill`,
@@ -1937,6 +1978,9 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   const duration = Math.max(2, Number(scene.duration) || 6);
   const fps = 24;
   const frames = Math.max(1, Math.floor(duration * fps));
+  const sceneAudioSeed = buildDeterministicSeed(scene?.title, scene?.description, scene?.lines?.map((line) => line?.text).join(' '), sceneIndex);
+  const baseFrequency = 320 + (sceneAudioSeed % 220);
+  const overtoneFrequency = baseFrequency + 140 + (sceneAudioSeed % 90);
 
   const args = ['-y'];
   if (generatedByAi) {
@@ -1951,7 +1995,12 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   if (synthesizedPath) {
     args.push('-i', synthesizedPath);
   } else {
-    args.push('-f', 'lavfi', '-i', `sine=frequency=450:duration=${duration}:sample_rate=44100`);
+    args.push(
+      '-f',
+      'lavfi',
+      '-i',
+      `aevalsrc=(0.02*sin(2*PI*${baseFrequency}*t)+0.012*sin(2*PI*${overtoneFrequency}*t)):s=44100:d=${duration}`
+    );
   }
 
   if (generatedByAi) {
