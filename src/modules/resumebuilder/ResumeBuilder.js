@@ -160,15 +160,16 @@ const parseResumeTextToFormData = (text = "") => {
   if (lines.length === 0) return {};
 
   const allText = lines.join("\n");
-  const email = (allText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [""])[0];
-  const phone = (allText.match(/(?:\+\d{1,3}[\s-]?)?(?:\(?\d{2,4}\)?[\s-]?)?[\d\s-]{7,15}/g) || [""])[0];
-  const inferredName = lines[0].length < 50 ? lines[0] : "";
+  const emailMatch = allText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
+  const phoneMatch = allText.match(/(?:\+\d{1,3}[\s-]?)?(?:\(?\d{2,4}\)?[\s-]?)?(?:\d[\d\s-]{5,14}\d)/g);
+  const inferredName = lines[0] && !/resume|curriculum vitae|cv/i.test(lines[0]) ? lines[0] : lines[1] || "";
+  const summaryLines = lines.slice(1, 4).filter((line) => !/^\s*(email|phone|mobile|linkedin|github|address):?/i.test(line));
 
   return {
     name: clean(inferredName),
-    email: clean(email),
-    phone: clean(phone),
-    summary: clean(lines.slice(1, 4).join(" ")),
+    email: clean(emailMatch?.[0] || ""),
+    phone: clean(phoneMatch?.[0] || ""),
+    summary: clean(summaryLines.join(" ")),
   };
 };
 
@@ -741,7 +742,6 @@ const ResumeBuilder = () => {
 
   const exportPdf = useCallback(() => {
     const doc = new jsPDF({ unit: "pt", format: "a4" });
-    const text = formatResumeText(previewResume).split("\n");
     const theme = TEMPLATE_THEME[template] || TEMPLATE_THEME["simple-ats"];
     const rgb = hexToRgb(theme.primary);
     let y = 44;
@@ -756,20 +756,23 @@ const ResumeBuilder = () => {
     doc.setTextColor(30, 41, 59);
     y = 84;
 
-    text.forEach((line) => {
-      if (y > 790) {
-        doc.addPage();
-        y = 44;
-      }
-      if (/^[A-Z ]+$/.test(line)) {
-        doc.setTextColor(rgb.r, rgb.g, rgb.b);
-        doc.setFontSize(11);
-      } else {
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(10);
-      }
-      doc.text(line || " ", 44, y);
-      y += 13;
+    formatResumeText(previewResume).split("\n").forEach((line) => {
+      const wrapped = doc.splitTextToSize(line || " ", 510);
+      wrapped.forEach((segment) => {
+        if (y > 790) {
+          doc.addPage();
+          y = 44;
+        }
+        if (/^[A-Z ]+$/.test(segment)) {
+          doc.setTextColor(rgb.r, rgb.g, rgb.b);
+          doc.setFontSize(11);
+        } else {
+          doc.setTextColor(30, 41, 59);
+          doc.setFontSize(10);
+        }
+        doc.text(segment, 44, y);
+        y += 13;
+      });
     });
     doc.save(`${clean(previewResume?.header?.fullName || "resume").replace(/\s+/g, "_")}_${template}.pdf`);
   }, [previewResume, template]);
@@ -1130,4 +1133,5 @@ const ResumeBuilder = () => {
   );
 };
 
+export { toList, toLines, clean, extractKeywords, parseResumeTextToFormData, rewriteSummaryLocal, rewriteExperienceLocal, inferRoleSkills, buildResumeFromForm, computeSectionCompleteness, formatResumeText, buildLocalAtsReport };
 export default ResumeBuilder;

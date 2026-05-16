@@ -274,3 +274,46 @@ export const getProjectDownloadLink = (projectId, options = {}) =>
       return result;
     }
   );
+
+export const waitForRenderedVideo = async (
+  projectId,
+  { signal, maxAttempts = 24, intervalMs = 5000, timeoutMs = 20000 } = {}
+) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (signal?.aborted) {
+      throw new VideoStudioApiError("Render status check cancelled.", {
+        status: 499,
+        code: "REQUEST_ABORTED",
+      });
+    }
+
+    try {
+      return await getProjectDownloadLink(projectId, {
+        signal,
+        retries: 0,
+        timeoutMs,
+      });
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.status || 0);
+      const code = String(error?.code || "");
+      const retryable = status === 404 || status === 408 || status === 409 || status === 425 || status >= 500 || code === "EMPTY_RESPONSE";
+
+      if (!retryable || attempt === maxAttempts - 1) {
+        throw error;
+      }
+
+      await delay(intervalMs);
+    }
+  }
+
+  throw (
+    lastError ||
+    new VideoStudioApiError("Rendered video is not available yet. Please retry in a moment.", {
+      status: 408,
+      code: "REQUEST_TIMEOUT",
+    })
+  );
+};

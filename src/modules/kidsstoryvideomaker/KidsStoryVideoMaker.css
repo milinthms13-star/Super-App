@@ -626,6 +626,46 @@ select:focus-visible {
   align-items: center;
 }
 
+.render-progress-card {
+  margin-top: 16px;
+  border-radius: 16px;
+  background: #f5f1ff;
+  border: 1px solid #e3dbff;
+  padding: 14px;
+}
+
+.render-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #493f7f;
+  margin-bottom: 8px;
+}
+
+.render-progress-head strong {
+  font-size: 0.96rem;
+}
+
+.render-progress-track {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e5ddff;
+}
+
+.render-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5f41ff 0%, #13b1b8 100%);
+  transition: width 240ms ease;
+}
+
+.render-progress-card p {
+  margin: 10px 0 0;
+  color: #5f4f92;
+  font-size: 0.92rem;
+}
+
 .studio-toggle-row {
   display: flex;
   justify-content: space-between;

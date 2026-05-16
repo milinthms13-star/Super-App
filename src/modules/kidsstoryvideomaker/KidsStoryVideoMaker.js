@@ -25,6 +25,7 @@ import {
   patchProject,
   regenerateStage,
   renderProject,
+  waitForRenderedVideo,
 } from "./videoStudioApi";
 import SceneCards from "./components/SceneCards";
 import TimelineCards from "./components/TimelineCards";
@@ -203,6 +204,7 @@ const KidsStoryVideoMaker = () => {
   const mainContentRef = useRef(null);
   const voiceCatalogReadyRef = useRef(false);
   const requestControllersRef = useRef({});
+  const renderProgressIntervalRef = useRef(null);
   const [subjectInput, setSubjectInput] = useState("Rabbit and Tortoise");
   const [storyTitle, setStoryTitle] = useState("AI Kids Story Video Generator");
   const [storyPrompt, setStoryPrompt] = useState(DEFAULT_STORY_PROMPT);
@@ -222,6 +224,8 @@ const KidsStoryVideoMaker = () => {
   const [videoUrl, setVideoUrl] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState(0);
+  const [renderProgressLabel, setRenderProgressLabel] = useState("");
   const [isNarrating, setIsNarrating] = useState(false);
   const [isAutopilotGenerating, setIsAutopilotGenerating] = useState(false);
   const [isStageRegenerating, setIsStageRegenerating] = useState("");
@@ -309,6 +313,57 @@ const KidsStoryVideoMaker = () => {
     }
   };
 
+  const stopRenderProgress = (reset = false) => {
+    if (renderProgressIntervalRef.current) {
+      clearInterval(renderProgressIntervalRef.current);
+      renderProgressIntervalRef.current = null;
+    }
+    if (reset) {
+      setRenderProgress(0);
+      setRenderProgressLabel("");
+    }
+  };
+
+  const startRenderProgress = () => {
+    stopRenderProgress();
+    const startedAt = Date.now();
+    setRenderProgress(8);
+    setRenderProgressLabel("Preparing render request...");
+
+    renderProgressIntervalRef.current = setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      let target = 92;
+      let label = "Finalizing MP4 output...";
+
+      if (elapsedSeconds < 15) {
+        target = 20;
+        label = "Uploading scene and timeline data...";
+      } else if (elapsedSeconds < 120) {
+        target = 70;
+        label = "Rendering scenes and subtitles...";
+      } else if (elapsedSeconds < 300) {
+        target = 86;
+        label = "Encoding video and audio track...";
+      }
+
+      setRenderProgress((current) => Math.min(target, current + 2));
+      setRenderProgressLabel(label);
+    }, 1400);
+  };
+
+  const shouldAttemptRenderRecovery = (err) => {
+    const code = String(err?.code || "").toUpperCase();
+    const status = Number(err?.status || 0);
+    const message = String(err?.message || "").toLowerCase();
+    if (code === "EMPTY_RESPONSE" || code === "REQUEST_TIMEOUT" || code === "NETWORK_ERROR") {
+      return true;
+    }
+    if (status === 408 || status === 502 || status === 503 || status === 504) {
+      return true;
+    }
+    return /empty response|timed out|network|aborted/i.test(message);
+  };
+
   useEffect(() => {
     setProjectLibrary(loadLocalCollection(LOCAL_PROJECT_LIBRARY_KEY));
   }, []);
@@ -321,6 +376,7 @@ const KidsStoryVideoMaker = () => {
     return () => {
       window.speechSynthesis?.cancel();
       Object.values(requestControllersRef.current).forEach((controller) => controller?.abort?.());
+      stopRenderProgress(true);
       if (recognitionRef.current?.abort) {
         recognitionRef.current.abort();
       }
@@ -945,6 +1001,7 @@ const KidsStoryVideoMaker = () => {
     setError("");
     setMessage("Rendering your MP4 with AI visuals and subtitles...");
     setIsRendering(true);
+    startRenderProgress();
 
     try {
       const { payload, response } = await runCancelableRequest("render-video", (signal) =>
@@ -969,11 +1026,55 @@ const KidsStoryVideoMaker = () => {
 
       setGeneratedProject(nextProject);
       setVideoUrl(nextProject.videoUrl);
+      setRenderProgress(100);
+      setRenderProgressLabel("Render complete.");
       setMessage("Video rendered successfully. Preview and export your MP4.");
       setActiveTab("export");
     } catch (err) {
-      setError(formatSafetyError(err));
+      const canRecover = shouldAttemptRenderRecovery(err) && Boolean(generatedProject?.projectId);
+
+      if (canRecover) {
+        try {
+          setRenderProgress((current) => Math.max(current, 85));
+          setRenderProgressLabel("Render processing on server. Checking video status...");
+          setMessage("Render request finished without response. Checking video availability...");
+
+          const { payload } = await runCancelableRequest("render-download-poll", (signal) =>
+            waitForRenderedVideo(generatedProject.projectId, {
+              signal,
+              maxAttempts: 24,
+              intervalMs: 5000,
+              timeoutMs: 20000,
+            })
+          );
+
+          const recoveredVideoUrl = normalizeMediaUrl(payload.downloadUrl || payload.videoUrl || "");
+          if (!recoveredVideoUrl) {
+            throw new Error("Rendered video is not available yet. Please retry in a minute.");
+          }
+
+          const nextProject = {
+            ...renderPayload,
+            renderedAt: new Date().toISOString(),
+            videoUrl: recoveredVideoUrl,
+          };
+
+          setGeneratedProject(nextProject);
+          setVideoUrl(nextProject.videoUrl);
+          setRenderProgress(100);
+          setRenderProgressLabel("Render complete.");
+          setError("");
+          setMessage("Video rendered successfully. Preview and export your MP4.");
+          setActiveTab("export");
+          return;
+        } catch (recoveryError) {
+          setError(formatSafetyError(recoveryError));
+        }
+      } else {
+        setError(formatSafetyError(err));
+      }
     } finally {
+      stopRenderProgress();
       setIsRendering(false);
     }
   };
@@ -1936,6 +2037,19 @@ const KidsStoryVideoMaker = () => {
                   Save Project
                 </button>
               </div>
+
+              {(isRendering || renderProgress > 0) && (
+                <div className="render-progress-card" aria-live="polite">
+                  <div className="render-progress-head">
+                    <strong>Render progress</strong>
+                    <span>{Math.min(100, Math.max(0, Math.round(renderProgress)))}%</span>
+                  </div>
+                  <div className="render-progress-track">
+                    <div className="render-progress-fill" style={{ width: `${Math.min(100, Math.max(0, renderProgress))}%` }} />
+                  </div>
+                  <p>{renderProgressLabel || (isRendering ? "Rendering your video..." : "Ready")}</p>
+                </div>
+              )}
             </div>
           )}
 

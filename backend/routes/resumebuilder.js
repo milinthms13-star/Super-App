@@ -314,10 +314,15 @@ const computeAtsReport = ({ resume = {}, jobDescription = '' }) => {
 };
 
 const parseJsonResponse = (content = '', fallbackValue = null) => {
+  if (!content) return fallbackValue;
+
   try {
-    const fencedMatch = String(content || '').match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const text = fencedMatch ? fencedMatch[1] : content;
-    return JSON.parse(text);
+    const raw = String(content);
+    const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    let candidate = fencedMatch ? fencedMatch[1] : raw;
+    const objectMatch = candidate.match(/([\s\S]*?\{[\s\S]*\})/);
+    candidate = objectMatch ? objectMatch[1] : candidate;
+    return JSON.parse(candidate.trim());
   } catch (_error) {
     return fallbackValue;
   }
