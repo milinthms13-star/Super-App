@@ -42,6 +42,18 @@ const toAbsoluteApiUrl = (baseUrl, path = "") => {
 
 const dedupeUrls = (urls = []) => Array.from(new Set(urls.filter(Boolean)));
 
+const normalizeComparableVideoUrl = (value = "") => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw, "https://video.local");
+    parsed.hash = "";
+    return `${parsed.pathname}${parsed.search}`;
+  } catch (_error) {
+    return raw;
+  }
+};
+
 const buildVideoStudioRequestUrls = (path = "") => {
   const candidates = [buildApiUrl(path)];
   const runtimeOrigin =
@@ -350,9 +362,16 @@ export const getProjectRenderStatus = (projectId, options = {}) =>
 
 export const waitForRenderedVideo = async (
   projectId,
-  { signal, maxAttempts = DEFAULT_RENDER_POLL_ATTEMPTS, intervalMs = DEFAULT_RENDER_POLL_INTERVAL_MS, timeoutMs = 20000 } = {}
+  {
+    signal,
+    maxAttempts = DEFAULT_RENDER_POLL_ATTEMPTS,
+    intervalMs = DEFAULT_RENDER_POLL_INTERVAL_MS,
+    timeoutMs = 20000,
+    previousVideoUrl = "",
+  } = {}
 ) => {
   let lastError = null;
+  const previousComparableUrl = normalizeComparableVideoUrl(previousVideoUrl);
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (signal?.aborted) {
@@ -370,6 +389,12 @@ export const waitForRenderedVideo = async (
       });
       const status = String(statusResult?.payload?.status || "").toLowerCase();
       if (status === "ready" && (statusResult.payload?.downloadUrl || statusResult.payload?.videoUrl)) {
+        const candidateVideoUrl = statusResult.payload.videoUrl || statusResult.payload.downloadUrl;
+        const candidateComparableUrl = normalizeComparableVideoUrl(candidateVideoUrl);
+        if (previousComparableUrl && candidateComparableUrl === previousComparableUrl) {
+          await delay(intervalMs);
+          continue;
+        }
         return {
           ...statusResult,
           payload: {
@@ -381,11 +406,19 @@ export const waitForRenderedVideo = async (
         };
       }
 
-      return await getProjectDownloadLink(projectId, {
+      const downloadResult = await getProjectDownloadLink(projectId, {
         signal,
         retries: 0,
         timeoutMs,
       });
+      const candidateVideoUrl = downloadResult?.payload?.videoUrl || downloadResult?.payload?.downloadUrl || "";
+      const candidateComparableUrl = normalizeComparableVideoUrl(candidateVideoUrl);
+      if (previousComparableUrl && candidateComparableUrl === previousComparableUrl) {
+        await delay(intervalMs);
+        continue;
+      }
+
+      return downloadResult;
     } catch (error) {
       lastError = error;
       const status = Number(error?.status || 0);

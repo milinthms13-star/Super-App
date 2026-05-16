@@ -1384,6 +1384,7 @@ const KidsStoryVideoMaker = () => {
               maxAttempts: 24,
               intervalMs: 5000,
               timeoutMs: 20000,
+              previousVideoUrl: generatedProject.videoUrl || videoUrl || "",
             })
           );
 

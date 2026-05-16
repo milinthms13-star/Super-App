@@ -1,4 +1,4 @@
-import { VideoStudioApiError, requestVideoStudio, getProjectDownloadLink } from "./videoStudioApi";
+import { VideoStudioApiError, requestVideoStudio, getProjectDownloadLink, waitForRenderedVideo } from "./videoStudioApi";
 
 const jsonResponse = ({ ok = true, status = 200, payload, url = "http://localhost/api/video-studio/create" }) => ({
   ok,
@@ -104,5 +104,45 @@ describe("videoStudioApi", () => {
     expect(result.payload.success).toBe(true);
     expect(result.payload.downloadUrl).toBe("/uploads/video-studio/p1/story-render.mp4");
     expect(global.fetch).toHaveBeenCalled();
+  });
+
+  test("waits for a newer render url when status returns stale previous video", async () => {
+    process.env.REACT_APP_API_URL = "https://super-app-api.onrender.com";
+    process.env.REACT_APP_BACKEND_URL = "https://super-app-api.onrender.com";
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          payload: {
+            success: true,
+            status: "ready",
+            projectId: "p1",
+            videoUrl: "https://super-app-api.onrender.com/uploads/video-studio/p1/story-render.mp4?v=1000",
+            downloadUrl: "https://super-app-api.onrender.com/uploads/video-studio/p1/story-render.mp4?v=1000",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          payload: {
+            success: true,
+            status: "ready",
+            projectId: "p1",
+            videoUrl: "https://super-app-api.onrender.com/uploads/video-studio/p1/story-render.mp4?v=2000",
+            downloadUrl: "https://super-app-api.onrender.com/uploads/video-studio/p1/story-render.mp4?v=2000",
+          },
+        })
+      );
+
+    const result = await waitForRenderedVideo("p1", {
+      maxAttempts: 2,
+      intervalMs: 0,
+      timeoutMs: 5000,
+      previousVideoUrl: "https://super-app-api.onrender.com/uploads/video-studio/p1/story-render.mp4?v=1000",
+    });
+
+    expect(result.payload.videoUrl).toContain("v=2000");
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });
