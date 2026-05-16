@@ -13,6 +13,9 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 let backgroundServicesStarted = false;
 let databaseConnectedAtStartup = false;
+const disableBackgroundServices = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.DISABLE_BACKGROUND_SERVICES || '').toLowerCase()
+);
 
 const startBackgroundServices = () => {
   if (backgroundServicesStarted) {
@@ -142,7 +145,11 @@ const bootstrap = async () => {
     setupClassifiedsWebSocket(require('./config/websocket').io());
     moderationWebsocket.initialize(server);
 
-    startBackgroundServices();
+    if (disableBackgroundServices) {
+      logger.warn('Background services are disabled by DISABLE_BACKGROUND_SERVICES.');
+    } else {
+      startBackgroundServices();
+    }
 
     server.listen(PORT, () => {
       logger.info(`Server started on port ${PORT}`);
