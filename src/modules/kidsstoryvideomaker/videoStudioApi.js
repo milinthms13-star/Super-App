@@ -6,6 +6,7 @@ import {
 } from "./videoStudioContracts";
 
 const DEFAULT_TIMEOUT_MS = 25000;
+const RENDER_TIMEOUT_MS = 360000;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -126,7 +127,11 @@ export const requestVideoStudio = async (
 
   while (attempt <= retries) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
 
     const abortHandler = () => controller.abort();
     if (signal?.addEventListener) {
@@ -149,8 +154,28 @@ export const requestVideoStudio = async (
           const payload = await parseApiResponse(response);
           return { payload, response };
         } catch (error) {
-          if (isAbortError(error) && signal?.aborted) {
-            throw error;
+          if (isAbortError(error)) {
+            if (signal?.aborted) {
+              throw new VideoStudioApiError("Request was cancelled.", {
+                status: 499,
+                code: "REQUEST_ABORTED",
+              });
+            }
+
+            if (timedOut) {
+              throw new VideoStudioApiError(
+                `Video service timed out after ${Math.ceil(timeoutMs / 1000)} seconds. Please retry or reduce scene complexity.`,
+                {
+                  status: 408,
+                  code: "REQUEST_TIMEOUT",
+                }
+              );
+            }
+
+            throw new VideoStudioApiError("Request was aborted. Please try again.", {
+              status: 499,
+              code: "REQUEST_ABORTED",
+            });
           }
 
           const normalizedError = isLikelyNetworkError(error)
@@ -232,7 +257,7 @@ export const regenerateStage = (projectId, stage, requestBody, options = {}) =>
   });
 
 export const renderProject = (requestBody, options = {}) =>
-  requestVideoStudio("/video-studio/render", { method: "POST", body: requestBody, retries: 0, timeoutMs: 120000, ...options }).then(
+  requestVideoStudio("/video-studio/render", { method: "POST", body: requestBody, retries: 0, timeoutMs: RENDER_TIMEOUT_MS, ...options }).then(
     (result) => {
       assertRenderResponse(result.payload);
       return result;
