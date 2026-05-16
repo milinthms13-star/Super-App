@@ -670,7 +670,42 @@ const regenerateProjectStage = async (projectId, stage, options = {}) => {
 };
 
 const patchStudioProject = async (projectId, patch = {}) => {
-  const project = await getStudioProject(projectId);
+  let project;
+  try {
+    project = await getStudioProject(projectId);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+
+    // Cloud Run instances can lose local ephemeral files between requests.
+    // When a project json is missing, upsert from patch payload instead of failing render.
+    const fallbackProjectId = sanitizeText(projectId) || sanitizeText(patch?.projectId) || uuidv4();
+    project = {
+      projectId: fallbackProjectId,
+      createdAt: new Date().toISOString(),
+      storyTitle: sanitizeText(patch?.storyTitle || patch?.script?.title || ''),
+      storyPrompt: sanitizeText(patch?.storyPrompt || patch?.script?.synopsis || ''),
+      language: sanitizeText(patch?.language || 'english'),
+      style: sanitizeText(patch?.style || 'cartoon'),
+      videoSize: sanitizeText(patch?.videoSize || 'youtube'),
+      voiceType: sanitizeText(patch?.voiceType || 'kid-female'),
+      storyMode: sanitizeText(patch?.storyMode || 'bedtime'),
+      safeMode: Boolean(patch?.safeMode),
+      ageFilter: sanitizeText(patch?.ageFilter || '5-8'),
+      premiumExport: Boolean(patch?.premiumExport),
+      freeMode: isFreeMode,
+      aiProviderEnabled,
+      scenes: Array.isArray(patch?.scenes) ? patch.scenes : [],
+      subtitles: Array.isArray(patch?.subtitles) ? patch.subtitles : [],
+      characters: Array.isArray(patch?.characters) ? patch.characters : [],
+      editCapabilities: Array.isArray(patch?.editCapabilities) && patch.editCapabilities.length
+        ? patch.editCapabilities
+        : ['script', 'characters', 'scenes', 'voice', 'music', 'timeline'],
+      editableOptions: patch?.editableOptions || buildEditableOptions(),
+    };
+  }
+
   const updatedProject = {
     ...project,
     ...patch,
