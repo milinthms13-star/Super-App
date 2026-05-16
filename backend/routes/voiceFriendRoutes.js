@@ -23,6 +23,9 @@ router.post('/init', async (req, res) => {
       friendId,
       userName: userName || req.user?.name || null,
       userId: req.user?._id || null,
+      friendCustomName: req.body?.friendCustomName,
+      friendCustomAvatar: req.body?.friendCustomAvatar,
+      scenario: req.body?.scenario,
     });
 
     res.json({
@@ -34,6 +37,9 @@ router.post('/init', async (req, res) => {
         language: session.language,
         friendId: session.friendId,
         friendName: session.friendName,
+        friendCustomName: session.friendCustomName,
+        friendCustomAvatar: session.friendCustomAvatar,
+        scenario: session.scenario,
       },
       message: 'Voice Friend session started',
     });
@@ -70,6 +76,9 @@ router.post('/message', async (req, res) => {
       language,
       friendId,
       userName: userName || req.user?.name || null,
+      friendCustomName: req.body?.friendCustomName,
+      friendCustomAvatar: req.body?.friendCustomAvatar,
+      scenario: req.body?.scenario,
     });
 
     res.json({
@@ -151,7 +160,10 @@ router.get('/history/:sessionId', async (req, res) => {
         language: session.language,
         friendId: session.friendId,
         friendName: session.friendName,
+        friendCustomName: session.friendCustomName,
+        friendCustomAvatar: session.friendCustomAvatar,
         friendPersonality: session.friendPersonality,
+        scenario: session.scenario,
         messages: session.messages,
       },
     });

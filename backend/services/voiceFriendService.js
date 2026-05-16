@@ -137,9 +137,12 @@ const buildMemoryPrompt = (session) => {
 
 const buildPersonaPrompt = (session) => {
   const friend = buildFriendProfile(session.friendId);
-  const name = friend.name;
+  const displayName = session.friendCustomName || friend.name;
   const userName = session.userName || 'friend';
-  const basePrompt = `You are ${name}, a caring AI voice companion with a ${friend.personality} personality. Speak like a close friend, not a robotic assistant. Keep your language warm, natural, emotionally intelligent, and easy to understand.`;
+  const basePrompt = `You are ${displayName}, a caring AI voice companion with a ${friend.personality} personality. Speak like a close friend, not a robotic assistant. Keep your language warm, natural, emotionally intelligent, and easy to understand.`;
+  const scenarioPrompt = session.scenario
+    ? `This conversation takes place in a ${session.scenario} setting. Reflect that in your tone and imagery when it helps the user feel present.`
+    : '';
   const moodPrompt = session.mood
     ? `The user says they are feeling ${session.mood}. Match your response to their emotional state and be gentle when they feel sad or anxious.`
     : '';
@@ -151,7 +154,7 @@ const buildPersonaPrompt = (session) => {
         ? 'Keep the tone friendly, light, and caring.'
         : 'Keep the tone supportive, loving, and reassuring.';
 
-  return `${basePrompt} ${moodPrompt} ${personaPrompt}
+  return `${basePrompt} ${scenarioPrompt} ${moodPrompt} ${personaPrompt}
 
 Rules:
 - Use the user's name (${userName}) naturally when it feels appropriate.
@@ -207,7 +210,7 @@ const buildLocalSupportReply = (session, userMessage) => {
   return `${namePrefix}I hear you. You said: "${snippet}". I can help with a practical plan, emotional support, or both.`;
 };
 
-const createSession = ({ userId, persona = 'supportive', mood = 'neutral', language = 'en', friendId = 'nila', userName = null }) => {
+const createSession = ({ userId, persona = 'supportive', mood = 'neutral', language = 'en', friendId = 'nila', userName = null, friendCustomName = null, friendCustomAvatar = null, scenario = 'room' }) => {
   cleanOldSessions();
   const sessionId = crypto.randomUUID();
   const friend = buildFriendProfile(friendId);
@@ -217,8 +220,11 @@ const createSession = ({ userId, persona = 'supportive', mood = 'neutral', langu
     userName: normalizeUserName(userName),
     friendId: friend.id,
     friendName: friend.name,
+    friendCustomName: friendCustomName ? String(friendCustomName).trim() : null,
+    friendCustomAvatar: friendCustomAvatar ? String(friendCustomAvatar).trim() : null,
     friendPersonality: friend.personality,
     friendVoice: friend.voice,
+    scenario: scenario || 'room',
     persona: persona || 'supportive',
     mood: mood || 'neutral',
     language: language || 'en',
@@ -347,7 +353,7 @@ const generateSpeech = async ({ text, friendId = 'nila', voice, language = 'en' 
   }
 };
 
-const sendMessage = async ({ sessionId, message, persona, mood, language, friendId, userName }) => {
+const sendMessage = async ({ sessionId, message, persona, mood, language, friendId, userName, friendCustomName, friendCustomAvatar, scenario }) => {
   const session = getSession(sessionId);
   if (!session) {
     throw new Error('Voice friend session not found');
@@ -362,6 +368,15 @@ const sendMessage = async ({ sessionId, message, persona, mood, language, friend
   }
   if (userName !== undefined) {
     session.userName = normalizeUserName(userName);
+  }
+  if (friendCustomName !== undefined) {
+    session.friendCustomName = String(friendCustomName || '').trim() || null;
+  }
+  if (friendCustomAvatar !== undefined) {
+    session.friendCustomAvatar = String(friendCustomAvatar || '').trim() || null;
+  }
+  if (scenario) {
+    session.scenario = scenario;
   }
   if (persona) session.persona = persona;
   if (mood) session.mood = mood;

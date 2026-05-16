@@ -305,8 +305,107 @@
   color: #64748b;
 }
 
+.voice-friend-video-stage {
+  position: relative;
+  margin: 18px 0 10px;
+  border-radius: 24px;
+  overflow: hidden;
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+}
+
+.voice-friend-video-stage--room {
+  background: linear-gradient(180deg, #6d28d9 0%, #4338ca 100%);
+}
+
+.voice-friend-video-stage--park {
+  background: linear-gradient(180deg, #16a34a 0%, #4ade80 100%);
+}
+
+.voice-friend-video-stage--beach {
+  background: linear-gradient(180deg, #f97316 0%, #fbbf24 100%);
+}
+
+.voice-friend-video-stage--cafe {
+  background: linear-gradient(180deg, #4b5563 0%, #9ca3af 100%);
+}
+
+.voice-friend-video-backdrop {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background-image: radial-gradient(circle at top left, rgba(255,255,255,0.35), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(0,0,0,0.18), transparent 24%);
+}
+
+.voice-friend-video-avatar {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  border-radius: 24px;
+  background-color: rgba(255, 255, 255, 0.95);
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.14);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 3rem;
+  color: #111827;
+}
+
+.voice-friend-video-avatar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.02), rgba(0,0,0,0.08));
+}
+
+.voice-friend-mouth {
+  position: absolute;
+  bottom: 16px;
+  width: 44px;
+  height: 16px;
+  background: rgba(0,0,0,0.35);
+  border-radius: 999px;
+  transform: scaleX(1);
+  transition: transform 100ms ease;
+}
+
+.voice-friend-video-stage.speaking .voice-friend-mouth {
+  animation: mouth-move 0.24s ease-in-out infinite both;
+}
+
+@keyframes mouth-move {
+  0%, 100% { transform: scaleX(1) scaleY(1); }
+  25% { transform: scaleX(1.1) scaleY(0.7); }
+  50% { transform: scaleX(1.3) scaleY(0.45); }
+  75% { transform: scaleX(1.1) scaleY(0.7); }
+}
+
+.voice-friend-video-label {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+.voice-friend-video-label strong {
+  display: block;
+  font-size: 1.1rem;
+}
+
 @media (max-width: 640px) {
   .voice-friend-controls {
     grid-template-columns: 1fr;
+  }
+  .voice-friend-video-avatar {
+    width: 130px;
+    height: 130px;
   }
 }

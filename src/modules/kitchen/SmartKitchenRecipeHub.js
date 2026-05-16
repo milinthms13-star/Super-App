@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { buildApiUrl } from "../../utils/api";
 import { getStoredAuthToken } from "../../utils/auth";
@@ -15,6 +15,17 @@ const TABS = [
   { id: "admin", label: "Admin Panel" },
 ];
 
+const VOICE_COMMAND_HINTS = [
+  "start cooking",
+  "next step",
+  "repeat step",
+  "grocery list",
+  "tips",
+  "ingredients ...",
+  "allergies ...",
+  "generate recipe",
+];
+
 const SmartKitchenRecipeHub = () => {
   const token = getStoredAuthToken();
   const [tab, setTab] = useState("home");
@@ -27,6 +38,14 @@ const SmartKitchenRecipeHub = () => {
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [grocery, setGrocery] = useState(null);
   const [pendingCommunity, setPendingCommunity] = useState([]);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [handsFreeMode, setHandsFreeMode] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [assistantName, setAssistantName] = useState("Chef Nila");
+  const [lastHeardCommand, setLastHeardCommand] = useState("");
+
+  const recognitionRef = useRef(null);
 
   const [generatorForm, setGeneratorForm] = useState({
     ingredients: "rice, onion, egg",
@@ -69,6 +88,40 @@ const SmartKitchenRecipeHub = () => {
   }, []);
 
   const pushStatus = useCallback((type, text) => setStatus({ type, text }), []);
+
+  const getVoiceLanguageCode = useCallback(() => {
+    if (generatorForm.language === "ml") return "ml-IN";
+    if (generatorForm.language === "hi") return "hi-IN";
+    return "en-US";
+  }, [generatorForm.language]);
+
+  const speakText = useCallback(
+    (text) => {
+      const message = String(text || "").trim();
+      if (!voiceEnabled || !window.speechSynthesis || !message) return;
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.lang = getVoiceLanguageCode();
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      const availableVoices = window.speechSynthesis.getVoices?.() || [];
+      const bestVoice =
+        availableVoices.find((voice) => voice.lang === utterance.lang) ||
+        availableVoices.find((voice) => voice.lang?.startsWith(utterance.lang.split("-")[0])) ||
+        null;
+      if (bestVoice) {
+        utterance.voice = bestVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+    },
+    [getVoiceLanguageCode, voiceEnabled]
+  );
 
   const loadMeta = useCallback(async () => {
     await withBusy("meta", async () => {
@@ -153,13 +206,16 @@ const SmartKitchenRecipeHub = () => {
           share: response.data?.share,
         });
         pushStatus("success", "AI recipe generated successfully.");
+        speakText(
+          `Recipe ready. ${response.data.recipe?.title || "New recipe"} is prepared. You can say start cooking.`
+        );
         setTab("details");
         loadRecipes();
       } catch (error) {
         pushStatus("error", error?.response?.data?.message || "Failed to generate AI recipe.");
       }
     });
-  }, [generatorForm, loadRecipes, pushStatus, request, withBusy]);
+  }, [generatorForm, loadRecipes, pushStatus, request, speakText, withBusy]);
 
   const saveRecipe = useCallback(async () => {
     if (!selectedRecipe?.id && !selectedRecipe?._id) return;
@@ -186,11 +242,12 @@ const SmartKitchenRecipeHub = () => {
         });
         setGrocery(response.data);
         setTab("grocery");
+        speakText("Grocery list is ready.");
       } catch (error) {
         pushStatus("error", error?.response?.data?.message || "Failed to create grocery list.");
       }
     });
-  }, [pushStatus, request, selectedRecipe, withBusy]);
+  }, [pushStatus, request, selectedRecipe, speakText, withBusy]);
 
   const submitCommunityRecipe = useCallback(async () => {
     await withBusy("community-submit", async () => {
@@ -244,6 +301,162 @@ const SmartKitchenRecipeHub = () => {
     [loadPendingCommunity, loadRecipes, pushStatus, request, withBusy]
   );
 
+  const processVoiceCommand = useCallback(
+    (command) => {
+      const raw = String(command || "").trim();
+      if (!raw) return;
+      const lower = raw.toLowerCase();
+      setLastHeardCommand(raw);
+
+      if (lower.includes("start cooking")) {
+        setTab("cooking");
+        if (selectedRecipe?.steps?.length) {
+          setCookingIndex(0);
+          setTimerSeconds(Number(selectedRecipe.steps?.[0]?.timerSeconds || 0));
+          speakText(selectedRecipe.steps?.[0]?.instruction || "Cooking mode started.");
+        } else {
+          speakText("Please open a recipe first.");
+        }
+        return;
+      }
+
+      if (lower.includes("next step") || lower === "next" || lower.includes("next")) {
+        const maxIndex = Math.max(0, (selectedRecipe?.steps || []).length - 1);
+        const nextIndex = Math.min(cookingIndex + 1, maxIndex);
+        setCookingIndex(nextIndex);
+        setTimerSeconds(Number(selectedRecipe?.steps?.[nextIndex]?.timerSeconds || 0));
+        speakText(selectedRecipe?.steps?.[nextIndex]?.instruction || "No next step available.");
+        return;
+      }
+
+      if (lower.includes("repeat")) {
+        speakText(currentStep?.instruction || "No active step to repeat.");
+        return;
+      }
+
+      if (lower.includes("previous")) {
+        const prevIndex = Math.max(0, cookingIndex - 1);
+        setCookingIndex(prevIndex);
+        setTimerSeconds(Number(selectedRecipe?.steps?.[prevIndex]?.timerSeconds || 0));
+        speakText(selectedRecipe?.steps?.[prevIndex]?.instruction || "No previous step available.");
+        return;
+      }
+
+      if (lower.includes("grocery")) {
+        generateGroceryList();
+        speakText("Opening grocery list.");
+        return;
+      }
+
+      if (lower.includes("tip")) {
+        setTab("tips");
+        speakText(todayTip?.tipText || "No kitchen tip available right now.");
+        return;
+      }
+
+      if (lower.startsWith("ingredients ")) {
+        const captured = raw.slice("ingredients ".length).trim();
+        if (captured) {
+          setGeneratorForm((current) => ({
+            ...current,
+            ingredients: current.ingredients ? `${current.ingredients}, ${captured}` : captured,
+          }));
+          speakText("Ingredients updated.");
+        }
+        return;
+      }
+
+      if (lower.startsWith("allergies ")) {
+        const captured = raw.slice("allergies ".length).trim();
+        if (captured) {
+          setGeneratorForm((current) => ({
+            ...current,
+            allergies: current.allergies ? `${current.allergies}, ${captured}` : captured,
+          }));
+          speakText("Allergy notes updated.");
+        }
+        return;
+      }
+
+      if (lower.includes("clear ingredients")) {
+        setGeneratorForm((current) => ({ ...current, ingredients: "" }));
+        speakText("Ingredients cleared.");
+        return;
+      }
+
+      if (lower.includes("generate recipe")) {
+        setTab("generator");
+        generateRecipe();
+        speakText("Generating recipe.");
+        return;
+      }
+
+      speakText(`I heard: ${raw}`);
+    },
+    [
+      cookingIndex,
+      currentStep?.instruction,
+      generateGroceryList,
+      generateRecipe,
+      selectedRecipe?.steps,
+      speakText,
+      todayTip?.tipText,
+    ]
+  );
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsListening(false);
+  }, []);
+
+  const startListening = useCallback(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!voiceEnabled) {
+      pushStatus("error", "Enable voice companion first.");
+      return;
+    }
+    if (!SpeechRecognition) {
+      pushStatus("error", "Speech recognition is not supported on this browser.");
+      return;
+    }
+
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = getVoiceLanguageCode();
+    recognition.continuous = handsFreeMode;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+    recognition.onresult = (event) => {
+      const transcript = String(event?.results?.[0]?.[0]?.transcript || "").trim();
+      processVoiceCommand(transcript);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [
+    getVoiceLanguageCode,
+    handsFreeMode,
+    processVoiceCommand,
+    pushStatus,
+    voiceEnabled,
+  ]);
+
   useEffect(() => {
     loadMeta();
     loadRecipes();
@@ -265,6 +478,23 @@ const SmartKitchenRecipeHub = () => {
     return () => clearInterval(timer);
   }, [selectedRecipe?.steps, timerSeconds]);
 
+  useEffect(() => {
+    if (!handsFreeMode || !voiceEnabled) {
+      stopListening();
+      return;
+    }
+
+    startListening();
+    return () => stopListening();
+  }, [handsFreeMode, startListening, stopListening, voiceEnabled]);
+
+  useEffect(() => {
+    return () => {
+      stopListening();
+      window.speechSynthesis?.cancel?.();
+    };
+  }, [stopListening]);
+
   const currentStep = selectedRecipe?.steps?.[cookingIndex] || null;
   const trendyRecipes = recipes.slice(0, 6);
 
@@ -273,6 +503,91 @@ const SmartKitchenRecipeHub = () => {
       <header className="kitchen-hero">
         <h1>Smart Kitchen & Recipe Hub</h1>
         <p>Food + Home Utility + AI Lifestyle module for families, students, bachelors, and homemakers.</p>
+        <div className="voice-chef-card">
+          <div className={`chef-avatar ${isSpeaking ? "talking" : ""} ${isListening ? "listening" : ""}`}>
+            <div className="chef-face">
+              <div className="chef-eyes">
+                <span />
+                <span />
+              </div>
+              <div className={`chef-mouth ${isSpeaking ? "speak" : ""}`} />
+            </div>
+          </div>
+          <div className="voice-controls">
+            <h3>{assistantName}</h3>
+            <p>
+              {isListening
+                ? "Listening..."
+                : isSpeaking
+                ? "Speaking..."
+                : "Ready for hands-free cooking."}
+            </p>
+            {lastHeardCommand ? <small>Heard: "{lastHeardCommand}"</small> : null}
+            <div className="kitchen-form voice-config">
+              <label>
+                Companion name
+                <input
+                  value={assistantName}
+                  onChange={(event) => setAssistantName(event.target.value)}
+                />
+              </label>
+              <label>
+                Voice language
+                <select
+                  value={generatorForm.language}
+                  onChange={(event) => setGeneratorForm((current) => ({ ...current, language: event.target.value }))}
+                >
+                  <option value="en">English</option>
+                  <option value="ml">Malayalam</option>
+                  <option value="hi">Hindi</option>
+                </select>
+              </label>
+            </div>
+            <div className="kitchen-inline-actions">
+              <button type="button" onClick={startListening} disabled={!voiceEnabled || isListening}>
+                Talk
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  speakText(
+                    currentStep?.instruction ||
+                      todayTip?.tipText ||
+                      "Welcome to Smart Kitchen. Say start cooking to begin."
+                  )
+                }
+              >
+                Speak
+              </button>
+              <button type="button" onClick={stopListening} disabled={!isListening}>
+                Stop Mic
+              </button>
+            </div>
+            <div className="kitchen-inline-actions">
+              <label className="kitchen-inline-check">
+                <input
+                  type="checkbox"
+                  checked={voiceEnabled}
+                  onChange={(event) => setVoiceEnabled(event.target.checked)}
+                />
+                Voice companion enabled
+              </label>
+              <label className="kitchen-inline-check">
+                <input
+                  type="checkbox"
+                  checked={handsFreeMode}
+                  onChange={(event) => setHandsFreeMode(event.target.checked)}
+                />
+                Hands-free cooking mode
+              </label>
+            </div>
+            <div className="kitchen-chip-wall voice-command-chips">
+              {VOICE_COMMAND_HINTS.map((hint) => (
+                <span key={hint}>{hint}</span>
+              ))}
+            </div>
+          </div>
+        </div>
       </header>
 
       <nav className="kitchen-tabs">
@@ -518,7 +833,7 @@ const SmartKitchenRecipeHub = () => {
               <div className="kitchen-inline-actions">
                 <button
                   type="button"
-                  onClick={() => window.speechSynthesis?.speak(new SpeechSynthesisUtterance(currentStep.instruction))}
+                  onClick={() => speakText(currentStep.instruction)}
                 >
                   Voice Read
                 </button>
@@ -676,4 +991,3 @@ const SmartKitchenRecipeHub = () => {
 };
 
 export default SmartKitchenRecipeHub;
-

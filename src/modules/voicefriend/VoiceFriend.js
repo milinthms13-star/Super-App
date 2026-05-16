@@ -18,6 +18,13 @@ const MOOD_OPTIONS = [
   { id: 'sad', label: 'Sad' },
 ];
 
+const SCENARIO_OPTIONS = [
+  { id: 'room', label: 'Cozy room' },
+  { id: 'park', label: 'Park walk' },
+  { id: 'beach', label: 'Seaside' },
+  { id: 'cafe', label: 'Cafe chat' },
+];
+
 const AI_FRIENDS = [
   {
     id: 'nila',
@@ -75,6 +82,7 @@ const VoiceFriend = () => {
   const [playingAudio, setPlayingAudio] = useState(false);
   const [friendCustomName, setFriendCustomName] = useState('');
   const [friendCustomAvatar, setFriendCustomAvatar] = useState('');
+  const [scenario, setScenario] = useState('room');
   const [persistData, setPersistData] = useState(true);
   const [hasPendingSessionSettings, setHasPendingSessionSettings] = useState(false);
   const [editingPersona, setEditingPersona] = useState(false);
@@ -119,6 +127,11 @@ const VoiceFriend = () => {
 
   const handleLanguageChange = (value) => {
     setLanguage(value);
+    markPendingSessionSettings();
+  };
+
+  const handleScenarioChange = (value) => {
+    setScenario(value);
     markPendingSessionSettings();
   };
 
@@ -205,6 +218,9 @@ const VoiceFriend = () => {
             setMood(sessionData.mood || mood);
             setLanguage(sessionData.language || language);
             setUserName(sessionData.userName || sessionUserName || '');
+            setFriendCustomName(sessionData.friendCustomName || '');
+            setFriendCustomAvatar(sessionData.friendCustomAvatar || '');
+            setScenario(sessionData.scenario || 'room');
             setConversation(sessionData.messages || []);
             setStatus('Restored your previous Voice Friend session.');
             sessionMetaRef.current = {
@@ -213,6 +229,9 @@ const VoiceFriend = () => {
               persona: sessionData.persona || persona,
               mood: sessionData.mood || mood,
               language: sessionData.language || language,
+              friendCustomName: sessionData.friendCustomName || '',
+              friendCustomAvatar: sessionData.friendCustomAvatar || '',
+              scenario: sessionData.scenario || 'room',
             };
             setHasPendingSessionSettings(false);
             return;
@@ -225,7 +244,16 @@ const VoiceFriend = () => {
       setConversation([]);
       const response = await axios.post(
         buildApiUrl('/ai-voice-friend/init'),
-        { persona, mood, language, friendId: sessionFriendId, userName: sessionUserName },
+        {
+          persona,
+          mood,
+          language,
+          friendId: sessionFriendId,
+          userName: sessionUserName,
+          friendCustomName,
+          friendCustomAvatar,
+          scenario,
+        },
         { headers: buildRequestHeaders() }
       );
 
@@ -286,6 +314,9 @@ const VoiceFriend = () => {
           }
           if (parsed?.friendCustomAvatar) {
             setFriendCustomAvatar(parsed.friendCustomAvatar);
+          }
+          if (parsed?.scenario) {
+            setScenario(parsed.scenario);
           }
           if (parsed?.sessionId) {
             initSession(parsed.sessionId, parsed.friendId, parsed.userName);
@@ -415,7 +446,18 @@ const VoiceFriend = () => {
     try {
       const response = await axios.post(
         buildApiUrl('/ai-voice-friend/message'),
-        { sessionId, message: trimmed, persona, mood, language, friendId, userName },
+        {
+          sessionId,
+          message: trimmed,
+          persona,
+          mood,
+          language,
+          friendId,
+          userName,
+          friendCustomName,
+          friendCustomAvatar,
+          scenario,
+        },
         { headers: buildRequestHeaders(), signal: controller.signal }
       );
 
@@ -476,6 +518,7 @@ const VoiceFriend = () => {
         persona,
         mood,
         language,
+        scenario,
         conversation,
         friendCustomName,
         friendCustomAvatar,
@@ -710,11 +753,25 @@ const VoiceFriend = () => {
               </div>
             </div>
           </div>
+        <div className={`voice-friend-video-stage voice-friend-video-stage--${scenario} ${playingAudio ? 'speaking' : ''}`} aria-label="Video friend scene">
+          <div className="voice-friend-video-backdrop" />
+          <div className="voice-friend-video-avatar" style={{
+            backgroundImage: friendCustomAvatar ? `url(${friendCustomAvatar})` : `url(${selectedFriend.avatar})`,
+          }}>
+            {!friendCustomAvatar && !selectedFriend.avatar && (friendCustomName || selectedFriend.name)[0]}
+            <div className="voice-friend-mouth" aria-hidden="true" />
+          </div>
+          <div className="voice-friend-video-label">
+            <strong>{friendCustomName || selectedFriend.name}</strong>
+            <span>{SCENARIO_OPTIONS.find((opt) => opt.id === scenario)?.label}</span>
+          </div>
+        </div>
         <p>Emotion-aware chat companion with voice input and supportive guidance.</p>
         <div className="voice-friend-summary">
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
           <span><strong>Mood:</strong> {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
           <span><strong>Language:</strong> {language.toUpperCase()}</span>
+          <span><strong>Scenario:</strong> {SCENARIO_OPTIONS.find((opt) => opt.id === scenario)?.label}</span>
           <span><strong>Voice input:</strong> {speechSupported ? 'Supported' : 'Unavailable'}</span>
           <span><strong>Audio:</strong> {audioLoading ? 'Loading...' : playingAudio ? 'Playing response' : 'Ready'}</span>
           <span><strong>Messages:</strong> {conversation.length}</span>
@@ -761,6 +818,14 @@ const VoiceFriend = () => {
             <option value="hi">Hindi</option>
             <option value="ml">Malayalam</option>
             <option value="kn">Kannada</option>
+          </select>
+        </div>
+        <div className="voice-friend-control-group">
+          <label>Scenario</label>
+          <select value={scenario} onChange={(e) => handleScenarioChange(e.target.value)}>
+            {SCENARIO_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
           </select>
         </div>
         <div className="voice-friend-control-group">
