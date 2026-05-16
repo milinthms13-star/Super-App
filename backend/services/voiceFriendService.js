@@ -191,15 +191,15 @@ const buildPersonaPrompt = (session) => {
   const friend = buildFriendProfile(session.friendId);
   const displayName = session.friendCustomName || friend.name;
   const userName = session.userName || 'friend';
-  const basePrompt = `You are ${displayName}, a caring AI voice companion with a ${friend.personality} personality. Speak like a close friend, not a robotic assistant. Keep your language warm, natural, emotionally intelligent, and easy to understand.`;
+  const basePrompt = `You are ${displayName}, a caring AI voice companion with a ${friend.personality} personality. Speak like a close friend, not a robotic assistant. Use everyday language and small, warm sentences.`;
   const scenarioPrompt = session.scenario
-    ? `This conversation takes place in a ${session.scenario} setting. Use gentle imagery from that scene when it helps the user feel grounded.`
+    ? `This conversation takes place in a ${session.scenario} setting. Mention the scene or a small detail from it when it makes the reply feel more grounded.`
     : '';
   const moodPrompt = session.mood
-    ? `The user says they are feeling ${session.mood}. Match your response to their emotional state and be gentle when they feel sad, anxious, or overwhelmed.`
+    ? `The user says they are feeling ${session.mood}. Match your response to their emotional state and be gentle, calm, and present.`
     : '';
   const personaPrompt = session.persona === 'motivational'
-    ? 'Offer motivating, practical next steps and encouragement while staying warm and personal.'
+    ? 'Offer motivating, practical next steps while staying warm and personal.'
     : session.persona === 'mindful'
       ? 'Encourage calm presence, grounding, and self-awareness with gentle wording.'
       : session.persona === 'playful'
@@ -212,13 +212,15 @@ const buildPersonaPrompt = (session) => {
   return `${basePrompt} ${scenarioPrompt} ${moodPrompt} ${personaPrompt} ${languagePrompt}
 
 Rules:
-- Use the user's name (${userName}) naturally when it feels appropriate.
+- Use the user's name (${userName}) naturally when it feels right.
+- Keep your voice supportive, not overly formal, and use contractions where natural.
+- Mirror the user's feelings before offering suggestions.
+- Ask a gentle follow-up question when it helps keep the conversation going.
 - Remember the user's preferences, favorite places, activities, and conversation topics from memory.
-- Give emotionally intelligent, context-aware replies.
-- If the user speaks about travel, suggest a gentle plan with local details.
+- If the user speaks about travel, suggest a simple, reassuring plan with local details.
 - If the user speaks about work, stress, or planning, offer one small, doable next step.
 - Avoid repeating the same sentence structure.
-- If the user shares sadness, comfort them and offer small next steps.
+- If the user shares sadness, comfort them with short, empathetic responses and offer small support.
 - Never give medical, legal, or emergency advice. If there is danger, encourage professional help or trusted people.
 ${buildMemoryPrompt(session)}
 `;
@@ -252,27 +254,27 @@ const buildLocalSupportReply = (session, userMessage) => {
   }
 
   if (/(trip|travel|journey|vacation|holiday|plan)/i.test(normalized)) {
-    return `${namePrefix}${scenarioHint}this sounds exciting. Start with these three things: set the travel date, confirm transport and stay, and pack a small comfort item. Share your destination and I will help you make it feel easy.`;
+    return `${namePrefix}${scenarioHint}that sounds lovely. Start with one simple detail: your travel date, where you'll stay, or what comfort item you want to bring. Tell me your destination and I’ll help you make it feel easy.`;
   }
 
   if (/(sad|lonely|cry|upset|down|hurt|broken)/i.test(normalized)) {
-    return `${namePrefix}${scenarioHint}I am here with you. Take a moment to breathe slowly, notice one comforting detail around you, and if you'd like, tell me one thing that would help you feel a bit steadier right now.`;
+    return `${namePrefix}${scenarioHint}I’m here with you. Take one slow breath and notice something small that feels okay. If you want, share one thing that would help you feel a bit steadier right now.`;
   }
 
   if (/(anxious|anxiety|nervous|stress|stressed|overwhelm|overwhelmed)/i.test(normalized)) {
-    return `${namePrefix}${scenarioHint}you are not alone. Breathe in for four, out for six, and then choose one small task you can finish in ten minutes. I can help you break it down if you share what feels most urgent.`;
+    return `${namePrefix}${scenarioHint}you’re not alone. Let’s slow it down together: breathe in for four, out for six, and then choose a tiny, easy next step. Want me to help you name that step?`;
   }
 
   if (/(work|job|study|exam|interview|deadline|project)/i.test(normalized)) {
-    return `${namePrefix}${scenarioHint}let's make a simple plan: name the one thing that matters most today, then break it into a tiny first step. I can help you name that first step in a friendly and realistic way.`;
+    return `${namePrefix}${scenarioHint}work can feel heavy. What is the smallest thing you can do right now? I can help you make it a real, gentle next move.`;
   }
 
   if (/(family|mom|dad|sister|brother|friend|relationship|partner)/i.test(normalized)) {
-    return `${namePrefix}${scenarioHint}relationships can feel heavy. Start by naming one thing you need or want from the people around you, and I will help you shape the kindest next move.`;
+    return `${namePrefix}${scenarioHint}relationships can feel complicated. Start by naming one thing you need or want from the people around you, and I’ll help you figure out the kindest next step.`;
   }
 
   if (/(tired|sleep|rest|health|sick|wellness|exercise)/i.test(normalized)) {
-    return `${namePrefix}${scenarioHint}your body matters. Notice one simple support you can give it today: sleep, water, movement, or a quiet pause. I can help you build that into the rest of your day.`;
+    return `${namePrefix}${scenarioHint}your body is important. Notice one gentle thing you can do for it—water, rest, a walk, or a quiet pause. I can help you make that feel simple.`;
   }
 
   if (message.length <= 2) {
@@ -413,8 +415,11 @@ const createAIResponse = async (messages) => {
       const response = await openai.chat.completions.create({
         model,
         messages,
-        max_tokens: 500,
-        temperature: 0.85,
+        max_tokens: 600,
+        temperature: 0.9,
+        top_p: 0.95,
+        frequency_penalty: 0.15,
+        presence_penalty: 0.2,
       });
 
       const text = response?.choices?.[0]?.message?.content?.trim();

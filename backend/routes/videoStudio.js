@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 const {
   createStudioProject,
   renderVideo,
+  renderCartoonVideo,
   createAutopilotProject,
   getStudioProject,
   regenerateProjectStage,
@@ -280,6 +281,96 @@ router.post('/render', async (req, res) => {
   } catch (error) {
     logger.error('Video studio render error:', error);
     respondVideoStudioError(res, error, 'Video rendering failed.');
+  }
+});
+
+router.post('/render-cartoon', async (req, res) => {
+  try {
+    const maxRssMb = Math.max(
+      256,
+      Number(process.env.VIDEO_STUDIO_MAX_RSS_MB) || (isFreeMode ? 420 : 1024)
+    );
+    const currentRssMb = getRssMemoryMb();
+    if (currentRssMb >= maxRssMb) {
+      logger.warn(
+        `Video studio render-cartoon skipped due to high memory rss=${currentRssMb}MB threshold=${maxRssMb}MB`
+      );
+      return res.status(503).json({
+        success: false,
+        error: 'Renderer is temporarily busy due to memory pressure. Please retry in 30-60 seconds.',
+      });
+    }
+
+    if (activeRenderCount >= maxParallelRenders) {
+      return res.status(429).json({
+        success: false,
+        error: 'Video renderer is busy. Please retry in a moment.',
+      });
+    }
+
+    const { project, projectId, premiumHD } = req.body || {};
+    const requestedProject = project || (projectId ? await getStudioProject(projectId) : null);
+    const resolvedProject = requestedProject
+      ? {
+        ...requestedProject,
+        renderMode: 'real-cartoon',
+        requireCharacters: true,
+        requireDialogueVoice: true,
+        requireLipSync: true,
+        requireSceneImages: true,
+      }
+      : requestedProject;
+    const payloadError = validateRenderProjectPayload(resolvedProject);
+    if (payloadError) {
+      return res.status(400).json({ success: false, error: payloadError });
+    }
+
+    activeRenderCount += 1;
+    logger.info(
+      `Video studio render-cartoon started (active=${activeRenderCount}/${maxParallelRenders}) project=${resolvedProject.projectId} ${formatMemoryUsage()}`
+    );
+    const renderStart = Date.now();
+
+    try {
+      const result = await renderCartoonVideo(resolvedProject, Boolean(premiumHD));
+      if (!result?.outputFile || !fs.existsSync(result.outputFile)) {
+        logger.error(`Video studio render-cartoon produced missing output file for project ${resolvedProject.projectId}`);
+        return res.status(500).json({ success: false, error: 'Render completed but output video was not found.' });
+      }
+
+      const relativeVideoUrl = String(result.videoUrl || '');
+      const origin = buildRequestOrigin(req);
+      const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
+        ? relativeVideoUrl
+        : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
+
+      await patchStudioProject(resolvedProject.projectId, {
+        videoUrl: relativeVideoUrl,
+        renderedAt: new Date().toISOString(),
+        premiumExport: Boolean(premiumHD),
+        scenes: resolvedProject.scenes,
+        renderMode: 'real-cartoon-backend',
+      });
+
+      logger.info(
+        `Video studio render-cartoon completed in ${Date.now() - renderStart}ms project=${resolvedProject.projectId} ${formatMemoryUsage()}`
+      );
+
+      res.json({
+        success: true,
+        videoUrl: absoluteVideoUrl,
+        videoPath: relativeVideoUrl,
+        projectId: result.projectId,
+        renderMode: result.renderMode || 'real-cartoon-backend',
+        ttsEnabled: Boolean(result.ttsEnabled),
+        ...getStudioCapabilities(),
+      });
+    } finally {
+      activeRenderCount = Math.max(0, activeRenderCount - 1);
+    }
+  } catch (error) {
+    logger.error('Video studio render-cartoon error:', error);
+    respondVideoStudioError(res, error, 'Cartoon video rendering failed.');
   }
 });
 

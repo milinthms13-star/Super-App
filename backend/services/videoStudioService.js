@@ -1483,6 +1483,207 @@ const runFfmpeg = async (args, cwd) => {
   });
 };
 
+const escapeFfmpegDrawtext = (value = '') => sanitizeText(value)
+  .replace(/\\/g, '\\\\')
+  .replace(/:/g, '\\:')
+  .replace(/'/g, "\\'")
+  .replace(/%/g, '\\%')
+  .replace(/\n+/g, ' ')
+  .slice(0, 220);
+
+const normalizeScenesForCartoonRenderer = (project = {}) => {
+  const rawScenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  return rawScenes
+    .slice(0, 12)
+    .map((scene, index) => {
+      const sceneCharacters = normalizeSceneCharacterList(scene, project);
+      const lines = extractSceneDialogueTurns(scene, project);
+      const fallbackLine = sanitizeText(scene?.description || scene?.title || 'The story continues.');
+      return {
+        id: Number(scene?.id || index + 1),
+        title: sanitizeText(scene?.title || `Scene ${index + 1}`),
+        description: sanitizeText(scene?.description || ''),
+        emotion: sanitizeText(scene?.emotion || 'happy'),
+        duration: Math.max(4, Math.min(12, Number(scene?.durationSeconds) || 6)),
+        characters: sceneCharacters.length ? sceneCharacters : [{ name: 'Hero', role: 'Main Character' }, { name: 'Friend', role: 'Guide' }],
+        lines: lines.length
+          ? lines
+          : [{ speaker: sceneCharacters[0]?.name || 'Narrator', text: fallbackLine }],
+      };
+    });
+};
+
+const buildCartoonSceneFilter = (scene, resolution) => {
+  const width = Number(resolution?.width || 1280);
+  const height = Number(resolution?.height || 720);
+  const title = escapeFfmpegDrawtext(scene.title);
+  const description = escapeFfmpegDrawtext(scene.description || scene.lines.map((line) => line.text).join(' '));
+  const firstLine = scene.lines[0] || { speaker: 'Narrator', text: scene.description || 'The story continues.' };
+  const dialogue = escapeFfmpegDrawtext(`${sanitizeText(firstLine.speaker)}: ${sanitizeText(firstLine.text)}`);
+  const characterOne = escapeFfmpegDrawtext(scene.characters[0]?.name || 'Hero');
+  const characterTwo = escapeFfmpegDrawtext(scene.characters[1]?.name || 'Friend');
+  const skyColor = scene.emotion === 'joyful' ? '0xfff1a9' : scene.emotion === 'brave' ? '0xbce5ff' : '0x9ee7ff';
+  const groundColor = scene.emotion === 'joyful' ? '0x7dd95f' : '0x8fd36a';
+  const bubbleY = Math.max(0, height - 140);
+
+  return [
+    `drawbox=x=0:y=0:w=${width}:h=${height}:color=${skyColor}@1:t=fill`,
+    `drawbox=x=0:y=${Math.max(0, height - 220)}:w=${width}:h=220:color=${groundColor}@1:t=fill`,
+    `drawbox=x=55:y=45:w=${Math.max(240, width - 110)}:h=110:color=white@0.76:t=fill`,
+    `drawtext=text='${title}':x=80:y=70:fontsize=46:fontcolor=0x17356b:box=0`,
+    `drawbox=x=${Math.max(100, width - 230)}:y=70:w=90:h=90:color=0xffdd55@1:t=fill`,
+    `drawbox=x=120:y=125:w=160:h=35:color=white@0.85:t=fill`,
+    `drawbox=x=${Math.max(300, width - 500)}:y=115:w=190:h=35:color=white@0.85:t=fill`,
+    `drawbox=x=250:y=310:w=150:h=190:color=0xff8ab3@1:t=fill`,
+    `drawbox=x=220:y=195:w=210:h=150:color=0xffd2a6@1:t=fill`,
+    `drawbox=x=262:y=245:w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x=358:y=245:w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x=290:y=292+mod(n\\,2)*8:w=72:h=18+mod(n\\,2)*10:color=0x7a1c1c@1:t=fill`,
+    `drawtext=text='${characterOne}':x=255:y=515:fontsize=30:fontcolor=white:box=1:boxcolor=0x17356b@0.85`,
+    `drawbox=x=${Math.max(520, width - 500)}:y=320:w=150:h=180:color=0x6cc4ff@1:t=fill`,
+    `drawbox=x=${Math.max(490, width - 530)}:y=205:w=210:h=150:color=0xffd2a6@1:t=fill`,
+    `drawbox=x=${Math.max(532, width - 488)}:y=255:w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x=${Math.max(628, width - 392)}:y=255:w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x=${Math.max(560, width - 460)}:y=302+mod(n\\,2)*8:w=72:h=18+mod(n\\,2)*10:color=0x7a1c1c@1:t=fill`,
+    `drawtext=text='${characterTwo}':x=${Math.max(525, width - 495)}:y=515:fontsize=30:fontcolor=white:box=1:boxcolor=0x17356b@0.85`,
+    `drawbox=x=120:y=${bubbleY}:w=${Math.max(300, width - 240)}:h=95:color=white@0.92:t=fill`,
+    `drawtext=text='${dialogue}':x=145:y=${bubbleY + 25}:fontsize=32:fontcolor=0x111111:box=0`,
+    `drawtext=text='${description}':x=95:y=172:fontsize=30:fontcolor=0x263238:box=1:boxcolor=white@0.6`,
+  ].join(',');
+};
+
+const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution, project }) => {
+  const clipPath = path.join(outputDir, `scene-${String(sceneIndex).padStart(2, '0')}-cartoon.mp4`);
+  const ttsPath = path.join(outputDir, `scene-${String(sceneIndex).padStart(2, '0')}-voice.mp3`);
+  const dialogueForVoice = scene.lines.map((line) => `${line.speaker}: ${line.text}`).join(' ').slice(0, 4096);
+  const synthesizedPath = await synthesizeSpeechToFile({
+    text: dialogueForVoice,
+    voiceCandidate: project?.voiceType,
+    outputPath: ttsPath,
+  });
+
+  const args = [
+    '-y',
+    '-f', 'lavfi',
+    '-i', `color=c=0x9ee7ff:s=${resolution.width}x${resolution.height}:r=24:d=${scene.duration}`,
+  ];
+
+  if (synthesizedPath) {
+    args.push('-i', synthesizedPath);
+  } else {
+    args.push('-f', 'lavfi', '-i', `sine=frequency=450:duration=${scene.duration}:sample_rate=44100`);
+  }
+
+  args.push(
+    '-vf', buildCartoonSceneFilter(scene, resolution),
+    '-t', `${scene.duration}`,
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-r', '24',
+    '-c:a', 'aac',
+    '-shortest',
+    clipPath
+  );
+
+  await runFfmpeg(args, outputDir);
+  return {
+    path: clipPath,
+    duration: scene.duration,
+    usedTts: Boolean(synthesizedPath),
+  };
+};
+
+const renderCartoonVideo = async (project, premiumHD = false) => {
+  if (project?.safeMode) {
+    const safetyInput = [
+      project?.title,
+      project?.storyPrompt,
+      project?.narration,
+      ...(Array.isArray(project?.scenes)
+        ? project.scenes.flatMap((scene) => [scene?.title, scene?.description, scene?.dialogue])
+        : []),
+    ]
+      .map((value) => sanitizeText(value))
+      .filter(Boolean)
+      .join(' ');
+
+    const assessment = await getCombinedSafetyAssessment(safetyInput);
+    if (assessment.blocked) {
+      throw createSafetyError('render_project', assessment);
+    }
+  }
+
+  await ensureUploadsRoot();
+  const safeProjectId = safeFileName(project.projectId || uuidv4());
+  const outputDir = path.join(uploadsRoot, safeProjectId);
+  await mkdir(outputDir, { recursive: true });
+
+  const resolution = getResolution(project.videoSize);
+  const scenes = normalizeScenesForCartoonRenderer(project);
+  if (!scenes.length) {
+    throw new Error('No scenes supplied for cartoon render.');
+  }
+
+  const clipResults = [];
+  for (let index = 0; index < scenes.length; index += 1) {
+    const clipResult = await renderCartoonSceneClip({
+      scene: scenes[index],
+      sceneIndex: index + 1,
+      outputDir,
+      resolution,
+      project,
+    });
+    clipResults.push(clipResult);
+  }
+
+  const concatListPath = path.join(outputDir, 'cartoon-concat.txt');
+  const concatLines = clipResults
+    .map((clip) => `file '${clip.path.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`)
+    .join('\n');
+  await writeFile(concatListPath, `${concatLines}\n`, 'utf-8');
+
+  const outputFile = path.join(outputDir, 'story-render.mp4');
+  const concatArgs = [
+    '-y',
+    '-f', 'concat',
+    '-safe', '0',
+    '-i', concatListPath,
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac',
+  ];
+  if (premiumHD && !isLowMemoryMode) {
+    concatArgs.push('-preset', 'medium');
+  } else {
+    concatArgs.push('-movflags', '+faststart');
+  }
+  concatArgs.push(outputFile);
+  await runFfmpeg(concatArgs, outputDir);
+
+  const videoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
+  const totalDuration = clipResults.reduce((sum, clip) => sum + (Number(clip.duration) || 0), 0);
+  const usedTts = clipResults.some((clip) => clip.usedTts);
+
+  const metadataPath = path.join(outputDir, 'project.json');
+  await writeFile(metadataPath, JSON.stringify({
+    ...project,
+    renderedAt: new Date().toISOString(),
+    videoUrl,
+    renderMode: 'real-cartoon-backend',
+    renderAudioMode: usedTts ? 'character-dialogue' : 'ambient-fallback',
+    totalDurationSeconds: totalDuration,
+    freeMode: isFreeMode,
+  }, null, 2), 'utf-8');
+
+  return {
+    videoUrl,
+    projectId: safeProjectId,
+    outputFile,
+    renderMode: 'real-cartoon-backend',
+    ttsEnabled: usedTts,
+  };
+};
+
 const renderVideo = async (project, premiumHD = false) => {
   if (project?.safeMode) {
     const safetyInput = [
@@ -1806,6 +2007,7 @@ const composeFinalVideo = async (projectId, options = {}) => {
 module.exports = {
   createStudioProject,
   renderVideo,
+  renderCartoonVideo,
   createAutopilotProject,
   getStudioProject,
   regenerateProjectStage,
