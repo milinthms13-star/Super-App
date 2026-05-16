@@ -116,7 +116,11 @@ describe("KidsStoryVideoMaker smoke", () => {
     fireEvent.click(screen.getByRole("button", { name: "Render MP4" }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Video rendered successfully\. Preview and export your MP4\./i)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /Video rendered successfully\.( Preview and export your MP4\.| AI providers are disabled, so quality may use fallback visuals\/audio\.)/i
+        )
+      ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Download MP4" })).toBeEnabled();
     });
 

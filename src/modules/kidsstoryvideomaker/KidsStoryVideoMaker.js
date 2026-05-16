@@ -361,6 +361,11 @@ const KidsStoryVideoMaker = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [projectLibrary, setProjectLibrary] = useState([]);
   const [characterPresets, setCharacterPresets] = useState([]);
+  const [serviceCapabilities, setServiceCapabilities] = useState({
+    freeMode: false,
+    aiProviderEnabled: false,
+    realCartoonModeEnabled: false,
+  });
   const [dirtySections, setDirtySections] = useState({
     script: false,
     characters: false,
@@ -404,6 +409,18 @@ const KidsStoryVideoMaker = () => {
   }, [generatedProject, generatedScenes.length, videoUrl]);
 
   const hasUnsavedEdits = Object.values(dirtySections).some(Boolean);
+
+  const applyServiceCapabilities = (payload) => {
+    if (!payload || typeof payload !== "object") {
+      return;
+    }
+    setServiceCapabilities((current) => ({
+      ...current,
+      freeMode: Boolean(payload.freeMode),
+      aiProviderEnabled: Boolean(payload.aiProviderEnabled),
+      realCartoonModeEnabled: Boolean(payload.realCartoonModeEnabled),
+    }));
+  };
 
   const markSectionDirty = (section) => {
     setDirtySections((current) => ({ ...current, [section]: true }));
@@ -787,6 +804,7 @@ const KidsStoryVideoMaker = () => {
       if (!payload.success || !payload.project) {
         throw new Error(payload.error || payload.message || "Autopilot generation failed.");
       }
+      applyServiceCapabilities(payload);
 
       applyProjectSnapshotToStudio(payload.project, "Autopilot project generated. You can edit every stage.");
       setActiveTab("characters");
@@ -963,6 +981,7 @@ const KidsStoryVideoMaker = () => {
       if (!payload.success || !payload.project) {
         throw new Error(payload.error || payload.message || "AI pipeline generation failed.");
       }
+      applyServiceCapabilities(payload);
       const serviceOrigin = (() => {
         try {
           return new URL(response.url).origin;
@@ -1136,6 +1155,7 @@ const KidsStoryVideoMaker = () => {
       if (!payload.success) {
         throw new Error(payload.error || payload.message || "Video render failed.");
       }
+      applyServiceCapabilities(payload);
       const serviceOrigin = (() => {
         try {
           return new URL(response.url).origin;
@@ -1154,7 +1174,11 @@ const KidsStoryVideoMaker = () => {
       setVideoUrl(nextProject.videoUrl);
       setRenderProgress(100);
       setRenderProgressLabel("Render complete.");
-      setMessage("Video rendered successfully. Preview and export your MP4.");
+      setMessage(
+        payload.aiProviderEnabled
+          ? "Video rendered successfully with AI character visuals and voice. Preview and export your MP4."
+          : "Video rendered successfully. AI providers are disabled, so quality may use fallback visuals/audio."
+      );
       setActiveTab("export");
     } catch (err) {
       const canRecover = shouldAttemptRenderRecovery(err) && Boolean(generatedProject?.projectId);
@@ -1570,6 +1594,14 @@ const KidsStoryVideoMaker = () => {
               <strong>{creditsUsed}</strong>
               <p>Duration: {estimatedDurationSeconds || 0}s</p>
             </div>
+            {generatedProject && (
+              <small>
+                Render quality mode:{" "}
+                {serviceCapabilities.aiProviderEnabled && serviceCapabilities.realCartoonModeEnabled
+                  ? "Real AI cartoon + voice"
+                  : "Fallback mode (AI provider off)"}
+              </small>
+            )}
           </div>
 
           <div className="studio-card features-card">

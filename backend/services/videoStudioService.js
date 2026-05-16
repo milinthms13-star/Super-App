@@ -17,11 +17,15 @@ const stat = promisify(fs.stat);
 const uploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
 const projectStoreRoot = path.join(uploadsRoot, 'projects');
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
+const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
+);
+const aiProviderEnabled = Boolean(process.env.OPENAI_API_KEY) && (!isFreeMode || allowAiInFreeMode);
 const isLowMemoryMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_LOW_MEMORY_MODE || (isFreeMode ? '1' : '0')).toLowerCase()
 );
 const useRealCartoonImages = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (!isFreeMode ? '1' : '0')).toLowerCase()
+  String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (aiProviderEnabled ? '1' : '0')).toLowerCase()
 );
 
 if (isLowMemoryMode) {
@@ -32,7 +36,7 @@ if (isLowMemoryMode) {
 
 let openai;
 try {
-  openai = !isFreeMode && process.env.OPENAI_API_KEY
+  openai = aiProviderEnabled
     ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     : null;
 } catch (error) {
@@ -146,7 +150,7 @@ const buildSafetyReasonLabel = (categoryKey = '') =>
 
 const getModerationSafetyAssessment = async (value = '') => {
   const cleanValue = sanitizeText(value);
-  if (isFreeMode || !openai || !cleanValue) {
+  if (!openai || !cleanValue) {
     return { blocked: false, reasons: [] };
   }
 
@@ -204,7 +208,7 @@ const getCombinedSafetyAssessment = async (value = '') => {
 };
 
 const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
-  if (isFreeMode || !openai) return null;
+  if (!openai) return null;
 
   const aiCall = (async () => {
     const response = await openai.chat.completions.create({
@@ -602,7 +606,7 @@ const createAutopilotProject = async ({
     ],
     editableOptions: buildEditableOptions(),
     freeMode: isFreeMode,
-    aiProviderEnabled: !isFreeMode && Boolean(process.env.OPENAI_API_KEY),
+    aiProviderEnabled,
   };
 
   return saveStudioProject(project);
@@ -789,7 +793,7 @@ const createStudioProject = async ({ storyTitle, storyPrompt, languageId, styleI
     ageFilter,
     premiumExport: false,
     freeMode: isFreeMode,
-    aiProviderEnabled: !isFreeMode && Boolean(process.env.OPENAI_API_KEY),
+    aiProviderEnabled,
   };
 
   const systemPrompt = `You are a children-friendly animation production engine for an AI Kids Animation Studio. Parse the user story into scenes, characters, emotions, camera actions, and safe multimedia prompts.`;
@@ -1041,7 +1045,7 @@ const getImageBufferFromOpenAIResult = async (item) => {
 };
 
 const generateRealCartoonSceneImage = async (scene, project, imagePath, resolution) => {
-  if (!openai || isFreeMode || !useRealCartoonImages) {
+  if (!openai || !useRealCartoonImages) {
     return false;
   }
 
@@ -1216,7 +1220,7 @@ const buildTtsModelFallbackList = () => {
 };
 
 const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
-  if (isFreeMode || !openai) {
+  if (!openai) {
     return null;
   }
 
@@ -1363,7 +1367,7 @@ const extractSceneDialogueTurns = (scene, project) => {
 };
 
 const buildCharacterDialogueAudio = async (project, outputDir, totalDurationSeconds) => {
-  if (isFreeMode || !openai || !Array.isArray(project?.scenes) || !project.scenes.length) {
+  if (!openai || !Array.isArray(project?.scenes) || !project.scenes.length) {
     return null;
   }
 
@@ -1441,7 +1445,7 @@ const buildNarrationAudio = async (project, outputDir) => {
   if (!narrationText) {
     return null;
   }
-  if (isFreeMode || !openai) {
+  if (!openai) {
     return null;
   }
   return synthesizeSpeechToFile({

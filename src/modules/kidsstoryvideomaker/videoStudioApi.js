@@ -6,7 +6,13 @@ import {
 } from "./videoStudioContracts";
 
 const DEFAULT_TIMEOUT_MS = 25000;
-const RENDER_TIMEOUT_MS = 360000;
+const parseNumericEnv = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+const RENDER_TIMEOUT_MS = parseNumericEnv(process.env.REACT_APP_VIDEO_RENDER_TIMEOUT_MS, 900000);
+const DEFAULT_RENDER_POLL_ATTEMPTS = parseNumericEnv(process.env.REACT_APP_VIDEO_RENDER_POLL_ATTEMPTS, 48);
+const DEFAULT_RENDER_POLL_INTERVAL_MS = parseNumericEnv(process.env.REACT_APP_VIDEO_RENDER_POLL_INTERVAL_MS, 5000);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -310,9 +316,19 @@ export const getProjectDownloadLink = async (projectId, options = {}) => {
   }
 };
 
+export const getProjectRenderStatus = (projectId, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/status`, {
+    method: "GET",
+    retries: 0,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "render-status response");
+    return result;
+  });
+
 export const waitForRenderedVideo = async (
   projectId,
-  { signal, maxAttempts = 24, intervalMs = 5000, timeoutMs = 20000 } = {}
+  { signal, maxAttempts = DEFAULT_RENDER_POLL_ATTEMPTS, intervalMs = DEFAULT_RENDER_POLL_INTERVAL_MS, timeoutMs = 20000 } = {}
 ) => {
   let lastError = null;
 
@@ -325,6 +341,24 @@ export const waitForRenderedVideo = async (
     }
 
     try {
+      const statusResult = await getProjectRenderStatus(projectId, {
+        signal,
+        retries: 0,
+        timeoutMs,
+      });
+      const status = String(statusResult?.payload?.status || "").toLowerCase();
+      if (status === "ready" && (statusResult.payload?.downloadUrl || statusResult.payload?.videoUrl)) {
+        return {
+          ...statusResult,
+          payload: {
+            ...statusResult.payload,
+            success: true,
+            downloadUrl: statusResult.payload.downloadUrl || statusResult.payload.videoUrl,
+            videoUrl: statusResult.payload.videoUrl || statusResult.payload.downloadUrl,
+          },
+        };
+      }
+
       return await getProjectDownloadLink(projectId, {
         signal,
         retries: 0,

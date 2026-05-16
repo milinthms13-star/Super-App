@@ -20,9 +20,22 @@ const {
 
 const router = express.Router();
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
+const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
+);
+const aiProviderEnabled = Boolean(process.env.OPENAI_API_KEY) && (!isFreeMode || allowAiInFreeMode);
+const realCartoonModeEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (aiProviderEnabled ? '1' : '0')).toLowerCase()
+);
 const videoStudioUploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
 const maxParallelRenders = Math.max(1, Number(process.env.VIDEO_STUDIO_MAX_PARALLEL_RENDERS) || 1);
 let activeRenderCount = 0;
+
+const getStudioCapabilities = () => ({
+  freeMode: isFreeMode,
+  aiProviderEnabled,
+  realCartoonModeEnabled,
+});
 
 const toSafeProjectDirectoryName = (value = '') => String(value).replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
 
@@ -176,7 +189,7 @@ router.post('/create', async (req, res) => {
       return res.status(500).json({ success: false, error: 'AI pipeline returned no project.' });
     }
 
-    res.json({ success: true, project, freeMode: isFreeMode });
+    res.json({ success: true, project, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio create error:', error);
     respondVideoStudioError(res, error, 'Failed to create AI video project.');
@@ -259,7 +272,7 @@ router.post('/render', async (req, res) => {
         videoUrl: absoluteVideoUrl,
         videoPath: relativeVideoUrl,
         projectId: result.projectId,
-        freeMode: isFreeMode,
+        ...getStudioCapabilities(),
       });
     } finally {
       activeRenderCount = Math.max(0, activeRenderCount - 1);
@@ -301,7 +314,7 @@ router.post('/autopilot/create', async (req, res) => {
       sceneCount,
     });
 
-    res.json({ success: true, project, freeMode: isFreeMode });
+    res.json({ success: true, project, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio autopilot create error:', error);
     respondVideoStudioError(res, error, 'Failed to generate autonomous story project.');
@@ -311,7 +324,7 @@ router.post('/autopilot/create', async (req, res) => {
 router.get('/projects/:projectId', async (req, res) => {
   try {
     const project = await getStudioProject(req.params.projectId);
-    res.json({ success: true, project, freeMode: isFreeMode });
+    res.json({ success: true, project, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio get project error:', error);
     res.status(404).json({ success: false, error: error.message || 'Project not found.' });
@@ -321,7 +334,7 @@ router.get('/projects/:projectId', async (req, res) => {
 router.patch('/projects/:projectId', async (req, res) => {
   try {
     const project = await patchStudioProject(req.params.projectId, req.body || {});
-    res.json({ success: true, project, freeMode: isFreeMode });
+    res.json({ success: true, project, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio patch project error:', error);
     respondVideoStudioError(res, error, 'Failed to update project.');
@@ -331,7 +344,7 @@ router.patch('/projects/:projectId', async (req, res) => {
 router.post('/projects/:projectId/regenerate/:stage', async (req, res) => {
   try {
     const project = await regenerateProjectStage(req.params.projectId, req.params.stage, req.body || {});
-    res.json({ success: true, project, freeMode: isFreeMode });
+    res.json({ success: true, project, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio regenerate stage error:', error);
     respondVideoStudioError(res, error, 'Failed to regenerate stage.');
@@ -341,7 +354,7 @@ router.post('/projects/:projectId/regenerate/:stage', async (req, res) => {
 router.post('/projects/:projectId/generate-character-sheet', async (req, res) => {
   try {
     const result = await generateCharacterSheet(req.params.projectId, req.body || {});
-    res.json({ success: true, ...result, freeMode: isFreeMode });
+    res.json({ success: true, ...result, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio generate-character-sheet error:', error);
     respondVideoStudioError(res, error, 'Failed to generate character sheet.');
@@ -351,7 +364,7 @@ router.post('/projects/:projectId/generate-character-sheet', async (req, res) =>
 router.post('/projects/:projectId/scenes/:sceneId/generate-image', async (req, res) => {
   try {
     const result = await generateSceneImage(req.params.projectId, req.params.sceneId);
-    res.json({ success: true, ...result, freeMode: isFreeMode });
+    res.json({ success: true, ...result, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio generate-scene-image error:', error);
     respondVideoStudioError(res, error, 'Failed to generate scene image.');
@@ -361,7 +374,7 @@ router.post('/projects/:projectId/scenes/:sceneId/generate-image', async (req, r
 router.post('/projects/:projectId/scenes/:sceneId/animate', async (req, res) => {
   try {
     const result = await animateScene(req.params.projectId, req.params.sceneId);
-    res.json({ success: true, ...result, freeMode: isFreeMode });
+    res.json({ success: true, ...result, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio animate-scene error:', error);
     respondVideoStudioError(res, error, 'Failed to animate scene.');
@@ -371,7 +384,7 @@ router.post('/projects/:projectId/scenes/:sceneId/animate', async (req, res) => 
 router.post('/projects/:projectId/scenes/:sceneId/generate-voice', async (req, res) => {
   try {
     const result = await generateVoice(req.params.projectId, req.params.sceneId);
-    res.json({ success: true, ...result, freeMode: isFreeMode });
+    res.json({ success: true, ...result, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio generate-voice error:', error);
     respondVideoStudioError(res, error, 'Failed to generate voice track.');
@@ -381,7 +394,7 @@ router.post('/projects/:projectId/scenes/:sceneId/generate-voice', async (req, r
 router.post('/projects/:projectId/scenes/:sceneId/generate-sfx', async (req, res) => {
   try {
     const result = await generateSfx(req.params.projectId, req.params.sceneId);
-    res.json({ success: true, ...result, freeMode: isFreeMode });
+    res.json({ success: true, ...result, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio generate-sfx error:', error);
     respondVideoStudioError(res, error, 'Failed to generate scene SFX.');
@@ -391,7 +404,7 @@ router.post('/projects/:projectId/scenes/:sceneId/generate-sfx', async (req, res
 router.post('/projects/:projectId/scenes/:sceneId/lip-sync', async (req, res) => {
   try {
     const result = await lipSync(req.params.projectId, req.params.sceneId);
-    res.json({ success: true, ...result, freeMode: isFreeMode });
+    res.json({ success: true, ...result, ...getStudioCapabilities() });
   } catch (error) {
     logger.error('Video studio lip-sync error:', error);
     respondVideoStudioError(res, error, 'Failed to lip-sync scene.');
@@ -410,11 +423,61 @@ router.post('/projects/:projectId/compose-final-video', async (req, res) => {
       success: true,
       ...result,
       videoUrl: absoluteVideoUrl,
-      freeMode: isFreeMode,
+      ...getStudioCapabilities(),
     });
   } catch (error) {
     logger.error('Video studio compose-final-video error:', error);
     respondVideoStudioError(res, error, 'Failed to compose final video.');
+  }
+});
+
+router.get('/projects/:projectId/status', async (req, res) => {
+  try {
+    const requestedProjectId = String(req.params.projectId || '').trim();
+    if (!requestedProjectId) {
+      return res.status(400).json({ success: false, error: 'Project ID is required.' });
+    }
+
+    let project = null;
+    try {
+      project = await getStudioProject(requestedProjectId);
+    } catch (projectError) {
+      if (projectError?.code !== 'ENOENT') {
+        throw projectError;
+      }
+    }
+
+    const safeProjectId = toSafeProjectDirectoryName(project?.projectId || requestedProjectId);
+    const fallbackOutputPath = path.join(videoStudioUploadsRoot, safeProjectId, 'story-render.mp4');
+    const hasOutputFile = fs.existsSync(fallbackOutputPath);
+    const rawVideoUrl = String(project?.videoUrl || '').trim();
+    const hasVideo = Boolean(rawVideoUrl) || hasOutputFile;
+    const origin = buildRequestOrigin(req);
+    const relativeVideoUrl = rawVideoUrl || (hasOutputFile ? `/uploads/video-studio/${safeProjectId}/story-render.mp4` : '');
+    const absoluteVideoUrl = relativeVideoUrl
+      ? (/^https?:\/\//i.test(relativeVideoUrl)
+        ? relativeVideoUrl
+        : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`)
+      : '';
+
+    const status = hasVideo
+      ? 'ready'
+      : project
+        ? 'rendering'
+        : 'not_found';
+
+    res.json({
+      success: true,
+      projectId: project?.projectId || requestedProjectId,
+      status,
+      progress: hasVideo ? 100 : status === 'rendering' ? 70 : 0,
+      videoUrl: absoluteVideoUrl,
+      downloadUrl: absoluteVideoUrl,
+      ...getStudioCapabilities(),
+    });
+  } catch (error) {
+    logger.error('Video studio status error:', error);
+    respondVideoStudioError(res, error, 'Failed to read render status.');
   }
 });
 

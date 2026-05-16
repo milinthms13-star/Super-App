@@ -40,6 +40,8 @@ Base path: `/api/video-studio`
   - Response: `{ success, videoUrl, videoPath, projectId }`
 - `GET /projects/:projectId/download`
   - Response: `{ success, projectId, videoUrl, downloadUrl }`
+- `GET /projects/:projectId/status`
+  - Response: `{ success, projectId, status, progress, videoUrl, downloadUrl }`
 
 ## Safety failures
 
@@ -84,6 +86,9 @@ Backend safety now combines:
 - "Save stage edits" persists to backend (`PATCH /projects/:projectId`).
 - "Save Project" stores a local snapshot for My Projects on this device.
 - Render uses subtitles generated from scene durations.
+- Frontend render timeout defaults to 15 minutes and can be overridden with `REACT_APP_VIDEO_RENDER_TIMEOUT_MS`.
+- Poll tuning is configurable with `REACT_APP_VIDEO_RENDER_POLL_ATTEMPTS` and `REACT_APP_VIDEO_RENDER_POLL_INTERVAL_MS`.
+- Backend can allow AI rendering while global free mode is on using `VIDEO_STUDIO_ALLOW_AI_IN_FREE=true`.
 
 ## Tests
 

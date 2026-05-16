@@ -25,6 +25,12 @@ const SCENARIO_OPTIONS = [
   { id: 'cafe', label: 'Cafe chat' },
 ];
 
+const VOICE_OPTIONS = [
+  { id: 'female-soft', label: 'Gentle' },
+  { id: 'male-calm', label: 'Warm' },
+  { id: 'female-warm', label: 'Soft' },
+];
+
 const AI_FRIENDS = [
   {
     id: 'nila',
@@ -86,6 +92,7 @@ const VoiceFriend = () => {
   const [friendCustomName, setFriendCustomName] = useState('');
   const [friendCustomAvatar, setFriendCustomAvatar] = useState('');
   const [scenario, setScenario] = useState('room');
+  const [voice, setVoice] = useState('female-soft');
   const [persistData, setPersistData] = useState(true);
   const [hasPendingSessionSettings, setHasPendingSessionSettings] = useState(false);
   const [editingPersona, setEditingPersona] = useState(false);
@@ -102,6 +109,11 @@ const VoiceFriend = () => {
   const selectedFriend = useMemo(
     () => AI_FRIENDS.find((friend) => friend.id === friendId) || AI_FRIENDS[0],
     [friendId]
+  );
+
+  const selectedVoiceOption = useMemo(
+    () => VOICE_OPTIONS.find((option) => option.id === voice) || VOICE_OPTIONS[0],
+    [voice]
   );
 
   const markPendingSessionSettings = useCallback(() => {
@@ -135,6 +147,11 @@ const VoiceFriend = () => {
 
   const handleScenarioChange = (value) => {
     setScenario(value);
+    markPendingSessionSettings();
+  };
+
+  const handleVoiceChange = (value) => {
+    setVoice(value);
     markPendingSessionSettings();
   };
 
@@ -256,6 +273,7 @@ const VoiceFriend = () => {
           friendCustomName,
           friendCustomAvatar,
           scenario,
+          voice,
         },
         { headers: buildRequestHeaders() }
       );
@@ -321,6 +339,9 @@ const VoiceFriend = () => {
           if (parsed?.scenario) {
             setScenario(parsed.scenario);
           }
+          if (parsed?.voice) {
+            setVoice(parsed.voice);
+          }
           if (parsed?.sessionId) {
             initSession(parsed.sessionId, parsed.friendId, parsed.userName);
             return;
@@ -383,7 +404,7 @@ const VoiceFriend = () => {
         {
           text,
           friendId,
-          voice: selectedFriend.voice,
+          voice,
           language,
         },
         { headers: buildRequestHeaders(), signal: controller.signal }
@@ -522,6 +543,7 @@ const VoiceFriend = () => {
         mood,
         language,
         scenario,
+        voice,
         conversation,
         friendCustomName,
         friendCustomAvatar,
@@ -687,7 +709,7 @@ const VoiceFriend = () => {
                 <img src={friendCustomAvatar || selectedFriend.avatar} alt={`${friendCustomName || selectedFriend.name} avatar`} className="voice-friend-persona-img" />
                 <div className="voice-friend-persona-meta">
                   <div className="voice-friend-persona-bio">{selectedFriend.style}</div>
-                  <div className="voice-friend-persona-voice">Voice style: {selectedFriend.voiceLabel}</div>
+                  <div className="voice-friend-persona-voice">Voice style: {selectedVoiceOption.label}</div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input
                       value={friendCustomName}
@@ -774,7 +796,7 @@ const VoiceFriend = () => {
         <div className="voice-friend-summary">
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
           <span><strong>Mood:</strong> {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
-          <span><strong>Voice:</strong> {selectedFriend.voiceLabel}</span>
+          <span><strong>Voice style:</strong> {selectedVoiceOption.label}</span>
           <span><strong>Language:</strong> {language.toUpperCase()}</span>
           <span><strong>Scenario:</strong> {SCENARIO_OPTIONS.find((opt) => opt.id === scenario)?.label}</span>
           <span><strong>Voice input:</strong> {speechSupported ? 'Supported' : 'Unavailable'}</span>
@@ -804,6 +826,14 @@ const VoiceFriend = () => {
           <label>Persona</label>
           <select value={persona} onChange={(e) => handlePersonaChange(e.target.value)}>
             {VOICE_PERSONAS.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="voice-friend-control-group">
+          <label>Voice</label>
+          <select value={voice} onChange={(e) => handleVoiceChange(e.target.value)}>
+            {VOICE_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>{option.label}</option>
             ))}
           </select>
