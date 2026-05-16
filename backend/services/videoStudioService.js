@@ -902,7 +902,7 @@ const renderVideo = async (project, premiumHD = false) => {
   }
   const listPath = path.join(outputDir, 'scenes.txt');
   const listContent = sceneAssets
-    .map((scene) => `file '${scene.path.replace(/\\/g, '/')}'\\nduration ${scene.duration}`)
+    .map((scene) => `file '${scene.path.replace(/\\/g, '/')}'\nduration ${scene.duration}`)
     .join('\n') + `\nfile '${sceneAssets[sceneAssets.length - 1].path.replace(/\\/g, '/')}'\n`;
 
   await writeFile(listPath, listContent, 'utf-8');
