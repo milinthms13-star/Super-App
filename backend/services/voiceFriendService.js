@@ -48,6 +48,14 @@ const AI_FRIENDS = {
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6; // 6 hours
 
+const normalizeUserName = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const normalized = String(value).trim().replace(/\s+/g, ' ').slice(0, 40);
+  return normalized || null;
+};
+
 const cleanOldSessions = () => {
   const now = Date.now();
   for (const [sessionId, session] of sessions.entries()) {
@@ -152,6 +160,48 @@ ${buildMemoryPrompt(session)}
 `; 
 };
 
+const buildModelFallbackList = () => {
+  const configured = String(process.env.OPENAI_VOICE_FRIEND_MODEL || 'gpt-4o-mini').trim();
+  return Array.from(new Set([configured, 'gpt-4o-mini', 'gpt-4.1-mini']));
+};
+
+const buildLocalSupportReply = (session, userMessage) => {
+  const message = String(userMessage || '').trim();
+  const normalized = message.toLowerCase();
+  const namePrefix = session?.userName ? `${session.userName}, ` : '';
+  const favoritePlace = session?.favoritePlaces?.[0];
+  const placeTip = favoritePlace
+    ? ` Since you mentioned ${favoritePlace}, check weather and traffic before leaving.`
+    : '';
+
+  if (/(packing|pack|luggage|bag|suitcase)/i.test(normalized)) {
+    return `${namePrefix}let us make packing easy: clothes by day count, charger, ID, medicines, water bottle, and one light jacket. Keep tickets and valuables in one quick-access pouch. Tell me trip length and I will make a simple checklist for you.`;
+  }
+
+  if (/(trip|travel|journey|vacation|holiday|plan)/i.test(normalized)) {
+    return `${namePrefix}that sounds exciting. Quick plan: set departure time, confirm transport and stay, keep digital ID and ticket copies, and set food plus local travel budget.${placeTip} Share destination and number of days, and I will give you a practical step-by-step plan.`;
+  }
+
+  if (/(sad|lonely|cry|upset|down|hurt)/i.test(normalized)) {
+    return `${namePrefix}I am with you. For the next 5 minutes, try this: drink water, take 6 slow breaths, and message one trusted person. If you want, tell me what happened in one line and we will handle it together, one step at a time.`;
+  }
+
+  if (/(anxious|anxiety|nervous|stress|stressed|overwhelm|overwhelmed)/i.test(normalized)) {
+    return `${namePrefix}you are not alone. Let us reduce pressure right now: 4 slow breaths, then write the top 3 tasks, and do only the smallest first task for 10 minutes. I can help you pick that first task if you share your current situation.`;
+  }
+
+  if (/(work|job|study|exam|interview|deadline)/i.test(normalized)) {
+    return `${namePrefix}let us make a small plan: what is due first, what can wait, and what can be delegated. If you share your top priority, I will break it into a realistic action list for today.`;
+  }
+
+  if (message.length <= 2) {
+    return `${namePrefix}I am here with you. Tell me a little more, and I will give practical support.`;
+  }
+
+  const snippet = message.length > 90 ? `${message.slice(0, 87)}...` : message;
+  return `${namePrefix}I hear you. You said: "${snippet}". I can help with a practical plan, emotional support, or both.`;
+};
+
 const createSession = ({ userId, persona = 'supportive', mood = 'neutral', language = 'en', friendId = 'nila', userName = null }) => {
   cleanOldSessions();
   const sessionId = crypto.randomUUID();
@@ -159,7 +209,7 @@ const createSession = ({ userId, persona = 'supportive', mood = 'neutral', langu
   const session = {
     sessionId,
     userId: userId || null,
-    userName: userName || null,
+    userName: normalizeUserName(userName),
     friendId: friend.id,
     friendName: friend.name,
     friendPersonality: friend.personality,
@@ -228,22 +278,39 @@ const buildConversation = (session, userMessage) => {
 
 const createAIResponse = async (messages) => {
   if (!openai) {
-    return 'I am here to listen, but the AI voice companion is not available right now. Please try again later.';
+    openai = createOpenAIClient();
+    if (!openai) {
+      return null;
+    }
   }
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_VOICE_FRIEND_MODEL || 'gpt-4o-mini',
-      messages,
-      max_tokens: 500,
-      temperature: 0.85,
-    });
+  const modelsToTry = buildModelFallbackList();
+  const errors = [];
 
-    return response?.choices?.[0]?.message?.content?.trim() || null;
-  } catch (error) {
-    logger.error('VoiceFriendService AI response error:', error);
-    return null;
+  for (const model of modelsToTry) {
+    try {
+      const response = await openai.chat.completions.create({
+        model,
+        messages,
+        max_tokens: 500,
+        temperature: 0.85,
+      });
+
+      const text = response?.choices?.[0]?.message?.content?.trim();
+      if (text) {
+        return text;
+      }
+
+      errors.push({ model, reason: 'empty_response' });
+    } catch (error) {
+      const reason = error?.message || error?.code || 'unknown_error';
+      logger.warn(`VoiceFriendService model ${model} failed: ${reason}`);
+      errors.push({ model, reason });
+    }
   }
+
+  logger.error('VoiceFriendService AI response error: all chat models failed', { errors });
+  return null;
 };
 
 const generateSpeech = async ({ text, friendId = 'nila', voice, language = 'en' }) => {
@@ -280,8 +347,8 @@ const sendMessage = async ({ sessionId, message, persona, mood, language, friend
     session.friendPersonality = friend.personality;
     session.friendVoice = friend.voice;
   }
-  if (userName) {
-    session.userName = userName;
+  if (userName !== undefined) {
+    session.userName = normalizeUserName(userName);
   }
   if (persona) session.persona = persona;
   if (mood) session.mood = mood;
@@ -291,7 +358,7 @@ const sendMessage = async ({ sessionId, message, persona, mood, language, friend
 
   const messages = buildConversation(session, message);
   const aiText = await createAIResponse(messages);
-  const finalText = aiText || `I hear you${session.userName ? `, ${session.userName}` : ''}. I'm here with you — tell me more, or tell me how I can help.`;
+  const finalText = aiText || buildLocalSupportReply(session, message);
 
   session.messages.push({ role: 'user', content: message, timestamp: new Date() });
   session.messages.push({ role: 'assistant', content: finalText, timestamp: new Date() });
