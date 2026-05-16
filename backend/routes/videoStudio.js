@@ -222,7 +222,20 @@ router.post('/render', async (req, res) => {
     }
 
     const { project, projectId, premiumHD } = req.body;
-    const requestedProject = project || (projectId ? await getStudioProject(projectId) : null);
+    let requestedProject = project || null;
+    if (!requestedProject && projectId) {
+      try {
+        requestedProject = await getStudioProject(projectId);
+      } catch (projectError) {
+        if (projectError?.code === 'ENOENT') {
+          return res.status(404).json({
+            success: false,
+            error: projectError.message || 'Project not found.',
+          });
+        }
+        throw projectError;
+      }
+    }
     const resolvedProject = requestedProject
       ? {
         ...requestedProject,
@@ -309,7 +322,20 @@ router.post('/render-cartoon', async (req, res) => {
     }
 
     const { project, projectId, premiumHD } = req.body || {};
-    const requestedProject = project || (projectId ? await getStudioProject(projectId) : null);
+    let requestedProject = project || null;
+    if (!requestedProject && projectId) {
+      try {
+        requestedProject = await getStudioProject(projectId);
+      } catch (projectError) {
+        if (projectError?.code === 'ENOENT') {
+          return res.status(404).json({
+            success: false,
+            error: projectError.message || 'Project not found.',
+          });
+        }
+        throw projectError;
+      }
+    }
     const resolvedProject = requestedProject
       ? {
         ...requestedProject,

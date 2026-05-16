@@ -540,8 +540,34 @@ const getStudioProject = async (projectId) => {
     throw new Error('Project ID is required.');
   }
   const filePath = getProjectFilePath(safeProjectId);
-  const content = await readFile(filePath, 'utf-8');
-  return JSON.parse(content);
+  try {
+    const content = await readFile(filePath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+
+    // Legacy/fallback metadata path used after render.
+    const fallbackMetadataPath = path.join(uploadsRoot, safeFileName(safeProjectId), 'project.json');
+    try {
+      const fallbackContent = await readFile(fallbackMetadataPath, 'utf-8');
+      const fallbackProject = JSON.parse(fallbackContent);
+      return {
+        ...fallbackProject,
+        projectId: sanitizeText(fallbackProject?.projectId || safeProjectId),
+      };
+    } catch (fallbackError) {
+      if (fallbackError?.code !== 'ENOENT') {
+        throw fallbackError;
+      }
+    }
+
+    const notFoundError = new Error(`Project "${safeProjectId}" not found.`);
+    notFoundError.code = 'ENOENT';
+    notFoundError.status = 404;
+    throw notFoundError;
+  }
 };
 
 const createAutopilotProject = async ({
@@ -1550,6 +1576,11 @@ const buildCartoonSceneFilter = (scene, resolution) => {
   const bubbleTailX = Math.max(200, Math.floor(width * 0.36));
   const accentOne = scene.emotion === 'joyful' ? '0xfff7d6' : '0xe8f6ff';
   const accentTwo = scene.emotion === 'brave' ? '0xd8f5ff' : '0xeef8e3';
+  const characterTwoBodyX = Math.max(520, width - 500);
+  const characterTwoHeadX = Math.max(490, width - 530);
+  const characterTwoLeftEyeX = Math.max(532, width - 488);
+  const characterTwoRightEyeX = Math.max(628, width - 392);
+  const characterTwoMouthX = Math.max(560, width - 460);
 
   return [
     `drawbox=x=0:y=0:w=${width}:h=${height}:color=${skyColor}@1:t=fill`,
@@ -1562,18 +1593,18 @@ const buildCartoonSceneFilter = (scene, resolution) => {
     `drawbox=x=${Math.max(300, width - 500)}:y=115:w=190:h=35:color=white@0.85:t=fill`,
     `drawbox=x=90:y=182:w=${Math.max(240, width - 590)}:h=22:color=0x31475e@0.3:t=fill`,
     `drawbox=x=90:y=214:w=${Math.max(180, width - 760)}:h=18:color=0x31475e@0.22:t=fill`,
-    `drawbox=x=250:y=310:w=150:h=190:color=0xff8ab3@1:t=fill`,
-    `drawbox=x=220:y=195:w=210:h=150:color=0xffd2a6@1:t=fill`,
-    `drawbox=x=262:y=245:w=28:h=28:color=black@1:t=fill`,
-    `drawbox=x=358:y=245:w=28:h=28:color=black@1:t=fill`,
-    `drawbox=x=290:y=300:w=72:h=24:color=0x7a1c1c@1:t=fill`,
-    `drawbox=x=250:y=515:w=150:h=34:color=0x17356b@0.85:t=fill`,
-    `drawbox=x=${Math.max(520, width - 500)}:y=320:w=150:h=180:color=0x6cc4ff@1:t=fill`,
-    `drawbox=x=${Math.max(490, width - 530)}:y=205:w=210:h=150:color=0xffd2a6@1:t=fill`,
-    `drawbox=x=${Math.max(532, width - 488)}:y=255:w=28:h=28:color=black@1:t=fill`,
-    `drawbox=x=${Math.max(628, width - 392)}:y=255:w=28:h=28:color=black@1:t=fill`,
-    `drawbox=x=${Math.max(560, width - 460)}:y=310:w=72:h=24:color=0x7a1c1c@1:t=fill`,
-    `drawbox=x=${Math.max(520, width - 500)}:y=515:w=150:h=34:color=0x17356b@0.85:t=fill`,
+    `drawbox=x='250+18*sin(t*2.8)':y='310+10*sin(t*5)':w=150:h=190:color=0xff8ab3@1:t=fill`,
+    `drawbox=x='220+18*sin(t*2.8)':y='195+8*sin(t*5)':w=210:h=150:color=0xffd2a6@1:t=fill`,
+    `drawbox=x='262+18*sin(t*2.8)':y='245+if(lt(mod(t\\,1.2)\\,0.12)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x='358+18*sin(t*2.8)':y='245+if(lt(mod(t\\,1.2)\\,0.12)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x='290+18*sin(t*2.8)':y='300+6*sin(t*12)':w=72:h='12+18*abs(sin(t*10))':color=0x7a1c1c@1:t=fill`,
+    `drawbox=x='250+18*sin(t*2.8)':y='515+6*sin(t*2.8)':w=150:h=34:color=0x17356b@0.85:t=fill`,
+    `drawbox=x='${characterTwoBodyX}+16*sin(t*2.5+1.2)':y='320+9*sin(t*4.6+1.2)':w=150:h=180:color=0x6cc4ff@1:t=fill`,
+    `drawbox=x='${characterTwoHeadX}+16*sin(t*2.5+1.2)':y='205+7*sin(t*4.6+1.2)':w=210:h=150:color=0xffd2a6@1:t=fill`,
+    `drawbox=x='${characterTwoLeftEyeX}+16*sin(t*2.5+1.2)':y='255+if(lt(mod(t\\,1.15)\\,0.1)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x='${characterTwoRightEyeX}+16*sin(t*2.5+1.2)':y='255+if(lt(mod(t\\,1.15)\\,0.1)\\,8\\,0)':w=28:h=28:color=black@1:t=fill`,
+    `drawbox=x='${characterTwoMouthX}+16*sin(t*2.5+1.2)':y='310+6*sin(t*11+1.2)':w=72:h='12+18*abs(sin(t*9.5))':color=0x7a1c1c@1:t=fill`,
+    `drawbox=x='${characterTwoBodyX}+16*sin(t*2.5+1.2)':y='515+5*sin(t*2.5+1.2)':w=150:h=34:color=0x17356b@0.85:t=fill`,
     `drawbox=x=120:y=${bubbleY}:w=${bubbleWidth}:h=95:color=white@0.92:t=fill`,
     `drawbox=x=${bubbleTailX}:y=${bubbleY + 80}:w=26:h=30:color=white@0.92:t=fill`,
     `drawbox=x=145:y=${bubbleY + 24}:w=${Math.max(150, bubbleWidth - 120)}:h=12:color=0x111111@0.55:t=fill`,
@@ -1616,7 +1647,12 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   }
 
   if (generatedByAi) {
-    const zoomFilter = `zoompan=z='min(1.12,1+0.0012*on)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${resolution.width}x${resolution.height}:fps=${fps}`;
+    const zoomFilter = [
+      `zoompan=z='min(1.18,1+0.0022*on)'`,
+      `x='iw/2-(iw/zoom/2)+18*sin(on/18)'`,
+      `y='ih/2-(ih/zoom/2)+10*cos(on/20)'`,
+      `d=${frames}:s=${resolution.width}x${resolution.height}:fps=${fps}`,
+    ].join(':');
     const fadeOutStart = Math.max(0, duration - 0.35);
     args.push(
       '-t', `${duration}`,
