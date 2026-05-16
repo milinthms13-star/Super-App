@@ -102,7 +102,7 @@ describe('Video studio routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
-    expect(response.body.videoUrl).toMatch(/\/uploads\/video\/proj-123\.mp4$/);
+    expect(response.body.videoUrl).toMatch(/\/uploads\/video\/proj-123\.mp4(\?v=.*)?$/);
     expect(patchStudioProject).toHaveBeenCalledWith('proj-123', expect.objectContaining({ videoUrl: '/uploads/video/proj-123.mp4' }));
   });
 

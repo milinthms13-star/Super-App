@@ -49,6 +49,51 @@ const buildRequestOrigin = (req) => {
   return `${protocol}://${host}`;
 };
 
+const toCacheBustToken = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return String(Date.now());
+  }
+  const parsed = Date.parse(raw);
+  if (Number.isFinite(parsed)) {
+    return String(parsed);
+  }
+  return raw.replace(/[^\w.-]/g, '_');
+};
+
+const upsertVersionQuery = (videoUrl = '', versionToken = '') => {
+  const raw = String(videoUrl || '').trim();
+  const token = String(versionToken || '').trim();
+  if (!raw || !token) {
+    return raw;
+  }
+
+  try {
+    const isAbsolute = /^https?:\/\//i.test(raw);
+    const parsed = new URL(raw, 'https://video.local');
+    parsed.searchParams.set('v', token);
+    if (isAbsolute) {
+      return parsed.toString();
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch (_error) {
+    const joiner = raw.includes('?') ? '&' : '?';
+    return `${raw}${joiner}v=${encodeURIComponent(token)}`;
+  }
+};
+
+const toAbsoluteVideoUrl = (origin, videoUrl = '', versionToken = '') => {
+  const raw = String(videoUrl || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  const absoluteVideoUrl = /^https?:\/\//i.test(raw)
+    ? raw
+    : `${origin}${raw.startsWith('/') ? '' : '/'}${raw}`;
+  return upsertVersionQuery(absoluteVideoUrl, versionToken);
+};
+
 const respondVideoStudioError = (res, error, fallbackMessage) => {
   if (error?.code === 'SAFETY_FAILED') {
     return res.status(error.status || 422).json({
@@ -268,13 +313,13 @@ router.post('/render', async (req, res) => {
 
       const relativeVideoUrl = String(result.videoUrl || '');
       const origin = buildRequestOrigin(req);
-      const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
-        ? relativeVideoUrl
-        : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
+      const renderedAt = new Date().toISOString();
+      const versionToken = toCacheBustToken(renderedAt);
+      const absoluteVideoUrl = toAbsoluteVideoUrl(origin, relativeVideoUrl, versionToken);
 
       await patchStudioProject(resolvedProject.projectId, {
         videoUrl: relativeVideoUrl,
-        renderedAt: new Date().toISOString(),
+        renderedAt,
         premiumExport: Boolean(premiumHD),
         scenes: resolvedProject.scenes,
       });
@@ -286,7 +331,7 @@ router.post('/render', async (req, res) => {
       res.json({
         success: true,
         videoUrl: absoluteVideoUrl,
-        videoPath: relativeVideoUrl,
+        videoPath: upsertVersionQuery(relativeVideoUrl, versionToken),
         projectId: result.projectId,
         ...getStudioCapabilities(),
       });
@@ -368,13 +413,13 @@ router.post('/render-cartoon', async (req, res) => {
 
       const relativeVideoUrl = String(result.videoUrl || '');
       const origin = buildRequestOrigin(req);
-      const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
-        ? relativeVideoUrl
-        : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
+      const renderedAt = new Date().toISOString();
+      const versionToken = toCacheBustToken(renderedAt);
+      const absoluteVideoUrl = toAbsoluteVideoUrl(origin, relativeVideoUrl, versionToken);
 
       await patchStudioProject(resolvedProject.projectId, {
         videoUrl: relativeVideoUrl,
-        renderedAt: new Date().toISOString(),
+        renderedAt,
         premiumExport: Boolean(premiumHD),
         scenes: resolvedProject.scenes,
         renderMode: 'real-cartoon-backend',
@@ -387,7 +432,7 @@ router.post('/render-cartoon', async (req, res) => {
       res.json({
         success: true,
         videoUrl: absoluteVideoUrl,
-        videoPath: relativeVideoUrl,
+        videoPath: upsertVersionQuery(relativeVideoUrl, versionToken),
         projectId: result.projectId,
         renderMode: result.renderMode || 'real-cartoon-backend',
         ttsEnabled: Boolean(result.ttsEnabled),
@@ -556,9 +601,8 @@ router.post('/projects/:projectId/compose-final-video', async (req, res) => {
     const result = await composeFinalVideo(req.params.projectId, req.body || {});
     const relativeVideoUrl = String(result.videoUrl || '');
     const origin = buildRequestOrigin(req);
-    const absoluteVideoUrl = /^https?:\/\//i.test(relativeVideoUrl)
-      ? relativeVideoUrl
-      : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`;
+    const versionToken = toCacheBustToken(new Date().toISOString());
+    const absoluteVideoUrl = toAbsoluteVideoUrl(origin, relativeVideoUrl, versionToken);
     res.json({
       success: true,
       ...result,
@@ -590,15 +634,14 @@ router.get('/projects/:projectId/status', async (req, res) => {
     const safeProjectId = toSafeProjectDirectoryName(project?.projectId || requestedProjectId);
     const fallbackOutputPath = path.join(videoStudioUploadsRoot, safeProjectId, 'story-render.mp4');
     const hasOutputFile = fs.existsSync(fallbackOutputPath);
+    const fileVersionToken = hasOutputFile ? toCacheBustToken(fs.statSync(fallbackOutputPath).mtime.toISOString()) : '';
+    const renderedAtToken = project?.renderedAt ? toCacheBustToken(project.renderedAt) : '';
+    const versionToken = renderedAtToken || fileVersionToken || toCacheBustToken(new Date().toISOString());
     const rawVideoUrl = String(project?.videoUrl || '').trim();
     const hasVideo = Boolean(rawVideoUrl) || hasOutputFile;
     const origin = buildRequestOrigin(req);
     const relativeVideoUrl = rawVideoUrl || (hasOutputFile ? `/uploads/video-studio/${safeProjectId}/story-render.mp4` : '');
-    const absoluteVideoUrl = relativeVideoUrl
-      ? (/^https?:\/\//i.test(relativeVideoUrl)
-        ? relativeVideoUrl
-        : `${origin}${relativeVideoUrl.startsWith('/') ? '' : '/'}${relativeVideoUrl}`)
-      : '';
+    const absoluteVideoUrl = toAbsoluteVideoUrl(origin, relativeVideoUrl, versionToken);
 
     const status = hasVideo
       ? 'ready'
@@ -638,11 +681,13 @@ router.get('/projects/:projectId/download', async (req, res) => {
     }
 
     let rawVideoUrl = String(project?.videoUrl || '').trim();
+    let versionToken = project?.renderedAt ? toCacheBustToken(project.renderedAt) : '';
     if (!rawVideoUrl) {
       const safeProjectId = toSafeProjectDirectoryName(project?.projectId || requestedProjectId);
       const fallbackOutputPath = path.join(videoStudioUploadsRoot, safeProjectId, 'story-render.mp4');
       if (fs.existsSync(fallbackOutputPath)) {
         rawVideoUrl = `/uploads/video-studio/${safeProjectId}/story-render.mp4`;
+        versionToken = toCacheBustToken(fs.statSync(fallbackOutputPath).mtime.toISOString());
       }
     }
 
@@ -651,9 +696,11 @@ router.get('/projects/:projectId/download', async (req, res) => {
     }
 
     const origin = buildRequestOrigin(req);
-    const absoluteVideoUrl = /^https?:\/\//i.test(rawVideoUrl)
-      ? rawVideoUrl
-      : `${origin}${rawVideoUrl.startsWith('/') ? '' : '/'}${rawVideoUrl}`;
+    const absoluteVideoUrl = toAbsoluteVideoUrl(
+      origin,
+      rawVideoUrl,
+      versionToken || toCacheBustToken(new Date().toISOString())
+    );
 
     res.json({
       success: true,
