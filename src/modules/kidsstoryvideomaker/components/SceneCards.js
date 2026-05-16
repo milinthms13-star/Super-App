@@ -8,6 +8,10 @@ const SceneCards = React.memo(function SceneCards({
   onDurationChange,
   onDuplicateScene,
   onRemoveScene,
+  onRegenerateScene,
+  onRegenerateDialogue,
+  isRegeneratingSceneId,
+  isRegeneratingDialogueId,
 }) {
   if (!scenes.length) {
     return <p>No scenes yet. Use Create to build your video pipeline.</p>;
@@ -41,6 +45,20 @@ const SceneCards = React.memo(function SceneCards({
             disabled={scenes.length <= 1}
           >
             Remove
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => onRegenerateScene(sceneId)}
+            disabled={Boolean(isRegeneratingSceneId || isRegeneratingDialogueId)}
+          >
+            {isRegeneratingSceneId === String(sceneId) ? "Regenerating..." : "Regenerate This Scene"}
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => onRegenerateDialogue(sceneId)}
+            disabled={Boolean(isRegeneratingSceneId || isRegeneratingDialogueId)}
+          >
+            {isRegeneratingDialogueId === String(sceneId) ? "Regenerating..." : "Regenerate Dialogue"}
           </button>
         </div>
 

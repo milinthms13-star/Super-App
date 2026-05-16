@@ -695,6 +695,220 @@ const regenerateProjectStage = async (projectId, stage, options = {}) => {
   return saveStudioProject(project);
 };
 
+const resolveSceneIndex = (scenes = [], sceneId) => {
+  const numericSceneId = Number(sceneId);
+  if (Number.isFinite(numericSceneId)) {
+    return scenes.findIndex((scene, index) => Number(scene?.id || index + 1) === numericSceneId);
+  }
+  const normalized = sanitizeText(sceneId);
+  return scenes.findIndex((scene, index) => sanitizeText(scene?.id || String(index + 1)) === normalized);
+};
+
+const buildFallbackSceneDialogue = (scene, project, sceneIndex = 0) => {
+  const sceneCharacters = normalizeSceneCharacterList(scene, project);
+  const primaryA = sceneCharacters[0]?.name || 'Hero';
+  const primaryB = sceneCharacters[1]?.name || 'Friend';
+  const summary = sanitizeText(scene?.description || 'Our story moves forward.');
+  const mood = sanitizeText(scene?.emotion || 'wonder');
+  return `${primaryA}: ${summary}\n${primaryB}: We can do this together with ${mood}.`;
+};
+
+const regenerateProjectScene = async (projectId, sceneId, options = {}) => {
+  const project = await getStudioProject(projectId);
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const sceneIndex = resolveSceneIndex(scenes, sceneId);
+  if (sceneIndex < 0) {
+    throw new Error('Scene not found.');
+  }
+
+  const existingScene = scenes[sceneIndex];
+  const previousScene = sceneIndex > 0 ? scenes[sceneIndex - 1] : null;
+  const nextScene = sceneIndex < scenes.length - 1 ? scenes[sceneIndex + 1] : null;
+  const sceneCharacters = normalizeSceneCharacterList(existingScene, project);
+  const customDirection = sanitizeText(options?.direction || options?.prompt || '');
+
+  let regeneratedCandidate = null;
+  if (openai) {
+    const systemPrompt = 'You are an expert kids animation writer. Return strict JSON only.';
+    const userPrompt = `Regenerate one storyboard scene while preserving story continuity.
+Project title: ${sanitizeText(project?.storyTitle || project?.title || 'Kids story')}
+Story mode: ${sanitizeText(project?.storyMode || 'bedtime')}
+Scene index: ${sceneIndex + 1} of ${scenes.length}
+Current scene title: ${sanitizeText(existingScene?.title || '')}
+Current scene description: ${sanitizeText(existingScene?.description || '')}
+Current scene dialogue: ${sanitizeText(existingScene?.dialogue || '')}
+Characters in this scene: ${sceneCharacters.map((char) => `${char.name} (${char.role})`).join(', ') || 'Hero, Friend'}
+Previous scene context: ${sanitizeText(previousScene?.description || 'none')}
+Next scene context: ${sanitizeText(nextScene?.description || 'none')}
+Creative direction: ${customDirection || 'Keep it playful and emotionally clear.'}
+
+Return JSON with keys:
+title, description, dialogue, emotion, background, weather, timeOfDay, cameraActions, durationSeconds.
+Dialogue must be 2-4 short lines and child-safe.`;
+    const response = await safeOpenAI([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ], 700);
+    regeneratedCandidate = response ? extractJson(response) : null;
+  }
+
+  const fallbackScene = {
+    ...existingScene,
+    title: sanitizeText(existingScene?.title || `Scene ${sceneIndex + 1}`),
+    description: sanitizeText(existingScene?.description || existingScene?.summary || 'Story progression scene'),
+    dialogue: buildFallbackSceneDialogue(existingScene, project, sceneIndex),
+    emotion: sanitizeText(existingScene?.emotion || 'wonder'),
+    background: sanitizeText(existingScene?.background || `${project?.storyMode || 'bedtime'} cartoon world`),
+    weather: sanitizeText(existingScene?.weather || 'sunny'),
+    timeOfDay: sanitizeText(existingScene?.timeOfDay || 'Afternoon'),
+    cameraActions: sanitizeText(existingScene?.cameraActions || 'soft pan'),
+    durationSeconds: Math.max(2, Math.min(15, Number(existingScene?.durationSeconds) || 4)),
+    characters: sceneCharacters,
+  };
+
+  const mergedScene = normalizeSceneForCinematicPipeline({
+    ...fallbackScene,
+    ...(regeneratedCandidate && typeof regeneratedCandidate === 'object' ? regeneratedCandidate : {}),
+    id: sceneIndex + 1,
+    title: sanitizeText(
+      regeneratedCandidate?.title
+      || fallbackScene.title
+      || `Scene ${sceneIndex + 1}`
+    ),
+    description: sanitizeText(
+      regeneratedCandidate?.description
+      || fallbackScene.description
+      || ''
+    ),
+    dialogue: sanitizeText(
+      regeneratedCandidate?.dialogue
+      || fallbackScene.dialogue
+      || ''
+    ),
+    emotion: sanitizeText(
+      regeneratedCandidate?.emotion
+      || fallbackScene.emotion
+      || 'wonder'
+    ),
+    background: sanitizeText(
+      regeneratedCandidate?.background
+      || fallbackScene.background
+      || ''
+    ),
+    weather: sanitizeText(
+      regeneratedCandidate?.weather
+      || fallbackScene.weather
+      || ''
+    ),
+    timeOfDay: sanitizeText(
+      regeneratedCandidate?.timeOfDay
+      || fallbackScene.timeOfDay
+      || ''
+    ),
+    cameraActions: sanitizeText(
+      regeneratedCandidate?.cameraActions
+      || fallbackScene.cameraActions
+      || ''
+    ),
+    durationSeconds: Math.max(
+      2,
+      Math.min(15, Number(regeneratedCandidate?.durationSeconds) || Number(fallbackScene.durationSeconds) || 4)
+    ),
+    characters: Array.isArray(existingScene?.characters) && existingScene.characters.length
+      ? existingScene.characters
+      : sceneCharacters,
+  }, sceneIndex);
+
+  if (project.safeMode) {
+    const safetyInput = [
+      mergedScene.title,
+      mergedScene.description,
+      mergedScene.dialogue,
+    ]
+      .map((value) => sanitizeText(value))
+      .filter(Boolean)
+      .join(' ');
+    const assessment = await getCombinedSafetyAssessment(safetyInput);
+    if (assessment.blocked) {
+      throw createSafetyError('scene_regeneration', assessment);
+    }
+  }
+
+  const updatedScenes = [...scenes];
+  updatedScenes[sceneIndex] = mergedScene;
+  project.scenes = updatedScenes;
+  project.subtitles = buildSubtitlesFromScenes(updatedScenes);
+  project.animationPlan = buildAnimationPlan({ scenes: updatedScenes });
+
+  const savedProject = await saveStudioProject(project);
+  return {
+    project: savedProject,
+    scene: mergedScene,
+    sceneId: Number(mergedScene.id || sceneIndex + 1),
+  };
+};
+
+const regenerateProjectSceneDialogue = async (projectId, sceneId, options = {}) => {
+  const project = await getStudioProject(projectId);
+  const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+  const sceneIndex = resolveSceneIndex(scenes, sceneId);
+  if (sceneIndex < 0) {
+    throw new Error('Scene not found.');
+  }
+
+  const scene = scenes[sceneIndex];
+  const sceneCharacters = normalizeSceneCharacterList(scene, project);
+  const customDirection = sanitizeText(options?.direction || options?.prompt || '');
+  let regeneratedDialogue = '';
+
+  if (openai) {
+    const systemPrompt = 'You are an expert kids dialogue writer. Output only plain dialogue text.';
+    const userPrompt = `Rewrite dialogue for one kids animation scene.
+Scene title: ${sanitizeText(scene?.title || '')}
+Scene description: ${sanitizeText(scene?.description || '')}
+Emotion: ${sanitizeText(scene?.emotion || 'wonder')}
+Characters: ${sceneCharacters.map((char) => `${char.name} (${char.role})`).join(', ') || 'Hero, Friend'}
+Current dialogue: ${sanitizeText(scene?.dialogue || '')}
+Direction: ${customDirection || 'Make it playful, short, and child-safe.'}
+
+Write 2-4 short lines in the format "Name: line".`;
+    const response = await safeOpenAI([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ], 350);
+    regeneratedDialogue = sanitizeText(response || '');
+  }
+
+  if (!regeneratedDialogue) {
+    regeneratedDialogue = buildFallbackSceneDialogue(scene, project, sceneIndex);
+  }
+
+  if (project.safeMode) {
+    const assessment = await getCombinedSafetyAssessment(regeneratedDialogue);
+    if (assessment.blocked) {
+      throw createSafetyError('scene_dialogue_regeneration', assessment);
+    }
+  }
+
+  const updatedScene = normalizeSceneForCinematicPipeline({
+    ...scene,
+    id: sceneIndex + 1,
+    dialogue: regeneratedDialogue,
+  }, sceneIndex);
+
+  const updatedScenes = [...scenes];
+  updatedScenes[sceneIndex] = updatedScene;
+  project.scenes = updatedScenes;
+  project.subtitles = buildSubtitlesFromScenes(updatedScenes);
+
+  const savedProject = await saveStudioProject(project);
+  return {
+    project: savedProject,
+    scene: updatedScene,
+    sceneId: Number(updatedScene.id || sceneIndex + 1),
+  };
+};
+
 const patchStudioProject = async (projectId, patch = {}) => {
   let project;
   try {
@@ -2203,6 +2417,8 @@ module.exports = {
   createAutopilotProject,
   getStudioProject,
   regenerateProjectStage,
+  regenerateProjectScene,
+  regenerateProjectSceneDialogue,
   patchStudioProject,
   generateCharacterSheet,
   generateSceneImage,

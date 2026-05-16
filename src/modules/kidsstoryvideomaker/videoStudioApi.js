@@ -431,6 +431,30 @@ export const generateSceneImage = (projectId, sceneId, options = {}) =>
     return result;
   });
 
+export const regenerateScene = (projectId, sceneId, requestBody = {}, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/scenes/${sceneId}/regenerate`, {
+    method: "POST",
+    body: requestBody,
+    retries: 0,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "regenerate-scene response");
+    assertProjectShape(result.payload.project, "regenerated-scene project");
+    return result;
+  });
+
+export const regenerateSceneDialogue = (projectId, sceneId, requestBody = {}, options = {}) =>
+  requestVideoStudio(`/video-studio/projects/${projectId}/scenes/${sceneId}/regenerate-dialogue`, {
+    method: "POST",
+    body: requestBody,
+    retries: 0,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, "regenerate-scene-dialogue response");
+    assertProjectShape(result.payload.project, "regenerated-scene-dialogue project");
+    return result;
+  });
+
 export const animateScene = (projectId, sceneId, options = {}) =>
   requestVideoStudio(`/video-studio/projects/${projectId}/scenes/${sceneId}/animate`, {
     method: "POST",

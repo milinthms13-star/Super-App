@@ -12,6 +12,8 @@ const {
   patchStudioProject,
   generateCharacterSheet,
   generateSceneImage,
+  regenerateProjectScene,
+  regenerateProjectSceneDialogue,
   animateScene,
   generateVoice,
   generateSfx,
@@ -486,6 +488,26 @@ router.post('/projects/:projectId/scenes/:sceneId/generate-image', async (req, r
   } catch (error) {
     logger.error('Video studio generate-scene-image error:', error);
     respondVideoStudioError(res, error, 'Failed to generate scene image.');
+  }
+});
+
+router.post('/projects/:projectId/scenes/:sceneId/regenerate', async (req, res) => {
+  try {
+    const result = await regenerateProjectScene(req.params.projectId, req.params.sceneId, req.body || {});
+    res.json({ success: true, ...result, ...getStudioCapabilities() });
+  } catch (error) {
+    logger.error('Video studio regenerate-scene error:', error);
+    respondVideoStudioError(res, error, 'Failed to regenerate scene.');
+  }
+});
+
+router.post('/projects/:projectId/scenes/:sceneId/regenerate-dialogue', async (req, res) => {
+  try {
+    const result = await regenerateProjectSceneDialogue(req.params.projectId, req.params.sceneId, req.body || {});
+    res.json({ success: true, ...result, ...getStudioCapabilities() });
+  } catch (error) {
+    logger.error('Video studio regenerate-scene-dialogue error:', error);
+    respondVideoStudioError(res, error, 'Failed to regenerate scene dialogue.');
   }
 });
 

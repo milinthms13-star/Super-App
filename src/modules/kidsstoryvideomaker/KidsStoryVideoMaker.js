@@ -23,6 +23,8 @@ import {
   createProject,
   getProjectDownloadLink,
   patchProject,
+  regenerateScene,
+  regenerateSceneDialogue,
   regenerateStage,
   renderProject,
   waitForRenderedVideo,
@@ -376,6 +378,8 @@ const KidsStoryVideoMaker = () => {
   const [isNarrating, setIsNarrating] = useState(false);
   const [isAutopilotGenerating, setIsAutopilotGenerating] = useState(false);
   const [isStageRegenerating, setIsStageRegenerating] = useState("");
+  const [isRegeneratingSceneId, setIsRegeneratingSceneId] = useState("");
+  const [isRegeneratingDialogueId, setIsRegeneratingDialogueId] = useState("");
   const [speechSupported, setSpeechSupported] = useState(false);
   const [voiceListeningTarget, setVoiceListeningTarget] = useState("");
   const [error, setError] = useState("");
@@ -1222,6 +1226,74 @@ const KidsStoryVideoMaker = () => {
     markSectionDirty("scenes");
     setMessage("Scene removed. Save scene edits to persist.");
     setError("");
+  };
+
+  const handleRegenerateSingleScene = async (sceneId) => {
+    if (!generatedProject?.projectId) {
+      setError("Generate a project first.");
+      return;
+    }
+    const targetScene = generatedScenes.find((scene, index) => getSceneId(scene, index) === String(sceneId));
+    setIsRegeneratingSceneId(String(sceneId));
+    setError("");
+    setMessage(`Regenerating Scene ${sceneId}...`);
+    try {
+      const { payload } = await runCancelableRequest(`regenerate-scene-${sceneId}`, (signal) =>
+        regenerateScene(
+          generatedProject.projectId,
+          sceneId,
+          {
+            direction: sanitizeText(
+              `${targetScene?.title || ""}. ${targetScene?.description || ""}`.trim()
+            ),
+          },
+          { signal }
+        )
+      );
+      if (!payload.success || !payload.project) {
+        throw new Error(payload.error || payload.message || "Failed to regenerate scene.");
+      }
+      applyServiceCapabilities(payload);
+      applyProjectSnapshotToStudio(payload.project, `Scene ${sceneId} regenerated.`);
+      setActiveTab("scenes");
+    } catch (err) {
+      setError(formatSafetyError(err));
+    } finally {
+      setIsRegeneratingSceneId("");
+    }
+  };
+
+  const handleRegenerateSingleDialogue = async (sceneId) => {
+    if (!generatedProject?.projectId) {
+      setError("Generate a project first.");
+      return;
+    }
+    const targetScene = generatedScenes.find((scene, index) => getSceneId(scene, index) === String(sceneId));
+    setIsRegeneratingDialogueId(String(sceneId));
+    setError("");
+    setMessage(`Regenerating dialogue for Scene ${sceneId}...`);
+    try {
+      const { payload } = await runCancelableRequest(`regenerate-dialogue-${sceneId}`, (signal) =>
+        regenerateSceneDialogue(
+          generatedProject.projectId,
+          sceneId,
+          {
+            direction: sanitizeText(targetScene?.description || targetScene?.title || ""),
+          },
+          { signal }
+        )
+      );
+      if (!payload.success || !payload.project) {
+        throw new Error(payload.error || payload.message || "Failed to regenerate dialogue.");
+      }
+      applyServiceCapabilities(payload);
+      applyProjectSnapshotToStudio(payload.project, `Scene ${sceneId} dialogue regenerated.`);
+      setActiveTab("scenes");
+    } catch (err) {
+      setError(formatSafetyError(err));
+    } finally {
+      setIsRegeneratingDialogueId("");
+    }
   };
 
   const handleRenderVideo = async () => {
@@ -2144,6 +2216,10 @@ const KidsStoryVideoMaker = () => {
                   onDurationChange={handleSceneDurationChange}
                   onDuplicateScene={handleDuplicateScene}
                   onRemoveScene={handleRemoveScene}
+                  onRegenerateScene={handleRegenerateSingleScene}
+                  onRegenerateDialogue={handleRegenerateSingleDialogue}
+                  isRegeneratingSceneId={isRegeneratingSceneId}
+                  isRegeneratingDialogueId={isRegeneratingDialogueId}
                 />
               </div>
             </div>
