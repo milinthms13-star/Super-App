@@ -121,6 +121,51 @@ const runProcess = async ({ command, args = [], cwd }) =>
     });
   });
 
+const isLikelySpawnCommandNotFound = (error) => {
+  const message = sanitizeText(error?.message || '').toLowerCase();
+  return (
+    message.includes('enoent')
+    || message.includes('not recognized as an internal or external command')
+    || message.includes('no such file or directory')
+    || message.includes('cannot find the file specified')
+  );
+};
+
+const getPythonCommandCandidates = () => {
+  const preferred = sanitizeText(process.env.PYTHON_BIN || process.env.PYTHON_PATH || '');
+  return Array.from(
+    new Set(
+      [preferred, 'python', 'python3', 'python.exe', 'py']
+        .map((candidate) => sanitizeText(candidate))
+        .filter(Boolean)
+    )
+  );
+};
+
+const runPythonProcess = async ({ args = [], cwd }) => {
+  const candidates = getPythonCommandCandidates();
+  let lastError = null;
+  const tried = [];
+
+  for (const command of candidates) {
+    try {
+      const result = await runProcess({ command, args, cwd });
+      return { ...result, command, tried };
+    } catch (error) {
+      lastError = error;
+      tried.push(command);
+      if (!isLikelySpawnCommandNotFound(error)) {
+        throw error;
+      }
+    }
+  }
+
+  const triedCommands = tried.join(', ');
+  throw new Error(
+    `Python executable not found. Tried: ${triedCommands}. Set PYTHON_BIN (or PYTHON_PATH) to a valid Python executable path.`
+  );
+};
+
 const buildRabbitTortoiseStory = () => ({
   title: 'The Rabbit and the Tortoise',
   synopsis: 'A speedy rabbit laughs at a calm tortoise, but a race teaches everyone that patience and consistency matter.',
@@ -603,7 +648,6 @@ const generateKidsVideoFromDiffusersPrompt = async ({
   const outputFile = path.join(outputDir, outputFileName);
   const { width, height } = getResolution(videoSize);
 
-  const pythonCmd = sanitizeText(process.env.PYTHON_BIN || process.env.PYTHON_PATH || 'python');
   const scriptPath = path.join(__dirname, '..', 'scripts', 'hf_text_to_video.py');
   const modelId = sanitizeText(process.env.HF_TEXT_TO_VIDEO_MODEL || 'damo-vilab/text-to-video-ms-1.7b');
 
@@ -619,8 +663,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     '--fps', `${Math.max(8, Math.min(24, Number(process.env.HF_TEXT_TO_VIDEO_FPS) || 12))}`,
   ];
 
-  const { stdout } = await runProcess({
-    command: pythonCmd,
+  const { stdout, command: pythonCommand } = await runPythonProcess({
     args,
     cwd: path.join(__dirname, '..'),
   });
@@ -645,6 +688,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     renderedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     generatorLog: stdout || '',
+    pythonCommand: sanitizeText(pythonCommand || ''),
   };
 
   await writeFile(projectFilePath(projectId), JSON.stringify(persistedProject, null, 2), 'utf-8');

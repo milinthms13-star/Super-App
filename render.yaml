@@ -3,7 +3,7 @@ services:
     name: nilahub-backend
     env: node
     rootDir: backend
-    buildCommand: npm install --production
+    buildCommand: "npm install --production && python3 -m pip install --user --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch && python3 -m pip install --user --no-cache-dir diffusers transformers accelerate imageio imageio-ffmpeg safetensors huggingface_hub"
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -55,6 +55,12 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
+      - key: PYTHON_BIN
+        value: python3
+      - key: HF_TOKEN
+        sync: false
+      - key: HUGGINGFACE_API_KEY
+        sync: false
       - key: FREE_MODE
         value: true
       - key: VIDEO_STUDIO_REAL_CARTOON_MODE
