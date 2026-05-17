@@ -16,9 +16,8 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-# Install Python dependencies for HF text-to-video (CPU build).
-RUN python3 -m pip install --no-cache-dir --break-system-packages --index-url https://download.pytorch.org/whl/cpu torch \
-  && python3 -m pip install --no-cache-dir --break-system-packages diffusers transformers accelerate imageio imageio-ffmpeg safetensors huggingface_hub
+# Install Python dependencies for scene-based text-to-video pipeline.
+RUN python3 -m pip install --no-cache-dir --break-system-packages -r backend/scripts/requirements-hf-text-to-video.txt
 
 EXPOSE 8080
 

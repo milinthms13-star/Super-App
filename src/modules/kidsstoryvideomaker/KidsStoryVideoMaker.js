@@ -78,13 +78,13 @@ const AGE_FILTERS = [
   { id: "12+", label: "12+ years" },
 ];
 const AI_PROVIDER_OPTIONS = [
-  { id: "huggingface", label: "Hugging Face (Recommended)" },
+  { id: "scene_pipeline", label: "Scene Pipeline (Recommended)" },
   { id: "pollinations", label: "Pollinations" },
 ];
 const HF_RENDER_ENGINE_OPTIONS = [
-  { id: "free_steve_like", label: "Free Script-to-Video (Recommended)" },
-  { id: "default", label: "Image + FFmpeg (Default)" },
-  { id: "diffusers_t2v", label: "Diffusers Text-to-Video (High Memory)" },
+  { id: "scene_script_video", label: "Script-to-Video (Recommended)" },
+  { id: "image_ffmpeg", label: "Image + FFmpeg (Default)" },
+  { id: "prompt_video_python", label: "Prompt Video (Python)" },
 ];
 
 const STORY_TEMPLATES = [
@@ -115,6 +115,22 @@ const STORY_TEMPLATES = [
 ];
 
 const DEFAULT_STORY_PROMPT = STORY_TEMPLATES[0].prompt;
+
+const normalizeRenderProvider = (value) => {
+  const normalized = sanitizeText(value).toLowerCase();
+  if (!normalized || normalized === "huggingface" || normalized === "hf") {
+    return "scene_pipeline";
+  }
+  return normalized;
+};
+
+const normalizeRenderEngine = (value) => {
+  const normalized = sanitizeText(value).toLowerCase();
+  if (!normalized || normalized === "default") return "image_ffmpeg";
+  if (normalized === "free_steve_like" || normalized === "steve_like") return "scene_script_video";
+  if (normalized === "diffusers_t2v") return "prompt_video_python";
+  return normalized;
+};
 
 const getStyleDescription = (styleId) => {
   const style = STYLE_OPTIONS.find((item) => item.id === styleId);
@@ -195,7 +211,7 @@ const createClientFallbackProject = ({
     safeMode,
     ageFilter,
     premiumExport: false,
-    aiProvider: aiProvider || "huggingface",
+    aiProvider: normalizeRenderProvider(aiProvider),
     mode: storyMode,
     themes: [storyMode],
     characters: [
@@ -349,7 +365,7 @@ const buildCartoonRenderPayload = ({
     voiceType,
     storyMode,
     ageFilter,
-    aiProvider: sanitizeText(aiProvider || project?.aiProvider || "huggingface").toLowerCase(),
+    aiProvider: normalizeRenderProvider(aiProvider || project?.aiProvider),
     renderMode: "real-cartoon",
     requireCharacters: true,
     requireDialogueVoice: true,
@@ -382,8 +398,8 @@ const KidsStoryVideoMaker = () => {
   const [safeMode, setSafeMode] = useState(true);
   const [premiumHD, setPremiumHD] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [aiProvider, setAiProvider] = useState("huggingface");
-  const [hfRenderEngine, setHfRenderEngine] = useState("free_steve_like");
+  const [aiProvider, setAiProvider] = useState("scene_pipeline");
+  const [hfRenderEngine, setHfRenderEngine] = useState("scene_script_video");
   const [generatedProject, setGeneratedProject] = useState(null);
   const [generatedScenes, setGeneratedScenes] = useState([]);
   const [videoUrl, setVideoUrl] = useState("");
@@ -407,7 +423,7 @@ const KidsStoryVideoMaker = () => {
     freeMode: false,
     aiProviderEnabled: false,
     realCartoonModeEnabled: false,
-    defaultAiProvider: "huggingface",
+    defaultAiProvider: "scene_pipeline",
   });
   const [dirtySections, setDirtySections] = useState({
     script: false,
@@ -462,7 +478,7 @@ const KidsStoryVideoMaker = () => {
       freeMode: Boolean(payload.freeMode),
       aiProviderEnabled: Boolean(payload.aiProviderEnabled),
       realCartoonModeEnabled: Boolean(payload.realCartoonModeEnabled),
-      defaultAiProvider: sanitizeText(payload.defaultAiProvider || current.defaultAiProvider || "huggingface").toLowerCase(),
+      defaultAiProvider: normalizeRenderProvider(payload.defaultAiProvider || current.defaultAiProvider),
     }));
   };
 
@@ -784,7 +800,7 @@ const KidsStoryVideoMaker = () => {
       scenes: Array.isArray(incomingProject.scenes) ? incomingProject.scenes : [],
       videoUrl: normalizeMediaUrl(incomingProject.videoUrl || ""),
       premiumExport: Boolean(incomingProject.premiumExport),
-      aiProvider: sanitizeText(incomingProject.aiProvider || aiProvider).toLowerCase(),
+      aiProvider: normalizeRenderProvider(incomingProject.aiProvider || aiProvider),
     });
 
     const enrichedProject = {
@@ -816,7 +832,7 @@ const KidsStoryVideoMaker = () => {
     setAgeFilter(normalized.ageFilter || ageFilter);
     setSafeMode(typeof normalized.safeMode === "boolean" ? normalized.safeMode : safeMode);
     setPremiumHD(Boolean(normalized.premiumExport));
-    setAiProvider(sanitizeText(incomingProject.aiProvider || normalized.aiProvider || serviceCapabilities.defaultAiProvider || "huggingface").toLowerCase());
+    setAiProvider(normalizeRenderProvider(incomingProject.aiProvider || normalized.aiProvider || serviceCapabilities.defaultAiProvider));
     setVideoUrl(normalizeMediaUrl(normalized.videoUrl || ""));
     setSubjectInput(incomingProject.subject || subjectInput);
     setDirtySections({
@@ -1326,7 +1342,7 @@ const KidsStoryVideoMaker = () => {
       return;
     }
 
-    const useCleanHfPipeline = aiProvider === "huggingface";
+    const useCleanHfPipeline = aiProvider === "scene_pipeline" || aiProvider === "huggingface";
     if (!generatedProject && !useCleanHfPipeline) {
       setError("Generate the project before rendering.");
       return;
@@ -1339,13 +1355,13 @@ const KidsStoryVideoMaker = () => {
       );
 
       setError("");
-      setMessage(`Rendering with Hugging Face (${hfRenderEngine})...`);
+      setMessage(`Rendering with scene pipeline (${hfRenderEngine})...`);
       setIsRendering(true);
       startRenderProgress();
 
       try {
-        const selectedEngine =
-          hfRenderEngine && hfRenderEngine !== "default" ? hfRenderEngine : "";
+        const normalizedEngine = normalizeRenderEngine(hfRenderEngine);
+        const selectedEngine = normalizedEngine && normalizedEngine !== "image_ffmpeg" ? normalizedEngine : "";
         const selectedLanguageCode = (
           LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US"
         )
@@ -1394,11 +1410,11 @@ const KidsStoryVideoMaker = () => {
             payload.projectId ||
             returnedProject?.projectId ||
             generatedProject?.projectId ||
-            `hf-${Date.now()}`,
+            `scene-${Date.now()}`,
           title: sanitizeText(storyTitle || returnedProject?.title || generatedProject?.title || "AI Kids Story Video Generator"),
           storyPrompt: normalizedStoryPrompt,
-          aiProvider: "huggingface",
-          renderEngine: selectedEngine || "default",
+          aiProvider: "scene_pipeline",
+          renderEngine: selectedEngine || "image_ffmpeg",
           renderedAt: new Date().toISOString(),
           videoUrl: normalizedVideoUrl,
         };
@@ -1412,8 +1428,8 @@ const KidsStoryVideoMaker = () => {
         setRenderProgressLabel("Render complete.");
         setMessage(
           payload.aiImagesEnabled
-            ? "Hugging Face render complete with regenerated scenes and AI visuals."
-            : "Render complete using fallback visuals. Add HF API key for stronger character images."
+            ? "Scene pipeline render complete with regenerated scenes and AI visuals."
+            : "Render complete using fallback visuals."
         );
         setActiveTab("export");
       } catch (err) {
@@ -1907,7 +1923,7 @@ const KidsStoryVideoMaker = () => {
                 Render quality mode:{" "}
                 {serviceCapabilities.aiProviderEnabled && serviceCapabilities.realCartoonModeEnabled
                   ? "Real AI cartoon + voice"
-                  : "Fallback mode (AI provider off)"}
+                  : "Fallback mode (AI services off)"}
               </small>
             )}
           </div>
@@ -2210,7 +2226,7 @@ const KidsStoryVideoMaker = () => {
                       </select>
                     </div>
                     <div>
-                      <label>AI image provider</label>
+                      <label>Render provider</label>
                       <select value={aiProvider} onChange={(event) => setAiProvider(event.target.value)}>
                         {AI_PROVIDER_OPTIONS.map((option) => (
                           <option key={option.id} value={option.id}>{option.label}</option>
@@ -2218,7 +2234,7 @@ const KidsStoryVideoMaker = () => {
                       </select>
                     </div>
                     <div>
-                      <label>HF render engine</label>
+                      <label>Render engine</label>
                       <select value={hfRenderEngine} onChange={(event) => setHfRenderEngine(event.target.value)}>
                         {HF_RENDER_ENGINE_OPTIONS.map((option) => (
                           <option key={option.id} value={option.id}>{option.label}</option>
@@ -2503,8 +2519,8 @@ const KidsStoryVideoMaker = () => {
                   <p><strong>Video size:</strong> {videoSizeLabel}</p>
                   <p><strong>Mode:</strong> {storyMode}</p>
                   <p><strong>Safe mode:</strong> {safeMode ? "On" : "Off"}</p>
-                  <p><strong>AI provider:</strong> {aiProvider}</p>
-                  <p><strong>HF engine:</strong> {hfRenderEngine}</p>
+                  <p><strong>Render provider:</strong> {aiProvider}</p>
+                  <p><strong>Render engine:</strong> {hfRenderEngine}</p>
                   <p><strong>Premium HD:</strong> {premiumHD ? "On" : "Off"}</p>
                 </div>
               </div>
@@ -2517,7 +2533,7 @@ const KidsStoryVideoMaker = () => {
                 <button
                   className="primary-button"
                   onClick={handleRenderVideo}
-                  disabled={(!generatedProject && aiProvider !== "huggingface") || isRendering}
+                  disabled={(!generatedProject && aiProvider !== "scene_pipeline") || isRendering}
                 >
                   {isRendering ? "Rendering video..." : "Render MP4"}
                 </button>

@@ -28,9 +28,11 @@ router.post('/generate', async (req, res) => {
     const disableDiffusers = String(process.env.HF_DISABLE_DIFFUSERS || '').trim().toLowerCase() === 'true';
     const useDiffusers =
       requestedEngine === 'diffusers_t2v' ||
+      requestedEngine === 'prompt_video_python' ||
       requestedEngine === 'text_to_video' ||
       requestedEngine === 'damo-text-to-video';
     const useFreeSteveLike =
+      requestedEngine === 'scene_script_video' ||
       requestedEngine === 'free_steve_like' ||
       requestedEngine === 'steve_like' ||
       requestedEngine === 'script_to_video';
@@ -63,9 +65,9 @@ router.post('/generate', async (req, res) => {
       projectId: result.projectId,
       project: result.project,
       videoUrl: result.videoUrl,
-      aiProvider: 'huggingface',
+      aiProvider: 'scene_pipeline',
       aiImagesEnabled: Boolean(result.aiImagesEnabled),
-      workflowType: result?.project?.workflowType || 'kids-video-hf-clean-restart',
+      workflowType: result?.project?.workflowType || 'kids-video-scene-pipeline',
     });
   } catch (error) {
     return res.status(500).json({

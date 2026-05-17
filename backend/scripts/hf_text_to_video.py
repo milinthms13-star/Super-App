@@ -141,7 +141,7 @@ def _build_scene_clip(
 def generate_text_to_video(
     prompt: str,
     output: str,
-    model: str = "damo-vilab/text-to-video-ms-1.7b",
+    model: str = "scene-pipeline",
     negative_prompt: str | None = None,
     num_inference_steps: int = 25,
     num_frames: int = 24,
@@ -211,7 +211,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Steve.ai-style text-to-video scene pipeline")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--model", default="damo-vilab/text-to-video-ms-1.7b")
+    parser.add_argument("--model", default="scene-pipeline")
     parser.add_argument("--negative_prompt")
     parser.add_argument("--num_inference_steps", type=int, default=25)
     parser.add_argument("--num_frames", type=int, default=24)
