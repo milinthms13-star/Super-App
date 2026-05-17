@@ -672,7 +672,11 @@ const VoiceFriend = () => {
               <strong>{item.role === 'assistant' ? selectedFriend.name : userName || 'You'}</strong>
               {timestampText && <time dateTime={item.timestamp}>{timestampText}</time>}
             </div>
-            <p>{item.content}</p>
+            {item.role === 'assistant' ? (
+              <p className="voice-friend-assistant-note">Response delivered through your avatar in voice-only mode.</p>
+            ) : (
+              <p>{item.content}</p>
+            )}
             {item.role === 'assistant' && (
               <div style={{ marginTop: 8 }}>
                 <button
@@ -790,8 +794,9 @@ const VoiceFriend = () => {
               </div>
             </div>
           </div>
-        <div className={`voice-friend-video-stage voice-friend-video-stage--${scenario} ${playingAudio ? 'speaking' : ''}`} aria-label="Video friend scene">
+        <div className={`voice-friend-video-stage voice-friend-video-stage--${scenario} ${playingAudio ? 'speaking' : ''}`} aria-label="Live video friend scene">
           <div className="voice-friend-video-backdrop" />
+          <div className="voice-friend-video-badge">Live</div>
           <div className="voice-friend-video-avatar" style={{
             backgroundImage: friendCustomAvatar ? `url(${friendCustomAvatar})` : `url(${selectedFriend.avatar})`,
           }}>
@@ -803,7 +808,7 @@ const VoiceFriend = () => {
             <span>{SCENARIO_OPTIONS.find((opt) => opt.id === scenario)?.label}</span>
           </div>
         </div>
-        <p>Emotion-aware chat companion with voice input and supportive guidance.</p>
+        <p className="voice-friend-video-note">Your avatar speaks directly when a response is generated — text replies are hidden for a more natural interaction.</p>
         <div className="voice-friend-summary">
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
           <span><strong>Mood:</strong> {moodEmojiMap[mood] || ''} {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
@@ -917,7 +922,7 @@ const VoiceFriend = () => {
         <textarea
           value={messageText}
           onChange={(e) => setMessageText(e.target.value)}
-          placeholder="Share how you're feeling or ask for a friendly suggestion..."
+          placeholder="Speak or type your message. Your friend replies by voice and avatar only."
           rows={3}
         />
         <div className="voice-friend-actions">
