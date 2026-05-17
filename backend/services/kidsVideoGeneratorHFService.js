@@ -227,35 +227,60 @@ const wrapText = (value = '', maxChars = 44, maxLines = 4) => {
   return lines.length ? lines : [''];
 };
 
+const escapeXml = (value = '') =>
+  String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
 const buildSceneSvg = (scene, story, width, height) => {
-  const descLines = wrapText(scene.description, 52, 5);
-  const dialogLines = wrapText(scene.dialogue.replace(/\n/g, ' '), 46, 4);
-  const charLabels = (story.characters || [])
-    .slice(0, 3)
-    .map((char) => `${char.name} (${char.role})`)
-    .join('  |  ');
-  const descSvg = descLines
-    .map((line, idx) => `<text x="70" y="${230 + (idx * 34)}" font-size="28" fill="#1f2937">${line}</text>`)
+  const sceneTitle = escapeXml(sanitizeText(scene.title || 'Scene'));
+  const descLines = wrapText(scene.description, 42, 3);
+  const characters = (story.characters || []).slice(0, 2);
+  const characterSvgs = characters
+    .map((char, index) => {
+      const baseX = index === 0 ? Math.round(width * 0.3) : Math.round(width * 0.68);
+      const headY = Math.round(height * 0.36);
+      const bodyY = headY + 60;
+      const accent = escapeXml(char?.colorPalette?.[1] || (index === 0 ? '#f97316' : '#0ea5e9'));
+      const body = escapeXml(char?.colorPalette?.[0] || (index === 0 ? '#fb7185' : '#14b8a6'));
+      const label = escapeXml(sanitizeText(char?.name || `Character ${index + 1}`));
+      return `
+      <g transform="translate(${baseX},0)">
+        <ellipse cx="0" cy="${headY + 138}" rx="72" ry="24" fill="#00000022"/>
+        <circle cx="0" cy="${headY}" r="46" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/>
+        <circle cx="-14" cy="${headY - 8}" r="5" fill="#111827"/>
+        <circle cx="14" cy="${headY - 8}" r="5" fill="#111827"/>
+        <path d="M -16 ${headY + 14} Q 0 ${headY + 27} 16 ${headY + 14}" fill="none" stroke="#7c2d12" stroke-width="4" stroke-linecap="round"/>
+        <rect x="-34" y="${bodyY}" width="68" height="92" rx="24" fill="${body}" stroke="#0f172a" stroke-width="3"/>
+        <circle cx="-34" cy="${bodyY + 26}" r="12" fill="${accent}" />
+        <circle cx="34" cy="${bodyY + 26}" r="12" fill="${accent}" />
+        <rect x="-24" y="${bodyY + 90}" width="18" height="42" rx="9" fill="#334155"/>
+        <rect x="6" y="${bodyY + 90}" width="18" height="42" rx="9" fill="#334155"/>
+        <text x="0" y="${bodyY + 154}" font-size="22" text-anchor="middle" fill="#0f172a">${label}</text>
+      </g>`;
+    })
     .join('');
-  const dialogSvg = dialogLines
-    .map((line, idx) => `<text x="70" y="${430 + (idx * 30)}" font-size="22" fill="#0f172a">${line}</text>`)
+  const descSvg = descLines
+    .map((line, idx) => `<text x="92" y="${Math.round(height * 0.72) + (idx * 30)}" font-size="26" fill="#0f172a">${escapeXml(line)}</text>`)
     .join('');
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
     <defs>
-      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#e0f2fe"/>
-        <stop offset="100%" stop-color="#fff7ed"/>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#bae6fd"/>
+        <stop offset="100%" stop-color="#fef3c7"/>
       </linearGradient>
     </defs>
-    <rect width="${width}" height="${height}" fill="url(#bg)"/>
-    <rect x="36" y="34" width="${width - 72}" height="${height - 68}" rx="28" fill="#ffffffdd" stroke="#bae6fd" stroke-width="2"/>
-    <text x="70" y="110" font-size="46" font-weight="700" fill="#0f172a">${sanitizeText(scene.title)}</text>
-    <text x="70" y="155" font-size="20" fill="#334155">${sanitizeText(charLabels)}</text>
+    <rect width="${width}" height="${height}" fill="url(#sky)"/>
+    <rect x="0" y="${Math.round(height * 0.62)}" width="${width}" height="${Math.round(height * 0.38)}" fill="#bbf7d0"/>
+    <circle cx="${Math.round(width * 0.85)}" cy="${Math.round(height * 0.16)}" r="48" fill="#fde047"/>
+    <text x="72" y="88" font-size="48" font-weight="700" fill="#0f172a">${sceneTitle}</text>
+    ${characterSvgs}
+    <rect x="64" y="${Math.round(height * 0.66)}" width="${width - 128}" height="${Math.round(height * 0.28)}" rx="24" fill="#ffffffdd" stroke="#93c5fd" stroke-width="3"/>
     ${descSvg}
-    <rect x="58" y="360" width="${width - 116}" height="160" rx="18" fill="#f0f9ff" stroke="#cbd5e1" stroke-width="2"/>
-    <text x="70" y="398" font-size="20" font-weight="700" fill="#0369a1">Dialogue</text>
-    ${dialogSvg}
   </svg>`;
 };
 
@@ -322,7 +347,9 @@ const fetchHfImage = async ({ prompt, width, height, model, timeoutMs = 35000 })
     const imageBuffer = Buffer.from(await response.arrayBuffer());
     return { buffer: imageBuffer.length ? imageBuffer : null, error: imageBuffer.length ? '' : 'empty image bytes' };
   } catch (error) {
-    return { buffer: null, error: sanitizeText(error?.message || 'unknown error') };
+    const errMessage = sanitizeText(error?.message || 'unknown error');
+    const causeMessage = sanitizeText(error?.cause?.message || '');
+    return { buffer: null, error: causeMessage ? `${errMessage} (${causeMessage})` : errMessage };
   } finally {
     clearTimeout(timeout);
   }
@@ -521,4 +548,3 @@ module.exports = {
   generateKidsVideoFromPrompt,
   getKidsVideoProject,
 };
-
