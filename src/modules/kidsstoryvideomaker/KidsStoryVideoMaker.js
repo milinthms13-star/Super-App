@@ -27,6 +27,7 @@ import {
   regenerateSceneDialogue,
   regenerateStage,
   renderProject,
+  renderPromptVideoHf,
   waitForRenderedVideo,
 } from "./videoStudioApi";
 import SceneCards from "./components/SceneCards";
@@ -75,6 +76,10 @@ const AGE_FILTERS = [
   { id: "5-8", label: "5-8 years" },
   { id: "8-11", label: "8-11 years" },
   { id: "12+", label: "12+ years" },
+];
+const AI_PROVIDER_OPTIONS = [
+  { id: "huggingface", label: "Hugging Face (Recommended)" },
+  { id: "pollinations", label: "Pollinations" },
 ];
 
 const STORY_TEMPLATES = [
@@ -152,6 +157,7 @@ const createClientFallbackProject = ({
   safeMode,
   ageFilter,
   storySource,
+  aiProvider,
 }) => {
   const rawLines = sanitizeText(storyPrompt)
     .split(/[\.\?\!]+/)
@@ -184,6 +190,7 @@ const createClientFallbackProject = ({
     safeMode,
     ageFilter,
     premiumExport: false,
+    aiProvider: aiProvider || "huggingface",
     mode: storyMode,
     themes: [storyMode],
     characters: [
@@ -232,6 +239,7 @@ const buildCartoonRenderPayload = ({
   ageFilter,
   safeMode,
   premiumHD,
+  aiProvider,
 }) => {
   const projectCharacters =
     Array.isArray(project?.characters) && project.characters.length
@@ -336,6 +344,7 @@ const buildCartoonRenderPayload = ({
     voiceType,
     storyMode,
     ageFilter,
+    aiProvider: sanitizeText(aiProvider || project?.aiProvider || "huggingface").toLowerCase(),
     renderMode: "real-cartoon",
     requireCharacters: true,
     requireDialogueVoice: true,
@@ -368,6 +377,7 @@ const KidsStoryVideoMaker = () => {
   const [safeMode, setSafeMode] = useState(true);
   const [premiumHD, setPremiumHD] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [aiProvider, setAiProvider] = useState("huggingface");
   const [generatedProject, setGeneratedProject] = useState(null);
   const [generatedScenes, setGeneratedScenes] = useState([]);
   const [videoUrl, setVideoUrl] = useState("");
@@ -391,6 +401,7 @@ const KidsStoryVideoMaker = () => {
     freeMode: false,
     aiProviderEnabled: false,
     realCartoonModeEnabled: false,
+    defaultAiProvider: "huggingface",
   });
   const [dirtySections, setDirtySections] = useState({
     script: false,
@@ -445,6 +456,7 @@ const KidsStoryVideoMaker = () => {
       freeMode: Boolean(payload.freeMode),
       aiProviderEnabled: Boolean(payload.aiProviderEnabled),
       realCartoonModeEnabled: Boolean(payload.realCartoonModeEnabled),
+      defaultAiProvider: sanitizeText(payload.defaultAiProvider || current.defaultAiProvider || "huggingface").toLowerCase(),
     }));
   };
 
@@ -766,6 +778,7 @@ const KidsStoryVideoMaker = () => {
       scenes: Array.isArray(incomingProject.scenes) ? incomingProject.scenes : [],
       videoUrl: normalizeMediaUrl(incomingProject.videoUrl || ""),
       premiumExport: Boolean(incomingProject.premiumExport),
+      aiProvider: sanitizeText(incomingProject.aiProvider || aiProvider).toLowerCase(),
     });
 
     const enrichedProject = {
@@ -797,6 +810,7 @@ const KidsStoryVideoMaker = () => {
     setAgeFilter(normalized.ageFilter || ageFilter);
     setSafeMode(typeof normalized.safeMode === "boolean" ? normalized.safeMode : safeMode);
     setPremiumHD(Boolean(normalized.premiumExport));
+    setAiProvider(sanitizeText(incomingProject.aiProvider || normalized.aiProvider || serviceCapabilities.defaultAiProvider || "huggingface").toLowerCase());
     setVideoUrl(normalizeMediaUrl(normalized.videoUrl || ""));
     setSubjectInput(incomingProject.subject || subjectInput);
     setDirtySections({
@@ -849,6 +863,7 @@ const KidsStoryVideoMaker = () => {
             safeMode,
             ageFilter,
             sceneCount: generatedScenes.length || 5,
+            aiProvider,
           },
           { signal }
         )
@@ -1026,6 +1041,7 @@ const KidsStoryVideoMaker = () => {
             safeMode,
             ageFilter,
             storySource,
+            aiProvider,
           },
           { signal }
         )
@@ -1079,6 +1095,7 @@ const KidsStoryVideoMaker = () => {
         safeMode,
         ageFilter,
         storySource,
+        aiProvider,
       });
 
       setGeneratedProject(fallbackProject);
@@ -1297,8 +1314,93 @@ const KidsStoryVideoMaker = () => {
   };
 
   const handleRenderVideo = async () => {
-    if (!generatedProject) {
+    const normalizedStoryPrompt = sanitizeText(storyText);
+    if (!normalizedStoryPrompt) {
+      setError("Story text is missing. Please add a story before rendering.");
+      return;
+    }
+
+    const useCleanHfPipeline = aiProvider === "huggingface";
+    if (!generatedProject && !useCleanHfPipeline) {
       setError("Generate the project before rendering.");
+      return;
+    }
+
+    if (useCleanHfPipeline) {
+      const fallbackSceneCount = Math.max(
+        3,
+        Math.min(8, Number(normalizeScenesForRender(generatedScenes).length || 5))
+      );
+
+      setError("");
+      setMessage("Rendering with Hugging Face clean pipeline (fresh scenes + character visuals)...");
+      setIsRendering(true);
+      startRenderProgress();
+
+      try {
+        const { payload, response } = await runCancelableRequest("render-video", (signal) =>
+          renderPromptVideoHf(
+            {
+              prompt: normalizedStoryPrompt,
+              storyPrompt: normalizedStoryPrompt,
+              storyTitle: sanitizeText(storyTitle || generatedProject?.title || "AI Kids Story Video Generator"),
+              sceneCount: fallbackSceneCount,
+              videoSize: videoSizeId,
+              videoSizeId,
+              storyMode,
+              voiceType,
+            },
+            { signal }
+          )
+        );
+
+        applyServiceCapabilities(payload);
+        const serviceOrigin = (() => {
+          try {
+            return new URL(response.url).origin;
+          } catch (_error) {
+            return "";
+          }
+        })();
+
+        const normalizedVideoUrl = normalizeMediaUrl(payload.videoUrl, serviceOrigin);
+        const returnedProject = payload?.project && typeof payload.project === "object" ? payload.project : null;
+        const nextScenes = Array.isArray(returnedProject?.scenes) ? returnedProject.scenes : [];
+
+        const nextProject = {
+          ...(generatedProject || {}),
+          ...(returnedProject || {}),
+          projectId:
+            payload.projectId ||
+            returnedProject?.projectId ||
+            generatedProject?.projectId ||
+            `hf-${Date.now()}`,
+          title: sanitizeText(storyTitle || returnedProject?.title || generatedProject?.title || "AI Kids Story Video Generator"),
+          storyPrompt: normalizedStoryPrompt,
+          aiProvider: "huggingface",
+          renderedAt: new Date().toISOString(),
+          videoUrl: normalizedVideoUrl,
+        };
+
+        if (nextScenes.length) {
+          setGeneratedScenes(nextScenes);
+        }
+        setGeneratedProject(nextProject);
+        setVideoUrl(normalizedVideoUrl);
+        setRenderProgress(100);
+        setRenderProgressLabel("Render complete.");
+        setMessage(
+          payload.aiImagesEnabled
+            ? "Hugging Face render complete with regenerated scenes and AI visuals."
+            : "Render complete using fallback visuals. Add HF API key for stronger character images."
+        );
+        setActiveTab("export");
+      } catch (err) {
+        setError(formatSafetyError(err));
+      } finally {
+        stopRenderProgress();
+        setIsRendering(false);
+      }
       return;
     }
 
@@ -1306,12 +1408,6 @@ const KidsStoryVideoMaker = () => {
     const sceneValidationError = validateScenesForRender(normalizedScenes);
     if (sceneValidationError) {
       setError(sceneValidationError);
-      return;
-    }
-
-    const normalizedStoryPrompt = sanitizeText(storyText);
-    if (!normalizedStoryPrompt) {
-      setError("Story text is missing. Please add a story before rendering.");
       return;
     }
 
@@ -1328,6 +1424,7 @@ const KidsStoryVideoMaker = () => {
       ageFilter,
       safeMode,
       premiumHD,
+      aiProvider,
     });
 
     setError("");
@@ -2091,6 +2188,14 @@ const KidsStoryVideoMaker = () => {
                         ))}
                       </select>
                     </div>
+                    <div>
+                      <label>AI image provider</label>
+                      <select value={aiProvider} onChange={(event) => setAiProvider(event.target.value)}>
+                        {AI_PROVIDER_OPTIONS.map((option) => (
+                          <option key={option.id} value={option.id}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2369,6 +2474,7 @@ const KidsStoryVideoMaker = () => {
                   <p><strong>Video size:</strong> {videoSizeLabel}</p>
                   <p><strong>Mode:</strong> {storyMode}</p>
                   <p><strong>Safe mode:</strong> {safeMode ? "On" : "Off"}</p>
+                  <p><strong>AI provider:</strong> {aiProvider}</p>
                   <p><strong>Premium HD:</strong> {premiumHD ? "On" : "Off"}</p>
                 </div>
               </div>

@@ -36,6 +36,14 @@ const freeTextModel = String(process.env.FREE_TEXT_MODEL || process.env.POLLINAT
 const freeImageModel = String(
   process.env.FREE_IMAGE_MODEL || process.env.POLLINATIONS_IMAGE_MODEL || 'flux'
 ).trim();
+const huggingFaceApiKey = String(
+  process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN || process.env.HF_API_KEY || ''
+).trim();
+const huggingFaceApiBaseUrl = String(process.env.HUGGINGFACE_API_BASE_URL || 'https://api-inference.huggingface.co/models')
+  .replace(/\/+$/, '');
+const huggingFaceImageModel = String(
+  process.env.HUGGINGFACE_IMAGE_MODEL || process.env.HF_IMAGE_MODEL || 'black-forest-labs/FLUX.1-dev'
+).trim();
 const freeImageModelCandidates = Array.from(new Set(
   [
     process.env.FREE_IMAGE_MODEL,
@@ -51,6 +59,17 @@ const freeImageModelCandidates = Array.from(new Set(
 const pollinationsApiBaseUrl = String(process.env.POLLINATIONS_API_BASE_URL || 'https://gen.pollinations.ai')
   .replace(/\/+$/, '');
 const pollinationsApiKey = String(process.env.POLLINATIONS_API_KEY || process.env.FREE_AI_API_KEY || '').trim();
+const huggingFaceImageModelCandidates = Array.from(new Set(
+  [
+    process.env.HUGGINGFACE_IMAGE_MODEL,
+    process.env.HF_IMAGE_MODEL,
+    huggingFaceImageModel,
+    'black-forest-labs/FLUX.1-dev',
+    'stabilityai/stable-diffusion-xl-base-1.0',
+  ]
+    .map((value) => String(value || '').replace(/\u0000/g, '').trim())
+    .filter(Boolean)
+));
 
 if (isLowMemoryMode) {
   // Keep native image processing predictable on low-memory instances.
@@ -110,6 +129,14 @@ const extractJson = (text) => {
 };
 
 const sanitizeText = (value = '') => String(value).replace(/\u0000/g, '').trim();
+const normalizeAiProvider = (value = '') => {
+  const normalized = sanitizeText(value).toLowerCase();
+  if (normalized === 'hf') return 'huggingface';
+  if (normalized === 'huggingface') return 'huggingface';
+  return 'pollinations';
+};
+const resolveProjectAiProvider = (project = null) =>
+  normalizeAiProvider(project?.aiProvider || freeAiProvider || 'pollinations');
 const escapeXml = (value = '') =>
   String(value)
     .replace(/&/g, '&amp;')
@@ -242,7 +269,7 @@ const callFreeTextModel = async ({
   temperature = 0.7,
   model = freeTextModel,
 }) => {
-  if (!aiProviderEnabled || freeAiProvider !== 'pollinations') {
+  if (!aiProviderEnabled) {
     return null;
   }
   const controller = new AbortController();
@@ -694,8 +721,47 @@ const clampSceneCount = (value) => {
   return Math.max(3, Math.min(12, count));
 };
 
+const normalizeStorySubject = (subject = '') => {
+  const cleaned = sanitizeText(subject)
+    .replace(/\b(moral\s+story|story\s+for\s+kids|for\s+kids|kids\s+story|kids|story)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || sanitizeText(subject || 'Magical friendship');
+};
+
+const buildKnownStoryTemplate = ({ subject, languageId, ageFilter, storyMode }) => {
+  const normalizedSubject = normalizeStorySubject(subject).toLowerCase();
+  const hasRabbit = /\b(rabbit|hare|bunny)\b/.test(normalizedSubject);
+  const hasTortoise = /\b(tortoise|turtle)\b/.test(normalizedSubject);
+
+  if (hasRabbit && hasTortoise) {
+    return {
+      title: 'The Rabbit and the Tortoise',
+      synopsis: 'A speedy rabbit mocks a calm tortoise and challenges him to a race, but steady effort and focus win the day.',
+      moral: 'Slow and steady wins the race.',
+      language: languageId,
+      audience: ageFilter,
+      sceneBeats: [
+        { beat: 'Opening', summary: 'Rabbit boasts about speed while Tortoise stays calm and polite.' },
+        { beat: 'Challenge', summary: 'The forest friends announce a race between Rabbit and Tortoise.' },
+        { beat: 'Journey', summary: 'Rabbit sprints ahead, then rests proudly while Tortoise keeps moving step by step.' },
+        { beat: 'Climax', summary: 'Rabbit wakes up too late and rushes, but Tortoise reaches the finish line first.' },
+        { beat: 'Ending', summary: 'Rabbit admits his mistake and learns to respect patience and consistency.' },
+      ],
+      narration: 'Rabbit laughed at Tortoise for being slow. But in the race, Rabbit stopped and slept while Tortoise kept walking. In the end, Tortoise won because he never gave up. Slow and steady wins the race.',
+    };
+  }
+
+  return null;
+};
+
 const buildFallbackScript = ({ subject, languageId, storyMode, ageFilter }) => {
-  const cleanSubject = sanitizeText(subject || 'Magical friendship story');
+  const knownTemplate = buildKnownStoryTemplate({ subject, languageId, ageFilter, storyMode });
+  if (knownTemplate) {
+    return knownTemplate;
+  }
+
+  const cleanSubject = normalizeStorySubject(subject || 'Magical friendship story');
   const title = `Story of ${cleanSubject}`;
   const synopsis = `A child-safe ${storyMode} story about ${cleanSubject}, with teamwork, curiosity, and kindness.`;
   const moral = 'Kindness, patience, and smart effort help us succeed.';
@@ -782,10 +848,14 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
   const primaryB = characters?.[1]?.name || 'Friend';
   const primaryC = characters?.[2]?.name || '';
   const coreTopic = sanitizeText(script?.title || script?.synopsis || 'our mission');
+  const readableTopic = coreTopic
+    .replace(/^story of\s+/i, '')
+    .replace(/^the\s+/i, '')
+    .trim() || 'mission';
   const moralLine = sanitizeText(script?.moral || 'teamwork and patience matter');
   const weatherOptions = ['sunny', 'golden evening', 'soft cloudy', 'gentle rain', 'starlit night'];
   const sceneDialogueTemplates = [
-    `${primaryA}: Let's begin our ${coreTopic} adventure.\n${primaryB}: Yes, we can solve this together.${primaryC ? `\n${primaryC}: I will join and support this plan.` : ''}`,
+    `${primaryA}: Let's begin this ${readableTopic} adventure.\n${primaryB}: Yes, we can solve this together.${primaryC ? `\n${primaryC}: I will join and support this plan.` : ''}`,
     `${primaryA}: This challenge is bigger than I expected.\n${primaryB}: We can break it into small steps.${primaryC ? `\n${primaryC}: I can handle one key part carefully.` : ''}`,
     `${primaryA}: I found a new clue.\n${primaryB}: Great, let us keep exploring and stay brave.${primaryC ? `\n${primaryC}: Teamwork makes this easier for everyone.` : ''}`,
     `${primaryA}: We are close now.\n${primaryB}: One more good decision and we can finish it.${primaryC ? `\n${primaryC}: Let us stay focused and kind.` : ''}`,
@@ -934,6 +1004,7 @@ const createAutopilotProject = async ({
   safeMode,
   ageFilter,
   sceneCount,
+  aiProvider,
 }) => {
   const cleanSubject = sanitizeText(subject || '');
   if (!cleanSubject) {
@@ -968,6 +1039,7 @@ const createAutopilotProject = async ({
     safeMode: Boolean(safeMode),
     ageFilter,
     premiumExport: false,
+    aiProvider: normalizeAiProvider(aiProvider || freeAiProvider),
     script,
     characters,
     scenes,
@@ -1288,6 +1360,7 @@ const patchStudioProject = async (projectId, patch = {}) => {
       safeMode: Boolean(patch?.safeMode),
       ageFilter: sanitizeText(patch?.ageFilter || '5-8'),
       premiumExport: Boolean(patch?.premiumExport),
+      aiProvider: normalizeAiProvider(patch?.aiProvider || freeAiProvider),
       freeMode: isFreeMode,
       aiProviderEnabled,
       scenes: Array.isArray(patch?.scenes) ? patch.scenes : [],
@@ -1366,6 +1439,7 @@ const patchStudioProject = async (projectId, patch = {}) => {
 
   updatedProject.storyTitle = sanitizeText(updatedProject.storyTitle || updatedProject.script?.title || project.storyTitle);
   updatedProject.storyPrompt = sanitizeText(updatedProject.storyPrompt || updatedProject.script?.synopsis || project.storyPrompt);
+  updatedProject.aiProvider = normalizeAiProvider(updatedProject.aiProvider || project.aiProvider || freeAiProvider);
   updatedProject.narration = sanitizeText(
     updatedProject?.voicePlan?.narrator?.text
     || updatedProject.narration
@@ -1391,7 +1465,19 @@ const patchStudioProject = async (projectId, patch = {}) => {
   return saveStudioProject(updatedProject);
 };
 
-const createStudioProject = async ({ storyTitle, storyPrompt, languageId, styleId, voiceType, videoSizeId, storyMode, safeMode, ageFilter, storySource }) => {
+const createStudioProject = async ({
+  storyTitle,
+  storyPrompt,
+  languageId,
+  styleId,
+  voiceType,
+  videoSizeId,
+  storyMode,
+  safeMode,
+  ageFilter,
+  storySource,
+  aiProvider,
+}) => {
   const normalizedStoryPrompt = sanitizeText(storyPrompt);
   const normalizedStoryTitle = sanitizeText(storyTitle);
 
@@ -1421,6 +1507,7 @@ const createStudioProject = async ({ storyTitle, storyPrompt, languageId, styleI
     safeMode,
     ageFilter,
     premiumExport: false,
+    aiProvider: normalizeAiProvider(aiProvider || freeAiProvider),
     freeMode: isFreeMode,
     aiProviderEnabled,
   };
@@ -1575,8 +1662,8 @@ const getResolution = (videoSize) => {
   }
 };
 
-const fetchFreeAiImage = async ({ prompt = '', model = '', width = 1280, height = 720, timeoutMs = 20000 }) => {
-  if (!aiProviderEnabled || freeAiProvider !== 'pollinations') {
+const fetchPollinationsImage = async ({ prompt = '', model = '', width = 1280, height = 720, timeoutMs = 20000 }) => {
+  if (!aiProviderEnabled) {
     return null;
   }
   const cleanPrompt = sanitizeText(prompt).slice(0, 1400);
@@ -1620,29 +1707,105 @@ const fetchFreeAiImage = async ({ prompt = '', model = '', width = 1280, height 
   }
 };
 
+const fetchHuggingFaceImage = async ({ prompt = '', model = '', width = 1280, height = 720, timeoutMs = 35000 }) => {
+  if (!aiProviderEnabled) {
+    return null;
+  }
+  const cleanPrompt = sanitizeText(prompt).slice(0, 1800);
+  if (!cleanPrompt) {
+    return null;
+  }
+  const selectedModel = sanitizeText(model || huggingFaceImageModel || 'black-forest-labs/FLUX.1-dev').replace(/\s+/g, '');
+  if (!selectedModel) {
+    return null;
+  }
+  const headers = {
+    'content-type': 'application/json',
+    accept: 'image/*',
+  };
+  if (huggingFaceApiKey) {
+    headers.authorization = `Bearer ${huggingFaceApiKey}`;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(3000, Number(timeoutMs) || 35000));
+  try {
+    const response = await fetch(`${huggingFaceApiBaseUrl}/${selectedModel}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        inputs: cleanPrompt,
+        parameters: {
+          width: Math.max(320, Number(width) || 1280),
+          height: Math.max(320, Number(height) || 720),
+        },
+        options: {
+          wait_for_model: true,
+          use_cache: false,
+        },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const contentType = sanitizeText(response.headers.get('content-type') || '');
+    if (!contentType.startsWith('image/')) {
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return buffer.length ? buffer : null;
+  } catch (_error) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const fetchFreeAiImage = async ({
+  project = null,
+  prompt = '',
+  model = '',
+  width = 1280,
+  height = 720,
+  timeoutMs = 20000,
+}) => {
+  const provider = resolveProjectAiProvider(project);
+  if (provider === 'huggingface') {
+    return fetchHuggingFaceImage({ prompt, model, width, height, timeoutMs });
+  }
+  return fetchPollinationsImage({ prompt, model, width, height, timeoutMs });
+};
+
 const diagnoseImageGeneration = async (options = {}) => {
   const samplePrompt = sanitizeText(
     options.prompt
     || 'A cheerful 2D cartoon rabbit and tortoise in a colorful park, child-safe, no text, no logos.'
   );
   const modelAttempts = [];
+  const provider = resolveProjectAiProvider(options?.project || null);
+  const candidateModels = provider === 'huggingface'
+    ? huggingFaceImageModelCandidates
+    : freeImageModelCandidates;
+  const configuredModel = provider === 'huggingface' ? huggingFaceImageModel : freeImageModel;
 
-  if (!aiProviderEnabled || freeAiProvider !== 'pollinations') {
+  if (!aiProviderEnabled) {
     return {
       ok: false,
-      reason: 'Free AI provider disabled or unsupported.',
-      provider: freeAiProvider,
+      reason: 'Free AI provider disabled.',
+      provider,
       aiProviderEnabled,
       useRealCartoonImages,
-      configuredImageModel: freeImageModel,
-      candidateModels: freeImageModelCandidates,
+      configuredImageModel: configuredModel,
+      candidateModels,
       modelAttempts,
     };
   }
 
-  for (const model of freeImageModelCandidates) {
+  for (const model of candidateModels) {
     try {
       const imageBuffer = await fetchFreeAiImage({
+        project: options?.project || null,
         prompt: samplePrompt,
         model,
         width: 960,
@@ -1658,12 +1821,12 @@ const diagnoseImageGeneration = async (options = {}) => {
       if (hasImage) {
         return {
           ok: true,
-          provider: freeAiProvider,
+          provider,
           aiProviderEnabled,
           useRealCartoonImages,
-          configuredImageModel: freeImageModel,
+          configuredImageModel: configuredModel,
           workingModel: model,
-          candidateModels: freeImageModelCandidates,
+          candidateModels,
           modelAttempts,
         };
       }
@@ -1679,11 +1842,11 @@ const diagnoseImageGeneration = async (options = {}) => {
   return {
     ok: false,
     reason: 'No image output returned by any candidate free image model.',
-    provider: freeAiProvider,
+    provider,
     aiProviderEnabled,
     useRealCartoonImages,
-    configuredImageModel: freeImageModel,
-    candidateModels: freeImageModelCandidates,
+    configuredImageModel: configuredModel,
+    candidateModels,
     modelAttempts,
   };
 };
@@ -1766,15 +1929,20 @@ const buildRealCartoonPrompt = (scene, project) => {
 };
 
 const generateRealCartoonSceneImage = async (scene, project, imagePath, resolution) => {
-  if (!aiProviderEnabled || freeAiProvider !== 'pollinations' || !useRealCartoonImages) {
+  if (!aiProviderEnabled || !useRealCartoonImages) {
     return false;
   }
 
+  const provider = resolveProjectAiProvider(project);
+  const candidateModels = provider === 'huggingface'
+    ? huggingFaceImageModelCandidates
+    : freeImageModelCandidates;
   const prompt = buildRealCartoonPrompt(scene, project);
   const errors = [];
-  for (const model of freeImageModelCandidates) {
+  for (const model of candidateModels) {
     try {
       const imageBuffer = await fetchFreeAiImage({
+        project,
         prompt,
         model,
         width: resolution.width,
@@ -1801,7 +1969,7 @@ const generateRealCartoonSceneImage = async (scene, project, imagePath, resoluti
   }
 
   logger.warn(
-    `Video studio image generation failed for scene "${sanitizeText(scene?.title || scene?.id || 'unknown')}". Attempts: ${errors.join(' | ')}`
+    `Video studio image generation failed for scene "${sanitizeText(scene?.title || scene?.id || 'unknown')}" (provider=${provider}). Attempts: ${errors.join(' | ')}`
   );
   return false;
 };

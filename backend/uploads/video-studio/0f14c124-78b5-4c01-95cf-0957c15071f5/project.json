@@ -1,0 +1,317 @@
+{
+  "projectId": "0f14c124-78b5-4c01-95cf-0957c15071f5",
+  "createdAt": "2026-05-17T11:41:08.163Z",
+  "workflowType": "autonomous-story-to-animation",
+  "subject": "Kids space adventure helping a lost star",
+  "storyTitle": "Story of Kids space adventure helping a lost star",
+  "storyPrompt": "A child-safe adventure story about Kids space adventure helping a lost star, with teamwork, curiosity, and kindness.",
+  "language": "english",
+  "style": "cartoon",
+  "videoSize": "youtube",
+  "voiceType": "kid-female",
+  "storyMode": "adventure",
+  "safeMode": true,
+  "ageFilter": "8-11",
+  "premiumExport": false,
+  "aiProvider": "huggingface",
+  "script": {
+    "title": "Story of Kids space adventure helping a lost star",
+    "synopsis": "A child-safe adventure story about Kids space adventure helping a lost star, with teamwork, curiosity, and kindness.",
+    "moral": "Kindness, patience, and smart effort help us succeed.",
+    "language": "english",
+    "audience": "8-11",
+    "sceneBeats": [
+      {
+        "beat": "Opening",
+        "summary": "Introduce Kids space adventure helping a lost star in a warm, playful setting."
+      },
+      {
+        "beat": "Challenge",
+        "summary": "A challenge appears and characters react with different emotions."
+      },
+      {
+        "beat": "Journey",
+        "summary": "Characters try, fail, learn, and support each other."
+      },
+      {
+        "beat": "Climax",
+        "summary": "The key moment proves the main lesson with clear action."
+      },
+      {
+        "beat": "Ending",
+        "summary": "Celebrate growth with the moral: Kindness, patience, and smart effort help us succeed."
+      }
+    ],
+    "narration": "Story of Kids space adventure helping a lost star. A child-safe adventure story about Kids space adventure helping a lost star, with teamwork, curiosity, and kindness. Kindness, patience, and smart effort help us succeed."
+  },
+  "characters": [
+    {
+      "id": "char-kids",
+      "name": "Kids",
+      "role": "Inventor",
+      "appearance": "creative kid inventor with colorful gadgets and confident pose",
+      "emotionStyle": "curious and brave",
+      "voiceProfile": "kid-female",
+      "colorPalette": [
+        "sky blue",
+        "sunny yellow",
+        "mint"
+      ],
+      "locked": true
+    },
+    {
+      "id": "char-space",
+      "name": "Space",
+      "role": "Navigator",
+      "appearance": "steady teammate with practical tools and calm expressions",
+      "emotionStyle": "supportive and warm",
+      "voiceProfile": "kid-female",
+      "colorPalette": [
+        "peach",
+        "teal",
+        "cream"
+      ],
+      "locked": true
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Opening",
+      "description": "Introduce Kids space adventure helping a lost star in a warm, playful setting.",
+      "dialogue": "Kids: Let's begin our Story of Kids space adventure helping a lost star adventure.\nSpace: Yes, we can solve this together.",
+      "emotion": "wonder",
+      "background": "adventure world with child-safe cartoon art",
+      "weather": "sunny",
+      "timeOfDay": "Morning",
+      "cameraActions": "wide shot",
+      "animationPrompt": "Animate Kids, Space with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Kids",
+          "role": "Inventor"
+        },
+        {
+          "name": "Space",
+          "role": "Navigator"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "slow-zoom",
+      "transitionType": "fade-in",
+      "shotType": "wide",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "introduce-characters",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 2,
+      "title": "Challenge",
+      "description": "A challenge appears and characters react with different emotions.",
+      "dialogue": "Kids: This challenge is bigger than I expected.\nSpace: We can break it into small steps.",
+      "emotion": "wonder",
+      "background": "adventure world with child-safe cartoon art",
+      "weather": "golden evening",
+      "timeOfDay": "Morning",
+      "cameraActions": "medium shot",
+      "animationPrompt": "Animate Kids, Space with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Kids",
+          "role": "Inventor"
+        },
+        {
+          "name": "Space",
+          "role": "Navigator"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "push-in",
+      "transitionType": "cross-dissolve",
+      "shotType": "medium",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 3,
+      "title": "Journey",
+      "description": "Characters try, fail, learn, and support each other.",
+      "dialogue": "Kids: I found a new clue.\nSpace: Great, let us keep exploring and stay brave.",
+      "emotion": "joyful",
+      "background": "adventure world with child-safe cartoon art",
+      "weather": "soft cloudy",
+      "timeOfDay": "Evening",
+      "cameraActions": "close-up",
+      "animationPrompt": "Animate Kids, Space with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Kids",
+          "role": "Inventor"
+        },
+        {
+          "name": "Space",
+          "role": "Navigator"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "orbit",
+      "transitionType": "fade-out",
+      "shotType": "close-up",
+      "backgroundMusicMood": "victory",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "golden-hour",
+      "animationStyle": "2d-cartoon"
+    }
+  ],
+  "subtitles": [
+    {
+      "start": 0,
+      "end": 4,
+      "text": "Opening: Introduce Kids space adventure helping a lost star in a warm, playful setting."
+    },
+    {
+      "start": 4,
+      "end": 8,
+      "text": "Challenge: A challenge appears and characters react with different emotions."
+    },
+    {
+      "start": 8,
+      "end": 12,
+      "text": "Journey: Characters try, fail, learn, and support each other."
+    }
+  ],
+  "narration": "Story of Kids space adventure helping a lost star. A child-safe adventure story about Kids space adventure helping a lost star, with teamwork, curiosity, and kindness. Kindness, patience, and smart effort help us succeed.",
+  "voicePlan": {
+    "narrator": {
+      "voice": "kid-female",
+      "language": "english",
+      "text": "Story of Kids space adventure helping a lost star. A child-safe adventure story about Kids space adventure helping a lost star, with teamwork, curiosity, and kindness. Kindness, patience, and smart effort help us succeed."
+    },
+    "characterVoices": [
+      {
+        "characterId": "char-kids",
+        "name": "Kids",
+        "voice": "kid-female",
+        "emotionStyle": "curious and brave"
+      },
+      {
+        "characterId": "char-space",
+        "name": "Space",
+        "voice": "kid-female",
+        "emotionStyle": "supportive and warm"
+      }
+    ],
+    "lipSyncEngine": "wav2lip-ready"
+  },
+  "musicPlan": {
+    "backgroundTrack": "adventure-friendly soundtrack",
+    "sfx": [
+      "footsteps",
+      "birds",
+      "wind",
+      "crowd-cheer"
+    ],
+    "mixStyle": "soft-dynamic-kids-mix"
+  },
+  "animationPlan": {
+    "engine": "anim-diff-ready",
+    "timeline": [
+      {
+        "sceneId": 1,
+        "action": "Animate Kids, Space with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 2,
+        "action": "Animate Kids, Space with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 3,
+        "action": "Animate Kids, Space with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      }
+    ]
+  },
+  "editCapabilities": [
+    "script",
+    "characters",
+    "scenes",
+    "voice",
+    "music",
+    "timeline"
+  ],
+  "editableOptions": {
+    "script": [
+      "title",
+      "synopsis",
+      "moral",
+      "narration",
+      "sceneBeats"
+    ],
+    "characters": [
+      "name",
+      "role",
+      "appearance",
+      "voiceProfile",
+      "emotionStyle",
+      "colorPalette"
+    ],
+    "scenes": [
+      "title",
+      "description",
+      "dialogue",
+      "emotion",
+      "background",
+      "weather",
+      "timeOfDay",
+      "cameraActions",
+      "durationSeconds",
+      "characters"
+    ],
+    "voice": [
+      "narrator.voice",
+      "narrator.language",
+      "narrator.text",
+      "characterVoices"
+    ],
+    "music": [
+      "backgroundTrack",
+      "sfx",
+      "mixStyle"
+    ],
+    "timeline": [
+      "subtitles",
+      "animationPlan.timeline",
+      "sceneOrder"
+    ]
+  },
+  "freeMode": true,
+  "aiProviderEnabled": true,
+  "updatedAt": "2026-05-17T11:41:08.165Z",
+  "requireSceneImages": false,
+  "renderedAt": "2026-05-17T11:41:16.440Z",
+  "videoUrl": "/uploads/video-studio/0f14c124-78b5-4c01-95cf-0957c15071f5/story-render-1779018074347.mp4",
+  "renderMode": "real-cartoon-backend",
+  "renderAudioMode": "character-dialogue",
+  "renderVisualMode": "shape-fallback",
+  "totalDurationSeconds": 12
+}

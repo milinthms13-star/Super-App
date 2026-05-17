@@ -195,6 +195,7 @@ app.use('/api/appdata', appDataRoutes);
 app.use('/api/app-data', appDataRoutes);
 app.use('/api/business-builder', require('./routes/businessBuilderRoutes'));
 app.use('/api/video-studio', createLazyRouteMiddleware('./routes/videoStudio'));
+app.use('/api/kids-video-hf', createLazyRouteMiddleware('./routes/kidsVideoGeneratorHF'));
 app.use('/api/prompt-video', createLazyRouteMiddleware('./routes/promptVideoGenerator'));
 app.use('/api/photo-studio', require('./routes/photoStudio'));
 app.use('/api/voice-input', require('./routes/voiceInput'));

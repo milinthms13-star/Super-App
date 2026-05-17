@@ -45,6 +45,7 @@ const getStudioCapabilities = () => ({
   freeMode: isFreeMode,
   aiProviderEnabled,
   realCartoonModeEnabled,
+  defaultAiProvider: String(process.env.FREE_AI_PROVIDER || 'pollinations').trim().toLowerCase(),
 });
 
 const toSafeProjectDirectoryName = (value = '') => String(value).replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
@@ -231,6 +232,7 @@ router.post('/create', async (req, res) => {
       safeMode,
       ageFilter,
       storySource,
+      aiProvider,
     } = req.body;
 
     const normalizedStoryPrompt = String(storyPrompt || '').trim();
@@ -262,6 +264,7 @@ router.post('/create', async (req, res) => {
         safeMode,
         ageFilter,
         sceneCount: 5,
+        aiProvider,
       })
       : await createStudioProject({
         storyTitle: normalizedStoryTitle,
@@ -274,6 +277,7 @@ router.post('/create', async (req, res) => {
         safeMode,
         ageFilter,
         storySource,
+        aiProvider,
       });
 
     const elapsed = Date.now() - start;
@@ -506,6 +510,7 @@ router.post('/autopilot/create', async (req, res) => {
       safeMode = true,
       ageFilter = '5-8',
       sceneCount = 5,
+      aiProvider,
     } = req.body || {};
 
     const normalizedSubject = String(subject || '').trim();
@@ -523,6 +528,7 @@ router.post('/autopilot/create', async (req, res) => {
       safeMode,
       ageFilter,
       sceneCount,
+      aiProvider,
     });
 
     res.json({ success: true, project, ...getStudioCapabilities() });

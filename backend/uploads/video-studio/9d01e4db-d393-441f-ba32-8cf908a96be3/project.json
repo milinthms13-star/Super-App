@@ -1,0 +1,443 @@
+{
+  "projectId": "9d01e4db-d393-441f-ba32-8cf908a96be3",
+  "createdAt": "2026-05-17T11:30:03.777Z",
+  "workflowType": "autonomous-story-to-animation",
+  "subject": "Space adventure with a lost star where two kids help the star return home",
+  "storyTitle": "Story of Space adventure with a lost star where two kids help the star return home",
+  "storyPrompt": "A child-safe adventure story about Space adventure with a lost star where two kids help the star return home, with teamwork, curiosity, and kindness.",
+  "language": "english",
+  "style": "cartoon",
+  "videoSize": "youtube",
+  "voiceType": "kid-female",
+  "storyMode": "adventure",
+  "safeMode": true,
+  "ageFilter": "8-12",
+  "premiumExport": false,
+  "script": {
+    "title": "Story of Space adventure with a lost star where two kids help the star return home",
+    "synopsis": "A child-safe adventure story about Space adventure with a lost star where two kids help the star return home, with teamwork, curiosity, and kindness.",
+    "moral": "Kindness, patience, and smart effort help us succeed.",
+    "language": "english",
+    "audience": "8-12",
+    "sceneBeats": [
+      {
+        "beat": "Opening",
+        "summary": "Introduce Space adventure with a lost star where two kids help the star return home in a warm, playful setting."
+      },
+      {
+        "beat": "Challenge",
+        "summary": "A challenge appears and characters react with different emotions."
+      },
+      {
+        "beat": "Journey",
+        "summary": "Characters try, fail, learn, and support each other."
+      },
+      {
+        "beat": "Climax",
+        "summary": "The key moment proves the main lesson with clear action."
+      },
+      {
+        "beat": "Ending",
+        "summary": "Celebrate growth with the moral: Kindness, patience, and smart effort help us succeed."
+      }
+    ],
+    "narration": "Story of Space adventure with a lost star where two kids help the star return home. A child-safe adventure story about Space adventure with a lost star where two kids help the star return home, with teamwork, curiosity, and kindness. Kindness, patience, and smart effort help us succeed."
+  },
+  "characters": [
+    {
+      "id": "char-aanya",
+      "name": "Aanya",
+      "role": "Young Space Explorer",
+      "appearance": "10-year-old Indian girl, short curly hair, blue space jacket with star patches, expressive warm eyes, friendly smile",
+      "voiceProfile": "kid-female",
+      "emotionStyle": "curious and brave",
+      "colorPalette": [
+        "royal blue",
+        "sun yellow",
+        "white"
+      ],
+      "locked": true
+    },
+    {
+      "id": "char-vik",
+      "name": "Vik",
+      "role": "Tech Buddy",
+      "appearance": "10-year-old Indian boy, neat black hair, orange hoodie under light astronaut vest, playful confident face",
+      "voiceProfile": "kid-male",
+      "emotionStyle": "smart and supportive",
+      "colorPalette": [
+        "orange",
+        "teal",
+        "charcoal"
+      ],
+      "locked": true
+    },
+    {
+      "id": "char-lumi",
+      "name": "Lumi",
+      "role": "Lost Star",
+      "appearance": "small glowing golden star character with soft eyes, tiny light trail, child-friendly magical expression",
+      "voiceProfile": "soft-female",
+      "emotionStyle": "gentle and hopeful",
+      "colorPalette": [
+        "gold",
+        "warm white",
+        "peach glow"
+      ],
+      "locked": true
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Opening",
+      "description": "Introduce Space adventure with a lost star where two kids help the star return home in a warm, playful setting. Main characters in this scene: Aanya, Vik, Lumi.",
+      "dialogue": "Space: Let's begin our Story of Space adventure with a lost star where two kids help the star return home adventure.\nAdventure: Yes, we can solve this together.",
+      "emotion": "wonder",
+      "background": "adventure world with child-safe cartoon art",
+      "weather": "sunny",
+      "timeOfDay": "Morning",
+      "cameraActions": "wide shot",
+      "animationPrompt": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Aanya",
+          "role": "Young Space Explorer"
+        },
+        {
+          "name": "Vik",
+          "role": "Tech Buddy"
+        },
+        {
+          "name": "Lumi",
+          "role": "Lost Star"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "slow-zoom",
+      "transitionType": "fade-in",
+      "shotType": "wide",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "introduce-characters",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 2,
+      "title": "Challenge",
+      "description": "A challenge appears and characters react with different emotions. Main characters in this scene: Aanya, Vik, Lumi.",
+      "dialogue": "Space: This challenge is bigger than I expected.\nAdventure: We can break it into small steps.",
+      "emotion": "wonder",
+      "background": "adventure world with child-safe cartoon art",
+      "weather": "golden evening",
+      "timeOfDay": "Morning",
+      "cameraActions": "medium shot",
+      "animationPrompt": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Aanya",
+          "role": "Young Space Explorer"
+        },
+        {
+          "name": "Vik",
+          "role": "Tech Buddy"
+        },
+        {
+          "name": "Lumi",
+          "role": "Lost Star"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "push-in",
+      "transitionType": "cross-dissolve",
+      "shotType": "medium",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 3,
+      "title": "Journey",
+      "description": "Characters try, fail, learn, and support each other. Main characters in this scene: Aanya, Vik, Lumi.",
+      "dialogue": "Space: I found a new clue.\nAdventure: Great, let us keep exploring and stay brave.",
+      "emotion": "brave",
+      "background": "adventure world with child-safe cartoon art",
+      "weather": "soft cloudy",
+      "timeOfDay": "Afternoon",
+      "cameraActions": "close-up",
+      "animationPrompt": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Aanya",
+          "role": "Young Space Explorer"
+        },
+        {
+          "name": "Vik",
+          "role": "Tech Buddy"
+        },
+        {
+          "name": "Lumi",
+          "role": "Lost Star"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "orbit",
+      "transitionType": "cross-dissolve",
+      "shotType": "close-up",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 4,
+      "title": "Climax",
+      "description": "The key moment proves the main lesson with clear action. Main characters in this scene: Aanya, Vik, Lumi.",
+      "dialogue": "Space: We are close now.\nAdventure: One more good decision and we can finish it.",
+      "emotion": "wonder",
+      "background": "adventure world with child-safe cartoon art",
+      "weather": "gentle rain",
+      "timeOfDay": "Afternoon",
+      "cameraActions": "tracking shot",
+      "animationPrompt": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Aanya",
+          "role": "Young Space Explorer"
+        },
+        {
+          "name": "Vik",
+          "role": "Tech Buddy"
+        },
+        {
+          "name": "Lumi",
+          "role": "Lost Star"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "tracking-left",
+      "transitionType": "cross-dissolve",
+      "shotType": "over-shoulder",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 5,
+      "title": "Ending",
+      "description": "Celebrate growth with the moral: Kindness, patience, and smart effort help us succeed. Main characters in this scene: Aanya, Vik, Lumi.",
+      "dialogue": "Space: We did it and learned something important.\nAdventure: Kindness, patience, and smart effort help us succeed.",
+      "emotion": "joyful",
+      "background": "adventure world with child-safe cartoon art",
+      "weather": "starlit night",
+      "timeOfDay": "Evening",
+      "cameraActions": "crane reveal",
+      "animationPrompt": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Aanya",
+          "role": "Young Space Explorer"
+        },
+        {
+          "name": "Vik",
+          "role": "Tech Buddy"
+        },
+        {
+          "name": "Lumi",
+          "role": "Lost Star"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "crane-up",
+      "transitionType": "fade-out",
+      "shotType": "wide",
+      "backgroundMusicMood": "victory",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "golden-hour",
+      "animationStyle": "2d-cartoon"
+    }
+  ],
+  "subtitles": [
+    {
+      "start": 0,
+      "end": 4,
+      "text": "Opening: Introduce Space adventure with a lost star where two kids help the star return home in a warm, playful setting. Main characters in this scene: Aanya, Vik, Lumi."
+    },
+    {
+      "start": 4,
+      "end": 8,
+      "text": "Challenge: A challenge appears and characters react with different emotions. Main characters in this scene: Aanya, Vik, Lumi."
+    },
+    {
+      "start": 8,
+      "end": 12,
+      "text": "Journey: Characters try, fail, learn, and support each other. Main characters in this scene: Aanya, Vik, Lumi."
+    },
+    {
+      "start": 12,
+      "end": 16,
+      "text": "Climax: The key moment proves the main lesson with clear action. Main characters in this scene: Aanya, Vik, Lumi."
+    },
+    {
+      "start": 16,
+      "end": 20,
+      "text": "Ending: Celebrate growth with the moral: Kindness, patience, and smart effort help us succeed. Main characters in this scene: Aanya, Vik, Lumi."
+    }
+  ],
+  "narration": "Story of Space adventure with a lost star where two kids help the star return home. A child-safe adventure story about Space adventure with a lost star where two kids help the star return home, with teamwork, curiosity, and kindness. Kindness, patience, and smart effort help us succeed.",
+  "voicePlan": {
+    "narrator": {
+      "voice": "kid-female",
+      "language": "english",
+      "text": "Story of Space adventure with a lost star where two kids help the star return home. A child-safe adventure story about Space adventure with a lost star where two kids help the star return home, with teamwork, curiosity, and kindness. Kindness, patience, and smart effort help us succeed."
+    },
+    "characterVoices": [
+      {
+        "characterId": "char-space",
+        "name": "Space",
+        "voice": "kid-female",
+        "emotionStyle": "curious and brave"
+      },
+      {
+        "characterId": "char-adventure",
+        "name": "Adventure",
+        "voice": "kid-female",
+        "emotionStyle": "supportive and warm"
+      }
+    ],
+    "lipSyncEngine": "wav2lip-ready"
+  },
+  "musicPlan": {
+    "backgroundTrack": "adventure-friendly soundtrack",
+    "sfx": [
+      "footsteps",
+      "birds",
+      "wind",
+      "crowd-cheer"
+    ],
+    "mixStyle": "soft-dynamic-kids-mix"
+  },
+  "animationPlan": {
+    "engine": "anim-diff-ready",
+    "timeline": [
+      {
+        "sceneId": 1,
+        "action": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 2,
+        "action": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 3,
+        "action": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 4,
+        "action": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 5,
+        "action": "Animate Space, Adventure with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      }
+    ]
+  },
+  "editCapabilities": [
+    "script",
+    "characters",
+    "scenes",
+    "voice",
+    "music",
+    "timeline"
+  ],
+  "editableOptions": {
+    "script": [
+      "title",
+      "synopsis",
+      "moral",
+      "narration",
+      "sceneBeats"
+    ],
+    "characters": [
+      "name",
+      "role",
+      "appearance",
+      "voiceProfile",
+      "emotionStyle",
+      "colorPalette"
+    ],
+    "scenes": [
+      "title",
+      "description",
+      "dialogue",
+      "emotion",
+      "background",
+      "weather",
+      "timeOfDay",
+      "cameraActions",
+      "durationSeconds",
+      "characters"
+    ],
+    "voice": [
+      "narrator.voice",
+      "narrator.language",
+      "narrator.text",
+      "characterVoices"
+    ],
+    "music": [
+      "backgroundTrack",
+      "sfx",
+      "mixStyle"
+    ],
+    "timeline": [
+      "subtitles",
+      "animationPlan.timeline",
+      "sceneOrder"
+    ]
+  },
+  "freeMode": true,
+  "aiProviderEnabled": true,
+  "updatedAt": "2026-05-17T11:34:26.498Z",
+  "renderMode": "real-cartoon-backend",
+  "requireSceneImages": false,
+  "requireCharacters": true,
+  "requireDialogueVoice": true,
+  "requireLipSync": true,
+  "renderedAt": "2026-05-17T11:34:39.944Z",
+  "videoUrl": "/uploads/video-studio/9d01e4db-d393-441f-ba32-8cf908a96be3/story-render-1779017676204.mp4",
+  "renderAudioMode": "character-dialogue",
+  "renderVisualMode": "shape-fallback",
+  "totalDurationSeconds": 20
+}

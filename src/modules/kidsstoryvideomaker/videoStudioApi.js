@@ -304,6 +304,25 @@ export const renderProject = async (requestBody, options = {}) => {
   }
 };
 
+export const renderPromptVideoHf = (requestBody, options = {}) =>
+  requestVideoStudio('/kids-video-hf/generate', {
+    method: 'POST',
+    body: requestBody,
+    retries: 0,
+    timeoutMs: RENDER_TIMEOUT_MS,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, 'kids-video-hf generate response');
+    if (!result.payload?.videoUrl) {
+      throw new VideoStudioApiError('HF generator response is missing videoUrl.', {
+        status: 500,
+        code: 'INVALID_RESPONSE',
+        payload: result.payload,
+      });
+    }
+    return result;
+  });
+
 export const getProjectDownloadLink = async (projectId, options = {}) => {
   try {
     const result = await requestVideoStudio(`/video-studio/projects/${projectId}/download`, {

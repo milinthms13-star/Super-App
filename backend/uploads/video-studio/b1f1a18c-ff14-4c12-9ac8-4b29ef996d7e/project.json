@@ -1,0 +1,407 @@
+{
+  "projectId": "b1f1a18c-ff14-4c12-9ac8-4b29ef996d7e",
+  "createdAt": "2026-05-17T11:44:10.020Z",
+  "workflowType": "autonomous-story-to-animation",
+  "subject": "Rabbit and tortoise moral story for kids",
+  "storyTitle": "The Rabbit and the Tortoise",
+  "storyPrompt": "A speedy rabbit mocks a calm tortoise and challenges him to a race, but steady effort and focus win the day.",
+  "language": "english",
+  "style": "cartoon",
+  "videoSize": "youtube",
+  "voiceType": "kid-female",
+  "storyMode": "moral",
+  "safeMode": true,
+  "ageFilter": "5-8",
+  "premiumExport": false,
+  "aiProvider": "huggingface",
+  "script": {
+    "title": "The Rabbit and the Tortoise",
+    "synopsis": "A speedy rabbit mocks a calm tortoise and challenges him to a race, but steady effort and focus win the day.",
+    "moral": "Slow and steady wins the race.",
+    "language": "english",
+    "audience": "5-8",
+    "sceneBeats": [
+      {
+        "beat": "Opening",
+        "summary": "Rabbit boasts about speed while Tortoise stays calm and polite."
+      },
+      {
+        "beat": "Challenge",
+        "summary": "The forest friends announce a race between Rabbit and Tortoise."
+      },
+      {
+        "beat": "Journey",
+        "summary": "Rabbit sprints ahead, then rests proudly while Tortoise keeps moving step by step."
+      },
+      {
+        "beat": "Climax",
+        "summary": "Rabbit wakes up too late and rushes, but Tortoise reaches the finish line first."
+      },
+      {
+        "beat": "Ending",
+        "summary": "Rabbit admits his mistake and learns to respect patience and consistency."
+      }
+    ],
+    "narration": "Rabbit laughed at Tortoise for being slow. But in the race, Rabbit stopped and slept while Tortoise kept walking. In the end, Tortoise won because he never gave up. Slow and steady wins the race."
+  },
+  "characters": [
+    {
+      "id": "char-rabbit",
+      "name": "Rabbit",
+      "role": "Fast Challenger",
+      "appearance": "white rabbit with long ears, expressive eyes, and a red scarf",
+      "emotionStyle": "energetic and expressive",
+      "voiceProfile": "kid-female",
+      "colorPalette": [
+        "sunny yellow",
+        "white",
+        "coral"
+      ],
+      "locked": true
+    },
+    {
+      "id": "char-tortoise",
+      "name": "Tortoise",
+      "role": "Steady Hero",
+      "appearance": "green tortoise with a patterned shell and calm smile",
+      "emotionStyle": "calm and determined",
+      "voiceProfile": "kid-female",
+      "colorPalette": [
+        "green",
+        "olive",
+        "teal"
+      ],
+      "locked": true
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Opening",
+      "description": "Rabbit boasts about speed while Tortoise stays calm and polite.",
+      "dialogue": "Rabbit: Let's begin our The Rabbit and the Tortoise adventure.\nTortoise: Yes, we can solve this together.",
+      "emotion": "wonder",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "sunny",
+      "timeOfDay": "Morning",
+      "cameraActions": "wide shot",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "slow-zoom",
+      "transitionType": "fade-in",
+      "shotType": "wide",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "introduce-characters",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 2,
+      "title": "Challenge",
+      "description": "The forest friends announce a race between Rabbit and Tortoise.",
+      "dialogue": "Rabbit: This challenge is bigger than I expected.\nTortoise: We can break it into small steps.",
+      "emotion": "wonder",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "golden evening",
+      "timeOfDay": "Morning",
+      "cameraActions": "medium shot",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "push-in",
+      "transitionType": "cross-dissolve",
+      "shotType": "medium",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 3,
+      "title": "Journey",
+      "description": "Rabbit sprints ahead, then rests proudly while Tortoise keeps moving step by step.",
+      "dialogue": "Rabbit: I found a new clue.\nTortoise: Great, let us keep exploring and stay brave.",
+      "emotion": "brave",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "soft cloudy",
+      "timeOfDay": "Afternoon",
+      "cameraActions": "close-up",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "orbit",
+      "transitionType": "cross-dissolve",
+      "shotType": "close-up",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 4,
+      "title": "Climax",
+      "description": "Rabbit wakes up too late and rushes, but Tortoise reaches the finish line first.",
+      "dialogue": "Rabbit: We are close now.\nTortoise: One more good decision and we can finish it.",
+      "emotion": "wonder",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "gentle rain",
+      "timeOfDay": "Afternoon",
+      "cameraActions": "tracking shot",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "tracking-left",
+      "transitionType": "cross-dissolve",
+      "shotType": "over-shoulder",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
+    },
+    {
+      "id": 5,
+      "title": "Ending",
+      "description": "Rabbit admits his mistake and learns to respect patience and consistency.",
+      "dialogue": "Rabbit: We did it and learned something important.\nTortoise: Slow and steady wins the race.",
+      "emotion": "joyful",
+      "background": "moral world with child-safe cartoon art",
+      "weather": "starlit night",
+      "timeOfDay": "Evening",
+      "cameraActions": "crane reveal",
+      "animationPrompt": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+      "characters": [
+        {
+          "name": "Rabbit",
+          "role": "Fast Challenger"
+        },
+        {
+          "name": "Tortoise",
+          "role": "Steady Hero"
+        }
+      ],
+      "durationSeconds": 4,
+      "cameraMotion": "crane-up",
+      "transitionType": "fade-out",
+      "shotType": "wide",
+      "backgroundMusicMood": "victory",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "golden-hour",
+      "animationStyle": "2d-cartoon"
+    }
+  ],
+  "subtitles": [
+    {
+      "start": 0,
+      "end": 4,
+      "text": "Opening: Rabbit boasts about speed while Tortoise stays calm and polite."
+    },
+    {
+      "start": 4,
+      "end": 8,
+      "text": "Challenge: The forest friends announce a race between Rabbit and Tortoise."
+    },
+    {
+      "start": 8,
+      "end": 12,
+      "text": "Journey: Rabbit sprints ahead, then rests proudly while Tortoise keeps moving step by step."
+    },
+    {
+      "start": 12,
+      "end": 16,
+      "text": "Climax: Rabbit wakes up too late and rushes, but Tortoise reaches the finish line first."
+    },
+    {
+      "start": 16,
+      "end": 20,
+      "text": "Ending: Rabbit admits his mistake and learns to respect patience and consistency."
+    }
+  ],
+  "narration": "Rabbit laughed at Tortoise for being slow. But in the race, Rabbit stopped and slept while Tortoise kept walking. In the end, Tortoise won because he never gave up. Slow and steady wins the race.",
+  "voicePlan": {
+    "narrator": {
+      "voice": "kid-female",
+      "language": "english",
+      "text": "Rabbit laughed at Tortoise for being slow. But in the race, Rabbit stopped and slept while Tortoise kept walking. In the end, Tortoise won because he never gave up. Slow and steady wins the race."
+    },
+    "characterVoices": [
+      {
+        "characterId": "char-rabbit",
+        "name": "Rabbit",
+        "voice": "kid-female",
+        "emotionStyle": "energetic and expressive"
+      },
+      {
+        "characterId": "char-tortoise",
+        "name": "Tortoise",
+        "voice": "kid-female",
+        "emotionStyle": "calm and determined"
+      }
+    ],
+    "lipSyncEngine": "wav2lip-ready"
+  },
+  "musicPlan": {
+    "backgroundTrack": "moral-friendly soundtrack",
+    "sfx": [
+      "footsteps",
+      "birds",
+      "wind",
+      "crowd-cheer"
+    ],
+    "mixStyle": "soft-dynamic-kids-mix"
+  },
+  "animationPlan": {
+    "engine": "anim-diff-ready",
+    "timeline": [
+      {
+        "sceneId": 1,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 2,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 3,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 4,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      },
+      {
+        "sceneId": 5,
+        "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
+        "durationSeconds": 4
+      }
+    ]
+  },
+  "editCapabilities": [
+    "script",
+    "characters",
+    "scenes",
+    "voice",
+    "music",
+    "timeline"
+  ],
+  "editableOptions": {
+    "script": [
+      "title",
+      "synopsis",
+      "moral",
+      "narration",
+      "sceneBeats"
+    ],
+    "characters": [
+      "name",
+      "role",
+      "appearance",
+      "voiceProfile",
+      "emotionStyle",
+      "colorPalette"
+    ],
+    "scenes": [
+      "title",
+      "description",
+      "dialogue",
+      "emotion",
+      "background",
+      "weather",
+      "timeOfDay",
+      "cameraActions",
+      "durationSeconds",
+      "characters"
+    ],
+    "voice": [
+      "narrator.voice",
+      "narrator.language",
+      "narrator.text",
+      "characterVoices"
+    ],
+    "music": [
+      "backgroundTrack",
+      "sfx",
+      "mixStyle"
+    ],
+    "timeline": [
+      "subtitles",
+      "animationPlan.timeline",
+      "sceneOrder"
+    ]
+  },
+  "freeMode": true,
+  "aiProviderEnabled": true,
+  "updatedAt": "2026-05-17T11:47:40.467Z",
+  "requireSceneImages": false,
+  "renderMode": "real-cartoon-backend",
+  "renderedAt": "2026-05-17T11:48:08.879Z",
+  "videoUrl": "/uploads/video-studio/b1f1a18c-ff14-4c12-9ac8-4b29ef996d7e/story-render-1779018486017.mp4",
+  "renderAudioMode": "character-dialogue",
+  "renderVisualMode": "shape-fallback",
+  "totalDurationSeconds": 20
+}

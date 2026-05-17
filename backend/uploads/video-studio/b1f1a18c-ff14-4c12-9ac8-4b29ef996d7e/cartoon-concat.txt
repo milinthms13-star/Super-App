@@ -1,0 +1,5 @@
+file 'C:/Users/Dhanya/malabarbazaar/backend/uploads/video-studio/b1f1a18c-ff14-4c12-9ac8-4b29ef996d7e/scene-01-cartoon.mp4'
+file 'C:/Users/Dhanya/malabarbazaar/backend/uploads/video-studio/b1f1a18c-ff14-4c12-9ac8-4b29ef996d7e/scene-02-cartoon.mp4'
+file 'C:/Users/Dhanya/malabarbazaar/backend/uploads/video-studio/b1f1a18c-ff14-4c12-9ac8-4b29ef996d7e/scene-03-cartoon.mp4'
+file 'C:/Users/Dhanya/malabarbazaar/backend/uploads/video-studio/b1f1a18c-ff14-4c12-9ac8-4b29ef996d7e/scene-04-cartoon.mp4'
+file 'C:/Users/Dhanya/malabarbazaar/backend/uploads/video-studio/b1f1a18c-ff14-4c12-9ac8-4b29ef996d7e/scene-05-cartoon.mp4'

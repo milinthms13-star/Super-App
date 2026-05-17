@@ -1,0 +1,108 @@
+{
+  "projectId": "277816be-878c-4d91-9fbc-a4ffc4141d43",
+  "createdAt": "2026-05-17T12:03:47.439Z",
+  "workflowType": "kids-video-hf-clean-restart",
+  "aiProvider": "huggingface",
+  "storyMode": "moral",
+  "voiceType": "kid-female",
+  "videoSize": "youtube",
+  "prompt": "Rabbit and tortoise race through a sunny forest and learn patience.",
+  "title": "The Rabbit and the Tortoise",
+  "synopsis": "A speedy rabbit laughs at a calm tortoise, but a race teaches everyone that patience and consistency matter.",
+  "moral": "Slow and steady wins the race.",
+  "characters": [
+    {
+      "id": "char-rabbit",
+      "name": "Rabbit",
+      "role": "Fast Challenger",
+      "appearance": "white rabbit with long ears, bright red scarf, expressive eyes",
+      "colorPalette": [
+        "white",
+        "red",
+        "gold"
+      ]
+    },
+    {
+      "id": "char-tortoise",
+      "name": "Tortoise",
+      "role": "Steady Hero",
+      "appearance": "green tortoise with patterned shell and calm smile",
+      "colorPalette": [
+        "green",
+        "olive",
+        "teal"
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Opening",
+      "description": "Rabbit boasts about speed while Tortoise stays calm and kind.",
+      "dialogue": "Rabbit: I am the fastest in the forest!\\nTortoise: Speed is nice, but I will keep trying.",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 2,
+      "title": "Challenge",
+      "description": "The forest friends organize a race and cheer for both runners.",
+      "dialogue": "Rabbit: This race will be easy for me.\\nTortoise: I will take one step at a time.",
+      "emotion": "curious",
+      "durationSeconds": 4
+    },
+    {
+      "id": 3,
+      "title": "Journey",
+      "description": "Rabbit runs far ahead and decides to rest, while Tortoise keeps moving steadily.",
+      "dialogue": "Rabbit: I can rest for a minute and still win.\\nTortoise: Slow and steady, I keep going.",
+      "emotion": "brave",
+      "durationSeconds": 4
+    }
+  ],
+  "outputDir": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\277816be-878c-4d91-9fbc-a4ffc4141d43",
+  "outputFile": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\277816be-878c-4d91-9fbc-a4ffc4141d43\\story-render-1779019433882.mp4",
+  "videoUrl": "/uploads/kids-video-hf/277816be-878c-4d91-9fbc-a4ffc4141d43/story-render-1779019433882.mp4",
+  "renderMode": "kids-video-hf-clean-restart",
+  "aiImagesEnabled": false,
+  "sceneRenderMeta": [
+    {
+      "sceneId": 1,
+      "title": "Opening",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\277816be-878c-4d91-9fbc-a4ffc4141d43\\scene-01-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\277816be-878c-4d91-9fbc-a4ffc4141d43\\scene-01.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 2,
+      "title": "Challenge",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\277816be-878c-4d91-9fbc-a4ffc4141d43\\scene-02-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\277816be-878c-4d91-9fbc-a4ffc4141d43\\scene-02.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 3,
+      "title": "Journey",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\277816be-878c-4d91-9fbc-a4ffc4141d43\\scene-03-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\277816be-878c-4d91-9fbc-a4ffc4141d43\\scene-03.mp4",
+      "durationSeconds": 4
+    }
+  ],
+  "renderedAt": "2026-05-17T12:03:56.127Z",
+  "updatedAt": "2026-05-17T12:03:56.127Z"
+}
