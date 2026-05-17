@@ -1,4 +1,10 @@
-import { VideoStudioApiError, requestVideoStudio, getProjectDownloadLink, waitForRenderedVideo } from "./videoStudioApi";
+import {
+  VideoStudioApiError,
+  requestVideoStudio,
+  getProjectDownloadLink,
+  renderPromptVideoHf,
+  waitForRenderedVideo,
+} from "./videoStudioApi";
 
 const jsonResponse = ({ ok = true, status = 200, payload, url = "http://localhost/api/video-studio/create" }) => ({
   ok,
@@ -144,5 +150,26 @@ describe("videoStudioApi", () => {
 
     expect(result.payload.videoUrl).toContain("v=2000");
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("defaults kids HF render engine to diffusers_t2v", async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse({
+        payload: {
+          success: true,
+          projectId: "hf-1",
+          videoUrl: "/uploads/kids-video-hf/hf-1/story-render.mp4",
+        },
+      })
+    );
+
+    await renderPromptVideoHf({
+      prompt: "A bunny bedtime story in moonlight",
+    });
+
+    const requestInit = global.fetch.mock.calls[0][1];
+    const parsedBody = JSON.parse(requestInit.body);
+    expect(parsedBody.engine).toBe("diffusers_t2v");
+    expect(parsedBody.renderEngine).toBe("diffusers_t2v");
   });
 });

@@ -1343,6 +1343,8 @@ const KidsStoryVideoMaker = () => {
             {
               prompt: normalizedStoryPrompt,
               storyPrompt: normalizedStoryPrompt,
+              engine: "diffusers_t2v",
+              renderEngine: "diffusers_t2v",
               storyTitle: sanitizeText(storyTitle || generatedProject?.title || "AI Kids Story Video Generator"),
               sceneCount: fallbackSceneCount,
               videoSize: videoSizeId,
@@ -2484,7 +2486,11 @@ const KidsStoryVideoMaker = () => {
               </div>
 
               <div className="project-actions export-actions">
-                <button className="primary-button" onClick={handleRenderVideo} disabled={!generatedProject || isRendering}>
+                <button
+                  className="primary-button"
+                  onClick={handleRenderVideo}
+                  disabled={(!generatedProject && aiProvider !== "huggingface") || isRendering}
+                >
                   {isRendering ? "Rendering video..." : "Render MP4"}
                 </button>
                 <button

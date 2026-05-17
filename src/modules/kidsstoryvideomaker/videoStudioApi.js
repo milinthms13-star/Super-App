@@ -307,7 +307,11 @@ export const renderProject = async (requestBody, options = {}) => {
 export const renderPromptVideoHf = (requestBody, options = {}) =>
   requestVideoStudio('/kids-video-hf/generate', {
     method: 'POST',
-    body: requestBody,
+    body: {
+      ...(requestBody || {}),
+      engine: requestBody?.engine || requestBody?.renderEngine || 'diffusers_t2v',
+      renderEngine: requestBody?.renderEngine || requestBody?.engine || 'diffusers_t2v',
+    },
     retries: 0,
     timeoutMs: RENDER_TIMEOUT_MS,
     ...options,
