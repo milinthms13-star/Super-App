@@ -1,5 +1,6 @@
 jest.mock('../services/kidsVideoGeneratorHFService', () => ({
   generateKidsVideoFromPrompt: jest.fn(),
+  generateKidsVideoFromDiffusersPrompt: jest.fn(),
   getKidsVideoProject: jest.fn(),
 }));
 
@@ -7,6 +8,7 @@ const request = require('supertest');
 const app = require('../app');
 const {
   generateKidsVideoFromPrompt,
+  generateKidsVideoFromDiffusersPrompt,
   getKidsVideoProject,
 } = require('../services/kidsVideoGeneratorHFService');
 
@@ -56,5 +58,37 @@ describe('kids-video-hf routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body.project.projectId).toBe('proj-2');
+  });
+
+  test('POST /api/kids-video-hf/generate uses diffusers engine when requested', async () => {
+    generateKidsVideoFromDiffusersPrompt.mockResolvedValue({
+      projectId: 'proj-diffusers-1',
+      videoUrl: '/uploads/kids-video-hf/proj-diffusers-1/story-render.mp4',
+      aiImagesEnabled: true,
+      project: {
+        projectId: 'proj-diffusers-1',
+        workflowType: 'kids-video-hf-diffusers',
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/generate')
+      .send({
+        prompt: 'a hero flying over a futuristic city',
+        engine: 'diffusers_t2v',
+        numFrames: 64,
+        numInferenceSteps: 20,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.workflowType).toBe('kids-video-hf-diffusers');
+    expect(generateKidsVideoFromDiffusersPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'a hero flying over a futuristic city',
+        numFrames: 64,
+        numInferenceSteps: 20,
+      })
+    );
   });
 });

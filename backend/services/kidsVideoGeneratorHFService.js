@@ -92,6 +92,35 @@ const runFfmpeg = async (args, cwd) => {
   });
 };
 
+const runProcess = async ({ command, args = [], cwd }) =>
+  new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    let spawnError = '';
+
+    proc.stdout.on('data', (chunk) => {
+      stdout += String(chunk || '');
+      if (stdout.length > 300000) stdout = stdout.slice(-300000);
+    });
+    proc.stderr.on('data', (chunk) => {
+      stderr += String(chunk || '');
+      if (stderr.length > 300000) stderr = stderr.slice(-300000);
+    });
+    proc.on('error', (error) => {
+      spawnError = sanitizeText(error?.message || 'failed to spawn process');
+    });
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        return reject(new Error(spawnError || sanitizeText(stderr) || `exit code ${code}`));
+      }
+      return resolve({ stdout: sanitizeText(stdout), stderr: sanitizeText(stderr) });
+    });
+  });
+
 const buildRabbitTortoiseStory = () => ({
   title: 'The Rabbit and the Tortoise',
   synopsis: 'A speedy rabbit laughs at a calm tortoise, but a race teaches everyone that patience and consistency matter.',
@@ -156,6 +185,23 @@ const buildRabbitTortoiseStory = () => ({
   ],
 });
 
+const extractPromptCharacters = (prompt = '') => {
+  const lowered = sanitizeText(prompt).toLowerCase();
+  const known = [
+    'rabbit', 'tortoise', 'turtle', 'fox', 'squirrel', 'lion', 'bear', 'cat', 'dog',
+    'elephant', 'monkey', 'deer', 'owl', 'bird', 'horse', 'goat', 'cow', 'camel',
+  ];
+  const picked = known.filter((name) => new RegExp(`\\b${name}\\b`).test(lowered)).slice(0, 2);
+  if (!picked.length) return [];
+  return picked.map((name, index) => ({
+    id: `char-${name}`,
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    role: index === 0 ? 'Main Character' : 'Support Friend',
+    appearance: `friendly ${name} character with expressive eyes`,
+    colorPalette: index === 0 ? ['sky blue', 'sunny yellow', 'mint'] : ['peach', 'teal', 'cream'],
+  }));
+};
+
 const buildGenericStory = (prompt = '', sceneCount = 5) => {
   const cleanPrompt = sanitizeText(prompt);
   const lines = cleanPrompt
@@ -176,27 +222,30 @@ const buildGenericStory = (prompt = '', sceneCount = 5) => {
       durationSeconds: 4,
     };
   });
+  const extractedCharacters = extractPromptCharacters(cleanPrompt);
 
   return {
     title: 'Kids Story Adventure',
     synopsis: cleanPrompt || beats[0],
     moral: 'Kindness and consistency help us succeed.',
-    characters: [
-      {
-        id: 'char-hero',
-        name: 'Hero',
-        role: 'Main Character',
-        appearance: 'friendly child hero with colorful outfit',
-        colorPalette: ['sky blue', 'sunny yellow', 'mint'],
-      },
-      {
-        id: 'char-guide',
-        name: 'Guide',
-        role: 'Support Friend',
-        appearance: 'wise companion with warm smile',
-        colorPalette: ['peach', 'teal', 'cream'],
-      },
-    ],
+    characters: extractedCharacters.length
+      ? extractedCharacters
+      : [
+          {
+            id: 'char-hero',
+            name: 'Hero',
+            role: 'Main Character',
+            appearance: 'friendly child hero with colorful outfit',
+            colorPalette: ['sky blue', 'sunny yellow', 'mint'],
+          },
+          {
+            id: 'char-guide',
+            name: 'Guide',
+            role: 'Support Friend',
+            appearance: 'wise companion with warm smile',
+            colorPalette: ['peach', 'teal', 'cream'],
+          },
+        ],
     scenes,
   };
 };
@@ -536,6 +585,81 @@ const generateKidsVideoFromPrompt = async ({
   };
 };
 
+const generateKidsVideoFromDiffusersPrompt = async ({
+  prompt,
+  videoSize = 'youtube',
+  numFrames = 200,
+  numInferenceSteps = 25,
+}) => {
+  await ensureDirectories();
+  const cleanPrompt = sanitizeText(prompt);
+  if (!cleanPrompt) throw new Error('Prompt is required.');
+  if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
+
+  const projectId = uuidv4();
+  const outputDir = path.join(uploadsRoot, safeFileName(projectId));
+  await mkdir(outputDir, { recursive: true });
+  const outputFileName = `story-render-${Date.now()}.mp4`;
+  const outputFile = path.join(outputDir, outputFileName);
+  const { width, height } = getResolution(videoSize);
+
+  const pythonCmd = sanitizeText(process.env.PYTHON_BIN || process.env.PYTHON_PATH || 'python');
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'hf_text_to_video.py');
+  const modelId = sanitizeText(process.env.HF_TEXT_TO_VIDEO_MODEL || 'damo-vilab/text-to-video-ms-1.7b');
+
+  const args = [
+    scriptPath,
+    '--prompt', cleanPrompt,
+    '--output', outputFile,
+    '--model', modelId,
+    '--num_frames', `${Math.max(16, Math.min(240, Number(numFrames) || 200))}`,
+    '--num_inference_steps', `${Math.max(5, Math.min(80, Number(numInferenceSteps) || 25))}`,
+    '--width', `${width}`,
+    '--height', `${height}`,
+    '--fps', `${Math.max(8, Math.min(24, Number(process.env.HF_TEXT_TO_VIDEO_FPS) || 12))}`,
+  ];
+
+  const { stdout } = await runProcess({
+    command: pythonCmd,
+    args,
+    cwd: path.join(__dirname, '..'),
+  });
+
+  if (!fs.existsSync(outputFile)) {
+    throw new Error(`Diffusers did not produce output video. ${stdout || ''}`.trim());
+  }
+
+  const persistedProject = {
+    projectId,
+    createdAt: new Date().toISOString(),
+    workflowType: 'kids-video-hf-diffusers',
+    aiProvider: 'huggingface',
+    renderEngine: 'diffusers_t2v',
+    prompt: cleanPrompt,
+    title: 'HF Text-to-Video Render',
+    videoSize: sanitizeText(videoSize || 'youtube'),
+    outputDir,
+    outputFile,
+    videoUrl: `/uploads/kids-video-hf/${safeFileName(projectId)}/${outputFileName}`,
+    aiImagesEnabled: true,
+    renderedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    generatorLog: stdout || '',
+  };
+
+  await writeFile(projectFilePath(projectId), JSON.stringify(persistedProject, null, 2), 'utf-8');
+  await writeFile(path.join(outputDir, 'project.json'), JSON.stringify(persistedProject, null, 2), 'utf-8');
+
+  return {
+    success: true,
+    projectId,
+    project: persistedProject,
+    videoUrl: persistedProject.videoUrl,
+    outputFile,
+    aiImagesEnabled: true,
+  };
+};
+
 const getKidsVideoProject = async (projectId) => {
   await ensureDirectories();
   const cleanProjectId = sanitizeText(projectId);
@@ -546,5 +670,6 @@ const getKidsVideoProject = async (projectId) => {
 
 module.exports = {
   generateKidsVideoFromPrompt,
+  generateKidsVideoFromDiffusersPrompt,
   getKidsVideoProject,
 };

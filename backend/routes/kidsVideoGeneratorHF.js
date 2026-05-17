@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   generateKidsVideoFromPrompt,
+  generateKidsVideoFromDiffusersPrompt,
   getKidsVideoProject,
 } = require('../services/kidsVideoGeneratorHFService');
 
@@ -22,13 +23,26 @@ router.post('/generate', async (req, res) => {
       });
     }
 
-    const result = await generateKidsVideoFromPrompt({
-      prompt,
-      sceneCount: clampSceneCount(req.body?.sceneCount),
-      videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-      storyMode: req.body?.storyMode || 'moral',
-      voiceType: req.body?.voiceType || 'kid-female',
-    });
+    const requestedEngine = String(req.body?.engine || req.body?.renderEngine || '').trim().toLowerCase();
+    const useDiffusers =
+      requestedEngine === 'diffusers_t2v' ||
+      requestedEngine === 'text_to_video' ||
+      requestedEngine === 'damo-text-to-video';
+
+    const result = useDiffusers
+      ? await generateKidsVideoFromDiffusersPrompt({
+          prompt,
+          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
+          numFrames: req.body?.numFrames,
+          numInferenceSteps: req.body?.numInferenceSteps,
+        })
+      : await generateKidsVideoFromPrompt({
+          prompt,
+          sceneCount: clampSceneCount(req.body?.sceneCount),
+          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
+          storyMode: req.body?.storyMode || 'moral',
+          voiceType: req.body?.voiceType || 'kid-female',
+        });
 
     return res.status(200).json({
       success: true,
@@ -37,7 +51,7 @@ router.post('/generate', async (req, res) => {
       videoUrl: result.videoUrl,
       aiProvider: 'huggingface',
       aiImagesEnabled: Boolean(result.aiImagesEnabled),
-      workflowType: 'kids-video-hf-clean-restart',
+      workflowType: result?.project?.workflowType || 'kids-video-hf-clean-restart',
     });
   } catch (error) {
     return res.status(500).json({
