@@ -663,10 +663,44 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     '--fps', `${Math.max(8, Math.min(24, Number(process.env.HF_TEXT_TO_VIDEO_FPS) || 12))}`,
   ];
 
-  const { stdout, command: pythonCommand } = await runPythonProcess({
-    args,
-    cwd: path.join(__dirname, '..'),
-  });
+  let stdout = '';
+  let pythonCommand = '';
+  try {
+    const pythonRun = await runPythonProcess({
+      args,
+      cwd: path.join(__dirname, '..'),
+    });
+    stdout = pythonRun.stdout;
+    pythonCommand = pythonRun.command;
+  } catch (error) {
+    const message = sanitizeText(error?.message || '');
+    const shouldFallbackToImagePipeline =
+      isLikelySpawnCommandNotFound(error) || message.toLowerCase().includes('python executable not found');
+
+    if (!shouldFallbackToImagePipeline) {
+      throw error;
+    }
+
+    // Graceful degradation: keep render working even when python runtime
+    // is unavailable in the deployment environment.
+    const fallbackResult = await generateKidsVideoFromPrompt({
+      prompt: cleanPrompt,
+      sceneCount: 5,
+      videoSize,
+      storyMode: 'moral',
+      voiceType: 'kid-female',
+    });
+
+    return {
+      ...fallbackResult,
+      project: {
+        ...(fallbackResult.project || {}),
+        workflowType: 'kids-video-hf-fallback-no-python',
+        renderEngine: 'hf_image_ffmpeg_fallback',
+        fallbackReason: message || 'python executable unavailable',
+      },
+    };
+  }
 
   if (!fs.existsSync(outputFile)) {
     throw new Error(`Diffusers did not produce output video. ${stdout || ''}`.trim());
