@@ -230,11 +230,77 @@ const buildRabbitTortoiseStory = () => ({
   ],
 });
 
+const buildRamaSitaSwayamvaramStory = () => ({
+  title: 'Rama and Sita Swayamvaram',
+  synopsis:
+    "In King Janaka's court at Mithila, a sacred challenge is announced: whoever can lift and string Shiva's mighty bow will win Sita's hand.",
+  moral: 'Strength with humility and dharma leads to true victory.',
+  characters: [
+    {
+      id: 'char-rama',
+      name: 'Rama',
+      role: 'Prince of Ayodhya',
+      appearance: 'calm prince in royal attire with a kind expression',
+      colorPalette: ['#60a5fa', '#1e3a8a', '#facc15'],
+    },
+    {
+      id: 'char-sita',
+      name: 'Sita',
+      role: 'Princess of Mithila',
+      appearance: 'graceful princess with a flower garland and serene smile',
+      colorPalette: ['#f9a8d4', '#be185d', '#fde68a'],
+    },
+  ],
+  scenes: [
+    {
+      id: 1,
+      title: 'Mithila Court',
+      description: 'King Janaka welcomes great princes and announces the swayamvaram challenge.',
+      dialogue: "Janaka: Whoever strings Shiva's bow shall wed Sita.\\nSita: I pray for a noble and righteous heart.",
+      emotion: 'wonder',
+      durationSeconds: 4,
+    },
+    {
+      id: 2,
+      title: 'The Challenge',
+      description: 'Many warriors try to move the sacred bow, but none can lift it.',
+      dialogue: 'Princes: This bow is too heavy!\\nLakshmana: Brother Rama, your time has come.',
+      emotion: 'curious',
+      durationSeconds: 4,
+    },
+    {
+      id: 3,
+      title: 'Rama Lifts the Bow',
+      description: 'Rama bows to the sages, lifts Shiva dhanush with ease, and begins to string it.',
+      dialogue: 'Rama: With blessings of guru and dharma, I shall try.\\nCrowd: Jai! Jai!',
+      emotion: 'brave',
+      durationSeconds: 4,
+    },
+    {
+      id: 4,
+      title: 'The Sacred Moment',
+      description: 'The great bow breaks with a thunderous sound, and the hall is filled with awe.',
+      dialogue: 'Janaka: Glory to Rama!\\nSita: My heart has chosen with faith and joy.',
+      emotion: 'tense',
+      durationSeconds: 4,
+    },
+    {
+      id: 5,
+      title: 'Garland and Blessings',
+      description: 'Sita garlands Rama, and everyone celebrates their union with blessings.',
+      dialogue: 'Sita: I offer this garland to Rama.\\nRama: Together we shall walk the path of dharma.',
+      emotion: 'joyful',
+      durationSeconds: 4,
+    },
+  ],
+});
+
 const extractPromptCharacters = (prompt = '') => {
   const lowered = sanitizeText(prompt).toLowerCase();
   const known = [
     'rabbit', 'tortoise', 'turtle', 'fox', 'squirrel', 'lion', 'bear', 'cat', 'dog',
     'elephant', 'monkey', 'deer', 'owl', 'bird', 'horse', 'goat', 'cow', 'camel',
+    'rama', 'sita', 'lakshmana', 'janaka',
   ];
   const picked = known.filter((name) => new RegExp(`\\b${name}\\b`).test(lowered)).slice(0, 2);
   if (!picked.length) return [];
@@ -297,6 +363,13 @@ const buildGenericStory = (prompt = '', sceneCount = 5) => {
 
 const createStoryFromPrompt = (prompt = '', sceneCount = 5) => {
   const normalized = sanitizeText(prompt).toLowerCase();
+  if (
+    /\brama\b/.test(normalized)
+    && /\bsita\b/.test(normalized)
+    && /\b(swayamvar|swayamvaram|shiv|dhanush|janaka|mithila)\b/.test(normalized)
+  ) {
+    return buildRamaSitaSwayamvaramStory();
+  }
   if (/\brabbit\b/.test(normalized) && /\b(tortoise|turtle)\b/.test(normalized)) {
     return buildRabbitTortoiseStory();
   }
@@ -331,7 +404,8 @@ const escapeXml = (value = '') =>
 
 const buildSceneSvg = (scene, story, width, height) => {
   const sceneTitle = escapeXml(sanitizeText(scene.title || 'Scene'));
-  const descLines = wrapText(scene.description, 42, 3);
+  const textSource = sanitizeText(scene.dialogue || scene.description || '');
+  const descLines = wrapText(textSource, 42, 3);
   const characters = (story.characters || []).slice(0, 2);
   const characterSvgs = characters
     .map((char, index) => {
@@ -674,15 +748,11 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     pythonCommand = pythonRun.command;
   } catch (error) {
     const message = sanitizeText(error?.message || '');
-    const shouldFallbackToImagePipeline =
-      isLikelySpawnCommandNotFound(error) || message.toLowerCase().includes('python executable not found');
-
-    if (!shouldFallbackToImagePipeline) {
-      throw error;
-    }
+    const strictDiffusers = String(process.env.HF_DIFFUSERS_STRICT || 'false').toLowerCase() === 'true';
+    if (strictDiffusers) throw error;
 
     // Graceful degradation: keep render working even when python runtime
-    // is unavailable in the deployment environment.
+    // or diffusers execution fails in the deployment environment.
     const fallbackResult = await generateKidsVideoFromPrompt({
       prompt: cleanPrompt,
       sceneCount: 5,
@@ -697,7 +767,8 @@ const generateKidsVideoFromDiffusersPrompt = async ({
         ...(fallbackResult.project || {}),
         workflowType: 'kids-video-hf-fallback-no-python',
         renderEngine: 'hf_image_ffmpeg_fallback',
-        fallbackReason: message || 'python executable unavailable',
+        fallbackReason: message || 'diffusers execution failed',
+        pythonCommand: '',
       },
     };
   }

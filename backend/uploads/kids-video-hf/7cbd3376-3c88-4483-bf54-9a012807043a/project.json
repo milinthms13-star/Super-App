@@ -1,0 +1,148 @@
+{
+  "projectId": "7cbd3376-3c88-4483-bf54-9a012807043a",
+  "createdAt": "2026-05-17T15:35:34.246Z",
+  "workflowType": "kids-video-hf-clean-restart",
+  "aiProvider": "huggingface",
+  "storyMode": "mythology",
+  "voiceType": "kid-female",
+  "videoSize": "youtube",
+  "prompt": "Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love",
+  "title": "Kids Story Adventure",
+  "synopsis": "Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love",
+  "moral": "Kindness and consistency help us succeed.",
+  "characters": [
+    {
+      "id": "char-hero",
+      "name": "Hero",
+      "role": "Main Character",
+      "appearance": "friendly child hero with colorful outfit",
+      "colorPalette": [
+        "sky blue",
+        "sunny yellow",
+        "mint"
+      ]
+    },
+    {
+      "id": "char-guide",
+      "name": "Guide",
+      "role": "Support Friend",
+      "appearance": "wise companion with warm smile",
+      "colorPalette": [
+        "peach",
+        "teal",
+        "cream"
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Opening",
+      "description": "Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love",
+      "dialogue": "Hero: Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love\\nGuide: We can do this together.",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 2,
+      "title": "Challenge",
+      "description": "Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love",
+      "dialogue": "Hero: Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love\\nGuide: We can do this together.",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 3,
+      "title": "Journey",
+      "description": "Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love",
+      "dialogue": "Hero: Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love\\nGuide: We can do this together.",
+      "emotion": "brave",
+      "durationSeconds": 4
+    },
+    {
+      "id": 4,
+      "title": "Climax",
+      "description": "Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love",
+      "dialogue": "Hero: Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love\\nGuide: We can do this together.",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 5,
+      "title": "Ending",
+      "description": "Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love",
+      "dialogue": "Hero: Rama and Sita swayamvaram in Mithila: King Janaka's challenge, Rama lifting and stringing Shiva dhanush, Sita garlanding Rama, joyful celebration of dharma and love\\nGuide: We can do this together.",
+      "emotion": "joyful",
+      "durationSeconds": 4
+    }
+  ],
+  "outputDir": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a",
+  "outputFile": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\story-render-1779032141513.mp4",
+  "videoUrl": "/uploads/kids-video-hf/7cbd3376-3c88-4483-bf54-9a012807043a/story-render-1779032141513.mp4",
+  "renderMode": "kids-video-hf-clean-restart",
+  "aiImagesEnabled": false,
+  "sceneRenderMeta": [
+    {
+      "sceneId": 1,
+      "title": "Opening",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-01-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-01.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 2,
+      "title": "Challenge",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-02-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-02.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 3,
+      "title": "Journey",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-03-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-03.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 4,
+      "title": "Climax",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-04-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-04.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 5,
+      "title": "Ending",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-05-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\7cbd3376-3c88-4483-bf54-9a012807043a\\scene-05.mp4",
+      "durationSeconds": 4
+    }
+  ],
+  "renderedAt": "2026-05-17T15:35:45.088Z",
+  "updatedAt": "2026-05-17T15:35:45.088Z"
+}

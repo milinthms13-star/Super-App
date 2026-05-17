@@ -1,0 +1,148 @@
+{
+  "projectId": "fa6866b4-dbf1-41b7-9bcb-043ae650de92",
+  "createdAt": "2026-05-17T15:42:03.602Z",
+  "workflowType": "kids-video-hf-clean-restart",
+  "aiProvider": "huggingface",
+  "storyMode": "mythology",
+  "voiceType": "kid-female",
+  "videoSize": "youtube",
+  "prompt": "Rama and Sita swayamvaram in Mithila with Janaka's challenge and Shiva dhanush",
+  "title": "Rama and Sita Swayamvaram",
+  "synopsis": "In King Janaka's court at Mithila, a sacred challenge is announced: whoever can lift and string Shiva's mighty bow will win Sita's hand.",
+  "moral": "Strength with humility and dharma leads to true victory.",
+  "characters": [
+    {
+      "id": "char-rama",
+      "name": "Rama",
+      "role": "Prince of Ayodhya",
+      "appearance": "calm prince in royal attire with a kind expression",
+      "colorPalette": [
+        "#60a5fa",
+        "#1e3a8a",
+        "#facc15"
+      ]
+    },
+    {
+      "id": "char-sita",
+      "name": "Sita",
+      "role": "Princess of Mithila",
+      "appearance": "graceful princess with a flower garland and serene smile",
+      "colorPalette": [
+        "#f9a8d4",
+        "#be185d",
+        "#fde68a"
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Mithila Court",
+      "description": "King Janaka welcomes great princes and announces the swayamvaram challenge.",
+      "dialogue": "Janaka: Whoever strings Shiva's bow shall wed Sita.\\nSita: I pray for a noble and righteous heart.",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 2,
+      "title": "The Challenge",
+      "description": "Many warriors try to move the sacred bow, but none can lift it.",
+      "dialogue": "Princes: This bow is too heavy!\\nLakshmana: Brother Rama, your time has come.",
+      "emotion": "curious",
+      "durationSeconds": 4
+    },
+    {
+      "id": 3,
+      "title": "Rama Lifts the Bow",
+      "description": "Rama bows to the sages, lifts Shiva dhanush with ease, and begins to string it.",
+      "dialogue": "Rama: With blessings of guru and dharma, I shall try.\\nCrowd: Jai! Jai!",
+      "emotion": "brave",
+      "durationSeconds": 4
+    },
+    {
+      "id": 4,
+      "title": "The Sacred Moment",
+      "description": "The great bow breaks with a thunderous sound, and the hall is filled with awe.",
+      "dialogue": "Janaka: Glory to Rama!\\nSita: My heart has chosen with faith and joy.",
+      "emotion": "tense",
+      "durationSeconds": 4
+    },
+    {
+      "id": 5,
+      "title": "Garland and Blessings",
+      "description": "Sita garlands Rama, and everyone celebrates their union with blessings.",
+      "dialogue": "Sita: I offer this garland to Rama.\\nRama: Together we shall walk the path of dharma.",
+      "emotion": "joyful",
+      "durationSeconds": 4
+    }
+  ],
+  "outputDir": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92",
+  "outputFile": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\story-render-1779032532309.mp4",
+  "videoUrl": "/uploads/kids-video-hf/fa6866b4-dbf1-41b7-9bcb-043ae650de92/story-render-1779032532309.mp4",
+  "renderMode": "kids-video-hf-clean-restart",
+  "aiImagesEnabled": false,
+  "sceneRenderMeta": [
+    {
+      "sceneId": 1,
+      "title": "Mithila Court",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-01-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-01.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 2,
+      "title": "The Challenge",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-02-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-02.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 3,
+      "title": "Rama Lifts the Bow",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-03-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-03.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 4,
+      "title": "The Sacred Moment",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-04-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-04.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 5,
+      "title": "Garland and Blessings",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-05-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\fa6866b4-dbf1-41b7-9bcb-043ae650de92\\scene-05.mp4",
+      "durationSeconds": 4
+    }
+  ],
+  "renderedAt": "2026-05-17T15:42:16.125Z",
+  "updatedAt": "2026-05-17T15:42:16.125Z"
+}
