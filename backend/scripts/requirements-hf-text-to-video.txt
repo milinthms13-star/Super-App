@@ -3,3 +3,4 @@ moviepy
 imageio
 imageio-ffmpeg
 pillow
+requests
