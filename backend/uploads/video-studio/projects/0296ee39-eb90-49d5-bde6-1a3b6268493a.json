@@ -48,18 +48,28 @@
       "id": "char-rabbit",
       "name": "Rabbit",
       "role": "Fast Challenger",
-      "appearance": "white rabbit, red scarf, playful eyes",
+      "appearance": "white rabbit with long ears, expressive eyes, and a red scarf",
       "emotionStyle": "energetic and expressive",
       "voiceProfile": "kid-female",
+      "colorPalette": [
+        "sunny yellow",
+        "white",
+        "coral"
+      ],
       "locked": true
     },
     {
       "id": "char-tortoise",
       "name": "Tortoise",
       "role": "Steady Hero",
-      "appearance": "green tortoise, gentle smile, simple cap",
+      "appearance": "green tortoise with a patterned shell and calm smile",
       "emotionStyle": "calm and determined",
       "voiceProfile": "kid-female",
+      "colorPalette": [
+        "green",
+        "olive",
+        "teal"
+      ],
       "locked": true
     }
   ],
@@ -68,7 +78,7 @@
       "id": 1,
       "title": "Opening",
       "description": "Introduce Rabbit and Tortoise in a warm, playful setting.",
-      "dialogue": "\"Introduce Rabbit and Tortoise in a warm, playful setting.\"",
+      "dialogue": "Rabbit: Let's begin our The Rabbit and the Tortoise adventure.\nTortoise: Yes, we can solve this together.",
       "emotion": "wonder",
       "background": "moral world with child-safe cartoon art",
       "weather": "sunny",
@@ -85,13 +95,25 @@
           "role": "Steady Hero"
         }
       ],
-      "durationSeconds": 6
+      "durationSeconds": 4,
+      "cameraMotion": "slow-zoom",
+      "transitionType": "fade-in",
+      "shotType": "wide",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "introduce-characters",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
     },
     {
       "id": 2,
       "title": "Challenge",
       "description": "A challenge appears and characters react with different emotions.",
-      "dialogue": "\"A challenge appears and characters react with different emotions.\"",
+      "dialogue": "Rabbit: This challenge is bigger than I expected.\nTortoise: We can break it into small steps.",
       "emotion": "wonder",
       "background": "moral world with child-safe cartoon art",
       "weather": "golden evening",
@@ -108,13 +130,25 @@
           "role": "Steady Hero"
         }
       ],
-      "durationSeconds": 3
+      "durationSeconds": 4,
+      "cameraMotion": "push-in",
+      "transitionType": "cross-dissolve",
+      "shotType": "medium",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
     },
     {
       "id": 3,
       "title": "Journey",
       "description": "Characters try, fail, learn, and support each other.",
-      "dialogue": "\"Characters try, fail, learn, and support each other.\"",
+      "dialogue": "Rabbit: I found a new clue.\nTortoise: Great, let us keep exploring and stay brave.",
       "emotion": "brave",
       "background": "moral world with child-safe cartoon art",
       "weather": "soft cloudy",
@@ -131,13 +165,25 @@
           "role": "Steady Hero"
         }
       ],
-      "durationSeconds": 6
+      "durationSeconds": 4,
+      "cameraMotion": "orbit",
+      "transitionType": "cross-dissolve",
+      "shotType": "close-up",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
     },
     {
       "id": 4,
       "title": "Climax",
       "description": "The key moment proves the main lesson with clear action.",
-      "dialogue": "\"The key moment proves the main lesson with clear action.\"",
+      "dialogue": "Rabbit: We are close now.\nTortoise: One more good decision and we can finish it.",
       "emotion": "wonder",
       "background": "moral world with child-safe cartoon art",
       "weather": "gentle rain",
@@ -154,13 +200,25 @@
           "role": "Steady Hero"
         }
       ],
-      "durationSeconds": 3
+      "durationSeconds": 4,
+      "cameraMotion": "tracking-left",
+      "transitionType": "cross-dissolve",
+      "shotType": "over-shoulder",
+      "backgroundMusicMood": "curious",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "soft-cinematic",
+      "animationStyle": "2d-cartoon"
     },
     {
       "id": 5,
       "title": "Ending",
       "description": "Celebrate growth with the moral: Slow and steady wins the race.",
-      "dialogue": "\"Celebrate growth with the moral: Slow and steady wins the race.\"",
+      "dialogue": "Rabbit: We did it and learned something important.\nTortoise: Slow and steady wins the race.",
       "emotion": "joyful",
       "background": "moral world with child-safe cartoon art",
       "weather": "starlit night",
@@ -177,33 +235,45 @@
           "role": "Steady Hero"
         }
       ],
-      "durationSeconds": 6
+      "durationSeconds": 4,
+      "cameraMotion": "crane-up",
+      "transitionType": "fade-out",
+      "shotType": "wide",
+      "backgroundMusicMood": "victory",
+      "soundEffects": [
+        "wind",
+        "footsteps"
+      ],
+      "characterPose": "action-pose",
+      "mouthMovement": "auto",
+      "sceneLighting": "golden-hour",
+      "animationStyle": "2d-cartoon"
     }
   ],
   "subtitles": [
     {
       "start": 0,
-      "end": 6,
+      "end": 4,
       "text": "Opening: Introduce Rabbit and Tortoise in a warm, playful setting."
     },
     {
-      "start": 3,
-      "end": 6,
+      "start": 4,
+      "end": 8,
       "text": "Challenge: A challenge appears and characters react with different emotions."
     },
     {
-      "start": 12,
-      "end": 18,
+      "start": 8,
+      "end": 12,
       "text": "Journey: Characters try, fail, learn, and support each other."
     },
     {
-      "start": 9,
-      "end": 12,
+      "start": 12,
+      "end": 16,
       "text": "Climax: The key moment proves the main lesson with clear action."
     },
     {
-      "start": 24,
-      "end": 30,
+      "start": 16,
+      "end": 20,
       "text": "Ending: Celebrate growth with the moral: Slow and steady wins the race."
     }
   ],
@@ -246,27 +316,27 @@
       {
         "sceneId": 1,
         "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
-        "durationSeconds": 6
+        "durationSeconds": 4
       },
       {
         "sceneId": 2,
         "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
-        "durationSeconds": 3
+        "durationSeconds": 4
       },
       {
         "sceneId": 3,
         "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
-        "durationSeconds": 6
+        "durationSeconds": 4
       },
       {
         "sceneId": 4,
         "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
-        "durationSeconds": 3
+        "durationSeconds": 4
       },
       {
         "sceneId": 5,
         "action": "Animate Rabbit, Tortoise with smooth family-friendly motion, lip sync, and expressive faces.",
-        "durationSeconds": 6
+        "durationSeconds": 4
       }
     ]
   },
@@ -278,5 +348,5 @@
     "music",
     "timeline"
   ],
-  "updatedAt": "2026-05-15T19:59:59.195Z"
+  "updatedAt": "2026-05-17T11:24:04.216Z"
 }

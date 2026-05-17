@@ -53,6 +53,7 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 const uploadsDirectory = path.join(__dirname, 'uploads');
+const videoStudioDirectory = path.join(uploadsDirectory, 'video-studio');
 const DEFAULT_FRONTEND_ORIGINS = [
   'https://super-app-7j9x.onrender.com',
   'https://super-app-api.onrender.com',
@@ -126,6 +127,14 @@ app.use(express.urlencoded({ extended: true, limit: '20mb', inflate: true }));
 app.use(
   '/uploads',
   express.static(uploadsDirectory, {
+    setHeaders: (res) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    },
+  })
+);
+app.use(
+  '/videos',
+  express.static(videoStudioDirectory, {
     setHeaders: (res) => {
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     },

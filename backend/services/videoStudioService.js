@@ -3,7 +3,6 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 const { promisify } = require('util');
-const { GoogleGenAI, Modality } = require('@google/genai');
 const textToSpeech = require('@google-cloud/text-to-speech');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
@@ -22,32 +21,36 @@ const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_M
 const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
 );
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const aiProviderEnabled = Boolean(geminiApiKey) && (!isFreeMode || allowAiInFreeMode);
+const freeAiProvider = String(process.env.FREE_AI_PROVIDER || 'pollinations').trim().toLowerCase();
+const freeAiEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.AI_PROVIDER_ENABLED || 'true').toLowerCase()
+);
+const aiProviderEnabled = freeAiEnabled && (!isFreeMode || allowAiInFreeMode);
 const isLowMemoryMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_LOW_MEMORY_MODE || (isFreeMode ? '1' : '0')).toLowerCase()
 );
 const useRealCartoonImages = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (aiProviderEnabled ? '1' : '0')).toLowerCase()
 );
-const googleVideoModel = String(process.env.GOOGLE_VIDEO_MODEL || 'gemini-2.5-flash').trim();
-const googleSafetyModel = String(process.env.GOOGLE_SAFETY_MODEL || googleVideoModel || 'gemini-2.5-flash').trim();
-const googleImageModel = String(
-  process.env.GOOGLE_IMAGE_MODEL || 'gemini-2.0-flash-preview-image-generation'
+const freeTextModel = String(process.env.FREE_TEXT_MODEL || process.env.POLLINATIONS_TEXT_MODEL || 'openai').trim();
+const freeImageModel = String(
+  process.env.FREE_IMAGE_MODEL || process.env.POLLINATIONS_IMAGE_MODEL || 'flux'
 ).trim();
-const googleImageModelCandidates = Array.from(new Set(
+const freeImageModelCandidates = Array.from(new Set(
   [
-    process.env.GOOGLE_IMAGE_MODEL,
-    process.env.GEMINI_IMAGE_MODEL,
+    process.env.FREE_IMAGE_MODEL,
+    process.env.POLLINATIONS_IMAGE_MODEL,
     process.env.VIDEO_STUDIO_IMAGE_MODEL,
-    googleImageModel,
-    'gemini-2.0-flash-preview-image-generation',
-    'gemini-2.5-flash-image-preview',
-    'gemini-3.1-flash-image-preview',
+    freeImageModel,
+    'flux',
+    'flux-realism',
   ]
     .map((value) => String(value || '').replace(/\u0000/g, '').trim())
     .filter(Boolean)
 ));
+const pollinationsApiBaseUrl = String(process.env.POLLINATIONS_API_BASE_URL || 'https://gen.pollinations.ai')
+  .replace(/\/+$/, '');
+const pollinationsApiKey = String(process.env.POLLINATIONS_API_KEY || process.env.FREE_AI_API_KEY || '').trim();
 
 if (isLowMemoryMode) {
   // Keep native image processing predictable on low-memory instances.
@@ -55,19 +58,18 @@ if (isLowMemoryMode) {
   sharp.concurrency(1);
 }
 
-let googleAI;
 let googleTtsClient;
-try {
-  googleAI = aiProviderEnabled
-    ? new GoogleGenAI({ apiKey: geminiApiKey })
-    : null;
-} catch (error) {
-  googleAI = null;
-}
+const enableGoogleCloudTts = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ENABLE_GOOGLE_TTS || '').toLowerCase()
+);
 
-try {
-  googleTtsClient = new textToSpeech.TextToSpeechClient();
-} catch (error) {
+if (enableGoogleCloudTts) {
+  try {
+    googleTtsClient = new textToSpeech.TextToSpeechClient();
+  } catch (error) {
+    googleTtsClient = null;
+  }
+} else {
   googleTtsClient = null;
 }
 
@@ -207,23 +209,71 @@ const messagesToPrompt = (messages = []) =>
     .filter(Boolean)
     .join('\n\n');
 
-const normalizeGeminiTextResponse = (response) => {
+const normalizeFreeAiTextResponse = (response) => {
   if (!response) return null;
   if (typeof response.text === 'string' && response.text.trim()) {
     return response.text.trim();
   }
-  const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
-  for (const candidate of candidates) {
-    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
-    const text = parts
-      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
-      .join('\n')
-      .trim();
-    if (text) {
-      return text;
+  const choices = Array.isArray(response?.choices) ? response.choices : [];
+  for (const choice of choices) {
+    const message = choice?.message?.content;
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim();
     }
   }
   return null;
+};
+
+const buildPollinationsHeaders = () => {
+  const headers = {
+    'content-type': 'application/json',
+  };
+  if (pollinationsApiKey) {
+    headers.authorization = `Bearer ${pollinationsApiKey}`;
+  }
+  return headers;
+};
+
+const callFreeTextModel = async ({
+  prompt = '',
+  systemInstruction = '',
+  maxTokens = 1100,
+  timeoutMs = 8000,
+  temperature = 0.7,
+  model = freeTextModel,
+}) => {
+  if (!aiProviderEnabled || freeAiProvider !== 'pollinations') {
+    return null;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 8000));
+  try {
+    const response = await fetch(`${pollinationsApiBaseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: buildPollinationsHeaders(),
+      body: JSON.stringify({
+        model: sanitizeText(model || freeTextModel || 'openai'),
+        temperature,
+        max_tokens: Math.max(128, Number(maxTokens) || 1100),
+        messages: [
+          ...(sanitizeText(systemInstruction)
+            ? [{ role: 'system', content: sanitizeText(systemInstruction) }]
+            : []),
+          { role: 'user', content: sanitizeText(prompt) },
+        ],
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const payload = await response.json();
+    return normalizeFreeAiTextResponse(payload);
+  } catch (_error) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 const safeGoogleGenerateContent = async ({
@@ -232,31 +282,28 @@ const safeGoogleGenerateContent = async ({
   maxTokens = 1100,
   timeoutMs = 8000,
   temperature = 0.7,
-  model = googleVideoModel,
+  model = freeTextModel,
   jsonMode = false,
 }) => {
-  if (!googleAI) return null;
-
   const cleanPrompt = sanitizeText(prompt);
   if (!cleanPrompt) return null;
 
-  const aiCall = (async () => {
-    const response = await googleAI.models.generateContent({
-      model: sanitizeText(model || googleVideoModel || 'gemini-2.5-flash'),
-      contents: cleanPrompt,
-      config: {
-        temperature,
-        maxOutputTokens: Math.max(128, Number(maxTokens) || 1100),
-        ...(sanitizeText(systemInstruction) ? { systemInstruction: sanitizeText(systemInstruction) } : {}),
-        ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
-      },
-    });
-    return normalizeGeminiTextResponse(response);
-  })();
+  const aiCall = callFreeTextModel({
+    prompt: cleanPrompt,
+    systemInstruction,
+    maxTokens,
+    timeoutMs,
+    temperature,
+    model,
+  });
 
   const timeout = new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs));
   try {
-    return await Promise.race([aiCall, timeout]);
+    const responseText = await Promise.race([aiCall, timeout]);
+    if (!responseText) return null;
+    if (!jsonMode) return responseText;
+    const parsed = extractJson(responseText);
+    return parsed ? JSON.stringify(parsed) : responseText;
   } catch (_error) {
     return null;
   }
@@ -264,7 +311,7 @@ const safeGoogleGenerateContent = async ({
 
 const getModerationSafetyAssessment = async (value = '') => {
   const cleanValue = sanitizeText(value);
-  if (!googleAI || !cleanValue) {
+  if (!aiProviderEnabled || !cleanValue) {
     return { blocked: false, reasons: [] };
   }
 
@@ -283,7 +330,7 @@ ${cleanValue.slice(0, 12000)}`;
       maxTokens: 300,
       timeoutMs: 7000,
       temperature: 0.1,
-      model: googleSafetyModel,
+      model: freeTextModel,
       jsonMode: true,
     });
 
@@ -335,7 +382,7 @@ const getCombinedSafetyAssessment = async (value = '') => {
 };
 
 const safeGoogleAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
-  if (!googleAI) return null;
+  if (!aiProviderEnabled) return null;
   const normalizedMessages = Array.isArray(messages) ? messages : [];
   const systemInstruction = sanitizeText(
     normalizedMessages
@@ -352,7 +399,7 @@ const safeGoogleAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
     maxTokens,
     timeoutMs,
     temperature: 0.7,
-    model: googleVideoModel,
+    model: freeTextModel,
   });
 };
 
@@ -482,6 +529,99 @@ const inferPresetCharactersFromText = (text = '', voiceType = '') => {
   return Array.from(uniqueByName.values());
 };
 
+const FALLBACK_NAME_PAIRS = [
+  ['Ari', 'Milo'],
+  ['Nova', 'Kian'],
+  ['Ira', 'Rian'],
+  ['Tara', 'Vihaan'],
+  ['Maya', 'Arin'],
+  ['Zara', 'Rey'],
+];
+
+const FALLBACK_ROLE_PAIRS = [
+  ['Explorer', 'Guide'],
+  ['Inventor', 'Navigator'],
+  ['Dreamer', 'Protector'],
+  ['Detective', 'Helper'],
+];
+
+const FALLBACK_LOOK_PAIRS = [
+  [
+    'curious young explorer with a bright backpack and star badge',
+    'friendly companion with expressive eyes and a warm smile',
+  ],
+  [
+    'creative kid inventor with colorful gadgets and confident pose',
+    'steady teammate with practical tools and calm expressions',
+  ],
+  [
+    'brave learner with adventurous outfit and determined look',
+    'wise sidekick with playful style and kind gestures',
+  ],
+];
+
+const buildTextSeed = (value = '') => {
+  const text = String(value || '').toLowerCase();
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
+const toTitleCaseWord = (word = '') => {
+  const clean = sanitizeText(word).toLowerCase();
+  if (!clean) return '';
+  return `${clean[0].toUpperCase()}${clean.slice(1)}`;
+};
+
+const buildSeededFallbackCharacters = ({ sourceText = '', voiceType = '' }) => {
+  const cleanSource = sanitizeText(sourceText);
+  const seed = buildTextSeed(cleanSource || 'kids-story');
+  const stopWords = new Set([
+    'about', 'after', 'again', 'also', 'and', 'back', 'before', 'being', 'between', 'bring',
+    'could', 'every', 'from', 'have', 'into', 'just', 'like', 'make', 'more', 'most', 'need',
+    'only', 'over', 'real', 'scene', 'story', 'that', 'their', 'there', 'these', 'they', 'this',
+    'those', 'with', 'your',
+  ]);
+
+  const wordCandidates = (cleanSource.match(/[A-Za-z][A-Za-z'-]{2,}/g) || [])
+    .map((entry) => toTitleCaseWord(entry))
+    .filter((entry) => entry && !stopWords.has(entry.toLowerCase()) && entry.length <= 12);
+  const uniqueCandidates = Array.from(new Set(wordCandidates));
+
+  const pickedNames = FALLBACK_NAME_PAIRS[seed % FALLBACK_NAME_PAIRS.length];
+  const pickedRoles = FALLBACK_ROLE_PAIRS[seed % FALLBACK_ROLE_PAIRS.length];
+  const pickedLooks = FALLBACK_LOOK_PAIRS[seed % FALLBACK_LOOK_PAIRS.length];
+
+  const nameA = uniqueCandidates[0] || pickedNames[0];
+  const nameB = uniqueCandidates[1] || pickedNames[1];
+
+  return [
+    {
+      id: `char-${nameA.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'lead'}`,
+      name: nameA,
+      role: pickedRoles[0],
+      appearance: pickedLooks[0],
+      emotionStyle: 'curious and brave',
+      voiceProfile: voiceType || 'kid-female',
+      colorPalette: ['sky blue', 'sunny yellow', 'mint'],
+      locked: true,
+    },
+    {
+      id: `char-${nameB.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'friend'}`,
+      name: nameB,
+      role: pickedRoles[1],
+      appearance: pickedLooks[1],
+      emotionStyle: 'supportive and warm',
+      voiceProfile: voiceType || 'soft-female',
+      colorPalette: ['peach', 'teal', 'cream'],
+      locked: true,
+    },
+  ];
+};
+
 const fallbackParseStory = ({ story, storyMode, voiceType, language, storyTitle }) => {
   const lines = story
     .split(/[\.\?\!]+/)
@@ -494,22 +634,7 @@ const fallbackParseStory = ({ story, storyMode, voiceType, language, storyTitle 
     locked: true,
   }));
   if (!characters.length) {
-    characters.push(
-      {
-        name: 'Ari',
-        role: 'Hero',
-        appearance: 'curious young explorer with a bright backpack',
-        voiceProfile: 'kid-friendly playful narrator',
-        colorPalette: ['sky blue', 'sunny yellow', 'mint'],
-      },
-      {
-        name: 'Milo',
-        role: 'Guide',
-        appearance: 'friendly sidekick with expressive eyes and a warm smile',
-        voiceProfile: 'soft storytelling voice',
-        colorPalette: ['peach', 'teal', 'cream'],
-      }
-    );
+    characters.push(...buildSeededFallbackCharacters({ sourceText: story, voiceType }));
   }
   const primaryA = characters[0]?.name || 'Hero';
   const primaryB = characters[1]?.name || 'Friend';
@@ -640,26 +765,7 @@ const buildCharactersFromScript = ({ script, subject, voiceType }) => {
   const baseCharacters = inferPresetCharactersFromText(text, voiceType);
 
   if (!baseCharacters.length) {
-    baseCharacters.push(
-      {
-        id: 'char-hero',
-        name: 'Hero',
-        role: 'Main Character',
-        appearance: 'friendly animated hero with colorful outfit',
-        emotionStyle: 'curious and brave',
-        voiceProfile: voiceType || 'kid-female',
-        locked: true,
-      },
-      {
-        id: 'char-guide',
-        name: 'Guide',
-        role: 'Mentor',
-        appearance: 'wise companion with warm smile',
-        emotionStyle: 'supportive and calm',
-        voiceProfile: 'soft-female',
-        locked: true,
-      }
-    );
+    baseCharacters.push(...buildSeededFallbackCharacters({ sourceText: text, voiceType }));
   }
 
   return baseCharacters;
@@ -976,7 +1082,7 @@ const regenerateProjectScene = async (projectId, sceneId, options = {}) => {
   const customDirection = sanitizeText(options?.direction || options?.prompt || '');
 
   let regeneratedCandidate = null;
-  if (googleAI) {
+  if (aiProviderEnabled) {
     const systemPrompt = 'You are an expert kids animation writer. Return strict JSON only.';
     const userPrompt = `Regenerate one storyboard scene while preserving story continuity.
 Project title: ${sanitizeText(project?.storyTitle || project?.title || 'Kids story')}
@@ -1109,7 +1215,7 @@ const regenerateProjectSceneDialogue = async (projectId, sceneId, options = {}) 
   const customDirection = sanitizeText(options?.direction || options?.prompt || '');
   let regeneratedDialogue = '';
 
-  if (googleAI) {
+  if (aiProviderEnabled) {
     const systemPrompt = 'You are an expert kids dialogue writer. Output only plain dialogue text.';
     const userPrompt = `Rewrite dialogue for one kids animation scene.
 Scene title: ${sanitizeText(scene?.title || '')}
@@ -1429,7 +1535,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
 
 const buildNarration = async (project) => {
   const fallback = `${project.title}. ${project.scenes.map((scene) => `${scene.title}: ${scene.description} `).join(' ')}`;
-  if (!googleAI) return fallback;
+  if (!aiProviderEnabled) return fallback;
 
   try {
     const systemPrompt = `You are a warm bedtime storyteller for kids. Create a gentle narration script in ${project.language} using the scenes and emotions provided.`;
@@ -1469,28 +1575,49 @@ const getResolution = (videoSize) => {
   }
 };
 
-const getGeminiImageBufferFromResponse = (response) => {
-  const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
-  for (const candidate of candidates) {
-    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
-    for (const part of parts) {
-      const mimeType = sanitizeText(part?.inlineData?.mimeType || part?.inline_data?.mime_type || '');
-      const rawData = part?.inlineData?.data ?? part?.inline_data?.data;
-      if (!rawData || !mimeType.startsWith('image/')) {
-        continue;
-      }
-      if (Buffer.isBuffer(rawData)) {
-        return rawData;
-      }
-      if (typeof rawData === 'string') {
-        return Buffer.from(rawData, 'base64');
-      }
-      if (rawData instanceof Uint8Array) {
-        return Buffer.from(rawData);
-      }
-    }
+const fetchFreeAiImage = async ({ prompt = '', model = '', width = 1280, height = 720, timeoutMs = 20000 }) => {
+  if (!aiProviderEnabled || freeAiProvider !== 'pollinations') {
+    return null;
   }
-  return null;
+  const cleanPrompt = sanitizeText(prompt).slice(0, 1400);
+  if (!cleanPrompt) {
+    return null;
+  }
+  const encodedPrompt = encodeURIComponent(cleanPrompt);
+  const query = new URLSearchParams({
+    width: String(Math.max(320, Number(width) || 1280)),
+    height: String(Math.max(320, Number(height) || 720)),
+    model: sanitizeText(model || freeImageModel || 'flux'),
+    nologo: 'true',
+    private: 'true',
+    safe: 'true',
+  });
+  if (pollinationsApiKey) {
+    query.set('key', pollinationsApiKey);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(2000, Number(timeoutMs) || 20000));
+  try {
+    const url = `${pollinationsApiBaseUrl}/image/${encodedPrompt}?${query.toString()}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const contentType = sanitizeText(response.headers.get('content-type') || '');
+    if (!contentType.startsWith('image/')) {
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    return buffer.length ? buffer : null;
+  } catch (_error) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 const diagnoseImageGeneration = async (options = {}) => {
@@ -1500,30 +1627,28 @@ const diagnoseImageGeneration = async (options = {}) => {
   );
   const modelAttempts = [];
 
-  if (!googleAI) {
+  if (!aiProviderEnabled || freeAiProvider !== 'pollinations') {
     return {
       ok: false,
-      reason: 'Google AI client not initialized (missing/invalid GEMINI_API_KEY).',
+      reason: 'Free AI provider disabled or unsupported.',
+      provider: freeAiProvider,
       aiProviderEnabled,
       useRealCartoonImages,
-      configuredImageModel: googleImageModel,
-      candidateModels: googleImageModelCandidates,
+      configuredImageModel: freeImageModel,
+      candidateModels: freeImageModelCandidates,
       modelAttempts,
     };
   }
 
-  for (const model of googleImageModelCandidates) {
+  for (const model of freeImageModelCandidates) {
     try {
-      const response = await googleAI.models.generateContent({
+      const imageBuffer = await fetchFreeAiImage({
+        prompt: samplePrompt,
         model,
-        contents: samplePrompt,
-        config: {
-          responseModalities: [Modality.TEXT, Modality.IMAGE],
-          temperature: 0.4,
-        },
+        width: 960,
+        height: 540,
+        timeoutMs: 15000,
       });
-
-      const imageBuffer = getGeminiImageBufferFromResponse(response);
       const hasImage = Boolean(imageBuffer?.length);
       modelAttempts.push({
         model,
@@ -1533,11 +1658,12 @@ const diagnoseImageGeneration = async (options = {}) => {
       if (hasImage) {
         return {
           ok: true,
+          provider: freeAiProvider,
           aiProviderEnabled,
           useRealCartoonImages,
-          configuredImageModel: googleImageModel,
+          configuredImageModel: freeImageModel,
           workingModel: model,
-          candidateModels: googleImageModelCandidates,
+          candidateModels: freeImageModelCandidates,
           modelAttempts,
         };
       }
@@ -1552,11 +1678,12 @@ const diagnoseImageGeneration = async (options = {}) => {
 
   return {
     ok: false,
-    reason: 'No image output returned by any candidate Gemini image model.',
+    reason: 'No image output returned by any candidate free image model.',
+    provider: freeAiProvider,
     aiProviderEnabled,
     useRealCartoonImages,
-    configuredImageModel: googleImageModel,
-    candidateModels: googleImageModelCandidates,
+    configuredImageModel: freeImageModel,
+    candidateModels: freeImageModelCandidates,
     modelAttempts,
   };
 };
@@ -1639,23 +1766,21 @@ const buildRealCartoonPrompt = (scene, project) => {
 };
 
 const generateRealCartoonSceneImage = async (scene, project, imagePath, resolution) => {
-  if (!googleAI || !useRealCartoonImages) {
+  if (!aiProviderEnabled || freeAiProvider !== 'pollinations' || !useRealCartoonImages) {
     return false;
   }
 
   const prompt = buildRealCartoonPrompt(scene, project);
   const errors = [];
-  for (const model of googleImageModelCandidates) {
+  for (const model of freeImageModelCandidates) {
     try {
-      const response = await googleAI.models.generateContent({
+      const imageBuffer = await fetchFreeAiImage({
+        prompt,
         model,
-        contents: prompt,
-        config: {
-          responseModalities: [Modality.TEXT, Modality.IMAGE],
-          temperature: 0.8,
-        },
+        width: resolution.width,
+        height: resolution.height,
+        timeoutMs: 25000,
       });
-      const imageBuffer = getGeminiImageBufferFromResponse(response);
       if (!imageBuffer?.length) {
         errors.push(`${model}: no image bytes`);
         continue;
@@ -2176,15 +2301,17 @@ const buildNarrationAudio = async (project, outputDir) => {
 };
 
 const runFfmpeg = async (args, cwd) => {
-  if (!ffmpegPath) {
-    throw new Error('FFmpeg binary is not available in this environment. Install ffmpeg-static or configure a local ffmpeg binary.');
+  const resolvedFfmpegPath = String(process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg').trim();
+  if (!resolvedFfmpegPath) {
+    throw new Error('FFmpeg binary is not available. Set FFMPEG_PATH or install ffmpeg in the runtime image.');
   }
 
   return new Promise((resolve, reject) => {
     const ffmpegArgs = ['-hide_banner', '-loglevel', 'error', '-nostdin', ...args];
-    const ffmpeg = spawn(ffmpegPath, ffmpegArgs, { cwd, stdio: ['ignore', 'ignore', 'pipe'] });
+    const ffmpeg = spawn(resolvedFfmpegPath, ffmpegArgs, { cwd, stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     const stderrLimit = 200000;
+    let spawnError = '';
 
     ffmpeg.stderr.on('data', (chunk) => {
       if (stderr.length >= stderrLimit) {
@@ -2194,9 +2321,16 @@ const runFfmpeg = async (args, cwd) => {
       stderr = `${stderr}${next}`.slice(-stderrLimit);
     });
 
+    ffmpeg.on('error', (error) => {
+      spawnError = sanitizeText(error?.message || 'failed to spawn ffmpeg');
+    });
+
     ffmpeg.on('close', (code) => {
       if (code !== 0) {
-        return reject(new Error(`FFmpeg failed with code ${code}: ${stderr}`));
+        const errorDetails = spawnError || stderr || `exit code ${code}`;
+        return reject(new Error(
+          `FFmpeg failed with code ${code}: ${errorDetails}. Install ffmpeg (apt-get install -y ffmpeg) or set FFMPEG_PATH.`
+        ));
       }
       resolve();
     });
@@ -2400,8 +2534,15 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   const generatedByAi = await generateRealCartoonSceneImage(scene, project, stillPath, resolution);
   if (!generatedByAi && project?.requireSceneImages) {
     throw new Error(
-      'AI character visuals are required for this render, but image generation failed. Check GEMINI_API_KEY (or GOOGLE_API_KEY), VIDEO_STUDIO_REAL_CARTOON_MODE, and image model access before retrying.'
+      'AI character visuals are required for this render, but free image generation failed. Check FREE_AI_PROVIDER, AI_PROVIDER_ENABLED, VIDEO_STUDIO_REAL_CARTOON_MODE, and image model access before retrying.'
     );
+  }
+  if (!generatedByAi) {
+    const svg = buildSceneSvg(scene, project, resolution.width, resolution.height);
+    const pngOptions = isLowMemoryMode
+      ? { compressionLevel: 9, palette: true, effort: 4 }
+      : { compressionLevel: 6 };
+    await sharp(Buffer.from(svg)).png(pngOptions).toFile(stillPath);
   }
   const duration = Math.max(2, Number(scene.duration) || 6);
   const fps = 24;
@@ -2411,14 +2552,7 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   const overtoneFrequency = baseFrequency + 140 + (sceneAudioSeed % 90);
 
   const args = ['-y'];
-  if (generatedByAi) {
-    args.push('-loop', '1', '-i', stillPath);
-  } else {
-    args.push(
-      '-f', 'lavfi',
-      '-i', `color=c=0x9ee7ff:s=${resolution.width}x${resolution.height}:r=24:d=${duration}`
-    );
-  }
+  args.push('-loop', '1', '-i', stillPath);
 
   if (synthesizedPath) {
     args.push('-i', synthesizedPath);
@@ -2434,44 +2568,27 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
     ? 'loudnorm=I=-16:TP=-1.5:LRA=11,volume=1.8,aresample=48000'
     : 'volume=0.10,aresample=48000';
 
-  if (generatedByAi) {
-    const zoomFilter = [
-      `zoompan=z='min(1.18,1+0.0022*on)'`,
-      `x='iw/2-(iw/zoom/2)+18*sin(on/18)'`,
-      `y='ih/2-(ih/zoom/2)+10*cos(on/20)'`,
-      `d=${frames}:s=${resolution.width}x${resolution.height}:fps=${fps}`,
-    ].join(':');
-    const fadeOutStart = Math.max(0, duration - 0.35);
-    args.push(
-      '-t', `${duration}`,
-      '-vf', `${zoomFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${fadeOutStart}:d=0.3`,
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-r', `${fps}`,
-      '-c:a', 'aac',
-      '-af', audioFilter,
-      '-ar', '48000',
-      '-ac', '2',
-      '-b:a', '160k',
-      '-shortest',
-      clipPath
-    );
-  } else {
-    args.push(
-      '-vf', buildCartoonSceneFilter(scene, resolution),
-      '-t', `${duration}`,
-      '-c:v', 'libx264',
-      '-pix_fmt', 'yuv420p',
-      '-r', `${fps}`,
-      '-c:a', 'aac',
-      '-af', audioFilter,
-      '-ar', '48000',
-      '-ac', '2',
-      '-b:a', '160k',
-      '-shortest',
-      clipPath
-    );
-  }
+  const zoomFilter = [
+    `zoompan=z='min(1.18,1+0.0022*on)'`,
+    `x='iw/2-(iw/zoom/2)+18*sin(on/18)'`,
+    `y='ih/2-(ih/zoom/2)+10*cos(on/20)'`,
+    `d=${frames}:s=${resolution.width}x${resolution.height}:fps=${fps}`,
+  ].join(':');
+  const fadeOutStart = Math.max(0, duration - 0.35);
+  args.push(
+    '-t', `${duration}`,
+    '-vf', `${zoomFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${fadeOutStart}:d=0.3`,
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-r', `${fps}`,
+    '-c:a', 'aac',
+    '-af', audioFilter,
+    '-ar', '48000',
+    '-ac', '2',
+    '-b:a', '160k',
+    '-shortest',
+    clipPath
+  );
 
   await runFfmpeg(args, outputDir);
   return {

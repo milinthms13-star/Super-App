@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen", "aibusinessos", "gulfjobsmigration", "womensafetyfamily", "devotionalecosystem", "hyperlocalaicommerce", "nilaaistudio", "trustlayer"],
+    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "promptvideogenerator", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen", "aibusinessos", "gulfjobsmigration", "womensafetyfamily", "devotionalecosystem", "hyperlocalaicommerce", "nilaaistudio", "trustlayer"],
   },
   utilities: {
     label: "Utilities",
@@ -108,6 +108,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "localservices", label: t("modules.localservices", "Local Services Marketplace"), icon: "LS", sellerVisible: true },
     { id: "nilaaihub", label: t("modules.nilaaihub", "Nila AI Hub"), icon: "🤖" },
     { id: "kidsstoryvideomaker", label: t("modules.kidsstoryvideomaker", "AI Kids Story Video Generator"), icon: "🎬" },
+    { id: "promptvideogenerator", label: t("modules.promptvideogenerator", "Prompt Video Generator"), icon: "🎥" },
     { id: "gulfservices", label: t("modules.gulfservices", "Gulf Services"), icon: "🌍" },
     { id: "hotelbooking", label: t("modules.hotelbooking", "NilaStay"), icon: "🏨" },
     { id: "healthcare", label: t("modules.healthcare", "NilaCare"), icon: "🏥" },

@@ -30,8 +30,10 @@ const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
 const requireSceneImagesByDefault = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_REQUIRE_SCENE_IMAGES || '0').toLowerCase()
 );
-const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const aiProviderEnabled = Boolean(geminiApiKey) && (!isFreeMode || allowAiInFreeMode);
+const freeAiEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.AI_PROVIDER_ENABLED || 'true').toLowerCase()
+);
+const aiProviderEnabled = freeAiEnabled && (!isFreeMode || allowAiInFreeMode);
 const realCartoonModeEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (aiProviderEnabled ? '1' : '0')).toLowerCase()
 );
