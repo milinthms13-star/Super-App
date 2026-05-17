@@ -2,6 +2,7 @@ const express = require('express');
 const {
   generateKidsVideoFromPrompt,
   generateKidsVideoFromDiffusersPrompt,
+  generateKidsVideoFromFreeSteveLikePrompt,
   getKidsVideoProject,
 } = require('../services/kidsVideoGeneratorHFService');
 
@@ -29,9 +30,20 @@ router.post('/generate', async (req, res) => {
       requestedEngine === 'diffusers_t2v' ||
       requestedEngine === 'text_to_video' ||
       requestedEngine === 'damo-text-to-video';
+    const useFreeSteveLike =
+      requestedEngine === 'free_steve_like' ||
+      requestedEngine === 'steve_like' ||
+      requestedEngine === 'script_to_video';
     const shouldUseDiffusers = useDiffusers && !disableDiffusers;
 
-    const result = shouldUseDiffusers
+    const result = useFreeSteveLike
+      ? await generateKidsVideoFromFreeSteveLikePrompt({
+          prompt,
+          sceneCount: clampSceneCount(req.body?.sceneCount),
+          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
+          language: req.body?.language || req.body?.lang || 'en',
+        })
+      : shouldUseDiffusers
       ? await generateKidsVideoFromDiffusersPrompt({
           prompt,
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',

@@ -809,6 +809,107 @@ const generateKidsVideoFromDiffusersPrompt = async ({
   };
 };
 
+const generateKidsVideoFromFreeSteveLikePrompt = async ({
+  prompt,
+  videoSize = 'youtube',
+  sceneCount = 5,
+  language = 'en',
+}) => {
+  await ensureDirectories();
+  const cleanPrompt = sanitizeText(prompt);
+  if (!cleanPrompt) throw new Error('Prompt is required.');
+  if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
+
+  const projectId = uuidv4();
+  const outputDir = path.join(uploadsRoot, safeFileName(projectId));
+  await mkdir(outputDir, { recursive: true });
+  const outputFileName = `story-render-${Date.now()}.mp4`;
+  const outputFile = path.join(outputDir, outputFileName);
+  const { width, height } = getResolution(videoSize);
+
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'steve_like_text_to_video.py');
+  const fps = Math.max(12, Math.min(30, Number(process.env.HF_STEVE_LIKE_FPS) || 24));
+  const args = [
+    scriptPath,
+    '--script', cleanPrompt,
+    '--output', outputFile,
+    '--max_scenes', `${Math.max(3, Math.min(8, Number(sceneCount) || 5))}`,
+    '--width', `${width}`,
+    '--height', `${height}`,
+    '--fps', `${fps}`,
+    '--lang', sanitizeText(language || 'en'),
+  ];
+
+  try {
+    const { stdout, command: pythonCommand } = await runPythonProcess({
+      args,
+      cwd: path.join(__dirname, '..'),
+    });
+
+    if (!fs.existsSync(outputFile)) {
+      throw new Error(`Free Steve-like generator did not produce output video. ${stdout || ''}`.trim());
+    }
+
+    let parsedScriptOutput = null;
+    try {
+      parsedScriptOutput = JSON.parse(stdout || '{}');
+    } catch (_error) {
+      parsedScriptOutput = null;
+    }
+
+    const persistedProject = {
+      projectId,
+      createdAt: new Date().toISOString(),
+      workflowType: 'kids-video-hf-steve-like',
+      aiProvider: 'huggingface',
+      renderEngine: 'free_steve_like',
+      prompt: cleanPrompt,
+      title: 'HF Free Script-to-Video Render',
+      videoSize: sanitizeText(videoSize || 'youtube'),
+      outputDir,
+      outputFile,
+      videoUrl: `/uploads/kids-video-hf/${safeFileName(projectId)}/${outputFileName}`,
+      aiImagesEnabled: true,
+      renderedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      generatorLog: stdout || '',
+      pythonCommand: sanitizeText(pythonCommand || ''),
+      sceneCount: Number(parsedScriptOutput?.scene_count || Math.max(3, Math.min(8, Number(sceneCount) || 5))),
+    };
+
+    await writeFile(projectFilePath(projectId), JSON.stringify(persistedProject, null, 2), 'utf-8');
+    await writeFile(path.join(outputDir, 'project.json'), JSON.stringify(persistedProject, null, 2), 'utf-8');
+
+    return {
+      success: true,
+      projectId,
+      project: persistedProject,
+      videoUrl: persistedProject.videoUrl,
+      outputFile,
+      aiImagesEnabled: true,
+    };
+  } catch (error) {
+    // Resilient fallback to existing non-python-pipeline so render still succeeds.
+    const fallbackResult = await generateKidsVideoFromPrompt({
+      prompt: cleanPrompt,
+      sceneCount: Math.max(3, Math.min(8, Number(sceneCount) || 5)),
+      videoSize,
+      storyMode: 'educational',
+      voiceType: 'kid-female',
+    });
+
+    return {
+      ...fallbackResult,
+      project: {
+        ...(fallbackResult.project || {}),
+        workflowType: 'kids-video-hf-steve-like-fallback',
+        renderEngine: 'hf_image_ffmpeg_fallback',
+        fallbackReason: sanitizeText(error?.message || 'free steve-like generation failed'),
+      },
+    };
+  }
+};
+
 const getKidsVideoProject = async (projectId) => {
   await ensureDirectories();
   const cleanProjectId = sanitizeText(projectId);
@@ -820,5 +921,6 @@ const getKidsVideoProject = async (projectId) => {
 module.exports = {
   generateKidsVideoFromPrompt,
   generateKidsVideoFromDiffusersPrompt,
+  generateKidsVideoFromFreeSteveLikePrompt,
   getKidsVideoProject,
 };

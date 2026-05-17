@@ -81,6 +81,11 @@ const AI_PROVIDER_OPTIONS = [
   { id: "huggingface", label: "Hugging Face (Recommended)" },
   { id: "pollinations", label: "Pollinations" },
 ];
+const HF_RENDER_ENGINE_OPTIONS = [
+  { id: "free_steve_like", label: "Free Script-to-Video (Recommended)" },
+  { id: "default", label: "Image + FFmpeg (Default)" },
+  { id: "diffusers_t2v", label: "Diffusers Text-to-Video (High Memory)" },
+];
 
 const STORY_TEMPLATES = [
   {
@@ -378,6 +383,7 @@ const KidsStoryVideoMaker = () => {
   const [premiumHD, setPremiumHD] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [aiProvider, setAiProvider] = useState("huggingface");
+  const [hfRenderEngine, setHfRenderEngine] = useState("free_steve_like");
   const [generatedProject, setGeneratedProject] = useState(null);
   const [generatedScenes, setGeneratedScenes] = useState([]);
   const [videoUrl, setVideoUrl] = useState("");
@@ -1333,11 +1339,18 @@ const KidsStoryVideoMaker = () => {
       );
 
       setError("");
-      setMessage("Rendering with Hugging Face clean pipeline (fresh scenes + character visuals)...");
+      setMessage(`Rendering with Hugging Face (${hfRenderEngine})...`);
       setIsRendering(true);
       startRenderProgress();
 
       try {
+        const selectedEngine =
+          hfRenderEngine && hfRenderEngine !== "default" ? hfRenderEngine : "";
+        const selectedLanguageCode = (
+          LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US"
+        )
+          .split("-")[0]
+          .toLowerCase();
         const { payload, response } = await runCancelableRequest("render-video", (signal) =>
           renderPromptVideoHf(
             {
@@ -1349,6 +1362,13 @@ const KidsStoryVideoMaker = () => {
               videoSizeId,
               storyMode,
               voiceType,
+              language: selectedLanguageCode,
+              ...(selectedEngine
+                ? {
+                    engine: selectedEngine,
+                    renderEngine: selectedEngine,
+                  }
+                : {}),
             },
             { signal }
           )
@@ -1378,6 +1398,7 @@ const KidsStoryVideoMaker = () => {
           title: sanitizeText(storyTitle || returnedProject?.title || generatedProject?.title || "AI Kids Story Video Generator"),
           storyPrompt: normalizedStoryPrompt,
           aiProvider: "huggingface",
+          renderEngine: selectedEngine || "default",
           renderedAt: new Date().toISOString(),
           videoUrl: normalizedVideoUrl,
         };
@@ -2196,6 +2217,14 @@ const KidsStoryVideoMaker = () => {
                         ))}
                       </select>
                     </div>
+                    <div>
+                      <label>HF render engine</label>
+                      <select value={hfRenderEngine} onChange={(event) => setHfRenderEngine(event.target.value)}>
+                        {HF_RENDER_ENGINE_OPTIONS.map((option) => (
+                          <option key={option.id} value={option.id}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2475,6 +2504,7 @@ const KidsStoryVideoMaker = () => {
                   <p><strong>Mode:</strong> {storyMode}</p>
                   <p><strong>Safe mode:</strong> {safeMode ? "On" : "Off"}</p>
                   <p><strong>AI provider:</strong> {aiProvider}</p>
+                  <p><strong>HF engine:</strong> {hfRenderEngine}</p>
                   <p><strong>Premium HD:</strong> {premiumHD ? "On" : "Off"}</p>
                 </div>
               </div>

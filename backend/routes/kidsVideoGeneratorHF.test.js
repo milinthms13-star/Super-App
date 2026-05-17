@@ -1,6 +1,7 @@
 jest.mock('../services/kidsVideoGeneratorHFService', () => ({
   generateKidsVideoFromPrompt: jest.fn(),
   generateKidsVideoFromDiffusersPrompt: jest.fn(),
+  generateKidsVideoFromFreeSteveLikePrompt: jest.fn(),
   getKidsVideoProject: jest.fn(),
 }));
 
@@ -9,6 +10,7 @@ const app = require('../app');
 const {
   generateKidsVideoFromPrompt,
   generateKidsVideoFromDiffusersPrompt,
+  generateKidsVideoFromFreeSteveLikePrompt,
   getKidsVideoProject,
 } = require('../services/kidsVideoGeneratorHFService');
 
@@ -88,6 +90,38 @@ describe('kids-video-hf routes', () => {
         prompt: 'a hero flying over a futuristic city',
         numFrames: 64,
         numInferenceSteps: 20,
+      })
+    );
+  });
+
+  test('POST /api/kids-video-hf/generate uses free steve-like engine when requested', async () => {
+    generateKidsVideoFromFreeSteveLikePrompt.mockResolvedValue({
+      projectId: 'proj-steve-1',
+      videoUrl: '/uploads/kids-video-hf/proj-steve-1/story-render.mp4',
+      aiImagesEnabled: true,
+      project: {
+        projectId: 'proj-steve-1',
+        workflowType: 'kids-video-hf-steve-like',
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/generate')
+      .send({
+        prompt: 'AI helps create videos from script',
+        engine: 'free_steve_like',
+        sceneCount: 4,
+        language: 'en',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.workflowType).toBe('kids-video-hf-steve-like');
+    expect(generateKidsVideoFromFreeSteveLikePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'AI helps create videos from script',
+        sceneCount: 4,
+        language: 'en',
       })
     );
   });

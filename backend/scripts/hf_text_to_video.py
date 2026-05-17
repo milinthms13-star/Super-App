@@ -17,22 +17,10 @@ def _resolve_output_path(output: str) -> Path:
 def _load_pipeline(model: str, dtype: Any, token: str | None):
     from diffusers import DPMSolverMultistepScheduler, DiffusionPipeline
 
-    kwargs: dict[str, Any] = {
-        "torch_dtype": dtype,
-        "use_safetensors": True,
-    }
+    kwargs: dict[str, Any] = {"torch_dtype": dtype}
     if token:
         kwargs["token"] = token
-    if str(dtype).endswith("float16"):
-        kwargs["variant"] = "fp16"
-
-    try:
-        pipe = DiffusionPipeline.from_pretrained(model, **kwargs)
-    except Exception:
-        if "variant" not in kwargs:
-            raise
-        kwargs.pop("variant", None)
-        pipe = DiffusionPipeline.from_pretrained(model, **kwargs)
+    pipe = DiffusionPipeline.from_pretrained(model, **kwargs)
 
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
     return pipe
@@ -64,6 +52,13 @@ def generate_text_to_video(
     has_cuda = torch.cuda.is_available()
     dtype = torch.float16 if has_cuda else torch.float32
     device = "cuda" if has_cuda else "cpu"
+
+    if not has_cuda:
+        print(
+            "WARNING: Running on CPU. This can be very slow. "
+            "Use a CUDA GPU for practical text-to-video generation.",
+            file=sys.stderr,
+        )
 
     pipe = _load_pipeline(model=model, dtype=dtype, token=token)
     if has_cuda:

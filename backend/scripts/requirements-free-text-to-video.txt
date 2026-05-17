@@ -1,0 +1,4 @@
+moviepy==1.0.3
+gTTS==2.5.4
+requests==2.32.3
+Pillow==11.2.1
