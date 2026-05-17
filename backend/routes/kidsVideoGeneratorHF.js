@@ -58,6 +58,7 @@ router.post('/generate', async (req, res) => {
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           storyMode: req.body?.storyMode || 'moral',
           voiceType: req.body?.voiceType || 'kid-female',
+          language: req.body?.language || req.body?.lang || 'en',
         });
 
     return res.status(200).json({

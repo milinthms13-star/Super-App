@@ -394,6 +394,17 @@ const wrapText = (value = '', maxChars = 44, maxLines = 4) => {
   return lines.length ? lines : [''];
 };
 
+const escapeForDrawText = (value = '') =>
+  String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/:/g, '\\:')
+    .replace(/'/g, "\\'")
+    .replace(/,/g, '\\,')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/%/g, '\\%')
+    .replace(/\r?\n/g, '\\n');
+
 const escapeXml = (value = '') =>
   String(value || '')
     .replace(/&/g, '&amp;')
@@ -524,42 +535,52 @@ const fetchHfImage = async ({ prompt, width, height, model, timeoutMs = 35000 })
 };
 
 const generateSceneImage = async ({ scene, story, outputPath, width, height }) => {
-  const prompt = buildSceneImagePrompt(scene, story);
-  const attempts = [];
-  for (const model of hfImageModels) {
-    const { buffer, error } = await fetchHfImage({ prompt, width, height, model });
-    if (buffer?.length) {
-      await sharp(buffer)
-        .resize(width, height, { fit: 'cover' })
-        .png({ compressionLevel: 7 })
-        .toFile(outputPath);
-      return { generatedByAi: true, attempts };
-    }
-    attempts.push(`${model}: ${error || 'no image bytes'}`);
-  }
-
+  const attempts = ['scene_svg_character_layout'];
   const svg = buildSceneSvg(scene, story, width, height);
   await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toFile(outputPath);
   return { generatedByAi: false, attempts };
 };
 
-const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, height }) => {
+const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, height, language = 'en' }) => {
   const fps = 24;
-  const duration = Math.max(3, Math.min(8, Number(scene.durationSeconds) || 4));
+  const narrationText = sanitizeText(scene.dialogue || scene.description || scene.title || 'Story scene');
+  const wordCount = narrationText ? narrationText.split(/\s+/).filter(Boolean).length : 0;
+  const estimatedNarrationSeconds = wordCount > 0 ? (wordCount / 2.2) : 0;
+  const duration = Math.max(3, Math.min(14, Math.max(Number(scene.durationSeconds) || 4, estimatedNarrationSeconds)));
   const frames = Math.max(1, Math.floor(duration * fps));
   const clipPath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}.mp4`);
-  const audioPath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}-tone.mp3`);
-  const baseHz = 260 + ((index * 47) % 190);
-  const overHz = baseHz + 120;
+  const speechPath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}-speech.mp3`);
+  const tonePath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}-tone.mp3`);
+  let audioPath = tonePath;
 
-  await runFfmpeg([
-    '-y',
-    '-f', 'lavfi',
-    '-i', `aevalsrc=(0.02*sin(2*PI*${baseHz}*t)+0.01*sin(2*PI*${overHz}*t)):s=44100:d=${duration}`,
-    '-c:a', 'libmp3lame',
-    '-b:a', '96k',
-    audioPath,
-  ], outputDir);
+  try {
+    const ttsScriptPath = path.join(__dirname, '..', 'scripts', 'scene_tts.py');
+    const languageCode = sanitizeText(language || 'en').split('-')[0].toLowerCase() || 'en';
+    await runPythonProcess({
+      args: [
+        ttsScriptPath,
+        '--text', narrationText,
+        '--output', speechPath,
+        '--lang', languageCode,
+      ],
+      cwd: path.join(__dirname, '..'),
+    });
+
+    if (fs.existsSync(speechPath)) {
+      audioPath = speechPath;
+    }
+  } catch (_error) {
+    const baseHz = 260 + ((index * 47) % 190);
+    const overHz = baseHz + 120;
+    await runFfmpeg([
+      '-y',
+      '-f', 'lavfi',
+      '-i', `aevalsrc=(0.02*sin(2*PI*${baseHz}*t)+0.01*sin(2*PI*${overHz}*t)):s=44100:d=${duration}`,
+      '-c:a', 'libmp3lame',
+      '-b:a', '96k',
+      tonePath,
+    ], outputDir);
+  }
 
   const zoom = [
     `zoompan=z='min(1.15,1+0.0018*on)'`,
@@ -568,20 +589,48 @@ const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, heig
     `d=${frames}:s=${width}x${height}:fps=${fps}`,
   ].join(':');
 
-  await runFfmpeg([
+  const subtitleLines = wrapText(narrationText.replace(/\s*\n+\s*/g, ' '), 46, 3);
+  const subtitleText = escapeForDrawText(subtitleLines.join('\n'));
+  const subtitleBoxHeight = Math.max(110, Math.min(220, 66 + (subtitleLines.length * 30)));
+  const subtitleMargin = Math.max(20, Math.round(height * 0.04));
+  const subtitleY = Math.max(10, height - subtitleBoxHeight - subtitleMargin);
+  const subtitleX = 40;
+  const subtitleWidth = Math.max(220, width - (subtitleX * 2));
+  const subtitleFontSize = Math.max(22, Math.round(height * 0.04));
+  const subtitleFilter = [
+    `drawbox=x=${subtitleX}:y=${subtitleY}:w=${subtitleWidth}:h=${subtitleBoxHeight}:color=black@0.48:t=fill`,
+    `drawtext=text='${subtitleText}':fontcolor=white:fontsize=${subtitleFontSize}:line_spacing=8:x=(w-text_w)/2:y=${subtitleY + Math.round(subtitleBoxHeight * 0.22)}:shadowx=2:shadowy=2:shadowcolor=black@0.85`,
+  ].join(',');
+  const vfWithSubtitles = `${zoom},${subtitleFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+  const vfWithoutSubtitles = `${zoom},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+
+  const baseArgs = [
     '-y',
     '-loop', '1',
     '-i', stillPath,
     '-i', audioPath,
     '-t', `${duration}`,
-    '-vf', `${zoom},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`,
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-r', `${fps}`,
     '-c:a', 'aac',
     '-shortest',
     clipPath,
-  ], outputDir);
+  ];
+
+  try {
+    await runFfmpeg([
+      ...baseArgs.slice(0, 8),
+      '-vf', vfWithSubtitles,
+      ...baseArgs.slice(8),
+    ], outputDir);
+  } catch (_subtitleError) {
+    await runFfmpeg([
+      ...baseArgs.slice(0, 8),
+      '-vf', vfWithoutSubtitles,
+      ...baseArgs.slice(8),
+    ], outputDir);
+  }
 
   return { clipPath, duration };
 };
@@ -592,6 +641,7 @@ const generateKidsVideoFromPrompt = async ({
   videoSize = 'youtube',
   storyMode = 'moral',
   voiceType = 'kid-female',
+  language = 'en',
 }) => {
   await ensureDirectories();
 
@@ -641,6 +691,7 @@ const generateKidsVideoFromPrompt = async ({
       stillPath,
       width,
       height,
+      language,
     });
     clips.push(clipResult);
     sceneRenderMeta.push({
