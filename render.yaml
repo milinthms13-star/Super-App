@@ -79,3 +79,5 @@ services:
         sync: false
       - key: TWILIO_PHONE_NUMBER
         value: +17623443854
+      - key: GEMINI_API_KEY\n        sync: false\n      - key: GOOGLE_API_KEY\n        sync: false\n        
+
