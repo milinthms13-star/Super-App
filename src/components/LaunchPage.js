@@ -164,6 +164,12 @@ const moduleFallbacks = {
     icon: "FaStar",
     isComingSoon: false,
   },
+  promptvideogenerator: {
+    title: "Prompt Video Generator",
+    description: "Generate real-feel videos from a prompt, with optional customer character image upload.",
+    icon: "FaRocket",
+    isComingSoon: false,
+  },
   hyperlocal: {
     title: "Nila Hyperlocal Delivery",
     description: "Grocery, pharmacy, food, and local pickup/drop with fast delivery workflows.",
@@ -315,6 +321,7 @@ const moduleCategoryMap = {
   hyperlocalaicommerce: "business",
   nilaaistudio: "business",
   trustlayer: "business",
+  promptvideogenerator: "business",
   finance: "utility",
   billpay: "utility",
   fooddelivery: "utility",
@@ -366,6 +373,7 @@ const LaunchPage = ({
     "Business Services Hub": "businessservices",
     "Nila AI Hub": "nilaaihub",
     "Nila Kids Story Video Maker": "kidsstoryvideomaker",
+    "Prompt Video Generator": "promptvideogenerator",
     "AI Business Operating System": "aibusinessos",
     "Kerala + Gulf Jobs Migration": "gulfjobsmigration",
     "Women Safety + Family Protection": "womensafetyfamily",

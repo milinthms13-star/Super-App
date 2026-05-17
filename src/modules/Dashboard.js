@@ -445,6 +445,18 @@ const MODULE_CONFIG = [
     emoji: "KS",
   },
   {
+    id: "promptvideogenerator",
+    nameKey: "modules.promptvideogenerator",
+    fallbackName: "Prompt Video Generator",
+    icon: "photostudio",
+    descriptionKey: "dashboard.moduleDescriptions.promptvideogenerator",
+    fallbackDescription:
+      "Generate real-feel videos from a prompt with optional customer character UI uploads and auto-render output.",
+    stats: "Prompt-to-video pipeline",
+    gradient: "linear-gradient(135deg, #0B5ED7 0%, #129e8a 45%, #f59e0b 100%)",
+    emoji: "PV",
+  },
+  {
     id: "karaokeduet",
     nameKey: "modules.karaokeduet",
     fallbackName: "Remote Karaoke Duet",
@@ -1341,6 +1353,7 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "resumebuilder" ||
         module.id === "photostudio" ||
         module.id === "kidsstoryvideomaker" ||
+        module.id === "promptvideogenerator" ||
         module.id === "karaokeduet" ||
         module.id === "beautyai" ||
         module.id === "kitchen" ||

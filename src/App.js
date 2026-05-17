@@ -57,6 +57,7 @@ const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket")
 const BusinessBuilder = React.lazy(() => import("./modules/businessbuilder/BusinessBuilder"));
 const NilaAIHub = React.lazy(() => import("./modules/nilaaihub/NilaAIHub"));
 const KidsStoryVideoMaker = React.lazy(() => import("./modules/kidsstoryvideomaker/KidsStoryVideoMaker"));
+const PromptVideoGenerator = React.lazy(() => import("./modules/promptvideogenerator/PromptVideoGenerator"));
 const GulfServices = React.lazy(() => import("./modules/gulfservices/GulfServices"));
 const HotelBooking = React.lazy(() => import("./modules/hotelbooking/HotelBooking"));
 const Healthcare = React.lazy(() => import("./modules/healthcare/Healthcare"));
@@ -166,6 +167,7 @@ const PREVIEW_ENABLED_MODULES = [
   "sosalert",
   "astrology",
   "kidsstoryvideomaker",
+  "promptvideogenerator",
   "photostudio",
   "karaokeduet",
   "danceduet",
@@ -220,6 +222,7 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "education",
   "nilaaihub",
   "kidsstoryvideomaker",
+  "promptvideogenerator",
   "finance",
   "billpay",
   "fooddelivery",
@@ -1253,6 +1256,7 @@ function AppShell() {
               <Route path="business-builder" element={<BusinessBuilder />} />
               <Route path="nila-ai-hub" element={<NilaAIHub />} />
               <Route path="kids-story-video-maker" element={<KidsStoryVideoMaker />} />
+              <Route path="prompt-video-generator" element={<PromptVideoGenerator />} />
               <Route path="gulf-services" element={<GulfServices />} />
               <Route path="hotelbooking" element={<HotelBooking />} />
               <Route path="healthcare" element={<Healthcare />} />
