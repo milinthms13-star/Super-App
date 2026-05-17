@@ -332,7 +332,7 @@ export const renderPromptVideoHf = (requestBody, options = {}) =>
       engine: requestBody?.engine || requestBody?.renderEngine || 'diffusers_t2v',
       renderEngine: requestBody?.renderEngine || requestBody?.engine || 'diffusers_t2v',
     },
-    retries: 0,
+    retries: 1,
     timeoutMs: RENDER_TIMEOUT_MS,
     ...options,
   }).then((result) => {
