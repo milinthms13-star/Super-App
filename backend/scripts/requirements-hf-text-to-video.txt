@@ -1,5 +1,5 @@
-requests
 gtts
 moviepy
 imageio
 imageio-ffmpeg
+pillow

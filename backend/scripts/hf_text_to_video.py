@@ -1,225 +1,282 @@
 import argparse
 import json
-import os
-import random
 import re
+import subprocess
 import sys
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import requests
-from gtts import gTTS
-from moviepy.editor import (
-    AudioFileClip,
-    CompositeVideoClip,
-    ImageClip,
-    TextClip,
-    concatenate_videoclips,
-)
+from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips
+from PIL import Image, ImageDraw, ImageFont
+
+
+KNOWN_CHARACTERS = {
+    "rabbit": ("Rabbit", "#f97316", "#fde68a"),
+    "tortoise": ("Tortoise", "#059669", "#a7f3d0"),
+    "turtle": ("Turtle", "#059669", "#a7f3d0"),
+    "lion": ("Lion", "#b45309", "#fde68a"),
+    "fox": ("Fox", "#ea580c", "#fed7aa"),
+    "bear": ("Bear", "#7c2d12", "#d6d3d1"),
+    "dog": ("Dog", "#2563eb", "#bfdbfe"),
+    "cat": ("Cat", "#7c3aed", "#ddd6fe"),
+    "rama": ("Rama", "#1d4ed8", "#bfdbfe"),
+    "sita": ("Sita", "#be185d", "#fbcfe8"),
+}
+
+
+@dataclass
+class Character:
+    name: str
+    body_color: str
+    accent_color: str
+
+
+@dataclass
+class Scene:
+    title: str
+    description: str
+    dialogue: str
 
 
 def _resolve_output_path(output: str) -> Path:
-    output_path = Path(output).expanduser().resolve()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    if output_path.suffix.lower() != ".mp4":
-        output_path = output_path.with_suffix(".mp4")
-    return output_path
-
-
-COMMON_STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "by",
-    "for",
-    "from",
-    "has",
-    "he",
-    "in",
-    "is",
-    "it",
-    "its",
-    "of",
-    "on",
-    "that",
-    "the",
-    "to",
-    "was",
-    "were",
-    "will",
-    "with",
-    "you",
-    "your",
-}
+    path = Path(output).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.suffix.lower() != ".mp4":
+        path = path.with_suffix(".mp4")
+    return path
 
 
 def _clean_text(value: str) -> str:
     return str(value or "").replace("\x00", "").strip()
 
 
-def _split_prompt_to_scenes(prompt: str, max_scenes: int = 6) -> list[dict[str, str]]:
-    cleaned = _clean_text(prompt)
+def _extract_characters(prompt: str) -> list[Character]:
+    lowered = _clean_text(prompt).lower()
+    found: list[Character] = []
+    for key, payload in KNOWN_CHARACTERS.items():
+        if re.search(rf"\\b{re.escape(key)}\\b", lowered):
+            found.append(Character(*payload))
+        if len(found) >= 2:
+            break
+
+    if len(found) < 2:
+        defaults = [Character("Asha", "#2563eb", "#bfdbfe"), Character("Ravi", "#7c3aed", "#ddd6fe")]
+        for character in defaults:
+            if len(found) >= 2:
+                break
+            if all(character.name != current.name for current in found):
+                found.append(character)
+
+    return found[:2]
+
+
+def _split_prompt_to_scenes(prompt: str, scene_count: int, lead: str, support: str) -> list[Scene]:
     chunks = [
-        chunk.strip()
-        for chunk in re.split(r"(?<=[.!?])\s+|\n+", cleaned)
-        if chunk.strip()
+        item.strip()
+        for item in re.split(r"(?<=[.!?])\\s+|\\n+", _clean_text(prompt))
+        if item.strip()
     ]
     if not chunks:
-        chunks = [cleaned]
+        chunks = ["A child starts a magical adventure and learns kindness."]
 
-    chunks = chunks[: max(1, min(12, max_scenes))]
-    scenes: list[dict[str, str]] = []
-    for sentence in chunks:
-        words = re.findall(r"[a-zA-Z][a-zA-Z'-]+", sentence.lower())
-        keyword = next(
-            (word for word in words if word not in COMMON_STOPWORDS and len(word) > 3),
-            "story",
+    count = max(3, min(8, int(scene_count or 5)))
+    titles = ["Opening", "Challenge", "Journey", "Climax", "Ending", "Twist", "Hope", "Finale"]
+    scenes: list[Scene] = []
+    for index in range(count):
+        base = chunks[index % len(chunks)]
+        dialogue = f"{lead}: {base}\\n{support}: We stay together and solve this step by step."
+        scenes.append(
+            Scene(
+                title=titles[index] if index < len(titles) else f"Scene {index + 1}",
+                description=base,
+                dialogue=dialogue,
+            )
         )
-        scenes.append({"text": sentence, "keyword": keyword})
     return scenes
 
 
-def _fetch_free_image(keyword: str, image_path: Path) -> bool:
-    query = _clean_text(keyword).replace(" ", ",")
-    dynamic_url = f"https://source.unsplash.com/featured/1920x1080/?{query or 'story'}"
-    try:
-        response = requests.get(dynamic_url, timeout=30, allow_redirects=True)
-        if response.status_code != 200 or not response.content:
-            return False
-        image_path.write_bytes(response.content)
-        return True
-    except Exception:
-        return False
+def _wrap_text(value: str, max_chars: int, max_lines: int) -> list[str]:
+    words = _clean_text(value).split()
+    if not words:
+        return [""]
+
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        tentative = f"{current} {word}".strip()
+        if len(tentative) <= max_chars:
+            current = tentative
+            continue
+        if current:
+            lines.append(current)
+        current = word
+        if len(lines) >= max_lines - 1:
+            break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    return lines or [""]
 
 
-def _build_scene_clip(
-    scene: dict[str, str],
-    index: int,
-    output_path: Path,
-    width: int,
-    height: int,
-) -> CompositeVideoClip:
-    scene_text = _clean_text(scene.get("text", ""))
-    keyword = _clean_text(scene.get("keyword", "story"))
+def _draw_character(draw: ImageDraw.ImageDraw, x: int, y: int, body: str, accent: str, name: str, font: ImageFont.ImageFont) -> None:
+    # Shadow
+    draw.ellipse((x - 80, y + 165, x + 80, y + 205), fill="#00000033")
+    # Head
+    draw.ellipse((x - 48, y, x + 48, y + 96), fill="#fde7c6", outline="#111827", width=3)
+    draw.ellipse((x - 20, y + 32, x - 10, y + 42), fill="#111827")
+    draw.ellipse((x + 10, y + 32, x + 20, y + 42), fill="#111827")
+    draw.arc((x - 22, y + 48, x + 22, y + 74), start=15, end=165, fill="#7c2d12", width=3)
+    # Body
+    draw.rounded_rectangle((x - 36, y + 94, x + 36, y + 198), radius=26, fill=body, outline="#0f172a", width=3)
+    draw.ellipse((x - 47, y + 126, x - 29, y + 144), fill=accent)
+    draw.ellipse((x + 29, y + 126, x + 47, y + 144), fill=accent)
+    draw.rounded_rectangle((x - 22, y + 196, x - 6, y + 244), radius=8, fill="#334155")
+    draw.rounded_rectangle((x + 6, y + 196, x + 22, y + 244), radius=8, fill="#334155")
+    draw.text((x - 45, y + 250), name, fill="#0f172a", font=font)
 
-    audio_filename = output_path.parent / f"audio_{index}.mp3"
-    gTTS(text=scene_text, lang="en", slow=False).save(str(audio_filename))
-    audio_clip = AudioFileClip(str(audio_filename))
-    duration = max(2.5, float(audio_clip.duration))
 
-    image_filename = output_path.parent / f"scene_{index}.jpg"
-    if not _fetch_free_image(keyword, image_filename):
-        # Fallback to a random placeholder image if stock fetch fails.
-        seed = random.randint(1000, 999999)
-        placeholder = f"https://picsum.photos/seed/{seed}/{max(640, width)}/{max(360, height)}"
-        response = requests.get(placeholder, timeout=20)
-        response.raise_for_status()
-        image_filename.write_bytes(response.content)
+def _build_scene_image(scene: Scene, characters: list[Character], width: int, height: int, output: Path) -> None:
+    image = Image.new("RGB", (width, height), color="#dbeafe")
+    draw = ImageDraw.Draw(image)
 
-    image_clip = ImageClip(str(image_filename)).resize((width, height)).set_duration(duration)
-    image_clip = image_clip.set_audio(audio_clip)
+    # Background
+    draw.rectangle((0, 0, width, int(height * 0.62)), fill="#bae6fd")
+    draw.rectangle((0, int(height * 0.62), width, height), fill="#bbf7d0")
+    draw.ellipse((int(width * 0.83), int(height * 0.06), int(width * 0.93), int(height * 0.20)), fill="#fde047")
 
-    try:
-        text_clip = TextClip(
-            scene_text,
-            fontsize=40,
-            color="white",
-            bg_color="black",
-            size=(int(width * 0.85), int(height * 0.24)),
-            method="caption",
-        ).set_position(("center", "bottom")).set_duration(duration)
-        return CompositeVideoClip([image_clip, text_clip], size=(width, height))
-    except Exception:
-        # Text rendering can fail if ImageMagick/fonts are unavailable.
-        return CompositeVideoClip([image_clip], size=(width, height))
+    title_font = ImageFont.load_default()
+    body_font = ImageFont.load_default()
+
+    draw.text((32, 26), scene.title, fill="#0f172a", font=title_font)
+
+    left_x = int(width * 0.32)
+    right_x = int(width * 0.68)
+    base_y = int(height * 0.30)
+    _draw_character(draw, left_x, base_y, characters[0].body_color, characters[0].accent_color, characters[0].name, body_font)
+    _draw_character(draw, right_x, base_y, characters[1].body_color, characters[1].accent_color, characters[1].name, body_font)
+
+    # Dialogue subtitle box
+    box_top = int(height * 0.74)
+    box_bottom = height - 18
+    draw.rounded_rectangle((26, box_top, width - 26, box_bottom), radius=18, fill="#000000B0")
+
+    subtitle_lines = _wrap_text(scene.dialogue.replace("\n", " "), max_chars=max(28, width // 30), max_lines=3)
+    y = box_top + 14
+    for line in subtitle_lines:
+        draw.text((42, y), line, fill="#ffffff", font=body_font)
+        y += 24
+
+    image.save(output, format="PNG")
+
+
+def _create_scene_audio(text: str, output_mp3: Path, language: str) -> None:
+    tts_script = Path(__file__).resolve().parent / "scene_tts.py"
+    cmd = [
+        sys.executable,
+        str(tts_script),
+        "--text",
+        _clean_text(text),
+        "--output",
+        str(output_mp3),
+        "--lang",
+        _clean_text(language or "en") or "en",
+    ]
+    subprocess.run(cmd, check=True)
 
 
 def generate_text_to_video(
     prompt: str,
     output: str,
-    model: str = "scene-pipeline",
+    model: str = "storybuilder-v1",
     negative_prompt: str | None = None,
     num_inference_steps: int = 25,
     num_frames: int = 24,
     width: int = 576,
     height: int = 320,
-    fps: int = 8,
+    fps: int = 12,
     guidance_scale: float = 9.0,
     seed: int = 42,
+    language: str = "en",
 ) -> dict[str, Any]:
     clean_prompt = _clean_text(prompt)
     if not clean_prompt:
         raise RuntimeError("Prompt is required.")
 
     output_path = _resolve_output_path(output)
-    scenes = _split_prompt_to_scenes(clean_prompt, max_scenes=max(1, num_frames // 16))
+    width = max(640, int(width))
+    height = max(360, int(height))
+    fps = max(8, int(fps))
 
-    width = max(320, int(width))
-    height = max(240, int(height))
-    fps = max(1, int(fps))
+    characters = _extract_characters(clean_prompt)
+    lead = characters[0].name
+    support = characters[1].name
+    scenes = _split_prompt_to_scenes(clean_prompt, max(3, num_frames // 16), lead=lead, support=support)
 
     clips: list[Any] = []
-    created_assets: list[Path] = []
-    try:
-        for index, scene in enumerate(scenes):
-            clip = _build_scene_clip(scene, index, output_path, width, height)
-            clips.append(clip)
-            created_assets.append(output_path.parent / f"audio_{index}.mp3")
-            created_assets.append(output_path.parent / f"scene_{index}.jpg")
+    created_files: list[Path] = []
 
-        if not clips:
-            raise RuntimeError("No scenes could be generated from prompt.")
+    with tempfile.TemporaryDirectory(prefix="storybuilder_") as tmp:
+        tmp_dir = Path(tmp)
+        try:
+            for index, scene in enumerate(scenes):
+                image_path = tmp_dir / f"scene_{index:02d}.png"
+                audio_path = tmp_dir / f"scene_{index:02d}.mp3"
+                _build_scene_image(scene, characters, width, height, image_path)
+                _create_scene_audio(scene.dialogue, audio_path, language)
 
-        final_video = concatenate_videoclips(clips, method="compose")
-        final_video.write_videofile(
-            str(output_path),
-            fps=fps,
-            codec="libx264",
-            audio_codec="aac",
-            logger=None,
-        )
-        final_video.close()
-    finally:
-        for clip in clips:
-            try:
-                clip.close()
-            except Exception:
-                pass
-        for asset in created_assets:
-            try:
-                if asset.exists():
-                    asset.unlink()
-            except Exception:
-                pass
+                audio = AudioFileClip(str(audio_path))
+                duration = max(3.0, float(audio.duration))
+                clip = ImageClip(str(image_path)).set_duration(duration).set_audio(audio)
+                clips.append(clip)
+
+                created_files.extend([image_path, audio_path])
+
+            if not clips:
+                raise RuntimeError("No scenes generated.")
+
+            final = concatenate_videoclips(clips, method="compose")
+            final.write_videofile(
+                str(output_path),
+                fps=fps,
+                codec="libx264",
+                audio_codec="aac",
+                logger=None,
+            )
+            final.close()
+        finally:
+            for clip in clips:
+                try:
+                    clip.close()
+                except Exception:
+                    pass
 
     return {
         "success": True,
         "output": str(output_path),
-        "model": model or "steve-ai-style-scene-pipeline",
+        "model": model,
         "seed": int(seed),
         "num_frames": len(scenes),
         "fps": fps,
-        "provider": "scene_pipeline_moviepy_gtts",
+        "provider": "storybuilder_free",
+        "characters": [character.name for character in characters],
     }
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Steve.ai-style text-to-video scene pipeline")
+    parser = argparse.ArgumentParser(description="Free Storybuilder character text-to-video")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--model", default="scene-pipeline")
+    parser.add_argument("--model", default="storybuilder-v1")
     parser.add_argument("--negative_prompt")
     parser.add_argument("--num_inference_steps", type=int, default=25)
     parser.add_argument("--num_frames", type=int, default=24)
-    parser.add_argument("--width", type=int, default=576)
-    parser.add_argument("--height", type=int, default=320)
-    parser.add_argument("--fps", type=int, default=8)
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--fps", type=int, default=12)
     parser.add_argument("--guidance_scale", type=float, default=9.0)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--lang", default="en")
     args = parser.parse_args()
 
     result = generate_text_to_video(
@@ -234,6 +291,7 @@ def main() -> None:
         fps=args.fps,
         guidance_scale=args.guidance_scale,
         seed=args.seed,
+        language=args.lang,
     )
     print(json.dumps(result))
 

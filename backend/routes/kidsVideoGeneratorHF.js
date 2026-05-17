@@ -50,6 +50,7 @@ router.post('/generate', async (req, res) => {
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           numFrames: req.body?.numFrames,
           numInferenceSteps: req.body?.numInferenceSteps,
+          language: req.body?.language || req.body?.lang || 'en',
         })
       : await generateKidsVideoFromPrompt({
           prompt,

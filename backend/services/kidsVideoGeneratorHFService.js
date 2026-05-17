@@ -678,6 +678,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
   videoSize = 'youtube',
   numFrames = 200,
   numInferenceSteps = 25,
+  language = 'en',
 }) => {
   await ensureDirectories();
   const cleanPrompt = sanitizeText(prompt);
@@ -704,6 +705,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     '--width', `${width}`,
     '--height', `${height}`,
     '--fps', `${Math.max(8, Math.min(24, Number(process.env.HF_TEXT_TO_VIDEO_FPS) || 12))}`,
+    '--lang', sanitizeText(language || 'en'),
   ];
 
   let stdout = '';
