@@ -17,7 +17,7 @@ RUN npm ci --omit=dev
 COPY . .
 
 # Install Python dependencies for scene-based text-to-video pipeline.
-RUN python3 -m pip install --no-cache-dir --break-system-packages -r backend/scripts/requirements-hf-text-to-video.txt
+RUN python3 -m pip install --no-cache-dir --break-system-packages -r scripts/requirements-hf-text-to-video.txt
 
 EXPOSE 8080
 
