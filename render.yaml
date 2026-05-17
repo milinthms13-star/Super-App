@@ -55,8 +55,14 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
-      - key: OPENAI_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
+      - key: VIDEO_STUDIO_REAL_CARTOON_MODE
+        value: true
+      - key: VIDEO_STUDIO_ALLOW_AI_IN_FREE
+        value: true
+      - key: VIDEO_STUDIO_REQUIRE_SCENE_IMAGES
+        value: false
       - key: PORT
         value: 5000
       - key: REACT_APP_FIREBASE_API_KEY
@@ -85,4 +91,5 @@ services:
 =======
       
 >>>>>>> fa2ba4a9 (LLL)
+
 
