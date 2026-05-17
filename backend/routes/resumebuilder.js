@@ -5,6 +5,7 @@ const authenticate = require('../middleware/auth');
 const ResumeDocument = require('../models/ResumeDocument');
 
 const router = express.Router();
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 
 const MAX_KEYWORDS = 24;
 
@@ -329,6 +330,10 @@ const parseJsonResponse = (content = '', fallbackValue = null) => {
 };
 
 const callGoogleAiJson = async ({ systemPrompt, userPrompt, fallback }) => {
+  if (isFreeMode) {
+    return fallback();
+  }
+
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     return fallback();

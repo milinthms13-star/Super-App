@@ -1,6 +1,7 @@
 const axios = require('axios');
 const logger = require('./logger');
 
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MESSAGING_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
@@ -22,6 +23,10 @@ const parseSuggestions = (text, tone) => {
 };
 
 async function generateAISuggestions(recentMessages, tone = 'casual') {
+  if (isFreeMode) {
+    return fallbackSuggestions(tone);
+  }
+
   if (!GEMINI_API_KEY) {
     logger.warn('GEMINI_API_KEY/GOOGLE_API_KEY not set, using fallback suggestions');
     return fallbackSuggestions(tone);

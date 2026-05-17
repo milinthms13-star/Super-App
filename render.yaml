@@ -55,18 +55,14 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
-      - key: GEMINI_API_KEY
-        sync: false
+      - key: FREE_MODE
+        value: true
       - key: VIDEO_STUDIO_REAL_CARTOON_MODE
         value: true
       - key: VIDEO_STUDIO_ALLOW_AI_IN_FREE
-        value: true
+        value: false
       - key: VIDEO_STUDIO_REQUIRE_SCENE_IMAGES
         value: false
-      - key: GOOGLE_IMAGE_MODEL
-        value: gemini-2.0-flash-preview-image-generation
-      - key: VIDEO_STUDIO_IMAGE_MODEL
-        value: gemini-2.0-flash-preview-image-generation
       - key: PORT
         value: 5000
       - key: REACT_APP_FIREBASE_API_KEY
@@ -89,11 +85,5 @@ services:
         sync: false
       - key: TWILIO_PHONE_NUMBER
         value: +17623443854
-<<<<<<< HEAD
-      - key: GEMINI_API_KEY\n        sync: false\n      - key: GOOGLE_API_KEY\n        sync: false\n        
-
-=======
-      
->>>>>>> fa2ba4a9 (LLL)
 
 

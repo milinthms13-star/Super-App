@@ -12,7 +12,8 @@ const logger = require('../utils/logger');
 
 class DiaryAISummaryService {
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    this.isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
+    this.apiKey = this.isFreeMode ? '' : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
     this.model = process.env.GEMINI_DIARY_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     this.client = this.apiKey ? new GoogleGenAI({ apiKey: this.apiKey }) : null;
 

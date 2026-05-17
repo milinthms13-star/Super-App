@@ -9,6 +9,7 @@ const logger = require('../utils/logger');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const geminiModel = process.env.GEMINI_VOICE_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const speechLanguageCode = process.env.GOOGLE_SPEECH_LANGUAGE || 'en-US';
@@ -17,14 +18,14 @@ let googleAI = null;
 let speechClient = null;
 
 try {
-  googleAI = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
+  googleAI = (!isFreeMode && geminiApiKey) ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 } catch (error) {
   logger.warn('Google AI client not initialized for voice input:', error.message);
   googleAI = null;
 }
 
 try {
-  speechClient = new speech.SpeechClient();
+  speechClient = isFreeMode ? null : new speech.SpeechClient();
 } catch (error) {
   logger.warn('Google Speech client not initialized:', error.message);
   speechClient = null;

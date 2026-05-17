@@ -11,12 +11,15 @@ const logger = require('../utils/logger');
 
 class AITemplateSuggestionsService {
   constructor() {
+    this.isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
     this.aiProvider = process.env.AI_TEMPLATE_PROVIDER || 'gemini';
     this.apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.CLAUDE_API_KEY;
     this.geminiModel = process.env.GEMINI_TEMPLATE_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     this.googleAI = null;
 
-    if (this.aiProvider === 'gemini' && this.apiKey && !process.env.CLAUDE_API_KEY) {
+    if (this.isFreeMode) {
+      this.apiKey = '';
+    } else if (this.aiProvider === 'gemini' && this.apiKey && !process.env.CLAUDE_API_KEY) {
       try {
         this.googleAI = new GoogleGenAI({ apiKey: this.apiKey });
       } catch (_error) {
@@ -36,7 +39,7 @@ class AITemplateSuggestionsService {
   async generateSuggestions(userId, reminderData) {
     try {
       if (!this.apiKey) {
-        throw new Error('AI API key not configured. Set GEMINI_API_KEY/GOOGLE_API_KEY.');
+        return this._createFallbackSuggestions(reminderData);
       }
 
       const prompt = this._buildPrompt(reminderData);
@@ -166,6 +169,59 @@ Return ONLY valid JSON array of 3 template objects. Each template object should 
     }
   }
 
+  _createFallbackSuggestions(reminderData = {}) {
+    const title = reminderData?.title || '{title}';
+    const category = reminderData?.category || '{category}';
+    const priority = reminderData?.priority || '{priority}';
+
+    const templates = [
+      {
+        name: 'Professional Reminder',
+        style: 'professional',
+        description: 'Formal and concise reminder template',
+        email: {
+          subject: `Reminder: ${title}`,
+          htmlContent: `<p>Hello,</p><p>This is a reminder for <strong>${title}</strong>.</p><p>Category: ${category} | Priority: ${priority}</p><p>Regards</p>`,
+          textContent: `This is a reminder for ${title}. Category: ${category}. Priority: ${priority}.`,
+        },
+        sms: { content: `Reminder: ${title}. Priority: ${priority}.` },
+        whatsapp: { content: `Reminder: *${title}*\nCategory: ${category}\nPriority: ${priority}` },
+        telegram: { content: `Reminder: *${title}*\nCategory: ${category}\nPriority: ${priority}` },
+        push: { title: `Reminder: ${title}`, body: `Category ${category} | Priority ${priority}` },
+      },
+      {
+        name: 'Casual Reminder',
+        style: 'casual',
+        description: 'Friendly and approachable reminder template',
+        email: {
+          subject: `Quick reminder: ${title}`,
+          htmlContent: `<p>Hey there,</p><p>Just a friendly reminder about <strong>${title}</strong>.</p><p>You've got this.</p>`,
+          textContent: `Friendly reminder about ${title}.`,
+        },
+        sms: { content: `Quick reminder: ${title}` },
+        whatsapp: { content: `Hey, quick reminder: ${title}` },
+        telegram: { content: `Quick reminder: ${title}` },
+        push: { title: `Don't forget`, body: title },
+      },
+      {
+        name: 'Urgent Reminder',
+        style: 'urgent',
+        description: 'High-priority action-oriented reminder template',
+        email: {
+          subject: `Urgent: ${title}`,
+          htmlContent: `<p><strong>Action required:</strong> ${title}</p><p>Please complete this as soon as possible.</p>`,
+          textContent: `Urgent: ${title}. Action required soon.`,
+        },
+        sms: { content: `URGENT: ${title}. Please act now.` },
+        whatsapp: { content: `*URGENT*\n${title}\nPlease act now.` },
+        telegram: { content: `*URGENT*\n${title}\nPlease act now.` },
+        push: { title: `Urgent Task`, body: title },
+      },
+    ];
+
+    return this._parseSuggestions(JSON.stringify(templates), reminderData);
+  }
+
   async acceptSuggestion(userId, suggestion, customName) {
     try {
       const template = new ReminderTemplate({
@@ -250,6 +306,15 @@ Return as JSON array with same structure but with "improvement": "description of
       const validStyles = ['professional', 'casual', 'urgent'];
       if (!validStyles.includes(preferredStyle)) {
         throw new Error('Invalid style');
+      }
+
+      if (!this.apiKey) {
+        const fallbacks = this._createFallbackSuggestions(reminderData);
+        return (
+          fallbacks.find((item) => item.style === preferredStyle)
+          || fallbacks[0]
+          || null
+        );
       }
 
       const prompt = `Generate a single reminder notification template in a "${preferredStyle}" style:

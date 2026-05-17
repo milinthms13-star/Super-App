@@ -1,5 +1,6 @@
 const { GoogleGenAI } = require('@google/genai');
 const logger = require('./logger');
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 
 /**
  * Diary AI integration (Gemini-backed)
@@ -7,6 +8,10 @@ const logger = require('./logger');
  */
 
 const getGeminiClient = () => {
+  if (isFreeMode) {
+    return null;
+  }
+
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     return null;

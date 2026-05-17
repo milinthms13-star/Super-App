@@ -3,11 +3,12 @@ const { GoogleGenAI } = require('@google/genai');
 const logger = require('../utils/logger');
 
 const router = express.Router();
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 
 let googleAI;
 try {
   const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-  googleAI = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
+  googleAI = (!isFreeMode && geminiApiKey) ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 } catch (error) {
   logger.warn('LivePlaceExplorer Google AI initialization failed:', error.message);
   googleAI = null;
