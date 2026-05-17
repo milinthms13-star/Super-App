@@ -64,6 +64,11 @@ const buildVideoStudioRequestUrls = (path = "") => {
     typeof window !== "undefined" && window.location?.origin
       ? window.location.origin
       : "";
+  const explicitBackendUrl =
+    typeof process !== "undefined" ? stripTrailingSlashes(process.env.REACT_APP_BACKEND_URL || "") : "";
+  const explicitApiUrl =
+    typeof process !== "undefined" ? stripTrailingSlashes(process.env.REACT_APP_API_URL || "") : "";
+  const hasExplicitApiTargets = Boolean(explicitBackendUrl || explicitApiUrl);
 
   if (runtimeOrigin && /^https?:\/\//i.test(runtimeOrigin)) {
     candidates.push(toAbsoluteApiUrl(runtimeOrigin, path));
@@ -74,7 +79,9 @@ const buildVideoStudioRequestUrls = (path = "") => {
     candidates.push(toAbsoluteApiUrl(process.env.REACT_APP_API_URL || "", path));
   }
 
-  if (/onrender\.com/i.test(API_BASE_URL) || /onrender\.com/i.test(runtimeOrigin)) {
+  // Legacy safety fallback for older deployments that only used onrender API host.
+  // If explicit API targets are configured, do not force this host.
+  if (!hasExplicitApiTargets && (/onrender\.com/i.test(API_BASE_URL) || /onrender\.com/i.test(runtimeOrigin))) {
     candidates.push(toAbsoluteApiUrl("https://super-app-api.onrender.com", path));
   }
 
