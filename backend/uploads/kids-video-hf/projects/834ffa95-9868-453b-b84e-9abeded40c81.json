@@ -1,0 +1,153 @@
+{
+  "projectId": "834ffa95-9868-453b-b84e-9abeded40c81",
+  "createdAt": "2026-05-17T12:32:53.695Z",
+  "workflowType": "kids-video-hf-clean-restart",
+  "aiProvider": "huggingface",
+  "storyMode": "moral",
+  "voiceType": "kid-female",
+  "videoSize": "youtube",
+  "prompt": "A space adventure with a lost star, where two kids help it return home through colorful planets.",
+  "title": "Kids Story Adventure",
+  "synopsis": "A space adventure with a lost star, where two kids help it return home through colorful planets.",
+  "moral": "Kindness and consistency help us succeed.",
+  "characters": [
+    {
+      "id": "char-hero",
+      "name": "Hero",
+      "role": "Main Character",
+      "appearance": "friendly child hero with colorful outfit",
+      "colorPalette": [
+        "sky blue",
+        "sunny yellow",
+        "mint"
+      ]
+    },
+    {
+      "id": "char-guide",
+      "name": "Guide",
+      "role": "Support Friend",
+      "appearance": "wise companion with warm smile",
+      "colorPalette": [
+        "peach",
+        "teal",
+        "cream"
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Opening",
+      "description": "A space adventure with a lost star, where two kids help it return home through colorful planets",
+      "dialogue": "Hero: A space adventure with a lost star, where two kids help it return home through colorful planets\\nGuide: We can do this together.",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 2,
+      "title": "Challenge",
+      "description": "A space adventure with a lost star, where two kids help it return home through colorful planets",
+      "dialogue": "Hero: A space adventure with a lost star, where two kids help it return home through colorful planets\\nGuide: We can do this together.",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 3,
+      "title": "Journey",
+      "description": "A space adventure with a lost star, where two kids help it return home through colorful planets",
+      "dialogue": "Hero: A space adventure with a lost star, where two kids help it return home through colorful planets\\nGuide: We can do this together.",
+      "emotion": "brave",
+      "durationSeconds": 4
+    },
+    {
+      "id": 4,
+      "title": "Climax",
+      "description": "A space adventure with a lost star, where two kids help it return home through colorful planets",
+      "dialogue": "Hero: A space adventure with a lost star, where two kids help it return home through colorful planets\\nGuide: We can do this together.",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 5,
+      "title": "Ending",
+      "description": "A space adventure with a lost star, where two kids help it return home through colorful planets",
+      "dialogue": "Hero: A space adventure with a lost star, where two kids help it return home through colorful planets\\nGuide: We can do this together.",
+      "emotion": "joyful",
+      "durationSeconds": 4
+    }
+  ],
+  "outputDir": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81",
+  "outputFile": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\story-render-1779021179367.mp4",
+  "videoUrl": "/uploads/kids-video-hf/834ffa95-9868-453b-b84e-9abeded40c81/story-render-1779021179367.mp4",
+  "renderMode": "kids-video-hf-clean-restart",
+  "aiImagesEnabled": false,
+  "sceneRenderMeta": [
+    {
+      "sceneId": 1,
+      "title": "Opening",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-01-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-dev: fetch failed",
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-01.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 2,
+      "title": "Challenge",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-02-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-dev: fetch failed",
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-02.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 3,
+      "title": "Journey",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-03-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-dev: fetch failed",
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-03.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 4,
+      "title": "Climax",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-04-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-dev: fetch failed",
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-04.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 5,
+      "title": "Ending",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-05-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "black-forest-labs/FLUX.1-dev: fetch failed",
+        "black-forest-labs/FLUX.1-schnell: fetch failed",
+        "stabilityai/stable-diffusion-xl-base-1.0: fetch failed"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\834ffa95-9868-453b-b84e-9abeded40c81\\scene-05.mp4",
+      "durationSeconds": 4
+    }
+  ],
+  "renderedAt": "2026-05-17T12:33:02.744Z",
+  "updatedAt": "2026-05-17T12:33:02.744Z"
+}
