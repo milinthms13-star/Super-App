@@ -340,7 +340,7 @@ const buildCartoonRenderPayload = ({
     requireCharacters: true,
     requireDialogueVoice: true,
     requireLipSync: true,
-    requireSceneImages: true,
+    requireSceneImages: false,
   };
 };
 
