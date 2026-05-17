@@ -182,7 +182,7 @@ describe("videoStudioApi", () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
-  test("defaults kids HF render engine to diffusers_t2v", async () => {
+  test("does not force diffusers engine when caller does not provide engine", async () => {
     global.fetch = jest.fn().mockResolvedValue(
       jsonResponse({
         payload: {
@@ -199,7 +199,7 @@ describe("videoStudioApi", () => {
 
     const requestInit = global.fetch.mock.calls[0][1];
     const parsedBody = JSON.parse(requestInit.body);
-    expect(parsedBody.engine).toBe("diffusers_t2v");
-    expect(parsedBody.renderEngine).toBe("diffusers_t2v");
+    expect(parsedBody.engine).toBeUndefined();
+    expect(parsedBody.renderEngine).toBeUndefined();
   });
 });

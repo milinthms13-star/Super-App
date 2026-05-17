@@ -24,12 +24,14 @@ router.post('/generate', async (req, res) => {
     }
 
     const requestedEngine = String(req.body?.engine || req.body?.renderEngine || '').trim().toLowerCase();
+    const disableDiffusers = String(process.env.HF_DISABLE_DIFFUSERS || '').trim().toLowerCase() === 'true';
     const useDiffusers =
       requestedEngine === 'diffusers_t2v' ||
       requestedEngine === 'text_to_video' ||
       requestedEngine === 'damo-text-to-video';
+    const shouldUseDiffusers = useDiffusers && !disableDiffusers;
 
-    const result = useDiffusers
+    const result = shouldUseDiffusers
       ? await generateKidsVideoFromDiffusersPrompt({
           prompt,
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
