@@ -53,7 +53,7 @@ describe('VoiceFriendService', () => {
     expect(session.messages[1]).toMatchObject({ role: 'assistant', content: 'I am here with you.' });
   });
 
-  test('generateSpeech returns base64 audio from OpenAI TTS', async () => {
+  test('generateSpeech returns base64 audio from configured TTS provider', async () => {
     const result = await voiceFriendService.generateSpeech({ text: 'Hello friend', friendId: 'nila', language: 'en' });
 
     expect(result).toBe(mockSpeechBuffer.toString('base64'));

@@ -1,102 +1,134 @@
+const { GoogleGenAI } = require('@google/genai');
 const logger = require('./logger');
 
 /**
- * OpenAI integration for diary summaries
- * Provides smart summaries using GPT-3.5-turbo with fallback to keyword-based
+ * Diary AI integration (Gemini-backed)
+ * Note: file/export names are preserved for backward compatibility.
  */
 
-const getOpenAIClient = () => {
-  // Lazy load to avoid requiring if not available
-  if (process.env.OPENAI_API_KEY) {
-    try {
-      const { OpenAI } = require('openai');
-      return new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
-      });
-    } catch (error) {
-      logger.warn('OpenAI client not available:', error.message);
-      return null;
-    }
+const getGeminiClient = () => {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    return null;
   }
-  return null;
+  try {
+    return new GoogleGenAI({ apiKey });
+  } catch (error) {
+    logger.warn('Gemini client not available:', error.message);
+    return null;
+  }
+};
+
+const getModelName = () => process.env.GEMINI_DIARY_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+const extractGeminiText = (response) => {
+  if (!response) return '';
+  if (typeof response.text === 'string' && response.text.trim()) {
+    return response.text.trim();
+  }
+  return response?.candidates?.[0]?.content?.parts
+    ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+    .join('\n')
+    .trim() || '';
+};
+
+const extractUsageTokens = (response) => {
+  const usage = response?.usageMetadata || {};
+  return Number(
+    usage.totalTokenCount
+    || usage.candidatesTokenCount
+    || usage.promptTokenCount
+    || 0
+  ) || 0;
+};
+
+const runGeminiPrompt = async ({
+  systemPrompt,
+  userPrompt,
+  maxTokens = 800,
+  temperature = 0.7,
+  jsonMode = false,
+}) => {
+  const client = getGeminiClient();
+  if (!client) return null;
+
+  try {
+    const response = await client.models.generateContent({
+      model: getModelName(),
+      contents: userPrompt,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature,
+        maxOutputTokens: maxTokens,
+        ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      },
+    });
+
+    return {
+      text: extractGeminiText(response),
+      tokensUsed: extractUsageTokens(response),
+    };
+  } catch (error) {
+    logger.error('Gemini API error:', error);
+    return null;
+  }
 };
 
 /**
- * Generate summary using OpenAI GPT-3.5
+ * Generate summary using Gemini
  * Falls back to keyword-based if API unavailable or fails
  */
-const generateOpenAISummary = async (entries, period = 'week') => {
-  const client = getOpenAIClient();
-
-  if (!client) {
-    logger.debug('OpenAI not configured, using fallback');
-    return null; // Will fallback to keyword-based
+const generateGeminiSummary = async (entries, period = 'week') => {
+  if (!getGeminiClient()) {
+    logger.debug('Gemini not configured, using fallback');
+    return null;
   }
 
   try {
-    // Prepare entry content for OpenAI
     const entriesText = entries
       .map((e) => {
-        const content = (e.content || '').substring(0, 500); // Limit to avoid token bloat
+        const content = (e.content || '').substring(0, 500);
         const mood = e.mood ? `[Mood: ${e.mood}]` : '';
         const date = new Date(e.createdAt).toLocaleDateString();
         return `${date} - ${e.title || 'Untitled'} ${mood}\n${content}`;
       })
       .join('\n\n');
 
-    const prompt = buildOpenAIPrompt(entriesText, period, entries.length);
-
-    logger.debug(`Calling OpenAI for ${period} summary (${entries.length} entries)`);
-
-    const response = await client.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a thoughtful diary analyst. Generate insightful summaries that are personal, 
-          meaningful, and actionable. Focus on patterns, emotions, and growth. Be warm and encouraging.`
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
+    const prompt = buildGeminiPrompt(entriesText, period, entries.length);
+    const result = await runGeminiPrompt({
+      systemPrompt: 'You are a thoughtful diary analyst. Generate insightful summaries that are personal, meaningful, and actionable. Focus on patterns, emotions, and growth. Be warm and encouraging.',
+      userPrompt: prompt,
+      maxTokens: 800,
       temperature: 0.7,
-      max_tokens: 800,
-      top_p: 0.9
     });
 
-    const summaryText = response.choices[0]?.message?.content || '';
-    const tokensUsed = response.usage?.total_tokens || 0;
+    if (!result || !result.text) {
+      return null;
+    }
 
-    // Parse OpenAI response into structured format
-    const parsedSummary = parseOpenAISummaryResponse(summaryText);
+    const parsedSummary = parseGeminiSummaryResponse(result.text);
 
     return {
-      narrative: parsedSummary.narrative || summaryText,
-      keyThemes: parsedSummary.themes || extractThemesFromText(summaryText),
+      narrative: parsedSummary.narrative || result.text,
+      keyThemes: parsedSummary.themes || extractThemesFromText(result.text),
       moodSummary: parsedSummary.moodSummary || calculateMoodFromEntries(entries),
       highlights: parsedSummary.highlights || [],
-      aiProvider: 'openai',
-      tokensUsed,
-      success: true
+      aiProvider: 'gemini',
+      tokensUsed: result.tokensUsed || 0,
+      success: true,
     };
   } catch (error) {
-    logger.error('OpenAI API error:', error);
-    // Return null to trigger fallback
+    logger.error('Gemini summary error:', error);
     return null;
   }
 };
 
-/**
- * Build prompt for OpenAI
- */
-const buildOpenAIPrompt = (entriesText, period, entryCount) => {
+const buildGeminiPrompt = (entriesText, period, entryCount) => {
   const periodLabel = {
     week: 'this week',
     month: 'this month',
     quarter: 'this quarter',
-    year: 'this year'
+    year: 'this year',
   }[period] || period;
 
   return `Please analyze these ${entryCount} diary entries from ${periodLabel} and provide:
@@ -121,19 +153,12 @@ MOOD: [Overall mood assessment]
 INSIGHT: [Your insight here]`;
 };
 
-/**
- * Parse structured response from OpenAI
- */
-const parseOpenAISummaryResponse = (responseText) => {
+const parseGeminiSummaryResponse = (responseText) => {
   const parsed = {};
 
-  // Extract SUMMARY
   const summaryMatch = responseText.match(/SUMMARY:\s*(.+?)(?=THEMES:|$)/is);
-  if (summaryMatch) {
-    parsed.narrative = summaryMatch[1].trim();
-  }
+  if (summaryMatch) parsed.narrative = summaryMatch[1].trim();
 
-  // Extract THEMES
   const themesMatch = responseText.match(/THEMES:\s*(.+?)(?=MOOD:|$)/is);
   if (themesMatch) {
     parsed.themes = themesMatch[1]
@@ -143,24 +168,15 @@ const parseOpenAISummaryResponse = (responseText) => {
       .slice(0, 5);
   }
 
-  // Extract MOOD
   const moodMatch = responseText.match(/MOOD:\s*(.+?)(?=INSIGHT:|$)/is);
-  if (moodMatch) {
-    parsed.moodSummary = moodMatch[1].trim();
-  }
+  if (moodMatch) parsed.moodSummary = moodMatch[1].trim();
 
-  // Extract INSIGHT
   const insightMatch = responseText.match(/INSIGHT:\s*(.+?)$/is);
-  if (insightMatch) {
-    parsed.insight = insightMatch[1].trim();
-  }
+  if (insightMatch) parsed.insight = insightMatch[1].trim();
 
   return parsed;
 };
 
-/**
- * Extract themes from OpenAI response if structured parsing fails
- */
 const extractThemesFromText = (text) => {
   const words = text
     .toLowerCase()
@@ -178,17 +194,12 @@ const extractThemesFromText = (text) => {
     .map(([word]) => word);
 };
 
-/**
- * Calculate mood from entries
- */
 const calculateMoodFromEntries = (entries) => {
   if (entries.length === 0) return 'Neutral';
 
   const moodCounts = {};
   entries.forEach((e) => {
-    if (e.mood) {
-      moodCounts[e.mood] = (moodCounts[e.mood] || 0) + 1;
-    }
+    if (e.mood) moodCounts[e.mood] = (moodCounts[e.mood] || 0) + 1;
   });
 
   const dominantMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0];
@@ -196,130 +207,65 @@ const calculateMoodFromEntries = (entries) => {
 
   const [mood, count] = dominantMood;
   const percentage = Math.round((count / entries.length) * 100);
+  return `${mood} (${percentage}% of entries)`;
+};
 
-  const moodEmojis = {
-    happy: '😊 Happy',
-    sad: '😢 Sad',
-    peaceful: '😌 Peaceful',
-    anxious: '😰 Anxious',
-    angry: '😠 Angry',
-    grateful: '🙏 Grateful',
-    energetic: '⚡ Energetic',
-    neutral: '😐 Neutral'
+const generateInsights = async (entries, type = 'general') => {
+  if (!getGeminiClient()) return null;
+
+  const entriesText = entries
+    .map((e) => `${new Date(e.createdAt).toLocaleDateString()}: ${String(e.content || '').substring(0, 200)}`)
+    .join('\n');
+
+  const prompts = {
+    general: 'Based on these diary entries, what are the main themes and patterns? What advice would you give?',
+    wellness: 'Analyze these entries for wellness indicators. How is the person doing mentally and emotionally?',
+    goals: 'What goals or aspirations can you identify from these entries? Are they on track?',
+    relationships: 'What can you learn about this person\'s relationships from these entries?',
+    growth: 'How has this person grown or changed based on these entries?',
   };
 
-  const label = moodEmojis[mood] || mood;
-  return `${label} (${percentage}% of entries)`;
+  const result = await runGeminiPrompt({
+    systemPrompt: 'You are an empathetic diary analyst providing insightful observations.',
+    userPrompt: `${prompts[type] || prompts.general}\n\nEntries:\n${entriesText}`,
+    maxTokens: 500,
+    temperature: 0.8,
+  });
+
+  return result?.text || null;
 };
 
-/**
- * Generate insights using OpenAI
- */
-const generateInsights = async (entries, type = 'general') => {
-  const client = getOpenAIClient();
-
-  if (!client) {
-    logger.debug('OpenAI not available for insights');
-    return null;
-  }
-
-  try {
-    const entriesText = entries
-      .map((e) => `${e.createdAt.toLocaleDateString()}: ${e.content?.substring(0, 200)}`)
-      .join('\n');
-
-    const prompts = {
-      general: `Based on these diary entries, what are the main themes and patterns? What advice would you give?`,
-      wellness: `Analyze these entries for wellness indicators. How is the person doing mentally and emotionally?`,
-      goals: `What goals or aspirations can you identify from these entries? Are they on track?`,
-      relationships: `What can you learn about this person's relationships from these entries?`,
-      growth: `How has this person grown or changed based on these entries?`
-    };
-
-    const response = await client.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an empathetic diary analyst providing insightful observations.'
-        },
-        {
-          role: 'user',
-          content: `${prompts[type] || prompts.general}\n\nEntries:\n${entriesText}`
-        }
-      ],
-      temperature: 0.8,
-      max_tokens: 500
-    });
-
-    return response.choices[0]?.message?.content || null;
-  } catch (error) {
-    logger.error('Error generating insights:', error);
-    return null;
-  }
-};
-
-/**
- * Generate suggestions for entries
- */
 const generateSuggestions = async (entryContent) => {
-  const client = getOpenAIClient();
+  if (!getGeminiClient()) return null;
 
-  if (!client) return null;
+  const result = await runGeminiPrompt({
+    systemPrompt: 'You are a writing coach helping someone improve their diary entries. Provide 2-3 specific suggestions.',
+    userPrompt: `How could I improve this diary entry? What questions could I explore?\n\nEntry:\n${entryContent}`,
+    maxTokens: 300,
+    temperature: 0.7,
+  });
 
-  try {
-    const response = await client.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a writing coach helping someone improve their diary entries. Provide 2-3 specific suggestions.'
-        },
-        {
-          role: 'user',
-          content: `How could I improve this diary entry? What questions could I explore?\n\nEntry:\n${entryContent}`
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 300
-    });
-
-    return response.choices[0]?.message?.content || null;
-  } catch (error) {
-    logger.error('Error generating suggestions:', error);
-    return null;
-  }
+  return result?.text || null;
 };
 
-/**
- * Estimate tokens for cost calculation
- */
-const estimateTokens = (text) => {
-  // Rough estimate: 1 token ≈ 4 characters
-  return Math.ceil(text.length / 4);
-};
+const estimateTokens = (text) => Math.ceil(String(text || '').length / 4);
 
-/**
- * Calculate cost of API calls
- */
 const calculateAPICost = (tokensUsed) => {
-  // GPT-3.5-turbo pricing (as of May 2026)
-  const inputCost = 0.0015; // per 1K tokens
-  const outputCost = 0.002; // per 1K tokens
-
-  // Assuming roughly 60/40 split input/output
-  const inputTokens = Math.round(tokensUsed * 0.6);
-  const outputTokens = tokensUsed - inputTokens;
-
-  const cost = (inputTokens * inputCost + outputTokens * outputCost) / 1000;
-  return cost.toFixed(6);
+  const perThousand = 0.0004;
+  return ((Number(tokensUsed || 0) / 1000) * perThousand).toFixed(6);
 };
+
+// Backward compatibility for existing imports.
+const getOpenAIClient = getGeminiClient;
+const generateOpenAISummary = generateGeminiSummary;
 
 module.exports = {
+  generateGeminiSummary,
   generateOpenAISummary,
   generateInsights,
   generateSuggestions,
   estimateTokens,
   calculateAPICost,
-  getOpenAIClient
+  getGeminiClient,
+  getOpenAIClient,
 };

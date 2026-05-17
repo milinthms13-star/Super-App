@@ -1,38 +1,46 @@
 /**
  * AI Template Suggestions Service
- * Generate template suggestions using Claude/OpenAI API
+ * Generate template suggestions using Google Gemini API
  * Analyze reminder content and suggest professionally formatted templates
  */
 
 const axios = require('axios');
+const { GoogleGenAI } = require('@google/genai');
 const ReminderTemplate = require('../models/ReminderTemplate');
 const logger = require('../utils/logger');
 
 class AITemplateSuggestionsService {
   constructor() {
-    this.aiProvider = process.env.AI_TEMPLATE_PROVIDER || 'openai'; // 'openai' or 'claude'
-    this.apiKey = process.env.OPENAI_API_KEY || process.env.CLAUDE_API_KEY;
-    this.apiEndpoint = this.aiProvider === 'claude'
-      ? 'https://api.anthropic.com/v1/messages'
-      : 'https://api.openai.com/v1/chat/completions';
+    this.aiProvider = process.env.AI_TEMPLATE_PROVIDER || 'gemini';
+    this.apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.CLAUDE_API_KEY;
+    this.geminiModel = process.env.GEMINI_TEMPLATE_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    this.googleAI = null;
+
+    if (this.aiProvider === 'gemini' && this.apiKey && !process.env.CLAUDE_API_KEY) {
+      try {
+        this.googleAI = new GoogleGenAI({ apiKey: this.apiKey });
+      } catch (_error) {
+        this.googleAI = null;
+      }
+    } else if (this.aiProvider === 'gemini' && this.apiKey) {
+      try {
+        this.googleAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY });
+      } catch (_error) {
+        this.googleAI = null;
+      }
+    }
+
+    this.apiEndpoint = 'https://api.anthropic.com/v1/messages';
   }
 
-  /**
-   * Generate template suggestions for a reminder
-   * @param {String} userId
-   * @param {Object} reminderData - { title, description, category, priority }
-   * @returns {Promise<Array>} Array of suggested templates
-   */
   async generateSuggestions(userId, reminderData) {
     try {
       if (!this.apiKey) {
-        throw new Error('AI API key not configured. Set OPENAI_API_KEY or CLAUDE_API_KEY');
+        throw new Error('AI API key not configured. Set GEMINI_API_KEY/GOOGLE_API_KEY.');
       }
 
       const prompt = this._buildPrompt(reminderData);
       const suggestions = await this._callAIApi(prompt);
-
-      // Parse and structure suggestions
       const parsedSuggestions = this._parseSuggestions(suggestions, reminderData);
 
       return parsedSuggestions;
@@ -42,10 +50,6 @@ class AITemplateSuggestionsService {
     }
   }
 
-  /**
-   * Build prompt for AI
-   * @private
-   */
   _buildPrompt(reminderData) {
     return `Generate 3 diverse reminder notification templates for the following reminder:
 
@@ -80,88 +84,60 @@ Return ONLY valid JSON array of 3 template objects. Each template object should 
 }`;
   }
 
-  /**
-   * Call AI API (OpenAI or Claude)
-   * @private
-   */
   async _callAIApi(prompt) {
     try {
-      let response;
-
       if (this.aiProvider === 'claude') {
-        response = await axios.post(
+        const response = await axios.post(
           this.apiEndpoint,
           {
             model: 'claude-3-5-sonnet-20241022',
             max_tokens: 2000,
-            messages: [
-              {
-                role: 'user',
-                content: prompt
-              }
-            ]
+            messages: [{ role: 'user', content: prompt }],
           },
           {
             headers: {
-              'x-api-key': this.apiKey,
-              'anthropic-version': '2023-06-01'
+              'x-api-key': process.env.CLAUDE_API_KEY,
+              'anthropic-version': '2023-06-01',
             },
-            timeout: 30000
+            timeout: 30000,
           }
         );
-
         return response.data.content[0].text;
-      } else {
-        // OpenAI
-        response = await axios.post(
-          this.apiEndpoint,
-          {
-            model: 'gpt-4-turbo-preview',
-            temperature: 0.7,
-            max_tokens: 2000,
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a professional notification template writer. Always return valid JSON.'
-              },
-              {
-                role: 'user',
-                content: prompt
-              }
-            ]
-          },
-          {
-            headers: {
-              'Authorization': `Bearer ${this.apiKey}`
-            },
-            timeout: 30000
-          }
-        );
-
-        return response.data.choices[0].message.content;
       }
+
+      if (!this.googleAI) {
+        throw new Error('Gemini client unavailable');
+      }
+
+      const response = await this.googleAI.models.generateContent({
+        model: this.geminiModel,
+        contents: prompt,
+        config: {
+          systemInstruction: 'You are a professional notification template writer. Always return valid JSON.',
+          temperature: 0.7,
+          maxOutputTokens: 2000,
+          responseMimeType: 'application/json',
+        },
+      });
+
+      return response?.text
+        || response?.candidates?.[0]?.content?.parts
+          ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+          .join('\n')
+          .trim();
     } catch (error) {
       logger.error('Error calling AI API:', error.message);
       throw new Error(`AI API error: ${error.message}`);
     }
   }
 
-  /**
-   * Parse and validate AI response
-   * @private
-   */
   _parseSuggestions(aiResponse, reminderData) {
     try {
-      // Extract JSON from response (handle markdown code blocks)
       let jsonStr = aiResponse;
-      const jsonMatch = aiResponse.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        jsonStr = jsonMatch[1];
-      }
+      const jsonMatch = String(aiResponse || '').match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) jsonStr = jsonMatch[1];
 
       const suggestions = JSON.parse(jsonStr);
-
-      // Validate and normalize
       if (!Array.isArray(suggestions)) {
         throw new Error('AI response is not an array');
       }
@@ -179,10 +155,10 @@ Return ONLY valid JSON array of 3 template objects. Each template object should 
         generatedFor: {
           title: reminderData.title,
           category: reminderData.category,
-          priority: reminderData.priority
+          priority: reminderData.priority,
         },
         createdAt: new Date(),
-        approved: false
+        approved: false,
       }));
     } catch (error) {
       logger.error('Error parsing AI suggestions:', error);
@@ -190,12 +166,6 @@ Return ONLY valid JSON array of 3 template objects. Each template object should 
     }
   }
 
-  /**
-   * Accept and save AI suggestion as template
-   * @param {String} userId
-   * @param {Object} suggestion
-   * @param {String} customName
-   */
   async acceptSuggestion(userId, suggestion, customName) {
     try {
       const template = new ReminderTemplate({
@@ -209,7 +179,7 @@ Return ONLY valid JSON array of 3 template objects. Each template object should 
         telegramTemplate: suggestion.telegramTemplate,
         pushTemplate: suggestion.pushTemplate,
         usageCount: 0,
-        lastUsed: null
+        lastUsed: null,
       });
 
       await template.save();
@@ -219,7 +189,7 @@ Return ONLY valid JSON array of 3 template objects. Each template object should 
       return {
         success: true,
         templateId: template._id,
-        templateName: template.name
+        templateName: template.name,
       };
     } catch (error) {
       logger.error('Error accepting suggestion:', error);
@@ -227,22 +197,14 @@ Return ONLY valid JSON array of 3 template objects. Each template object should 
     }
   }
 
-  /**
-   * Enhance existing template with AI
-   * Suggest improvements or variations
-   * @param {String} userId
-   * @param {String} templateId
-   */
   async enhanceTemplate(userId, templateId) {
     try {
       const template = await ReminderTemplate.findOne({
         _id: templateId,
-        userId
+        userId,
       });
 
-      if (!template) {
-        throw new Error('Template not found');
-      }
+      if (!template) throw new Error('Template not found');
 
       const prompt = `Improve and create variations of this reminder template:
 
@@ -266,16 +228,16 @@ Return as JSON array with same structure but with "improvement": "description of
       const variations = this._parseSuggestions(aiResponse, {
         title: template.name,
         category: 'enhancement',
-        priority: 'high'
+        priority: 'high',
       });
 
       return {
         success: true,
         originalTemplate: {
           id: template._id,
-          name: template.name
+          name: template.name,
         },
-        variations
+        variations,
       };
     } catch (error) {
       logger.error('Error enhancing template:', error);
@@ -283,12 +245,6 @@ Return as JSON array with same structure but with "improvement": "description of
     }
   }
 
-  /**
-   * Regenerate suggestions with different style
-   * @param {String} userId
-   * @param {Object} reminderData
-   * @param {String} preferredStyle - 'professional', 'casual', 'urgent'
-   */
   async generateStyleSpecific(userId, reminderData, preferredStyle) {
     try {
       const validStyles = ['professional', 'casual', 'urgent'];
@@ -316,11 +272,6 @@ Return as JSON object with email, sms, whatsapp, telegram, push objects.`;
     }
   }
 
-  /**
-   * Batch generate suggestions for multiple reminders
-   * @param {String} userId
-   * @param {Array<Object>} reminderList
-   */
   async batchGenerateSuggestions(userId, reminderList) {
     try {
       const results = [];
@@ -331,14 +282,14 @@ Return as JSON object with email, sms, whatsapp, telegram, push objects.`;
           results.push({
             reminderId: reminder._id,
             title: reminder.title,
-            suggestions
+            suggestions,
           });
         } catch (error) {
           logger.warn(`Failed to generate suggestions for reminder ${reminder._id}:`, error.message);
           results.push({
             reminderId: reminder._id,
             title: reminder.title,
-            error: error.message
+            error: error.message,
           });
         }
       }
@@ -346,7 +297,7 @@ Return as JSON object with email, sms, whatsapp, telegram, push objects.`;
       return {
         success: true,
         processed: reminderList.length,
-        results
+        results,
       };
     } catch (error) {
       logger.error('Error in batch generation:', error);

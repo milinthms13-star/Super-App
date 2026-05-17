@@ -90,7 +90,7 @@ jest.mock('../utils/diaryAISummary', () => ({
 }));
 
 jest.mock('../utils/diaryAIOpenAI', () => ({
-  generateOpenAISummary: jest.fn(),
+  generateGeminiSummary: jest.fn(),
   generateInsights: jest.fn(),
   generateSuggestions: jest.fn(),
   calculateAPICost: jest.fn(),

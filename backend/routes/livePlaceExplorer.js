@@ -1,15 +1,16 @@
 const express = require('express');
-const { OpenAI } = require('openai');
+const { GoogleGenAI } = require('@google/genai');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
-let openai;
+let googleAI;
 try {
-  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+  googleAI = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 } catch (error) {
-  logger.warn('LivePlaceExplorer OpenAI initialization failed:', error.message);
-  openai = null;
+  logger.warn('LivePlaceExplorer Google AI initialization failed:', error.message);
+  googleAI = null;
 }
 
 const createGuidePrompt = ({ placeName, address, description, weather, traffic, liveStatus, question }) => {
@@ -66,7 +67,7 @@ router.post('/guide', async (req, res) => {
       return res.status(400).json({ success: false, error: 'placeName and address are required' });
     }
 
-    if (!openai) {
+    if (!googleAI) {
       return res.json({
         success: true,
         guide: createFallbackGuide({ placeName, address, weather, liveStatus, question }),
@@ -74,16 +75,21 @@ router.post('/guide', async (req, res) => {
     }
 
     const prompt = createGuidePrompt({ placeName, address, description, weather, traffic, liveStatus, question });
-    const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_PLACE_GUIDE_MODEL || 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: 'You are a friendly travel assistant that provides concise, inspiring guidance.' },
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: 300,
+    const response = await googleAI.models.generateContent({
+      model: process.env.GEMINI_PLACE_GUIDE_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        systemInstruction: 'You are a friendly travel assistant that provides concise, inspiring guidance.',
+        maxOutputTokens: 300,
+        temperature: 0.6,
+      },
     });
 
-    const guideText = response?.choices?.[0]?.message?.content?.trim();
+    const guideText = response?.text?.trim()
+      || response?.candidates?.[0]?.content?.parts
+        ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+        .join('\n')
+        .trim();
     return res.json({ success: true, guide: guideText || createFallbackGuide({ placeName, address, weather, liveStatus, question }) });
   } catch (error) {
     logger.error('LivePlaceExplorer guide error:', error);

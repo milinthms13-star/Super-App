@@ -43,8 +43,8 @@ const aiReplySchema = new mongoose.Schema(
     },
     model: {
       type: String,
-      enum: ['gpt-3.5-turbo', 'gpt-4', 'claude', 'custom'],
-      default: 'gpt-3.5-turbo',
+      enum: ['gemini-2.5-flash', 'gemini-2.0-flash', 'claude', 'custom'],
+      default: 'gemini-2.5-flash',
     },
     generationTime: Number, // in ms
     tokensUsed: Number,

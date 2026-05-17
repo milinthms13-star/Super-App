@@ -3,7 +3,8 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 const { promisify } = require('util');
-const { OpenAI } = require('openai');
+const { GoogleGenAI, Modality } = require('@google/genai');
+const textToSpeech = require('@google-cloud/text-to-speech');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const ffmpegPath = require('ffmpeg-static');
@@ -21,13 +22,19 @@ const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_M
 const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
 );
-const aiProviderEnabled = Boolean(process.env.OPENAI_API_KEY) && (!isFreeMode || allowAiInFreeMode);
+const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const aiProviderEnabled = Boolean(geminiApiKey) && (!isFreeMode || allowAiInFreeMode);
 const isLowMemoryMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_LOW_MEMORY_MODE || (isFreeMode ? '1' : '0')).toLowerCase()
 );
 const useRealCartoonImages = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (aiProviderEnabled ? '1' : '0')).toLowerCase()
 );
+const googleVideoModel = String(process.env.GOOGLE_VIDEO_MODEL || 'gemini-2.5-flash').trim();
+const googleSafetyModel = String(process.env.GOOGLE_SAFETY_MODEL || googleVideoModel || 'gemini-2.5-flash').trim();
+const googleImageModel = String(
+  process.env.GOOGLE_IMAGE_MODEL || 'gemini-2.0-flash-preview-image-generation'
+).trim();
 
 if (isLowMemoryMode) {
   // Keep native image processing predictable on low-memory instances.
@@ -35,13 +42,20 @@ if (isLowMemoryMode) {
   sharp.concurrency(1);
 }
 
-let openai;
+let googleAI;
+let googleTtsClient;
 try {
-  openai = aiProviderEnabled
-    ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  googleAI = aiProviderEnabled
+    ? new GoogleGenAI({ apiKey: geminiApiKey })
     : null;
 } catch (error) {
-  openai = null;
+  googleAI = null;
+}
+
+try {
+  googleTtsClient = new textToSpeech.TextToSpeechClient();
+} catch (error) {
+  googleTtsClient = null;
 }
 
 const MAX_STORY_LENGTH = 7000;
@@ -149,30 +163,129 @@ const buildSafetyReasonLabel = (categoryKey = '') =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const flattenMessageContent = (content) => {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part.text === 'string') return part.text;
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  if (content && typeof content === 'object' && typeof content.text === 'string') {
+    return content.text;
+  }
+  return '';
+};
+
+const messagesToPrompt = (messages = []) =>
+  messages
+    .map((message) => {
+      const role = sanitizeText(message?.role || 'user').toUpperCase();
+      const content = sanitizeText(flattenMessageContent(message?.content || ''));
+      if (!content) return '';
+      return `${role}:\n${content}`;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+
+const normalizeGeminiTextResponse = (response) => {
+  if (!response) return null;
+  if (typeof response.text === 'string' && response.text.trim()) {
+    return response.text.trim();
+  }
+  const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    const text = parts
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('\n')
+      .trim();
+    if (text) {
+      return text;
+    }
+  }
+  return null;
+};
+
+const safeGoogleGenerateContent = async ({
+  prompt = '',
+  systemInstruction = '',
+  maxTokens = 1100,
+  timeoutMs = 8000,
+  temperature = 0.7,
+  model = googleVideoModel,
+  jsonMode = false,
+}) => {
+  if (!googleAI) return null;
+
+  const cleanPrompt = sanitizeText(prompt);
+  if (!cleanPrompt) return null;
+
+  const aiCall = (async () => {
+    const response = await googleAI.models.generateContent({
+      model: sanitizeText(model || googleVideoModel || 'gemini-2.5-flash'),
+      contents: cleanPrompt,
+      config: {
+        temperature,
+        maxOutputTokens: Math.max(128, Number(maxTokens) || 1100),
+        ...(sanitizeText(systemInstruction) ? { systemInstruction: sanitizeText(systemInstruction) } : {}),
+        ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      },
+    });
+    return normalizeGeminiTextResponse(response);
+  })();
+
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs));
+  try {
+    return await Promise.race([aiCall, timeout]);
+  } catch (_error) {
+    return null;
+  }
+};
+
 const getModerationSafetyAssessment = async (value = '') => {
   const cleanValue = sanitizeText(value);
-  if (!openai || !cleanValue) {
+  if (!googleAI || !cleanValue) {
     return { blocked: false, reasons: [] };
   }
 
   try {
-    const moderation = await openai.moderations.create({
-      model: process.env.OPENAI_MODERATION_MODEL || 'omni-moderation-latest',
-      input: cleanValue.slice(0, 12000),
+    const prompt = `Classify the following text for child-safety.
+Return strict JSON:
+{"blocked": boolean, "reasons": [{"code":"string","reason":"string"}]}
+If safe, return {"blocked":false,"reasons":[]}.
+
+Text:
+${cleanValue.slice(0, 12000)}`;
+
+    const moderationText = await safeGoogleGenerateContent({
+      prompt,
+      systemInstruction: 'You are a strict content safety classifier for children content moderation.',
+      maxTokens: 300,
+      timeoutMs: 7000,
+      temperature: 0.1,
+      model: googleSafetyModel,
+      jsonMode: true,
     });
 
-    const result = moderation?.results?.[0];
-    if (!result?.flagged) {
+    const parsed = moderationText ? extractJson(moderationText) : null;
+    if (!parsed || !parsed.blocked) {
       return { blocked: false, reasons: [] };
     }
 
-    const categories = result?.categories && typeof result.categories === 'object' ? result.categories : {};
-    const reasons = Object.entries(categories)
-      .filter(([, flagged]) => Boolean(flagged))
-      .map(([code]) => ({
-        code: `model_${String(code).replace(/[^\w/.-]/g, '_')}`,
-        reason: buildSafetyReasonLabel(code) || 'unsafe content',
-      }));
+    const parsedReasons = Array.isArray(parsed?.reasons) ? parsed.reasons : [];
+    const reasons = parsedReasons
+      .map((reason) => ({
+        code: sanitizeText(reason?.code || 'model_flagged').replace(/[^\w/.-]/g, '_'),
+        reason: sanitizeText(reason?.reason || buildSafetyReasonLabel(reason?.code || 'unsafe content')),
+      }))
+      .filter((reason) => reason.code || reason.reason);
 
     if (!reasons.length) {
       reasons.push({
@@ -208,26 +321,26 @@ const getCombinedSafetyAssessment = async (value = '') => {
   };
 };
 
-const safeOpenAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
-  if (!openai) return null;
-
-  const aiCall = (async () => {
-    const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_VIDEO_MODEL || 'gpt-4o-mini',
-      messages,
-      max_tokens: maxTokens,
-      temperature: 0.7,
-    });
-    return response?.choices?.[0]?.message?.content?.trim() || null;
-  })();
-
-  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs));
-
-  try {
-    return await Promise.race([aiCall, timeout]);
-  } catch (error) {
-    return null;
-  }
+const safeGoogleAI = async (messages, maxTokens = 1100, timeoutMs = 8000) => {
+  if (!googleAI) return null;
+  const normalizedMessages = Array.isArray(messages) ? messages : [];
+  const systemInstruction = sanitizeText(
+    normalizedMessages
+      .filter((message) => sanitizeText(message?.role).toLowerCase() === 'system')
+      .map((message) => flattenMessageContent(message?.content || ''))
+      .join('\n\n')
+  );
+  const prompt = messagesToPrompt(
+    normalizedMessages.filter((message) => sanitizeText(message?.role).toLowerCase() !== 'system')
+  );
+  return safeGoogleGenerateContent({
+    prompt,
+    systemInstruction,
+    maxTokens,
+    timeoutMs,
+    temperature: 0.7,
+    model: googleVideoModel,
+  });
 };
 
 const CHARACTER_ROLE_PRESETS = [
@@ -483,7 +596,7 @@ Return JSON with keys:
 title, synopsis, moral, narration, sceneBeats[] where each beat has beat and summary.
 Keep language simple and family-friendly.`;
 
-  const response = await safeOpenAI([
+  const response = await safeGoogleAI([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
   ], 900);
@@ -850,7 +963,7 @@ const regenerateProjectScene = async (projectId, sceneId, options = {}) => {
   const customDirection = sanitizeText(options?.direction || options?.prompt || '');
 
   let regeneratedCandidate = null;
-  if (openai) {
+  if (googleAI) {
     const systemPrompt = 'You are an expert kids animation writer. Return strict JSON only.';
     const userPrompt = `Regenerate one storyboard scene while preserving story continuity.
 Project title: ${sanitizeText(project?.storyTitle || project?.title || 'Kids story')}
@@ -867,7 +980,7 @@ Creative direction: ${customDirection || 'Keep it playful and emotionally clear.
 Return JSON with keys:
 title, description, dialogue, emotion, background, weather, timeOfDay, cameraActions, durationSeconds.
 Dialogue must be 2-4 short lines and child-safe.`;
-    const response = await safeOpenAI([
+    const response = await safeGoogleAI([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ], 700);
@@ -983,7 +1096,7 @@ const regenerateProjectSceneDialogue = async (projectId, sceneId, options = {}) 
   const customDirection = sanitizeText(options?.direction || options?.prompt || '');
   let regeneratedDialogue = '';
 
-  if (openai) {
+  if (googleAI) {
     const systemPrompt = 'You are an expert kids dialogue writer. Output only plain dialogue text.';
     const userPrompt = `Rewrite dialogue for one kids animation scene.
 Scene title: ${sanitizeText(scene?.title || '')}
@@ -994,7 +1107,7 @@ Current dialogue: ${sanitizeText(scene?.dialogue || '')}
 Direction: ${customDirection || 'Make it playful, short, and child-safe.'}
 
 Write 2-4 short lines in the format "Name: line".`;
-    const response = await safeOpenAI([
+    const response = await safeGoogleAI([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ], 350);
@@ -1206,7 +1319,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
 
   let parsed = null;
   try {
-    const aiResponse = await safeOpenAI([
+    const aiResponse = await safeGoogleAI([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ], 1100);
@@ -1303,7 +1416,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
 
 const buildNarration = async (project) => {
   const fallback = `${project.title}. ${project.scenes.map((scene) => `${scene.title}: ${scene.description} `).join(' ')}`;
-  if (!openai) return fallback;
+  if (!googleAI) return fallback;
 
   try {
     const systemPrompt = `You are a warm bedtime storyteller for kids. Create a gentle narration script in ${project.language} using the scenes and emotions provided.`;
@@ -1311,7 +1424,7 @@ const buildNarration = async (project) => {
 Scenes:
 ${project.scenes.map((scene) => `- ${scene.title}: ${scene.description} [${scene.emotion}]`).join('\n')}
 Generate a single narration text for the entire video with kid-safe phrasing.`;
-    const response = await safeOpenAI([
+    const response = await safeGoogleAI([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ], 800);
@@ -1343,9 +1456,28 @@ const getResolution = (videoSize) => {
   }
 };
 
-const getOpenAIImageSize = (width, height) => {
-  if (width === height) return '1024x1024';
-  return width > height ? '1536x1024' : '1024x1536';
+const getGeminiImageBufferFromResponse = (response) => {
+  const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
+  for (const candidate of candidates) {
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    for (const part of parts) {
+      const mimeType = sanitizeText(part?.inlineData?.mimeType || part?.inline_data?.mime_type || '');
+      const rawData = part?.inlineData?.data ?? part?.inline_data?.data;
+      if (!rawData || !mimeType.startsWith('image/')) {
+        continue;
+      }
+      if (Buffer.isBuffer(rawData)) {
+        return rawData;
+      }
+      if (typeof rawData === 'string') {
+        return Buffer.from(rawData, 'base64');
+      }
+      if (rawData instanceof Uint8Array) {
+        return Buffer.from(rawData);
+      }
+    }
+  }
+  return null;
 };
 
 const safeFileName = (value) => value.replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
@@ -1425,35 +1557,21 @@ const buildRealCartoonPrompt = (scene, project) => {
   ].join(' ');
 };
 
-const getImageBufferFromOpenAIResult = async (item) => {
-  if (!item) return null;
-  if (item.b64_json) {
-    return Buffer.from(item.b64_json, 'base64');
-  }
-  if (item.url) {
-    const response = await fetch(item.url);
-    if (!response.ok) {
-      return null;
-    }
-    const arr = await response.arrayBuffer();
-    return Buffer.from(arr);
-  }
-  return null;
-};
-
 const generateRealCartoonSceneImage = async (scene, project, imagePath, resolution) => {
-  if (!openai || !useRealCartoonImages) {
+  if (!googleAI || !useRealCartoonImages) {
     return false;
   }
 
   try {
-    const response = await openai.images.generate({
-      model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1',
-      prompt: buildRealCartoonPrompt(scene, project),
-      size: getOpenAIImageSize(resolution.width, resolution.height),
+    const response = await googleAI.models.generateContent({
+      model: googleImageModel,
+      contents: buildRealCartoonPrompt(scene, project),
+      config: {
+        responseModalities: [Modality.TEXT, Modality.IMAGE],
+        temperature: 0.8,
+      },
     });
-    const firstImage = response?.data?.[0];
-    const imageBuffer = await getImageBufferFromOpenAIResult(firstImage);
+    const imageBuffer = getGeminiImageBufferFromResponse(response);
     if (!imageBuffer?.length) {
       return false;
     }
@@ -1581,43 +1699,57 @@ const buildSubtitleFile = async (project, directory) => {
 const resolveNarrationVoice = (voiceCandidate = '') => {
   const normalized = sanitizeText(voiceCandidate).toLowerCase();
   const map = {
-    'kid-female': 'nova',
-    'kid-male': 'echo',
-    'female-soft': 'nova',
-    'female-warm': 'shimmer',
-    'male-calm': 'alloy',
-    'warm-male': 'alloy',
-    'soft-female': 'nova',
+    'kid-female': 'en-IN-Standard-A',
+    'kid-male': 'en-IN-Standard-B',
+    'female-soft': 'en-IN-Standard-A',
+    'female-warm': 'en-US-Standard-E',
+    'male-calm': 'en-US-Standard-I',
+    'warm-male': 'en-US-Standard-D',
+    'soft-female': 'en-US-Standard-F',
+    nova: 'en-IN-Standard-A',
+    shimmer: 'en-US-Standard-E',
+    alloy: 'en-US-Standard-D',
+    echo: 'en-IN-Standard-B',
+    fable: 'en-US-Standard-I',
+    onyx: 'en-US-Standard-J',
   };
 
   if (map[normalized]) {
     return map[normalized];
   }
-  if (['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].includes(normalized)) {
-    return normalized;
+  if (/^[a-z]{2}-[A-Z]{2}-(Standard|Neural2|Wavenet)-[A-Z0-9]+$/.test(voiceCandidate)) {
+    return voiceCandidate;
   }
-  return 'nova';
+  if (/male|deep|baritone|boy|prince|father/.test(normalized)) {
+    return 'en-US-Standard-I';
+  }
+  if (/female|girl|mother|princess|soft|gentle/.test(normalized)) {
+    return 'en-US-Standard-F';
+  }
+  return 'en-IN-Standard-A';
 };
 
-const voiceCatalog = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+const voiceCatalog = [
+  'en-IN-Standard-A',
+  'en-IN-Standard-B',
+  'en-IN-Standard-C',
+  'en-IN-Standard-D',
+  'en-US-Standard-D',
+  'en-US-Standard-E',
+  'en-US-Standard-F',
+  'en-US-Standard-I',
+  'en-US-Standard-J',
+];
 
-const normalizeOpenAIAudioBuffer = async (response) => {
-  if (Buffer.isBuffer(response)) {
-    return response;
-  }
-  if (response instanceof ArrayBuffer) {
-    return Buffer.from(response);
-  }
-  if (typeof response?.arrayBuffer === 'function') {
-    return Buffer.from(await response.arrayBuffer());
-  }
+const normalizeTtsAudioBuffer = (response) => {
+  const content = response?.audioContent;
+  if (!content) return null;
+  if (Buffer.isBuffer(content)) return content;
+  if (typeof content === 'string') return Buffer.from(content, 'base64');
+  if (content instanceof Uint8Array) return Buffer.from(content);
   return null;
 };
 
-const buildTtsModelFallbackList = () => {
-  const preferred = sanitizeText(process.env.OPENAI_VIDEO_TTS_MODEL || 'gpt-4o-mini-tts');
-  return Array.from(new Set([preferred, 'gpt-4o-mini-tts', 'tts-1', 'tts-1-hd']));
-};
 const ttsProviderByOutputPath = new Map();
 
 const windowsTtsEnabled = ['1', 'true', 'yes', 'on'].includes(
@@ -1713,28 +1845,34 @@ const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
     return null;
   }
 
-  const voice = resolveNarrationVoice(voiceCandidate);
-  if (openai) {
-    const modelsToTry = buildTtsModelFallbackList();
-
-    for (const model of modelsToTry) {
-      try {
-        const response = await openai.audio.speech.create({
-          model,
-          voice,
-          input: content,
-          format: 'mp3',
-        });
-
-        const audioBuffer = await normalizeOpenAIAudioBuffer(response);
-        if (audioBuffer?.length) {
-          await writeFile(outputPath, audioBuffer);
-          ttsProviderByOutputPath.set(outputPath, 'openai-tts');
-          return outputPath;
-        }
-      } catch (_error) {
-        // Try next model.
+  const voiceName = resolveNarrationVoice(voiceCandidate);
+  if (googleTtsClient) {
+    try {
+      const inferredLanguageCode = sanitizeText(voiceName.split('-').slice(0, 2).join('-') || 'en-US');
+      const ssmlGender = /-([A-FH])$/i.test(voiceName) ? 'FEMALE' : 'MALE';
+      const [response] = await googleTtsClient.synthesizeSpeech({
+        input: { text: content },
+        voice: {
+          languageCode: inferredLanguageCode || 'en-US',
+          name: voiceName,
+          ssmlGender,
+        },
+        audioConfig: {
+          audioEncoding: 'MP3',
+          speakingRate: 1.0,
+          pitch: 0.0,
+          volumeGainDb: 2.0,
+          sampleRateHertz: 24000,
+        },
+      });
+      const audioBuffer = normalizeTtsAudioBuffer(response);
+      if (audioBuffer?.length) {
+        await writeFile(outputPath, audioBuffer);
+        ttsProviderByOutputPath.set(outputPath, 'google-cloud-tts');
+        return outputPath;
       }
+    } catch (_error) {
+      // Fall back to Windows voice synthesis if Google Cloud TTS is unavailable.
     }
   }
 
@@ -1776,7 +1914,7 @@ const resolveSpeakerVoice = (project, speakerName) => {
   );
 
   const mapped = resolveNarrationVoice(candidate);
-  return voiceCatalog.includes(mapped) ? mapped : 'nova';
+  return voiceCatalog.includes(mapped) ? mapped : 'en-IN-Standard-A';
 };
 
 const extractSceneDialogueTurns = (scene, project) => {
@@ -2174,7 +2312,7 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   const generatedByAi = await generateRealCartoonSceneImage(scene, project, stillPath, resolution);
   if (!generatedByAi && project?.requireSceneImages) {
     throw new Error(
-      'AI character visuals are required for this render, but image generation failed. Check OPENAI_API_KEY, VIDEO_STUDIO_REAL_CARTOON_MODE, and image model access before retrying.'
+      'AI character visuals are required for this render, but image generation failed. Check GEMINI_API_KEY (or GOOGLE_API_KEY), VIDEO_STUDIO_REAL_CARTOON_MODE, and image model access before retrying.'
     );
   }
   const duration = Math.max(2, Number(scene.duration) || 6);
@@ -2586,7 +2724,7 @@ const generateVoice = async (projectId, sceneId) => {
     sceneId: Number(scene.id || sceneId),
     voiceUrl: `/uploads/video-studio/${safeProjectId}/${path.basename(outputPath)}`,
     provider: synthesizedPath
-      ? (ttsProviderByOutputPath.get(outputPath) || 'openai-tts')
+      ? (ttsProviderByOutputPath.get(outputPath) || 'googleAI-tts')
       : 'procedural-fallback',
   };
 };

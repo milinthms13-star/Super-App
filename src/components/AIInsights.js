@@ -116,7 +116,7 @@ const AIInsights = ({ entryId = null, period = 'month' }) => {
     <div className="ai-insights-container">
       <div className="ai-insights-header">
         <h2>🤖 AI Insights</h2>
-        <p className="ai-insights-subtitle">Powered by OpenAI</p>
+        <p className="ai-insights-subtitle">Powered by Google AI</p>
       </div>
 
       {/* Tab Navigation */}

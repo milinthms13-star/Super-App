@@ -1,24 +1,63 @@
 const axios = require('axios');
-const openai = require('openai');
 
 /**
  * AI Chat Service
  * Provides AI-powered chatbot for product Q&A, order tracking, complaints, shopping assistance
- * Integration with OpenAI GPT-3.5/4 for natural language understanding
+ * Integration with Google Gemini for natural language understanding
  */
 class AIChatService {
-  static openaiClient = null;
+  static geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+  static geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
   /**
-   * Initialize OpenAI client
+   * Check API configuration
    */
-  static initializeOpenAI() {
-    if (!this.openaiClient) {
-      this.openaiClient = new openai.OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
-      });
+  static isGeminiConfigured() {
+    return Boolean(this.geminiApiKey);
+  }
+
+  static extractGeminiText(response) {
+    const direct = response?.data?.candidates?.[0]?.content?.parts
+      ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('\n')
+      .trim();
+    return direct || '';
+  }
+
+  static async generateGeminiResponse(systemPrompt, userMessage) {
+    if (!this.isGeminiConfigured()) {
+      throw new Error('Gemini API key is not configured');
     }
-    return this.openaiClient;
+
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.geminiModel)}:generateContent`,
+      {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `SYSTEM INSTRUCTION:\n${systemPrompt}\n\nUSER MESSAGE:\n${userMessage}`,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 500,
+          topP: 0.9,
+        },
+      },
+      {
+        headers: {
+          'x-goog-api-key': this.geminiApiKey,
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
+
+    return this.extractGeminiText(response);
   }
 
   /**
@@ -43,22 +82,7 @@ class AIChatService {
       // Build system prompt based on context
       const systemPrompt = this.buildSystemPrompt(context, contextData);
 
-      // Get response from OpenAI
-      const client = this.initializeOpenAI();
-
-      const completion = await client.chat.completions.create({
-        model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: message }
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-        presence_penalty: 0.6,
-        frequency_penalty: 0.5
-      });
-
-      const response = completion.choices[0].message.content;
+      const response = await this.generateGeminiResponse(systemPrompt, message);
 
       // Generate suggested actions based on response
       const suggestedActions = this.generateSuggestedActions(context, message, response);

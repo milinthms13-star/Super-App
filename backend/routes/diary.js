@@ -45,7 +45,7 @@ const {
   formatSummaryMarkdown,
 } = require('../utils/diaryAISummary');
 const {
-  generateOpenAISummary,
+  generateGeminiSummary,
   generateInsights,
   generateSuggestions,
   calculateAPICost,
@@ -2605,7 +2605,7 @@ router.post('/:entryId/apply-tags', async (req, res) => {
 // PHASE 4.3: AI SUMMARY & ACTION ITEMS
 // ============================================================================
 
-// GET /api/diary/ai/summary - Generate AI summary for period (OpenAI + Fallback + Persistent)
+// GET /api/diary/ai/summary - Generate AI summary for period (Gemini + Fallback + Persistent)
 router.get('/ai/summary', async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
@@ -2683,16 +2683,16 @@ router.get('/ai/summary', async (req, res) => {
       );
     }, 0);
 
-    // Try OpenAI first, fallback to keyword-based
+    // Try Gemini first, fallback to keyword-based
     let summary = null;
     let aiProvider = 'keyword-based';
     let tokensUsed = 0;
 
-    const openaiSummary = await generateOpenAISummary(entries, period);
-    if (openaiSummary) {
-      summary = openaiSummary;
-      aiProvider = 'openai';
-      tokensUsed = openaiSummary.tokensUsed || 0;
+    const geminiSummary = await generateGeminiSummary(entries, period);
+    if (geminiSummary) {
+      summary = geminiSummary;
+      aiProvider = 'gemini';
+      tokensUsed = geminiSummary.tokensUsed || 0;
     } else {
       // Fallback to keyword-based
       summary = await generateSummary(entries, period);
@@ -2721,7 +2721,7 @@ router.get('/ai/summary', async (req, res) => {
           totalWords,
           summary: summary,
           aiProvider,
-          openAITokensUsed: tokensUsed
+          aiTokensUsed: tokensUsed
         });
         await newSummary.save();
         logger.debug('Summary persisted to database');

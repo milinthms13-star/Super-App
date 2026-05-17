@@ -328,31 +328,46 @@ const parseJsonResponse = (content = '', fallbackValue = null) => {
   }
 };
 
-const callOpenAiJson = async ({ systemPrompt, userPrompt, fallback }) => {
-  const apiKey = process.env.OPENAI_API_KEY;
+const callGoogleAiJson = async ({ systemPrompt, userPrompt, fallback }) => {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     return fallback();
   }
 
   try {
     const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+        process.env.GEMINI_RESUME_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+      )}:generateContent`,
       {
-        model: process.env.OPENAI_RESUME_MODEL || 'gpt-4o-mini',
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: `SYSTEM:\n${systemPrompt}\n\nUSER:\n${userPrompt}`,
+              },
+            ],
+          },
         ],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 1800,
+          responseMimeType: 'application/json',
+        },
       },
       {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: {
+          'x-goog-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
         timeout: 45000,
       }
     );
 
-    const content = response?.data?.choices?.[0]?.message?.content || '';
+    const content = response?.data?.candidates?.[0]?.content?.parts
+      ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('\n') || '';
     const parsed = parseJsonResponse(content);
     if (!parsed || typeof parsed !== 'object') {
       return fallback();
@@ -375,7 +390,7 @@ router.post('/generate', authenticate, async (req, res) => {
       language,
     });
 
-    const aiResult = await callOpenAiJson({
+    const aiResult = await callGoogleAiJson({
       systemPrompt:
         'You are a senior resume writer. Return strictly valid JSON with fields: profile, skills, education, experience, projects, certifications, languages. Keep concise and ATS-friendly.',
       userPrompt: `Create an ATS-friendly resume body for this candidate profile.\n\n${JSON.stringify(
@@ -449,7 +464,7 @@ router.post('/optimize', authenticate, async (req, res) => {
       },
     };
 
-    const aiResult = await callOpenAiJson({
+    const aiResult = await callGoogleAiJson({
       systemPrompt:
         'You optimize resumes against job descriptions. Return strict JSON with fields: profile, skills, experience, optimization.',
       userPrompt: `Optimize this resume:\n${JSON.stringify({
@@ -498,7 +513,7 @@ router.post('/cover-letter', authenticate, async (req, res) => {
       highlights: skills.slice(0, 4),
     });
 
-    const aiResult = await callOpenAiJson({
+    const aiResult = await callGoogleAiJson({
       systemPrompt:
         'You write concise professional cover letters. Return strict JSON with fields: content and highlights (array).',
       userPrompt: `Write a ${type} cover letter for this candidate:\n${JSON.stringify({
@@ -549,7 +564,7 @@ router.post('/interview-prep', authenticate, async (req, res) => {
       skillCourses: topSkills.map((skill) => `${skill} interview prep`).slice(0, 4),
     });
 
-    const aiResult = await callOpenAiJson({
+    const aiResult = await callGoogleAiJson({
       systemPrompt:
         'You are an interview coach. Return strict JSON with questions, tips, and skillCourses arrays.',
       userPrompt: `Prepare interview coaching for:\n${JSON.stringify({
@@ -762,4 +777,3 @@ router.post('/my-resumes/:id/duplicate', authenticate, async (req, res) => {
 });
 
 module.exports = router;
-

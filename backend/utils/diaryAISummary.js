@@ -3,7 +3,7 @@ const logger = require('./logger');
 /**
  * Generate AI summary of diary entries using simple NLP
  * This version uses pattern-based summarization (no external API)
- * Ready for OpenAI API integration if needed
+ * Ready for Google Gemini API integration if needed
  */
 
 const generateSummary = async (entries, period = 'week') => {

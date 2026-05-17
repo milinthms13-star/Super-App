@@ -26,7 +26,8 @@ const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_M
 const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
 );
-const aiProviderEnabled = Boolean(process.env.OPENAI_API_KEY) && (!isFreeMode || allowAiInFreeMode);
+const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const aiProviderEnabled = Boolean(geminiApiKey) && (!isFreeMode || allowAiInFreeMode);
 const realCartoonModeEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (aiProviderEnabled ? '1' : '0')).toLowerCase()
 );

@@ -1,51 +1,75 @@
 const axios = require('axios');
 const logger = require('./logger');
 
-// Real AI Chat Suggestions using Groq API
-// Replace GROQ_API_KEY with your key in .env
-const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
-const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MESSAGING_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+const parseSuggestions = (text, tone) => {
+  try {
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed.map((item, index) => ({
+      id: String(item?.id || index + 1),
+      text: String(item?.text || '').trim(),
+      confidence: Number(item?.confidence || 0.8),
+      tone,
+    })).filter((item) => item.text);
+  } catch (_error) {
+    return null;
+  }
+};
 
 async function generateAISuggestions(recentMessages, tone = 'casual') {
-  if (!GROQ_API_KEY) {
-    logger.warn('GROQ_API_KEY not set, using fallback suggestions');
+  if (!GEMINI_API_KEY) {
+    logger.warn('GEMINI_API_KEY/GOOGLE_API_KEY not set, using fallback suggestions');
     return fallbackSuggestions(tone);
   }
 
   try {
-    // Build conversation context
-    const context = recentMessages.slice(-6).reverse().map(msg => 
-      `${msg.senderId?.name || 'User'}: ${msg.content.substring(0, 200)}`
-    ).join('\\n');
+    const context = recentMessages
+      .slice(-6)
+      .reverse()
+      .map((msg) => `${msg.senderId?.name || 'User'}: ${String(msg.content || '').substring(0, 200)}`)
+      .join('\n');
 
     const prompt = `Generate 3 helpful reply suggestions for this conversation (${tone} tone):
 Conversation:
 ${context}
 
-Provide exactly 3 short suggestions in JSON:
+Provide exactly 3 short suggestions in strict JSON:
 [{"id":"1","text":"Suggestion 1","confidence":0.9},{"id":"2","text":"Suggestion 2","confidence":0.85},{"id":"3","text":"Suggestion 3","confidence":0.8}]`;
 
-    const response = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
-      model: 'llama3-8b-8192', // Fast & cheap
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-      max_tokens: 200,
-    }, {
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`,
+      {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 220,
+          responseMimeType: 'application/json',
+        },
       },
-      timeout: 5000,
-    });
+      {
+        headers: {
+          'x-goog-api-key': GEMINI_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        timeout: 5000,
+      }
+    );
 
-    const suggestions = JSON.parse(response.data.choices[0].message.content);
-    return suggestions.map(s => ({
-      id: s.id,
-      text: s.text.trim(),
-      confidence: s.confidence || 0.8,
-      tone,
-    }));
+    const rawText = response?.data?.candidates?.[0]?.content?.parts
+      ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('\n')
+      .trim();
 
+    const parsed = parseSuggestions(rawText, tone);
+    if (parsed && parsed.length) {
+      return parsed.slice(0, 3);
+    }
+    return fallbackSuggestions(tone);
   } catch (error) {
     logger.error('AI suggestions failed:', error.message);
     return fallbackSuggestions(tone);
@@ -58,7 +82,7 @@ function fallbackSuggestions(tone) {
     { id: '2', text: 'That sounds interesting!', confidence: 0.8 },
     { id: '3', text: 'Tell me more about that.', confidence: 0.75 },
   ];
-  
+
   const professional = [
     { id: '1', text: 'Thank you for the information.', confidence: 0.9 },
     { id: '2', text: 'Could you elaborate?', confidence: 0.85 },
@@ -71,4 +95,3 @@ function fallbackSuggestions(tone) {
 module.exports = {
   generateAISuggestions,
 };
-

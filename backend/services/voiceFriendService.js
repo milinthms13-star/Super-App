@@ -1,29 +1,130 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { OpenAI } = require('openai');
+const { GoogleGenAI } = require('@google/genai');
+const textToSpeech = require('@google-cloud/text-to-speech');
 const logger = require('../utils/logger');
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 
-let openai = null;
+let aiClient = null;
+let googleTtsClient = null;
 
-const createOpenAIClient = () => {
+const createAIClient = () => {
   if (isFreeMode) {
-    logger.info('VoiceFriendService running in FREE_MODE; OpenAI disabled.');
+    logger.info('VoiceFriendService running in FREE_MODE; cloud AI disabled.');
     return null;
   }
-  if (!process.env.OPENAI_API_KEY) {
-    logger.warn('OpenAI API key missing for VoiceFriendService');
+  const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!geminiApiKey) {
+    logger.warn('Gemini API key missing for VoiceFriendService');
     return null;
   }
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  let geminiClient;
+  try {
+    geminiClient = new GoogleGenAI({ apiKey: geminiApiKey });
+  } catch (error) {
+    logger.warn('Gemini client initialization failed for VoiceFriendService:', error.message);
+    return null;
+  }
+
+  try {
+    if (!googleTtsClient) {
+      googleTtsClient = new textToSpeech.TextToSpeechClient();
+    }
+  } catch (error) {
+    logger.warn('Google TTS client initialization failed for VoiceFriendService:', error.message);
+    googleTtsClient = null;
+  }
+
+  return {
+    chat: {
+      completions: {
+        create: async ({ model, messages, max_tokens, temperature, top_p }) => {
+          const systemText = Array.isArray(messages)
+            ? messages
+              .filter((msg) => String(msg?.role || '').toLowerCase() === 'system')
+              .map((msg) => String(msg?.content || ''))
+              .join('\n\n')
+            : '';
+          const promptText = Array.isArray(messages)
+            ? messages
+              .filter((msg) => String(msg?.role || '').toLowerCase() !== 'system')
+              .map((msg) => `${String(msg?.role || 'user').toUpperCase()}: ${String(msg?.content || '')}`)
+              .join('\n\n')
+            : '';
+
+          const response = await geminiClient.models.generateContent({
+            model: String(model || process.env.GEMINI_VOICE_FRIEND_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim(),
+            contents: promptText,
+            config: {
+              systemInstruction: systemText,
+              maxOutputTokens: max_tokens || 600,
+              temperature: typeof temperature === 'number' ? temperature : 0.9,
+              topP: typeof top_p === 'number' ? top_p : 0.95,
+            },
+          });
+
+          const text = response?.text?.trim()
+            || response?.candidates?.[0]?.content?.parts
+              ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+              .join('\n')
+              .trim()
+            || '';
+
+          return {
+            choices: [{ message: { content: text } }],
+          };
+        },
+      },
+    },
+    audio: {
+      speech: {
+        create: async ({ voice, input }) => {
+          if (!googleTtsClient) {
+            throw new Error('Google TTS client unavailable');
+          }
+
+          const voiceName = String(voice || 'en-US-Standard-F').trim();
+          const languageCode = voiceName.split('-').slice(0, 2).join('-') || 'en-US';
+          const ssmlGender = /-(A|C|E|F|H)$/i.test(voiceName) ? 'FEMALE' : 'MALE';
+
+          const [response] = await googleTtsClient.synthesizeSpeech({
+            input: { text: String(input || '') },
+            voice: {
+              languageCode,
+              name: voiceName,
+              ssmlGender,
+            },
+            audioConfig: {
+              audioEncoding: 'MP3',
+              speakingRate: 1,
+              pitch: 0,
+            },
+          });
+
+          if (Buffer.isBuffer(response?.audioContent)) {
+            return response.audioContent;
+          }
+          if (typeof response?.audioContent === 'string') {
+            return Buffer.from(response.audioContent, 'base64');
+          }
+          if (response?.audioContent instanceof Uint8Array) {
+            return Buffer.from(response.audioContent);
+          }
+          throw new Error('Unexpected TTS response format');
+        },
+      },
+    },
+  };
 };
 
-openai = createOpenAIClient();
+aiClient = createAIClient();
 
-const setOpenAIClient = (client) => {
-  openai = client;
+const setAIClient = (client) => {
+  aiClient = client;
 };
+const setOpenAIClient = setAIClient;
 
 const AI_FRIENDS = {
   nila: {
@@ -122,17 +223,17 @@ const buildFriendProfile = (friendId) => {
 
 const mapSpeechVoice = (voiceKey) => {
   const voiceMap = {
-    'female-soft': 'alloy',
-    'male-calm': 'verse',
-    'female-warm': 'aria',
-    'default': 'alloy',
+    'female-soft': 'en-US-Standard-F',
+    'male-calm': 'en-US-Standard-I',
+    'female-warm': 'en-US-Standard-E',
+    'default': 'en-US-Standard-F',
   };
   return voiceMap[voiceKey] || voiceMap.default;
 };
 
 const getSpeechVoice = (friendId, overrideVoice) => {
-  if (process.env.OPENAI_VOICE_FRIEND_TTS_VOICE) {
-    return process.env.OPENAI_VOICE_FRIEND_TTS_VOICE;
+  if (process.env.GEMINI_VOICE_FRIEND_TTS_VOICE) {
+    return process.env.GEMINI_VOICE_FRIEND_TTS_VOICE;
   }
   const friend = buildFriendProfile(friendId);
   return mapSpeechVoice(overrideVoice || friend.voice || 'default');
@@ -229,8 +330,8 @@ ${buildMemoryPrompt(session)}
 };
 
 const buildModelFallbackList = () => {
-  const configured = String(process.env.OPENAI_VOICE_FRIEND_MODEL || 'gpt-4o-mini').trim();
-  return Array.from(new Set([configured, 'gpt-4o-mini', 'gpt-4.1-mini']));
+  const configured = String(process.env.GEMINI_VOICE_FRIEND_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+  return Array.from(new Set([configured, 'gemini-2.5-flash', 'gemini-2.0-flash']));
 };
 
 const buildLocalSupportReply = (session, userMessage) => {
@@ -408,9 +509,9 @@ const createAIResponse = async (messages) => {
     return null;
   }
 
-  if (!openai) {
-    openai = createOpenAIClient();
-    if (!openai) {
+  if (!aiClient) {
+    aiClient = createAIClient();
+    if (!aiClient) {
       return null;
     }
   }
@@ -420,7 +521,7 @@ const createAIResponse = async (messages) => {
 
   for (const model of modelsToTry) {
     try {
-      const response = await openai.chat.completions.create({
+      const response = await aiClient.chat.completions.create({
         model,
         messages,
         max_tokens: 600,
@@ -452,13 +553,13 @@ const generateSpeech = async ({ text, friendId = 'nila', voice, language = 'en' 
     return null;
   }
 
-  if (!openai) {
+  if (!aiClient) {
     return null;
   }
 
   try {
-    const speechResponse = await openai.audio.speech.create({
-      model: process.env.OPENAI_VOICE_FRIEND_TTS_MODEL || 'gpt-4o-mini',
+    const speechResponse = await aiClient.audio.speech.create({
+      model: process.env.GEMINI_VOICE_FRIEND_TTS_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       voice: getSpeechVoice(friendId, voice),
       input: text,
       format: 'mp3',
@@ -532,5 +633,6 @@ module.exports = {
   getSession,
   sendMessage,
   generateSpeech,
+  setAIClient,
   setOpenAIClient,
 };

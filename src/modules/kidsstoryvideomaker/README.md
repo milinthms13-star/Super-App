@@ -64,7 +64,7 @@ Structured safety response shape:
 Backend safety now combines:
 
 - keyword guardrails
-- OpenAI moderation check (`omni-moderation-latest` by default)
+- Google Gemini moderation classification (`GEMINI_API_KEY` / `GOOGLE_API_KEY`)
 - structured per-reason error payloads across create/autopilot/regenerate/patch/render
 
 ## Local storage schema

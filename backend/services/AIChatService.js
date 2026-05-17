@@ -1,6 +1,6 @@
 /**
  * AIChatService.js
- * AI-powered customer support and product Q&A using OpenAI/Azure
+ * AI-powered customer support and product Q&A using Google AI/Azure
  */
 
 const logger = require('../config/logger');

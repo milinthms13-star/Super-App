@@ -109,17 +109,17 @@ const diaryAISummarySchema = new Schema(
     // AI model used
     aiProvider: {
       type: String,
-      enum: ['openai', 'keyword-based'],
+      enum: ['gemini', 'keyword-based'],
       default: 'keyword-based'
     },
 
-    // OpenAI specific
-    openAIModel: {
+    // AI model metadata
+    aiModel: {
       type: String,
-      default: 'gpt-3.5-turbo' // Can be updated to gpt-4, etc.
+      default: 'gemini-2.5-flash'
     },
 
-    openAITokensUsed: {
+    aiTokensUsed: {
       type: Number,
       default: 0
     },

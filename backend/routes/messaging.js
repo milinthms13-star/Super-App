@@ -2659,7 +2659,7 @@ router.post('/ai/replies/generate', authenticate, attachMessagingUser, async (re
         previousMessages: recentMessages.length,
         topicKeywords: extractKeywords(recentMessages),
       },
-      model: 'gpt-3.5-turbo',
+      model: process.env.GEMINI_MESSAGING_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       generationTime: Math.random() * 1000 + 500, // Mock timing
       tokensUsed: Math.floor(Math.random() * 100) + 50,
     });

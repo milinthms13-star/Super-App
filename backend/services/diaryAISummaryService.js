@@ -1,9 +1,9 @@
-const axios = require('axios');
+const { GoogleGenAI } = require('@google/genai');
 const logger = require('../utils/logger');
 
 /**
  * Diary AI Summary Service
- * Uses OpenAI API for:
+ * Uses Google Gemini API for:
  * - Diary entry summaries
  * - Mood/sentiment analysis
  * - Wellness recommendations
@@ -12,33 +12,21 @@ const logger = require('../utils/logger');
 
 class DiaryAISummaryService {
   constructor() {
-    this.apiKey = process.env.OPENAI_API_KEY;
-    this.apiUrl = 'https://api.openai.com/v1/chat/completions';
-    this.model = 'gpt-4-turbo-preview'; // or gpt-3.5-turbo for cost optimization
+    this.apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    this.model = process.env.GEMINI_DIARY_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    this.client = this.apiKey ? new GoogleGenAI({ apiKey: this.apiKey }) : null;
 
     if (!this.apiKey) {
-      logger.warn('OPENAI_API_KEY not configured - AI features disabled');
+      logger.warn('GEMINI_API_KEY/GOOGLE_API_KEY not configured - diary AI features disabled');
     }
   }
 
-  /**
-   * Check if AI features are enabled
-   */
   isEnabled() {
-    return !!this.apiKey;
+    return !!this.client;
   }
 
-  /**
-   * Generate summary for single entry
-   * @param {string} entryContent - Full entry text
-   * @param {string} entryTitle - Entry title
-   * @param {object} metadata - { mood, category, tags }
-   * @returns {Promise<string>} - Summary text
-   */
   async generateEntrySummary(entryContent, entryTitle, metadata = {}) {
-    if (!this.isEnabled()) {
-      throw new Error('AI features not enabled');
-    }
+    if (!this.isEnabled()) throw new Error('AI features not enabled');
 
     try {
       const prompt = `Summarize this diary entry in 2-3 sentences. Focus on the main themes and emotions.
@@ -53,28 +41,19 @@ ${entryContent}
 
 Provide only the summary, no additional commentary.`;
 
-      const response = await this.callOpenAI(prompt);
-      return response;
+      return await this.callGemini(prompt);
     } catch (error) {
       logger.error('Failed to generate entry summary:', error);
       throw error;
     }
   }
 
-  /**
-   * Analyze mood and sentiment from entries
-   * @param {array} entries - Array of { title, content, mood, date }
-   * @param {string} period - 'week' | 'month' | 'year'
-   * @returns {Promise<object>} - { dominantMood, sentimentScore, themes, recommendations }
-   */
   async analyzeEmotionalPatterns(entries, period = 'month') {
-    if (!this.isEnabled()) {
-      throw new Error('AI features not enabled');
-    }
+    if (!this.isEnabled()) throw new Error('AI features not enabled');
 
     try {
       const entriesText = entries
-        .map(e => `${e.date}: [${e.mood}] ${e.title}\n${e.content.substring(0, 200)}...`)
+        .map((e) => `${e.date}: [${e.mood}] ${e.title}\n${String(e.content || '').substring(0, 200)}...`)
         .join('\n\n');
 
       const prompt = `Analyze the emotional patterns in these diary entries from the past ${period}:
@@ -93,7 +72,7 @@ Provide analysis in JSON format with:
 
 Respond with only valid JSON.`;
 
-      const response = await this.callOpenAI(prompt);
+      const response = await this.callGemini(prompt, 1200, true);
       return JSON.parse(response);
     } catch (error) {
       logger.error('Failed to analyze emotional patterns:', error);
@@ -101,19 +80,12 @@ Respond with only valid JSON.`;
     }
   }
 
-  /**
-   * Get weekly digest summary
-   * @param {array} entries - Array of entries for the week
-   * @returns {Promise<object>} - { weeklyHighlight, keyThemes, moodTrend, suggestion }
-   */
   async generateWeeklyDigest(entries) {
-    if (!this.isEnabled()) {
-      throw new Error('AI features not enabled');
-    }
+    if (!this.isEnabled()) throw new Error('AI features not enabled');
 
     try {
       const entriesText = entries
-        .map((e, i) => `Day ${i + 1}: ${e.title}\n${e.content.substring(0, 150)}...`)
+        .map((e, i) => `Day ${i + 1}: ${e.title}\n${String(e.content || '').substring(0, 150)}...`)
         .join('\n\n');
 
       const prompt = `Create a brief weekly digest of these diary entries:
@@ -130,7 +102,7 @@ Provide response in JSON format:
 
 Respond with only valid JSON.`;
 
-      const response = await this.callOpenAI(prompt);
+      const response = await this.callGemini(prompt, 1000, true);
       return JSON.parse(response);
     } catch (error) {
       logger.error('Failed to generate weekly digest:', error);
@@ -138,21 +110,13 @@ Respond with only valid JSON.`;
     }
   }
 
-  /**
-   * Get personalized wellness recommendations
-   * @param {array} entries - Recent entries
-   * @param {object} metadata - User mood history
-   * @returns {Promise<array>} - Array of recommendations
-   */
   async getWellnessRecommendations(entries, metadata = {}) {
-    if (!this.isEnabled()) {
-      throw new Error('AI features not enabled');
-    }
+    if (!this.isEnabled()) throw new Error('AI features not enabled');
 
     try {
       const entriesText = entries
-        .slice(0, 10) // Last 10 entries
-        .map(e => `${e.mood}: ${e.title}`)
+        .slice(0, 10)
+        .map((e) => `${e.mood}: ${e.title}`)
         .join('\n');
 
       const prompt = `Based on these diary entries and mood history, provide 3-5 personalized wellness recommendations:
@@ -174,7 +138,7 @@ Provide recommendations in JSON format:
 
 Respond with only valid JSON.`;
 
-      const response = await this.callOpenAI(prompt);
+      const response = await this.callGemini(prompt, 1000, true);
       return JSON.parse(response);
     } catch (error) {
       logger.error('Failed to get wellness recommendations:', error);
@@ -182,22 +146,15 @@ Respond with only valid JSON.`;
     }
   }
 
-  /**
-   * Extract action items from entry
-   * @param {string} entryContent - Entry text
-   * @returns {Promise<array>} - Array of action items
-   */
   async extractActionItems(entryContent) {
-    if (!this.isEnabled()) {
-      throw new Error('AI features not enabled');
-    }
+    if (!this.isEnabled()) throw new Error('AI features not enabled');
 
     try {
       const prompt = `Extract any action items, todos, or goals mentioned in this diary entry:
 
 ${entryContent}
 
-Return as JSON array:
+Return as JSON object:
 {
   "actionItems": [
     {"item": "...", "deadline": "if mentioned", "priority": "high|medium|low"},
@@ -207,7 +164,7 @@ Return as JSON array:
 
 Respond with only valid JSON. If no action items, return empty array.`;
 
-      const response = await this.callOpenAI(prompt);
+      const response = await this.callGemini(prompt, 900, true);
       return JSON.parse(response);
     } catch (error) {
       logger.error('Failed to extract action items:', error);
@@ -215,56 +172,36 @@ Respond with only valid JSON. If no action items, return empty array.`;
     }
   }
 
-  /**
-   * Generic OpenAI API call
-   * @param {string} prompt - User prompt
-   * @param {number} maxTokens - Max response tokens
-   * @returns {Promise<string>} - AI response
-   */
-  async callOpenAI(prompt, maxTokens = 1000) {
+  async callGemini(prompt, maxTokens = 1000, jsonMode = false) {
     try {
-      const response = await axios.post(
-        this.apiUrl,
-        {
-          model: this.model,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You are a compassionate diary assistant. Provide insightful, supportive analysis of diary entries.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: maxTokens,
-          temperature: 0.7
+      const response = await this.client.models.generateContent({
+        model: this.model,
+        contents: prompt,
+        config: {
+          systemInstruction: 'You are a compassionate diary assistant. Provide insightful, supportive analysis of diary entries.',
+          maxOutputTokens: maxTokens,
+          temperature: 0.7,
+          ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
         },
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000 // 30 second timeout
-        }
-      );
+      });
 
-      return response.data.choices[0].message.content;
+      const text = response?.text?.trim()
+        || response?.candidates?.[0]?.content?.parts
+          ?.map((part) => (typeof part?.text === 'string' ? part.text : ''))
+          .join('\n')
+          .trim();
+
+      if (!text) {
+        throw new Error('Empty Gemini response');
+      }
+      return text;
     } catch (error) {
-      logger.error('OpenAI API call failed:', error.response?.data || error.message);
+      logger.error('Gemini API call failed:', error.message);
       throw new Error(`AI service error: ${error.message}`);
     }
   }
 
-  /**
-   * Rate limit check (basic implementation)
-   * Could be extended with Redis for distributed rate limiting
-   */
-  async checkRateLimit(userId, limit = 10, windowMs = 3600000) {
-    // Simple implementation - in production use Redis
-    const key = `ai-summary-${userId}`;
-    // TODO: Implement with Redis
+  async checkRateLimit(_userId, _limit = 10, _windowMs = 3600000) {
     return true;
   }
 }
