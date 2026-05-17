@@ -758,9 +758,9 @@ router.get('/projects/:projectId/download', async (req, res) => {
   }
 });
 
-router.post('/debug/image-diagnostics', async (req, res) => {
+const handleImageDiagnostics = async (req, res) => {
   try {
-    const { prompt } = req.body || {};
+    const prompt = req.body?.prompt || req.query?.prompt || '';
     const diagnostics = await diagnoseImageGeneration({ prompt });
     return res.json({
       success: true,
@@ -774,6 +774,9 @@ router.post('/debug/image-diagnostics', async (req, res) => {
       error: error.message || 'Failed to run image diagnostics.',
     });
   }
-});
+};
+
+router.post('/debug/image-diagnostics', handleImageDiagnostics);
+router.get('/debug/image-diagnostics', handleImageDiagnostics);
 
 module.exports = router;
