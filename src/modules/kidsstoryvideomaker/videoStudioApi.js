@@ -19,6 +19,10 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const isTransientStatus = (status) => status === 429 || status >= 500;
 
 const isAbortError = (error) => error?.name === "AbortError";
+const isRecoverableParseError = (error) => {
+  const code = String(error?.code || "").toUpperCase();
+  return code === "EMPTY_RESPONSE" || code === "INVALID_JSON";
+};
 const isLikelyNetworkError = (error) => {
   if (!error) return false;
   if (error instanceof TypeError) return true;
@@ -201,10 +205,18 @@ export const requestVideoStudio = async (
             : error;
 
           const status = Number(normalizedError?.status || 0);
+          const code = String(normalizedError?.code || "").toUpperCase();
           const hasNextCandidate = index < requestUrls.length - 1;
           const shouldTryNextCandidate =
             hasNextCandidate &&
-            (isLikelyNetworkError(error) || status === 404 || status === 502 || status === 503 || status === 504);
+            (
+              isLikelyNetworkError(error) ||
+              isRecoverableParseError(normalizedError) ||
+              status === 404 ||
+              status === 502 ||
+              status === 503 ||
+              status === 504
+            );
 
           lastError = normalizedError;
           if (shouldTryNextCandidate) {
@@ -215,7 +227,11 @@ export const requestVideoStudio = async (
         }
       }
       const status = Number(lastError?.status || 0);
-      const shouldRetry = !isAbortError(lastError) && attempt < retries && (status === 0 || isTransientStatus(status));
+      const code = String(lastError?.code || "").toUpperCase();
+      const shouldRetry =
+        !isAbortError(lastError) &&
+        attempt < retries &&
+        (status === 0 || isTransientStatus(status) || code === "EMPTY_RESPONSE" || code === "INVALID_JSON");
       if (!shouldRetry) {
         throw lastError;
       }

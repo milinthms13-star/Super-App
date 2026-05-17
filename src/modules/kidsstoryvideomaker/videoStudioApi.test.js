@@ -76,6 +76,36 @@ describe("videoStudioApi", () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
+  test("falls back to alternate API origin when first response is 200 with empty body", async () => {
+    process.env.REACT_APP_API_URL = "https://unreachable.example.com/api";
+    process.env.REACT_APP_BACKEND_URL = "https://super-app-api.onrender.com";
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        url: "https://unreachable.example.com/api/video-studio/create",
+        text: async () => "",
+      })
+      .mockResolvedValueOnce(
+        jsonResponse({
+          payload: { success: true, project: { projectId: "p-empty-fallback" } },
+          url: "https://super-app-api.onrender.com/api/video-studio/create",
+        })
+      );
+
+    const result = await requestVideoStudio("/video-studio/create", {
+      method: "POST",
+      body: { storyPrompt: "test empty body fallback" },
+      retries: 0,
+    });
+
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.project.projectId).toBe("p-empty-fallback");
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
   test("falls back to project metadata when download endpoint is unavailable", async () => {
     process.env.REACT_APP_API_URL = "https://super-app-api.onrender.com";
     process.env.REACT_APP_BACKEND_URL = "https://super-app-api.onrender.com";
