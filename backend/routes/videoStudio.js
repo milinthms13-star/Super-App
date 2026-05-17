@@ -26,6 +26,9 @@ const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_M
 const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
 );
+const requireSceneImagesByDefault = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_REQUIRE_SCENE_IMAGES || '0').toLowerCase()
+);
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 const aiProviderEnabled = Boolean(geminiApiKey) && (!isFreeMode || allowAiInFreeMode);
 const realCartoonModeEnabled = ['1', 'true', 'yes', 'on'].includes(
@@ -330,7 +333,7 @@ router.post('/render', async (req, res) => {
         requireCharacters: true,
         requireDialogueVoice: true,
         requireLipSync: true,
-        requireSceneImages: true,
+        requireSceneImages: Boolean(requestedProject?.requireSceneImages) || requireSceneImagesByDefault,
       }
       : requestedProject;
     const payloadError = validateRenderProjectPayload(resolvedProject);
@@ -430,7 +433,7 @@ router.post('/render-cartoon', async (req, res) => {
         requireCharacters: true,
         requireDialogueVoice: true,
         requireLipSync: true,
-        requireSceneImages: true,
+        requireSceneImages: Boolean(requestedProject?.requireSceneImages) || requireSceneImagesByDefault,
       }
       : requestedProject;
     const payloadError = validateRenderProjectPayload(resolvedProject);
