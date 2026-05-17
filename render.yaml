@@ -60,7 +60,7 @@ services:
       - key: VIDEO_STUDIO_REAL_CARTOON_MODE
         value: true
       - key: VIDEO_STUDIO_ALLOW_AI_IN_FREE
-        value: false
+        value: true
       - key: VIDEO_STUDIO_REQUIRE_SCENE_IMAGES
         value: false
       - key: PORT

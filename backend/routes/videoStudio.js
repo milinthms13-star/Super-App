@@ -24,11 +24,14 @@ const {
 
 const router = express.Router();
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
+const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
+);
 const requireSceneImagesByDefault = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_REQUIRE_SCENE_IMAGES || '0').toLowerCase()
 );
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const aiProviderEnabled = Boolean(geminiApiKey) && !isFreeMode;
+const aiProviderEnabled = Boolean(geminiApiKey) && (!isFreeMode || allowAiInFreeMode);
 const realCartoonModeEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (aiProviderEnabled ? '1' : '0')).toLowerCase()
 );

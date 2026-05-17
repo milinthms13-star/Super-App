@@ -19,8 +19,11 @@ const stat = promisify(fs.stat);
 const uploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
 const projectStoreRoot = path.join(uploadsRoot, 'projects');
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
+const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
+);
 const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const aiProviderEnabled = Boolean(geminiApiKey) && !isFreeMode;
+const aiProviderEnabled = Boolean(geminiApiKey) && (!isFreeMode || allowAiInFreeMode);
 const isLowMemoryMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_LOW_MEMORY_MODE || (isFreeMode ? '1' : '0')).toLowerCase()
 );
