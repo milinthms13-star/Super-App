@@ -3,5 +3,3 @@ gtts
 moviepy
 imageio
 imageio-ffmpeg
-gradio
-bo

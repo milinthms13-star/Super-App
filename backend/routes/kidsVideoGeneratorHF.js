@@ -31,14 +31,13 @@ router.post('/generate', async (req, res) => {
       requestedEngine === 'prompt_video_python' ||
       requestedEngine === 'text_to_video' ||
       requestedEngine === 'damo-text-to-video';
-    const useFreeSteveLike =
-      requestedEngine === 'scene_script_video' ||
+    const useLegacyScriptVideo =
       requestedEngine === 'free_steve_like' ||
       requestedEngine === 'steve_like' ||
       requestedEngine === 'script_to_video';
     const shouldUseDiffusers = useDiffusers && !disableDiffusers;
 
-    const result = useFreeSteveLike
+    const result = useLegacyScriptVideo
       ? await generateKidsVideoFromFreeSteveLikePrompt({
           prompt,
           sceneCount: clampSceneCount(req.body?.sceneCount),

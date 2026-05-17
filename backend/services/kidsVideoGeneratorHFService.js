@@ -14,20 +14,6 @@ const mkdir = promisify(fs.mkdir);
 const uploadsRoot = path.join(__dirname, '..', 'uploads', 'kids-video-hf');
 const projectsRoot = path.join(uploadsRoot, 'projects');
 
-const huggingFaceApiBaseUrl = String(process.env.HUGGINGFACE_API_BASE_URL || 'https://api-inference.huggingface.co/models')
-  .replace(/\/+$/, '');
-const huggingFaceApiKey = String(process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN || process.env.HF_API_KEY || '').trim();
-const hfImageModels = Array.from(new Set(
-  [
-    process.env.HUGGINGFACE_IMAGE_MODEL,
-    process.env.HF_IMAGE_MODEL,
-    'black-forest-labs/FLUX.1-schnell',
-    'stabilityai/stable-diffusion-xl-base-1.0',
-  ]
-    .map((value) => String(value || '').trim())
-    .filter(Boolean)
-));
-
 const sanitizeText = (value = '') => String(value || '').replace(/\u0000/g, '').trim();
 const safeFileName = (value = '') => sanitizeText(value).replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
 
@@ -315,6 +301,27 @@ const extractPromptCharacters = (prompt = '') => {
 
 const buildGenericStory = (prompt = '', sceneCount = 5) => {
   const cleanPrompt = sanitizeText(prompt);
+  const extractedCharacters = extractPromptCharacters(cleanPrompt);
+  const characters = extractedCharacters.length
+    ? extractedCharacters
+    : [
+        {
+          id: 'char-hero',
+          name: 'Hero',
+          role: 'Main Character',
+          appearance: 'friendly child hero with colorful outfit',
+          colorPalette: ['sky blue', 'sunny yellow', 'mint'],
+        },
+        {
+          id: 'char-guide',
+          name: 'Guide',
+          role: 'Support Friend',
+          appearance: 'wise companion with warm smile',
+          colorPalette: ['peach', 'teal', 'cream'],
+        },
+      ];
+  const leadName = sanitizeText(characters[0]?.name || 'Hero');
+  const supportName = sanitizeText(characters[1]?.name || 'Guide');
   const lines = cleanPrompt
     .split(/[\.\?\!]+/)
     .map((line) => sanitizeText(line))
@@ -328,35 +335,17 @@ const buildGenericStory = (prompt = '', sceneCount = 5) => {
       id: index + 1,
       title: ['Opening', 'Challenge', 'Journey', 'Climax', 'Ending'][index] || `Scene ${index + 1}`,
       description: base,
-      dialogue: `Hero: ${base}\\nGuide: We can do this together.`,
+      dialogue: `${leadName}: ${base}\\n${supportName}: We can do this together.`,
       emotion: index === count - 1 ? 'joyful' : (index === 2 ? 'brave' : 'wonder'),
       durationSeconds: 4,
     };
   });
-  const extractedCharacters = extractPromptCharacters(cleanPrompt);
 
   return {
     title: 'Kids Story Adventure',
     synopsis: cleanPrompt || beats[0],
     moral: 'Kindness and consistency help us succeed.',
-    characters: extractedCharacters.length
-      ? extractedCharacters
-      : [
-          {
-            id: 'char-hero',
-            name: 'Hero',
-            role: 'Main Character',
-            appearance: 'friendly child hero with colorful outfit',
-            colorPalette: ['sky blue', 'sunny yellow', 'mint'],
-          },
-          {
-            id: 'char-guide',
-            name: 'Guide',
-            role: 'Support Friend',
-            appearance: 'wise companion with warm smile',
-            colorPalette: ['peach', 'teal', 'cream'],
-          },
-        ],
+    characters,
     scenes,
   };
 };
@@ -461,77 +450,6 @@ const buildSceneSvg = (scene, story, width, height) => {
     <rect x="64" y="${Math.round(height * 0.66)}" width="${width - 128}" height="${Math.round(height * 0.28)}" rx="24" fill="#ffffffdd" stroke="#93c5fd" stroke-width="3"/>
     ${descSvg}
   </svg>`;
-};
-
-const buildSceneImagePrompt = (scene, story) => {
-  const characterText = (story.characters || [])
-    .map((char) => `${char.name} (${char.role}) - ${char.appearance}`)
-    .join('; ');
-  return [
-    'Create one kid-safe 2D cartoon scene image.',
-    `Scene title: ${scene.title}.`,
-    `Description: ${scene.description}.`,
-    `Emotion: ${scene.emotion}.`,
-    `Characters: ${characterText}.`,
-    'No text, no watermark, no logo, expressive faces, colorful, cinematic framing.',
-  ].join(' ');
-};
-
-const fetchHfImage = async ({ prompt, width, height, model, timeoutMs = 35000 }) => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Math.max(3000, Number(timeoutMs) || 35000));
-  try {
-    const headers = {
-      'content-type': 'application/json',
-      accept: 'image/*',
-      'x-use-cache': 'false',
-    };
-    if (huggingFaceApiKey) {
-      headers.authorization = `Bearer ${huggingFaceApiKey}`;
-    }
-
-    const response = await fetch(`${huggingFaceApiBaseUrl}/${model}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        inputs: sanitizeText(prompt),
-        parameters: {
-          width: Math.max(320, Number(width) || 1280),
-          height: Math.max(320, Number(height) || 720),
-        },
-        options: {
-          wait_for_model: true,
-          use_cache: false,
-        },
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      let message = `${response.status}`;
-      try {
-        const payload = await response.json();
-        message = sanitizeText(payload?.error || payload?.message || message);
-      } catch (_error) {
-        // ignore body parse errors
-      }
-      return { buffer: null, error: message };
-    }
-
-    const contentType = sanitizeText(response.headers.get('content-type') || '');
-    if (!contentType.startsWith('image/')) {
-      return { buffer: null, error: `unexpected content-type ${contentType || 'unknown'}` };
-    }
-
-    const imageBuffer = Buffer.from(await response.arrayBuffer());
-    return { buffer: imageBuffer.length ? imageBuffer : null, error: imageBuffer.length ? '' : 'empty image bytes' };
-  } catch (error) {
-    const errMessage = sanitizeText(error?.message || 'unknown error');
-    const causeMessage = sanitizeText(error?.cause?.message || '');
-    return { buffer: null, error: causeMessage ? `${errMessage} (${causeMessage})` : errMessage };
-  } finally {
-    clearTimeout(timeout);
-  }
 };
 
 const generateSceneImage = async ({ scene, story, outputPath, width, height }) => {
