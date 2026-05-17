@@ -10,13 +10,23 @@ from typing import Any
 
 import requests
 from gtts import gTTS
-from moviepy.editor import (
-    AudioFileClip,
-    CompositeVideoClip,
-    ImageClip,
-    TextClip,
-    concatenate_videoclips,
-)
+try:
+    from moviepy.editor import (
+        AudioFileClip,
+        CompositeVideoClip,
+        ImageClip,
+        TextClip,
+        concatenate_videoclips,
+    )
+except Exception:
+    # MoviePy v2 exports directly from `moviepy`.
+    from moviepy import (
+        AudioFileClip,
+        CompositeVideoClip,
+        ImageClip,
+        TextClip,
+        concatenate_videoclips,
+    )
 from PIL import Image, ImageDraw, ImageFont
 
 

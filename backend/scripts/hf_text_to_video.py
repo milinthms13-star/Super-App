@@ -1,6 +1,7 @@
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -8,7 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips
+try:
+    from moviepy.editor import AudioFileClip, ImageClip, concatenate_videoclips
+except Exception:
+    # MoviePy v2 exports directly from `moviepy`.
+    from moviepy import AudioFileClip, ImageClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -185,6 +190,20 @@ def _create_scene_audio(text: str, output_mp3: Path, language: str) -> None:
     subprocess.run(cmd, check=True)
 
 
+def _attach_audio_and_duration(image_path: Path, audio: AudioFileClip, duration: float) -> Any:
+    clip = ImageClip(str(image_path))
+    if hasattr(clip, "set_duration"):
+        clip = clip.set_duration(duration)
+    else:
+        clip = clip.with_duration(duration)
+
+    if hasattr(clip, "set_audio"):
+        clip = clip.set_audio(audio)
+    else:
+        clip = clip.with_audio(audio)
+    return clip
+
+
 def generate_text_to_video(
     prompt: str,
     output: str,
@@ -216,40 +235,52 @@ def generate_text_to_video(
     clips: list[Any] = []
     created_files: list[Path] = []
 
-    with tempfile.TemporaryDirectory(prefix="storybuilder_") as tmp:
-        tmp_dir = Path(tmp)
-        try:
-            for index, scene in enumerate(scenes):
-                image_path = tmp_dir / f"scene_{index:02d}.png"
-                audio_path = tmp_dir / f"scene_{index:02d}.mp3"
-                _build_scene_image(scene, characters, width, height, image_path)
-                _create_scene_audio(scene.dialogue, audio_path, language)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="storybuilder_"))
+    audio_clips: list[Any] = []
+    final = None
+    try:
+        for index, scene in enumerate(scenes):
+            image_path = tmp_dir / f"scene_{index:02d}.png"
+            audio_path = tmp_dir / f"scene_{index:02d}.mp3"
+            _build_scene_image(scene, characters, width, height, image_path)
+            _create_scene_audio(scene.dialogue, audio_path, language)
 
-                audio = AudioFileClip(str(audio_path))
-                duration = max(3.0, float(audio.duration))
-                clip = ImageClip(str(image_path)).set_duration(duration).set_audio(audio)
-                clips.append(clip)
+            audio = AudioFileClip(str(audio_path))
+            audio_clips.append(audio)
+            duration = max(3.0, float(audio.duration))
+            clip = _attach_audio_and_duration(image_path, audio, duration)
+            clips.append(clip)
 
-                created_files.extend([image_path, audio_path])
+            created_files.extend([image_path, audio_path])
 
-            if not clips:
-                raise RuntimeError("No scenes generated.")
+        if not clips:
+            raise RuntimeError("No scenes generated.")
 
-            final = concatenate_videoclips(clips, method="compose")
-            final.write_videofile(
-                str(output_path),
-                fps=fps,
-                codec="libx264",
-                audio_codec="aac",
-                logger=None,
-            )
-            final.close()
-        finally:
-            for clip in clips:
-                try:
-                    clip.close()
-                except Exception:
-                    pass
+        final = concatenate_videoclips(clips, method="compose")
+        final.write_videofile(
+            str(output_path),
+            fps=fps,
+            codec="libx264",
+            audio_codec="aac",
+            logger=None,
+        )
+    finally:
+        if final is not None:
+            try:
+                final.close()
+            except Exception:
+                pass
+        for clip in clips:
+            try:
+                clip.close()
+            except Exception:
+                pass
+        for audio in audio_clips:
+            try:
+                audio.close()
+            except Exception:
+                pass
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return {
         "success": True,
