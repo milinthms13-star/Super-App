@@ -79,11 +79,8 @@ const buildVideoStudioRequestUrls = (path = "") => {
     candidates.push(toAbsoluteApiUrl(process.env.REACT_APP_API_URL || "", path));
   }
 
-  // Legacy safety fallback for older deployments that only used onrender API host.
-  // If explicit API targets are configured, do not force this host.
-  if (!hasExplicitApiTargets && (/onrender\.com/i.test(API_BASE_URL) || /onrender\.com/i.test(runtimeOrigin))) {
-    candidates.push(toAbsoluteApiUrl("https://super-app-api.onrender.com", path));
-  }
+  // Do not force any hardcoded host fallback.
+  // Requests should use only configured env targets + same-origin candidate.
 
   return dedupeUrls(candidates);
 };
