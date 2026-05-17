@@ -19,6 +19,7 @@ const {
   generateSfx,
   lipSync, 
   composeFinalVideo,
+  diagnoseImageGeneration,
 } = require('../services/videoStudioService');
 
 const router = express.Router();
@@ -311,7 +312,7 @@ router.post('/render', async (req, res) => {
       });
     }
 
-    const { project, projectId, premiumHD } = req.body;
+    const { project, projectId, premiumHD, requireSceneImages } = req.body || {};
     let requestedProject = project || null;
     if (!requestedProject && projectId) {
       try {
@@ -333,7 +334,7 @@ router.post('/render', async (req, res) => {
         requireCharacters: true,
         requireDialogueVoice: true,
         requireLipSync: true,
-        requireSceneImages: Boolean(requestedProject?.requireSceneImages) || requireSceneImagesByDefault,
+        requireSceneImages: Boolean(requireSceneImages) || requireSceneImagesByDefault,
       }
       : requestedProject;
     const payloadError = validateRenderProjectPayload(resolvedProject);
@@ -411,7 +412,7 @@ router.post('/render-cartoon', async (req, res) => {
       });
     }
 
-    const { project, projectId, premiumHD } = req.body || {};
+    const { project, projectId, premiumHD, requireSceneImages } = req.body || {};
     let requestedProject = project || null;
     if (!requestedProject && projectId) {
       try {
@@ -433,7 +434,7 @@ router.post('/render-cartoon', async (req, res) => {
         requireCharacters: true,
         requireDialogueVoice: true,
         requireLipSync: true,
-        requireSceneImages: Boolean(requestedProject?.requireSceneImages) || requireSceneImagesByDefault,
+        requireSceneImages: Boolean(requireSceneImages) || requireSceneImagesByDefault,
       }
       : requestedProject;
     const payloadError = validateRenderProjectPayload(resolvedProject);
@@ -754,6 +755,24 @@ router.get('/projects/:projectId/download', async (req, res) => {
   } catch (error) {
     logger.error('Video studio download link error:', error);
     res.status(404).json({ success: false, error: error.message || 'Project not found.' });
+  }
+});
+
+router.post('/debug/image-diagnostics', async (req, res) => {
+  try {
+    const { prompt } = req.body || {};
+    const diagnostics = await diagnoseImageGeneration({ prompt });
+    return res.json({
+      success: true,
+      diagnostics,
+      ...getStudioCapabilities(),
+    });
+  } catch (error) {
+    logger.error('Video studio image diagnostics error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to run image diagnostics.',
+    });
   }
 });
 

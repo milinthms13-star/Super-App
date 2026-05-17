@@ -63,6 +63,10 @@ services:
         value: true
       - key: VIDEO_STUDIO_REQUIRE_SCENE_IMAGES
         value: false
+      - key: GOOGLE_IMAGE_MODEL
+        value: gemini-2.0-flash-preview-image-generation
+      - key: VIDEO_STUDIO_IMAGE_MODEL
+        value: gemini-2.0-flash-preview-image-generation
       - key: PORT
         value: 5000
       - key: REACT_APP_FIREBASE_API_KEY

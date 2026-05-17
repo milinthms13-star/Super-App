@@ -35,6 +35,19 @@ const googleSafetyModel = String(process.env.GOOGLE_SAFETY_MODEL || googleVideoM
 const googleImageModel = String(
   process.env.GOOGLE_IMAGE_MODEL || 'gemini-2.0-flash-preview-image-generation'
 ).trim();
+const googleImageModelCandidates = Array.from(new Set(
+  [
+    process.env.GOOGLE_IMAGE_MODEL,
+    process.env.GEMINI_IMAGE_MODEL,
+    process.env.VIDEO_STUDIO_IMAGE_MODEL,
+    googleImageModel,
+    'gemini-2.0-flash-preview-image-generation',
+    'gemini-2.5-flash-image-preview',
+    'gemini-3.1-flash-image-preview',
+  ]
+    .map((value) => String(value || '').replace(/\u0000/g, '').trim())
+    .filter(Boolean)
+));
 
 if (isLowMemoryMode) {
   // Keep native image processing predictable on low-memory instances.
@@ -1480,6 +1493,74 @@ const getGeminiImageBufferFromResponse = (response) => {
   return null;
 };
 
+const diagnoseImageGeneration = async (options = {}) => {
+  const samplePrompt = sanitizeText(
+    options.prompt
+    || 'A cheerful 2D cartoon rabbit and tortoise in a colorful park, child-safe, no text, no logos.'
+  );
+  const modelAttempts = [];
+
+  if (!googleAI) {
+    return {
+      ok: false,
+      reason: 'Google AI client not initialized (missing/invalid GEMINI_API_KEY).',
+      aiProviderEnabled,
+      useRealCartoonImages,
+      configuredImageModel: googleImageModel,
+      candidateModels: googleImageModelCandidates,
+      modelAttempts,
+    };
+  }
+
+  for (const model of googleImageModelCandidates) {
+    try {
+      const response = await googleAI.models.generateContent({
+        model,
+        contents: samplePrompt,
+        config: {
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+          temperature: 0.4,
+        },
+      });
+
+      const imageBuffer = getGeminiImageBufferFromResponse(response);
+      const hasImage = Boolean(imageBuffer?.length);
+      modelAttempts.push({
+        model,
+        success: hasImage,
+        bytes: hasImage ? imageBuffer.length : 0,
+      });
+      if (hasImage) {
+        return {
+          ok: true,
+          aiProviderEnabled,
+          useRealCartoonImages,
+          configuredImageModel: googleImageModel,
+          workingModel: model,
+          candidateModels: googleImageModelCandidates,
+          modelAttempts,
+        };
+      }
+    } catch (error) {
+      modelAttempts.push({
+        model,
+        success: false,
+        error: sanitizeText(error?.message || 'unknown error'),
+      });
+    }
+  }
+
+  return {
+    ok: false,
+    reason: 'No image output returned by any candidate Gemini image model.',
+    aiProviderEnabled,
+    useRealCartoonImages,
+    configuredImageModel: googleImageModel,
+    candidateModels: googleImageModelCandidates,
+    modelAttempts,
+  };
+};
+
 const safeFileName = (value) => value.replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
 const parseList = (value) => String(value || '')
   .split(',')
@@ -1562,35 +1643,42 @@ const generateRealCartoonSceneImage = async (scene, project, imagePath, resoluti
     return false;
   }
 
-  try {
-    const response = await googleAI.models.generateContent({
-      model: googleImageModel,
-      contents: buildRealCartoonPrompt(scene, project),
-      config: {
-        responseModalities: [Modality.TEXT, Modality.IMAGE],
-        temperature: 0.8,
-      },
-    });
-    const imageBuffer = getGeminiImageBufferFromResponse(response);
-    if (!imageBuffer?.length) {
-      return false;
+  const prompt = buildRealCartoonPrompt(scene, project);
+  const errors = [];
+  for (const model of googleImageModelCandidates) {
+    try {
+      const response = await googleAI.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+          temperature: 0.8,
+        },
+      });
+      const imageBuffer = getGeminiImageBufferFromResponse(response);
+      if (!imageBuffer?.length) {
+        errors.push(`${model}: no image bytes`);
+        continue;
+      }
+      await sharp(imageBuffer)
+        .resize(resolution.width, resolution.height, {
+          fit: 'cover',
+        })
+        .png({
+          compressionLevel: isLowMemoryMode ? 9 : 6,
+          palette: Boolean(isLowMemoryMode),
+        })
+        .toFile(imagePath);
+      return true;
+    } catch (error) {
+      errors.push(`${model}: ${sanitizeText(error?.message || 'unknown error')}`);
     }
-    await sharp(imageBuffer)
-      .resize(resolution.width, resolution.height, {
-        fit: 'cover',
-      })
-      .png({
-        compressionLevel: isLowMemoryMode ? 9 : 6,
-        palette: Boolean(isLowMemoryMode),
-      })
-      .toFile(imagePath);
-    return true;
-  } catch (error) {
-    logger.warn(
-      `Video studio image generation failed for scene "${sanitizeText(scene?.title || scene?.id || 'unknown')}": ${sanitizeText(error?.message || 'unknown error')}`
-    );
-    return false;
   }
+
+  logger.warn(
+    `Video studio image generation failed for scene "${sanitizeText(scene?.title || scene?.id || 'unknown')}". Attempts: ${errors.join(' | ')}`
+  );
+  return false;
 };
 
 const buildSceneSvg = (scene, project, width, height) => {
@@ -2837,4 +2925,5 @@ module.exports = {
   generateSfx,
   lipSync,
   composeFinalVideo,
+  diagnoseImageGeneration,
 };
