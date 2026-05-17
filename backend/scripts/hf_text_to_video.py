@@ -1,14 +1,21 @@
 import argparse
 import json
 import os
+import random
+import re
 import sys
-import time
 from pathlib import Path
 from typing import Any
-from urllib import error as urlerror
-from urllib import request as urlrequest
 
-HF_API_BASE = "https://api-inference.huggingface.co/models"
+import requests
+from gtts import gTTS
+from moviepy.editor import (
+    AudioFileClip,
+    CompositeVideoClip,
+    ImageClip,
+    TextClip,
+    concatenate_videoclips,
+)
 
 
 def _resolve_output_path(output: str) -> Path:
@@ -19,88 +26,116 @@ def _resolve_output_path(output: str) -> Path:
     return output_path
 
 
-def _get_hf_token() -> str:
-    token = (
-        os.getenv("HUGGINGFACE_API_KEY")
-        or os.getenv("HF_TOKEN")
-        or os.getenv("HF_API_KEY")
-        or ""
-    ).strip()
-    if not token:
-        raise RuntimeError(
-            "Missing Hugging Face token. Set HUGGINGFACE_API_KEY or HF_TOKEN."
+COMMON_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "has",
+    "he",
+    "in",
+    "is",
+    "it",
+    "its",
+    "of",
+    "on",
+    "that",
+    "the",
+    "to",
+    "was",
+    "were",
+    "will",
+    "with",
+    "you",
+    "your",
+}
+
+
+def _clean_text(value: str) -> str:
+    return str(value or "").replace("\x00", "").strip()
+
+
+def _split_prompt_to_scenes(prompt: str, max_scenes: int = 6) -> list[dict[str, str]]:
+    cleaned = _clean_text(prompt)
+    chunks = [
+        chunk.strip()
+        for chunk in re.split(r"(?<=[.!?])\s+|\n+", cleaned)
+        if chunk.strip()
+    ]
+    if not chunks:
+        chunks = [cleaned]
+
+    chunks = chunks[: max(1, min(12, max_scenes))]
+    scenes: list[dict[str, str]] = []
+    for sentence in chunks:
+        words = re.findall(r"[a-zA-Z][a-zA-Z'-]+", sentence.lower())
+        keyword = next(
+            (word for word in words if word not in COMMON_STOPWORDS and len(word) > 3),
+            "story",
         )
-    return token
+        scenes.append({"text": sentence, "keyword": keyword})
+    return scenes
 
 
-def _parse_error_message(raw_body: bytes, status: int) -> str:
-    text = raw_body.decode("utf-8", errors="replace").strip()
-    if not text:
-        return f"HTTP {status}"
+def _fetch_free_image(keyword: str, image_path: Path) -> bool:
+    query = _clean_text(keyword).replace(" ", ",")
+    dynamic_url = f"https://source.unsplash.com/featured/1920x1080/?{query or 'story'}"
+    try:
+        response = requests.get(dynamic_url, timeout=30, allow_redirects=True)
+        if response.status_code != 200 or not response.content:
+            return False
+        image_path.write_bytes(response.content)
+        return True
+    except Exception:
+        return False
+
+
+def _build_scene_clip(
+    scene: dict[str, str],
+    index: int,
+    output_path: Path,
+    width: int,
+    height: int,
+) -> CompositeVideoClip:
+    scene_text = _clean_text(scene.get("text", ""))
+    keyword = _clean_text(scene.get("keyword", "story"))
+
+    audio_filename = output_path.parent / f"audio_{index}.mp3"
+    gTTS(text=scene_text, lang="en", slow=False).save(str(audio_filename))
+    audio_clip = AudioFileClip(str(audio_filename))
+    duration = max(2.5, float(audio_clip.duration))
+
+    image_filename = output_path.parent / f"scene_{index}.jpg"
+    if not _fetch_free_image(keyword, image_filename):
+        # Fallback to a random placeholder image if stock fetch fails.
+        seed = random.randint(1000, 999999)
+        placeholder = f"https://picsum.photos/seed/{seed}/{max(640, width)}/{max(360, height)}"
+        response = requests.get(placeholder, timeout=20)
+        response.raise_for_status()
+        image_filename.write_bytes(response.content)
+
+    image_clip = ImageClip(str(image_filename)).resize((width, height)).set_duration(duration)
+    image_clip = image_clip.set_audio(audio_clip)
 
     try:
-        payload = json.loads(text)
-        if isinstance(payload, dict):
-            message = (
-                str(payload.get("error") or payload.get("message") or "").strip()
-            )
-            if message:
-                return message
-    except json.JSONDecodeError:
-        pass
-
-    return text[:500]
-
-
-def _request_video_bytes(
-    model: str,
-    token: str,
-    payload: dict[str, Any],
-    timeout_seconds: int = 600,
-    max_retries: int = 3,
-) -> bytes:
-    url = f"{HF_API_BASE}/{model}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "Accept": "video/*",
-    }
-    body = json.dumps(payload).encode("utf-8")
-
-    for attempt in range(max_retries + 1):
-        req = urlrequest.Request(url=url, data=body, headers=headers, method="POST")
-        try:
-            with urlrequest.urlopen(req, timeout=timeout_seconds) as response:
-                raw = response.read()
-                content_type = (response.headers.get("content-type") or "").lower()
-                if not raw:
-                    raise RuntimeError("Hugging Face returned empty video bytes.")
-                if content_type.startswith("video/") or "octet-stream" in content_type:
-                    return raw
-                # Some failures are JSON/text with status 200.
-                message = _parse_error_message(raw, 200)
-                raise RuntimeError(
-                    f"Unexpected response type '{content_type or 'unknown'}': {message}"
-                )
-        except urlerror.HTTPError as exc:
-            raw_error = exc.read() if hasattr(exc, "read") else b""
-            message = _parse_error_message(raw_error, exc.code)
-
-            # 503 can occur while a model is cold-starting.
-            if exc.code == 503 and attempt < max_retries:
-                wait_seconds = 20 * (attempt + 1)
-                time.sleep(wait_seconds)
-                continue
-
-            raise RuntimeError(f"Hugging Face API error ({exc.code}): {message}") from exc
-        except urlerror.URLError as exc:
-            if attempt < max_retries:
-                wait_seconds = 10 * (attempt + 1)
-                time.sleep(wait_seconds)
-                continue
-            raise RuntimeError(f"Network error calling Hugging Face API: {exc}") from exc
-
-    raise RuntimeError("Unable to generate video after retries.")
+        text_clip = TextClip(
+            scene_text,
+            fontsize=40,
+            color="white",
+            bg_color="black",
+            size=(int(width * 0.85), int(height * 0.24)),
+            method="caption",
+        ).set_position(("center", "bottom")).set_duration(duration)
+        return CompositeVideoClip([image_clip, text_clip], size=(width, height))
+    except Exception:
+        # Text rendering can fail if ImageMagick/fonts are unavailable.
+        return CompositeVideoClip([image_clip], size=(width, height))
 
 
 def generate_text_to_video(
@@ -116,52 +151,64 @@ def generate_text_to_video(
     guidance_scale: float = 9.0,
     seed: int = 42,
 ) -> dict[str, Any]:
-    clean_prompt = str(prompt or "").strip()
+    clean_prompt = _clean_text(prompt)
     if not clean_prompt:
         raise RuntimeError("Prompt is required.")
 
     output_path = _resolve_output_path(output)
-    token = _get_hf_token()
+    scenes = _split_prompt_to_scenes(clean_prompt, max_scenes=max(1, num_frames // 16))
 
-    parameters: dict[str, Any] = {
-        "num_inference_steps": max(1, int(num_inference_steps)),
-        "num_frames": max(8, int(num_frames)),
-        "guidance_scale": max(0.0, float(guidance_scale)),
-        "seed": int(seed),
-        "width": max(128, int(width)),
-        "height": max(128, int(height)),
-        # Many models ignore fps, but we pass it when supported.
-        "fps": max(1, int(fps)),
-    }
+    width = max(320, int(width))
+    height = max(240, int(height))
+    fps = max(1, int(fps))
 
-    if negative_prompt and str(negative_prompt).strip():
-        parameters["negative_prompt"] = str(negative_prompt).strip()
+    clips: list[Any] = []
+    created_assets: list[Path] = []
+    try:
+        for index, scene in enumerate(scenes):
+            clip = _build_scene_clip(scene, index, output_path, width, height)
+            clips.append(clip)
+            created_assets.append(output_path.parent / f"audio_{index}.mp3")
+            created_assets.append(output_path.parent / f"scene_{index}.jpg")
 
-    payload = {
-        "inputs": clean_prompt,
-        "parameters": parameters,
-        "options": {
-            "wait_for_model": True,
-            "use_cache": False,
-        },
-    }
+        if not clips:
+            raise RuntimeError("No scenes could be generated from prompt.")
 
-    video_bytes = _request_video_bytes(model=model, token=token, payload=payload)
-    output_path.write_bytes(video_bytes)
+        final_video = concatenate_videoclips(clips, method="compose")
+        final_video.write_videofile(
+            str(output_path),
+            fps=fps,
+            codec="libx264",
+            audio_codec="aac",
+            logger=None,
+        )
+        final_video.close()
+    finally:
+        for clip in clips:
+            try:
+                clip.close()
+            except Exception:
+                pass
+        for asset in created_assets:
+            try:
+                if asset.exists():
+                    asset.unlink()
+            except Exception:
+                pass
 
     return {
         "success": True,
         "output": str(output_path),
-        "model": model,
+        "model": model or "steve-ai-style-scene-pipeline",
         "seed": int(seed),
-        "num_frames": int(parameters["num_frames"]),
-        "fps": int(parameters["fps"]),
-        "provider": "huggingface_inference_api",
+        "num_frames": len(scenes),
+        "fps": fps,
+        "provider": "scene_pipeline_moviepy_gtts",
     }
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Hugging Face text-to-video generator")
+    parser = argparse.ArgumentParser(description="Steve.ai-style text-to-video scene pipeline")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--model", default="damo-vilab/text-to-video-ms-1.7b")

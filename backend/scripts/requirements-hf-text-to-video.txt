@@ -1,3 +1,6 @@
-# Minimal dependencies for the new HF API-based text-to-video script.
-# Core generator uses Python stdlib only.
+requests
+gtts
+moviepy
+imageio
+imageio-ffmpeg
 gradio
