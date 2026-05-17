@@ -1,8 +1,3 @@
-torch
-torchvision
-diffusers
-transformers
-accelerate
-imageio
-imageio-ffmpeg
+# Minimal dependencies for the new HF API-based text-to-video script.
+# Core generator uses Python stdlib only.
 gradio

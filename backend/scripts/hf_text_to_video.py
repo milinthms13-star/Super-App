@@ -2,8 +2,13 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
+from urllib import error as urlerror
+from urllib import request as urlrequest
+
+HF_API_BASE = "https://api-inference.huggingface.co/models"
 
 
 def _resolve_output_path(output: str) -> Path:
@@ -14,16 +19,88 @@ def _resolve_output_path(output: str) -> Path:
     return output_path
 
 
-def _load_pipeline(model: str, dtype: Any, token: str | None):
-    from diffusers import DPMSolverMultistepScheduler, DiffusionPipeline
+def _get_hf_token() -> str:
+    token = (
+        os.getenv("HUGGINGFACE_API_KEY")
+        or os.getenv("HF_TOKEN")
+        or os.getenv("HF_API_KEY")
+        or ""
+    ).strip()
+    if not token:
+        raise RuntimeError(
+            "Missing Hugging Face token. Set HUGGINGFACE_API_KEY or HF_TOKEN."
+        )
+    return token
 
-    kwargs: dict[str, Any] = {"torch_dtype": dtype}
-    if token:
-        kwargs["token"] = token
-    pipe = DiffusionPipeline.from_pretrained(model, **kwargs)
 
-    pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
-    return pipe
+def _parse_error_message(raw_body: bytes, status: int) -> str:
+    text = raw_body.decode("utf-8", errors="replace").strip()
+    if not text:
+        return f"HTTP {status}"
+
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            message = (
+                str(payload.get("error") or payload.get("message") or "").strip()
+            )
+            if message:
+                return message
+    except json.JSONDecodeError:
+        pass
+
+    return text[:500]
+
+
+def _request_video_bytes(
+    model: str,
+    token: str,
+    payload: dict[str, Any],
+    timeout_seconds: int = 600,
+    max_retries: int = 3,
+) -> bytes:
+    url = f"{HF_API_BASE}/{model}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "video/*",
+    }
+    body = json.dumps(payload).encode("utf-8")
+
+    for attempt in range(max_retries + 1):
+        req = urlrequest.Request(url=url, data=body, headers=headers, method="POST")
+        try:
+            with urlrequest.urlopen(req, timeout=timeout_seconds) as response:
+                raw = response.read()
+                content_type = (response.headers.get("content-type") or "").lower()
+                if not raw:
+                    raise RuntimeError("Hugging Face returned empty video bytes.")
+                if content_type.startswith("video/") or "octet-stream" in content_type:
+                    return raw
+                # Some failures are JSON/text with status 200.
+                message = _parse_error_message(raw, 200)
+                raise RuntimeError(
+                    f"Unexpected response type '{content_type or 'unknown'}': {message}"
+                )
+        except urlerror.HTTPError as exc:
+            raw_error = exc.read() if hasattr(exc, "read") else b""
+            message = _parse_error_message(raw_error, exc.code)
+
+            # 503 can occur while a model is cold-starting.
+            if exc.code == 503 and attempt < max_retries:
+                wait_seconds = 20 * (attempt + 1)
+                time.sleep(wait_seconds)
+                continue
+
+            raise RuntimeError(f"Hugging Face API error ({exc.code}): {message}") from exc
+        except urlerror.URLError as exc:
+            if attempt < max_retries:
+                wait_seconds = 10 * (attempt + 1)
+                time.sleep(wait_seconds)
+                continue
+            raise RuntimeError(f"Network error calling Hugging Face API: {exc}") from exc
+
+    raise RuntimeError("Unable to generate video after retries.")
 
 
 def generate_text_to_video(
@@ -39,62 +116,52 @@ def generate_text_to_video(
     guidance_scale: float = 9.0,
     seed: int = 42,
 ) -> dict[str, Any]:
-    try:
-        import torch
-        from diffusers.utils import export_to_video
-    except Exception as error:
-        raise RuntimeError(
-            "Missing dependencies. Install: pip install torch diffusers transformers accelerate imageio imageio-ffmpeg"
-        ) from error
+    clean_prompt = str(prompt or "").strip()
+    if not clean_prompt:
+        raise RuntimeError("Prompt is required.")
 
     output_path = _resolve_output_path(output)
-    token = os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_TOKEN")
-    has_cuda = torch.cuda.is_available()
-    dtype = torch.float16 if has_cuda else torch.float32
-    device = "cuda" if has_cuda else "cpu"
+    token = _get_hf_token()
 
-    if not has_cuda:
-        print(
-            "WARNING: Running on CPU. This can be very slow. "
-            "Use a CUDA GPU for practical text-to-video generation.",
-            file=sys.stderr,
-        )
+    parameters: dict[str, Any] = {
+        "num_inference_steps": max(1, int(num_inference_steps)),
+        "num_frames": max(8, int(num_frames)),
+        "guidance_scale": max(0.0, float(guidance_scale)),
+        "seed": int(seed),
+        "width": max(128, int(width)),
+        "height": max(128, int(height)),
+        # Many models ignore fps, but we pass it when supported.
+        "fps": max(1, int(fps)),
+    }
 
-    pipe = _load_pipeline(model=model, dtype=dtype, token=token)
-    if has_cuda:
-        pipe.enable_model_cpu_offload()
-    else:
-        pipe.to(device)
-    pipe.enable_vae_slicing()
+    if negative_prompt and str(negative_prompt).strip():
+        parameters["negative_prompt"] = str(negative_prompt).strip()
 
-    generator = torch.Generator(device=device).manual_seed(seed)
-    result = pipe(
-        prompt=prompt,
-        negative_prompt=negative_prompt if negative_prompt else None,
-        num_inference_steps=max(1, num_inference_steps),
-        num_frames=max(8, num_frames),
-        width=max(128, width),
-        height=max(128, height),
-        guidance_scale=max(0.0, guidance_scale),
-        generator=generator,
-    ).frames
+    payload = {
+        "inputs": clean_prompt,
+        "parameters": parameters,
+        "options": {
+            "wait_for_model": True,
+            "use_cache": False,
+        },
+    }
 
-    # Diffusers can return [frames] for batch size 1.
-    video_frames = result[0] if result and isinstance(result[0], list) else result
-    export_to_video(video_frames, output_video_path=str(output_path), fps=max(1, fps))
+    video_bytes = _request_video_bytes(model=model, token=token, payload=payload)
+    output_path.write_bytes(video_bytes)
 
     return {
         "success": True,
         "output": str(output_path),
         "model": model,
-        "seed": seed,
-        "num_frames": len(video_frames),
-        "device": device,
+        "seed": int(seed),
+        "num_frames": int(parameters["num_frames"]),
+        "fps": int(parameters["fps"]),
+        "provider": "huggingface_inference_api",
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Hugging Face Diffusers text-to-video generator")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Hugging Face text-to-video generator")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--model", default="damo-vilab/text-to-video-ms-1.7b")
