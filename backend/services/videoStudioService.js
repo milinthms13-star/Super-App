@@ -2912,6 +2912,12 @@ const renderVideo = async (project, premiumHD = false) => {
   const dialogueAudioPath = await buildCharacterDialogueAudio(project, outputDir, totalDuration);
   const narrationAudioPath = dialogueAudioPath ? null : await buildNarrationAudio(project, outputDir);
   const audioTrackPath = dialogueAudioPath || narrationAudioPath;
+  const allowSilentRender = ['1', 'true', 'yes', 'on'].includes(String(process.env.VIDEO_STUDIO_ALLOW_SILENT_RENDER || '').toLowerCase());
+  if (!audioTrackPath && !allowSilentRender) {
+    throw new Error(
+      'Voice generation failed for this project. No spoken dialogue/narration audio track was created.'
+    );
+  }
 
   const quality = premiumHD && !isLowMemoryMode ? '24' : (isLowMemoryMode ? '28' : '23');
   const renderToken = Date.now();
