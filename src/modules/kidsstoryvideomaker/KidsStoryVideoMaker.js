@@ -390,6 +390,7 @@ const KidsStoryVideoMaker = () => {
   const { t } = useTranslation();
   const recognitionRef = useRef(null);
   const voiceTargetRef = useRef("");
+  const uploadStoryInputRef = useRef(null);
   const mainContentRef = useRef(null);
   const voiceCatalogReadyRef = useRef(false);
   const requestControllersRef = useRef({});
@@ -399,6 +400,7 @@ const KidsStoryVideoMaker = () => {
   const [storyPrompt, setStoryPrompt] = useState(DEFAULT_STORY_PROMPT);
   const [storySource, setStorySource] = useState("paste");
   const [uploadedText, setUploadedText] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState("");
   const [languageId, setLanguageId] = useState(LANGUAGE_OPTIONS[0].id);
   const [styleId, setStyleId] = useState(STYLE_OPTIONS[0].id);
   const [videoSizeId, setVideoSizeId] = useState(VIDEO_SIZE_OPTIONS[0].id);
@@ -426,7 +428,7 @@ const KidsStoryVideoMaker = () => {
   const [voiceListeningTarget, setVoiceListeningTarget] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("create");
   const [projectLibrary, setProjectLibrary] = useState([]);
   const [characterPresets, setCharacterPresets] = useState([]);
   const [serviceCapabilities, setServiceCapabilities] = useState({
@@ -1074,16 +1076,23 @@ const KidsStoryVideoMaker = () => {
     }
 
     const text = sanitizeText(await file.text());
+    setStorySource("upload");
     setUploadedText(text);
     setStoryPrompt(text);
+    setUploadedFileName(file.name || "");
     setMessage(`Uploaded story file: ${file.name}`);
     setError("");
+  };
+
+  const handleOpenStoryFilePicker = () => {
+    uploadStoryInputRef.current?.click();
   };
 
   const applyTemplatePrompt = (templatePrompt) => {
     setStorySource("paste");
     setStoryPrompt(templatePrompt);
     setUploadedText("");
+    setUploadedFileName("");
     setError("");
     setMessage("Template applied. Customize it before generating.");
   };
@@ -1934,13 +1943,9 @@ const KidsStoryVideoMaker = () => {
 
       <section className="studio-tabs">
         {[
-          { id: "dashboard", label: t("kidsstory.tabs.dashboard", { defaultValue: "Dashboard" }) },
           { id: "create", label: t("kidsstory.tabs.create", { defaultValue: "Create" }) },
-          { id: "characters", label: t("kidsstory.tabs.characters", { defaultValue: "Characters" }) },
           { id: "scenes", label: t("kidsstory.tabs.scenes", { defaultValue: "Scenes" }) },
-          { id: "audio", label: t("kidsstory.tabs.audio", { defaultValue: "Audio" }) },
           { id: "export", label: t("kidsstory.tabs.export", { defaultValue: "Export" }) },
-          { id: "myprojects", label: t("kidsstory.tabs.myProjects", { defaultValue: "My Projects" }) },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1961,58 +1966,22 @@ const KidsStoryVideoMaker = () => {
       <div className="studio-grid">
         <aside className="studio-sidebar">
           <div className="studio-card sidebar-card">
-            <h3>Quick studio</h3>
-            <div className="studio-panel-row">
-              <label>Story mode</label>
-              <select value={storyMode} onChange={(event) => setStoryMode(event.target.value)}>
-                {STORY_MODES.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-              <small>{getModeDescription(storyMode)}</small>
-            </div>
-            <div className="studio-panel-row">
-              <label>Age category</label>
-              <select value={ageFilter} onChange={(event) => setAgeFilter(event.target.value)}>
-                {AGE_FILTERS.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="studio-toggle-row">
-              <span>Safe mode</span>
-              <button className={`pill-toggle ${safeMode ? "on" : "off"}`} onClick={() => setSafeMode((prev) => !prev)}>
-                {safeMode ? "Enabled" : "Disabled"}
-              </button>
-            </div>
-            <div className="studio-toggle-row">
-              <span>Premium HD</span>
-              <button className={`pill-toggle ${premiumHD ? "on" : "off"}`} onClick={() => setPremiumHD((prev) => !prev)}>
-                {premiumHD ? "Enabled" : "Disabled"}
-              </button>
-            </div>
+            <h3>Quick summary</h3>
             <div className="studio-stats-card">
               <p>Estimated credits</p>
               <strong>{creditsUsed}</strong>
               <p>Duration: {estimatedDurationSeconds || 0}s</p>
             </div>
-            {generatedProject && (
-              <small>
-                Render quality mode:{" "}
-                {serviceCapabilities.aiProviderEnabled && serviceCapabilities.realCartoonModeEnabled
-                  ? "Real AI cartoon + voice"
-                  : "Fallback mode (AI services off)"}
-              </small>
-            )}
+            <small>{getModeDescription(storyMode)}</small>
           </div>
 
           <div className="studio-card features-card">
             <h3>Module features</h3>
             <ul>
-              <li>Template prompt quick start</li>
-              <li>Safe mode keyword guardrail</li>
-              <li>Editable scenes before render</li>
-              <li>Project library save/load/delete</li>
+              <li>Upload story text</li>
+              <li>Multilanguage script + dialogue</li>
+              <li>Character movement + lip-sync style animation</li>
+              <li>Render and download MP4</li>
             </ul>
           </div>
         </aside>
@@ -2054,55 +2023,6 @@ const KidsStoryVideoMaker = () => {
               <h2>Create</h2>
               <p>Paste your story or upload text. AI builds scenes, dialogue, and narration automatically.</p>
 
-              <label htmlFor="subjectInput">One-click story subject</label>
-              <input
-                id="subjectInput"
-                type="text"
-                value={subjectInput}
-                onChange={(event) => setSubjectInput(event.target.value)}
-                placeholder="Example: Space explorer and moon dragon"
-              />
-              <div className="story-actions">
-                <button
-                  className="secondary-button"
-                  onClick={() => handleVoiceInput("subject")}
-                  disabled={!speechSupported}
-                >
-                  {voiceListeningTarget === "subject"
-                    ? "Stop Subject Mic"
-                    : speechSupported
-                      ? "Speak Subject"
-                      : "Voice Unsupported"}
-                </button>
-                <button
-                  className="secondary-button"
-                  onClick={() => handleVoiceInput("story")}
-                  disabled={!speechSupported}
-                >
-                  {voiceListeningTarget === "story"
-                    ? "Stop Story Mic"
-                    : speechSupported
-                      ? "Speak Story"
-                      : "Voice Unsupported"}
-                </button>
-              </div>
-              <div className="story-actions">
-                <button
-                  className="primary-button"
-                  onClick={handleAutopilotGenerate}
-                  disabled={isAutopilotGenerating}
-                >
-                  {isAutopilotGenerating ? "Creating full AI movie pipeline..." : "One Click Story Movie"}
-                </button>
-                <button
-                  className="secondary-button"
-                  onClick={() => handleRegenerateStage("script")}
-                  disabled={!generatedProject?.projectId || isStageRegenerating === "script"}
-                >
-                  {isStageRegenerating === "script" ? "Regenerating script..." : "Regenerate Script"}
-                </button>
-              </div>
-
               <label htmlFor="storyTitle">Project title</label>
               <input
                 id="storyTitle"
@@ -2121,41 +2041,27 @@ const KidsStoryVideoMaker = () => {
                 ))}
               </div>
 
-              <div className="story-source-row">
-                <label>
-                  <input
-                    type="radio"
-                    name="storySource"
-                    value="paste"
-                    checked={storySource === "paste"}
-                    onChange={() => setStorySource("paste")}
-                  />
-                  Paste story
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="storySource"
-                    value="upload"
-                    checked={storySource === "upload"}
-                    onChange={() => setStorySource("upload")}
-                  />
-                  Upload text
-                </label>
+              <div className="upload-quick-row">
+                <button type="button" className="secondary-button" onClick={handleOpenStoryFilePicker}>
+                  Upload Story File (.txt/.md)
+                </button>
+                <input
+                  ref={uploadStoryInputRef}
+                  type="file"
+                  accept=".txt,.md,text/plain,text/markdown"
+                  onChange={handleUploadStory}
+                  style={{ display: "none" }}
+                />
+                <p className="upload-hint">
+                  {uploadedFileName ? `Selected file: ${uploadedFileName}` : "No file selected yet."}
+                </p>
               </div>
-
-              {storySource === "upload" && (
-                <div className="upload-control">
-                  <input type="file" accept=".txt,.md,text/plain,text/markdown" onChange={handleUploadStory} />
-                  {uploadedText && <p className="upload-hint">Uploaded story length: {uploadedText.length} chars</p>}
-                </div>
-              )}
 
               <label htmlFor="storyPrompt">Story text</label>
               <textarea
                 id="storyPrompt"
                 rows={10}
-                value={storySource === "upload" ? uploadedText || storyPrompt : storyPrompt}
+                value={storyPrompt}
                 onChange={(event) => {
                   setStoryPrompt(event.target.value);
                   if (storySource === "upload") {
@@ -2247,26 +2153,6 @@ const KidsStoryVideoMaker = () => {
                   <div className="story-actions">
                     <button
                       className="secondary-button"
-                      onClick={async () => {
-                        try {
-                          await patchCurrentProject(
-                            {
-                              script: generatedProject.script,
-                              storyPrompt: generatedProject.script?.synopsis || storyPrompt,
-                            },
-                            "Script edits saved."
-                          );
-                          clearSectionDirty("script");
-                        } catch (err) {
-                          setError(err.message || "Unable to save script edits.");
-                        }
-                      }}
-                      disabled={!generatedProject?.projectId}
-                    >
-                      Save Script Edits
-                    </button>
-                    <button
-                      className="secondary-button"
                       onClick={handleUpdateStoryAndDialogues}
                       disabled={!generatedProject?.projectId || isStageRegenerating === "story-dialogues"}
                     >
@@ -2282,55 +2168,7 @@ const KidsStoryVideoMaker = () => {
                 <button className="primary-button" onClick={handleGenerateProject} disabled={isGenerating}>
                   {isGenerating ? "Building AI storyboard..." : "Generate Story Pipeline"}
                 </button>
-                <button className="secondary-button" onClick={handlePlayNarration} disabled={!generatedProject || isNarrating}>
-                  {isNarrating ? "Playing narration..." : "Preview narration"}
-                </button>
               </div>
-
-              <button className="secondary-button advanced-toggle" onClick={handleToggleAdvanced}>
-                {advancedOpen ? "Hide Advanced Creator Studio" : "Show Advanced Creator Studio"}
-              </button>
-
-              {advancedOpen && (
-                <div className="advanced-panel">
-                  <h3>Advanced studio controls</h3>
-                  <p>Adjust story mode and age filter while keeping automatic scene and character generation active.</p>
-                  <div className="advanced-settings-grid">
-                    <div>
-                      <label>Story mode</label>
-                      <select value={storyMode} onChange={(event) => setStoryMode(event.target.value)}>
-                        {STORY_MODES.map((option) => (
-                          <option key={option.id} value={option.id}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label>Age category</label>
-                      <select value={ageFilter} onChange={(event) => setAgeFilter(event.target.value)}>
-                        {AGE_FILTERS.map((option) => (
-                          <option key={option.id} value={option.id}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label>Render provider</label>
-                      <select value={aiProvider} onChange={(event) => setAiProvider(event.target.value)}>
-                        {AI_PROVIDER_OPTIONS.map((option) => (
-                          <option key={option.id} value={option.id}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label>Render engine</label>
-                      <select value={hfRenderEngine} onChange={(event) => setHfRenderEngine(event.target.value)}>
-                        {HF_RENDER_ENGINE_OPTIONS.map((option) => (
-                          <option key={option.id} value={option.id}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {error && <div className="message error">{error}</div>}
               {message && !error && <div className="message success">{message}</div>}
@@ -2422,13 +2260,6 @@ const KidsStoryVideoMaker = () => {
               <div className="story-actions">
                 <button
                   className="secondary-button"
-                  onClick={() => handleRegenerateStage("scenes")}
-                  disabled={!generatedProject?.projectId || isStageRegenerating === "scenes"}
-                >
-                  {isStageRegenerating === "scenes" ? "Regenerating..." : "Regenerate Scenes"}
-                </button>
-                <button
-                  className="secondary-button"
                   onClick={() => handleRegenerateStage("dialogues")}
                   disabled={!generatedProject?.projectId || isStageRegenerating === "dialogues"}
                 >
@@ -2449,9 +2280,6 @@ const KidsStoryVideoMaker = () => {
                   disabled={!generatedProject?.projectId}
                 >
                   Save Scene Edits
-                </button>
-                <button className="secondary-button" onClick={handleAddScene} disabled={!generatedProject}>
-                  Add Scene
                 </button>
               </div>
               <div className="preview-grid">
@@ -2614,10 +2442,6 @@ const KidsStoryVideoMaker = () => {
                   <p><strong>Style:</strong> {styleLabel}</p>
                   <p><strong>Video size:</strong> {videoSizeLabel}</p>
                   <p><strong>Mode:</strong> {storyMode}</p>
-                  <p><strong>Safe mode:</strong> {safeMode ? "On" : "Off"}</p>
-                  <p><strong>Render provider:</strong> {aiProvider}</p>
-                  <p><strong>Render engine:</strong> {hfRenderEngine}</p>
-                  <p><strong>Premium HD:</strong> {premiumHD ? "On" : "Off"}</p>
                 </div>
               </div>
 
@@ -2633,21 +2457,8 @@ const KidsStoryVideoMaker = () => {
                 >
                   {isRendering ? "Rendering video..." : "Render MP4"}
                 </button>
-                <button
-                  className="secondary-button"
-                  onClick={() => handleRegenerateStage("animation")}
-                  disabled={!generatedProject?.projectId || isStageRegenerating === "animation"}
-                >
-                  {isStageRegenerating === "animation" ? "Regenerating..." : "Regenerate Animation Plan"}
-                </button>
                 <button className="download-button" onClick={handleDownloadVideo} disabled={!videoUrl}>
                   Download MP4
-                </button>
-                <button className="secondary-button" onClick={handleDownloadProjectJson} disabled={!generatedProject}>
-                  Download Project JSON
-                </button>
-                <button className="secondary-button" onClick={handleSaveProject} disabled={!generatedProject}>
-                  Save Project
                 </button>
               </div>
 

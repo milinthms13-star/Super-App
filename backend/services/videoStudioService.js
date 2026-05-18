@@ -3308,22 +3308,58 @@ const buildFreeStockCharacterMotionFilter = (scene, resolution = {}, sceneIndex 
   const bubbleY = Math.max(20, height - 245);
   const safeCharA = escapeFfmpegDrawtext(charA);
   const safeCharB = escapeFfmpegDrawtext(charB);
-  const safeDialogue = escapeFfmpegDrawtext(dialogue);
   const labelSize = Math.max(20, Math.floor(width / 40));
-  const dialogueSize = Math.max(18, Math.floor(width / 47));
 
   return [
     `drawbox=x=0:y=${Math.max(0, height - 185)}:w=${width}:h=185:color=0x020617@0.35:t=fill`,
     `drawbox=x=40:y=${bubbleY}:w=${Math.max(420, width - 120)}:h=92:color=0xffffff@0.88:t=fill`,
-    `drawtext=fontcolor=0x111827:fontsize=${dialogueSize}:x=56:y=${bubbleY + 34}:text='${safeDialogue}'`,
+    `drawbox=x=56:y=${bubbleY + 26}:w=${Math.max(220, width - 220)}:h=12:color=0x111827@0.45:t=fill`,
+    `drawbox=x=56:y=${bubbleY + 48}:w=${Math.max(180, width - 340)}:h=10:color=0x111827@0.35:t=fill`,
+    `drawbox=x=56:y=${bubbleY + 66}:w=${Math.max(140, width - 420)}:h=10:color=0x111827@0.28:t=fill`,
     `drawbox=x='70+8*sin(t*${bobA})':y='${cardY}+7*sin(t*${bobA}*1.8)':w=170:h=130:color=0xffffff@0.90:t=fill`,
     `drawbox=x='250+8*sin(t*${bobB})':y='${cardY}+7*sin(t*${bobB}*1.8)':w=170:h=130:color=0xffffff@0.90:t=fill`,
     `drawbox=x='115+10*sin(t*${bobA})':y='${cardY + 30}+8*sin(t*${bobA}*2)':w=72:h=70:color=0xfbcfe8@0.96:t=fill`,
     `drawbox=x='295+10*sin(t*${bobB})':y='${cardY + 30}+8*sin(t*${bobB}*2)':w=72:h=70:color=0xfbcfe8@0.96:t=fill`,
     `drawbox=x='132+10*sin(t*${bobA})':y='${cardY + 78}+8*sin(t*${bobA}*2)':w=30:h='10+13*abs(sin(t*${mouthA}))':color=0x3f1d1d@0.95:t=fill`,
     `drawbox=x='312+10*sin(t*${bobB})':y='${cardY + 78}+8*sin(t*${bobB}*2)':w=30:h='10+13*abs(sin(t*${mouthB}))':color=0x3f1d1d@0.95:t=fill`,
-    `drawtext=fontcolor=0x111827:fontsize=${labelSize}:x='88+8*sin(t*${bobA})':y='${cardY + 118}+5*sin(t*${bobA})':text='${safeCharA}'`,
-    `drawtext=fontcolor=0x111827:fontsize=${labelSize}:x='268+8*sin(t*${bobB})':y='${cardY + 118}+5*sin(t*${bobB})':text='${safeCharB}'`,
+    `drawbox=x='88+8*sin(t*${bobA})':y='${cardY + 116}+5*sin(t*${bobA})':w=${Math.max(48, Math.min(140, safeCharA.length * 8))}:h=${Math.max(8, Math.floor(labelSize * 0.34))}:color=0x111827@0.62:t=fill`,
+    `drawbox=x='268+8*sin(t*${bobB})':y='${cardY + 116}+5*sin(t*${bobB})':w=${Math.max(48, Math.min(140, safeCharB.length * 8))}:h=${Math.max(8, Math.floor(labelSize * 0.34))}:color=0x111827@0.62:t=fill`,
+  ].join(',');
+};
+
+const buildCharacterLipSyncMovementFilter = (scene, resolution = {}, sceneIndex = 1) => {
+  const width = Number(resolution?.width || 854);
+  const height = Number(resolution?.height || 480);
+  const seed = buildDeterministicSeed(
+    scene?.title,
+    scene?.description,
+    scene?.emotion,
+    sceneIndex,
+    scene?.lines?.map((line) => `${line?.speaker}:${line?.text}`).join('|')
+  );
+  const bobA = 2.0 + ((seed % 6) / 10);
+  const bobB = 2.2 + (((seed >> 2) % 6) / 10);
+  const stepA = 1.2 + ((seed % 4) / 10);
+  const stepB = 1.1 + (((seed >> 4) % 4) / 10);
+  const mouthA = 8.5 + ((seed % 5) / 2);
+  const mouthB = 9.0 + (((seed >> 3) % 5) / 2);
+  const baseY = Math.max(220, height - 190);
+  const panelH = Math.max(150, Math.floor(height * 0.29));
+
+  return [
+    `drawbox=x=0:y=${height - panelH}:w=${width}:h=${panelH}:color=0x020617@0.28:t=fill`,
+    // Character A body/head/eyes/mouth with gentle walk + talk movement.
+    `drawbox=x='86+24*sin(t*${stepA})':y='${baseY + 42}+8*sin(t*${bobA})':w=112:h=106:color=0xf8fafc@0.94:t=fill`,
+    `drawbox=x='102+24*sin(t*${stepA})':y='${baseY + 14}+7*sin(t*${bobA})':w=80:h=56:color=0xfbcfe8@0.96:t=fill`,
+    `drawbox=x='122+24*sin(t*${stepA})':y='${baseY + 28}+7*sin(t*${bobA})':w=9:h=9:color=0x111827@1:t=fill`,
+    `drawbox=x='152+24*sin(t*${stepA})':y='${baseY + 28}+7*sin(t*${bobA})':w=9:h=9:color=0x111827@1:t=fill`,
+    `drawbox=x='126+24*sin(t*${stepA})':y='${baseY + 46}+7*sin(t*${bobA})':w=30:h='7+12*abs(sin(t*${mouthA}))':color=0x7f1d1d@0.96:t=fill`,
+    // Character B body/head/eyes/mouth with counter movement.
+    `drawbox=x='${Math.max(250, width - 248)}+24*sin(t*${stepB})':y='${baseY + 40}+8*sin(t*${bobB})':w=112:h=108:color=0xf8fafc@0.94:t=fill`,
+    `drawbox=x='${Math.max(266, width - 232)}+24*sin(t*${stepB})':y='${baseY + 12}+7*sin(t*${bobB})':w=80:h=58:color=0xbfdbfe@0.96:t=fill`,
+    `drawbox=x='${Math.max(286, width - 212)}+24*sin(t*${stepB})':y='${baseY + 27}+7*sin(t*${bobB})':w=9:h=9:color=0x111827@1:t=fill`,
+    `drawbox=x='${Math.max(316, width - 182)}+24*sin(t*${stepB})':y='${baseY + 27}+7*sin(t*${bobB})':w=9:h=9:color=0x111827@1:t=fill`,
+    `drawbox=x='${Math.max(290, width - 208)}+24*sin(t*${stepB})':y='${baseY + 46}+7*sin(t*${bobB})':w=30:h='7+12*abs(sin(t*${mouthB}))':color=0x7f1d1d@0.96:t=fill`,
   ].join(',');
 };
 
@@ -3381,6 +3417,7 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
     : 'volume=0.10,aresample=48000';
   const stillRenderMode = sanitizeText(imageRenderModeByPath.get(stillPath) || '');
   const useFreeStockMotionOverlay = stillRenderMode === 'free_stock';
+  const enableLipSyncMovementOverlay = project?.requireLipSync !== false;
 
   const zoomFilter = [
     `zoompan=z='min(1.18,1+0.0022*on)'`,
@@ -3390,7 +3427,7 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   ].join(':');
   const motionOverlayFilter = useFreeStockMotionOverlay
     ? buildFreeStockCharacterMotionFilter(scene, resolution, sceneIndex)
-    : '';
+    : (enableLipSyncMovementOverlay ? buildCharacterLipSyncMovementFilter(scene, resolution, sceneIndex) : '');
   const entryFadeFilter = sceneIndex === 1 ? 'fade=t=in:st=0:d=0.16' : '';
   const composedVideoFilter = [zoomFilter, motionOverlayFilter, entryFadeFilter].filter(Boolean).join(',');
   args.push(

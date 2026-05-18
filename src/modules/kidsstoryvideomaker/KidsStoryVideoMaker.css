@@ -172,6 +172,10 @@
   color: #5f4f8a;
 }
 
+.upload-quick-row {
+  margin-bottom: 14px;
+}
+
 .create-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
