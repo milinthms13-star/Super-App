@@ -25,10 +25,10 @@ const {
 const router = express.Router();
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
+  String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '1').toLowerCase()
 );
 const requireSceneImagesByDefault = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env.VIDEO_STUDIO_REQUIRE_SCENE_IMAGES || '0').toLowerCase()
+  String(process.env.VIDEO_STUDIO_REQUIRE_SCENE_IMAGES || '1').toLowerCase()
 );
 const freeAiEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.AI_PROVIDER_ENABLED || 'true').toLowerCase()

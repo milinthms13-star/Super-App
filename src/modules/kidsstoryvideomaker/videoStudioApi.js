@@ -295,33 +295,15 @@ export const regenerateStage = (projectId, stage, requestBody, options = {}) =>
   });
 
 export const renderProject = async (requestBody, options = {}) => {
-  try {
-    const cartoonResult = await requestVideoStudio("/video-studio/render-cartoon", {
-      method: "POST",
-      body: requestBody,
-      retries: 0,
-      timeoutMs: RENDER_TIMEOUT_MS,
-      ...options,
-    });
-    assertRenderResponse(cartoonResult.payload);
-    return cartoonResult;
-  } catch (error) {
-    const status = Number(error?.status || 0);
-    const shouldFallback = status === 404 || status === 405;
-    if (!shouldFallback) {
-      throw error;
-    }
-
-    const legacyResult = await requestVideoStudio("/video-studio/render", {
-      method: "POST",
-      body: requestBody,
-      retries: 0,
-      timeoutMs: RENDER_TIMEOUT_MS,
-      ...options,
-    });
-    assertRenderResponse(legacyResult.payload);
-    return legacyResult;
-  }
+  const cartoonResult = await requestVideoStudio("/video-studio/render-cartoon", {
+    method: "POST",
+    body: requestBody,
+    retries: 0,
+    timeoutMs: RENDER_TIMEOUT_MS,
+    ...options,
+  });
+  assertRenderResponse(cartoonResult.payload);
+  return cartoonResult;
 };
 
 export const renderPromptVideoHf = (requestBody, options = {}) =>

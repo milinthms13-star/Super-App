@@ -19,7 +19,7 @@ const uploadsRoot = path.join(__dirname, '..', 'uploads', 'video-studio');
 const projectStoreRoot = path.join(uploadsRoot, 'projects');
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 const allowAiInFreeMode = ['1', 'true', 'yes', 'on'].includes(
-  String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '').toLowerCase()
+  String(process.env.VIDEO_STUDIO_ALLOW_AI_IN_FREE || '1').toLowerCase()
 );
 const freeAiProvider = String(process.env.FREE_AI_PROVIDER || 'pollinations').trim().toLowerCase();
 const freeAiEnabled = ['1', 'true', 'yes', 'on'].includes(
@@ -2699,6 +2699,11 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
     voiceCandidate: project?.voiceType,
     outputPath: ttsPath,
   });
+  if (!synthesizedPath && project?.requireDialogueVoice) {
+    throw new Error(
+      'Dialogue voice generation failed for a scene. Real story render requires spoken character voice; fallback tone audio is disabled.'
+    );
+  }
   const generatedByAi = await generateRealCartoonSceneImage(scene, project, stillPath, resolution);
   if (!generatedByAi && project?.requireSceneImages) {
     throw new Error(
