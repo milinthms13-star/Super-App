@@ -1662,6 +1662,111 @@ const getResolution = (videoSize) => {
   }
 };
 
+const decodeBase64ImagePayload = (value = '') => {
+  const raw = sanitizeText(value);
+  if (!raw) return null;
+
+  const dataUriMatch = raw.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/i);
+  const base64 = dataUriMatch ? dataUriMatch[1] : raw;
+  if (!base64 || base64.length < 40) return null;
+
+  try {
+    const buffer = Buffer.from(base64, 'base64');
+    return buffer.length ? buffer : null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const extractImageBufferFromJsonPayload = (payload) => {
+  const candidates = [];
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  if (typeof payload.image === 'string') candidates.push(payload.image);
+  if (typeof payload.generated_image === 'string') candidates.push(payload.generated_image);
+  if (typeof payload.b64_json === 'string') candidates.push(payload.b64_json);
+  if (typeof payload.output === 'string') candidates.push(payload.output);
+
+  if (Array.isArray(payload.images)) {
+    payload.images.forEach((entry) => {
+      if (typeof entry === 'string') candidates.push(entry);
+      if (entry && typeof entry === 'object') {
+        if (typeof entry.b64_json === 'string') candidates.push(entry.b64_json);
+        if (typeof entry.image === 'string') candidates.push(entry.image);
+      }
+    });
+  }
+
+  if (Array.isArray(payload.data)) {
+    payload.data.forEach((entry) => {
+      if (typeof entry === 'string') candidates.push(entry);
+      if (entry && typeof entry === 'object') {
+        if (typeof entry.b64_json === 'string') candidates.push(entry.b64_json);
+        if (typeof entry.image === 'string') candidates.push(entry.image);
+        if (typeof entry.url === 'string' && /^(data:image\/|https?:\/\/)/i.test(entry.url)) candidates.push(entry.url);
+      }
+    });
+  }
+
+  for (const candidate of candidates) {
+    const decoded = decodeBase64ImagePayload(candidate);
+    if (decoded?.length) {
+      return decoded;
+    }
+  }
+  return null;
+};
+
+const ensureValidImageBuffer = async (buffer, sourceLabel = 'image provider') => {
+  if (!buffer?.length) {
+    throw new Error(`${sourceLabel}: empty response body`);
+  }
+  try {
+    const metadata = await sharp(buffer).metadata();
+    if (!metadata?.width || !metadata?.height) {
+      throw new Error('missing dimensions');
+    }
+    return buffer;
+  } catch (_error) {
+    throw new Error(`${sourceLabel}: response is not a decodable image`);
+  }
+};
+
+const parseImageBufferFromResponse = async (response, sourceLabel = 'image provider') => {
+  const contentType = sanitizeText(response.headers.get('content-type') || '').toLowerCase();
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer || new ArrayBuffer(0));
+
+  if (contentType.startsWith('image/') || contentType.includes('application/octet-stream')) {
+    return ensureValidImageBuffer(buffer, sourceLabel);
+  }
+
+  const textPreview = buffer.toString('utf8').slice(0, 3000);
+  if (contentType.includes('application/json') || contentType.includes('text/')) {
+    try {
+      const parsed = JSON.parse(textPreview);
+      const explicitError = sanitizeText(parsed?.error || parsed?.message || '');
+      if (explicitError) {
+        throw new Error(`${sourceLabel}: ${explicitError}`);
+      }
+      const imageBuffer = extractImageBufferFromJsonPayload(parsed);
+      if (imageBuffer?.length) {
+        return ensureValidImageBuffer(imageBuffer, sourceLabel);
+      }
+      throw new Error(`${sourceLabel}: JSON response did not include image bytes`);
+    } catch (error) {
+      const message = sanitizeText(error?.message || '');
+      if (message) {
+        throw new Error(message);
+      }
+    }
+  }
+
+  throw new Error(`${sourceLabel}: unsupported content-type "${contentType || 'unknown'}"`);
+};
+
 const fetchPollinationsImage = async ({ prompt = '', model = '', width = 1280, height = 720, timeoutMs = 20000 }) => {
   if (!aiProviderEnabled) {
     return null;
@@ -1688,20 +1793,18 @@ const fetchPollinationsImage = async ({ prompt = '', model = '', width = 1280, h
     const url = `${pollinationsApiBaseUrl}/image/${encodedPrompt}?${query.toString()}`;
     const response = await fetch(url, {
       method: 'GET',
+      headers: {
+        accept: 'image/*, application/octet-stream, application/json, text/plain;q=0.9, */*;q=0.8',
+      },
       signal: controller.signal,
     });
     if (!response.ok) {
-      return null;
+      const failureText = sanitizeText(await response.text());
+      throw new Error(`pollinations http ${response.status}${failureText ? `: ${failureText.slice(0, 240)}` : ''}`);
     }
-    const contentType = sanitizeText(response.headers.get('content-type') || '');
-    if (!contentType.startsWith('image/')) {
-      return null;
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    return buffer.length ? buffer : null;
+    return parseImageBufferFromResponse(response, 'pollinations');
   } catch (_error) {
-    return null;
+    throw _error;
   } finally {
     clearTimeout(timeout);
   }
@@ -1721,7 +1824,7 @@ const fetchHuggingFaceImage = async ({ prompt = '', model = '', width = 1280, he
   }
   const headers = {
     'content-type': 'application/json',
-    accept: 'image/*',
+    accept: 'image/*, application/octet-stream, application/json, text/plain;q=0.9, */*;q=0.8',
   };
   if (huggingFaceApiKey) {
     headers.authorization = `Bearer ${huggingFaceApiKey}`;
@@ -1746,17 +1849,12 @@ const fetchHuggingFaceImage = async ({ prompt = '', model = '', width = 1280, he
       signal: controller.signal,
     });
     if (!response.ok) {
-      return null;
+      const failureText = sanitizeText(await response.text());
+      throw new Error(`huggingface ${selectedModel} http ${response.status}${failureText ? `: ${failureText.slice(0, 240)}` : ''}`);
     }
-    const contentType = sanitizeText(response.headers.get('content-type') || '');
-    if (!contentType.startsWith('image/')) {
-      return null;
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    return buffer.length ? buffer : null;
+    return parseImageBufferFromResponse(response, `huggingface ${selectedModel}`);
   } catch (_error) {
-    return null;
+    throw _error;
   } finally {
     clearTimeout(timeout);
   }
