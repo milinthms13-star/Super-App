@@ -15,6 +15,37 @@ const clampSceneCount = (value) => {
   return Math.max(3, Math.min(8, Math.round(parsed)));
 };
 
+const parseJsonArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+const normalizeStructuredStoryInput = (body = {}) => {
+  const bodyProject = body?.project && typeof body.project === 'object' ? body.project : null;
+  const directCharacters = Array.isArray(body?.characters) ? body.characters : parseJsonArray(body?.characters);
+  const directScenes = Array.isArray(body?.scenes) ? body.scenes : parseJsonArray(body?.scenes);
+  const projectCharacters = Array.isArray(bodyProject?.characters) ? bodyProject.characters : [];
+  const projectScenes = Array.isArray(bodyProject?.scenes) ? bodyProject.scenes : [];
+
+  const providedCharacters = directCharacters.length ? directCharacters : projectCharacters;
+  const providedScenes = directScenes.length ? directScenes : projectScenes;
+
+  return {
+    storyTitle:
+      String(body?.storyTitle || '').trim()
+      || String(bodyProject?.title || '').trim()
+      || '',
+    providedCharacters,
+    providedScenes,
+  };
+};
+
 router.post('/generate', async (req, res) => {
   try {
     const prompt = String(req.body?.prompt || req.body?.storyPrompt || '').trim();
@@ -42,6 +73,8 @@ router.post('/generate', async (req, res) => {
       requestedEngine === 'cogvideo' ||
       requestedEngine === 'real_motion_gpu';
     const shouldUseDiffusers = useDiffusers && !disableDiffusers;
+
+    const { storyTitle, providedCharacters, providedScenes } = normalizeStructuredStoryInput(req.body || {});
 
     const result = useCogVideoX
       ? await generateKidsVideoFromCogVideoXPrompt({
@@ -74,6 +107,9 @@ router.post('/generate', async (req, res) => {
           storyMode: req.body?.storyMode || 'moral',
           voiceType: req.body?.voiceType || 'kid-female',
           language: req.body?.language || req.body?.lang || 'en',
+          storyTitle,
+          providedCharacters,
+          providedScenes,
         });
 
     return res.status(200).json({

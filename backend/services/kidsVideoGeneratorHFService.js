@@ -388,6 +388,120 @@ const createStoryFromPrompt = (prompt = '', sceneCount = 5) => {
   return buildGenericStory(prompt, sceneCount);
 };
 
+const normalizeCharacter = (character = {}, index = 0) => {
+  const name = sanitizeText(character?.name) || `Character ${index + 1}`;
+  const role = sanitizeText(character?.role) || (index === 0 ? 'Main Character' : 'Support Friend');
+  const appearance = sanitizeText(character?.appearance) || `friendly ${name.toLowerCase()} cartoon character with expressive eyes`;
+  const colorPalette = Array.isArray(character?.colorPalette) && character.colorPalette.length
+    ? character.colorPalette.map((item) => sanitizeText(item)).filter(Boolean).slice(0, 4)
+    : (index === 0 ? ['sky blue', 'sunny yellow', 'mint'] : ['peach', 'teal', 'cream']);
+
+  return {
+    id: sanitizeText(character?.id) || `char-${safeFileName(name || `character-${index + 1}`) || index + 1}`,
+    name,
+    role,
+    appearance,
+    colorPalette,
+  };
+};
+
+const extractSpeakersFromDialogue = (dialogue = '') => {
+  const lines = String(dialogue || '')
+    .split(/\r?\n+/)
+    .map((line) => sanitizeText(line))
+    .filter(Boolean);
+  const speakers = [];
+  for (const line of lines) {
+    const match = line.match(/^([^:]{1,40}):\s*(.+)$/);
+    if (!match) continue;
+    const speakerName = sanitizeText(match[1]);
+    if (speakerName) speakers.push(speakerName);
+    if (speakers.length >= 3) break;
+  }
+  return speakers;
+};
+
+const mergeProvidedCharacters = ({ providedCharacters = [], providedScenes = [] }) => {
+  const normalized = [];
+  const seen = new Set();
+  const pushUnique = (character) => {
+    const normalizedCharacter = normalizeCharacter(character, normalized.length);
+    const key = sanitizeText(normalizedCharacter.name).toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    normalized.push(normalizedCharacter);
+  };
+
+  for (const character of Array.isArray(providedCharacters) ? providedCharacters : []) {
+    if (normalized.length >= 3) break;
+    pushUnique(character);
+  }
+
+  if (normalized.length < 2) {
+    const sceneList = Array.isArray(providedScenes) ? providedScenes : [];
+    for (const scene of sceneList) {
+      if (normalized.length >= 3) break;
+      const fromDialogue = extractSpeakersFromDialogue(scene?.dialogue || scene?.description || '');
+      for (const speakerName of fromDialogue) {
+        if (normalized.length >= 3) break;
+        pushUnique({ name: speakerName, role: normalized.length === 0 ? 'Main Character' : 'Support Friend' });
+      }
+    }
+  }
+
+  if (normalized.length === 0) {
+    pushUnique({ name: 'Hero', role: 'Main Character' });
+    pushUnique({ name: 'Guide', role: 'Support Friend' });
+  } else if (normalized.length === 1) {
+    pushUnique({ name: 'Guide', role: 'Support Friend' });
+  }
+
+  return normalized.slice(0, 3);
+};
+
+const createStoryFromStructuredInput = ({
+  prompt = '',
+  sceneCount = 5,
+  storyTitle = '',
+  providedCharacters = [],
+  providedScenes = [],
+}) => {
+  const characters = mergeProvidedCharacters({
+    providedCharacters,
+    providedScenes,
+  });
+  const leadName = sanitizeText(characters[0]?.name || 'Hero');
+  const supportName = sanitizeText(characters[1]?.name || leadName);
+  const maxScenes = Math.max(3, Math.min(8, Number(sceneCount) || 5));
+  const sourceScenes = Array.isArray(providedScenes) ? providedScenes.slice(0, maxScenes) : [];
+
+  const scenes = sourceScenes.map((scene, index) => {
+    const title = sanitizeText(scene?.title || `Scene ${index + 1}`);
+    const description = sanitizeText(scene?.description || scene?.summary || scene?.dialogue || prompt || title);
+    const dialogue = sanitizeText(scene?.dialogue)
+      || `${leadName}: ${description}\n${supportName}: We can do this together.`;
+    const emotion = sanitizeText(scene?.emotion) || (index === sourceScenes.length - 1 ? 'joyful' : 'wonder');
+    const durationSeconds = Math.max(3, Math.min(14, Number(scene?.durationSeconds) || 4));
+
+    return {
+      id: Number(scene?.id) || index + 1,
+      title,
+      description,
+      dialogue,
+      emotion,
+      durationSeconds,
+    };
+  });
+
+  return {
+    title: sanitizeText(storyTitle) || 'Kids Story Adventure',
+    synopsis: sanitizeText(prompt) || sanitizeText(scenes[0]?.description || ''),
+    moral: 'Kindness and consistency help us succeed.',
+    characters,
+    scenes,
+  };
+};
+
 const wrapText = (value = '', maxChars = 44, maxLines = 4) => {
   const words = sanitizeText(value).split(/\s+/).filter(Boolean);
   const lines = [];
@@ -598,6 +712,9 @@ const generateKidsVideoFromPrompt = async ({
   storyMode = 'moral',
   voiceType = 'kid-female',
   language = 'en',
+  storyTitle = '',
+  providedCharacters = [],
+  providedScenes = [],
 }) => {
   await ensureDirectories();
 
@@ -609,7 +726,17 @@ const generateKidsVideoFromPrompt = async ({
     throw new Error('Prompt is too short.');
   }
 
-  const baseStory = createStoryFromPrompt(cleanPrompt, sceneCount);
+  const hasStructuredScenes = Array.isArray(providedScenes) && providedScenes.length > 0;
+  const hasStructuredCharacters = Array.isArray(providedCharacters) && providedCharacters.length > 0;
+  const baseStory = hasStructuredScenes || hasStructuredCharacters
+    ? createStoryFromStructuredInput({
+      prompt: cleanPrompt,
+      sceneCount,
+      storyTitle,
+      providedCharacters,
+      providedScenes,
+    })
+    : createStoryFromPrompt(cleanPrompt, sceneCount);
   const projectId = uuidv4();
   const { width, height } = getResolution(videoSize);
   const outputDir = path.join(uploadsRoot, safeFileName(projectId));

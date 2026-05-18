@@ -1443,10 +1443,31 @@ const KidsStoryVideoMaker = () => {
     }
 
     if (useCleanHfPipeline) {
+      const normalizedScenesForPipeline = normalizeScenesForRender(generatedScenes);
       const fallbackSceneCount = Math.max(
         3,
-        Math.min(8, Number(normalizeScenesForRender(generatedScenes).length || 5))
+        Math.min(8, Number(normalizedScenesForPipeline.length || 5))
       );
+      const normalizedProjectCharacters = Array.isArray(generatedProject?.characters)
+        ? generatedProject.characters
+            .map((character, index) => ({
+              id: sanitizeText(character?.id || `char-${index + 1}`),
+              name: sanitizeText(character?.name || `Character ${index + 1}`),
+              role: sanitizeText(character?.role || "Story role"),
+              appearance: sanitizeText(character?.appearance || ""),
+              voiceProfile: sanitizeText(character?.voiceProfile || voiceType),
+              colorPalette: Array.isArray(character?.colorPalette) ? character.colorPalette.slice(0, 4) : [],
+            }))
+            .filter((character) => character.name)
+            .slice(0, 3)
+        : [];
+      const pipelineProjectPayload = {
+        projectId: generatedProject?.projectId || "",
+        title: sanitizeText(storyTitle || generatedProject?.title || "AI Kids Story Video Generator"),
+        storyPrompt: normalizedStoryPrompt,
+        characters: normalizedProjectCharacters,
+        scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
+      };
 
       setError("");
       setMessage(`Rendering with scene pipeline (${hfRenderEngine})...`);
@@ -1454,9 +1475,16 @@ const KidsStoryVideoMaker = () => {
       startRenderProgress();
 
       let selectedEngine = "";
+      let forcedCharacterEngine = false;
       try {
         const normalizedEngine = normalizeRenderEngine(hfRenderEngine);
-        selectedEngine = normalizedEngine && normalizedEngine !== "image_ffmpeg" ? normalizedEngine : "";
+        forcedCharacterEngine =
+          normalizedEngine === "cogvideox"
+          && (normalizedProjectCharacters.length > 0 || normalizedScenesForPipeline.length > 0);
+        selectedEngine =
+          normalizedEngine && normalizedEngine !== "image_ffmpeg"
+            ? (forcedCharacterEngine ? "scene_script_video" : normalizedEngine)
+            : "";
         const selectedLanguageCode = (
           LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US"
         )
@@ -1474,6 +1502,9 @@ const KidsStoryVideoMaker = () => {
               storyMode,
               voiceType,
               language: selectedLanguageCode,
+              project: pipelineProjectPayload,
+              characters: normalizedProjectCharacters,
+              scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
               ...(selectedEngine
                 ? {
                     engine: selectedEngine,
@@ -1524,6 +1555,8 @@ const KidsStoryVideoMaker = () => {
         setMessage(
           selectedEngine === "cogvideox"
             ? "Real motion render complete (CogVideoX)."
+            : forcedCharacterEngine
+              ? "Character-focused render complete (auto-switched to Script-to-Video for consistency)."
             : payload.aiImagesEnabled
               ? "Scene pipeline render complete with regenerated scenes and AI visuals."
               : "Render complete using fallback visuals."
