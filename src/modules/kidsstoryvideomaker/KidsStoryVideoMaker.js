@@ -38,6 +38,14 @@ const LANGUAGE_OPTIONS = [
   { id: "english", label: "English", code: "en-US" },
   { id: "hindi", label: "Hindi", code: "hi-IN" },
   { id: "malayalam", label: "Malayalam", code: "ml-IN" },
+  { id: "tamil", label: "Tamil", code: "ta-IN" },
+  { id: "telugu", label: "Telugu", code: "te-IN" },
+  { id: "kannada", label: "Kannada", code: "kn-IN" },
+  { id: "bengali", label: "Bengali", code: "bn-IN" },
+  { id: "marathi", label: "Marathi", code: "mr-IN" },
+  { id: "gujarati", label: "Gujarati", code: "gu-IN" },
+  { id: "urdu", label: "Urdu", code: "ur-IN" },
+  { id: "arabic", label: "Arabic", code: "ar-SA" },
 ];
 
 const STYLE_OPTIONS = [

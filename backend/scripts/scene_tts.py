@@ -16,6 +16,11 @@ def _map_espeak_voice(lang: str) -> str:
         "ta": "ta",
         "te": "te",
         "kn": "kn",
+        "bn": "bn",
+        "mr": "mr",
+        "gu": "gu",
+        "ur": "ur",
+        "ar": "ar",
     }
     return mapping.get(code, "en")
 

@@ -151,6 +151,38 @@ const extractJson = (text) => {
 };
 
 const sanitizeText = (value = '') => String(value).replace(/\u0000/g, '').trim();
+const LANGUAGE_LABEL_MAP = {
+  english: 'English',
+  en: 'English',
+  hindi: 'Hindi',
+  hi: 'Hindi',
+  malayalam: 'Malayalam',
+  ml: 'Malayalam',
+  tamil: 'Tamil',
+  ta: 'Tamil',
+  telugu: 'Telugu',
+  te: 'Telugu',
+  kannada: 'Kannada',
+  kn: 'Kannada',
+  bengali: 'Bengali',
+  bn: 'Bengali',
+  marathi: 'Marathi',
+  mr: 'Marathi',
+  gujarati: 'Gujarati',
+  gu: 'Gujarati',
+  urdu: 'Urdu',
+  ur: 'Urdu',
+  arabic: 'Arabic',
+  ar: 'Arabic',
+  spanish: 'Spanish',
+  es: 'Spanish',
+  french: 'French',
+  fr: 'French',
+};
+const resolveLanguageLabel = (value = '') => {
+  const normalized = sanitizeText(value).toLowerCase();
+  return LANGUAGE_LABEL_MAP[normalized] || (normalized ? normalized : 'English');
+};
 const normalizeAiProvider = (value = '') => {
   const normalized = sanitizeText(value).toLowerCase();
   if (normalized === 'hf') return 'huggingface';
@@ -824,14 +856,16 @@ const buildScriptFromSubject = async ({ subject, languageId, storyMode, ageFilte
     throw new Error('Subject is required.');
   }
 
+  const targetLanguage = resolveLanguageLabel(languageId);
   const systemPrompt = 'You are an expert kids screenplay writer. Output strict JSON only.';
   const userPrompt = `Create a safe kids screenplay for topic: "${cleanSubject}".
-Language: ${languageId}
+Language: ${targetLanguage}
 Mode: ${storyMode}
 Age group: ${ageFilter}
 Return JSON with keys:
 title, synopsis, moral, narration, sceneBeats[] where each beat has beat and summary.
-Keep language simple and family-friendly.`;
+Keep language simple and family-friendly.
+IMPORTANT: All text values must be written in ${targetLanguage}.`;
 
   const response = await safeGoogleAI([
     { role: 'system', content: systemPrompt },
@@ -1224,6 +1258,7 @@ const buildStoryAwareSceneDialogue = async ({
   nextScene = null,
 }) => {
   const sceneCharacters = normalizeSceneCharacterList(scene, project);
+  const targetLanguage = resolveLanguageLabel(project?.language || 'english');
   const fallbackDialogue = buildFallbackSceneDialogue(scene, project, sceneIndex);
   let regeneratedDialogue = '';
 
@@ -1234,6 +1269,7 @@ const buildStoryAwareSceneDialogue = async ({
     const systemPrompt = 'You are an expert children-story dialogue writer. Output only dialogue lines.';
     const userPrompt = `Rewrite dialogue for one scene in a kids story animation.
 Project title: ${sanitizeText(project?.storyTitle || project?.title || 'Kids story')}
+Target language: ${targetLanguage}
 Story synopsis: ${storySynopsis || 'n/a'}
 Story moral: ${storyMoral || 'n/a'}
 Narration summary: ${storyNarration || 'n/a'}
@@ -1254,7 +1290,8 @@ Rules:
 4) Do not repeat the same sentence.
 5) Keep language simple for children.
 6) Ensure this scene advances the story and reflects the moral.
-7) No violence, hate, or unsafe content.`;
+7) No violence, hate, or unsafe content.
+8) Write every dialogue line in ${targetLanguage}.`;
     const response = await safeGoogleAI([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -1305,9 +1342,11 @@ const regenerateProjectScene = async (projectId, sceneId, options = {}) => {
 
   let regeneratedCandidate = null;
   if (aiProviderEnabled) {
+    const targetLanguage = resolveLanguageLabel(project?.language || 'english');
     const systemPrompt = 'You are an expert kids animation writer. Return strict JSON only.';
     const userPrompt = `Regenerate one storyboard scene while preserving story continuity.
 Project title: ${sanitizeText(project?.storyTitle || project?.title || 'Kids story')}
+Target language: ${targetLanguage}
 Story mode: ${sanitizeText(project?.storyMode || 'bedtime')}
 Scene index: ${sceneIndex + 1} of ${scenes.length}
 Current scene title: ${sanitizeText(existingScene?.title || '')}
@@ -1320,7 +1359,8 @@ Creative direction: ${customDirection || 'Keep it playful and emotionally clear.
 
 Return JSON with keys:
 title, description, dialogue, emotion, background, weather, timeOfDay, cameraActions, durationSeconds.
-Dialogue must be 2-4 short lines and child-safe.`;
+Dialogue must be 2-4 short lines and child-safe.
+All returned text fields must be in ${targetLanguage}.`;
     const response = await safeGoogleAI([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
