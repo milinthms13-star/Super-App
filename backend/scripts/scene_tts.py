@@ -1,4 +1,5 @@
 import argparse
+import os
 import shutil
 import subprocess
 import tempfile
@@ -30,15 +31,36 @@ def _synthesize_with_espeak(text: str, output: Path, lang: str) -> None:
     if not espeak_bin:
         raise RuntimeError("espeak is not installed.")
 
-    voice = _map_espeak_voice(lang)
+    primary_voice = _map_espeak_voice(lang)
+    fallback_voices = [primary_voice, "hi", "en"]
+    voice_candidates = []
+    for entry in fallback_voices:
+        if entry and entry not in voice_candidates:
+            voice_candidates.append(entry)
+
+    last_error = None
     with tempfile.TemporaryDirectory(prefix="scene_tts_") as tmp_dir:
         wav_path = Path(tmp_dir) / "speech.wav"
-        subprocess.run(
-            [espeak_bin, "-v", voice, "-s", "145", "-w", str(wav_path), text],
-            check=True,
-            capture_output=True,
-            text=False,
-        )
+        generated = False
+        for voice in voice_candidates:
+            try:
+                subprocess.run(
+                    [espeak_bin, "-v", voice, "-s", "145", "-w", str(wav_path), text],
+                    check=True,
+                    capture_output=True,
+                    text=False,
+                )
+                if wav_path.exists() and wav_path.stat().st_size > 0:
+                    generated = True
+                    break
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        if not generated:
+            if last_error:
+                raise RuntimeError(f"espeak synthesis failed: {last_error}") from last_error
+            raise RuntimeError("espeak synthesis failed for all fallback voices.")
 
         if output.suffix.lower() == ".wav":
             output.write_bytes(wav_path.read_bytes())
@@ -135,7 +157,10 @@ def main() -> None:
         try:
             _synthesize_with_espeak(text=text, output=output, lang=language)
         except Exception:
-            _synthesize_with_windows_speech(text=text, output=output)
+            if os.name == "nt":
+                _synthesize_with_windows_speech(text=text, output=output)
+            else:
+                raise
 
 
 if __name__ == "__main__":
