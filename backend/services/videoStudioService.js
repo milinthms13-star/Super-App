@@ -36,6 +36,9 @@ const isLowMemoryMode = ['1', 'true', 'yes', 'on'].includes(
 const useRealCartoonImages = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_REAL_CARTOON_MODE || (aiProviderEnabled ? '1' : '0')).toLowerCase()
 );
+const enableBoxCharacterOverlay = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ENABLE_BOX_CHARACTER_OVERLAY || '0').toLowerCase()
+);
 const freeTextModel = String(process.env.FREE_TEXT_MODEL || process.env.POLLINATIONS_TEXT_MODEL || 'openai').trim();
 const freeImageModel = String(
   process.env.FREE_IMAGE_MODEL || process.env.POLLINATIONS_IMAGE_MODEL || 'flux'
@@ -115,6 +118,10 @@ if (enableGoogleCloudTts) {
 }
 
 const MAX_STORY_LENGTH = 7000;
+const MAX_PRIMARY_CHARACTERS = Math.max(
+  1,
+  Math.min(4, Number(process.env.VIDEO_STUDIO_MAX_PRIMARY_CHARACTERS) || 2)
+);
 const UNSAFE_THEME_RULES = [
   { code: 'self_harm', reason: 'self-harm or suicide', pattern: /suicide|self[-\s]?harm/i },
   { code: 'weapons', reason: 'weapons', pattern: /weapon/i },
@@ -151,38 +158,126 @@ const extractJson = (text) => {
 };
 
 const sanitizeText = (value = '') => String(value).replace(/\u0000/g, '').trim();
-const LANGUAGE_LABEL_MAP = {
+const LANGUAGE_KEY_BY_ALIAS = {
+  english: 'english',
+  en: 'english',
+  'en-us': 'english',
+  'en-in': 'english',
+  hindi: 'hindi',
+  hi: 'hindi',
+  'hi-in': 'hindi',
+  malayalam: 'malayalam',
+  ml: 'malayalam',
+  'ml-in': 'malayalam',
+  tamil: 'tamil',
+  ta: 'tamil',
+  'ta-in': 'tamil',
+  telugu: 'telugu',
+  te: 'telugu',
+  'te-in': 'telugu',
+  kannada: 'kannada',
+  kn: 'kannada',
+  'kn-in': 'kannada',
+  bengali: 'bengali',
+  bn: 'bengali',
+  'bn-in': 'bengali',
+  marathi: 'marathi',
+  mr: 'marathi',
+  'mr-in': 'marathi',
+  gujarati: 'gujarati',
+  gu: 'gujarati',
+  'gu-in': 'gujarati',
+  urdu: 'urdu',
+  ur: 'urdu',
+  'ur-in': 'urdu',
+  'ur-pk': 'urdu',
+  arabic: 'arabic',
+  ar: 'arabic',
+  'ar-sa': 'arabic',
+  'ar-xa': 'arabic',
+  spanish: 'spanish',
+  es: 'spanish',
+  'es-es': 'spanish',
+  french: 'french',
+  fr: 'french',
+  'fr-fr': 'french',
+};
+const LANGUAGE_LABEL_BY_KEY = {
   english: 'English',
-  en: 'English',
   hindi: 'Hindi',
-  hi: 'Hindi',
   malayalam: 'Malayalam',
-  ml: 'Malayalam',
   tamil: 'Tamil',
-  ta: 'Tamil',
   telugu: 'Telugu',
-  te: 'Telugu',
   kannada: 'Kannada',
-  kn: 'Kannada',
   bengali: 'Bengali',
-  bn: 'Bengali',
   marathi: 'Marathi',
-  mr: 'Marathi',
   gujarati: 'Gujarati',
-  gu: 'Gujarati',
   urdu: 'Urdu',
-  ur: 'Urdu',
   arabic: 'Arabic',
-  ar: 'Arabic',
   spanish: 'Spanish',
-  es: 'Spanish',
   french: 'French',
-  fr: 'French',
+};
+const LANGUAGE_CODE_BY_KEY = {
+  english: 'en',
+  hindi: 'hi',
+  malayalam: 'ml',
+  tamil: 'ta',
+  telugu: 'te',
+  kannada: 'kn',
+  bengali: 'bn',
+  marathi: 'mr',
+  gujarati: 'gu',
+  urdu: 'ur',
+  arabic: 'ar',
+  spanish: 'es',
+  french: 'fr',
+};
+const LANGUAGE_TTS_LOCALE_BY_KEY = {
+  english: 'en-IN',
+  hindi: 'hi-IN',
+  malayalam: 'ml-IN',
+  tamil: 'ta-IN',
+  telugu: 'te-IN',
+  kannada: 'kn-IN',
+  bengali: 'bn-IN',
+  marathi: 'mr-IN',
+  gujarati: 'gu-IN',
+  urdu: 'ur-PK',
+  arabic: 'ar-XA',
+  spanish: 'es-ES',
+  french: 'fr-FR',
+};
+const normalizeLanguageKey = (value = '') => {
+  const normalized = sanitizeText(value).toLowerCase();
+  if (!normalized) return 'english';
+  if (LANGUAGE_KEY_BY_ALIAS[normalized]) return LANGUAGE_KEY_BY_ALIAS[normalized];
+  const base = normalized.split('-')[0];
+  if (LANGUAGE_KEY_BY_ALIAS[base]) return LANGUAGE_KEY_BY_ALIAS[base];
+  return normalized;
 };
 const resolveLanguageLabel = (value = '') => {
-  const normalized = sanitizeText(value).toLowerCase();
-  return LANGUAGE_LABEL_MAP[normalized] || (normalized ? normalized : 'English');
+  const key = normalizeLanguageKey(value);
+  return LANGUAGE_LABEL_BY_KEY[key] || 'English';
 };
+const resolveLanguageCode = (value = '') => {
+  const key = normalizeLanguageKey(value);
+  return LANGUAGE_CODE_BY_KEY[key] || 'en';
+};
+const resolveLanguageTtsLocale = (value = '') => {
+  const key = normalizeLanguageKey(value);
+  return LANGUAGE_TTS_LOCALE_BY_KEY[key] || 'en-IN';
+};
+const getPrimaryProjectCharacters = (project = {}) => (
+  Array.isArray(project?.characters)
+    ? project.characters
+      .map((character, index) => ({
+        name: sanitizeText(character?.name || `Character ${index + 1}`),
+        role: sanitizeText(character?.role || 'Story role'),
+      }))
+      .filter((character) => character.name)
+      .slice(0, MAX_PRIMARY_CHARACTERS)
+    : []
+);
 const normalizeAiProvider = (value = '') => {
   const normalized = sanitizeText(value).toLowerCase();
   if (normalized === 'hf') return 'huggingface';
@@ -724,13 +819,12 @@ const fallbackParseStory = ({ story, storyMode, voiceType, language, storyTitle 
   const characters = inferPresetCharactersFromText(story, voiceType).map((char) => ({
     ...char,
     locked: true,
-  }));
+  })).slice(0, MAX_PRIMARY_CHARACTERS);
   if (!characters.length) {
-    characters.push(...buildSeededFallbackCharacters({ sourceText: story, voiceType }));
+    characters.push(...buildSeededFallbackCharacters({ sourceText: story, voiceType }).slice(0, MAX_PRIMARY_CHARACTERS));
   }
   const primaryA = characters[0]?.name || 'Hero';
   const primaryB = characters[1]?.name || 'Friend';
-  const primaryC = characters[2]?.name || '';
 
   const scenes = rawScenes.map((text, index) => ({
     id: index + 1,
@@ -746,7 +840,6 @@ const fallbackParseStory = ({ story, storyMode, voiceType, language, storyTitle 
     dialogue: [
       `${primaryA}: ${text}`,
       `${primaryB}: We can do this together.`,
-      primaryC ? `${primaryC}: Let us help each other and finish the mission.` : '',
     ]
       .filter(Boolean)
       .join('\n'),
@@ -901,7 +994,7 @@ const buildCharactersFromScript = ({ script, subject, voiceType }) => {
     baseCharacters.push(...buildSeededFallbackCharacters({ sourceText: text, voiceType }));
   }
 
-  return baseCharacters;
+  return baseCharacters.slice(0, MAX_PRIMARY_CHARACTERS);
 };
 
 const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCount = 5 }) => {
@@ -910,10 +1003,10 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
     ? script.sceneBeats
     : buildFallbackScript({ subject: script?.title || 'Story', languageId: script?.language, storyMode, ageFilter: script?.audience }).sceneBeats;
 
-  const primaryNames = (characters || []).map((char) => char.name).join(', ') || 'Story characters';
-  const primaryA = characters?.[0]?.name || 'Hero';
-  const primaryB = characters?.[1]?.name || 'Friend';
-  const primaryC = characters?.[2]?.name || '';
+  const limitedCharacters = (Array.isArray(characters) ? characters : []).slice(0, MAX_PRIMARY_CHARACTERS);
+  const primaryNames = limitedCharacters.map((char) => char.name).join(', ') || 'Story characters';
+  const primaryA = limitedCharacters[0]?.name || 'Hero';
+  const primaryB = limitedCharacters[1]?.name || 'Friend';
   const coreTopic = sanitizeText(script?.title || script?.synopsis || 'our mission');
   const readableTopic = coreTopic
     .replace(/^story of\s+/i, '')
@@ -922,11 +1015,11 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
   const moralLine = sanitizeText(script?.moral || 'teamwork and patience matter');
   const weatherOptions = ['sunny', 'golden evening', 'soft cloudy', 'gentle rain', 'starlit night'];
   const sceneDialogueTemplates = [
-    `${primaryA}: Let's begin this ${readableTopic} adventure.\n${primaryB}: Yes, we can solve this together.${primaryC ? `\n${primaryC}: I will join and support this plan.` : ''}`,
-    `${primaryA}: This challenge is bigger than I expected.\n${primaryB}: We can break it into small steps.${primaryC ? `\n${primaryC}: I can handle one key part carefully.` : ''}`,
-    `${primaryA}: I found a new clue.\n${primaryB}: Great, let us keep exploring and stay brave.${primaryC ? `\n${primaryC}: Teamwork makes this easier for everyone.` : ''}`,
-    `${primaryA}: We are close now.\n${primaryB}: One more good decision and we can finish it.${primaryC ? `\n${primaryC}: Let us stay focused and kind.` : ''}`,
-    `${primaryA}: We did it and learned something important.\n${primaryB}: ${moralLine}${primaryC ? `\n${primaryC}: Together we achieved our goal.` : ''}`,
+    `${primaryA}: Let's begin this ${readableTopic} adventure.\n${primaryB}: Yes, we can solve this together.`,
+    `${primaryA}: This challenge is bigger than I expected.\n${primaryB}: We can break it into small steps.`,
+    `${primaryA}: I found a new clue.\n${primaryB}: Great, let us keep exploring and stay brave.`,
+    `${primaryA}: We are close now.\n${primaryB}: One more good decision and we can finish it.`,
+    `${primaryA}: We did it and learned something important.\n${primaryB}: ${moralLine}`,
   ];
 
   return Array.from({ length: targetCount }).map((_, index) => {
@@ -942,7 +1035,7 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
       timeOfDay: index < 2 ? 'Morning' : index < targetCount - 1 ? 'Afternoon' : 'Evening',
       cameraActions: ['wide shot', 'medium shot', 'close-up', 'tracking shot', 'crane reveal'][index % 5],
       animationPrompt: `Animate ${primaryNames} with smooth family-friendly motion, lip sync, and expressive faces.`,
-      characters: (characters || []).map((char) => ({ name: char.name, role: char.role })),
+      characters: limitedCharacters.map((char) => ({ name: char.name, role: char.role })),
       durationSeconds: 4,
       cameraMotion: ['slow-zoom', 'push-in', 'orbit', 'tracking-left', 'crane-up'][index % 5],
       transitionType: index === 0 ? 'fade-in' : (index === targetCount - 1 ? 'fade-out' : 'cross-dissolve'),
@@ -960,7 +1053,7 @@ const buildScenesFromScript = ({ script, characters, styleId, storyMode, sceneCo
 const buildVoicePlan = ({ script, characters, languageId, voiceType }) => ({
   narrator: {
     voice: voiceType || 'kid-female',
-    language: languageId || 'english',
+    language: normalizeLanguageKey(languageId || 'english'),
     text: sanitizeText(script?.narration || script?.synopsis || ''),
   },
   characterVoices: (characters || []).map((char) => ({
@@ -1074,6 +1167,7 @@ const createAutopilotProject = async ({
   aiProvider,
 }) => {
   const cleanSubject = sanitizeText(subject || '');
+  const normalizedLanguage = normalizeLanguageKey(languageId);
   if (!cleanSubject) {
     throw new Error('Subject is required.');
   }
@@ -1084,10 +1178,15 @@ const createAutopilotProject = async ({
     }
   }
 
-  const script = await buildScriptFromSubject({ subject: cleanSubject, languageId, storyMode, ageFilter });
+  const script = await buildScriptFromSubject({
+    subject: cleanSubject,
+    languageId: normalizedLanguage,
+    storyMode,
+    ageFilter,
+  });
   const characters = buildCharactersFromScript({ script, subject: cleanSubject, voiceType });
   const scenes = buildScenesFromScript({ script, characters, styleId, storyMode, sceneCount });
-  const voicePlan = buildVoicePlan({ script, characters, languageId, voiceType });
+  const voicePlan = buildVoicePlan({ script, characters, languageId: normalizedLanguage, voiceType });
   const musicPlan = buildMusicPlan({ storyMode });
   const animationPlan = buildAnimationPlan({ scenes });
 
@@ -1098,7 +1197,7 @@ const createAutopilotProject = async ({
     subject: cleanSubject,
     storyTitle: script.title,
     storyPrompt: script.synopsis,
-    language: languageId,
+    language: normalizedLanguage,
     style: styleId,
     videoSize: videoSizeId,
     voiceType,
@@ -1529,7 +1628,7 @@ const patchStudioProject = async (projectId, patch = {}) => {
       createdAt: new Date().toISOString(),
       storyTitle: sanitizeText(patch?.storyTitle || patch?.script?.title || ''),
       storyPrompt: sanitizeText(patch?.storyPrompt || patch?.script?.synopsis || ''),
-      language: sanitizeText(patch?.language || 'english'),
+      language: normalizeLanguageKey(patch?.language || 'english'),
       style: sanitizeText(patch?.style || 'cartoon'),
       videoSize: sanitizeText(patch?.videoSize || 'youtube'),
       voiceType: sanitizeText(patch?.voiceType || 'kid-female'),
@@ -1580,23 +1679,38 @@ const patchStudioProject = async (projectId, patch = {}) => {
       voiceProfile: sanitizeText(character?.voiceProfile || updatedProject.voiceType || 'kid-female'),
       emotionStyle: sanitizeText(character?.emotionStyle || 'friendly'),
       locked: character?.locked !== false,
-    }));
+    })).slice(0, MAX_PRIMARY_CHARACTERS);
   }
   if (Array.isArray(patch.scenes)) {
-    const normalizedScenes = patch.scenes.map((scene, index) => normalizeSceneForCinematicPipeline({
-      ...scene,
-      id: index + 1,
-      title: sanitizeText(scene?.title || `Scene ${index + 1}`),
-      description: sanitizeText(scene?.description || ''),
-      dialogue: sanitizeText(scene?.dialogue || ''),
-      emotion: sanitizeText(scene?.emotion || 'wonder'),
-      background: sanitizeText(scene?.background || ''),
-      weather: sanitizeText(scene?.weather || ''),
-      timeOfDay: sanitizeText(scene?.timeOfDay || ''),
-      cameraActions: sanitizeText(scene?.cameraActions || ''),
-      durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
-      characters: Array.isArray(scene?.characters) ? scene.characters : [],
-    }, index));
+    const allowedCharacters = getPrimaryProjectCharacters(updatedProject);
+    const allowedNames = new Set(allowedCharacters.map((char) => sanitizeText(char.name).toLowerCase()));
+    const normalizedScenes = patch.scenes.map((scene, index) => {
+      const incomingCharacters = Array.isArray(scene?.characters) && scene.characters.length
+        ? scene.characters
+        : allowedCharacters;
+      const normalizedCharacters = incomingCharacters
+        .map((char, charIndex) => ({
+          name: sanitizeText(char?.name || allowedCharacters[charIndex]?.name || `Character ${charIndex + 1}`),
+          role: sanitizeText(char?.role || allowedCharacters[charIndex]?.role || 'Story role'),
+        }))
+        .filter((char) => char.name)
+        .filter((char) => !allowedNames.size || allowedNames.has(char.name.toLowerCase()))
+        .slice(0, MAX_PRIMARY_CHARACTERS);
+      return normalizeSceneForCinematicPipeline({
+        ...scene,
+        id: index + 1,
+        title: sanitizeText(scene?.title || `Scene ${index + 1}`),
+        description: sanitizeText(scene?.description || ''),
+        dialogue: sanitizeText(scene?.dialogue || ''),
+        emotion: sanitizeText(scene?.emotion || 'wonder'),
+        background: sanitizeText(scene?.background || ''),
+        weather: sanitizeText(scene?.weather || ''),
+        timeOfDay: sanitizeText(scene?.timeOfDay || ''),
+        cameraActions: sanitizeText(scene?.cameraActions || ''),
+        durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
+        characters: normalizedCharacters.length ? normalizedCharacters : allowedCharacters,
+      }, index);
+    });
     updatedProject.scenes = normalizedScenes;
     updatedProject.subtitles = buildSubtitlesFromScenes(normalizedScenes);
     updatedProject.animationPlan = buildAnimationPlan({ scenes: normalizedScenes });
@@ -1616,6 +1730,7 @@ const patchStudioProject = async (projectId, patch = {}) => {
 
   updatedProject.storyTitle = sanitizeText(updatedProject.storyTitle || updatedProject.script?.title || project.storyTitle);
   updatedProject.storyPrompt = sanitizeText(updatedProject.storyPrompt || updatedProject.script?.synopsis || project.storyPrompt);
+  updatedProject.language = normalizeLanguageKey(updatedProject.language || project.language || 'english');
   updatedProject.aiProvider = normalizeAiProvider(updatedProject.aiProvider || project.aiProvider || freeAiProvider);
   updatedProject.narration = sanitizeText(
     updatedProject?.voicePlan?.narrator?.text
@@ -1657,6 +1772,7 @@ const createStudioProject = async ({
 }) => {
   const normalizedStoryPrompt = sanitizeText(storyPrompt);
   const normalizedStoryTitle = sanitizeText(storyTitle);
+  const normalizedLanguage = normalizeLanguageKey(languageId);
 
   if (!normalizedStoryPrompt) {
     throw new Error('Story prompt is required.');
@@ -1676,7 +1792,7 @@ const createStudioProject = async ({
     createdAt: new Date().toISOString(),
     storyPrompt: normalizedStoryPrompt,
     storySource,
-    language: languageId,
+    language: normalizedLanguage,
     style: styleId,
     videoSize: videoSizeId,
     voiceType,
@@ -1694,7 +1810,7 @@ const createStudioProject = async ({
 ${normalizedStoryPrompt}
 
 Mode: ${storyMode}
-Language: ${languageId}
+Language: ${resolveLanguageLabel(normalizedLanguage)}
 Voice type: ${voiceType}
 Produce valid JSON with: title, mode, themes, characters, scenes, subtitles, promptHints.
 Each scene must include id, title, description, emotion, characters, cameraActions, dialogue.
@@ -1726,11 +1842,12 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
         story: normalizedStoryPrompt,
         storyMode,
         voiceType,
-        language: languageId,
+        language: normalizedLanguage,
         storyTitle: normalizedStoryTitle,
       }),
     };
   }
+  projectBody.language = normalizeLanguageKey(projectBody.language || normalizedLanguage);
 
   projectBody.scenes = Array.isArray(projectBody.scenes) ? projectBody.scenes.slice(0, 20) : [];
   if (!projectBody.scenes.length) {
@@ -1738,7 +1855,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
       story: normalizedStoryPrompt,
       storyMode,
       voiceType,
-      language: languageId,
+      language: normalizedLanguage,
       storyTitle: normalizedStoryTitle,
     }).scenes;
   }
@@ -1753,8 +1870,24 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
       voiceType,
     });
   }
+  projectBody.characters = (Array.isArray(projectBody.characters) ? projectBody.characters : [])
+    .slice(0, MAX_PRIMARY_CHARACTERS);
 
   projectBody.scenes = projectBody.scenes.map((scene, index) => {
+    const allowedCharacters = getPrimaryProjectCharacters({ characters: projectBody.characters });
+    const allowedNames = new Set(allowedCharacters.map((char) => sanitizeText(char.name).toLowerCase()));
+    const incomingCharacters = Array.isArray(scene?.characters) && scene.characters.length
+      ? scene.characters
+      : allowedCharacters;
+    const normalizedCharacters = incomingCharacters
+      .map((char, charIndex) => ({
+        name: sanitizeText(char?.name || allowedCharacters[charIndex]?.name || `Character ${charIndex + 1}`),
+        role: sanitizeText(char?.role || allowedCharacters[charIndex]?.role || 'Story role'),
+      }))
+      .filter((char) => char.name)
+      .filter((char) => !allowedNames.size || allowedNames.has(char.name.toLowerCase()))
+      .slice(0, MAX_PRIMARY_CHARACTERS);
+    const sceneCharacters = normalizedCharacters.length ? normalizedCharacters : allowedCharacters;
     const fallbackDialogue = `${projectBody.characters?.[0]?.name || 'Hero'}: ${scene.description || 'Let us continue our story.'}`;
     return normalizeSceneForCinematicPipeline({
       ...scene,
@@ -1764,9 +1897,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
       dialogue: sanitizeText(scene?.dialogue || fallbackDialogue),
       emotion: sanitizeText(scene?.emotion || 'wonder'),
       durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
-      characters: Array.isArray(scene?.characters) && scene.characters.length
-        ? scene.characters
-        : projectBody.characters.map((char) => ({ name: char.name, role: char.role })),
+      characters: sceneCharacters,
     }, index);
   });
 
@@ -1788,7 +1919,7 @@ Characters must include consistent face, costume, colorPalette, and voiceProfile
   projectBody.voicePlan = buildVoicePlan({
     script: { narration: narrationScript, synopsis: projectBody.storyPrompt },
     characters: projectBody.characters,
-    languageId,
+    languageId: normalizedLanguage,
     voiceType,
   });
   projectBody.musicPlan = projectBody.musicPlan || buildMusicPlan({ storyMode });
@@ -2213,16 +2344,20 @@ const colorFromText = (value = '') => {
 };
 
 const normalizeSceneCharacterList = (scene, project) => {
-  const sceneCharacters = Array.isArray(scene?.characters) && scene.characters.length
+  const primaryCharacters = getPrimaryProjectCharacters(project);
+  const allowedNames = new Set(primaryCharacters.map((char) => sanitizeText(char.name).toLowerCase()));
+  const rawSceneCharacters = Array.isArray(scene?.characters) && scene.characters.length
     ? scene.characters
-    : (project?.characters || []).map((char) => ({ name: char.name, role: char.role }));
-
-  return sceneCharacters
+    : primaryCharacters;
+  const normalizedSceneCharacters = rawSceneCharacters
     .map((char, index) => ({
-      name: sanitizeText(char?.name || `Character ${index + 1}`),
-      role: sanitizeText(char?.role || 'Story role'),
+      name: sanitizeText(char?.name || primaryCharacters[index]?.name || `Character ${index + 1}`),
+      role: sanitizeText(char?.role || primaryCharacters[index]?.role || 'Story role'),
     }))
-    .slice(0, 3);
+    .filter((char) => char.name)
+    .filter((char) => !allowedNames.size || allowedNames.has(char.name.toLowerCase()))
+    .slice(0, MAX_PRIMARY_CHARACTERS);
+  return normalizedSceneCharacters.length ? normalizedSceneCharacters : primaryCharacters;
 };
 
 const buildFreeStockCharacterOverlaySvg = (scene, project, width, height) => {
@@ -2277,10 +2412,12 @@ const renderFreeStockSceneImage = async (scene, project, imagePath, resolution) 
     width: resolution.width,
     height: resolution.height,
   });
-  const overlaySvg = buildFreeStockCharacterOverlaySvg(scene, project, resolution.width, resolution.height);
-  await sharp(backgroundBuffer)
-    .resize(resolution.width, resolution.height, { fit: 'cover' })
-    .composite([{ input: Buffer.from(overlaySvg) }])
+  const baseImage = sharp(backgroundBuffer).resize(resolution.width, resolution.height, { fit: 'cover' });
+  if (enableBoxCharacterOverlay) {
+    const overlaySvg = buildFreeStockCharacterOverlaySvg(scene, project, resolution.width, resolution.height);
+    baseImage.composite([{ input: Buffer.from(overlaySvg) }]);
+  }
+  await baseImage
     .png({
       compressionLevel: isLowMemoryMode ? 9 : 6,
       palette: Boolean(isLowMemoryMode),
@@ -2318,6 +2455,7 @@ const buildRealCartoonPrompt = (scene, project) => {
     `Mood: ${mood}.`,
     `Art style: ${artStyle}, colorful, child-safe, friendly expressions, clean outlines.`,
     `Characters: ${characterDetails || 'Main hero and supportive friend.'}`,
+    `Show ONLY these ${Math.max(1, sceneCharacters.length)} named characters. Do not add extra people or animals.`,
     'No text, no subtitles, no watermarks, no logos.',
     'Cinematic composition, high readability for children, warm lighting.',
   ].join(' ');
@@ -2332,7 +2470,7 @@ const buildCompactRealCartoonPrompt = (scene, project) => {
     `mood ${sanitizeText(scene?.emotion || 'wonder')}`,
     `scene ${sanitizeText(scene?.description || '')}`,
     `characters ${names || 'hero and friend'}`,
-    'colorful child-safe cinematic no text no logo',
+    'show only listed characters; no extra people; colorful child-safe cinematic no text no logo',
   ].join('. ').slice(0, 420);
 };
 
@@ -2534,8 +2672,10 @@ const buildSubtitleFile = async (project, directory) => {
   return srtPath;
 };
 
-const resolveNarrationVoice = (voiceCandidate = '') => {
+const resolveNarrationVoice = (voiceCandidate = '', languageHint = '') => {
   const normalized = sanitizeText(voiceCandidate).toLowerCase();
+  const languageLocale = resolveLanguageTtsLocale(languageHint);
+  const languageKey = normalizeLanguageKey(languageHint);
   const map = {
     'kid-female': 'en-IN-Standard-A',
     'kid-male': 'en-IN-Standard-B',
@@ -2553,31 +2693,25 @@ const resolveNarrationVoice = (voiceCandidate = '') => {
   };
 
   if (map[normalized]) {
-    return map[normalized];
+    if (languageKey === 'english') {
+      return map[normalized];
+    }
+    return '';
   }
   if (/^[a-z]{2}-[A-Z]{2}-(Standard|Neural2|Wavenet)-[A-Z0-9]+$/.test(voiceCandidate)) {
     return voiceCandidate;
   }
+  if (languageKey !== 'english') {
+    return '';
+  }
   if (/male|deep|baritone|boy|prince|father/.test(normalized)) {
-    return 'en-US-Standard-I';
+    return `${languageLocale}-Standard-B`;
   }
   if (/female|girl|mother|princess|soft|gentle/.test(normalized)) {
-    return 'en-US-Standard-F';
+    return `${languageLocale}-Standard-A`;
   }
-  return 'en-IN-Standard-A';
+  return '';
 };
-
-const voiceCatalog = [
-  'en-IN-Standard-A',
-  'en-IN-Standard-B',
-  'en-IN-Standard-C',
-  'en-IN-Standard-D',
-  'en-US-Standard-D',
-  'en-US-Standard-E',
-  'en-US-Standard-F',
-  'en-US-Standard-I',
-  'en-US-Standard-J',
-];
 
 const normalizeTtsAudioBuffer = (response) => {
   const content = response?.audioContent;
@@ -2638,12 +2772,11 @@ const getPythonCommandCandidates = () => {
   );
 };
 
-const runSceneTtsPythonFallback = async ({ text, voiceCandidate, outputPath }) => {
+const runSceneTtsPythonFallback = async ({ text, voiceCandidate, outputPath, languageHint = '' }) => {
   const content = sanitizeText(text).slice(0, 4096);
   if (!content) return null;
 
-  const voiceName = resolveNarrationVoice(voiceCandidate);
-  const languageCode = sanitizeText(voiceName).split('-')[0].toLowerCase() || 'en';
+  const languageCode = resolveLanguageCode(languageHint || voiceCandidate);
   const scriptPath = path.join(__dirname, '..', 'scripts', 'scene_tts.py');
   if (!fs.existsSync(scriptPath)) {
     return null;
@@ -2750,24 +2883,28 @@ const synthesizeSpeechWithWindowsTts = async ({ text, voiceCandidate, outputPath
   }
 };
 
-const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
+const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath, languageHint = '' }) => {
   const content = sanitizeText(text).slice(0, 4096);
   if (!content) {
     return null;
   }
 
-  const voiceName = resolveNarrationVoice(voiceCandidate);
+  const voiceName = resolveNarrationVoice(voiceCandidate, languageHint);
   if (googleTtsClient) {
     try {
-      const inferredLanguageCode = sanitizeText(voiceName.split('-').slice(0, 2).join('-') || 'en-US');
-      const ssmlGender = /-([A-FH])$/i.test(voiceName) ? 'FEMALE' : 'MALE';
+      const inferredLanguageCode = resolveLanguageTtsLocale(languageHint || voiceCandidate);
+      const voiceGenderHint = sanitizeText(voiceCandidate).toLowerCase();
+      const ssmlGender = /female|girl|mother|princess|soft|gentle/.test(voiceGenderHint) ? 'FEMALE' : 'MALE';
+      const voiceSelection = {
+        languageCode: inferredLanguageCode || 'en-IN',
+        ssmlGender,
+      };
+      if (voiceName) {
+        voiceSelection.name = voiceName;
+      }
       const [response] = await googleTtsClient.synthesizeSpeech({
         input: { text: content },
-        voice: {
-          languageCode: inferredLanguageCode || 'en-US',
-          name: voiceName,
-          ssmlGender,
-        },
+        voice: voiceSelection,
         audioConfig: {
           audioEncoding: 'MP3',
           speakingRate: 1.0,
@@ -2801,6 +2938,7 @@ const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
     text: content,
     voiceCandidate,
     outputPath,
+    languageHint,
   });
   if (pythonSpeechPath) {
     ttsProviderByOutputPath.set(outputPath, 'python-scene-tts');
@@ -2834,8 +2972,8 @@ const resolveSpeakerVoice = (project, speakerName) => {
     || 'kid-female'
   );
 
-  const mapped = resolveNarrationVoice(candidate);
-  return voiceCatalog.includes(mapped) ? mapped : 'en-IN-Standard-A';
+  const mapped = resolveNarrationVoice(candidate, project?.language);
+  return mapped || candidate || 'kid-female';
 };
 
 const extractSceneDialogueTurns = (scene, project) => {
@@ -2944,6 +3082,7 @@ const buildCharacterDialogueAudio = async (project, outputDir, totalDurationSeco
         text: turn.text,
         voiceCandidate: voice,
         outputPath: segmentPath,
+        languageHint: project?.language,
       });
 
       if (generatedPath) {
@@ -3005,6 +3144,7 @@ const buildNarrationAudio = async (project, outputDir) => {
     text: narrationText,
     voiceCandidate: project?.voicePlan?.narrator?.voice || project?.voiceType,
     outputPath: path.join(outputDir, 'narration.mp3'),
+    languageHint: project?.language,
   });
 };
 
@@ -3372,6 +3512,7 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
     text: dialogueForVoice,
     voiceCandidate: project?.voiceType,
     outputPath: ttsPath,
+    languageHint: project?.language,
   });
   if (!synthesizedPath && project?.requireDialogueVoice) {
     throw new Error(
@@ -3425,9 +3566,11 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
     `y='ih/2-(ih/zoom/2)+10*cos(on/20)'`,
     `d=${frames}:s=${resolution.width}x${resolution.height}:fps=${fps}`,
   ].join(':');
-  const motionOverlayFilter = useFreeStockMotionOverlay
-    ? buildFreeStockCharacterMotionFilter(scene, resolution, sceneIndex)
-    : (enableLipSyncMovementOverlay ? buildCharacterLipSyncMovementFilter(scene, resolution, sceneIndex) : '');
+  const motionOverlayFilter = enableBoxCharacterOverlay
+    ? (useFreeStockMotionOverlay
+      ? buildFreeStockCharacterMotionFilter(scene, resolution, sceneIndex)
+      : (enableLipSyncMovementOverlay ? buildCharacterLipSyncMovementFilter(scene, resolution, sceneIndex) : ''))
+    : '';
   const entryFadeFilter = sceneIndex === 1 ? 'fade=t=in:st=0:d=0.16' : '';
   const composedVideoFilter = [zoomFilter, motionOverlayFilter, entryFadeFilter].filter(Boolean).join(',');
   args.push(
@@ -3793,6 +3936,7 @@ const generateVoice = async (projectId, sceneId) => {
     text: voiceText,
     voiceCandidate: project?.voiceType || project?.voicePlan?.narrator?.voice,
     outputPath,
+    languageHint: project?.language,
   });
 
   if (!synthesizedPath) {

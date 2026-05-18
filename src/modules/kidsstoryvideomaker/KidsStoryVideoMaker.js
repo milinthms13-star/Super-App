@@ -124,6 +124,7 @@ const STORY_TEMPLATES = [
 ];
 
 const DEFAULT_STORY_PROMPT = STORY_TEMPLATES[0].prompt;
+const MAX_RENDER_CHARACTERS = 2;
 
 const normalizeRenderProvider = (value) => {
   const normalized = sanitizeText(value).toLowerCase();
@@ -274,7 +275,7 @@ const buildCartoonRenderPayload = ({
 }) => {
   const projectCharacters =
     Array.isArray(project?.characters) && project.characters.length
-      ? project.characters
+      ? project.characters.slice(0, MAX_RENDER_CHARACTERS)
       : [
           {
             id: "hero",
@@ -294,11 +295,28 @@ const buildCartoonRenderPayload = ({
           },
         ];
 
+  const allowedNames = new Set(
+    projectCharacters.map((character) => sanitizeText(character?.name).toLowerCase()).filter(Boolean)
+  );
   const normalizedScenes = normalizeScenesForRender(scenes).map((scene, index) => {
-    const sceneCharacters =
+    const inputSceneCharacters =
       Array.isArray(scene.characters) && scene.characters.length
         ? scene.characters
-        : projectCharacters.slice(0, 2).map((character) => ({
+        : projectCharacters;
+    const normalizedSceneCharacters = inputSceneCharacters
+      .map((character, characterIndex) => ({
+        name: sanitizeText(character?.name || projectCharacters[characterIndex]?.name || `Character ${characterIndex + 1}`),
+        role: sanitizeText(character?.role || projectCharacters[characterIndex]?.role || "Story role"),
+        appearance: sanitizeText(character?.appearance || projectCharacters[characterIndex]?.appearance || ""),
+        voiceProfile: sanitizeText(character?.voiceProfile || projectCharacters[characterIndex]?.voiceProfile || voiceType),
+      }))
+      .filter((character) => character.name)
+      .filter((character) => !allowedNames.size || allowedNames.has(character.name.toLowerCase()))
+      .slice(0, MAX_RENDER_CHARACTERS);
+    const sceneCharacters =
+      normalizedSceneCharacters.length > 0
+        ? normalizedSceneCharacters
+        : projectCharacters.slice(0, MAX_RENDER_CHARACTERS).map((character) => ({
             name: character.name,
             role: character.role,
             appearance: character.appearance,
