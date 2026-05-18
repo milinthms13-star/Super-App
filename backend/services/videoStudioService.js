@@ -2165,6 +2165,74 @@ const runPowerShellScript = async (scriptContent, cwd) => {
   });
 };
 
+const getPythonCommandCandidates = () => {
+  const preferred = sanitizeText(process.env.PYTHON_BIN || process.env.PYTHON_PATH || '');
+  return Array.from(
+    new Set(
+      [preferred, 'python3', 'python', 'py']
+        .map((candidate) => sanitizeText(candidate))
+        .filter(Boolean)
+    )
+  );
+};
+
+const runSceneTtsPythonFallback = async ({ text, voiceCandidate, outputPath }) => {
+  const content = sanitizeText(text).slice(0, 4096);
+  if (!content) return null;
+
+  const voiceName = resolveNarrationVoice(voiceCandidate);
+  const languageCode = sanitizeText(voiceName).split('-')[0].toLowerCase() || 'en';
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'scene_tts.py');
+  if (!fs.existsSync(scriptPath)) {
+    return null;
+  }
+
+  const candidates = getPythonCommandCandidates();
+  let lastErrorMessage = '';
+  for (const command of candidates) {
+    try {
+      await new Promise((resolve, reject) => {
+        const proc = spawn(command, [
+          scriptPath,
+          '--text', content,
+          '--output', outputPath,
+          '--lang', languageCode,
+        ], {
+          cwd: path.join(__dirname, '..'),
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        let stderr = '';
+        proc.stderr.on('data', (chunk) => {
+          stderr += String(chunk || '');
+          if (stderr.length > 120000) {
+            stderr = stderr.slice(-120000);
+          }
+        });
+
+        proc.on('error', (error) => reject(error));
+        proc.on('close', (code) => {
+          if (code !== 0) {
+            return reject(new Error(sanitizeText(stderr) || `scene_tts.py exited with code ${code}`));
+          }
+          return resolve();
+        });
+      });
+
+      if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+        return outputPath;
+      }
+    } catch (error) {
+      lastErrorMessage = sanitizeText(error?.message || '');
+    }
+  }
+
+  if (lastErrorMessage) {
+    logger.warn(`Python scene_tts fallback failed: ${lastErrorMessage}`);
+  }
+  return null;
+};
+
 const synthesizeSpeechWithWindowsTts = async ({ text, voiceCandidate, outputPath }) => {
   if (process.platform !== 'win32' || !windowsTtsEnabled) {
     return null;
@@ -2265,6 +2333,16 @@ const synthesizeSpeechToFile = async ({ text, voiceCandidate, outputPath }) => {
   if (windowsSpeechPath) {
     ttsProviderByOutputPath.set(outputPath, 'windows-offline-tts');
     return windowsSpeechPath;
+  }
+
+  const pythonSpeechPath = await runSceneTtsPythonFallback({
+    text: content,
+    voiceCandidate,
+    outputPath,
+  });
+  if (pythonSpeechPath) {
+    ttsProviderByOutputPath.set(outputPath, 'python-scene-tts');
+    return pythonSpeechPath;
   }
 
   return null;
