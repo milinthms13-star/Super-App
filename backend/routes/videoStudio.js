@@ -102,6 +102,27 @@ const toAbsoluteVideoUrl = (origin, videoUrl = '', versionToken = '') => {
   return upsertVersionQuery(absoluteVideoUrl, versionToken);
 };
 
+const toLocalUploadPathFromUrl = (videoUrl = '') => {
+  const raw = String(videoUrl || '').trim();
+  if (!raw) return '';
+  try {
+    const url = /^https?:\/\//i.test(raw) ? new URL(raw) : new URL(raw, 'https://video.local');
+    const pathname = String(url.pathname || '').trim();
+    if (!pathname.startsWith('/uploads/')) {
+      return '';
+    }
+    const relativePath = pathname.replace(/^\/uploads\//, '');
+    return path.join(__dirname, '..', 'uploads', relativePath);
+  } catch (_error) {
+    return '';
+  }
+};
+
+const localUploadExistsForVideoUrl = (videoUrl = '') => {
+  const filePath = toLocalUploadPathFromUrl(videoUrl);
+  return Boolean(filePath && fs.existsSync(filePath));
+};
+
 const getLatestRenderedVideoForProject = (safeProjectId = '') => {
   if (!safeProjectId) {
     return null;
@@ -689,7 +710,9 @@ router.get('/projects/:projectId/status', async (req, res) => {
     const fileVersionToken = latestRender?.mtimeIso ? toCacheBustToken(latestRender.mtimeIso) : '';
     const renderedAtToken = project?.renderedAt ? toCacheBustToken(project.renderedAt) : '';
     const versionToken = renderedAtToken || fileVersionToken || toCacheBustToken(new Date().toISOString());
-    const rawVideoUrl = String(project?.videoUrl || '').trim();
+    const projectVideoUrl = String(project?.videoUrl || '').trim();
+    const projectVideoExists = localUploadExistsForVideoUrl(projectVideoUrl);
+    const rawVideoUrl = projectVideoExists ? projectVideoUrl : '';
     const hasVideo = Boolean(rawVideoUrl) || hasOutputFile;
     const origin = buildRequestOrigin(req);
     const relativeVideoUrl = rawVideoUrl || (latestRender?.relativeUrl || '');
@@ -732,7 +755,9 @@ router.get('/projects/:projectId/download', async (req, res) => {
       }
     }
 
-    let rawVideoUrl = String(project?.videoUrl || '').trim();
+    const projectVideoUrl = String(project?.videoUrl || '').trim();
+    const projectVideoExists = localUploadExistsForVideoUrl(projectVideoUrl);
+    let rawVideoUrl = projectVideoExists ? projectVideoUrl : '';
     let versionToken = project?.renderedAt ? toCacheBustToken(project.renderedAt) : '';
     if (!rawVideoUrl) {
       const safeProjectId = toSafeProjectDirectoryName(project?.projectId || requestedProjectId);

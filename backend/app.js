@@ -127,6 +127,7 @@ app.use(express.urlencoded({ extended: true, limit: '20mb', inflate: true }));
 app.use(
   '/uploads',
   express.static(uploadsDirectory, {
+    fallthrough: false,
     setHeaders: (res) => {
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     },
@@ -135,6 +136,7 @@ app.use(
 app.use(
   '/videos',
   express.static(videoStudioDirectory, {
+    fallthrough: false,
     setHeaders: (res) => {
       res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     },

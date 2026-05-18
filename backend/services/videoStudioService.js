@@ -151,6 +151,7 @@ const normalizeAiProvider = (value = '') => {
   const normalized = sanitizeText(value).toLowerCase();
   if (normalized === 'hf') return 'huggingface';
   if (normalized === 'huggingface') return 'huggingface';
+  if (normalized === 'free_stock' || normalized === 'stock' || normalized === 'picsum') return 'free_stock';
   return 'pollinations';
 };
 const resolveProjectAiProvider = (project = null) =>
@@ -1680,6 +1681,10 @@ const getResolution = (videoSize) => {
   }
 };
 
+const freeStockFallbackEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ENABLE_STOCK_FALLBACK || '1').toLowerCase()
+);
+
 const decodeBase64ImagePayload = (value = '') => {
   const raw = sanitizeText(value);
   if (!raw) return null;
@@ -1693,6 +1698,31 @@ const decodeBase64ImagePayload = (value = '') => {
     return buffer.length ? buffer : null;
   } catch (_error) {
     return null;
+  }
+};
+
+const fetchFreeStockBackground = async ({ seed = '', width = 1280, height = 720, timeoutMs = 12000 }) => {
+  const cleanSeed = sanitizeText(seed) || 'kids-story-scene';
+  const safeWidth = Math.max(320, Number(width) || 1280);
+  const safeHeight = Math.max(320, Number(height) || 720);
+  const url = `https://picsum.photos/seed/${encodeURIComponent(cleanSeed)}/${safeWidth}/${safeHeight}.jpg`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.max(2000, Number(timeoutMs) || 12000));
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        accept: 'image/*, application/octet-stream, */*',
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const failureText = sanitizeText(await response.text());
+      throw new Error(`free_stock http ${response.status}${failureText ? `: ${failureText.slice(0, 200)}` : ''}`);
+    }
+    return parseImageBufferFromResponse(response, 'free_stock');
+  } finally {
+    clearTimeout(timeout);
   }
 };
 
@@ -1893,6 +1923,12 @@ const fetchFreeAiImage = async ({
   timeoutMs = 20000,
 }) => {
   const resolvedProvider = normalizeAiProvider(provider || resolveProjectAiProvider(project));
+  if (resolvedProvider === 'free_stock') {
+    const seed = [sanitizeText(project?.projectId || ''), sanitizeText(prompt || ''), sanitizeText(model || '')]
+      .filter(Boolean)
+      .join('-');
+    return fetchFreeStockBackground({ seed, width, height, timeoutMs });
+  }
   if (resolvedProvider === 'huggingface') {
     return fetchHuggingFaceImage({ prompt, model, width, height, timeoutMs });
   }
@@ -1929,7 +1965,9 @@ const diagnoseImageGeneration = async (options = {}) => {
   for (const activeProvider of providers) {
     const activeModels = activeProvider === 'huggingface'
       ? huggingFaceImageModelCandidates
-      : freeImageModelCandidates;
+      : activeProvider === 'free_stock'
+        ? ['stock']
+        : freeImageModelCandidates;
 
     for (const model of activeModels) {
       try {
@@ -2029,6 +2067,70 @@ const normalizeSceneCharacterList = (scene, project) => {
     .slice(0, 3);
 };
 
+const buildFreeStockCharacterOverlaySvg = (scene, project, width, height) => {
+  const sceneCharacters = normalizeSceneCharacterList(scene, project).slice(0, 2);
+  const lines = extractSceneDialogueTurns(scene, project).slice(0, 2);
+  const bottomStripHeight = Math.max(180, Math.floor(height * 0.28));
+  const bubbleY = Math.max(20, height - bottomStripHeight - 120);
+  const bubbleWidth = Math.max(420, Math.floor(width * 0.62));
+  const charCardWidth = Math.max(180, Math.floor(width * 0.2));
+  const charCardHeight = Math.max(130, Math.floor(height * 0.2));
+  const firstCardX = Math.max(24, Math.floor(width * 0.06));
+  const secondCardX = Math.min(width - charCardWidth - 24, firstCardX + charCardWidth + 24);
+  const cardY = height - charCardHeight - 24;
+  const dialogueText = lines.map((line) => `${line.speaker}: ${line.text}`).join(' ').slice(0, 160);
+  const titleText = sanitizeText(scene?.title || 'Story Scene').slice(0, 70);
+
+  const characterCards = sceneCharacters.map((char, index) => {
+    const x = index === 0 ? firstCardX : secondCardX;
+    const avatarColor = colorFromText(char.name);
+    const initial = escapeXml((char.name[0] || 'C').toUpperCase());
+    return `
+  <g>
+    <rect x="${x}" y="${cardY}" width="${charCardWidth}" height="${charCardHeight}" rx="18" fill="rgba(255,255,255,0.88)" stroke="rgba(255,255,255,0.94)" stroke-width="2" />
+    <circle cx="${x + 42}" cy="${cardY + 44}" r="26" fill="${avatarColor}" />
+    <text x="${x + 42}" y="${cardY + 52}" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#111827">${initial}</text>
+    <text x="${x + 80}" y="${cardY + 40}" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#111827">${escapeXml(char.name)}</text>
+    <text x="${x + 80}" y="${cardY + 68}" font-family="Arial, sans-serif" font-size="14" fill="#374151">${escapeXml(char.role)}</text>
+    <rect x="${x + 16}" y="${cardY + 82}" width="${charCardWidth - 32}" height="26" rx="13" fill="rgba(17,24,39,0.08)" />
+    <text x="${x + 24}" y="${cardY + 100}" font-family="Arial, sans-serif" font-size="12" fill="#111827">Character movement enabled</text>
+  </g>`;
+  }).join('\n');
+
+  return `
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="${height - bottomStripHeight}" width="${width}" height="${bottomStripHeight}" fill="rgba(4,10,24,0.45)" />
+  <rect x="${Math.max(20, Math.floor(width * 0.05))}" y="${bubbleY}" width="${bubbleWidth}" height="108" rx="20" fill="rgba(255,255,255,0.92)" />
+  <text x="${Math.max(34, Math.floor(width * 0.06))}" y="${bubbleY + 34}" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">${escapeXml(titleText)}</text>
+  <text x="${Math.max(34, Math.floor(width * 0.06))}" y="${bubbleY + 66}" font-family="Arial, sans-serif" font-size="16" fill="#1f2937">${escapeXml(dialogueText || sanitizeText(scene?.description || 'Story continues.'))}</text>
+  ${characterCards}
+</svg>`;
+};
+
+const renderFreeStockSceneImage = async (scene, project, imagePath, resolution) => {
+  if (!freeStockFallbackEnabled) return false;
+  const seed = [
+    sanitizeText(project?.projectId || ''),
+    sanitizeText(scene?.title || ''),
+    sanitizeText(scene?.description || ''),
+  ].filter(Boolean).join('-') || 'kids-story';
+  const backgroundBuffer = await fetchFreeStockBackground({
+    seed,
+    width: resolution.width,
+    height: resolution.height,
+  });
+  const overlaySvg = buildFreeStockCharacterOverlaySvg(scene, project, resolution.width, resolution.height);
+  await sharp(backgroundBuffer)
+    .resize(resolution.width, resolution.height, { fit: 'cover' })
+    .composite([{ input: Buffer.from(overlaySvg) }])
+    .png({
+      compressionLevel: isLowMemoryMode ? 9 : 6,
+      palette: Boolean(isLowMemoryMode),
+    })
+    .toFile(imagePath);
+  return true;
+};
+
 const buildRealCartoonPrompt = (scene, project) => {
   const customPrompt = sanitizeText(scene?.visualPrompt || '');
   if (customPrompt) {
@@ -2077,6 +2179,9 @@ const buildCompactRealCartoonPrompt = (scene, project) => {
 
 const getImageProviderOrder = (project) => {
   let preferred = resolveProjectAiProvider(project);
+  if (preferred === 'free_stock') {
+    return ['free_stock'];
+  }
   // Pollinations now commonly requires API keys; if absent, try HuggingFace first.
   if (preferred === 'pollinations' && !pollinationsApiKey) {
     preferred = 'huggingface';
@@ -2084,9 +2189,10 @@ const getImageProviderOrder = (project) => {
   if (!imageProviderFallbackEnabled) {
     return [preferred];
   }
-  return preferred === 'huggingface'
-    ? ['huggingface', 'pollinations']
-    : ['pollinations', 'huggingface'];
+  if (preferred === 'huggingface') {
+    return ['huggingface', 'pollinations', 'free_stock'];
+  }
+  return ['pollinations', 'huggingface', 'free_stock'];
 };
 
 const generateRealCartoonSceneImage = async (scene, project, imagePath, resolution) => {
@@ -2108,13 +2214,24 @@ const generateRealCartoonSceneImage = async (scene, project, imagePath, resoluti
   for (const provider of providers) {
     const candidateModels = provider === 'huggingface'
       ? huggingFaceImageModelCandidates
-      : freeImageModelCandidates;
+      : provider === 'free_stock'
+        ? ['stock']
+        : freeImageModelCandidates;
 
     for (const model of candidateModels) {
       for (let promptIndex = 0; promptIndex < promptVariants.length; promptIndex += 1) {
         const prompt = promptVariants[promptIndex];
         const timeoutMs = provider === 'huggingface' ? 35000 : 22000;
         try {
+          if (provider === 'free_stock') {
+            const rendered = await renderFreeStockSceneImage(scene, project, imagePath, resolution);
+            if (!rendered) {
+              errors.push(`${provider}/${model}/p${promptIndex + 1}: fallback disabled`);
+              continue;
+            }
+            imageGenerationErrorsByPath.delete(imagePath);
+            return true;
+          }
           const imageBuffer = await fetchFreeAiImage({
             project,
             provider,
