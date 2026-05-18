@@ -7,6 +7,7 @@ const textToSpeech = require('@google-cloud/text-to-speech');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const ffmpegPath = require('ffmpeg-static');
+const { uploadBufferToGridFS } = require('../utils/gridfs');
 const logger = require('../utils/logger');
 
 const writeFile = promisify(fs.writeFile);
@@ -26,6 +27,9 @@ const freeAiEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.AI_PROVIDER_ENABLED || 'true').toLowerCase()
 );
 const aiProviderEnabled = freeAiEnabled && (!isFreeMode || allowAiInFreeMode);
+const persistVideoToGridFsEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_PERSIST_GRIDFS || '1').toLowerCase()
+);
 const isLowMemoryMode = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_LOW_MEMORY_MODE || (isFreeMode ? '1' : '0')).toLowerCase()
 );
@@ -2860,6 +2864,41 @@ const buildNarrationAudio = async (project, outputDir) => {
   });
 };
 
+const persistRenderedVideoToGridFs = async ({
+  outputFile,
+  safeProjectId,
+  renderMode = 'video-studio-render',
+}) => {
+  if (!persistVideoToGridFsEnabled) {
+    return null;
+  }
+  try {
+    const buffer = await readFile(outputFile);
+    const filename = `video-studio/${safeProjectId}/${path.basename(outputFile)}`;
+    const uploaded = await uploadBufferToGridFS({
+      buffer,
+      filename,
+      contentType: 'video/mp4',
+      metadata: {
+        module: 'video-studio',
+        projectId: safeProjectId,
+        renderMode: sanitizeText(renderMode),
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    return {
+      videoGridFsId: String(uploaded?.id || ''),
+      videoStorage: 'gridfs',
+    };
+  } catch (error) {
+    logger.warn(
+      `Video studio GridFS persist skipped for project ${safeProjectId}: ${sanitizeText(error?.message || 'unknown error')}`
+    );
+    return null;
+  }
+};
+
 const resolveFfmpegBinary = () => {
   const configuredPath = String(process.env.FFMPEG_PATH || '').trim();
   if (configuredPath) {
@@ -3313,6 +3352,11 @@ const renderCartoonVideo = async (project, premiumHD = false) => {
   const totalDuration = clipResults.reduce((sum, clip) => sum + (Number(clip.duration) || 0), 0);
   const usedTts = clipResults.some((clip) => clip.usedTts);
   const usedAiImages = clipResults.some((clip) => clip.usedAiImage);
+  const persistedVideo = await persistRenderedVideoToGridFs({
+    outputFile,
+    safeProjectId,
+    renderMode: 'real-cartoon-backend',
+  });
 
   const metadataPath = path.join(outputDir, 'project.json');
   await writeFile(metadataPath, JSON.stringify({
@@ -3324,12 +3368,16 @@ const renderCartoonVideo = async (project, premiumHD = false) => {
     renderVisualMode: usedAiImages ? 'ai-cartoon-stills' : 'shape-fallback',
     totalDurationSeconds: totalDuration,
     freeMode: isFreeMode,
+    videoGridFsId: persistedVideo?.videoGridFsId || '',
+    videoStorage: persistedVideo?.videoStorage || 'local',
   }, null, 2), 'utf-8');
 
   return {
     videoUrl,
     projectId: safeProjectId,
     outputFile,
+    videoGridFsId: persistedVideo?.videoGridFsId || '',
+    videoStorage: persistedVideo?.videoStorage || 'local',
     renderMode: 'real-cartoon-backend',
     ttsEnabled: usedTts,
     aiImagesEnabled: usedAiImages,
@@ -3424,6 +3472,11 @@ const renderVideo = async (project, premiumHD = false) => {
   await runFfmpeg(ffmpegArgs, outputDir);
 
   const videoUrl = `/uploads/video-studio/${safeProjectId}/${outputFileName}`;
+  const persistedVideo = await persistRenderedVideoToGridFs({
+    outputFile,
+    safeProjectId,
+    renderMode: 'video-studio',
+  });
   const metadataPath = path.join(outputDir, 'project.json');
   await writeFile(metadataPath, JSON.stringify({
     ...project,
@@ -3431,9 +3484,17 @@ const renderVideo = async (project, premiumHD = false) => {
     videoUrl,
     renderAudioMode: dialogueAudioPath ? 'character-dialogue' : (narrationAudioPath ? 'narration' : 'silent'),
     freeMode: isFreeMode,
+    videoGridFsId: persistedVideo?.videoGridFsId || '',
+    videoStorage: persistedVideo?.videoStorage || 'local',
   }, null, 2), 'utf-8');
 
-  return { videoUrl, projectId: path.basename(outputDir), outputFile };
+  return {
+    videoUrl,
+    projectId: path.basename(outputDir),
+    outputFile,
+    videoGridFsId: persistedVideo?.videoGridFsId || '',
+    videoStorage: persistedVideo?.videoStorage || 'local',
+  };
 };
 
 const getProjectRenderDirectory = async (projectId) => {

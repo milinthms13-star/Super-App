@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const { getGridFSBucket, toObjectId } = require('../utils/gridfs');
 const {
   createStudioProject,
   renderVideo,
@@ -50,6 +51,9 @@ const getStudioCapabilities = () => ({
 
 const toSafeProjectDirectoryName = (value = '') => String(value).replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
 const sanitizeStatusText = (value = '') => String(value || '').replace(/\u0000/g, '').trim();
+const videoStudioPersistGridFs = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_PERSIST_GRIDFS || '1').toLowerCase()
+);
 
 const buildRequestOrigin = (req) => {
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
@@ -162,6 +166,12 @@ const getLatestRenderedVideoForProject = (safeProjectId = '') => {
 
   return candidates[0] || null;
 };
+
+const hasGridFsVideoReference = (project = null) =>
+  Boolean(videoStudioPersistGridFs && sanitizeStatusText(project?.videoGridFsId));
+
+const buildProjectVideoStreamPath = (projectId = '') =>
+  `/api/video-studio/projects/${encodeURIComponent(String(projectId || '').trim())}/file`;
 
 const respondVideoStudioError = (res, error, fallbackMessage) => {
   if (error?.code === 'SAFETY_FAILED') {
@@ -406,6 +416,8 @@ router.post('/render', async (req, res) => {
 
       await patchStudioProject(resolvedProject.projectId, {
         videoUrl: relativeVideoUrl,
+        videoGridFsId: sanitizeStatusText(result.videoGridFsId || ''),
+        videoStorage: sanitizeStatusText(result.videoStorage || 'local'),
         renderedAt,
         premiumExport: Boolean(premiumHD),
         scenes: resolvedProject.scenes,
@@ -539,6 +551,8 @@ router.post('/render-cartoon', async (req, res) => {
 
       await patchStudioProject(resolvedProject.projectId, {
         videoUrl: relativeVideoUrl,
+        videoGridFsId: sanitizeStatusText(result.videoGridFsId || ''),
+        videoStorage: sanitizeStatusText(result.videoStorage || 'local'),
         renderedAt,
         premiumExport: Boolean(premiumHD),
         scenes: resolvedProject.scenes,
@@ -780,10 +794,13 @@ router.get('/projects/:projectId/status', async (req, res) => {
     const projectVideoUrl = String(project?.videoUrl || '').trim();
     const projectVideoExists = localUploadExistsForVideoUrl(projectVideoUrl);
     const rawVideoUrl = projectVideoExists ? projectVideoUrl : '';
-    const hasVideo = Boolean(rawVideoUrl) || hasOutputFile;
+    const hasGridFsVideo = hasGridFsVideoReference(project);
+    const hasVideo = Boolean(rawVideoUrl) || hasOutputFile || hasGridFsVideo;
     const projectRenderStatus = sanitizeStatusText(project?.renderStatus).toLowerCase();
     const origin = buildRequestOrigin(req);
-    const relativeVideoUrl = rawVideoUrl || (latestRender?.relativeUrl || '');
+    const relativeVideoUrl = rawVideoUrl
+      || (latestRender?.relativeUrl || '')
+      || (hasGridFsVideo ? buildProjectVideoStreamPath(project?.projectId || requestedProjectId) : '');
     const absoluteVideoUrl = toAbsoluteVideoUrl(origin, relativeVideoUrl, versionToken);
     const status = hasVideo
       ? 'ready'
@@ -836,6 +853,7 @@ router.get('/projects/:projectId/download', async (req, res) => {
     const projectVideoUrl = String(project?.videoUrl || '').trim();
     const projectVideoExists = localUploadExistsForVideoUrl(projectVideoUrl);
     let rawVideoUrl = projectVideoExists ? projectVideoUrl : '';
+    const hasGridFsVideo = hasGridFsVideoReference(project);
     let versionToken = project?.renderedAt ? toCacheBustToken(project.renderedAt) : '';
     if (!rawVideoUrl) {
       const safeProjectId = toSafeProjectDirectoryName(project?.projectId || requestedProjectId);
@@ -846,7 +864,7 @@ router.get('/projects/:projectId/download', async (req, res) => {
       }
     }
 
-    if (!rawVideoUrl) {
+    if (!rawVideoUrl && !hasGridFsVideo) {
       const projectRenderStatus = sanitizeStatusText(project?.renderStatus).toLowerCase();
       if (projectRenderStatus === 'failed') {
         return res.status(409).json({
@@ -859,9 +877,10 @@ router.get('/projects/:projectId/download', async (req, res) => {
     }
 
     const origin = buildRequestOrigin(req);
+    const finalRelativeUrl = rawVideoUrl || buildProjectVideoStreamPath(project?.projectId || requestedProjectId);
     const absoluteVideoUrl = toAbsoluteVideoUrl(
       origin,
-      rawVideoUrl,
+      finalRelativeUrl,
       versionToken || toCacheBustToken(new Date().toISOString())
     );
 
@@ -874,6 +893,58 @@ router.get('/projects/:projectId/download', async (req, res) => {
   } catch (error) {
     logger.error('Video studio download link error:', error);
     res.status(404).json({ success: false, error: error.message || 'Project not found.' });
+  }
+});
+
+router.get('/projects/:projectId/file', async (req, res) => {
+  try {
+    const requestedProjectId = String(req.params.projectId || '').trim();
+    if (!requestedProjectId) {
+      return res.status(400).json({ success: false, error: 'Project ID is required.' });
+    }
+
+    const project = await getStudioProject(requestedProjectId);
+    const projectVideoUrl = String(project?.videoUrl || '').trim();
+    const localPath = toLocalUploadPathFromUrl(projectVideoUrl);
+
+    if (localPath && fs.existsSync(localPath)) {
+      return res.sendFile(localPath);
+    }
+
+    const gridFsFileId = toObjectId(project?.videoGridFsId);
+    if (!gridFsFileId) {
+      return res.status(404).json({ success: false, error: 'Rendered video file is not available.' });
+    }
+
+    const bucket = getGridFSBucket();
+    const files = await bucket.find({ _id: gridFsFileId }).toArray();
+    const fileDoc = Array.isArray(files) && files.length ? files[0] : null;
+    if (!fileDoc) {
+      return res.status(404).json({ success: false, error: 'Rendered video file is not available in storage.' });
+    }
+
+    const downloadName = String(fileDoc.filename || `story-render-${requestedProjectId}.mp4`)
+      .split('/')
+      .pop();
+    res.setHeader('Content-Type', String(fileDoc.contentType || 'video/mp4'));
+    res.setHeader('Content-Disposition', `inline; filename="${downloadName}"`);
+    res.setHeader('Cache-Control', 'no-store');
+
+    const downloadStream = bucket.openDownloadStream(gridFsFileId);
+    downloadStream.on('error', (streamError) => {
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          error: streamError?.message || 'Failed to stream rendered video.',
+        });
+      } else {
+        res.end();
+      }
+    });
+    return downloadStream.pipe(res);
+  } catch (error) {
+    logger.error('Video studio stream file error:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to load rendered video.' });
   }
 });
 

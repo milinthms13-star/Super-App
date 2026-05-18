@@ -1680,7 +1680,7 @@ const KidsStoryVideoMaker = () => {
   };
 
   const handleDownloadVideo = async () => {
-    if (!videoUrl) {
+    if (!videoUrl && !generatedProject?.projectId) {
       setError("Render the video first to download it.");
       return;
     }
@@ -1699,29 +1699,25 @@ const KidsStoryVideoMaker = () => {
     };
 
     try {
-      triggerDownload(videoUrl);
-      setMessage("Download started. Your MP4 is ready.");
-      setError("");
-    } catch (_error) {
-      if (!generatedProject?.projectId) {
-        setError("Download failed. Please try again.");
-        return;
-      }
-
-      try {
+      let resolvedUrl = "";
+      if (generatedProject?.projectId) {
         const { payload } = await runCancelableRequest("download-link", (signal) =>
           getProjectDownloadLink(generatedProject.projectId, { signal })
         );
-        const resolvedUrl = normalizeMediaUrl(payload?.downloadUrl || payload?.videoUrl || "");
-        if (!resolvedUrl) {
-          throw new Error("No download URL is available for this project.");
-        }
-        triggerDownload(resolvedUrl);
-        setMessage("Download started using fallback URL.");
-        setError("");
-      } catch (innerError) {
-        setError(innerError?.message || "Unable to download this video right now.");
+        resolvedUrl = normalizeMediaUrl(payload?.downloadUrl || payload?.videoUrl || "");
       }
+
+      const finalUrl = resolvedUrl || videoUrl;
+      if (!finalUrl) {
+        throw new Error("No download URL is available for this project.");
+      }
+
+      triggerDownload(finalUrl);
+      setVideoUrl(finalUrl);
+      setMessage("Download started. Your MP4 is ready.");
+      setError("");
+    } catch (innerError) {
+      setError(innerError?.message || "Unable to download this video right now.");
     }
   };
 
