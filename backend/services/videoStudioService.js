@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { promisify } = require('util');
 const textToSpeech = require('@google-cloud/text-to-speech');
 const sharp = require('sharp');
@@ -2860,8 +2860,33 @@ const buildNarrationAudio = async (project, outputDir) => {
   });
 };
 
+const resolveFfmpegBinary = () => {
+  const configuredPath = String(process.env.FFMPEG_PATH || '').trim();
+  if (configuredPath) {
+    return configuredPath;
+  }
+
+  // Prefer distro ffmpeg first (often includes drawtext/libfreetype),
+  // then fall back to bundled static binary.
+  try {
+    const probe = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' });
+    if (probe?.status === 0) {
+      return 'ffmpeg';
+    }
+  } catch (_error) {
+    // Ignore probe failures and continue to static fallback.
+  }
+
+  const bundledStatic = String(ffmpegPath || '').trim();
+  if (bundledStatic) {
+    return bundledStatic;
+  }
+
+  return 'ffmpeg';
+};
+
 const runFfmpeg = async (args, cwd) => {
-  const resolvedFfmpegPath = String(process.env.FFMPEG_PATH || ffmpegPath || 'ffmpeg').trim();
+  const resolvedFfmpegPath = resolveFfmpegBinary();
   if (!resolvedFfmpegPath) {
     throw new Error('FFmpeg binary is not available. Set FFMPEG_PATH or install ffmpeg in the runtime image.');
   }

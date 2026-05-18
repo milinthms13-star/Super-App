@@ -3,12 +3,14 @@ FROM node:20-bookworm-slim
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV PYTHON_BIN=python3
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
 
 WORKDIR /app
 
 # Install ffmpeg for video-studio rendering.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg espeak-ng ca-certificates python3 python3-pip \
+  && apt-get install -y --no-install-recommends ffmpeg espeak-ng ca-certificates python3 python3-pip fontconfig fonts-dejavu-core \
+  && ffmpeg -hide_banner -filters | grep -q drawtext \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
