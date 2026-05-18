@@ -39,8 +39,25 @@ const freeImageModel = String(
 const huggingFaceApiKey = String(
   process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN || process.env.HF_API_KEY || ''
 ).trim();
-const huggingFaceApiBaseUrl = String(process.env.HUGGINGFACE_API_BASE_URL || 'https://api-inference.huggingface.co/models')
-  .replace(/\/+$/, '');
+const DEFAULT_HUGGINGFACE_API_BASE_URL = 'https://api-inference.huggingface.co/models';
+const normalizeHuggingFaceApiBaseUrl = (value = '') => {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  if (!raw) return DEFAULT_HUGGINGFACE_API_BASE_URL;
+  let hostname = '';
+  try {
+    hostname = String(new URL(raw).hostname || '').toLowerCase();
+  } catch (_error) {
+    return DEFAULT_HUGGINGFACE_API_BASE_URL;
+  }
+  // Guard against accidental non-HuggingFace URLs (commonly causes HTML 404 "Cannot POST /models/...").
+  if (!hostname.endsWith('huggingface.co')) {
+    return DEFAULT_HUGGINGFACE_API_BASE_URL;
+  }
+  return raw;
+};
+const huggingFaceApiBaseUrl = normalizeHuggingFaceApiBaseUrl(
+  process.env.HUGGINGFACE_API_BASE_URL || DEFAULT_HUGGINGFACE_API_BASE_URL
+);
 const huggingFaceImageModel = String(
   process.env.HUGGINGFACE_IMAGE_MODEL || process.env.HF_IMAGE_MODEL || 'black-forest-labs/FLUX.1-dev'
 ).trim();
@@ -51,7 +68,8 @@ const freeImageModelCandidates = Array.from(new Set(
     process.env.VIDEO_STUDIO_IMAGE_MODEL,
     freeImageModel,
     'flux',
-    'flux-realism',
+    'seedream',
+    'kontext',
   ]
     .map((value) => String(value || '').replace(/\u0000/g, '').trim())
     .filter(Boolean)
@@ -1831,8 +1849,13 @@ const fetchHuggingFaceImage = async ({ prompt = '', model = '', width = 1280, he
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.max(3000, Number(timeoutMs) || 35000));
+  const modelPath = selectedModel.replace(/^\/+/, '');
+  const baseHasModelsSegment = /\/models$/i.test(huggingFaceApiBaseUrl);
+  const requestUrl = baseHasModelsSegment
+    ? `${huggingFaceApiBaseUrl}/${modelPath}`
+    : `${huggingFaceApiBaseUrl}/models/${modelPath}`;
   try {
-    const response = await fetch(`${huggingFaceApiBaseUrl}/${selectedModel}`, {
+    const response = await fetch(requestUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -2053,7 +2076,11 @@ const buildCompactRealCartoonPrompt = (scene, project) => {
 };
 
 const getImageProviderOrder = (project) => {
-  const preferred = resolveProjectAiProvider(project);
+  let preferred = resolveProjectAiProvider(project);
+  // Pollinations now commonly requires API keys; if absent, try HuggingFace first.
+  if (preferred === 'pollinations' && !pollinationsApiKey) {
+    preferred = 'huggingface';
+  }
   if (!imageProviderFallbackEnabled) {
     return [preferred];
   }
