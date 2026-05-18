@@ -1764,14 +1764,15 @@ const fetchHuggingFaceImage = async ({ prompt = '', model = '', width = 1280, he
 
 const fetchFreeAiImage = async ({
   project = null,
+  provider = '',
   prompt = '',
   model = '',
   width = 1280,
   height = 720,
   timeoutMs = 20000,
 }) => {
-  const provider = resolveProjectAiProvider(project);
-  if (provider === 'huggingface') {
+  const resolvedProvider = normalizeAiProvider(provider || resolveProjectAiProvider(project));
+  if (resolvedProvider === 'huggingface') {
     return fetchHuggingFaceImage({ prompt, model, width, height, timeoutMs });
   }
   return fetchPollinationsImage({ prompt, model, width, height, timeoutMs });
@@ -1783,11 +1784,13 @@ const diagnoseImageGeneration = async (options = {}) => {
     || 'A cheerful 2D cartoon rabbit and tortoise in a colorful park, child-safe, no text, no logos.'
   );
   const modelAttempts = [];
-  const provider = resolveProjectAiProvider(options?.project || null);
-  const candidateModels = provider === 'huggingface'
-    ? huggingFaceImageModelCandidates
-    : freeImageModelCandidates;
+  const project = options?.project || null;
+  const provider = resolveProjectAiProvider(project);
+  const providers = getImageProviderOrder(project);
   const configuredModel = provider === 'huggingface' ? huggingFaceImageModel : freeImageModel;
+  const candidateModels = providers.flatMap((entry) =>
+    (entry === 'huggingface' ? huggingFaceImageModelCandidates : freeImageModelCandidates).map((model) => `${entry}:${model}`)
+  );
 
   if (!aiProviderEnabled) {
     return {
@@ -1802,40 +1805,50 @@ const diagnoseImageGeneration = async (options = {}) => {
     };
   }
 
-  for (const model of candidateModels) {
-    try {
-      const imageBuffer = await fetchFreeAiImage({
-        project: options?.project || null,
-        prompt: samplePrompt,
-        model,
-        width: 960,
-        height: 540,
-        timeoutMs: 15000,
-      });
-      const hasImage = Boolean(imageBuffer?.length);
-      modelAttempts.push({
-        model,
-        success: hasImage,
-        bytes: hasImage ? imageBuffer.length : 0,
-      });
-      if (hasImage) {
-        return {
-          ok: true,
-          provider,
-          aiProviderEnabled,
-          useRealCartoonImages,
-          configuredImageModel: configuredModel,
-          workingModel: model,
-          candidateModels,
-          modelAttempts,
-        };
+  for (const activeProvider of providers) {
+    const activeModels = activeProvider === 'huggingface'
+      ? huggingFaceImageModelCandidates
+      : freeImageModelCandidates;
+
+    for (const model of activeModels) {
+      try {
+        const imageBuffer = await fetchFreeAiImage({
+          project,
+          provider: activeProvider,
+          prompt: samplePrompt,
+          model,
+          width: 960,
+          height: 540,
+          timeoutMs: 15000,
+        });
+        const hasImage = Boolean(imageBuffer?.length);
+        modelAttempts.push({
+          provider: activeProvider,
+          model,
+          success: hasImage,
+          bytes: hasImage ? imageBuffer.length : 0,
+        });
+        if (hasImage) {
+          return {
+            ok: true,
+            provider,
+            aiProviderEnabled,
+            useRealCartoonImages,
+            configuredImageModel: configuredModel,
+            workingProvider: activeProvider,
+            workingModel: model,
+            candidateModels,
+            modelAttempts,
+          };
+        }
+      } catch (error) {
+        modelAttempts.push({
+          provider: activeProvider,
+          model,
+          success: false,
+          error: sanitizeText(error?.message || 'unknown error'),
+        });
       }
-    } catch (error) {
-      modelAttempts.push({
-        model,
-        success: false,
-        error: sanitizeText(error?.message || 'unknown error'),
-      });
     }
   }
 
@@ -1928,48 +1941,90 @@ const buildRealCartoonPrompt = (scene, project) => {
   ].join(' ');
 };
 
+const buildCompactRealCartoonPrompt = (scene, project) => {
+  const sceneCharacters = normalizeSceneCharacterList(scene, project);
+  const names = sceneCharacters.map((char) => sanitizeText(char.name)).filter(Boolean).join(', ');
+  return [
+    '2D kids cartoon frame',
+    `title ${sanitizeText(scene?.title || 'story scene')}`,
+    `mood ${sanitizeText(scene?.emotion || 'wonder')}`,
+    `scene ${sanitizeText(scene?.description || '')}`,
+    `characters ${names || 'hero and friend'}`,
+    'colorful child-safe cinematic no text no logo',
+  ].join('. ').slice(0, 420);
+};
+
+const getImageProviderOrder = (project) => {
+  const preferred = resolveProjectAiProvider(project);
+  if (!imageProviderFallbackEnabled) {
+    return [preferred];
+  }
+  return preferred === 'huggingface'
+    ? ['huggingface', 'pollinations']
+    : ['pollinations', 'huggingface'];
+};
+
 const generateRealCartoonSceneImage = async (scene, project, imagePath, resolution) => {
   if (!aiProviderEnabled || !useRealCartoonImages) {
+    imageGenerationErrorsByPath.set(
+      imagePath,
+      `provider_disabled: aiProviderEnabled=${aiProviderEnabled} useRealCartoonImages=${useRealCartoonImages}`
+    );
     return false;
   }
 
-  const provider = resolveProjectAiProvider(project);
-  const candidateModels = provider === 'huggingface'
-    ? huggingFaceImageModelCandidates
-    : freeImageModelCandidates;
-  const prompt = buildRealCartoonPrompt(scene, project);
+  const providers = getImageProviderOrder(project);
+  const primaryPrompt = buildRealCartoonPrompt(scene, project);
+  const compactPrompt = buildCompactRealCartoonPrompt(scene, project);
+  const promptVariants = Array.from(
+    new Set([primaryPrompt, compactPrompt].map((entry) => sanitizeText(entry)).filter(Boolean))
+  );
   const errors = [];
-  for (const model of candidateModels) {
-    try {
-      const imageBuffer = await fetchFreeAiImage({
-        project,
-        prompt,
-        model,
-        width: resolution.width,
-        height: resolution.height,
-        timeoutMs: 25000,
-      });
-      if (!imageBuffer?.length) {
-        errors.push(`${model}: no image bytes`);
-        continue;
+  for (const provider of providers) {
+    const candidateModels = provider === 'huggingface'
+      ? huggingFaceImageModelCandidates
+      : freeImageModelCandidates;
+
+    for (const model of candidateModels) {
+      for (let promptIndex = 0; promptIndex < promptVariants.length; promptIndex += 1) {
+        const prompt = promptVariants[promptIndex];
+        const timeoutMs = provider === 'huggingface' ? 35000 : 22000;
+        try {
+          const imageBuffer = await fetchFreeAiImage({
+            project,
+            provider,
+            prompt,
+            model,
+            width: resolution.width,
+            height: resolution.height,
+            timeoutMs,
+          });
+          if (!imageBuffer?.length) {
+            errors.push(`${provider}/${model}/p${promptIndex + 1}: no image bytes`);
+            continue;
+          }
+          await sharp(imageBuffer)
+            .resize(resolution.width, resolution.height, {
+              fit: 'cover',
+            })
+            .png({
+              compressionLevel: isLowMemoryMode ? 9 : 6,
+              palette: Boolean(isLowMemoryMode),
+            })
+            .toFile(imagePath);
+          imageGenerationErrorsByPath.delete(imagePath);
+          return true;
+        } catch (error) {
+          errors.push(`${provider}/${model}/p${promptIndex + 1}: ${sanitizeText(error?.message || 'unknown error')}`);
+        }
       }
-      await sharp(imageBuffer)
-        .resize(resolution.width, resolution.height, {
-          fit: 'cover',
-        })
-        .png({
-          compressionLevel: isLowMemoryMode ? 9 : 6,
-          palette: Boolean(isLowMemoryMode),
-        })
-        .toFile(imagePath);
-      return true;
-    } catch (error) {
-      errors.push(`${model}: ${sanitizeText(error?.message || 'unknown error')}`);
     }
   }
 
+  const errorSummary = errors.join(' | ');
+  imageGenerationErrorsByPath.set(imagePath, errorSummary);
   logger.warn(
-    `Video studio image generation failed for scene "${sanitizeText(scene?.title || scene?.id || 'unknown')}" (provider=${provider}). Attempts: ${errors.join(' | ')}`
+    `Video studio image generation failed for scene "${sanitizeText(scene?.title || scene?.id || 'unknown')}" (providers=${providers.join(',')}). Attempts: ${errorSummary}`
   );
   return false;
 };
@@ -2132,6 +2187,10 @@ const normalizeTtsAudioBuffer = (response) => {
 };
 
 const ttsProviderByOutputPath = new Map();
+const imageGenerationErrorsByPath = new Map();
+const imageProviderFallbackEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_ALLOW_PROVIDER_FALLBACK || '1').toLowerCase()
+);
 
 const windowsTtsEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_ENABLE_WINDOWS_TTS || '1').toLowerCase()
@@ -2784,8 +2843,9 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   }
   const generatedByAi = await generateRealCartoonSceneImage(scene, project, stillPath, resolution);
   if (!generatedByAi && project?.requireSceneImages) {
+    const attemptSummary = sanitizeText(imageGenerationErrorsByPath.get(stillPath) || '');
     throw new Error(
-      'AI character visuals are required for this render, but free image generation failed. Check FREE_AI_PROVIDER, AI_PROVIDER_ENABLED, VIDEO_STUDIO_REAL_CARTOON_MODE, and image model access before retrying.'
+      `AI character visuals are required for this render, but free image generation failed.${attemptSummary ? ` Attempts: ${attemptSummary}` : ''} Check FREE_AI_PROVIDER, AI_PROVIDER_ENABLED, VIDEO_STUDIO_REAL_CARTOON_MODE, and image model access before retrying.`
     );
   }
   if (!generatedByAi) {
