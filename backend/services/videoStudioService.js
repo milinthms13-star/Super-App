@@ -1135,6 +1135,46 @@ const regenerateProjectStage = async (projectId, stage, options = {}) => {
     });
     project.subtitles = buildSubtitlesFromScenes(project.scenes);
     project.animationPlan = buildAnimationPlan({ scenes: project.scenes });
+  } else if (normalizedStage === 'dialogues') {
+    const scenes = Array.isArray(project?.scenes) ? project.scenes : [];
+    if (!scenes.length) {
+      throw new Error('No scenes found to regenerate dialogue.');
+    }
+
+    const customDirection = sanitizeText(options?.direction || options?.prompt || '');
+    const updatedScenes = [];
+    for (let index = 0; index < scenes.length; index += 1) {
+      const scene = scenes[index];
+      const previousScene = index > 0 ? scenes[index - 1] : null;
+      const nextScene = index < scenes.length - 1 ? scenes[index + 1] : null;
+      const regeneratedDialogue = await buildStoryAwareSceneDialogue({
+        project,
+        scene,
+        sceneIndex: index,
+        totalScenes: scenes.length,
+        customDirection,
+        previousScene,
+        nextScene,
+      });
+
+      const updatedScene = normalizeSceneForCinematicPipeline({
+        ...scene,
+        id: index + 1,
+        dialogue: regeneratedDialogue,
+      }, index);
+
+      if (project.safeMode) {
+        const assessment = await getCombinedSafetyAssessment(updatedScene.dialogue);
+        if (assessment.blocked) {
+          throw createSafetyError('scene_dialogue_regeneration', assessment);
+        }
+      }
+
+      updatedScenes.push(updatedScene);
+    }
+
+    project.scenes = updatedScenes;
+    project.subtitles = buildSubtitlesFromScenes(updatedScenes);
   } else if (normalizedStage === 'voice') {
     project.voicePlan = buildVoicePlan({
       script: project.script,
@@ -1169,7 +1209,84 @@ const buildFallbackSceneDialogue = (scene, project, sceneIndex = 0) => {
   const primaryB = sceneCharacters[1]?.name || 'Friend';
   const summary = sanitizeText(scene?.description || 'Our story moves forward.');
   const mood = sanitizeText(scene?.emotion || 'wonder');
-  return `${primaryA}: ${summary}\n${primaryB}: We can do this together with ${mood}.`;
+  const moral = sanitizeText(project?.script?.moral || project?.moral || '');
+  const moralHint = moral ? ` ${primaryB}: ${moral}` : '';
+  return `${primaryA}: ${summary}\n${primaryB}: We can do this together with ${mood}.${moralHint}`;
+};
+
+const buildStoryAwareSceneDialogue = async ({
+  project,
+  scene,
+  sceneIndex = 0,
+  totalScenes = 1,
+  customDirection = '',
+  previousScene = null,
+  nextScene = null,
+}) => {
+  const sceneCharacters = normalizeSceneCharacterList(scene, project);
+  const fallbackDialogue = buildFallbackSceneDialogue(scene, project, sceneIndex);
+  let regeneratedDialogue = '';
+
+  if (aiProviderEnabled) {
+    const storySynopsis = sanitizeText(project?.script?.synopsis || project?.storyPrompt || '');
+    const storyMoral = sanitizeText(project?.script?.moral || project?.moral || '');
+    const storyNarration = sanitizeText(project?.script?.narration || project?.narration || '');
+    const systemPrompt = 'You are an expert children-story dialogue writer. Output only dialogue lines.';
+    const userPrompt = `Rewrite dialogue for one scene in a kids story animation.
+Project title: ${sanitizeText(project?.storyTitle || project?.title || 'Kids story')}
+Story synopsis: ${storySynopsis || 'n/a'}
+Story moral: ${storyMoral || 'n/a'}
+Narration summary: ${storyNarration || 'n/a'}
+Scene index: ${sceneIndex + 1} of ${Math.max(1, totalScenes)}
+Scene title: ${sanitizeText(scene?.title || '')}
+Scene description: ${sanitizeText(scene?.description || '')}
+Scene emotion: ${sanitizeText(scene?.emotion || 'wonder')}
+Characters in scene: ${sceneCharacters.map((char) => `${char.name} (${char.role})`).join(', ') || 'Hero, Friend'}
+Previous scene: ${sanitizeText(previousScene?.description || 'n/a')}
+Next scene: ${sanitizeText(nextScene?.description || 'n/a')}
+Current dialogue: ${sanitizeText(scene?.dialogue || '')}
+Creative direction: ${customDirection || 'Keep it meaningful, natural, child-safe, and emotionally expressive.'}
+
+Rules:
+1) Write 3-5 short lines only.
+2) Every line must be in the format "Name: line".
+3) Use only listed character names.
+4) Do not repeat the same sentence.
+5) Keep language simple for children.
+6) Ensure this scene advances the story and reflects the moral.
+7) No violence, hate, or unsafe content.`;
+    const response = await safeGoogleAI([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ], 420);
+    regeneratedDialogue = sanitizeText(response || '');
+  }
+
+  if (!regeneratedDialogue) {
+    return fallbackDialogue;
+  }
+
+  const speakerNames = new Set(sceneCharacters.map((char) => sanitizeText(char?.name)).filter(Boolean));
+  const normalizedLines = regeneratedDialogue
+    .split('\n')
+    .map((line) => sanitizeText(line))
+    .filter(Boolean)
+    .filter((line) => line.includes(':'))
+    .map((line) => {
+      const [rawSpeaker, ...rest] = line.split(':');
+      const speaker = sanitizeText(rawSpeaker);
+      const text = sanitizeText(rest.join(':'));
+      if (!speaker || !text) return '';
+      if (speakerNames.size && !speakerNames.has(speaker)) {
+        const fallbackSpeaker = sceneCharacters[0]?.name || 'Narrator';
+        return `${fallbackSpeaker}: ${text}`;
+      }
+      return `${speaker}: ${text}`;
+    })
+    .filter(Boolean)
+    .slice(0, 5);
+
+  return normalizedLines.length ? normalizedLines.join('\n') : fallbackDialogue;
 };
 
 const regenerateProjectScene = async (projectId, sceneId, options = {}) => {
@@ -1316,31 +1433,18 @@ const regenerateProjectSceneDialogue = async (projectId, sceneId, options = {}) 
   }
 
   const scene = scenes[sceneIndex];
-  const sceneCharacters = normalizeSceneCharacterList(scene, project);
   const customDirection = sanitizeText(options?.direction || options?.prompt || '');
-  let regeneratedDialogue = '';
-
-  if (aiProviderEnabled) {
-    const systemPrompt = 'You are an expert kids dialogue writer. Output only plain dialogue text.';
-    const userPrompt = `Rewrite dialogue for one kids animation scene.
-Scene title: ${sanitizeText(scene?.title || '')}
-Scene description: ${sanitizeText(scene?.description || '')}
-Emotion: ${sanitizeText(scene?.emotion || 'wonder')}
-Characters: ${sceneCharacters.map((char) => `${char.name} (${char.role})`).join(', ') || 'Hero, Friend'}
-Current dialogue: ${sanitizeText(scene?.dialogue || '')}
-Direction: ${customDirection || 'Make it playful, short, and child-safe.'}
-
-Write 2-4 short lines in the format "Name: line".`;
-    const response = await safeGoogleAI([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ], 350);
-    regeneratedDialogue = sanitizeText(response || '');
-  }
-
-  if (!regeneratedDialogue) {
-    regeneratedDialogue = buildFallbackSceneDialogue(scene, project, sceneIndex);
-  }
+  const previousScene = sceneIndex > 0 ? scenes[sceneIndex - 1] : null;
+  const nextScene = sceneIndex < scenes.length - 1 ? scenes[sceneIndex + 1] : null;
+  const regeneratedDialogue = await buildStoryAwareSceneDialogue({
+    project,
+    scene,
+    sceneIndex,
+    totalScenes: scenes.length,
+    customDirection,
+    previousScene,
+    nextScene,
+  });
 
   if (project.safeMode) {
     const assessment = await getCombinedSafetyAssessment(regeneratedDialogue);

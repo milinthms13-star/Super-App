@@ -950,6 +950,7 @@ const KidsStoryVideoMaker = () => {
       script: "script",
       characters: "characters",
       scenes: "scenes",
+      dialogues: "scenes",
       voice: "voice",
       music: "music",
     };
@@ -984,6 +985,62 @@ const KidsStoryVideoMaker = () => {
         throw new Error(payload.error || payload.message || `Failed to regenerate ${stage}.`);
       }
       applyProjectSnapshotToStudio(payload.project, `${stage} stage regenerated.`);
+    } catch (err) {
+      setError(formatSafetyError(err));
+    } finally {
+      setIsStageRegenerating("");
+    }
+  };
+
+  const handleUpdateStoryAndDialogues = async () => {
+    if (!generatedProject?.projectId) {
+      setError("Generate a project first.");
+      return;
+    }
+
+    const nextSynopsis = sanitizeText(generatedProject?.script?.synopsis || storyText || storyPrompt);
+    if (!nextSynopsis || nextSynopsis.length < MIN_STORY_LENGTH) {
+      setError(`Please provide at least ${MIN_STORY_LENGTH} characters in story/synopsis.`);
+      return;
+    }
+
+    setError("");
+    setIsStageRegenerating("story-dialogues");
+    setMessage("Saving updated story and regenerating dialogues from story context...");
+
+    try {
+      const projectId = generatedProject?.projectId;
+      const updatedScript = {
+        ...(generatedProject?.script || {}),
+        synopsis: nextSynopsis,
+      };
+
+      await patchCurrentProject(
+        {
+          script: updatedScript,
+          storyPrompt: nextSynopsis,
+        },
+        "Story updated. Regenerating dialogues..."
+      );
+
+      const { payload } = await runCancelableRequest("regenerate-dialogues-stage", (signal) =>
+        regenerateStage(
+          projectId,
+          "dialogues",
+          {
+            direction: nextSynopsis,
+          },
+          { signal }
+        )
+      );
+      if (!payload.success || !payload.project) {
+        throw new Error(payload.error || payload.message || "Failed to regenerate dialogues.");
+      }
+      applyProjectSnapshotToStudio(
+        payload.project,
+        "Story updated and scene dialogues regenerated from your latest story."
+      );
+      setActiveTab("scenes");
     } catch (err) {
       setError(formatSafetyError(err));
     } finally {
@@ -2200,6 +2257,15 @@ const KidsStoryVideoMaker = () => {
                     >
                       Save Script Edits
                     </button>
+                    <button
+                      className="secondary-button"
+                      onClick={handleUpdateStoryAndDialogues}
+                      disabled={!generatedProject?.projectId || isStageRegenerating === "story-dialogues"}
+                    >
+                      {isStageRegenerating === "story-dialogues"
+                        ? "Updating story + dialogues..."
+                        : "Update Story + Regenerate Dialogues"}
+                    </button>
                   </div>
                 </div>
               )}
@@ -2352,6 +2418,15 @@ const KidsStoryVideoMaker = () => {
                   disabled={!generatedProject?.projectId || isStageRegenerating === "scenes"}
                 >
                   {isStageRegenerating === "scenes" ? "Regenerating..." : "Regenerate Scenes"}
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => handleRegenerateStage("dialogues")}
+                  disabled={!generatedProject?.projectId || isStageRegenerating === "dialogues"}
+                >
+                  {isStageRegenerating === "dialogues"
+                    ? "Regenerating Dialogues..."
+                    : "Regenerate Dialogues"}
                 </button>
                 <button
                   className="secondary-button"
