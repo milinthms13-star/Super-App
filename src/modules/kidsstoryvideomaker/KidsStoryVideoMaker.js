@@ -82,8 +82,9 @@ const AI_PROVIDER_OPTIONS = [
   { id: "pollinations", label: "Pollinations" },
 ];
 const HF_RENDER_ENGINE_OPTIONS = [
-  { id: "scene_script_video", label: "Script-to-Video (Recommended)" },
-  { id: "image_ffmpeg", label: "Image + FFmpeg (Default)" },
+  { id: "cogvideox", label: "CogVideoX (Real Motion GPU) (Recommended)" },
+  { id: "scene_script_video", label: "Script-to-Video (Fallback)" },
+  { id: "image_ffmpeg", label: "Image + FFmpeg (Fallback)" },
   { id: "prompt_video_python", label: "Prompt Video (Python)" },
 ];
 
@@ -126,7 +127,8 @@ const normalizeRenderProvider = (value) => {
 
 const normalizeRenderEngine = (value) => {
   const normalized = sanitizeText(value).toLowerCase();
-  if (!normalized || normalized === "default") return "image_ffmpeg";
+  if (!normalized || normalized === "default") return "cogvideox";
+  if (normalized === "cogvideo" || normalized === "cogvideox_2b" || normalized === "real_motion_gpu") return "cogvideox";
   if (normalized === "free_steve_like" || normalized === "steve_like") return "scene_script_video";
   if (normalized === "diffusers_t2v") return "prompt_video_python";
   return normalized;
@@ -399,7 +401,7 @@ const KidsStoryVideoMaker = () => {
   const [premiumHD, setPremiumHD] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [aiProvider, setAiProvider] = useState("scene_pipeline");
-  const [hfRenderEngine, setHfRenderEngine] = useState("scene_script_video");
+  const [hfRenderEngine, setHfRenderEngine] = useState("cogvideox");
   const [generatedProject, setGeneratedProject] = useState(null);
   const [generatedScenes, setGeneratedScenes] = useState([]);
   const [videoUrl, setVideoUrl] = useState("");
@@ -1414,7 +1416,7 @@ const KidsStoryVideoMaker = () => {
           title: sanitizeText(storyTitle || returnedProject?.title || generatedProject?.title || "AI Kids Story Video Generator"),
           storyPrompt: normalizedStoryPrompt,
           aiProvider: "scene_pipeline",
-          renderEngine: selectedEngine || "image_ffmpeg",
+          renderEngine: selectedEngine || "cogvideox",
           renderedAt: new Date().toISOString(),
           videoUrl: normalizedVideoUrl,
         };
@@ -1427,9 +1429,11 @@ const KidsStoryVideoMaker = () => {
         setRenderProgress(100);
         setRenderProgressLabel("Render complete.");
         setMessage(
-          payload.aiImagesEnabled
-            ? "Scene pipeline render complete with regenerated scenes and AI visuals."
-            : "Render complete using fallback visuals."
+          selectedEngine === "cogvideox"
+            ? "Real motion render complete (CogVideoX)."
+            : payload.aiImagesEnabled
+              ? "Scene pipeline render complete with regenerated scenes and AI visuals."
+              : "Render complete using fallback visuals."
         );
         setActiveTab("export");
       } catch (err) {

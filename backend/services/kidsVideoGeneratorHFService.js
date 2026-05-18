@@ -896,6 +896,119 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
   }
 };
 
+const generateKidsVideoFromCogVideoXPrompt = async ({
+  prompt,
+  videoSize = 'youtube',
+  numFrames = 49,
+  numInferenceSteps = 30,
+  guidanceScale = 6,
+  language = 'en',
+}) => {
+  await ensureDirectories();
+  const cleanPrompt = sanitizeText(prompt);
+  if (!cleanPrompt) throw new Error('Prompt is required.');
+  if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
+
+  const projectId = uuidv4();
+  const outputDir = path.join(uploadsRoot, safeFileName(projectId));
+  await mkdir(outputDir, { recursive: true });
+  const outputFileName = `story-render-${Date.now()}.mp4`;
+  const outputFile = path.join(outputDir, outputFileName);
+  const { width, height } = getResolution(videoSize);
+
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'cogvideox_text_to_video.py');
+  const modelId = sanitizeText(process.env.HF_COGVIDEOX_MODEL || 'THUDM/CogVideoX-2b');
+  const fps = Math.max(4, Math.min(24, Number(process.env.HF_COGVIDEOX_FPS) || 8));
+  const args = [
+    scriptPath,
+    '--prompt', cleanPrompt,
+    '--output', outputFile,
+    '--model', modelId,
+    '--num_frames', `${Math.max(16, Math.min(97, Number(numFrames) || 49))}`,
+    '--num_inference_steps', `${Math.max(10, Math.min(80, Number(numInferenceSteps) || 30))}`,
+    '--guidance_scale', `${Math.max(1, Math.min(12, Number(guidanceScale) || 6))}`,
+    '--fps', `${fps}`,
+  ];
+
+  try {
+    const { stdout, command: pythonCommand } = await runPythonProcess({
+      args,
+      cwd: path.join(__dirname, '..'),
+    });
+
+    if (!fs.existsSync(outputFile)) {
+      throw new Error(`CogVideoX generator did not produce output video. ${stdout || ''}`.trim());
+    }
+
+    let parsedScriptOutput = null;
+    try {
+      parsedScriptOutput = JSON.parse(stdout || '{}');
+    } catch (_error) {
+      parsedScriptOutput = null;
+    }
+
+    const persistedProject = {
+      projectId,
+      createdAt: new Date().toISOString(),
+      workflowType: 'kids-video-cogvideox-text-to-video',
+      aiProvider: 'scene_pipeline',
+      renderEngine: 'cogvideox_text_to_video',
+      prompt: cleanPrompt,
+      title: 'CogVideoX Prompt Render',
+      videoSize: sanitizeText(videoSize || 'youtube'),
+      outputDir,
+      outputFile,
+      videoUrl: `/uploads/kids-video-hf/${safeFileName(projectId)}/${outputFileName}`,
+      aiImagesEnabled: true,
+      renderedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      generatorLog: stdout || '',
+      pythonCommand: sanitizeText(pythonCommand || ''),
+      sceneCount: 1,
+      language: sanitizeText(language || 'en'),
+      width,
+      height,
+      model: modelId,
+      numFrames: Number(parsedScriptOutput?.num_frames || Math.max(16, Math.min(97, Number(numFrames) || 49))),
+      numInferenceSteps: Number(parsedScriptOutput?.num_inference_steps || Math.max(10, Math.min(80, Number(numInferenceSteps) || 30))),
+      guidanceScale: Number(parsedScriptOutput?.guidance_scale || Math.max(1, Math.min(12, Number(guidanceScale) || 6))),
+    };
+
+    await writeFile(projectFilePath(projectId), JSON.stringify(persistedProject, null, 2), 'utf-8');
+    await writeFile(path.join(outputDir, 'project.json'), JSON.stringify(persistedProject, null, 2), 'utf-8');
+
+    return {
+      success: true,
+      projectId,
+      project: persistedProject,
+      videoUrl: persistedProject.videoUrl,
+      outputFile,
+      aiImagesEnabled: true,
+    };
+  } catch (error) {
+    const strictCogVideoX = String(process.env.HF_COGVIDEOX_STRICT || 'false').toLowerCase() === 'true';
+    if (strictCogVideoX) throw error;
+
+    const fallbackResult = await generateKidsVideoFromPrompt({
+      prompt: cleanPrompt,
+      sceneCount: 5,
+      videoSize,
+      storyMode: 'moral',
+      voiceType: 'kid-female',
+    });
+
+    return {
+      ...fallbackResult,
+      project: {
+        ...(fallbackResult.project || {}),
+        workflowType: 'kids-video-cogvideox-fallback',
+        renderEngine: 'scene_image_ffmpeg_fallback',
+        fallbackReason: sanitizeText(error?.message || 'cogvideox execution failed'),
+      },
+    };
+  }
+};
+
 const getKidsVideoProject = async (projectId) => {
   await ensureDirectories();
   const cleanProjectId = sanitizeText(projectId);
@@ -908,5 +1021,6 @@ module.exports = {
   generateKidsVideoFromPrompt,
   generateKidsVideoFromDiffusersPrompt,
   generateKidsVideoFromFreeSteveLikePrompt,
+  generateKidsVideoFromCogVideoXPrompt,
   getKidsVideoProject,
 };

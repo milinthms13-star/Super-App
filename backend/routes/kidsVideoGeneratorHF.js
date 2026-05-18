@@ -3,6 +3,7 @@ const {
   generateKidsVideoFromPrompt,
   generateKidsVideoFromDiffusersPrompt,
   generateKidsVideoFromFreeSteveLikePrompt,
+  generateKidsVideoFromCogVideoXPrompt,
   getKidsVideoProject,
 } = require('../services/kidsVideoGeneratorHFService');
 
@@ -35,9 +36,23 @@ router.post('/generate', async (req, res) => {
       requestedEngine === 'free_steve_like' ||
       requestedEngine === 'steve_like' ||
       requestedEngine === 'script_to_video';
+    const useCogVideoX =
+      requestedEngine === 'cogvideox' ||
+      requestedEngine === 'cogvideox_2b' ||
+      requestedEngine === 'cogvideo' ||
+      requestedEngine === 'real_motion_gpu';
     const shouldUseDiffusers = useDiffusers && !disableDiffusers;
 
-    const result = useLegacyScriptVideo
+    const result = useCogVideoX
+      ? await generateKidsVideoFromCogVideoXPrompt({
+          prompt,
+          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
+          numFrames: req.body?.numFrames,
+          numInferenceSteps: req.body?.numInferenceSteps,
+          guidanceScale: req.body?.guidanceScale,
+          language: req.body?.language || req.body?.lang || 'en',
+        })
+      : useLegacyScriptVideo
       ? await generateKidsVideoFromFreeSteveLikePrompt({
           prompt,
           sceneCount: clampSceneCount(req.body?.sceneCount),
