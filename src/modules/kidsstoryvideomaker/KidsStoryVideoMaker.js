@@ -1587,7 +1587,8 @@ const KidsStoryVideoMaker = () => {
 
       if (canRecover) {
         try {
-          const isLongGpuRender = selectedEngine === "cogvideox";
+          const isLongGpuRender =
+            normalizeRenderEngine(generatedProject?.renderEngine || hfRenderEngine) === "cogvideox";
           const recoveryMaxAttempts = isLongGpuRender ? 180 : 24;
           const recoveryIntervalMs = isLongGpuRender ? 10000 : 5000;
           const recoveryRequestTimeoutMs = isLongGpuRender ? 30000 : 20000;
