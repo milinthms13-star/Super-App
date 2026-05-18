@@ -356,7 +356,11 @@ export const getProjectDownloadLink = async (projectId, options = {}) => {
     assertPayloadSuccess(projectResult.payload, "project response");
     const downloadUrl = projectResult.payload.project?.videoUrl || projectResult.payload.project?.downloadUrl;
     if (!downloadUrl) {
-      throw new Error("Project has no downloadable video URL.");
+      throw new VideoStudioApiError("Project has no downloadable video URL yet.", {
+        status: 404,
+        code: "VIDEO_NOT_READY",
+        payload: projectResult.payload,
+      });
     }
 
     return {
@@ -444,7 +448,14 @@ export const waitForRenderedVideo = async (
       lastError = error;
       const status = Number(error?.status || 0);
       const code = String(error?.code || "");
-      const retryable = status === 404 || status === 408 || status === 409 || status === 425 || status >= 500 || code === "EMPTY_RESPONSE";
+      const retryable =
+        status === 404 ||
+        status === 408 ||
+        status === 409 ||
+        status === 425 ||
+        status >= 500 ||
+        code === "EMPTY_RESPONSE" ||
+        code === "VIDEO_NOT_READY";
 
       if (!retryable || attempt === maxAttempts - 1) {
         throw error;
