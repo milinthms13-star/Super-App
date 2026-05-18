@@ -195,6 +195,16 @@ const wrapText = (value = '', maxCharsPerLine = 42, maxLines = 4) => {
   return lines;
 };
 
+const escapeFfmpegDrawtext = (value = '') =>
+  sanitizeText(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/:/g, '\\:')
+    .replace(/'/g, "\\'")
+    .replace(/,/g, '\\,')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/%/g, '\\%');
+
 const getSafetyAssessment = (value = '') => {
   const cleanValue = sanitizeText(value);
   const reasons = UNSAFE_THEME_RULES
@@ -2128,6 +2138,7 @@ const renderFreeStockSceneImage = async (scene, project, imagePath, resolution) 
       palette: Boolean(isLowMemoryMode),
     })
     .toFile(imagePath);
+  imageRenderModeByPath.set(imagePath, 'free_stock');
   return true;
 };
 
@@ -2254,6 +2265,7 @@ const generateRealCartoonSceneImage = async (scene, project, imagePath, resoluti
               palette: Boolean(isLowMemoryMode),
             })
             .toFile(imagePath);
+          imageRenderModeByPath.set(imagePath, provider === 'free_stock' ? 'free_stock' : 'ai_provider');
           imageGenerationErrorsByPath.delete(imagePath);
           return true;
         } catch (error) {
@@ -2429,6 +2441,7 @@ const normalizeTtsAudioBuffer = (response) => {
 };
 
 const ttsProviderByOutputPath = new Map();
+const imageRenderModeByPath = new Map();
 const imageGenerationErrorsByPath = new Map();
 const imageProviderFallbackEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_ALLOW_PROVIDER_FALLBACK || '1').toLowerCase()
@@ -3068,6 +3081,44 @@ const buildCartoonSceneFilter = (scene, resolution) => {
   ].join(',');
 };
 
+const buildFreeStockCharacterMotionFilter = (scene, resolution = {}, sceneIndex = 1) => {
+  const width = Number(resolution?.width || 854);
+  const height = Number(resolution?.height || 480);
+  const lines = Array.isArray(scene?.lines) ? scene.lines : [];
+  const characters = Array.isArray(scene?.characters) ? scene.characters : [];
+  const charA = sanitizeText(characters[0]?.name || 'Hero');
+  const charB = sanitizeText(characters[1]?.name || 'Guide');
+  const lineA = sanitizeText(lines[0]?.text || scene?.description || 'The story continues.').slice(0, 90);
+  const lineB = sanitizeText(lines[1]?.text || '').slice(0, 90);
+  const dialogue = [lineA, lineB].filter(Boolean).join(' ').slice(0, 140);
+  const seed = buildDeterministicSeed(scene?.title, scene?.description, sceneIndex);
+  const bobA = 2.0 + ((seed % 4) / 10);
+  const bobB = 2.2 + (((seed >> 2) % 4) / 10);
+  const mouthA = 8.0 + ((seed % 5) / 2);
+  const mouthB = 8.5 + (((seed >> 3) % 5) / 2);
+  const cardY = Math.max(220, height - 170);
+  const bubbleY = Math.max(20, height - 245);
+  const safeCharA = escapeFfmpegDrawtext(charA);
+  const safeCharB = escapeFfmpegDrawtext(charB);
+  const safeDialogue = escapeFfmpegDrawtext(dialogue);
+  const labelSize = Math.max(20, Math.floor(width / 40));
+  const dialogueSize = Math.max(18, Math.floor(width / 47));
+
+  return [
+    `drawbox=x=0:y=${Math.max(0, height - 185)}:w=${width}:h=185:color=0x020617@0.35:t=fill`,
+    `drawbox=x=40:y=${bubbleY}:w=${Math.max(420, width - 120)}:h=92:color=0xffffff@0.88:t=fill`,
+    `drawtext=fontcolor=0x111827:fontsize=${dialogueSize}:x=56:y=${bubbleY + 34}:text='${safeDialogue}'`,
+    `drawbox=x='70+8*sin(t*${bobA})':y='${cardY}+7*sin(t*${bobA}*1.8)':w=170:h=130:color=0xffffff@0.90:t=fill`,
+    `drawbox=x='250+8*sin(t*${bobB})':y='${cardY}+7*sin(t*${bobB}*1.8)':w=170:h=130:color=0xffffff@0.90:t=fill`,
+    `drawbox=x='115+10*sin(t*${bobA})':y='${cardY + 30}+8*sin(t*${bobA}*2)':w=72:h=70:color=0xfbcfe8@0.96:t=fill`,
+    `drawbox=x='295+10*sin(t*${bobB})':y='${cardY + 30}+8*sin(t*${bobB}*2)':w=72:h=70:color=0xfbcfe8@0.96:t=fill`,
+    `drawbox=x='132+10*sin(t*${bobA})':y='${cardY + 78}+8*sin(t*${bobA}*2)':w=30:h='10+13*abs(sin(t*${mouthA}))':color=0x3f1d1d@0.95:t=fill`,
+    `drawbox=x='312+10*sin(t*${bobB})':y='${cardY + 78}+8*sin(t*${bobB}*2)':w=30:h='10+13*abs(sin(t*${mouthB}))':color=0x3f1d1d@0.95:t=fill`,
+    `drawtext=fontcolor=0x111827:fontsize=${labelSize}:x='88+8*sin(t*${bobA})':y='${cardY + 118}+5*sin(t*${bobA})':text='${safeCharA}'`,
+    `drawtext=fontcolor=0x111827:fontsize=${labelSize}:x='268+8*sin(t*${bobB})':y='${cardY + 118}+5*sin(t*${bobB})':text='${safeCharB}'`,
+  ].join(',');
+};
+
 const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution, project }) => {
   const clipPath = path.join(outputDir, `scene-${String(sceneIndex).padStart(2, '0')}-cartoon.mp4`);
   const ttsPath = path.join(outputDir, `scene-${String(sceneIndex).padStart(2, '0')}-voice.mp3`);
@@ -3120,6 +3171,8 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
   const audioFilter = synthesizedPath
     ? 'loudnorm=I=-16:TP=-1.5:LRA=11,volume=1.8,aresample=48000'
     : 'volume=0.10,aresample=48000';
+  const stillRenderMode = sanitizeText(imageRenderModeByPath.get(stillPath) || '');
+  const useFreeStockMotionOverlay = stillRenderMode === 'free_stock';
 
   const zoomFilter = [
     `zoompan=z='min(1.18,1+0.0022*on)'`,
@@ -3127,10 +3180,14 @@ const renderCartoonSceneClip = async ({ scene, sceneIndex, outputDir, resolution
     `y='ih/2-(ih/zoom/2)+10*cos(on/20)'`,
     `d=${frames}:s=${resolution.width}x${resolution.height}:fps=${fps}`,
   ].join(':');
-  const fadeOutStart = Math.max(0, duration - 0.35);
+  const motionOverlayFilter = useFreeStockMotionOverlay
+    ? buildFreeStockCharacterMotionFilter(scene, resolution, sceneIndex)
+    : '';
+  const entryFadeFilter = sceneIndex === 1 ? 'fade=t=in:st=0:d=0.16' : '';
+  const composedVideoFilter = [zoomFilter, motionOverlayFilter, entryFadeFilter].filter(Boolean).join(',');
   args.push(
     '-t', `${duration}`,
-    '-vf', `${zoomFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${fadeOutStart}:d=0.3`,
+    '-vf', composedVideoFilter,
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-r', `${fps}`,
