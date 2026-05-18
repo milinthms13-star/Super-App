@@ -65,6 +65,13 @@ def _clean_text(value: str) -> str:
     return str(value or "").replace("\x00", "").strip()
 
 
+def _normalize_motion_style(value: str) -> str:
+    normalized = _clean_text(value).lower().replace("-", "_")
+    if normalized in {"2", "high", "highenergy", "high_energy", "energetic"}:
+        return "high_energy"
+    return "cinematic"
+
+
 def _resolve_ffmpeg_bin() -> str:
     ffmpeg_bin = shutil.which("ffmpeg")
     if ffmpeg_bin:
@@ -311,22 +318,32 @@ def _fetch_real_portrait(seed_name: str) -> Image.Image | None:
     return None
 
 
-def _camera_crop(image: Image.Image, out_w: int, out_h: int, progress: float, scene_index: int) -> Image.Image:
+def _camera_crop(
+    image: Image.Image,
+    out_w: int,
+    out_h: int,
+    progress: float,
+    scene_index: int,
+    motion_style: str,
+) -> Image.Image:
     src_w, src_h = image.size
     motion = scene_index % 3
+    motion_style = _normalize_motion_style(motion_style)
+    intensity = 1.6 if motion_style == "high_energy" else 1.0
+    zoom_boost = 0.07 if motion_style == "high_energy" else 0.0
 
     if motion == 0:
-        zoom = 1.0 + (0.12 * progress)
+        zoom = 1.0 + ((0.12 + zoom_boost) * progress)
         cx = src_w * 0.5
-        cy = src_h * (0.48 + 0.02 * math.sin(progress * math.pi))
+        cy = src_h * (0.48 + (0.02 * intensity) * math.sin(progress * math.pi))
     elif motion == 1:
-        zoom = 1.08
-        cx = src_w * (0.45 + 0.10 * progress)
+        zoom = 1.08 + (zoom_boost * 0.5)
+        cx = src_w * (0.45 + (0.10 * intensity) * progress)
         cy = src_h * 0.5
     else:
-        zoom = 1.06 + 0.04 * (1.0 - abs(0.5 - progress) * 2.0)
+        zoom = 1.06 + (0.04 + zoom_boost) * (1.0 - abs(0.5 - progress) * 2.0)
         cx = src_w * 0.55
-        cy = src_h * (0.47 + 0.03 * progress)
+        cy = src_h * (0.47 + (0.03 * intensity) * progress)
 
     crop_w = int(out_w / zoom)
     crop_h = int(out_h / zoom)
@@ -348,6 +365,7 @@ def _build_scene_frame(
     mouth_open: bool,
     background_image: Image.Image | None,
     portrait_images: list[Image.Image | None],
+    motion_style: str,
 ) -> Image.Image:
     base_scale = 1.18
     canvas_w = int(width * base_scale)
@@ -385,38 +403,67 @@ def _build_scene_frame(
     draw.rounded_rectangle((24, 22, min(canvas_w - 24, 320), 68), radius=14, fill="#ffffffcc")
     draw.text((38, 36), scene.title, fill="#0f172a", font=title_font)
 
-    bob = math.sin(progress * 2.0 * math.pi) * 5.0
-    left_x = int(canvas_w * 0.33)
-    right_x = int(canvas_w * 0.67)
+    motion_style = _normalize_motion_style(motion_style)
+    if motion_style == "high_energy":
+        entrance_speed = 4.0
+        entry_offset = canvas_w * 0.17
+        drift_amount = 26.0
+        bob_amount = 13.0
+        speaker_push = 34
+        breathe_base = 0.024
+        speaker_scale_boost = 0.12
+    else:
+        entrance_speed = 3.0
+        entry_offset = canvas_w * 0.12
+        drift_amount = 14.0
+        bob_amount = 8.0
+        speaker_push = 22
+        breathe_base = 0.014
+        speaker_scale_boost = 0.07
+
+    # Character motion: cinematic entry + continuous drift + bounce.
+    entrance = min(1.0, progress * entrance_speed)
+    drift = math.sin((progress * 2.0 * math.pi) + (scene_index * 0.9))
+    bob = math.sin(progress * 4.0 * math.pi) * bob_amount
+    left_x = int((canvas_w * 0.33) - ((1.0 - entrance) * entry_offset) + (drift * drift_amount))
+    right_x = int((canvas_w * 0.67) + ((1.0 - entrance) * entry_offset) - (drift * drift_amount))
     base_y = int(canvas_h * 0.32)
 
     left_active = active_speaker.lower() == characters[0].name.lower()
     right_active = active_speaker.lower() == characters[1].name.lower()
+    left_forward = speaker_push if left_active else 0
+    right_forward = speaker_push if right_active else 0
 
     left_portrait = portrait_images[0] if len(portrait_images) > 0 else None
     right_portrait = portrait_images[1] if len(portrait_images) > 1 else None
 
     if left_portrait is not None and right_portrait is not None:
-        portrait_size = int(canvas_w * 0.18)
-        top_y = int(base_y - 8 + (bob if left_active else 0))
-        top_y2 = int(base_y - 8 + (bob if right_active else 0))
-        _paste_round_portrait(image, left_portrait, left_x, top_y, portrait_size)
-        _paste_round_portrait(image, right_portrait, right_x, top_y2, portrait_size)
+        base_portrait_size = int(canvas_w * 0.18)
+        breathing = 1.0 + (breathe_base * math.sin(progress * 8.0 * math.pi))
+        left_scale = breathing + (speaker_scale_boost if left_active else 0.0)
+        right_scale = breathing + (speaker_scale_boost if right_active else 0.0)
+        left_size = int(base_portrait_size * max(0.86, left_scale))
+        right_size = int(base_portrait_size * max(0.86, right_scale))
+
+        top_y = int(base_y - 8 + bob)
+        top_y2 = int(base_y - 8 - bob)
+        _paste_round_portrait(image, left_portrait, left_x, top_y, left_size)
+        _paste_round_portrait(image, right_portrait, right_x, top_y2, right_size)
         draw = ImageDraw.Draw(image)
         ring_w = 8 if mouth_open else 5
-        draw.ellipse((left_x - portrait_size // 2 - 6, top_y - 6, left_x + portrait_size // 2 + 6, top_y + portrait_size + 6), outline=("#38bdf8" if left_active else "#ffffff88"), width=ring_w if left_active else 3)
-        draw.ellipse((right_x - portrait_size // 2 - 6, top_y2 - 6, right_x + portrait_size // 2 + 6, top_y2 + portrait_size + 6), outline=("#38bdf8" if right_active else "#ffffff88"), width=ring_w if right_active else 3)
+        draw.ellipse((left_x - left_size // 2 - 6, top_y - 6, left_x + left_size // 2 + 6, top_y + left_size + 6), outline=("#38bdf8" if left_active else "#ffffff88"), width=ring_w if left_active else 3)
+        draw.ellipse((right_x - right_size // 2 - 6, top_y2 - 6, right_x + right_size // 2 + 6, top_y2 + right_size + 6), outline=("#38bdf8" if right_active else "#ffffff88"), width=ring_w if right_active else 3)
         # Lip-sync cue bars
         bar_h = 24 + (8 if mouth_open else 0)
-        draw.rounded_rectangle((left_x - 18, top_y + portrait_size + 10, left_x + 18, top_y + portrait_size + 10 + bar_h), radius=7, fill=("#0ea5e9" if left_active else "#94a3b8"))
-        draw.rounded_rectangle((right_x - 18, top_y2 + portrait_size + 10, right_x + 18, top_y2 + portrait_size + 10 + bar_h), radius=7, fill=("#0ea5e9" if right_active else "#94a3b8"))
-        draw.text((left_x - 42, top_y + portrait_size + 40), characters[0].name, fill="#f8fafc", font=body_font)
-        draw.text((right_x - 42, top_y2 + portrait_size + 40), characters[1].name, fill="#f8fafc", font=body_font)
+        draw.rounded_rectangle((left_x - 18, top_y + left_size + 10, left_x + 18, top_y + left_size + 10 + bar_h), radius=7, fill=("#0ea5e9" if left_active else "#94a3b8"))
+        draw.rounded_rectangle((right_x - 18, top_y2 + right_size + 10, right_x + 18, top_y2 + right_size + 10 + bar_h), radius=7, fill=("#0ea5e9" if right_active else "#94a3b8"))
+        draw.text((left_x - 42, top_y + left_size + 40), characters[0].name, fill="#f8fafc", font=body_font)
+        draw.text((right_x - 42, top_y2 + right_size + 40), characters[1].name, fill="#f8fafc", font=body_font)
     else:
         _draw_character(
             draw,
-            left_x,
-            int(base_y + (bob if left_active else 0)),
+            left_x - left_forward,
+            int(base_y + bob),
             characters[0].body_color,
             characters[0].accent_color,
             characters[0].name,
@@ -426,8 +473,8 @@ def _build_scene_frame(
         )
         _draw_character(
             draw,
-            right_x,
-            int(base_y + (bob if right_active else 0)),
+            right_x + right_forward,
+            int(base_y - bob),
             characters[1].body_color,
             characters[1].accent_color,
             characters[1].name,
@@ -447,7 +494,7 @@ def _build_scene_frame(
         draw.text((42, y), line, fill="#f8fafc", font=body_font)
         y += 24
 
-    return _camera_crop(image, width, height, progress, scene_index)
+    return _camera_crop(image, width, height, progress, scene_index, motion_style)
 
 
 def _create_scene_audio(text: str, output_mp3: Path, language: str) -> None:
@@ -482,6 +529,7 @@ def _generate_scene_frames(
     output_dir: Path,
     background_image: Image.Image | None,
     portrait_images: list[Image.Image | None],
+    motion_style: str,
 ) -> list[Path]:
     turns = _parse_dialogue_turns(scene.dialogue, characters[0].name)
     total_frames = max(1, int(math.ceil(duration * fps)))
@@ -491,7 +539,8 @@ def _generate_scene_frames(
         t = frame_idx / max(1, total_frames - 1)
         timeline_index = min(len(turns) - 1, int(t * len(turns)))
         active_turn = turns[timeline_index]
-        mouth_open = math.sin((frame_idx / fps) * 9.0 * math.pi) > 0
+        lip_freq = 13.0 if _normalize_motion_style(motion_style) == "high_energy" else 9.0
+        mouth_open = math.sin((frame_idx / fps) * lip_freq * math.pi) > 0
 
         frame = _build_scene_frame(
             scene=scene,
@@ -504,6 +553,7 @@ def _generate_scene_frames(
             mouth_open=mouth_open,
             background_image=background_image,
             portrait_images=portrait_images,
+            motion_style=motion_style,
         )
         frame_path = output_dir / f"scene_{scene_index:02d}_frame_{frame_idx:04d}.png"
         frame.save(frame_path, format="PNG")
@@ -548,7 +598,10 @@ def _add_background_music_with_ducking(source_video: Path, target_video: Path, d
                 "-i",
                 str(bgm_path),
                 "-filter_complex",
-                "[1:a]volume=0.33[bg];[bg][0:a]sidechaincompress=threshold=0.045:ratio=10:attack=18:release=260[duck];[0:a][duck]amix=inputs=2:weights='1 1':normalize=0[aout]",
+                "[0:a]volume=2.0,highpass=f=120,lowpass=f=7000[voice];"
+                "[1:a]volume=0.07[bg];"
+                "[bg][voice]sidechaincompress=threshold=0.03:ratio=14:attack=8:release=220[bgduck];"
+                "[voice][bgduck]amix=inputs=2:weights='1 0.55':normalize=0[aout]",
                 "-map",
                 "0:v",
                 "-map",
@@ -571,7 +624,7 @@ def _add_background_music_with_ducking(source_video: Path, target_video: Path, d
                     "-i",
                     str(bgm_path),
                     "-filter_complex",
-                    "[1:a]volume=0.16[bg];[0:a][bg]amix=inputs=2:normalize=0[aout]",
+                    "[0:a]volume=2.0[voice];[1:a]volume=0.05[bg];[voice][bg]amix=inputs=2:weights='1 0.4':normalize=0[aout]",
                     "-map",
                     "0:v",
                     "-map",
@@ -601,12 +654,14 @@ def generate_text_to_video(
     guidance_scale: float = 9.0,
     seed: int = 42,
     language: str = "en",
+    motion_style: str = "cinematic",
 ) -> dict[str, Any]:
     clean_prompt = _clean_text(prompt)
     if not clean_prompt:
         raise RuntimeError("Prompt is required.")
 
     output_path = _resolve_output_path(output)
+    motion_style = _normalize_motion_style(motion_style)
     width = max(640, int(width))
     height = max(360, int(height))
     fps = max(8, int(fps))
@@ -645,6 +700,7 @@ def generate_text_to_video(
                 output_dir=tmp_dir,
                 background_image=_fetch_real_background(scene, int(width * 1.2), int(height * 1.2)),
                 portrait_images=portrait_images,
+                motion_style=motion_style,
             )
 
             clip = ImageSequenceClip([str(p) for p in frame_paths], fps=fps)
@@ -702,6 +758,7 @@ def generate_text_to_video(
         "lip_sync": True,
         "camera_motion": True,
         "bgm_ducking": used_bgm,
+        "motion_style": motion_style,
     }
 
 
@@ -719,6 +776,7 @@ def main() -> None:
     parser.add_argument("--guidance_scale", type=float, default=9.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--lang", default="en")
+    parser.add_argument("--motion_style", default="cinematic")
     args = parser.parse_args()
 
     result = generate_text_to_video(
@@ -734,6 +792,7 @@ def main() -> None:
         guidance_scale=args.guidance_scale,
         seed=args.seed,
         language=args.lang,
+        motion_style=args.motion_style,
     )
     print(json.dumps(result))
 

@@ -469,7 +469,8 @@ const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, heig
   const clipPath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}.mp4`);
   const speechPath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}-speech.mp3`);
   const tonePath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}-tone.mp3`);
-  let audioPath = tonePath;
+  let audioPath = '';
+  let ttsErrorMessage = '';
 
   try {
     const ttsScriptPath = path.join(__dirname, '..', 'scripts', 'scene_tts.py');
@@ -484,10 +485,17 @@ const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, heig
       cwd: path.join(__dirname, '..'),
     });
 
-    if (fs.existsSync(speechPath)) {
+    if (fs.existsSync(speechPath) && fs.statSync(speechPath).size > 2048) {
       audioPath = speechPath;
+    } else {
+      ttsErrorMessage = 'scene_tts.py did not produce valid speech audio';
     }
-  } catch (_error) {
+  } catch (error) {
+    ttsErrorMessage = sanitizeText(error?.message || 'scene_tts.py failed');
+  }
+
+  const allowToneFallback = String(process.env.ALLOW_TONE_FALLBACK || 'false').toLowerCase() === 'true';
+  if (!audioPath && allowToneFallback) {
     const baseHz = 260 + ((index * 47) % 190);
     const overHz = baseHz + 120;
     await runFfmpeg([
@@ -498,6 +506,13 @@ const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, heig
       '-b:a', '96k',
       tonePath,
     ], outputDir);
+    audioPath = tonePath;
+  }
+
+  if (!audioPath) {
+    throw new Error(
+      `Voice generation failed for scene ${index + 1}. ${ttsErrorMessage || 'No speech audio created.'}`
+    );
   }
 
   const zoom = [
