@@ -49,6 +49,7 @@ const getStudioCapabilities = () => ({
 });
 
 const toSafeProjectDirectoryName = (value = '') => String(value).replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
+const sanitizeStatusText = (value = '') => String(value || '').replace(/\u0000/g, '').trim();
 
 const buildRequestOrigin = (req) => {
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
@@ -369,6 +370,21 @@ router.post('/render', async (req, res) => {
       return res.status(400).json({ success: false, error: payloadError });
     }
 
+    const renderStartedAt = new Date().toISOString();
+    try {
+      await patchStudioProject(resolvedProject.projectId, {
+        renderStatus: 'rendering',
+        renderProgress: 15,
+        renderError: '',
+        renderRequestedAt: renderStartedAt,
+        renderStartedAt,
+      });
+    } catch (statusPatchError) {
+      logger.warn(
+        `Video studio render status patch failed before render start project=${resolvedProject.projectId}: ${statusPatchError?.message || statusPatchError}`
+      );
+    }
+
     activeRenderCount += 1;
     logger.info(
       `Video studio render started (active=${activeRenderCount}/${maxParallelRenders}) project=${resolvedProject.projectId} ${formatMemoryUsage()}`
@@ -393,6 +409,10 @@ router.post('/render', async (req, res) => {
         renderedAt,
         premiumExport: Boolean(premiumHD),
         scenes: resolvedProject.scenes,
+        renderStatus: 'ready',
+        renderProgress: 100,
+        renderError: '',
+        renderCompletedAt: renderedAt,
       });
 
       logger.info(
@@ -406,6 +426,20 @@ router.post('/render', async (req, res) => {
         projectId: result.projectId,
         ...getStudioCapabilities(),
       });
+    } catch (renderError) {
+      try {
+        await patchStudioProject(resolvedProject.projectId, {
+          renderStatus: 'failed',
+          renderProgress: 0,
+          renderError: sanitizeStatusText(renderError?.message || 'Video rendering failed.'),
+          renderFailedAt: new Date().toISOString(),
+        });
+      } catch (statusPatchError) {
+        logger.warn(
+          `Video studio render status patch failed after render error project=${resolvedProject.projectId}: ${statusPatchError?.message || statusPatchError}`
+        );
+      }
+      throw renderError;
     } finally {
       activeRenderCount = Math.max(0, activeRenderCount - 1);
     }
@@ -469,6 +503,21 @@ router.post('/render-cartoon', async (req, res) => {
       return res.status(400).json({ success: false, error: payloadError });
     }
 
+    const renderStartedAt = new Date().toISOString();
+    try {
+      await patchStudioProject(resolvedProject.projectId, {
+        renderStatus: 'rendering',
+        renderProgress: 15,
+        renderError: '',
+        renderRequestedAt: renderStartedAt,
+        renderStartedAt,
+      });
+    } catch (statusPatchError) {
+      logger.warn(
+        `Video studio render-cartoon status patch failed before render start project=${resolvedProject.projectId}: ${statusPatchError?.message || statusPatchError}`
+      );
+    }
+
     activeRenderCount += 1;
     logger.info(
       `Video studio render-cartoon started (active=${activeRenderCount}/${maxParallelRenders}) project=${resolvedProject.projectId} ${formatMemoryUsage()}`
@@ -494,6 +543,10 @@ router.post('/render-cartoon', async (req, res) => {
         premiumExport: Boolean(premiumHD),
         scenes: resolvedProject.scenes,
         renderMode: 'real-cartoon-backend',
+        renderStatus: 'ready',
+        renderProgress: 100,
+        renderError: '',
+        renderCompletedAt: renderedAt,
       });
 
       logger.info(
@@ -510,6 +563,20 @@ router.post('/render-cartoon', async (req, res) => {
         aiImagesEnabled: Boolean(result.aiImagesEnabled),
         ...getStudioCapabilities(),
       });
+    } catch (renderError) {
+      try {
+        await patchStudioProject(resolvedProject.projectId, {
+          renderStatus: 'failed',
+          renderProgress: 0,
+          renderError: sanitizeStatusText(renderError?.message || 'Cartoon video rendering failed.'),
+          renderFailedAt: new Date().toISOString(),
+        });
+      } catch (statusPatchError) {
+        logger.warn(
+          `Video studio render-cartoon status patch failed after render error project=${resolvedProject.projectId}: ${statusPatchError?.message || statusPatchError}`
+        );
+      }
+      throw renderError;
     } finally {
       activeRenderCount = Math.max(0, activeRenderCount - 1);
     }
@@ -714,23 +781,34 @@ router.get('/projects/:projectId/status', async (req, res) => {
     const projectVideoExists = localUploadExistsForVideoUrl(projectVideoUrl);
     const rawVideoUrl = projectVideoExists ? projectVideoUrl : '';
     const hasVideo = Boolean(rawVideoUrl) || hasOutputFile;
+    const projectRenderStatus = sanitizeStatusText(project?.renderStatus).toLowerCase();
     const origin = buildRequestOrigin(req);
     const relativeVideoUrl = rawVideoUrl || (latestRender?.relativeUrl || '');
     const absoluteVideoUrl = toAbsoluteVideoUrl(origin, relativeVideoUrl, versionToken);
-
     const status = hasVideo
       ? 'ready'
-      : project
-        ? 'rendering'
-        : 'not_found';
+      : projectRenderStatus === 'failed'
+        ? 'failed'
+        : project
+          ? 'rendering'
+          : 'not_found';
+    const parsedProgress = Number(project?.renderProgress);
+    const progress = Number.isFinite(parsedProgress)
+      ? Math.max(0, Math.min(100, parsedProgress))
+      : hasVideo
+        ? 100
+        : status === 'rendering'
+          ? 70
+          : 0;
 
     res.json({
       success: true,
       projectId: project?.projectId || requestedProjectId,
       status,
-      progress: hasVideo ? 100 : status === 'rendering' ? 70 : 0,
+      progress,
       videoUrl: absoluteVideoUrl,
       downloadUrl: absoluteVideoUrl,
+      error: status === 'failed' ? sanitizeStatusText(project?.renderError || 'Video render failed.') : '',
       ...getStudioCapabilities(),
     });
   } catch (error) {
@@ -769,6 +847,14 @@ router.get('/projects/:projectId/download', async (req, res) => {
     }
 
     if (!rawVideoUrl) {
+      const projectRenderStatus = sanitizeStatusText(project?.renderStatus).toLowerCase();
+      if (projectRenderStatus === 'failed') {
+        return res.status(409).json({
+          success: false,
+          code: 'RENDER_FAILED',
+          error: sanitizeStatusText(project?.renderError || 'Video rendering failed on server.'),
+        });
+      }
       return res.status(404).json({ success: false, error: 'No rendered video is available for this project yet.' });
     }
 

@@ -1361,9 +1361,10 @@ const KidsStoryVideoMaker = () => {
       setIsRendering(true);
       startRenderProgress();
 
+      let selectedEngine = "";
       try {
         const normalizedEngine = normalizeRenderEngine(hfRenderEngine);
-        const selectedEngine = normalizedEngine && normalizedEngine !== "image_ffmpeg" ? normalizedEngine : "";
+        selectedEngine = normalizedEngine && normalizedEngine !== "image_ffmpeg" ? normalizedEngine : "";
         const selectedLanguageCode = (
           LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US"
         )
@@ -1512,16 +1513,28 @@ const KidsStoryVideoMaker = () => {
 
       if (canRecover) {
         try {
+          const isLongGpuRender = selectedEngine === "cogvideox";
+          const recoveryMaxAttempts = isLongGpuRender ? 180 : 24;
+          const recoveryIntervalMs = isLongGpuRender ? 10000 : 5000;
+          const recoveryRequestTimeoutMs = isLongGpuRender ? 30000 : 20000;
           setRenderProgress((current) => Math.max(current, 85));
-          setRenderProgressLabel("Render processing on server. Checking video status...");
-          setMessage("Render request finished without response. Checking video availability...");
+          setRenderProgressLabel(
+            isLongGpuRender
+              ? "GPU render in progress. This can take several minutes. Checking video status..."
+              : "Render processing on server. Checking video status..."
+          );
+          setMessage(
+            isLongGpuRender
+              ? "CogVideoX GPU render is still running. Waiting for video availability..."
+              : "Render request finished without response. Checking video availability..."
+          );
 
           const { payload } = await runCancelableRequest("render-download-poll", (signal) =>
             waitForRenderedVideo(generatedProject.projectId, {
               signal,
-              maxAttempts: 24,
-              intervalMs: 5000,
-              timeoutMs: 20000,
+              maxAttempts: recoveryMaxAttempts,
+              intervalMs: recoveryIntervalMs,
+              timeoutMs: recoveryRequestTimeoutMs,
               previousVideoUrl: generatedProject.videoUrl || videoUrl || "",
             })
           );

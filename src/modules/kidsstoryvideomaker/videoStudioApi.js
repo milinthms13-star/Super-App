@@ -413,6 +413,16 @@ export const waitForRenderedVideo = async (
         timeoutMs,
       });
       const status = String(statusResult?.payload?.status || "").toLowerCase();
+      if (status === "failed") {
+        throw new VideoStudioApiError(
+          statusResult?.payload?.error || "Video rendering failed on server.",
+          {
+            status: 422,
+            code: "RENDER_FAILED",
+            payload: statusResult?.payload,
+          }
+        );
+      }
       if (status === "ready" && (statusResult.payload?.downloadUrl || statusResult.payload?.videoUrl)) {
         const candidateVideoUrl = statusResult.payload.videoUrl || statusResult.payload.downloadUrl;
         const candidateComparableUrl = normalizeComparableVideoUrl(candidateVideoUrl);
