@@ -325,6 +325,49 @@ describe('astrology routes integration', () => {
     expect(response.body.data.availableSlots.some((slot) => slot.label === 'Saturday 4:30 PM')).toBe(true);
   });
 
+  test('POST /api/astrology/consultants/add-slot blocks non-consultant non-admin users', async () => {
+    await request(app)
+      .post('/api/astrology/consultants/add-slot')
+      .set('x-user-role', 'user')
+      .set('x-user-id', 'astro-user-plain')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotTime: 'Saturday 6:00 PM',
+      })
+      .expect(403);
+  });
+
+  test('PATCH /api/astrology/consultations/:bookingId/status allows owner to cancel only', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .set('x-user-role', 'user')
+      .set('x-user-id', 'astro-owner-1')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+
+    await request(app)
+      .patch(`/api/astrology/consultations/${bookingId}/status`)
+      .set('x-user-role', 'user')
+      .set('x-user-id', 'astro-owner-1')
+      .send({ status: 'completed' })
+      .expect(403);
+
+    const cancelResponse = await request(app)
+      .patch(`/api/astrology/consultations/${bookingId}/status`)
+      .set('x-user-role', 'user')
+      .set('x-user-id', 'astro-owner-1')
+      .send({ status: 'cancelled' })
+      .expect(200);
+
+    expect(cancelResponse.body.success).toBe(true);
+    expect(cancelResponse.body.data.status).toBe('cancelled');
+  });
+
   test('GET /api/astrology/experiments/variants returns assigned experiment variants', async () => {
     const response = await request(app)
       .get('/api/astrology/experiments/variants')

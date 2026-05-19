@@ -20,17 +20,17 @@ const FEATURE_TABS = [
 
 const MOBILE_NAV_ITEMS = [
   { key: "today", label: "Home" },
-  { key: "today", label: "Horoscope" },
+  { key: "kundli", label: "Kundli" },
   { key: "ai", label: "AI Astro" },
   { key: "remedies", label: "Remedies" },
   { key: "profile", label: "Profile" },
 ];
 
 const GENDER_OPTIONS = [
-  { value: "", label: "Select gender", labelMl: "Ã Â´Â²Ã Â´Â¿Ã Â´â€šÃ Â´â€”Ã Â´â€š Ã Â´Â¤Ã Â´Â¿Ã Â´Â°Ã Â´Å¾Ã ÂµÂÃ Â´Å¾Ã Âµâ€ Ã Â´Å¸Ã ÂµÂÃ Â´â€¢Ã ÂµÂÃ Â´â€¢Ã ÂµÂÃ Â´â€¢" },
-  { value: "male", label: "Male", labelMl: "Ã Â´ÂªÃ ÂµÂÃ Â´Â°Ã ÂµÂÃ Â´Â·Ã ÂµÂ»" },
-  { value: "female", label: "Female", labelMl: "Ã Â´Â¸Ã ÂµÂÃ Â´Â¤Ã ÂµÂÃ Â´Â°Ã Âµâ‚¬" },
-  { value: "other", label: "Other", labelMl: "Ã Â´Â®Ã Â´Â±Ã ÂµÂÃ Â´Â±Ã ÂµÂÃ Â´Â³Ã ÂµÂÃ Â´Â³Ã Â´ÂµÃ ÂµÂ¼" },
+  { value: "", label: "Select gender", labelMl: "Select gender" },
+  { value: "male", label: "Male", labelMl: "Male" },
+  { value: "female", label: "Female", labelMl: "Female" },
+  { value: "other", label: "Other", labelMl: "Other" },
 ];
 
 const DEFAULT_BIRTH_TIME_ZONE = "Asia/Kolkata";
@@ -916,7 +916,19 @@ const getDefaultFamilyProfile = (profile, userName) => ({
   lagna: profile?.lagna || getLagnaFromTime(profile?.birthTime || "06:00"),
 });
 
-const localize = (en, ml, language) => (language === "ml" ? ml : en);
+const hasLikelyMojibake = (value = "") =>
+  /Ã|Â|à´|â‚¬|â€|â€š|â€œ|â€/i.test(String(value || ""));
+
+const localize = (en, ml, language) => {
+  if (language !== "ml") {
+    return en;
+  }
+  const normalizedMl = String(ml || "").trim();
+  if (!normalizedMl || hasLikelyMojibake(normalizedMl)) {
+    return en;
+  }
+  return normalizedMl;
+};
 
 const AstrologyHome = () => {
   const { currentUser } = useApp();

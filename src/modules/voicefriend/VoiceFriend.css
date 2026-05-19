@@ -164,6 +164,72 @@
   box-shadow: 0 0 0 4px rgba(14, 165, 164, 0.16);
 }
 
+.voice-friend-face-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.voice-friend-face-presets select,
+.voice-friend-face-presets input {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--vf-ink-900);
+  padding: 0 10px;
+  min-width: 150px;
+}
+
+.voice-friend-preset-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.voice-friend-preset-thumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--vf-ink-900);
+  padding: 0 10px 0 6px;
+  cursor: pointer;
+}
+
+.voice-friend-preset-thumb.active {
+  border-color: rgba(14, 165, 164, 0.65);
+  box-shadow: 0 0 0 3px rgba(14, 165, 164, 0.12);
+}
+
+.voice-friend-preset-thumb:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.voice-friend-preset-thumb-image {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background-size: cover;
+  background-position: center;
+  background-color: rgba(203, 213, 225, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.voice-friend-preset-thumb-name {
+  max-width: 120px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .voice-friend-summary {
   margin-top: 14px;
   display: flex;

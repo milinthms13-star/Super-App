@@ -77,6 +77,49 @@ const isBookingOwner = (booking, req) => {
   return bookingUserId === requestUserId;
 };
 
+const getRequestUserId = (req) => String(req.user?._id || req.user?.id || '');
+
+const isConsultantUser = (req) => {
+  const role = String(req.user?.role || req.user?.registrationType || '')
+    .trim()
+    .toLowerCase();
+  return role === 'consultant' || Boolean(req.user?.consultantId);
+};
+
+const getConsultantIdsForUser = (req) => {
+  const ids = new Set();
+  const fromUserId = getRequestUserId(req);
+  const fromConsultantId = sanitizeText(req.user?.consultantId, 80);
+  if (fromUserId) ids.add(fromUserId);
+  if (fromConsultantId) ids.add(fromConsultantId);
+  return ids;
+};
+
+const hasConsultantAccess = (req, consultantId = '') => {
+  if (hasAdminPrivileges(req.user)) {
+    return true;
+  }
+  if (!isConsultantUser(req)) {
+    return false;
+  }
+  const targetId = sanitizeText(consultantId, 80);
+  if (!targetId) {
+    return true;
+  }
+  return getConsultantIdsForUser(req).has(targetId);
+};
+
+const ensureConsultantScopeAccess = (req, res, consultantId = '') => {
+  if (hasConsultantAccess(req, consultantId)) {
+    return true;
+  }
+  res.status(403).json({
+    success: false,
+    message: 'Access denied for this consultant.',
+  });
+  return false;
+};
+
 const ensureBookingAccess = (booking, req, res) => {
   if (!booking) {
     res.status(404).json({
@@ -1643,7 +1686,10 @@ router.get('/consultants', (req, res) => {
 
 router.get('/consultants/:consultantId', authenticate, async (req, res) => {
   const consultantId = sanitizeText(req.params.consultantId, 80);
-  const consultant = getConsultantById(consultantId) || listConsultants()[0];
+  if (!ensureConsultantScopeAccess(req, res, consultantId)) {
+    return;
+  }
+  const consultant = getConsultantById(consultantId);
 
   if (!consultant) {
     return res.status(404).json({
@@ -1660,6 +1706,9 @@ router.get('/consultants/:consultantId', authenticate, async (req, res) => {
 
 router.put('/consultants/:consultantId', authenticate, async (req, res) => {
   const consultantId = sanitizeText(req.params.consultantId, 80);
+  if (!ensureConsultantScopeAccess(req, res, consultantId)) {
+    return;
+  }
   const payload = req.body || {};
   const consultantUpdates = {};
 
@@ -1701,7 +1750,10 @@ router.put('/consultants/:consultantId', authenticate, async (req, res) => {
 });
 
 router.post('/consultants/add-slot', authenticate, async (req, res) => {
-  const consultantId = sanitizeText(req.body?.consultantId || req.user?.consultantId || 'acharya-madhav', 80);
+  const consultantId = sanitizeText(req.body?.consultantId || req.user?.consultantId || req.user?.id || '', 80);
+  if (!ensureConsultantScopeAccess(req, res, consultantId)) {
+    return;
+  }
   const slotLabel = sanitizeText(req.body?.slotTime || req.body?.slotLabel, 80);
   const consultant = addConsultantSlot(consultantId, slotLabel);
 
@@ -1719,7 +1771,10 @@ router.post('/consultants/add-slot', authenticate, async (req, res) => {
 });
 
 router.delete('/consultants/remove-slot', authenticate, async (req, res) => {
-  const consultantId = sanitizeText(req.body?.consultantId || req.user?.consultantId || 'acharya-madhav', 80);
+  const consultantId = sanitizeText(req.body?.consultantId || req.user?.consultantId || req.user?.id || '', 80);
+  if (!ensureConsultantScopeAccess(req, res, consultantId)) {
+    return;
+  }
   const slotLabel = sanitizeText(req.body?.slotTime || req.body?.slotId || '', 80);
   const consultant = removeConsultantSlot(consultantId, slotLabel);
 
@@ -1854,7 +1909,13 @@ router.post('/consultations/book', authenticate, async (req, res) => {
 
 router.get('/consultations/consultant-bookings', authenticate, async (req, res) => {
   try {
-    const consultantId = sanitizeText(req.query?.consultantId || req.user?.consultantId || '', 80);
+    const requestedConsultantId = sanitizeText(req.query?.consultantId || '', 80);
+    const consultantId = hasAdminPrivileges(req.user)
+      ? requestedConsultantId
+      : sanitizeText(requestedConsultantId || req.user?.consultantId || req.user?.id || '', 80);
+    if (!ensureConsultantScopeAccess(req, res, consultantId)) {
+      return;
+    }
     const allBookings = await listAllConsultationBookings();
     const scopedBookings = consultantId
       ? allBookings.filter((booking) => booking.consultantId === consultantId)
@@ -1874,7 +1935,13 @@ router.get('/consultations/consultant-bookings', authenticate, async (req, res) 
 
 router.get('/consultations/consultant-earnings', authenticate, async (req, res) => {
   try {
-    const consultantId = sanitizeText(req.query?.consultantId || req.user?.consultantId || '', 80);
+    const requestedConsultantId = sanitizeText(req.query?.consultantId || '', 80);
+    const consultantId = hasAdminPrivileges(req.user)
+      ? requestedConsultantId
+      : sanitizeText(requestedConsultantId || req.user?.consultantId || req.user?.id || '', 80);
+    if (!ensureConsultantScopeAccess(req, res, consultantId)) {
+      return;
+    }
     const allBookings = await listAllConsultationBookings();
     const scopedBookings = consultantId
       ? allBookings.filter((booking) => booking.consultantId === consultantId)
@@ -1917,6 +1984,30 @@ router.patch('/consultations/:bookingId/status', authenticate, async (req, res) 
       return res.status(400).json({
         success: false,
         message: 'Invalid booking status value.',
+      });
+    }
+
+    const existingBooking = await findConsultationBookingById(bookingId);
+    if (!existingBooking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found.',
+      });
+    }
+
+    const requesterIsAdmin = hasAdminPrivileges(req.user);
+    const requesterIsOwner = isBookingOwner(existingBooking, req);
+    const requesterCanManageConsultant = hasConsultantAccess(req, existingBooking.consultantId);
+    if (!requesterIsAdmin && !requesterCanManageConsultant && !requesterIsOwner) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied for this booking.',
+      });
+    }
+    if (!requesterIsAdmin && !requesterCanManageConsultant && requesterIsOwner && nextStatus !== 'cancelled') {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only cancel your own booking.',
       });
     }
 

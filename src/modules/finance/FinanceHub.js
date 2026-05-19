@@ -365,7 +365,7 @@ const FinanceHub = () => {
 
   const [leadForm, setLeadForm] = useState(INITIAL_LEAD_FORM);
   const [documentsByCategory, setDocumentsByCategory] = useState(createEmptyDocuments());
-  const [leadState, setLeadState] = useState({ loading: false, error: "", success: "", consentAt: "" });
+  const [leadState, setLeadState] = useState({ loading: false, error: "", success: "", consentAt: "", leadId: "", supportPhone: "" });
 
   const [trackPhone, setTrackPhone] = useState("");
   const [leadHistory, setLeadHistory] = useState([]);
@@ -698,11 +698,11 @@ const FinanceHub = () => {
 
   const handleLeadSubmit = async (event) => {
     event.preventDefault();
-    setLeadState({ loading: true, error: "", success: "", consentAt: "" });
+    setLeadState({ loading: true, error: "", success: "", consentAt: "", leadId: "", supportPhone: "" });
 
     const validationErrors = getLeadFormErrors(leadForm);
     if (validationErrors.length > 0) {
-      setLeadState({ loading: false, error: validationErrors.join(" "), success: "", consentAt: "" });
+      setLeadState({ loading: false, error: validationErrors.join(" "), success: "", consentAt: "", leadId: "", supportPhone: "" });
       return;
     }
 
@@ -731,6 +731,8 @@ const FinanceHub = () => {
         error: "",
         success: `${createdLead?.leadId || "Lead"} submitted successfully.`,
         consentAt: new Date().toLocaleString(),
+        leadId: createdLead?.leadId || "",
+        supportPhone: String(createdLead?.phone || leadForm.phone || "").replace(/\D/g, "").slice(-10),
       });
       setLeadForm(INITIAL_LEAD_FORM);
       setDocumentsByCategory(createEmptyDocuments());
@@ -752,6 +754,8 @@ const FinanceHub = () => {
         error: error?.response?.data?.message || "Lead submission failed.",
         success: "",
         consentAt: "",
+        leadId: "",
+        supportPhone: "",
       });
     }
   };
@@ -924,6 +928,32 @@ const FinanceHub = () => {
     setActiveTab("apply");
   };
 
+  const openApplyWithInstitution = (institution) => {
+    if (!institution) return;
+
+    const institutionId = institution._id || institution.id || "";
+    setLeadForm((current) => ({
+      ...current,
+      institutionId,
+      loanCategory: selectedCategory === "all" ? current.loanCategory : selectedCategory,
+      state: stateFilter === "all" ? current.state : stateFilter,
+      district: districtFilter === "all" ? current.district : districtFilter,
+      documentNotes: `${current.documentNotes || ""}${current.documentNotes ? "\n" : ""}Preferred lender: ${institution.name}`,
+    }));
+    setInstitutionDashboardId(institutionId);
+    setActiveTab("apply");
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const openTracker = () => {
+    setActiveTab("track");
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   const canUseConsultantWorkflow = roleCapabilities.isConsultant;
   const canUseAdminWorkflow = roleCapabilities.isAdmin;
   const canUseInstitutionWorkflow = roleCapabilities.isAdmin || roleCapabilities.isConsultant || roleCapabilities.isInstitutionUser;
@@ -1063,6 +1093,25 @@ const FinanceHub = () => {
           </div>
         </div>
 
+        <div className="finance-primary-actions" aria-label="Finance quick actions">
+          <button type="button" onClick={startEligibilityFromQuickJourney}>
+            <strong>Check Eligibility</strong>
+            <small>Know approval chance first</small>
+          </button>
+          <button type="button" onClick={() => setActiveTab("loans")}>
+            <strong>Compare Loans</strong>
+            <small>Bank, NBFC and partner offers</small>
+          </button>
+          <button type="button" onClick={startApplicationFromQuickJourney}>
+            <strong>Apply for Loan</strong>
+            <small>Submit enquiry with documents</small>
+          </button>
+          <button type="button" onClick={openTracker}>
+            <strong>Track Application</strong>
+            <small>Status, callback and documents</small>
+          </button>
+        </div>
+
         <div className="finance-tab-row">
           {TABS.map((tab) => (
             <button
@@ -1091,6 +1140,7 @@ const FinanceHub = () => {
           categories={LOAN_CATEGORIES}
           filters={{ selectedCategory, filteredLoanCategories, filteredInstitutions, institutionLoadState }}
           onFilterChange={{ setSelectedCategory }}
+          onApplyWithInstitution={openApplyWithInstitution}
         />
       ) : null}
 

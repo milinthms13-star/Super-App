@@ -3,8 +3,8 @@
 export function getLeadFormErrors(form = {}) {
   const issues = [];
 
-  if (!/^[A-Za-z ]+$/.test(String(form.fullName || "").trim())) {
-    issues.push("Name should contain letters and spaces only.");
+  if (!/^[A-Za-z .'-]{2,80}$/.test(String(form.fullName || "").trim())) {
+    issues.push("Enter a valid name using letters, spaces, dot, apostrophe or hyphen.");
   }
 
   if (!/^\d{10}$/.test(String(form.phone || "").trim())) {
@@ -34,8 +34,8 @@ export function getLeadFormErrors(form = {}) {
 export function getEligibilityFormErrors(form = {}) {
   const issues = [];
 
-  if (!/^[A-Za-z ]+$/.test(String(form.fullName || "").trim())) {
-    issues.push("Name should contain letters and spaces only.");
+  if (!/^[A-Za-z .'-]{2,80}$/.test(String(form.fullName || "").trim())) {
+    issues.push("Enter a valid name using letters, spaces, dot, apostrophe or hyphen.");
   }
 
   if (!/^\d{10}$/.test(String(form.phone || "").trim())) {

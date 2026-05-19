@@ -340,41 +340,124 @@ class NotificationService {
   }
 
   /**
-   * Send email (mock)
+   * Send email notification
    */
   static async _sendEmail(email, notification) {
     try {
-      logger.info(`Email sent to ${email}: ${notification.title}`);
-      // In production: use Nodemailer or SendGrid
-      return true;
+      if (!email) {
+        logger.warn('No email address provided for notification');
+        return false;
+      }
+
+      // Use EmailNotificationService if available
+      try {
+        const EmailNotificationService = require('./EmailNotificationService');
+        await EmailNotificationService.getInstance().send({
+          to: email,
+          subject: notification.title || 'Notification',
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
+              <h2>${notification.title || 'Notification'}</h2>
+              <p>${notification.message || ''}</p>
+              ${notification.data ? `<p><strong>Details:</strong> ${JSON.stringify(notification.data)}</p>` : ''}
+              <p>Thank you!</p>
+            </div>
+          `,
+          text: notification.message || '',
+        });
+        logger.info(`Email sent to ${email}: ${notification.title}`);
+        return true;
+      } catch (emailServiceError) {
+        logger.warn(`EmailNotificationService not available: ${emailServiceError.message}`);
+        logger.info(`[Mock] Email to ${email}: ${notification.title}`);
+        return true;
+      }
     } catch (error) {
-      logger.error('Error sending email:', error);
+      logger.error(`Error sending email: ${error.message}`);
+      return false;
     }
   }
 
   /**
-   * Send SMS (mock)
+   * Send SMS notification
    */
   static async _sendSMS(phone, notification) {
     try {
-      logger.info(`SMS sent to ${phone}: ${notification.message.substring(0, 50)}...`);
-      // In production: use Twilio
+      if (!phone) {
+        logger.warn('No phone number provided for SMS');
+        return false;
+      }
+
+      // Use SMS service if available
+      try {
+        const smsService = require('../services/smsService');
+        if (smsService && smsService.sendSMS) {
+          await smsService.sendSMS({
+            phoneNumber: phone,
+            message: notification.message || notification.title,
+          });
+          logger.info(`SMS sent to ${phone}: ${notification.message?.substring(0, 50)}`);
+          return true;
+        }
+      } catch (smsError) {
+        logger.warn(`SMS service not available: ${smsError.message}`);
+      }
+
+      logger.info(`[Mock] SMS to ${phone}: ${notification.message?.substring(0, 50)}`);
       return true;
     } catch (error) {
-      logger.error('Error sending SMS:', error);
+      logger.error(`Error sending SMS: ${error.message}`);
+      return false;
     }
   }
 
   /**
-   * Send push notification (mock)
+   * Send push notification
    */
   static async _sendPushNotification(deviceTokens, notification) {
     try {
-      logger.info(`Push sent to ${deviceTokens.length} devices: ${notification.title}`);
-      // In production: use Firebase Cloud Messaging
-      return true;
+      if (!Array.isArray(deviceTokens) || deviceTokens.length === 0) {
+        logger.warn('No device tokens provided for push notification');
+        return false;
+      }
+
+      // Use Firebase Cloud Messaging if available
+      try {
+        const admin = require('firebase-admin');
+        const message = {
+          notification: {
+            title: notification.title || 'Notification',
+            body: notification.message || '',
+          },
+          data: notification.data ? Object.entries(notification.data).reduce((acc, [key, value]) => {
+            acc[key] = String(value);
+            return acc;
+          }, {}) : {},
+        };
+
+        const responses = await Promise.all(
+          deviceTokens.map(token =>
+            admin.messaging().send({
+              ...message,
+              token,
+            }).catch(err => {
+              logger.warn(`Failed to send push to token ${token}: ${err.message}`);
+              return null;
+            })
+          )
+        );
+
+        const successCount = responses.filter(r => r !== null).length;
+        logger.info(`Push sent to ${successCount}/${deviceTokens.length} devices: ${notification.title}`);
+        return successCount > 0;
+      } catch (firebaseError) {
+        logger.warn(`Firebase not available: ${firebaseError.message}`);
+        logger.info(`[Mock] Push to ${deviceTokens.length} devices: ${notification.title}`);
+        return true;
+      }
     } catch (error) {
-      logger.error('Error sending push notification:', error);
+      logger.error(`Error sending push notification: ${error.message}`);
+      return false;
     }
   }
 

@@ -156,6 +156,13 @@ const AI_FRIENDS = {
   },
 };
 
+const LANGUAGE_NAME_MAP = {
+  en: 'English',
+  hi: 'Hindi',
+  ml: 'Malayalam',
+  kn: 'Kannada',
+};
+
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 6; // 6 hours
 const sessionsFilePath = path.join(__dirname, '../data/voiceFriendSessions.json');
@@ -221,7 +228,17 @@ const buildFriendProfile = (friendId) => {
   return AI_FRIENDS[friendId] || AI_FRIENDS.nila;
 };
 
-const mapSpeechVoice = (voiceKey) => {
+const getLanguageName = (code = 'en') => {
+  const normalizedCode = String(code || 'en').trim().toLowerCase();
+  return LANGUAGE_NAME_MAP[normalizedCode] || 'English';
+};
+
+const mapSpeechVoice = (voiceKey, language = 'en') => {
+  const normalizedLanguage = String(language || 'en').trim().toLowerCase();
+  if (normalizedLanguage === 'ml') return 'ml-IN-Standard-A';
+  if (normalizedLanguage === 'hi') return 'hi-IN-Standard-A';
+  if (normalizedLanguage === 'kn') return 'kn-IN-Standard-A';
+
   const voiceMap = {
     'female-soft': 'en-US-Standard-F',
     'male-calm': 'en-US-Standard-I',
@@ -231,12 +248,12 @@ const mapSpeechVoice = (voiceKey) => {
   return voiceMap[voiceKey] || voiceMap.default;
 };
 
-const getSpeechVoice = (friendId, overrideVoice) => {
+const getSpeechVoice = (friendId, overrideVoice, language = 'en') => {
   if (process.env.GEMINI_VOICE_FRIEND_TTS_VOICE) {
     return process.env.GEMINI_VOICE_FRIEND_TTS_VOICE;
   }
   const friend = buildFriendProfile(friendId);
-  return mapSpeechVoice(overrideVoice || friend.voice || 'default');
+  return mapSpeechVoice(overrideVoice || friend.voice || 'default', language);
 };
 
 const normalizeAudioResponse = async (audioResponse) => {
@@ -308,11 +325,15 @@ const buildPersonaPrompt = (session) => {
         : session.persona === 'partner'
           ? 'Speak like a trusted companion: deeply understanding, warm, and respectful while still emotionally supportive.'
           : 'Keep the tone supportive, loving, and reassuring.';
+  const languageName = getLanguageName(session.language);
   const languagePrompt = session.language && session.language !== 'en'
-    ? `Answer naturally in ${session.language} when appropriate, while keeping the tone supportive and easy to understand.`
+    ? `Answer naturally in ${languageName}. Do not say you are answering in ${languageName}; just speak naturally in that language with a supportive tone.`
     : 'Answer naturally in English with a warm, conversational rhythm.';
+  const avatarIdentityPrompt = session.friendCustomAvatar
+    ? 'A custom face/avatar image is uploaded for you. Treat that image as your fixed identity and keep responses consistent with that persona.'
+    : '';
 
-  return `${basePrompt} ${scenarioPrompt} ${moodPrompt} ${personaPrompt} ${languagePrompt}
+  return `${basePrompt} ${scenarioPrompt} ${moodPrompt} ${personaPrompt} ${languagePrompt} ${avatarIdentityPrompt}
 
 Rules:
 - Use the user's name (${userName}) naturally when it feels right.
@@ -560,7 +581,7 @@ const generateSpeech = async ({ text, friendId = 'nila', voice, language = 'en' 
   try {
     const speechResponse = await aiClient.audio.speech.create({
       model: process.env.GEMINI_VOICE_FRIEND_TTS_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-      voice: getSpeechVoice(friendId, voice),
+      voice: getSpeechVoice(friendId, voice, language),
       input: text,
       format: 'mp3',
     });

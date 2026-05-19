@@ -246,7 +246,7 @@ const normalizeConsultantPayload = (payload = {}) => ({
   id: String(payload.id || payload.name || `consultant-${Math.random().toString(36).slice(2)}`).trim(),
   name: String(payload.name || "Astrology Consultant").trim(),
   specialty: String(payload.specialty || "General consultation").trim(),
-  rate: String(payload.rate || "₹1,000 / 15 min").trim(),
+  rate: String(payload.rate || "INR 1,000 / 15 min").trim(),
   amountInr: Number(payload.amountInr) > 0 ? Number(payload.amountInr) : 1000,
   availability: String(payload.availability || "Today").trim(),
   availableSlots: Array.isArray(payload.availableSlots)
@@ -816,3 +816,4 @@ export const astrologyService = {
     }
   },
 };
+

@@ -56,12 +56,32 @@ const LANGUAGE_NAME_BY_CODE = {
   ar: 'Arabic',
 };
 
+const LANGUAGE_TTS_BY_CODE = {
+  en: { locale: 'en-US', voice: 'en-US-Standard-F' },
+  hi: { locale: 'hi-IN', voice: 'hi-IN-Standard-A' },
+  ml: { locale: 'ml-IN', voice: 'ml-IN-Standard-A' },
+  ta: { locale: 'ta-IN', voice: 'ta-IN-Standard-A' },
+  te: { locale: 'te-IN', voice: 'te-IN-Standard-A' },
+  kn: { locale: 'kn-IN', voice: 'kn-IN-Standard-A' },
+  bn: { locale: 'bn-IN', voice: 'bn-IN-Standard-A' },
+  mr: { locale: 'mr-IN', voice: 'mr-IN-Standard-A' },
+  gu: { locale: 'gu-IN', voice: 'gu-IN-Standard-A' },
+  ur: { locale: 'ur-IN', voice: 'ur-IN-Standard-A' },
+  ar: { locale: 'ar-SA', voice: 'ar-XA-Standard-A' },
+};
+
 const normalizeLanguageCode = (value = 'en') => {
   const raw = sanitizeText(value).toLowerCase().replace(/_/g, '-');
   if (!raw) return 'en';
   const primary = raw.split('-')[0];
   return LANGUAGE_CODE_ALIASES[raw] || LANGUAGE_CODE_ALIASES[primary] || 'en';
 };
+
+const getKidsVideoLanguageName = (languageCode = 'en') =>
+  LANGUAGE_NAME_BY_CODE[normalizeLanguageCode(languageCode)] || 'English';
+
+const getKidsVideoTtsConfig = (languageCode = 'en') =>
+  LANGUAGE_TTS_BY_CODE[normalizeLanguageCode(languageCode)] || LANGUAGE_TTS_BY_CODE.en;
 const STORY_LOOKUP_TIMEOUT_MS = Math.max(
   1200,
   Math.min(9000, Number(process.env.STORY_LOOKUP_TIMEOUT_MS) || 4200)
@@ -1114,6 +1134,28 @@ const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, heig
   return { clipPath, duration };
 };
 
+const buildCharacterConsistencyInstruction = (characters = []) => {
+  const cleanCharacters = Array.isArray(characters) ? characters : [];
+  const characterLines = cleanCharacters
+    .map((character, index) => {
+      const name = sanitizeText(character?.name || `Character ${index + 1}`);
+      const appearance = sanitizeText(character?.appearance || 'friendly cartoon child-safe design');
+      const role = sanitizeText(character?.role || 'story character');
+      return `${index + 1}. ${name}: ${role}. Appearance: ${appearance}.`;
+    })
+    .join(' ');
+
+  return [
+    'Character consistency rules:',
+    'Keep the same character face, body shape, dress, color, age and style in every scene.',
+    'Do not change character species, costume, skin/fur color, hairstyle or accessories between scenes.',
+    'Use the same character names in narration, subtitles and scene prompts.',
+    characterLines ? `Locked character reference: ${characterLines}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
+
 const buildHybridScenePrompt = ({ scene = {}, story = {}, storyMode = 'moral' }) => {
   const title = sanitizeText(story?.title || story?.storyTitle || 'Kids story');
   const sceneTitle = sanitizeText(scene?.title || 'Story scene');
@@ -1128,14 +1170,18 @@ const buildHybridScenePrompt = ({ scene = {}, story = {}, storyMode = 'moral' })
       return `${name}${appearance ? ` (${appearance})` : ''}`;
     })
     .filter(Boolean);
+  const languageName = getKidsVideoLanguageName(story?.language || 'en');
+  const consistencyInstruction = buildCharacterConsistencyInstruction(story?.characters || []);
 
   return [
     `Child-safe animated ${mode} story video scene.`,
+    `Language for narration/subtitles: ${languageName}.`,
     `Story title: ${title}.`,
     `Scene title: ${sceneTitle}.`,
     sceneDescription ? `Scene description: ${sceneDescription}.` : '',
     dialogue ? `Dialogue cues: ${dialogue}.` : '',
     characters.length ? `Keep visual consistency for characters: ${characters.join(', ')}.` : '',
+    consistencyInstruction,
     'Show clear character movement and emotional body language.',
     'No text overlays, no logos, no watermarks, no violence.',
     'Cinematic camera motion with stable framing and soft lighting.',
@@ -1762,6 +1808,13 @@ const generateKidsVideoFromHybridPrompt = async ({
       strict: Boolean(strict),
       summary: hybridSummary,
     },
+    fallbackUsed: Boolean(fullyFallback || hybridSummary.fallbackSceneCount > 0),
+    fallbackWarning: fullyFallback
+      ? 'Real motion engine unavailable. Generated slideshow backup video instead.'
+      : hybridSummary.fallbackSceneCount > 0
+        ? `Partial fallback used for ${hybridSummary.fallbackSceneCount} scene(s).`
+        : '',
+    languageTts: getKidsVideoTtsConfig(normalizedLanguage),
     translation,
     renderedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -1904,6 +1957,9 @@ const generateKidsVideoFromPrompt = async ({
     aiImagesEnabled,
     scenes: localizedStory.scenes,
     sceneRenderMeta,
+    fallbackUsed: false,
+    fallbackWarning: '',
+    languageTts: getKidsVideoTtsConfig(normalizedLanguage),
     translation,
     renderedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -1999,6 +2055,9 @@ const generateKidsVideoFromDiffusersPrompt = async ({
         workflowType: 'kids-video-scene-fallback-no-python',
         renderEngine: 'scene_image_ffmpeg_fallback',
         fallbackReason: message || 'diffusers execution failed',
+        fallbackUsed: true,
+        fallbackWarning: 'Real motion engine unavailable. Generated slideshow backup video instead.',
+        languageTts: getKidsVideoTtsConfig(normalizedLanguage),
         pythonCommand: '',
       },
     };
@@ -2027,6 +2086,9 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     updatedAt: new Date().toISOString(),
     generatorLog: stdout || '',
     pythonCommand: sanitizeText(pythonCommand || ''),
+    fallbackUsed: false,
+    fallbackWarning: '',
+    languageTts: getKidsVideoTtsConfig(normalizedLanguage),
     translation,
   };
 
@@ -2120,6 +2182,9 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
       generatorLog: stdout || '',
       pythonCommand: sanitizeText(pythonCommand || ''),
       sceneCount: Number(parsedScriptOutput?.scene_count || Math.max(3, Math.min(8, Number(sceneCount) || 5))),
+      fallbackUsed: false,
+      fallbackWarning: '',
+      languageTts: getKidsVideoTtsConfig(normalizedLanguage),
       translation,
     };
 
@@ -2153,6 +2218,9 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
         workflowType: 'kids-video-scene-script-fallback',
         renderEngine: 'scene_image_ffmpeg_fallback',
         fallbackReason: sanitizeText(error?.message || 'free steve-like generation failed'),
+        fallbackUsed: true,
+        fallbackWarning: 'Real motion engine unavailable. Generated slideshow backup video instead.',
+        languageTts: getKidsVideoTtsConfig(normalizedLanguage),
       },
     };
   }
@@ -2245,6 +2313,9 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
       numFrames: Number(parsedScriptOutput?.num_frames || Math.max(16, Math.min(97, Number(numFrames) || 49))),
       numInferenceSteps: Number(parsedScriptOutput?.num_inference_steps || Math.max(10, Math.min(80, Number(numInferenceSteps) || 30))),
       guidanceScale: Number(parsedScriptOutput?.guidance_scale || Math.max(1, Math.min(12, Number(guidanceScale) || 6))),
+      fallbackUsed: false,
+      fallbackWarning: '',
+      languageTts: getKidsVideoTtsConfig(normalizedLanguage),
       translation,
     };
 
@@ -2280,6 +2351,9 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
         workflowType: 'kids-video-cogvideox-fallback',
         renderEngine: 'scene_image_ffmpeg_fallback',
         fallbackReason: sanitizeText(error?.message || 'cogvideox execution failed'),
+        fallbackUsed: true,
+        fallbackWarning: 'Real motion engine unavailable. Generated slideshow backup video instead.',
+        languageTts: getKidsVideoTtsConfig(normalizedLanguage),
       },
     };
   }

@@ -65,6 +65,53 @@ describe('VoiceFriendService', () => {
     }));
   });
 
+  test('generateSpeech uses localized TTS voice for Malayalam', async () => {
+    await voiceFriendService.generateSpeech({ text: 'Namaskaram', friendId: 'nila', voice: 'female-soft', language: 'ml' });
+
+    expect(mockSpeechCreate).toHaveBeenCalledWith(expect.objectContaining({
+      voice: 'ml-IN-Standard-A',
+      input: 'Namaskaram',
+    }));
+  });
+
+  test('sendMessage builds persona prompt with language name instead of code', async () => {
+    const session = voiceFriendService.createSession({ userId: 'user123', persona: 'supportive', mood: 'neutral', language: 'ml' });
+    await voiceFriendService.sendMessage({
+      sessionId: session.sessionId,
+      message: 'Hi there',
+      persona: 'supportive',
+      mood: 'neutral',
+      language: 'ml',
+    });
+
+    const lastCall = mockAiClient.chat.completions.create.mock.calls.at(-1)?.[0];
+    const systemPrompt = lastCall?.messages?.find((msg) => msg.role === 'system')?.content || '';
+    expect(systemPrompt).toContain('Answer naturally in Malayalam');
+  });
+
+  test('sendMessage persona prompt includes avatar identity context when custom avatar is set', async () => {
+    const session = voiceFriendService.createSession({
+      userId: 'user123',
+      persona: 'supportive',
+      mood: 'neutral',
+      language: 'en',
+      friendCustomAvatar: '/uploads/voicefriend/custom-face.jpg',
+    });
+
+    await voiceFriendService.sendMessage({
+      sessionId: session.sessionId,
+      message: 'Hello',
+      persona: 'supportive',
+      mood: 'neutral',
+      language: 'en',
+      friendCustomAvatar: '/uploads/voicefriend/custom-face.jpg',
+    });
+
+    const lastCall = mockAiClient.chat.completions.create.mock.calls.at(-1)?.[0];
+    const systemPrompt = lastCall?.messages?.find((msg) => msg.role === 'system')?.content || '';
+    expect(systemPrompt).toContain('custom face/avatar image is uploaded');
+  });
+
   test('sendMessage throws when the session is missing', async () => {
     await expect(
       voiceFriendService.sendMessage({ sessionId: 'invalid-session', message: 'Hi', persona: 'supportive', mood: 'happy', language: 'en' })

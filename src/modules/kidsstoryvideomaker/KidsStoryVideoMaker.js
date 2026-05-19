@@ -113,12 +113,36 @@ const AI_PROVIDER_OPTIONS = [
   { id: "pollinations", label: "Pollinations" },
 ];
 const HF_RENDER_ENGINE_OPTIONS = [
-  { id: "hybrid_phase2", label: "Hybrid Phase 2 (AnimateDiff + OpenPose + CogVideoX)" },
-  { id: "hybrid_motion_cogvideox", label: "Hybrid Motion + CogVideoX (Recommended)" },
-  { id: "cogvideox", label: "CogVideoX (Real Motion GPU) (Recommended)" },
-  { id: "scene_script_video", label: "Script-to-Video (Fallback)" },
-  { id: "image_ffmpeg", label: "Image + FFmpeg (Fallback)" },
-  { id: "prompt_video_python", label: "Prompt Video (Python)" },
+  {
+    id: "hybrid_phase2",
+    label: "Premium AI Animation",
+    description: "Best quality when advanced motion models are available.",
+  },
+  {
+    id: "hybrid_motion_cogvideox",
+    label: "Real Motion Cartoon",
+    description: "Balanced quality with strong motion and scene continuity.",
+  },
+  {
+    id: "cogvideox",
+    label: "Cinematic Cartoon",
+    description: "Text-to-video cinematic motion where GPU support is available.",
+  },
+  {
+    id: "scene_script_video",
+    label: "Fast Cartoon Story",
+    description: "Reliable story video with scenes, subtitles, and narration.",
+  },
+  {
+    id: "image_ffmpeg",
+    label: "Slideshow Backup",
+    description: "Fallback mode when real motion engines are unavailable.",
+  },
+  {
+    id: "prompt_video_python",
+    label: "Experimental Motion",
+    description: "Python/Diffusers motion rendering for experimental runs.",
+  },
 ];
 
 const STORY_TEMPLATES = [
@@ -146,6 +170,14 @@ const STORY_TEMPLATES = [
     prompt:
       "Children prepare for a colorful local festival, share food, music, and stories, and solve a funny mix-up together.",
   },
+];
+
+const FRIENDLY_PIPELINE_STEPS = [
+  { key: "script", label: "Writing script" },
+  { key: "characters", label: "Creating characters" },
+  { key: "scenes", label: "Designing scenes" },
+  { key: "voice", label: "Adding voice & subtitles" },
+  { key: "render", label: "Rendering video" },
 ];
 
 const DEFAULT_STORY_PROMPT = STORY_TEMPLATES[0].prompt;
@@ -645,6 +677,21 @@ const KidsStoryVideoMaker = () => {
       return ` Partial fallback was used for ${fallbackCount} scene${fallbackCount > 1 ? "s" : ""}.${warningText}`;
     }
     return "";
+  };
+
+  const isFallbackRender = (projectLike = {}) => {
+    if (!projectLike || typeof projectLike !== "object") {
+      return false;
+    }
+    if (projectLike.fallbackUsed) {
+      return true;
+    }
+    const engineText = String(projectLike.renderEngine || projectLike.workflowType || "").toLowerCase();
+    if (engineText.includes("fallback") || engineText.includes("image_ffmpeg")) {
+      return true;
+    }
+    const sceneRenderMeta = Array.isArray(projectLike.sceneRenderMeta) ? projectLike.sceneRenderMeta : [];
+    return sceneRenderMeta.some((item) => String(item?.renderEngine || "").toLowerCase().includes("fallback"));
   };
 
   const applyKidsVideoCapabilities = (capabilities) => {
@@ -2437,6 +2484,18 @@ const KidsStoryVideoMaker = () => {
               </div>
               <p>{pipelineProgress.label}</p>
             </div>
+            <div className="kids-friendly-steps" aria-label="Pipeline stages">
+              {FRIENDLY_PIPELINE_STEPS.map((step, index) => {
+                const threshold = index * 22;
+                const active = pipelineProgress.value >= threshold;
+                const done = pipelineProgress.value >= (index + 1) * 20;
+                return (
+                  <div key={step.key} className={`kids-friendly-step ${active ? "active" : ""} ${done ? "done" : ""}`}>
+                    <small>{step.label}</small>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
@@ -3020,6 +3079,11 @@ const KidsStoryVideoMaker = () => {
                   <p><strong>Mode:</strong> {storyMode}</p>
                 </div>
               </div>
+              {videoUrl && isFallbackRender(generatedProject) && (
+                <div className="kids-render-warning" role="alert">
+                  Real motion engine unavailable, generated slideshow backup video instead. Story, subtitles and export are available, but motion quality may be lower.
+                </div>
+              )}
 
               <div className="timeline-grid">
                 <TimelineCards scenes={generatedScenes} getSceneId={getSceneId} />

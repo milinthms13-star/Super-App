@@ -3,10 +3,6 @@ import axios from 'axios';
 import { useApp } from '../../contexts/AppContext';
 import './ConsultantAdminPanel.css';
 
-const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-});
-
 const ConsultantAdminPanel = () => {
   const { currentUser } = useApp();
   const [activeTab, setActiveTab] = useState('bookings');
@@ -19,6 +15,10 @@ const ConsultantAdminPanel = () => {
   const [error, setError] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
 
+  const isAdmin = String(currentUser?.role || currentUser?.registrationType || '').toLowerCase() === 'admin';
+  const isConsultant = String(currentUser?.role || currentUser?.registrationType || '').toLowerCase() === 'consultant';
+  const canAccessConsultantDashboard = isAdmin || isConsultant;
+
   const consultantId = consultant?.id || currentUser?.consultantId || currentUser?.id || '';
 
   const loadConsultantData = useCallback(async () => {
@@ -26,9 +26,7 @@ const ConsultantAdminPanel = () => {
       return;
     }
 
-    const response = await axios.get(`/api/astrology/consultants/${consultantId}`, {
-      headers: authHeaders(),
-    });
+    const response = await axios.get(`/api/astrology/consultants/${consultantId}`);
 
     const consultantData = response?.data?.data || null;
     setConsultant(consultantData);
@@ -38,7 +36,6 @@ const ConsultantAdminPanel = () => {
   const loadBookings = useCallback(async () => {
     const response = await axios.get('/api/astrology/consultations/consultant-bookings', {
       params: consultantId ? { consultantId } : {},
-      headers: authHeaders(),
     });
     setBookings(response?.data?.data || []);
   }, [consultantId]);
@@ -46,7 +43,6 @@ const ConsultantAdminPanel = () => {
   const loadEarnings = useCallback(async () => {
     const response = await axios.get('/api/astrology/consultations/consultant-earnings', {
       params: consultantId ? { consultantId } : {},
-      headers: authHeaders(),
     });
     setEarnings(response?.data?.data || { total: 0, month: 0, bookings: 0 });
   }, [consultantId]);
@@ -86,8 +82,7 @@ const ConsultantAdminPanel = () => {
     try {
       await axios.patch(
         `/api/astrology/consultations/${bookingId}/status`,
-        { status },
-        { headers: authHeaders() }
+        { status }
       );
       await loadBookings();
       await loadEarnings();
@@ -104,8 +99,7 @@ const ConsultantAdminPanel = () => {
     try {
       await axios.post(
         '/api/astrology/consultants/add-slot',
-        { consultantId, slotTime: slotInput.trim() },
-        { headers: authHeaders() }
+        { consultantId, slotTime: slotInput.trim() }
       );
       setSlotInput('');
       await loadConsultantData();
@@ -118,7 +112,6 @@ const ConsultantAdminPanel = () => {
     try {
       await axios.delete('/api/astrology/consultants/remove-slot', {
         data: { consultantId, slotTime: slot?.label || slot?.id || '' },
-        headers: authHeaders(),
       });
       await loadConsultantData();
     } catch (requestError) {
@@ -144,8 +137,7 @@ const ConsultantAdminPanel = () => {
             .map((item) => item.trim())
             .filter(Boolean),
           rate: Number(formData.get('rate')),
-        },
-        { headers: authHeaders() }
+        }
       );
       await loadConsultantData();
     } catch (requestError) {
@@ -155,6 +147,10 @@ const ConsultantAdminPanel = () => {
 
   if (!currentUser?.id) {
     return <div className="consultant-admin-panel">Please sign in to access the consultant dashboard.</div>;
+  }
+
+  if (!canAccessConsultantDashboard) {
+    return <div className="consultant-admin-panel">Consultant or admin access is required for this dashboard.</div>;
   }
 
   return (

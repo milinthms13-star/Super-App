@@ -98,6 +98,10 @@ const ApplyLeadTab = ({
           <option value="tomorrow-evening">Tomorrow evening</option>
         </select>
       </label>
+      <div className="finance-security-note">
+        <strong>Document safety:</strong> Upload only documents required for loan processing. Do not upload passwords,
+        PINs, OTP details, or unrelated personal files.
+      </div>
       <label>
         Document Notes
         <textarea
@@ -145,9 +149,21 @@ const ApplyLeadTab = ({
 
     {state.error ? <p className="finance-error">{state.error}</p> : null}
     {state.success ? (
-      <p className="finance-status">
-        {state.success} {state.consentAt ? `Consent timestamp: ${state.consentAt}` : ""}
-      </p>
+      <div className="finance-success-card">
+        <strong>{state.success}</strong>
+        {state.leadId ? <p>Application ID: <b>{state.leadId}</b></p> : null}
+        {state.consentAt ? <p>Consent timestamp: {state.consentAt}</p> : null}
+        <div className="finance-success-actions">
+          <a
+            href={`https://wa.me/91${String(state.supportPhone || form.phone || "").replace(/\D/g, "")}?text=${encodeURIComponent("Hi, I submitted a loan enquiry in Nila Finance Hub. Please help me with the next step.")}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            WhatsApp Support
+          </a>
+          <span>Next step: upload pending documents and track application status.</span>
+        </div>
+      </div>
     ) : null}
 
     <div className="finance-compliance-banner">

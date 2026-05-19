@@ -356,6 +356,49 @@ select:focus-visible {
   color: #5f4f92;
 }
 
+.kids-friendly-steps {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.kids-friendly-step {
+  border-radius: 14px;
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  opacity: 0.58;
+  text-align: center;
+}
+
+.kids-friendly-step small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.kids-friendly-step.active {
+  opacity: 1;
+  border-color: rgba(95, 65, 255, 0.35);
+  box-shadow: 0 10px 24px rgba(95, 65, 255, 0.1);
+}
+
+.kids-friendly-step.done {
+  background: rgba(237, 233, 254, 0.92);
+}
+
+.kids-render-warning {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 18px;
+  padding: 12px 14px;
+  margin: 12px 0;
+  background: rgba(255, 251, 235, 0.95);
+  color: #92400e;
+  font-weight: 800;
+}
+
 .message {
   margin-top: 18px;
   padding: 16px;
@@ -781,6 +824,10 @@ select:focus-visible {
   }
 
   .project-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .kids-friendly-steps {
     grid-template-columns: 1fr;
   }
 }

@@ -1,6 +1,6 @@
 import React from "react";
 
-const LoanMarketplaceTab = ({ categories, filters, onFilterChange }) => {
+const LoanMarketplaceTab = ({ categories, filters, onFilterChange, onApplyWithInstitution }) => {
   const { selectedCategory, filteredLoanCategories, filteredInstitutions, institutionLoadState } = filters;
   const { setSelectedCategory } = onFilterChange;
 
@@ -63,7 +63,9 @@ const LoanMarketplaceTab = ({ categories, filters, onFilterChange }) => {
             <p><strong>Processing Fee:</strong> {institution.processingFee?.value}{institution.processingFee?.type === "percentage" ? "%" : " INR"}</p>
             <p><strong>Service Cities:</strong> {(institution.serviceDistricts || []).slice(0, 4).join(", ")}{(institution.serviceDistricts || []).length > 4 ? "..." : ""}</p>
             <p><strong>Rating:</strong> {institution.ratings?.average || "4.0"} ({institution.ratings?.totalReviews || 0} reviews)</p>
-            <button type="button">Apply with {institution.name}</button>
+            <button type="button" onClick={() => onApplyWithInstitution?.(institution)}>
+              Apply with {institution.name}
+            </button>
           </article>
         ))}
       </div>

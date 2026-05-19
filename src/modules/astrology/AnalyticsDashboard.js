@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
+import { useApp } from '../../contexts/AppContext';
 import './AnalyticsDashboard.css';
 
 const AnalyticsDashboard = () => {
+  const { currentUser } = useApp();
   const [metrics, setMetrics] = useState({
     totalBookings: 0,
     completedBookings: 0,
@@ -16,6 +18,7 @@ const AnalyticsDashboard = () => {
   const [period, setPeriod] = useState('month');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const isAdmin = String(currentUser?.role || currentUser?.registrationType || '').toLowerCase() === 'admin';
 
   const loadAnalytics = useCallback(async () => {
     try {
@@ -23,7 +26,6 @@ const AnalyticsDashboard = () => {
       setError('');
       const response = await axios.get('/api/astrology/analytics/dashboard', {
         params: { period },
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
       });
       setMetrics(response?.data?.data || {});
     } catch (requestError) {
@@ -34,15 +36,21 @@ const AnalyticsDashboard = () => {
   }, [period]);
 
   useEffect(() => {
+    if (!isAdmin) {
+      return;
+    }
     void loadAnalytics();
-  }, [loadAnalytics]);
+  }, [isAdmin, loadAnalytics]);
+
+  if (!isAdmin) {
+    return <section className="analytics-dashboard"><p className="analytics-error">Admin access required.</p></section>;
+  }
 
   const downloadReport = async (format = 'pdf') => {
     try {
       const response = await axios.get('/api/astrology/analytics/report', {
         params: { period, format },
         responseType: 'blob',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));

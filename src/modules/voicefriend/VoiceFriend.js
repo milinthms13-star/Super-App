@@ -69,6 +69,126 @@ const AI_FRIENDS = [
 ];
 
 const STORAGE_KEY = 'voiceFriendState';
+const FACE_PRESET_STORAGE_PREFIX = 'voiceFriendFacePresets';
+const MAX_AVATAR_FILE_SIZE_BYTES = 3 * 1024 * 1024;
+const AVATAR_OUTPUT_SIZE = 512;
+const SPEECH_LANG_MAP = {
+  en: 'en-IN',
+  hi: 'hi-IN',
+  ml: 'ml-IN',
+  kn: 'kn-IN',
+};
+
+const decodeJwtPayload = (token = '') => {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) return null;
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const decoded = atob(padded);
+    return JSON.parse(decoded);
+  } catch (error) {
+    return null;
+  }
+};
+
+const sanitizePresetName = (value = '') => {
+  const normalized = String(value || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  return normalized || 'Face Preset';
+};
+
+const getFacePresetStorageKey = (fallbackName = '') => {
+  const token = getStoredAuthToken();
+  const payload = decodeJwtPayload(token || '');
+  const principal =
+    String(payload?.sub || payload?.email || payload?.phone || fallbackName || 'guest')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9@._-]+/g, '_')
+      .slice(0, 80) || 'guest';
+  return `${FACE_PRESET_STORAGE_PREFIX}:${principal}`;
+};
+
+const readFacePresets = (storageKey) => {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+};
+
+const writeFacePresets = (storageKey, presets) => {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(Array.isArray(presets) ? presets : []));
+  } catch (error) {
+    // ignore local storage quota errors
+  }
+};
+
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Unable to read image file.'));
+    reader.readAsDataURL(file);
+  });
+
+const loadImageFromDataUrl = (dataUrl) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Unable to load image preview.'));
+    image.src = dataUrl;
+  });
+
+const renderCenterCroppedAvatar = async (file) => {
+  const dataUrl = await readFileAsDataUrl(file);
+  const image = await loadImageFromDataUrl(dataUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = AVATAR_OUTPUT_SIZE;
+  canvas.height = AVATAR_OUTPUT_SIZE;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Unable to process avatar image.');
+  }
+
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const sourceSize = Math.max(1, Math.min(sourceWidth, sourceHeight));
+  const sourceX = Math.max(0, Math.floor((sourceWidth - sourceSize) / 2));
+  const sourceY = Math.max(0, Math.floor((sourceHeight - sourceSize) / 2));
+
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceSize,
+    sourceSize,
+    0,
+    0,
+    AVATAR_OUTPUT_SIZE,
+    AVATAR_OUTPUT_SIZE
+  );
+
+  const processedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  const avatarBlob = await new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('Unable to encode avatar image.'));
+        return;
+      }
+      resolve(blob);
+    }, 'image/jpeg', 0.92);
+  });
+
+  const baseName = String(file?.name || 'avatar').replace(/\.[^.]+$/, '').slice(0, 64) || 'avatar';
+  const processedFile = new File([avatarBlob], `${baseName}.jpg`, { type: 'image/jpeg' });
+
+  return { processedDataUrl, processedFile };
+};
 
 const resolveVoiceFriendAvatarUrl = (value = '') => {
   const rawValue = String(value || '').trim();
@@ -103,10 +223,14 @@ const VoiceFriend = () => {
   const [playingAudio, setPlayingAudio] = useState(false);
   const [friendCustomName, setFriendCustomName] = useState('');
   const [friendCustomAvatar, setFriendCustomAvatar] = useState('');
+  const [facePresets, setFacePresets] = useState([]);
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+  const [newPresetName, setNewPresetName] = useState('');
   const [scenario, setScenario] = useState('room');
   const [voice, setVoice] = useState('female-soft');
   const [persistData, setPersistData] = useState(true);
   const [hasPendingSessionSettings, setHasPendingSessionSettings] = useState(false);
+  const [autoApplyingAvatar, setAutoApplyingAvatar] = useState(false);
   const [editingPersona, setEditingPersona] = useState(false);
   const recognition = useRef(null);
   const audioPlayerRef = useRef(null);
@@ -140,6 +264,14 @@ const VoiceFriend = () => {
   const resolvedFriendCustomAvatar = useMemo(
     () => resolveVoiceFriendAvatarUrl(friendCustomAvatar),
     [friendCustomAvatar]
+  );
+  const facePresetStorageKey = useMemo(
+    () => getFacePresetStorageKey(userName),
+    [userName]
+  );
+  const selectedPreset = useMemo(
+    () => facePresets.find((preset) => preset.id === selectedPresetId) || null,
+    [facePresets, selectedPresetId]
   );
 
   const markPendingSessionSettings = useCallback(() => {
@@ -181,12 +313,10 @@ const VoiceFriend = () => {
     markPendingSessionSettings();
   };
 
-  const applySessionSettings = async () => {
+  const applySessionSettings = async (overrideSettings = {}) => {
     if (busy) return;
     setStatus('Applying updated Voice Friend settings...');
-    setBusy(true);
-    await initSession(undefined, friendId, userName);
-    setBusy(false);
+    await initSession(undefined, friendId, userName, overrideSettings);
   };
 
   useEffect(() => {
@@ -204,7 +334,7 @@ const VoiceFriend = () => {
       const instance = new SpeechRecognition();
       instance.continuous = false;
       instance.interimResults = false;
-      instance.lang = language || 'en-IN';
+      instance.lang = SPEECH_LANG_MAP[language] || 'en-IN';
 
       instance.onresult = (event) => {
         const transcript = event.results?.[0]?.[0]?.transcript;
@@ -243,11 +373,23 @@ const VoiceFriend = () => {
     };
   }, [language]);
 
-  const initSession = useCallback(async (existingSessionId, initialFriendId, initialUserName) => {
+  const initSession = useCallback(async (existingSessionId, initialFriendId, initialUserName, overrideSettings = {}) => {
     try {
       setBusy(true);
       const sessionFriendId = initialFriendId || friendId;
       const sessionUserName = initialUserName || userName;
+      const sessionFriendCustomName = overrideSettings.friendCustomName !== undefined
+        ? overrideSettings.friendCustomName
+        : friendCustomName;
+      const sessionFriendCustomAvatar = overrideSettings.friendCustomAvatar !== undefined
+        ? overrideSettings.friendCustomAvatar
+        : friendCustomAvatar;
+      const sessionScenario = overrideSettings.scenario !== undefined
+        ? overrideSettings.scenario
+        : scenario;
+      const sessionVoice = overrideSettings.voice !== undefined
+        ? overrideSettings.voice
+        : voice;
 
       if (existingSessionId) {
         try {
@@ -296,10 +438,10 @@ const VoiceFriend = () => {
           language,
           friendId: sessionFriendId,
           userName: sessionUserName,
-          friendCustomName,
-          friendCustomAvatar,
-          scenario,
-          voice,
+          friendCustomName: sessionFriendCustomName,
+          friendCustomAvatar: sessionFriendCustomAvatar,
+          scenario: sessionScenario,
+          voice: sessionVoice,
         },
         { headers: buildRequestHeaders() }
       );
@@ -313,6 +455,10 @@ const VoiceFriend = () => {
           persona,
           mood,
           language,
+          friendCustomName: sessionFriendCustomName || '',
+          friendCustomAvatar: sessionFriendCustomAvatar || '',
+          scenario: sessionScenario,
+          voice: sessionVoice,
         };
         setHasPendingSessionSettings(false);
       } else {
@@ -323,7 +469,7 @@ const VoiceFriend = () => {
     } finally {
       setBusy(false);
     }
-  }, [persona, mood, language, friendId, userName]);
+  }, [persona, mood, language, friendId, userName, friendCustomName, friendCustomAvatar, scenario, voice]);
 
   useEffect(() => {
     if (hasInitializedRef.current) {
@@ -382,6 +528,16 @@ const VoiceFriend = () => {
     initSession();
   }, [initSession]);
 
+  useEffect(() => {
+    const presets = readFacePresets(facePresetStorageKey);
+    setFacePresets(presets);
+    if (presets.length > 0) {
+      setSelectedPresetId((current) => current || presets[0].id);
+    } else {
+      setSelectedPresetId('');
+    }
+  }, [facePresetStorageKey]);
+
   const stopAudioPlayback = useCallback(() => {
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
@@ -402,7 +558,7 @@ const VoiceFriend = () => {
     stopAudioPlayback();
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = language || 'en-IN';
+    utterance.lang = SPEECH_LANG_MAP[language] || 'en-IN';
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
     utterance.onend = () => setPlayingAudio(false);
@@ -465,7 +621,7 @@ const VoiceFriend = () => {
     } finally {
       setAudioLoading(false);
     }
-  }, [friendId, language, selectedFriend.voice, sessionId, audioLoading, stopAudioPlayback]);
+  }, [friendId, language, sessionId, audioLoading, stopAudioPlayback]);
 
   const sendMessage = async () => {
     if (busy) {
@@ -575,7 +731,7 @@ const VoiceFriend = () => {
         friendCustomAvatar,
       })
     );
-  }, [sessionId, friendId, userName, persona, mood, language, conversation, friendCustomName, friendCustomAvatar, persistData]);
+  }, [sessionId, friendId, userName, persona, mood, language, scenario, voice, conversation, friendCustomName, friendCustomAvatar, persistData]);
 
   useEffect(() => {
     return () => {
@@ -672,6 +828,153 @@ const VoiceFriend = () => {
     setBusy(false);
   };
 
+  const persistFacePresets = useCallback((nextPresets) => {
+    setFacePresets(nextPresets);
+    writeFacePresets(facePresetStorageKey, nextPresets);
+  }, [facePresetStorageKey]);
+
+  const saveCurrentFaceAsPreset = useCallback(() => {
+    if (!resolvedFriendCustomAvatar) {
+      setStatus('Upload or set an avatar first, then save it as a preset.');
+      return;
+    }
+    const presetName = sanitizePresetName(newPresetName || friendCustomName || selectedFriend.name);
+    const presetId = window.crypto?.randomUUID?.() || `preset-${Date.now()}`;
+    const newPreset = {
+      id: presetId,
+      name: presetName,
+      avatarUrl: resolvedFriendCustomAvatar,
+      friendName: String(friendCustomName || '').trim(),
+      updatedAt: new Date().toISOString(),
+    };
+    const nextPresets = [newPreset, ...facePresets.filter((preset) => preset.id !== presetId)].slice(0, 20);
+    persistFacePresets(nextPresets);
+    setSelectedPresetId(presetId);
+    setNewPresetName('');
+    setStatus(`Saved face preset: ${presetName}.`);
+  }, [resolvedFriendCustomAvatar, newPresetName, friendCustomName, selectedFriend.name, facePresets, persistFacePresets]);
+
+  const deleteSelectedPreset = useCallback(() => {
+    if (!selectedPreset) {
+      setStatus('Select a preset to delete.');
+      return;
+    }
+    const nextPresets = facePresets.filter((preset) => preset.id !== selectedPreset.id);
+    persistFacePresets(nextPresets);
+    setSelectedPresetId(nextPresets[0]?.id || '');
+    setStatus(`Removed preset: ${selectedPreset.name}.`);
+  }, [selectedPreset, facePresets, persistFacePresets]);
+
+  const renameSelectedPreset = useCallback(() => {
+    if (!selectedPreset) {
+      setStatus('Select a preset to rename.');
+      return;
+    }
+    const nextName = sanitizePresetName(newPresetName || selectedPreset.name);
+    const nextPresets = facePresets.map((preset) => (
+      preset.id === selectedPreset.id
+        ? { ...preset, name: nextName, updatedAt: new Date().toISOString() }
+        : preset
+    ));
+    persistFacePresets(nextPresets);
+    setStatus(`Preset renamed to: ${nextName}.`);
+  }, [selectedPreset, newPresetName, facePresets, persistFacePresets]);
+
+  const applyPresetById = useCallback(async (presetId) => {
+    const targetPreset = facePresets.find((preset) => preset.id === presetId);
+    if (!targetPreset) {
+      setStatus('Choose a preset first.');
+      return;
+    }
+    if (busy) {
+      setStatus('Please wait for the current action to finish.');
+      return;
+    }
+
+    const nextAvatar = resolveVoiceFriendAvatarUrl(targetPreset.avatarUrl);
+    const nextName = String(targetPreset.friendName || '').trim();
+    setFriendCustomAvatar(nextAvatar);
+    if (nextName) {
+      setFriendCustomName(nextName);
+    }
+    setSelectedPresetId(targetPreset.id);
+    markPendingSessionSettings();
+    setStatus(`Applying preset: ${targetPreset.name}...`);
+    setAutoApplyingAvatar(true);
+    try {
+      await applySessionSettings({
+        friendCustomAvatar: nextAvatar,
+        friendCustomName: nextName || friendCustomName,
+      });
+      setStatus(`Preset "${targetPreset.name}" applied.`);
+    } finally {
+      setAutoApplyingAvatar(false);
+    }
+  }, [facePresets, busy, markPendingSessionSettings, applySessionSettings, friendCustomName]);
+
+  const applySelectedPreset = useCallback(async () => {
+    await applyPresetById(selectedPresetId);
+  }, [applyPresetById, selectedPresetId]);
+
+  const processAndUploadAvatar = useCallback(async (rawFile) => {
+    if (!rawFile) return;
+    const mimeType = String(rawFile.type || '').toLowerCase();
+    if (!mimeType.startsWith('image/')) {
+      setStatus('Please upload a valid image file (JPG, PNG, or WEBP).');
+      return;
+    }
+    if (rawFile.size > MAX_AVATAR_FILE_SIZE_BYTES) {
+      setStatus('Image is too large. Please choose an image under 3 MB.');
+      return;
+    }
+    if (busy) {
+      setStatus('Please wait for the current action to finish.');
+      return;
+    }
+
+    setAutoApplyingAvatar(true);
+    try {
+      setStatus('Processing avatar image...');
+      const { processedDataUrl, processedFile } = await renderCenterCroppedAvatar(rawFile);
+
+      let appliedAvatarUrl = processedDataUrl;
+      try {
+        const fd = new FormData();
+        fd.append('avatar', processedFile);
+
+        const resp = await axios.post(
+          buildApiUrl('/ai-voice-friend/avatar'),
+          fd,
+          {
+            headers: {
+              ...buildRequestHeaders(),
+              Accept: 'application/json',
+            },
+          }
+        );
+        const uploadedUrl = resp?.data?.data?.url;
+        if (uploadedUrl) {
+          appliedAvatarUrl = resolveVoiceFriendAvatarUrl(uploadedUrl);
+        }
+      } catch (uploadError) {
+        console.warn('Avatar upload failed, using local processed image.', uploadError);
+      }
+
+      setFriendCustomAvatar(appliedAvatarUrl);
+      markPendingSessionSettings();
+      setStatus('Applying new avatar...');
+      await applySessionSettings({ friendCustomAvatar: appliedAvatarUrl });
+      setStatus('Avatar updated and applied to your Voice Friend session.');
+    } catch (error) {
+      setStatus(error?.message || 'Could not process this image. Try another file.');
+    } finally {
+      setAutoApplyingAvatar(false);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = '';
+      }
+    }
+  }, [busy, markPendingSessionSettings, applySessionSettings]);
+
   const conversationList = useMemo(() => {
     return conversation.map((item, index) => {
       const timestampText = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
@@ -687,11 +990,7 @@ const VoiceFriend = () => {
               <strong>{item.role === 'assistant' ? selectedFriend.name : userName || 'You'}</strong>
               {timestampText && <time dateTime={item.timestamp}>{timestampText}</time>}
             </div>
-            {item.role === 'assistant' ? (
-              <p className="voice-friend-assistant-note">Response delivered through your avatar in voice-only mode.</p>
-            ) : (
-              <p>{item.content}</p>
-            )}
+            <p>{item.content}</p>
             {item.role === 'assistant' && (
               <div style={{ marginTop: 8 }}>
                 <button
@@ -743,7 +1042,10 @@ const VoiceFriend = () => {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <input
                       value={friendCustomName}
-                      onChange={(e) => setFriendCustomName(e.target.value)}
+                      onChange={(e) => {
+                        setFriendCustomName(e.target.value);
+                        markPendingSessionSettings();
+                      }}
                       placeholder={selectedFriend.name}
                       style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb' }}
                     />
@@ -752,6 +1054,7 @@ const VoiceFriend = () => {
                       type="button"
                       className="voice-friend-button"
                       onClick={() => avatarInputRef.current?.click()}
+                      disabled={busy || autoApplyingAvatar}
                     >
                       Upload face
                     </button>
@@ -763,38 +1066,7 @@ const VoiceFriend = () => {
                       style={{ display: 'none' }}
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (!file) return;
-
-                        // attempt upload to backend
-                        try {
-                          const fd = new FormData();
-                          fd.append('avatar', file);
-
-                          const resp = await axios.post(
-                            buildApiUrl('/ai-voice-friend/avatar'),
-                            fd,
-                            {
-                              headers: {
-                                ...buildRequestHeaders(),
-                                // Let axios set the multipart boundary automatically.
-                                'Accept': 'application/json',
-                              },
-                            }
-                          );
-
-                          const url = resp?.data?.data?.url;
-                          if (url) {
-                            setFriendCustomAvatar(resolveVoiceFriendAvatarUrl(url));
-                            return;
-                          }
-                        } catch (err) {
-                          console.warn('Avatar upload failed, falling back to local image', err);
-                        }
-
-                        // fallback: local data URL
-                        const reader = new FileReader();
-                        reader.onload = () => setFriendCustomAvatar(String(reader.result || ''));
-                        reader.readAsDataURL(file);
+                        await processAndUploadAvatar(file);
                       }}
                     />
 
@@ -805,6 +1077,7 @@ const VoiceFriend = () => {
                         if (!window.confirm('Clear custom name and avatar?')) return;
                         setFriendCustomName('');
                         setFriendCustomAvatar('');
+                        markPendingSessionSettings();
                         try {
                           const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
                           delete stored.friendCustomName;
@@ -817,6 +1090,84 @@ const VoiceFriend = () => {
                     >
                       Clear
                     </button>
+                  </div>
+                  <div className="voice-friend-face-presets">
+                    <input
+                      value={newPresetName}
+                      onChange={(e) => setNewPresetName(e.target.value)}
+                      placeholder="Preset name (save/rename)"
+                    />
+                    <button
+                      type="button"
+                      className="voice-friend-button"
+                      onClick={saveCurrentFaceAsPreset}
+                    >
+                      Save face
+                    </button>
+                    <select
+                      value={selectedPresetId}
+                      onChange={(e) => {
+                        const nextId = e.target.value;
+                        setSelectedPresetId(nextId);
+                        const nextPreset = facePresets.find((preset) => preset.id === nextId);
+                        setNewPresetName(nextPreset?.name || '');
+                      }}
+                    >
+                      <option value="">Select saved face</option>
+                      {facePresets.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                          {preset.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="voice-friend-button"
+                      onClick={applySelectedPreset}
+                      disabled={!selectedPresetId || busy || autoApplyingAvatar}
+                    >
+                      Use preset
+                    </button>
+                    <button
+                      type="button"
+                      className="voice-friend-button"
+                      onClick={renameSelectedPreset}
+                      disabled={!selectedPresetId}
+                    >
+                      Rename preset
+                    </button>
+                    <button
+                      type="button"
+                      className="voice-friend-button"
+                      onClick={deleteSelectedPreset}
+                      disabled={!selectedPresetId}
+                    >
+                      Delete preset
+                    </button>
+                  </div>
+                  <div className="voice-friend-preset-strip" role="list" aria-label="Saved face presets">
+                    {facePresets.map((preset) => {
+                      const isActive = preset.id === selectedPresetId;
+                      const thumbUrl = resolveVoiceFriendAvatarUrl(preset.avatarUrl);
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          role="listitem"
+                          className={`voice-friend-preset-thumb ${isActive ? 'active' : ''}`}
+                          onClick={() => applyPresetById(preset.id)}
+                          disabled={busy || autoApplyingAvatar}
+                          title={`Use preset ${preset.name}`}
+                        >
+                          <span
+                            className="voice-friend-preset-thumb-image"
+                            style={{ backgroundImage: thumbUrl ? `url(${thumbUrl})` : undefined }}
+                            aria-hidden
+                          />
+                          <span className="voice-friend-preset-thumb-name">{preset.name}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -836,7 +1187,7 @@ const VoiceFriend = () => {
             <span>{SCENARIO_OPTIONS.find((opt) => opt.id === scenario)?.label}</span>
           </div>
         </div>
-        <p className="voice-friend-video-note">Your avatar speaks directly when a response is generated — text replies are hidden for a more natural interaction.</p>
+        <p className="voice-friend-video-note">Your avatar speaks directly when a response is generated, and text replies are shown in chat for clarity.</p>
         <div className="voice-friend-summary">
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
           <span><strong>Mood:</strong> {moodEmojiMap[mood] || ''} {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
@@ -921,7 +1272,7 @@ const VoiceFriend = () => {
         </div>
         {hasPendingSessionSettings && (
           <div className="voice-friend-control-group">
-            <button type="button" className="voice-friend-button primary" onClick={applySessionSettings} disabled={busy}>
+            <button type="button" className="voice-friend-button primary" onClick={() => applySessionSettings()} disabled={busy || autoApplyingAvatar}>
               Apply updated session settings
             </button>
           </div>
@@ -950,7 +1301,7 @@ const VoiceFriend = () => {
         <textarea
           value={messageText}
           onChange={(e) => setMessageText(e.target.value)}
-          placeholder="Speak or type your message. Your friend replies by voice and avatar only."
+          placeholder="Speak or type your message. Your friend replies by voice, avatar, and chat text."
           rows={3}
         />
         <div className="voice-friend-actions">

@@ -97,10 +97,20 @@ const EligibilityTab = ({ form, onChange, onSubmit, state, categories, states, d
     {state.error ? <p className="finance-error">{state.error}</p> : null}
     {state.result?.result ? (
       <div className="finance-result">
-        <p><strong>Approval Probability:</strong> {state.result.result.approvalProbability}% ({state.result.result.probabilityLabel})</p>
+        <div className={`finance-eligibility-verdict ${Number(state.result.result.approvalProbability || 0) >= 70 ? "good" : Number(state.result.result.approvalProbability || 0) >= 45 ? "maybe" : "low"}`}>
+          <strong>
+            {Number(state.result.result.approvalProbability || 0) >= 70
+              ? "Eligible"
+              : Number(state.result.result.approvalProbability || 0) >= 45
+                ? "Maybe Eligible"
+                : "Low Chance"}
+          </strong>
+          <span>{state.result.result.approvalProbability}% probability</span>
+        </div>
         <p><strong>Score:</strong> {state.result.result.score}/100</p>
         <p><strong>FOIR:</strong> {state.result.result.foir}%</p>
         <p><strong>Estimated New EMI:</strong> {formatCurrency(state.result.result.estimatedNewEmi)}</p>
+        <p><strong>Recommended Amount:</strong> {formatCurrency(Math.min(Number(form.requiredAmount || 0), Math.max(0, Number(form.monthlyIncome || 0) * 12)))}</p>
         <p><strong>Best Matching Products:</strong> {(state.result.result.bestMatchingLoanProducts || []).join(", ")}</p>
         <p><strong>Improvement Guide:</strong> {(state.result.result.improvementTips || []).join(" | ")}</p>
         <p><strong>Potential Rejection Reasons:</strong> {(state.result.result.rejectionReasons || []).join(" | ") || "None"}</p>

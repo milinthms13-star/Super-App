@@ -5,6 +5,9 @@ const SchemesTab = ({ schemes = [], onApplyWithScheme }) => (
     <div className="finance-section-header">
       <h2>Government Scheme Hub</h2>
       <p>Detailed scheme cards with eligibility, amount, docs, benefit and support action.</p>
+      <div className="finance-disclaimer-box">
+        Scheme details, limits and eligibility can change. Verify on official Government, bank, or NBFC portals before applying.
+      </div>
     </div>
 
     <div className="finance-card-grid">
