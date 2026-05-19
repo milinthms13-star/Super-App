@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "promptvideogenerator", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen", "aibusinessos", "gulfjobsmigration", "womensafetyfamily", "devotionalecosystem", "hyperlocalaicommerce", "nilaaistudio", "trustlayer"],
+    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "promptvideogenerator", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen", "aibusinessos", "gulfjobsmigration", "womensafetyfamily", "hyperlocalaicommerce", "nilaaistudio", "trustlayer"],
   },
   utilities: {
     label: "Utilities",
@@ -121,7 +121,6 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "aibusinessos", label: t("modules.aibusinessos", "AI Business Operating System"), icon: "OS", sellerVisible: true },
     { id: "gulfjobsmigration", label: t("modules.gulfjobsmigration", "Kerala + Gulf Jobs Migration"), icon: "GM", sellerVisible: true },
     { id: "womensafetyfamily", label: t("modules.womensafetyfamily", "Women Safety + Family Protection"), icon: "SF", sellerVisible: true },
-    { id: "devotionalecosystem", label: t("modules.devotionalecosystem", "Devotional Ecosystem"), icon: "DE", sellerVisible: true },
     { id: "hyperlocalaicommerce", label: t("modules.hyperlocalaicommerce", "Hyperlocal AI Commerce"), icon: "HC", sellerVisible: true },
     { id: "nilaaistudio", label: t("modules.nilaaistudio", "Nila AI Studio"), icon: "NS", sellerVisible: true },
     { id: "trustlayer", label: t("modules.trustlayer", "Trust Layer"), icon: "TL", sellerVisible: true },

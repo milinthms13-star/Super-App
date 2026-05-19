@@ -218,12 +218,6 @@ const moduleFallbacks = {
     icon: "FaShieldAlt",
     isComingSoon: false,
   },
-  devotionalecosystem: {
-    title: "Devotional Ecosystem",
-    description: "Temple booking, vazhipadu, festival alerts, donations, and pilgrimage planning.",
-    icon: "FaStar",
-    isComingSoon: false,
-  },
   hyperlocalaicommerce: {
     title: "Hyperlocal AI Commerce",
     description: "AI-powered local shopping conversion with voice ordering, offers, and seller automation.",
@@ -327,7 +321,6 @@ const moduleCategoryMap = {
   fooddelivery: "utility",
   healthcare: "utility",
   womensafetyfamily: "utility",
-  devotionalecosystem: "utility",
   reminderalert: "utility",
   sosalert: "utility",
   devadarshan: "utility",
@@ -377,7 +370,6 @@ const LaunchPage = ({
     "AI Business Operating System": "aibusinessos",
     "Kerala + Gulf Jobs Migration": "gulfjobsmigration",
     "Women Safety + Family Protection": "womensafetyfamily",
-    "Devotional Ecosystem": "devotionalecosystem",
     "Hyperlocal AI Commerce": "hyperlocalaicommerce",
     "Nila AI Studio": "nilaaistudio",
     "Trust Layer": "trustlayer",

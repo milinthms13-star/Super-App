@@ -565,18 +565,6 @@ const MODULE_CONFIG = [
     emoji: "SF",
   },
   {
-    id: "devotionalecosystem",
-    nameKey: "modules.devotionalecosystem",
-    fallbackName: "Devotional Ecosystem",
-    icon: "devadarshan",
-    descriptionKey: "dashboard.moduleDescriptions.devotionalecosystem",
-    fallbackDescription:
-      "Temple bookings, vazhipadu, festival alerts, donations, streaming, and pilgrimage planning in one devotional stack.",
-    stats: "Daily devotional engagement",
-    gradient: "linear-gradient(135deg, #7C2D12 0%, #EA580C 45%, #F59E0B 100%)",
-    emoji: "DE",
-  },
-  {
     id: "hyperlocalaicommerce",
     nameKey: "modules.hyperlocalaicommerce",
     fallbackName: "Hyperlocal AI Commerce",
@@ -892,7 +880,6 @@ const MODULE_CATEGORY_MAP = {
   devadarshan: "utility",
   localservices: "utility",
   womensafetyfamily: "utility",
-  devotionalecosystem: "utility",
   reminderalert: "utility",
   sosalert: "utility",
   astrology: "utility",
@@ -1360,7 +1347,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "aibusinessos" ||
         module.id === "gulfjobsmigration" ||
         module.id === "womensafetyfamily" ||
-        module.id === "devotionalecosystem" ||
         module.id === "hyperlocalaicommerce" ||
         module.id === "nilaaistudio" ||
         module.id === "trustlayer" ||

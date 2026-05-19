@@ -29,7 +29,6 @@
   - [AI Business Operating System](#ai-business-operating-system)
   - [Kerala + Gulf Jobs Migration](#kerala--gulf-jobs-migration)
   - [Women Safety + Family Protection](#women-safety--family-protection)
-  - [Devotional Ecosystem](#devotional-ecosystem)
   - [Hyperlocal AI Commerce](#hyperlocal-ai-commerce)
   - [Nila AI Studio](#nila-ai-studio)
   - [Trust Layer](#trust-layer)
@@ -299,14 +298,6 @@ MalabarBazaar is a comprehensive mobile/web app for local services, marketplace,
 - SOS live tracking and trusted circle escalation
 - Emergency recording
 - Child and elderly protection alerts
-
-### Devotional Ecosystem
-**Purpose**: Daily devotional utility and temple engagement.
-
-**Highlights**:
-- Virtual queue and vazhipadu booking
-- Festival alerts and donation flows
-- Pilgrimage planning and devotional streaming
 
 ### Hyperlocal AI Commerce
 **Purpose**: AI acceleration layer for local commerce conversion.

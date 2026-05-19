@@ -21,11 +21,6 @@ const MODULE_META = {
     priority: 'high',
     monetization: ['Family plans', 'Institution safety plans', 'Partner services'],
   },
-  devotionalecosystem: {
-    title: 'Devotional Ecosystem',
-    priority: 'high',
-    monetization: ['Service fees', 'Temple SaaS', 'Pilgrimage partnerships'],
-  },
   hyperlocalaicommerce: {
     title: 'Hyperlocal AI Commerce',
     priority: 'highest',

@@ -466,7 +466,6 @@ const AdminDashboard = ({
               "aibusinessos",
               "gulfjobsmigration",
               "womensafetyfamily",
-              "devotionalecosystem",
               "hyperlocalaicommerce",
               "nilaaistudio",
               "trustlayer",

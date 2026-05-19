@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { buildApiUrl } from '../../utils/api';
+import { BACKEND_BASE_URL, buildApiUrl } from '../../utils/api';
 import { getStoredAuthToken } from '../../utils/auth';
 import './VoiceFriend.css';
 
@@ -70,6 +70,17 @@ const AI_FRIENDS = [
 
 const STORAGE_KEY = 'voiceFriendState';
 
+const resolveVoiceFriendAvatarUrl = (value = '') => {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) return '';
+  if (/^(data:|blob:)/i.test(rawValue)) return rawValue;
+  if (/^https?:\/\//i.test(rawValue)) return rawValue;
+  if (/^\/(uploads|videos)\//i.test(rawValue)) {
+    return `${String(BACKEND_BASE_URL || '').replace(/\/+$/, '')}${rawValue}`;
+  }
+  return rawValue;
+};
+
 const buildRequestHeaders = () => {
   const token = getStoredAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -126,6 +137,10 @@ const VoiceFriend = () => {
 
   const displayName = friendCustomName || selectedFriend.name;
   const friendLabel = `${displayName} • ${selectedFriend.label}`;
+  const resolvedFriendCustomAvatar = useMemo(
+    () => resolveVoiceFriendAvatarUrl(friendCustomAvatar),
+    [friendCustomAvatar]
+  );
 
   const markPendingSessionSettings = useCallback(() => {
     setHasPendingSessionSettings(true);
@@ -709,19 +724,19 @@ const VoiceFriend = () => {
               className="voice-friend-profile-avatar"
               style={{
                 backgroundColor: selectedFriend.color,
-                backgroundImage: friendCustomAvatar ? `url(${friendCustomAvatar})` : undefined,
+                backgroundImage: resolvedFriendCustomAvatar ? `url(${resolvedFriendCustomAvatar})` : undefined,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               }}
             >
-              {!friendCustomAvatar && (friendCustomName || selectedFriend.name)[0]}
+              {!resolvedFriendCustomAvatar && (friendCustomName || selectedFriend.name)[0]}
             </div>
             <div className="voice-friend-profile-meta">
               <h1>{displayName}</h1>
               <p>{friendLabel}</p>
 
               <div className="voice-friend-persona-card">
-                <img src={friendCustomAvatar || selectedFriend.avatar} alt={`${friendCustomName || selectedFriend.name} avatar`} className="voice-friend-persona-img" />
+                <img src={resolvedFriendCustomAvatar || selectedFriend.avatar} alt={`${friendCustomName || selectedFriend.name} avatar`} className="voice-friend-persona-img" />
                 <div className="voice-friend-persona-meta">
                   <div className="voice-friend-persona-bio">{selectedFriend.style}</div>
                   <div className="voice-friend-persona-voice">Voice style: {selectedVoiceOption.label}</div>
@@ -769,7 +784,7 @@ const VoiceFriend = () => {
 
                           const url = resp?.data?.data?.url;
                           if (url) {
-                            setFriendCustomAvatar(url);
+                            setFriendCustomAvatar(resolveVoiceFriendAvatarUrl(url));
                             return;
                           }
                         } catch (err) {
@@ -811,9 +826,9 @@ const VoiceFriend = () => {
           <div className="voice-friend-video-backdrop" />
           <div className="voice-friend-video-badge">Live</div>
           <div className="voice-friend-video-avatar" style={{
-            backgroundImage: friendCustomAvatar ? `url(${friendCustomAvatar})` : `url(${selectedFriend.avatar})`,
+            backgroundImage: resolvedFriendCustomAvatar ? `url(${resolvedFriendCustomAvatar})` : `url(${selectedFriend.avatar})`,
           }}>
-            {!friendCustomAvatar && !selectedFriend.avatar && (friendCustomName || selectedFriend.name)[0]}
+            {!resolvedFriendCustomAvatar && !selectedFriend.avatar && (friendCustomName || selectedFriend.name)[0]}
             <div className="voice-friend-mouth" aria-hidden="true" />
           </div>
           <div className="voice-friend-video-label">
