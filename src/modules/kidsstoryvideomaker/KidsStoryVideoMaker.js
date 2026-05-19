@@ -1568,6 +1568,7 @@ const KidsStoryVideoMaker = () => {
               storyMode,
               voiceType,
               language: selectedLanguageCode,
+              languageId,
               project: pipelineProjectPayload,
               characters: normalizedProjectCharacters,
               scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),

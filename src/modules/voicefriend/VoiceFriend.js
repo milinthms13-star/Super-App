@@ -749,11 +749,24 @@ const VoiceFriend = () => {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
+
                         // attempt upload to backend
                         try {
                           const fd = new FormData();
                           fd.append('avatar', file);
-                          const resp = await axios.post(buildApiUrl('/ai-voice-friend/avatar'), fd, { headers: { ...buildRequestHeaders(), 'Content-Type': 'multipart/form-data' } });
+
+                          const resp = await axios.post(
+                            buildApiUrl('/ai-voice-friend/avatar'),
+                            fd,
+                            {
+                              headers: {
+                                ...buildRequestHeaders(),
+                                // Let axios set the multipart boundary automatically.
+                                'Accept': 'application/json',
+                              },
+                            }
+                          );
+
                           const url = resp?.data?.data?.url;
                           if (url) {
                             setFriendCustomAvatar(url);

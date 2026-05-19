@@ -5,6 +5,7 @@ const { promisify } = require('util');
 const sharp = require('sharp');
 const ffmpegPath = require('ffmpeg-static');
 const { v4: uuidv4 } = require('uuid');
+const { safeGoogleAI } = require('./videoStudioService');
 
 const writeFile = promisify(fs.writeFile);
 const readFile = promisify(fs.readFile);
@@ -41,6 +42,20 @@ const LANGUAGE_CODE_ALIASES = {
   arabic: 'ar',
 };
 
+const LANGUAGE_NAME_BY_CODE = {
+  en: 'English',
+  hi: 'Hindi',
+  ml: 'Malayalam',
+  ta: 'Tamil',
+  te: 'Telugu',
+  kn: 'Kannada',
+  bn: 'Bengali',
+  mr: 'Marathi',
+  gu: 'Gujarati',
+  ur: 'Urdu',
+  ar: 'Arabic',
+};
+
 const normalizeLanguageCode = (value = 'en') => {
   const raw = sanitizeText(value).toLowerCase().replace(/_/g, '-');
   if (!raw) return 'en';
@@ -62,6 +77,51 @@ const sanitizeInternetSummaryText = (value = '') =>
     .replace(/\s+/g, ' ')
     .replace(/\((?:listen|help|about this sound file)[^)]+\)/gi, '')
     .trim();
+
+const translateTextToLanguage = async (text = '', targetLanguage = 'en') => {
+  const cleanText = sanitizeText(text);
+  if (!cleanText || targetLanguage === 'en') return cleanText;
+
+  const languageName = LANGUAGE_NAME_BY_CODE[targetLanguage] || targetLanguage;
+  try {
+    const aiResponse = await safeGoogleAI([
+      {
+        role: 'system',
+        content: `You are a friendly translation assistant. Translate the text into ${languageName} exactly and return only the translated text without adding extra commentary. Preserve names, punctuation, and story structure.`,
+      },
+      {
+        role: 'user',
+        content: cleanText,
+      },
+    ], 400);
+
+    const translated = sanitizeText(String(aiResponse || cleanText));
+    return translated || cleanText;
+  } catch (_error) {
+    return cleanText;
+  }
+};
+
+const localizeStoryForLanguage = async (story = {}, targetLanguage = 'en') => {
+  if (!story || targetLanguage === 'en') return story;
+
+  const localizedScenes = await Promise.all(
+    (Array.isArray(story.scenes) ? story.scenes : []).map(async (scene) => ({
+      ...scene,
+      title: await translateTextToLanguage(scene.title, targetLanguage),
+      description: await translateTextToLanguage(scene.description, targetLanguage),
+      dialogue: await translateTextToLanguage(scene.dialogue, targetLanguage),
+    }))
+  );
+
+  return {
+    ...story,
+    title: await translateTextToLanguage(story.title, targetLanguage),
+    synopsis: await translateTextToLanguage(story.synopsis, targetLanguage),
+    moral: await translateTextToLanguage(story.moral, targetLanguage),
+    scenes: localizedScenes,
+  };
+};
 
 const splitSummarySentences = (summary = '') =>
   sanitizeInternetSummaryText(summary)
@@ -991,14 +1051,16 @@ const generateKidsVideoFromPrompt = async ({
     scenes: (baseStory.scenes || []).slice(0, Math.max(3, Math.min(8, Number(sceneCount) || 5))),
   };
 
+  const localizedStory = await localizeStoryForLanguage(story, normalizedLanguage);
+
   const clips = [];
   const sceneRenderMeta = [];
-  for (let index = 0; index < story.scenes.length; index += 1) {
-    const scene = story.scenes[index];
+  for (let index = 0; index < localizedStory.scenes.length; index += 1) {
+    const scene = localizedStory.scenes[index];
     const stillPath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}-still.png`);
     const imageResult = await generateSceneImage({
       scene,
-      story,
+      story: localizedStory,
       outputPath: stillPath,
       width,
       height,
@@ -1048,14 +1110,14 @@ const generateKidsVideoFromPrompt = async ({
   const videoUrl = `/uploads/kids-video-hf/${safeFileName(projectId)}/${outputFileName}`;
 
   const persistedProject = {
-    ...story,
+    ...localizedStory,
     projectId,
     outputDir,
     outputFile,
     videoUrl,
     renderMode: 'kids-video-scene-pipeline',
     aiImagesEnabled,
-    scenes: story.scenes,
+    scenes: localizedStory.scenes,
     sceneRenderMeta,
     renderedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -1416,4 +1478,6 @@ module.exports = {
   generateKidsVideoFromFreeSteveLikePrompt,
   generateKidsVideoFromCogVideoXPrompt,
   getKidsVideoProject,
+  translateTextToLanguage,
+  localizeStoryForLanguage,
 };

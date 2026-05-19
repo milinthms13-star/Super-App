@@ -2,6 +2,10 @@ const logger = require('../utils/logger');
 const Reminder = require('../models/Reminder');
 const voiceCallService = require('./voiceCallService');
 const { emitToUser } = require('../config/websocket');
+const User = require('../models/User');
+const Chat = require('../models/Chat');
+const Call = require('../models/Call');
+const mongoose = require('mongoose');
 
 /**
  * Automated Voice Call Scheduler
@@ -152,18 +156,24 @@ class VoiceCallScheduler {
     try {
       logger.info(`Processing voice call reminder: ${reminder._id} (${reminder.title})`);
 
+      const formattedPhoneNumber = voiceCallService.formatPhoneNumber(reminder.recipientPhoneNumber);
+
       // Prepare call data
       const callData = {
         reminderId: reminder._id,
-        recipientPhoneNumber: voiceCallService.formatPhoneNumber(reminder.recipientPhoneNumber),
+        recipientPhoneNumber: formattedPhoneNumber,
         voiceMessage: reminder.voiceMessage,
         messageType: reminder.messageType || 'text',
         senderName: reminder.senderName || 'Reminder Service',
         voiceNoteUrl: reminder.voiceNoteUrl
       };
 
-      // Initiate the voice call
-      const callResult = await voiceCallService.initiateVoiceCall(callData);
+      // Level 1: Try chat-module call when phone belongs to a registered user.
+      // Level 2: Fall back to normal mobile voice call (Twilio/simulated) when chat route is unavailable.
+      const recipientUser = await this._resolveRecipientForChatCall(reminder, formattedPhoneNumber);
+      const callResult = recipientUser
+        ? await this._initiateChatModuleCall(reminder, recipientUser, callData)
+        : await voiceCallService.initiateVoiceCall(callData);
 
       // Update reminder with call result
       reminder.recordCallAttempt(
@@ -197,6 +207,110 @@ class VoiceCallScheduler {
       }
     } finally {
       this.currentCalls--;
+    }
+  }
+
+  _normalizePhone(phoneValue = '') {
+    return String(phoneValue || '').replace(/\D/g, '');
+  }
+
+  async _resolveRecipientForChatCall(reminder, formattedPhoneNumber) {
+    try {
+      const existingRecipientId = String(reminder.recipientId || '').trim();
+
+      if (mongoose.Types.ObjectId.isValid(existingRecipientId)) {
+        const existingUser = await User.findById(existingRecipientId).select('_id');
+        if (existingUser) {
+          return existingUser;
+        }
+      }
+
+      const normalizedPhone = this._normalizePhone(formattedPhoneNumber);
+      if (normalizedPhone.length < 10) {
+        return null;
+      }
+
+      const localPhone = normalizedPhone.slice(-10);
+      const recipientUser = await User.findOne({
+        $or: [{ phone: normalizedPhone }, { phone: localPhone }],
+      }).select('_id');
+
+      if (recipientUser && String(reminder.recipientId || '') !== String(recipientUser._id)) {
+        reminder.recipientId = String(recipientUser._id);
+      }
+
+      return recipientUser;
+    } catch (error) {
+      logger.warn(`Failed resolving chat recipient for reminder ${reminder._id}: ${error.message}`);
+      return null;
+    }
+  }
+
+  async _initiateChatModuleCall(reminder, recipientUser, callData) {
+    try {
+      const initiatorId = String(reminder.userId || '').trim();
+      const recipientId = String(recipientUser._id || '').trim();
+
+      if (!mongoose.Types.ObjectId.isValid(initiatorId) || !mongoose.Types.ObjectId.isValid(recipientId)) {
+        throw new Error('Invalid user ID for chat call');
+      }
+
+      if (initiatorId === recipientId) {
+        throw new Error('Sender and recipient cannot be the same for chat call');
+      }
+
+      let chat = await Chat.findOne({
+        type: 'direct',
+        participants: { $all: [initiatorId, recipientId] },
+      }).select('_id participants');
+
+      if (!chat) {
+        chat = await Chat.create({
+          type: 'direct',
+          participants: [initiatorId, recipientId],
+        });
+      }
+
+      const call = await Call.create({
+        chatId: chat._id,
+        initiatorId,
+        recipientId,
+        callType: 'audio',
+        status: 'ringing',
+      });
+
+      emitToUser(recipientId, 'call:incoming', {
+        _id: call._id,
+        callId: call._id,
+        initiatorId,
+        recipientId,
+        chatId: chat._id,
+        callType: 'audio',
+        status: call.status,
+        caller: {
+          _id: initiatorId,
+          name: callData.senderName || 'Reminder Service',
+          avatar: '',
+        },
+        reminderId: reminder._id,
+        reminderTitle: reminder.title,
+        voiceMessage: callData.messageType === 'text' ? callData.voiceMessage : '',
+        messageType: callData.messageType,
+        voiceNoteUrl: callData.messageType === 'audio' ? callData.voiceNoteUrl : '',
+        timestamp: new Date(),
+      });
+
+      logger.info(`Chat-module call initiated for reminder ${reminder._id}: ${call._id}`);
+
+      return {
+        status: 'ringing',
+        callId: String(call._id),
+        timestamp: new Date(),
+        provider: 'chat-module',
+      };
+    } catch (error) {
+      logger.warn(`Chat call fallback to mobile for reminder ${reminder._id}: ${error.message}`);
+      return voiceCallService.initiateVoiceCall(callData);
     }
   }
 

@@ -470,6 +470,31 @@ const ReminderForm = React.memo(({
         )}
 
         {/* Voice Call Setup */}
+        {!formData.reminders.includes('Call') && (
+          <div className="reminderalert-alert reminderalert-alert-info" role="note">
+            <p style={{ marginBottom: '0.5rem' }}>
+              Looking for voice note? Enable the <strong>Voice call</strong> channel above, then choose
+              <strong> Pre-recorded audio</strong> in message type.
+            </p>
+            <button
+              type="button"
+              className="reminderalert-filter-chip"
+              onClick={() =>
+                onChange({
+                  target: {
+                    type: 'checkbox',
+                    name: 'reminders',
+                    value: 'Call',
+                    checked: true,
+                  },
+                })
+              }
+              disabled={submitting}
+            >
+              Enable voice call
+            </button>
+          </div>
+        )}
         {formData.reminders.includes('Call') && (
           <fieldset className="reminderalert-section-block reminderalert-voice-block">
             <legend className="reminderalert-section-heading">

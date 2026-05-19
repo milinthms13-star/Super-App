@@ -1,11 +1,9 @@
 # TODO
 
-- [x] Locate the code path causing `spawn python ENOENT`.
-- [x] Identify the exact spawn site in `backend/services/kidsVideoGeneratorHFService.js`.
-- [ ] Make runtime resilient by adding fallback for python executable (python.exe/python3) when `python` is not in PATH.
-- [x] Add documentation to set `PYTHON_BIN` / `PYTHON_PATH` for deployments.
-- [x] Run a quick sanity check by calling the HF text-to-video endpoint (or invoking the generator function) after applying fix.
-
-
+- [x] Locate VoiceFriend UI module and related backend route.
+- [x] Identify why image upload wasn’t working (multipart header misuse).
+- [x] Fix avatar upload request in `src/modules/voicefriend/VoiceFriend.js` so axios sets multipart boundary correctly.
+- [ ] Redesign VoiceFriend UI (premium rich look, friendly & simple) via CSS updates in `src/modules/voicefriend/VoiceFriend.css`.
+- [ ] Quick smoke test: avatar upload endpoint returns `success:true` and renders uploaded URL.
 
 
