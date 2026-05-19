@@ -6,6 +6,9 @@ const CharacterCards = React.memo(function CharacterCards({
   onCharacterChange,
   onCharacterToggleLock,
   onCharacterRemove,
+  getCharacterFacePreview,
+  onCharacterFaceUpload,
+  onCharacterFaceClear,
 }) {
   return (
     <div className="character-grid">
@@ -35,6 +38,34 @@ const CharacterCards = React.memo(function CharacterCards({
             value={character.voiceProfile || ""}
             onChange={(event) => onCharacterChange(index, "voiceProfile", event.target.value)}
           />
+          <label>Face Reference</label>
+          <div className="character-face-upload">
+            {getCharacterFacePreview?.(character, index) ? (
+              <img
+                className="character-face-preview"
+                src={getCharacterFacePreview(character, index)}
+                alt={`${character.name || `Character ${index + 1}`} face reference`}
+              />
+            ) : (
+              <p className="character-face-placeholder">
+                Upload a face image to keep this character look consistent.
+              </p>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => onCharacterFaceUpload?.(index, character, event)}
+            />
+            {getCharacterFacePreview?.(character, index) ? (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onCharacterFaceClear?.(index, character)}
+              >
+                Clear Face
+              </button>
+            ) : null}
+          </div>
           <div className="studio-toggle-row">
             <span>Character Lock</span>
             <button

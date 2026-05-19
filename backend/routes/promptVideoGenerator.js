@@ -6,6 +6,7 @@ const logger = require('../utils/logger');
 const {
   createAutopilotProject,
   patchStudioProject,
+  regenerateProjectStage,
   renderVideo,
 } = require('../services/videoStudioService');
 
@@ -51,6 +52,19 @@ const inferExt = (file = {}) => {
 };
 
 const parseCharacterSeeds = (rawValue) => {
+  if (!rawValue) return [];
+  if (Array.isArray(rawValue)) return rawValue;
+  const text = sanitizeText(rawValue);
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+const parseSceneSeeds = (rawValue) => {
   if (!rawValue) return [];
   if (Array.isArray(rawValue)) return rawValue;
   const text = sanitizeText(rawValue);
@@ -138,6 +152,70 @@ const buildSceneCharacters = (characters = []) =>
     role: sanitizeText(character.role),
   }));
 
+const clampSceneCount = (value, fallback = 5) => {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(3, Math.min(8, parsed));
+};
+
+const clampDuration = (value, fallback = 4) => {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(2, Math.min(15, parsed));
+};
+
+const buildSubtitlesFromScenes = (scenes = []) => {
+  let cursor = 0;
+  return (Array.isArray(scenes) ? scenes : []).map((scene, index) => {
+    const durationSeconds = clampDuration(scene?.durationSeconds, 4);
+    const start = cursor;
+    const end = start + durationSeconds;
+    cursor = end;
+    const title = sanitizeText(scene?.title || `Scene ${index + 1}`);
+    const dialogue = sanitizeText(scene?.dialogue || scene?.description || '');
+    return {
+      start,
+      end,
+      text: `${title}: ${dialogue}`.slice(0, 240),
+    };
+  });
+};
+
+const buildManualScenes = ({
+  sceneSeeds = [],
+  baseScenes = [],
+  sceneCharacters = [],
+  sceneCount = 5,
+}) => {
+  const targetCount = clampSceneCount(sceneCount, 5);
+  const result = [];
+  for (let index = 0; index < targetCount; index += 1) {
+    const seed = sceneSeeds[index] && typeof sceneSeeds[index] === 'object' ? sceneSeeds[index] : {};
+    const base = baseScenes[index] && typeof baseScenes[index] === 'object' ? baseScenes[index] : {};
+    const title = sanitizeText(seed.title || base.title || `Scene ${index + 1}`);
+    const description = sanitizeText(seed.description || base.description || '');
+    const dialogue = sanitizeText(seed.dialogue || base.dialogue || '');
+    const hasMeaningfulContent = title || description || dialogue;
+    if (!hasMeaningfulContent) continue;
+
+    result.push({
+      ...base,
+      id: index + 1,
+      title: title || `Scene ${index + 1}`,
+      description: description || dialogue || title || `Story scene ${index + 1}`,
+      dialogue: dialogue || description || `${title || `Scene ${index + 1}`} continues.`,
+      emotion: sanitizeText(seed.emotion || base.emotion || 'wonder'),
+      background: sanitizeText(seed.background || base.background || ''),
+      weather: sanitizeText(seed.weather || base.weather || ''),
+      timeOfDay: sanitizeText(seed.timeOfDay || base.timeOfDay || ''),
+      cameraActions: sanitizeText(seed.cameraActions || base.cameraActions || 'soft pan'),
+      durationSeconds: clampDuration(seed.durationSeconds, clampDuration(base.durationSeconds, 4)),
+      characters: sceneCharacters.length ? sceneCharacters : base.characters,
+    });
+  }
+  return result;
+};
+
 const applyCharacterCustomization = async ({
   project,
   characters,
@@ -217,6 +295,31 @@ router.post('/generate', upload.array('characterImages', 8), async (req, res) =>
       }
     }
 
+    const sceneSeeds = parseSceneSeeds(req.body?.scenes);
+    const manualScenes = buildManualScenes({
+      sceneSeeds,
+      baseScenes: Array.isArray(finalProject?.scenes) ? finalProject.scenes : [],
+      sceneCharacters: buildSceneCharacters(finalProject?.characters || []),
+      sceneCount,
+    });
+    const manualScenesEnabled = manualScenes.length > 0;
+
+    if (manualScenesEnabled) {
+      finalProject = await patchStudioProject(finalProject.projectId, {
+        scenes: manualScenes,
+        subtitles: buildSubtitlesFromScenes(manualScenes),
+        sceneInputMode: 'manual',
+      });
+    } else {
+      try {
+        finalProject = await regenerateProjectStage(finalProject.projectId, 'dialogues', {
+          direction: `Topic: ${prompt}. Keep every scene dialogue unique, natural, child-safe, and tied to the scene description.`,
+        });
+      } catch (regenerationError) {
+        logger.warn(`Prompt video dialogue regeneration skipped: ${regenerationError?.message || regenerationError}`);
+      }
+    }
+
     if (!autoRender) {
       return res.json({
         success: true,
@@ -224,6 +327,7 @@ router.post('/generate', upload.array('characterImages', 8), async (req, res) =>
         message: 'Project created. Render when ready.',
         project: finalProject,
         characterMode: useCustomerCharacters ? 'customer-uploaded' : 'auto-generated',
+        sceneMode: manualScenesEnabled ? 'manual' : 'autopilot',
         uploadedCharacterImages: uploadedImages.map((item) => ({
           imageUrl: toAbsoluteUrl(req, item.imageUrl),
           originalName: item.originalName,
@@ -255,6 +359,7 @@ router.post('/generate', upload.array('characterImages', 8), async (req, res) =>
       module: 'prompt-video-generator',
       projectId: finalProject.projectId,
       characterMode: useCustomerCharacters ? 'customer-uploaded' : 'auto-generated',
+      sceneMode: manualScenesEnabled ? 'manual' : 'autopilot',
       videoUrl: toAbsoluteUrl(req, relativeVideoUrl),
       videoPath: relativeVideoUrl,
       uploadedCharacterImages: uploadedImages.map((item) => ({

@@ -308,6 +308,47 @@ describe('kids-video-hf routes', () => {
     );
   });
 
+  test('POST /api/kids-video-hf/generate accepts character face uploads and maps them into provided characters', async () => {
+    generateKidsVideoFromPrompt.mockResolvedValue({
+      projectId: 'proj-upload-1',
+      videoUrl: '/uploads/kids-video-hf/proj-upload-1/story-render.mp4',
+      aiImagesEnabled: true,
+      project: {
+        projectId: 'proj-upload-1',
+        scenes: [{ id: 1, title: 'Scene 1' }],
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/generate')
+      .field('prompt', 'A brave kid explores a forest')
+      .field('storyTitle', 'Forest Quest')
+      .field(
+        'characters',
+        JSON.stringify([
+          { name: 'Ari', role: 'Hero', appearance: 'curly hair, blue shirt' },
+        ])
+      )
+      .attach('characterImages', Buffer.from('fake-image-content'), {
+        filename: 'ari-face.png',
+        contentType: 'image/png',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.uploadedCharacterImages?.length).toBe(1);
+    expect(generateKidsVideoFromPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providedCharacters: expect.arrayContaining([
+          expect.objectContaining({
+            name: 'Ari',
+            appearance: expect.stringContaining('Match uploaded face reference image'),
+          }),
+        ]),
+      })
+    );
+  });
+
   test('POST /api/kids-video-hf/generate honors forced cogvideox even with structured scenes', async () => {
     generateKidsVideoFromCogVideoXPrompt.mockResolvedValue({
       projectId: 'proj-cog-forced-1',

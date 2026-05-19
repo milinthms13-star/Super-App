@@ -443,6 +443,8 @@ const buildCartoonRenderPayload = ({
 };
 
 const getSceneId = (scene, index) => String(scene?.id || index + 1);
+const getCharacterUploadKey = (character, index) =>
+  sanitizeText(character?.id || `character-${index + 1}`).toLowerCase();
 
 const buildCogVideoPromptFromProject = ({
   storyTitle,
@@ -515,6 +517,8 @@ const KidsStoryVideoMaker = () => {
   const [aiProvider, setAiProvider] = useState("scene_pipeline");
   const [hfRenderEngine, setHfRenderEngine] = useState("");
   const [generatedProject, setGeneratedProject] = useState(null);
+  const [characterFaceFiles, setCharacterFaceFiles] = useState({});
+  const [characterFacePreviews, setCharacterFacePreviews] = useState({});
   const [generatedScenes, setGeneratedScenes] = useState([]);
   const [videoUrl, setVideoUrl] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -908,6 +912,37 @@ const KidsStoryVideoMaker = () => {
     }
   }, [activeTab]);
 
+  useEffect(
+    () => () => {
+      Object.values(characterFacePreviews || {}).forEach((previewUrl) => {
+        if (previewUrl && previewUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(previewUrl);
+        }
+      });
+    },
+    [characterFacePreviews]
+  );
+
+  const clearAllCharacterFaceUploads = () => {
+    Object.values(characterFacePreviews || {}).forEach((previewUrl) => {
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    });
+    setCharacterFaceFiles({});
+    setCharacterFacePreviews({});
+  };
+
+  const getCharacterFacePreview = (character, index) => {
+    const key = getCharacterUploadKey(character, index);
+    return characterFacePreviews[key] || "";
+  };
+
+  const getCharacterFaceFile = (character, index) => {
+    const key = getCharacterUploadKey(character, index);
+    return characterFaceFiles[key] || null;
+  };
+
   const handleSaveCharacterPreset = () => {
     const currentCharacters = generatedProject?.characters;
     if (!Array.isArray(currentCharacters) || !currentCharacters.length) {
@@ -941,6 +976,7 @@ const KidsStoryVideoMaker = () => {
     if (!preset?.characters?.length) {
       return;
     }
+    clearAllCharacterFaceUploads();
 
     setGeneratedProject((current) =>
       current
@@ -975,6 +1011,75 @@ const KidsStoryVideoMaker = () => {
     markSectionDirty("characters");
   };
 
+  const handleCharacterFaceUpload = (index, character, event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) {
+      return;
+    }
+    const key = getCharacterUploadKey(character, index);
+    const previewUrl = URL.createObjectURL(file);
+
+    setCharacterFacePreviews((current) => {
+      const previous = current[key];
+      if (previous && previous.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return {
+        ...current,
+        [key]: previewUrl,
+      };
+    });
+    setCharacterFaceFiles((current) => ({
+      ...current,
+      [key]: file,
+    }));
+    setGeneratedProject((current) => {
+      if (!current) return current;
+      const characters = [...(current.characters || [])];
+      characters[index] = {
+        ...characters[index],
+        referenceImageName: file.name,
+      };
+      return { ...current, characters };
+    });
+    markSectionDirty("characters");
+    setMessage(`Face uploaded for ${character?.name || `Character ${index + 1}`}.`);
+    setError("");
+    if (event?.target) {
+      event.target.value = "";
+    }
+  };
+
+  const handleCharacterFaceClear = (index, character) => {
+    const key = getCharacterUploadKey(character, index);
+    setCharacterFacePreviews((current) => {
+      const previous = current[key];
+      if (previous && previous.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setCharacterFaceFiles((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setGeneratedProject((current) => {
+      if (!current) return current;
+      const characters = [...(current.characters || [])];
+      characters[index] = {
+        ...characters[index],
+      };
+      delete characters[index].referenceImageName;
+      return { ...current, characters };
+    });
+    markSectionDirty("characters");
+    setMessage(`Face reference cleared for ${character?.name || `Character ${index + 1}`}.`);
+    setError("");
+  };
+
   const handleCharacterLockToggle = (index) => {
     setGeneratedProject((current) => {
       if (!current) return current;
@@ -1000,12 +1105,32 @@ const KidsStoryVideoMaker = () => {
   };
 
   const handleRemoveCharacter = (index) => {
+    const currentCharacters = generatedProject?.characters || [];
+    if (currentCharacters.length <= 1) {
+      return;
+    }
+
+    const removedCharacter = currentCharacters[index];
+    if (removedCharacter) {
+      const key = getCharacterUploadKey(removedCharacter, index);
+      setCharacterFacePreviews((current) => {
+        const previous = current[key];
+        if (previous && previous.startsWith("blob:")) {
+          URL.revokeObjectURL(previous);
+        }
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      setCharacterFaceFiles((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
     setGeneratedProject((current) => {
       if (!current) return current;
       const characters = [...(current.characters || [])];
-      if (characters.length <= 1) {
-        return current;
-      }
       characters.splice(index, 1);
       return { ...current, characters };
     });
@@ -1018,6 +1143,7 @@ const KidsStoryVideoMaker = () => {
     if (!incomingProject) {
       return;
     }
+    clearAllCharacterFaceUploads();
 
     const normalized = normalizeProjectForLocal(incomingProject, {
       title: incomingProject.storyTitle || incomingProject.title || storyTitle,
@@ -1444,6 +1570,7 @@ const KidsStoryVideoMaker = () => {
         aiProvider,
       });
 
+      clearAllCharacterFaceUploads();
       setGeneratedProject(fallbackProject);
       setGeneratedScenes(fallbackProject.scenes || []);
       setStoryTitle(fallbackProject.title || safeTitle);
@@ -1687,15 +1814,45 @@ const KidsStoryVideoMaker = () => {
               appearance: sanitizeText(character?.appearance || ""),
               voiceProfile: sanitizeText(character?.voiceProfile || voiceType),
               colorPalette: Array.isArray(character?.colorPalette) ? character.colorPalette.slice(0, 4) : [],
+              referenceImageName: sanitizeText(character?.referenceImageName || ""),
             }))
             .filter((character) => character.name)
             .slice(0, 3)
         : [];
+      const characterImageFilesForRender = normalizedProjectCharacters
+        .map((character, index) => {
+          const sourceCharacter = generatedProject?.characters?.[index] || character;
+          const imageFile = getCharacterFaceFile(sourceCharacter, index);
+          return imageFile
+            ? {
+                imageFile,
+                character,
+              }
+            : null;
+        })
+        .filter(Boolean);
+      const charactersWithFaceHints = normalizedProjectCharacters.map((character, index) => {
+        const linkedFace = characterImageFilesForRender.find(
+          (entry) => sanitizeText(entry?.character?.id) === sanitizeText(character?.id)
+        );
+        if (!linkedFace?.imageFile) {
+          return character;
+        }
+        const imageName = sanitizeText(linkedFace.imageFile.name || `face-${index + 1}`);
+        const baseAppearance = sanitizeText(character.appearance);
+        return {
+          ...character,
+          appearance: sanitizeText(
+            `${baseAppearance}${baseAppearance ? ". " : ""}Match uploaded face reference ${imageName} with consistent identity in every scene.`
+          ),
+          referenceImageName: imageName,
+        };
+      });
       const pipelineProjectPayload = {
         projectId: generatedProject?.projectId || "",
         title: sanitizeText(storyTitle || generatedProject?.title || "AI Kids Story Video Generator"),
         storyPrompt: normalizedStoryPrompt,
-        characters: normalizedProjectCharacters,
+        characters: charactersWithFaceHints,
         scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
       };
 
@@ -1713,52 +1870,88 @@ const KidsStoryVideoMaker = () => {
         if (!engineAvailability.available) {
           throw new Error(engineAvailability.reason || "Selected render engine is not available right now.");
         }
-        forceEngine = selectedEngine === "cogvideox";
+        const hasStructuredOverrides = Boolean(
+          charactersWithFaceHints.length > 0 || normalizedScenesForPipeline.length > 0
+        );
+        forceEngine = selectedEngine === "cogvideox" && !hasStructuredOverrides;
         const enhancedPromptForCogVideoX =
           selectedEngine === "cogvideox"
             ? buildCogVideoPromptFromProject({
                 storyTitle: sanitizeText(storyTitle || generatedProject?.title || "AI Kids Story Video Generator"),
                 storyPrompt: normalizedStoryPrompt,
-                characters: normalizedProjectCharacters,
+                characters: charactersWithFaceHints,
                 scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
                 styleId,
                 storyMode,
               })
             : "";
         const selectedLanguageCode = getLanguageCode(languageId);
+        const renderRequestPayload = {
+          prompt: normalizedStoryPrompt,
+          storyPrompt: normalizedStoryPrompt,
+          storyTitle: sanitizeText(storyTitle || generatedProject?.title || "AI Kids Story Video Generator"),
+          sceneCount: fallbackSceneCount,
+          videoSize: videoSizeId,
+          videoSizeId,
+          storyMode,
+          voiceType,
+          language: selectedLanguageCode,
+          languageId,
+          project: pipelineProjectPayload,
+          characters: charactersWithFaceHints,
+          scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
+          forceEngine,
+          strictCogVideoX: selectedEngine === "cogvideox",
+          strictHybrid: selectedEngine === "hybrid_phase2" || selectedEngine === "hybrid_motion_cogvideox",
+          ...(selectedEngine === "cogvideox" && enhancedPromptForCogVideoX
+            ? {
+                enhancedPrompt: enhancedPromptForCogVideoX,
+              }
+            : {}),
+          ...(selectedEngine
+            ? {
+                engine: selectedEngine,
+                renderEngine: selectedEngine,
+              }
+            : {}),
+        };
+        const renderRequestBody = (() => {
+          if (!characterImageFilesForRender.length) {
+            return renderRequestPayload;
+          }
+          const formData = new FormData();
+          formData.append("prompt", renderRequestPayload.prompt);
+          formData.append("storyPrompt", renderRequestPayload.storyPrompt);
+          formData.append("storyTitle", renderRequestPayload.storyTitle);
+          formData.append("sceneCount", String(renderRequestPayload.sceneCount));
+          formData.append("videoSize", renderRequestPayload.videoSize);
+          formData.append("videoSizeId", renderRequestPayload.videoSizeId);
+          formData.append("storyMode", renderRequestPayload.storyMode);
+          formData.append("voiceType", renderRequestPayload.voiceType);
+          formData.append("language", renderRequestPayload.language);
+          formData.append("languageId", renderRequestPayload.languageId);
+          formData.append("project", JSON.stringify(renderRequestPayload.project));
+          formData.append("characters", JSON.stringify(renderRequestPayload.characters));
+          formData.append("scenes", JSON.stringify(renderRequestPayload.scenes));
+          formData.append("forceEngine", String(renderRequestPayload.forceEngine));
+          formData.append("strictCogVideoX", String(renderRequestPayload.strictCogVideoX));
+          formData.append("strictHybrid", String(renderRequestPayload.strictHybrid));
+          if (renderRequestPayload.enhancedPrompt) {
+            formData.append("enhancedPrompt", renderRequestPayload.enhancedPrompt);
+          }
+          if (renderRequestPayload.engine) {
+            formData.append("engine", renderRequestPayload.engine);
+          }
+          if (renderRequestPayload.renderEngine) {
+            formData.append("renderEngine", renderRequestPayload.renderEngine);
+          }
+          characterImageFilesForRender.forEach((entry) => {
+            formData.append("characterImages", entry.imageFile, entry.imageFile.name);
+          });
+          return formData;
+        })();
         const { payload, response } = await runCancelableRequest("render-video", (signal) =>
-          renderPromptVideoHf(
-            {
-              prompt: normalizedStoryPrompt,
-              storyPrompt: normalizedStoryPrompt,
-              storyTitle: sanitizeText(storyTitle || generatedProject?.title || "AI Kids Story Video Generator"),
-              sceneCount: fallbackSceneCount,
-              videoSize: videoSizeId,
-              videoSizeId,
-              storyMode,
-              voiceType,
-              language: selectedLanguageCode,
-              languageId,
-              project: pipelineProjectPayload,
-              characters: normalizedProjectCharacters,
-              scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
-              forceEngine,
-              strictCogVideoX: selectedEngine === "cogvideox",
-              strictHybrid: selectedEngine === "hybrid_phase2" || selectedEngine === "hybrid_motion_cogvideox",
-              ...(selectedEngine === "cogvideox" && enhancedPromptForCogVideoX
-                ? {
-                    enhancedPrompt: enhancedPromptForCogVideoX,
-                  }
-                : {}),
-              ...(selectedEngine
-                ? {
-                    engine: selectedEngine,
-                    renderEngine: selectedEngine,
-                  }
-                : {}),
-            },
-            { signal }
-          )
+          renderPromptVideoHf(renderRequestBody, { signal })
         );
 
         applyServiceCapabilities(payload);
@@ -2626,6 +2819,9 @@ const KidsStoryVideoMaker = () => {
                   onCharacterChange={handleCharacterFieldChange}
                   onCharacterToggleLock={handleCharacterLockToggle}
                   onCharacterRemove={handleRemoveCharacter}
+                  getCharacterFacePreview={getCharacterFacePreview}
+                  onCharacterFaceUpload={handleCharacterFaceUpload}
+                  onCharacterFaceClear={handleCharacterFaceClear}
                 />
               ) : (
                 <p>Generate the story pipeline to preview your AI characters.</p>

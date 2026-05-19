@@ -470,6 +470,31 @@ select:focus-visible {
   margin: 0;
 }
 
+.character-face-upload {
+  margin-top: 8px;
+  display: grid;
+  gap: 10px;
+}
+
+.character-face-preview {
+  width: 110px;
+  height: 110px;
+  border-radius: 14px;
+  object-fit: cover;
+  border: 1px solid #dcd2ff;
+  background: #fff;
+}
+
+.character-face-placeholder {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed #d4c9ff;
+  border-radius: 12px;
+  color: #6b5ea0;
+  font-size: 0.88rem;
+  background: #faf7ff;
+}
+
 .scene-card h3 {
   margin: 0 0 10px;
 }

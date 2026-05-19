@@ -31,6 +31,8 @@ const LOAN_CATEGORIES = [
   'business',
   'personal',
   'gold',
+  'loan-takeover',
+  'gold-sale',
   'home',
   'vehicle',
   'education',
@@ -38,6 +40,17 @@ const LOAN_CATEGORIES = [
   'women',
   'msme',
 ];
+
+const RELATED_LOAN_CATEGORY_MAP = {
+  'loan-takeover': ['loan-takeover', 'personal', 'business', 'home', 'msme', 'gold'],
+  'gold-sale': ['gold-sale', 'gold'],
+};
+
+const getRelatedLoanCategories = (category = '') => {
+  const normalized = String(category || '').trim().toLowerCase();
+  if (!normalized) return [];
+  return RELATED_LOAN_CATEGORY_MAP[normalized] || [normalized];
+};
 
 const LEAD_STATUSES = [
   'lead_received',
@@ -235,7 +248,7 @@ const defaultInstitutions = [
       email: 'rahul.nair@kcb.co.in',
     },
     serviceDistricts: ['Trivandrum', 'Kollam', 'Alappuzha', 'Kottayam'],
-    loanCategories: ['business', 'personal', 'home', 'vehicle', 'msme'],
+    loanCategories: ['business', 'personal', 'loan-takeover', 'home', 'vehicle', 'msme'],
     commissionModel: {
       type: 'percentage',
       value: 1.75,
@@ -259,7 +272,7 @@ const defaultInstitutions = [
       email: 'priya.menon@tnncapital.in',
     },
     serviceDistricts: ['Trivandrum', 'Kollam', 'Alappuzha'],
-    loanCategories: ['gold', 'vehicle', 'personal', 'education'],
+    loanCategories: ['gold', 'gold-sale', 'loan-takeover', 'vehicle', 'personal', 'education'],
     commissionModel: {
       type: 'flat',
       value: 3500,
@@ -283,7 +296,7 @@ const defaultInstitutions = [
       email: 'suresh.kumar@ccukerala.org',
     },
     serviceDistricts: ['Alappuzha', 'Kottayam', 'Pathanamthitta'],
-    loanCategories: ['agriculture', 'home', 'education', 'business'],
+    loanCategories: ['agriculture', 'home', 'loan-takeover', 'education', 'business'],
     commissionModel: {
       type: 'percentage',
       value: 1.25,
@@ -507,7 +520,8 @@ router.get('/institutions', publicReadLimiter, async (req, res) => {
       query.type = type;
     }
     if (category && category !== 'all') {
-      query.loanCategories = category;
+      const relatedCategories = getRelatedLoanCategories(category);
+      query.loanCategories = relatedCategories.length > 0 ? { $in: relatedCategories } : category;
     }
     if (verified === 'true') {
       query.verifiedPartner = true;
@@ -536,10 +550,11 @@ router.post('/eligibility', publicReadLimiter, async (req, res) => {
 
     const result = getEligibilityInsights(value);
 
+    const relatedCategories = getRelatedLoanCategories(value.loanCategory);
     const matchingInstitutions = await FinanceInstitution.find({
       isActive: true,
       serviceDistricts: value.district,
-      loanCategories: value.loanCategory,
+      loanCategories: relatedCategories.length > 0 ? { $in: relatedCategories } : value.loanCategory,
     })
       .sort({ verifiedPartner: -1, 'ratings.average': -1 })
       .limit(5)
@@ -653,10 +668,11 @@ router.post(
       }
 
       if (!selectedInstitution) {
+        const relatedCategories = getRelatedLoanCategories(value.loanCategory);
         selectedInstitution = await FinanceInstitution.findOne({
           isActive: true,
           serviceDistricts: value.district,
-          loanCategories: value.loanCategory,
+          loanCategories: relatedCategories.length > 0 ? { $in: relatedCategories } : value.loanCategory,
         })
           .sort({ verifiedPartner: -1, 'ratings.average': -1 })
           .lean();

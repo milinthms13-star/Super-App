@@ -9,6 +9,13 @@ const DEFAULT_CHARACTER = {
   appearance: "",
   voiceProfile: "kid-female",
 };
+const DEFAULT_SCENE = {
+  title: "",
+  description: "",
+  dialogue: "",
+  emotion: "wonder",
+  durationSeconds: 4,
+};
 
 const VOICE_OPTIONS = [
   "kid-female",
@@ -54,6 +61,7 @@ const PromptVideoGenerator = () => {
   const [premiumHD, setPremiumHD] = useState(false);
   const [characterInputs, setCharacterInputs] = useState([{ ...DEFAULT_CHARACTER }]);
   const [characterImages, setCharacterImages] = useState([]);
+  const [sceneInputs, setSceneInputs] = useState(Array.from({ length: 5 }, () => ({ ...DEFAULT_SCENE })));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -74,6 +82,15 @@ const PromptVideoGenerator = () => {
     [characterImagePreviews]
   );
 
+  useEffect(() => {
+    setSceneInputs((current) => {
+      const targetCount = Math.max(3, Math.min(8, Number(sceneCount) || 5));
+      if (current.length === targetCount) return current;
+      if (current.length > targetCount) return current.slice(0, targetCount);
+      return [...current, ...Array.from({ length: targetCount - current.length }, () => ({ ...DEFAULT_SCENE }))];
+    });
+  }, [sceneCount]);
+
   const handleCharacterChange = (index, key, value) => {
     setCharacterInputs((current) =>
       current.map((item, idx) => (idx === index ? { ...item, [key]: value } : item))
@@ -93,6 +110,28 @@ const PromptVideoGenerator = () => {
     setCharacterImages(selectedFiles.slice(0, 8));
   };
 
+  const handleSceneChange = (index, key, value) => {
+    setSceneInputs((current) =>
+      current.map((scene, idx) => (idx === index ? { ...scene, [key]: value } : scene))
+    );
+  };
+
+  const handleAddScene = () => {
+    setSceneInputs((current) => {
+      if (current.length >= 8) return current;
+      return [...current, { ...DEFAULT_SCENE }];
+    });
+    setSceneCount((current) => Math.min(8, Number(current || 5) + 1));
+  };
+
+  const handleRemoveScene = (index) => {
+    setSceneInputs((current) => {
+      if (current.length <= 3) return current;
+      return current.filter((_, idx) => idx !== index);
+    });
+    setSceneCount((current) => Math.max(3, Number(current || 5) - 1));
+  };
+
   const getCleanCharacters = () =>
     characterInputs
       .map((item) => ({
@@ -102,6 +141,17 @@ const PromptVideoGenerator = () => {
         voiceProfile: String(item.voiceProfile || "").trim(),
       }))
       .filter((item) => item.name || item.role || item.appearance);
+
+  const getCleanScenes = () =>
+    sceneInputs
+      .map((scene) => ({
+        title: String(scene.title || "").trim(),
+        description: String(scene.description || "").trim(),
+        dialogue: String(scene.dialogue || "").trim(),
+        emotion: String(scene.emotion || "").trim(),
+        durationSeconds: Math.max(2, Math.min(15, Number(scene.durationSeconds || 4))),
+      }))
+      .filter((scene) => scene.title || scene.description || scene.dialogue);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -126,6 +176,11 @@ const PromptVideoGenerator = () => {
       const cleanCharacters = getCleanCharacters();
       if (cleanCharacters.length > 0) {
         formData.append("characters", JSON.stringify(cleanCharacters));
+      }
+
+      const cleanScenes = getCleanScenes();
+      if (cleanScenes.length > 0) {
+        formData.append("scenes", JSON.stringify(cleanScenes));
       }
 
       characterImages.forEach((file) => {
@@ -260,6 +315,44 @@ const PromptVideoGenerator = () => {
           ))}
           <button type="button" className="ghost-button" onClick={handleAddCharacter}>
             Add Character
+          </button>
+        </section>
+
+        <section className="scene-section">
+          <h2>Scenes & Dialogues (Optional Override)</h2>
+          <p>If you fill this section, these scenes and dialogues will be used in final video generation.</p>
+          {sceneInputs.map((scene, index) => (
+            <div className="scene-row" key={`scene-${index + 1}`}>
+              <input
+                type="text"
+                value={scene.title}
+                onChange={(event) => handleSceneChange(index, "title", event.target.value)}
+                placeholder={`Scene ${index + 1} title`}
+              />
+              <textarea
+                rows={2}
+                value={scene.description}
+                onChange={(event) => handleSceneChange(index, "description", event.target.value)}
+                placeholder="Scene description"
+              />
+              <textarea
+                rows={2}
+                value={scene.dialogue}
+                onChange={(event) => handleSceneChange(index, "dialogue", event.target.value)}
+                placeholder="Dialogue lines (example: Hero: ...)"
+              />
+              <button
+                type="button"
+                className="ghost-danger"
+                onClick={() => handleRemoveScene(index)}
+                disabled={sceneInputs.length <= 3}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          <button type="button" className="ghost-button" onClick={handleAddScene} disabled={sceneInputs.length >= 8}>
+            Add Scene
           </button>
         </section>
 

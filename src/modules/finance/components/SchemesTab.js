@@ -12,6 +12,9 @@ const SchemesTab = ({ schemes = [], onApplyWithScheme }) => (
         <article key={scheme.id} className="finance-card">
           <h3>{scheme.name}</h3>
           <p>
+            <strong>Scheme Type:</strong> {scheme.schemeType || "Government"}
+          </p>
+          <p>
             <strong>Eligibility:</strong> {scheme.eligibility}
           </p>
           <p>

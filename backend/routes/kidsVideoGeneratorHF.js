@@ -1,4 +1,7 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
+const multer = require('multer');
 const {
   generateKidsVideoFromPrompt,
   generateKidsVideoFromHybridPrompt,
@@ -10,6 +13,57 @@ const {
 } = require('../services/kidsVideoGeneratorHFService');
 
 const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+    files: 8,
+  },
+});
+
+const sanitizeText = (value = '') => String(value || '').replace(/\u0000/g, '').trim();
+const safeSegment = (value = '') =>
+  sanitizeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'item';
+
+const inferExt = (file = {}) => {
+  const fromName = path.extname(String(file.originalname || '')).toLowerCase();
+  if (fromName) return fromName;
+  const mime = String(file.mimetype || '').toLowerCase();
+  if (mime.includes('png')) return '.png';
+  if (mime.includes('webp')) return '.webp';
+  if (mime.includes('jpeg') || mime.includes('jpg')) return '.jpg';
+  return '.png';
+};
+
+const buildRequestOrigin = (req) => {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || req.protocol || 'https';
+  const host = req.get('host');
+  return `${protocol}://${host}`;
+};
+
+const toAbsoluteUrl = (req, maybeRelativeUrl = '') => {
+  const raw = String(maybeRelativeUrl || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const origin = buildRequestOrigin(req);
+  return `${origin}${raw.startsWith('/') ? '' : '/'}${raw}`;
+};
+
+const parseJsonObject = (value) => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (!value || typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (_error) {
+    return null;
+  }
+};
 
 const LANGUAGE_CODE_ALIASES = {
   en: 'en',
@@ -67,7 +121,7 @@ const parseJsonArray = (value) => {
 };
 
 const normalizeStructuredStoryInput = (body = {}) => {
-  const bodyProject = body?.project && typeof body.project === 'object' ? body.project : null;
+  const bodyProject = parseJsonObject(body?.project);
   const directCharacters = Array.isArray(body?.characters) ? body.characters : parseJsonArray(body?.characters);
   const directScenes = Array.isArray(body?.scenes) ? body.scenes : parseJsonArray(body?.scenes);
   const projectCharacters = Array.isArray(bodyProject?.characters) ? bodyProject.characters : [];
@@ -77,16 +131,68 @@ const normalizeStructuredStoryInput = (body = {}) => {
   const providedScenes = directScenes.length ? directScenes : projectScenes;
 
   return {
-    storyTitle:
-      String(body?.storyTitle || '').trim()
-      || String(bodyProject?.title || '').trim()
-      || '',
+    storyTitle: sanitizeText(body?.storyTitle || bodyProject?.title || ''),
     providedCharacters,
     providedScenes,
   };
 };
 
-router.post('/generate', async (req, res) => {
+const saveUploadedCharacterImages = (requestTag, files = []) => {
+  const normalizedFiles = Array.isArray(files) ? files : [];
+  if (!normalizedFiles.length) {
+    return [];
+  }
+  const safeTag = safeSegment(requestTag || `request-${Date.now()}`);
+  const baseDir = path.join(__dirname, '..', 'uploads', 'kids-video-hf', 'character-ui', safeTag);
+  fs.mkdirSync(baseDir, { recursive: true });
+
+  return normalizedFiles.map((file, index) => {
+    const ext = inferExt(file);
+    const baseName = safeSegment(path.parse(String(file.originalname || `character-${index + 1}`)).name);
+    const fileName = `${String(index + 1).padStart(2, '0')}-${baseName}-${Date.now()}${ext}`;
+    const absolutePath = path.join(baseDir, fileName);
+    fs.writeFileSync(absolutePath, file.buffer);
+    return {
+      fileName,
+      imageUrl: `/uploads/kids-video-hf/character-ui/${safeTag}/${fileName}`,
+      originalName: sanitizeText(file.originalname || `character-${index + 1}${ext}`),
+    };
+  });
+};
+
+const mergeUploadedFacesIntoCharacters = ({
+  providedCharacters = [],
+  uploadedImages = [],
+}) => {
+  const baseCharacters = Array.isArray(providedCharacters) ? providedCharacters : [];
+  const uploads = Array.isArray(uploadedImages) ? uploadedImages : [];
+  const total = Math.max(baseCharacters.length, uploads.length);
+  const merged = [];
+
+  for (let index = 0; index < total; index += 1) {
+    const base = baseCharacters[index] && typeof baseCharacters[index] === 'object' ? baseCharacters[index] : {};
+    const uploadItem = uploads[index];
+    const name = sanitizeText(base.name) || `Character ${index + 1}`;
+    const role = sanitizeText(base.role) || (index === 0 ? 'Main Character' : 'Support Friend');
+    const appearanceBase = sanitizeText(base.appearance) || `friendly ${name.toLowerCase()} character`;
+    const appearance = uploadItem
+      ? `${appearanceBase}. Match uploaded face reference image (${uploadItem.fileName}) and keep identity consistent in every scene.`
+      : appearanceBase;
+
+    merged.push({
+      ...base,
+      id: sanitizeText(base.id) || `char-${index + 1}`,
+      name,
+      role,
+      appearance,
+      referenceImageUrl: uploadItem ? uploadItem.imageUrl : sanitizeText(base.referenceImageUrl),
+    });
+  }
+
+  return merged;
+};
+
+router.post('/generate', upload.array('characterImages', 8), async (req, res) => {
   try {
     const prompt = String(req.body?.prompt || req.body?.storyPrompt || '').trim();
     if (!prompt) {
@@ -126,10 +232,18 @@ router.post('/generate', async (req, res) => {
     const shouldUseDiffusers = useDiffusers && !disableDiffusers;
 
     const { storyTitle, providedCharacters, providedScenes } = normalizeStructuredStoryInput(req.body || {});
+    const uploadedCharacterImages = saveUploadedCharacterImages(
+      sanitizeText(req.body?.projectId || req.body?.storyTitle || `request-${Date.now()}`),
+      req.files || []
+    );
+    const mergedProvidedCharacters = mergeUploadedFacesIntoCharacters({
+      providedCharacters,
+      uploadedImages: uploadedCharacterImages,
+    });
 
     const hasStructuredStoryContext =
       (Array.isArray(providedScenes) && providedScenes.length > 0)
-      || (Array.isArray(providedCharacters) && providedCharacters.length > 0);
+      || (Array.isArray(mergedProvidedCharacters) && mergedProvidedCharacters.length > 0);
     const requestedPromptOnlyEngine = useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers;
     const shouldPreferStructuredRenderer = hasStructuredStoryContext && requestedPromptOnlyEngine;
 
@@ -148,7 +262,7 @@ router.post('/generate', async (req, res) => {
           voiceType: req.body?.voiceType || 'kid-female',
           language: languageCode,
           storyTitle,
-          providedCharacters,
+          providedCharacters: mergedProvidedCharacters,
           providedScenes,
           strict: strictHybrid,
           phase2: true,
@@ -162,7 +276,7 @@ router.post('/generate', async (req, res) => {
           voiceType: req.body?.voiceType || 'kid-female',
           language: languageCode,
           storyTitle,
-          providedCharacters,
+          providedCharacters: mergedProvidedCharacters,
           providedScenes,
           strict: strictHybrid,
         })
@@ -175,7 +289,7 @@ router.post('/generate', async (req, res) => {
           voiceType: req.body?.voiceType || 'kid-female',
           language: languageCode,
           storyTitle,
-          providedCharacters,
+          providedCharacters: mergedProvidedCharacters,
           providedScenes,
         })
       : useCogVideoX
@@ -214,7 +328,7 @@ router.post('/generate', async (req, res) => {
           voiceType: req.body?.voiceType || 'kid-female',
           language: languageCode,
           storyTitle,
-          providedCharacters,
+          providedCharacters: mergedProvidedCharacters,
           providedScenes,
         });
 
@@ -227,6 +341,10 @@ router.post('/generate', async (req, res) => {
       aiImagesEnabled: Boolean(result.aiImagesEnabled),
       workflowType: result?.project?.workflowType || 'kids-video-scene-pipeline',
       capabilities: getKidsVideoGeneratorCapabilities(),
+      uploadedCharacterImages: uploadedCharacterImages.map((item) => ({
+        imageUrl: toAbsoluteUrl(req, item.imageUrl),
+        originalName: item.originalName,
+      })),
     });
   } catch (error) {
     return res.status(500).json({

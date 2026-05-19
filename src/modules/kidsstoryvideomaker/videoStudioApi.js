@@ -169,11 +169,12 @@ export const requestVideoStudio = async (
         const requestUrl = requestUrls[index];
         try {
           const hasBody = typeof body !== "undefined";
-          const requestHeaders = hasBody ? { "Content-Type": "application/json" } : undefined;
+          const isFormDataBody = typeof FormData !== "undefined" && body instanceof FormData;
+          const requestHeaders = hasBody && !isFormDataBody ? { "Content-Type": "application/json" } : undefined;
           const response = await fetch(requestUrl, {
             method,
             headers: requestHeaders,
-            body: hasBody ? JSON.stringify(body) : undefined,
+            body: hasBody ? (isFormDataBody ? body : JSON.stringify(body)) : undefined,
             signal: controller.signal,
           });
 

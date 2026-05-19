@@ -28,7 +28,9 @@ const getDistrictsForState = (state) => SOUTH_INDIA_REGIONS[state] || SOUTH_INDI
 const LOAN_CATEGORIES = [
   { id: "business", title: "Business Loans", summary: "Working capital, machinery, MSME expansion." },
   { id: "personal", title: "Personal Loans", summary: "Salaried and self-employed personal finance." },
-  { id: "gold", title: "Gold Loans", summary: "Fast secured loans with collateral-backed pricing." },
+  { id: "gold", title: "Gold Loans", summary: "Fast secured loans with collateral-backed pricing, takeover and gold sale support." },
+  { id: "loan-takeover", title: "Loan Takeover", summary: "Shift existing loans for better rate, EMI or tenure terms." },
+  { id: "gold-sale", title: "Gold Sale (Gold Loan Closure)", summary: "Sell pledged gold to close gold loan and settle dues transparently." },
   { id: "home", title: "Home Loans", summary: "Purchase, construction and renovation assistance." },
   { id: "vehicle", title: "Vehicle Loans", summary: "Personal and commercial vehicle finance." },
   { id: "education", title: "Education Loans", summary: "India and abroad education support." },
@@ -36,6 +38,16 @@ const LOAN_CATEGORIES = [
   { id: "women", title: "Women Entrepreneur Loans", summary: "Women-led enterprise and subsidy-linked support." },
   { id: "msme", title: "MSME Loans", summary: "Term loans, OD and CGTMSE-backed products." },
 ];
+
+const RELATED_LOAN_CATEGORY_MAP = {
+  "loan-takeover": ["loan-takeover", "personal", "business", "home", "msme", "gold"],
+  "gold-sale": ["gold-sale", "gold"],
+};
+
+const getRelatedLoanCategories = (category) => {
+  const normalized = String(category || "").trim().toLowerCase();
+  return RELATED_LOAN_CATEGORY_MAP[normalized] || [normalized];
+};
 
 const TABS = [
   { id: "loans", label: "Compare Offers" },
@@ -57,49 +69,174 @@ const DOCUMENT_FIELDS = [
 
 const GOVERNMENT_SCHEMES = [
   {
-    id: "pm-mudra",
-    name: "PM Mudra Yojana",
+    id: "central-pm-mudra",
+    name: "PMMY (Pradhan Mantri Mudra Yojana)",
+    schemeType: "Central",
     categoryHint: "business",
-    eligibility: "Micro and small businesses with viable proposal.",
-    maxAmount: "INR 10 lakh",
-    documents: "KYC, business proof, bank statement, quotation for use of funds.",
-    benefit: "Collateral-free loan via Shishu/Kishor/Tarun categories.",
+    eligibility: "Non-corporate micro/small businesses in manufacturing, trading, services and allied activities.",
+    maxAmount: "Up to INR 20 lakh (Shishu/Kishor/Tarun/Tarun Plus as per borrower profile)",
+    documents: "KYC, business/activity proof, bank statement, quotation/invoice for funding need.",
+    benefit: "Collateral-free business credit through formal banking channels.",
   },
   {
-    id: "pmegp",
-    name: "PMEGP",
+    id: "central-pmegp",
+    name: "PMEGP (Prime Minister's Employment Generation Programme)",
+    schemeType: "Central",
     categoryHint: "msme",
-    eligibility: "New micro-enterprises in manufacturing/services.",
-    maxAmount: "INR 50 lakh (manufacturing), INR 20 lakh (service)",
-    documents: "Project report, KYC, education proof (if applicable), category proof.",
-    benefit: "Subsidy margin money with rural/urban differentiation.",
+    eligibility: "New micro-enterprises; applicant 18+; project and category should satisfy PMEGP guidelines.",
+    maxAmount: "Project cost for subsidy: up to INR 50 lakh (manufacturing) and INR 20 lakh (service/business)",
+    documents: "Detailed project report, KYC, educational proof where applicable, category certificates, Udyam (post setup).",
+    benefit: "Credit-linked margin money subsidy via KVIC/KVIB/DIC with special-category support.",
   },
   {
-    id: "standup-india",
+    id: "central-stand-up-india",
     name: "Stand-Up India",
+    schemeType: "Central",
     categoryHint: "women",
     eligibility: "Women and SC/ST entrepreneurs for greenfield project.",
-    maxAmount: "INR 1 crore",
+    maxAmount: "INR 10 lakh to INR 1 crore",
     documents: "KYC, project report, category certificate, business registration.",
     benefit: "Bank loans with handholding support and working capital options.",
   },
   {
-    id: "msme-loans",
-    name: "MSME Institutional Loans",
+    id: "central-cgtmse",
+    name: "CGTMSE Credit Guarantee Support",
+    schemeType: "Central",
     categoryHint: "msme",
-    eligibility: "Registered MSMEs with business cashflow visibility.",
-    maxAmount: "Varies by institution",
-    documents: "Udyam, GST, ITR, bank statement, balance sheet.",
-    benefit: "Structured term and OD limits with collateral and non-collateral options.",
+    eligibility: "Micro and Small Enterprises borrowing through CGTMSE member lending institutions.",
+    maxAmount: "Guarantee on unsecured credit portion up to INR 10 crore (not a direct loan scheme)",
+    documents: "Lender loan application set: KYC, Udyam, financials, GST/ITR, business plan.",
+    benefit: "Enables collateral-free MSME lending by providing guarantee cover to the lender.",
   },
   {
-    id: "women-entrepreneur",
-    name: "Women Entrepreneur Schemes",
+    id: "central-pm-vishwakarma",
+    name: "PM Vishwakarma",
+    schemeType: "Central",
     categoryHint: "women",
-    eligibility: "Women-led startups or established entrepreneurs.",
-    maxAmount: "Depends on institution and subsidy alignment",
-    documents: "KYC, business registration, project report, banking track record.",
-    benefit: "Priority processing, subsidy linkage, and mentorship support.",
+    eligibility: "Traditional artisans/craftspeople in notified trades, as per scheme registration criteria.",
+    maxAmount: "Collateral-free enterprise loan up to INR 3 lakh in two tranches (INR 1 lakh + INR 2 lakh)",
+    documents: "Aadhaar-linked KYC, trade declaration, scheme portal registration details.",
+    benefit: "Concessional credit, toolkit incentive, skill upgradation and market support.",
+  },
+  {
+    id: "central-pmfme",
+    name: "PMFME (Micro Food Processing Enterprises)",
+    schemeType: "Central",
+    categoryHint: "business",
+    eligibility: "Existing micro food processing units, SHGs, FPOs and cooperatives under PMFME norms.",
+    maxAmount: "Credit-linked subsidy up to 35% of eligible project cost; ceiling up to INR 10 lakh for individual units",
+    documents: "KYC, Udyam/FSSAI where applicable, project report, bank sanction details.",
+    benefit: "Formalization, modernization and branding support for micro food businesses.",
+  },
+  {
+    id: "kerala-ess",
+    name: "Kerala Entrepreneur Support Scheme (ESS)",
+    schemeType: "Kerala",
+    categoryHint: "msme",
+    eligibility: "Udyam-registered MSMEs in manufacturing in Kerala; support linked to fixed capital investment.",
+    maxAmount: "15%-45% assistance slab by category/sector; overall ceiling as per current ESS limits",
+    documents: "KYC, Udyam, fixed asset proof, project report, commencement and investment documents.",
+    benefit: "Capital subsidy with additional support for women, youth, SC/ST, NRK and priority sectors.",
+  },
+  {
+    id: "kerala-kels",
+    name: "Kerala Entrepreneur Loan Scheme (KELS)",
+    schemeType: "Kerala",
+    categoryHint: "business",
+    eligibility: "New and expanding MSMEs in manufacturing/service/trading in Kerala with Udyam registration.",
+    maxAmount: "Interest concession support on loans up to INR 10 lakh",
+    documents: "KYC, Udyam, loan details from participating banks, project/business plan.",
+    benefit: "Government interest subvention to bring effective borrowing cost lower for eligible units.",
+  },
+  {
+    id: "kerala-margin-money-nano",
+    name: "Kerala Margin Money Grant to Nano Units",
+    schemeType: "Kerala",
+    categoryHint: "business",
+    eligibility: "Nano units in manufacturing/job-work/service with project cost up to INR 10 lakh.",
+    maxAmount: "Margin grant 30%-40% with maximum assistance up to INR 4 lakh",
+    documents: "KYC, project report, bank sanction, proof of beneficiary contribution, Udyam details.",
+    benefit: "Upfront project support for nano entrepreneurs, with enhanced support for special categories.",
+  },
+  {
+    id: "kerala-interest-subvention-nano",
+    name: "Kerala Interest Subvention for Nano Household Enterprises",
+    schemeType: "Kerala",
+    categoryHint: "business",
+    eligibility: "Nano/household units (fixed capital up to INR 10 lakh) in manufacturing/services/job-work.",
+    maxAmount: "Interest subvention 6% p.a. (8% for women and SC/ST) for up to 3 years",
+    documents: "KYC, Udyam, term-loan details, repayment proof, fixed capital and connected-load details.",
+    benefit: "Reduces interest burden for early-stage nano enterprises on reimbursement basis.",
+  },
+  {
+    id: "kerala-asha",
+    name: "Kerala ASHA (Assistance Scheme for Handicrafts Artisans)",
+    schemeType: "Kerala",
+    categoryHint: "business",
+    eligibility: "Recognized handicraft artisans/micro enterprises in handicrafts with valid registration.",
+    maxAmount: "General: up to INR 5 lakh combined support; special categories: up to INR 7.5 lakh combined support",
+    documents: "Identity proof, artisan/sector proof, Udyam, project report, category certificates where applicable.",
+    benefit: "Fixed-capital and working-capital grant support for handicraft enterprises.",
+  },
+  {
+    id: "kerala-stressed-msme-revival",
+    name: "Kerala Stressed MSMEs Revival & Rehabilitation",
+    schemeType: "Kerala",
+    categoryHint: "msme",
+    eligibility: "Kerala MSMEs showing stress and taking approved revival/restructuring route.",
+    maxAmount: "Combined assistance up to INR 5 lakh per unit (as per relief component caps)",
+    documents: "Loan/restructuring records, revival project report, statutory dues and restart expense proofs.",
+    benefit: "Margin grant, limited-period interest support and restart assistance to revive operations.",
+  },
+  {
+    id: "kerala-iss-covid",
+    name: "Kerala ISS (Interest Subvention on Term/Working Capital Loan)",
+    schemeType: "Kerala",
+    categoryHint: "msme",
+    eligibility: "Manufacturing/job-work MSMEs in Kerala under notified ISS conditions.",
+    maxAmount: "Up to INR 1.2 lakh combined assistance per unit (one-time)",
+    documents: "KYC, Udyam, loan sanction details, operational and repayment evidence.",
+    benefit: "Time-bound interest relief for eligible MSMEs affected by economic disruption.",
+  },
+  {
+    id: "kerala-mission-1000",
+    name: "Kerala MSME Scale Up Mission (Mission 1000)",
+    schemeType: "Kerala",
+    categoryHint: "msme",
+    eligibility: "Kerala Udyam-registered MSMEs with operating history and scale-up potential under mission criteria.",
+    maxAmount: "Capital subsidy up to 40% (max INR 2 crore) plus other mission-linked support caps",
+    documents: "Udyam, audited financials, turnover/profit records, CIBIL and growth metrics.",
+    benefit: "Scale-up package for selected MSMEs targeting high-growth and larger turnover.",
+  },
+  {
+    id: "kerala-msme-insurance",
+    name: "Kerala MSME Insurance Scheme",
+    schemeType: "Kerala",
+    categoryHint: "msme",
+    eligibility: "Eligible MSMEs in Kerala insured through approved public-sector insurers.",
+    maxAmount: "Reimbursement up to 50% of annual insurance premium (as per scheme norms)",
+    documents: "Insurance policy and premium receipts, Udyam and business registration documents.",
+    benefit: "Risk protection support against business shocks such as fire, theft and disasters.",
+  },
+  {
+    id: "kerala-ofoe",
+    name: "Kerala One Family One Enterprise (OFOE)",
+    schemeType: "Kerala",
+    categoryHint: "business",
+    eligibility: "New MSMEs in manufacturing/service/trading that commenced operations on/after the notified date.",
+    maxAmount: "Interest subvention linked to term/working capital loans up to INR 10 lakh",
+    documents: "KYC, Udyam, loan documents from eligible financial institutions, activity proof.",
+    benefit: "Promotes household entrepreneurship with loan-interest support.",
+  },
+  {
+    id: "kerala-olop",
+    name: "Kerala One Local Body One Product (OLOP)",
+    schemeType: "Kerala",
+    categoryHint: "business",
+    eligibility: "Local enterprises and clusters aligned with LSGI-identified product opportunities.",
+    maxAmount: "Support converges with relevant state/central funding windows",
+    documents: "Project concept, local body alignment, enterprise and cluster documentation.",
+    benefit: "Promotes value-added local products and market linkage through local-body convergence.",
   },
 ];
 
@@ -329,7 +466,11 @@ const FinanceHub = () => {
   const filteredInstitutions = useMemo(
     () =>
       institutions.filter((institution) => {
-        const byCategory = selectedCategory === "all" || institution.loanCategories?.includes(selectedCategory);
+        const byCategory =
+          selectedCategory === "all" ||
+          getRelatedLoanCategories(selectedCategory).some((categoryId) =>
+            institution.loanCategories?.includes(categoryId)
+          );
         const byDistrict =
           districtFilter === "all" ||
           (institution.serviceDistricts || []).includes(districtFilter);
@@ -796,7 +937,7 @@ const FinanceHub = () => {
             <p className="finance-kicker">Nila Finance Hub</p>
             <h1>Get loans faster across South India</h1>
             <p className="finance-subtitle">
-              Personal, business, gold, home and MSME financing with trusted partners across Kerala,
+              Personal, business, gold, loan takeover, gold-sale closure, home and MSME financing with trusted partners across Kerala,
               Tamil Nadu, Karnataka, Telangana and Andhra Pradesh.
             </p>
             <div className="finance-hero-actions">
@@ -811,14 +952,14 @@ const FinanceHub = () => {
               </button>
             </div>
             <div className="finance-chip-row finance-quick-loan-types" aria-label="Quick loan categories">
-              {LOAN_CATEGORIES.filter((item) => ["personal", "business", "gold", "home", "msme"].includes(item.id)).map((item) => (
+              {LOAN_CATEGORIES.filter((item) => ["personal", "business", "gold", "loan-takeover", "gold-sale", "home", "msme"].includes(item.id)).map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   className={quickJourney.loanCategory === item.id ? "active" : ""}
                   onClick={() => setQuickJourney((current) => ({ ...current, loanCategory: item.id }))}
                 >
-                  {item.title.replace(" Loans", "")}
+                  {item.title.replace(" Loans", "").replace(" (Gold Loan Closure)", "")}
                 </button>
               ))}
             </div>
