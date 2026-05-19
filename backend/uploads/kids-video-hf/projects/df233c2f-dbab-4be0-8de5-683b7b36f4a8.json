@@ -1,0 +1,105 @@
+{
+  "projectId": "df233c2f-dbab-4be0-8de5-683b7b36f4a8",
+  "createdAt": "2026-05-18T20:57:10.892Z",
+  "workflowType": "kids-video-scene-pipeline",
+  "aiProvider": "scene_pipeline",
+  "storyMode": "moral",
+  "voiceType": "kid-female",
+  "videoSize": "youtube",
+  "prompt": "lion and cat learn sharing",
+  "title": "Lion Cat Story",
+  "synopsis": "lion and cat learn sharing",
+  "moral": "Kindness and consistency help us succeed.",
+  "characters": [
+    {
+      "id": "char-lion",
+      "name": "Lion",
+      "role": "Lead",
+      "appearance": "friendly lion cartoon character with expressive eyes",
+      "colorPalette": [
+        "sky blue",
+        "sunny yellow",
+        "mint"
+      ]
+    },
+    {
+      "id": "char-cat",
+      "name": "Cat",
+      "role": "Friend",
+      "appearance": "friendly cat cartoon character with expressive eyes",
+      "colorPalette": [
+        "peach",
+        "teal",
+        "cream"
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": 1,
+      "title": "Start",
+      "description": "Lion meets Cat in forest",
+      "dialogue": "Lion: hello Cat\nCat: hello Lion",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 2,
+      "title": "Problem",
+      "description": "They both want same fruit",
+      "dialogue": "Lion: I want it\nCat: me too",
+      "emotion": "wonder",
+      "durationSeconds": 4
+    },
+    {
+      "id": 3,
+      "title": "Share",
+      "description": "They share and smile",
+      "dialogue": "Lion: lets share\nCat: yay",
+      "emotion": "joyful",
+      "durationSeconds": 4
+    }
+  ],
+  "outputDir": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\df233c2f-dbab-4be0-8de5-683b7b36f4a8",
+  "outputFile": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\df233c2f-dbab-4be0-8de5-683b7b36f4a8\\story-render-1779137842491.mp4",
+  "videoUrl": "/uploads/kids-video-hf/df233c2f-dbab-4be0-8de5-683b7b36f4a8/story-render-1779137842491.mp4",
+  "renderMode": "kids-video-scene-pipeline",
+  "aiImagesEnabled": false,
+  "sceneRenderMeta": [
+    {
+      "sceneId": 1,
+      "title": "Start",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\df233c2f-dbab-4be0-8de5-683b7b36f4a8\\scene-01-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "scene_svg_character_layout"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\df233c2f-dbab-4be0-8de5-683b7b36f4a8\\scene-01.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 2,
+      "title": "Problem",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\df233c2f-dbab-4be0-8de5-683b7b36f4a8\\scene-02-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "scene_svg_character_layout"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\df233c2f-dbab-4be0-8de5-683b7b36f4a8\\scene-02.mp4",
+      "durationSeconds": 4
+    },
+    {
+      "sceneId": 3,
+      "title": "Share",
+      "stillPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\df233c2f-dbab-4be0-8de5-683b7b36f4a8\\scene-03-still.png",
+      "generatedByAi": false,
+      "imageAttempts": [
+        "scene_svg_character_layout"
+      ],
+      "clipPath": "C:\\Users\\Dhanya\\malabarbazaar\\backend\\uploads\\kids-video-hf\\df233c2f-dbab-4be0-8de5-683b7b36f4a8\\scene-03.mp4",
+      "durationSeconds": 4
+    }
+  ],
+  "renderedAt": "2026-05-18T20:57:24.433Z",
+  "updatedAt": "2026-05-18T20:57:24.433Z"
+}

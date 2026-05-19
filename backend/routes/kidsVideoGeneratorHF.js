@@ -76,7 +76,25 @@ router.post('/generate', async (req, res) => {
 
     const { storyTitle, providedCharacters, providedScenes } = normalizeStructuredStoryInput(req.body || {});
 
-    const result = useCogVideoX
+    const hasStructuredStoryContext =
+      (Array.isArray(providedScenes) && providedScenes.length > 0)
+      || (Array.isArray(providedCharacters) && providedCharacters.length > 0);
+    const requestedPromptOnlyEngine = useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers;
+    const shouldPreferStructuredRenderer = hasStructuredStoryContext && requestedPromptOnlyEngine;
+
+    const result = shouldPreferStructuredRenderer
+      ? await generateKidsVideoFromPrompt({
+          prompt,
+          sceneCount: clampSceneCount(req.body?.sceneCount),
+          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
+          storyMode: req.body?.storyMode || 'moral',
+          voiceType: req.body?.voiceType || 'kid-female',
+          language: req.body?.language || req.body?.lang || 'en',
+          storyTitle,
+          providedCharacters,
+          providedScenes,
+        })
+      : useCogVideoX
       ? await generateKidsVideoFromCogVideoXPrompt({
           prompt,
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',

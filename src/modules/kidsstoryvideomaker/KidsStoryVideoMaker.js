@@ -1475,16 +1475,13 @@ const KidsStoryVideoMaker = () => {
       startRenderProgress();
 
       let selectedEngine = "";
-      let forcedCharacterEngine = false;
+      let forcedStructuredRenderer = false;
       try {
         const normalizedEngine = normalizeRenderEngine(hfRenderEngine);
-        forcedCharacterEngine =
-          normalizedEngine === "cogvideox"
-          && (normalizedProjectCharacters.length > 0 || normalizedScenesForPipeline.length > 0);
-        selectedEngine =
-          normalizedEngine && normalizedEngine !== "image_ffmpeg"
-            ? (forcedCharacterEngine ? "scene_script_video" : normalizedEngine)
-            : "";
+        // Hard lock to structured renderer for this flow. Prompt-only engines
+        // have repeatedly ignored character continuity and scene intent.
+        forcedStructuredRenderer = Boolean(normalizedEngine);
+        selectedEngine = "";
         const selectedLanguageCode = (
           LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US"
         )
@@ -1553,11 +1550,9 @@ const KidsStoryVideoMaker = () => {
         setRenderProgress(100);
         setRenderProgressLabel("Render complete.");
         setMessage(
-          selectedEngine === "cogvideox"
-            ? "Real motion render complete (CogVideoX)."
-            : forcedCharacterEngine
-              ? "Character-focused render complete (auto-switched to Script-to-Video for consistency)."
-            : payload.aiImagesEnabled
+          forcedStructuredRenderer
+              ? "Character-focused render complete using structured scene renderer."
+              : payload.aiImagesEnabled
               ? "Scene pipeline render complete with regenerated scenes and AI visuals."
               : "Render complete using fallback visuals."
         );

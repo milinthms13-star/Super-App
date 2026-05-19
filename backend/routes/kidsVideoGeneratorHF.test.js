@@ -2,6 +2,7 @@ jest.mock('../services/kidsVideoGeneratorHFService', () => ({
   generateKidsVideoFromPrompt: jest.fn(),
   generateKidsVideoFromDiffusersPrompt: jest.fn(),
   generateKidsVideoFromFreeSteveLikePrompt: jest.fn(),
+  generateKidsVideoFromCogVideoXPrompt: jest.fn(),
   getKidsVideoProject: jest.fn(),
 }));
 
@@ -11,6 +12,7 @@ const {
   generateKidsVideoFromPrompt,
   generateKidsVideoFromDiffusersPrompt,
   generateKidsVideoFromFreeSteveLikePrompt,
+  generateKidsVideoFromCogVideoXPrompt,
   getKidsVideoProject,
 } = require('../services/kidsVideoGeneratorHFService');
 
@@ -124,5 +126,39 @@ describe('kids-video-hf routes', () => {
         language: 'en',
       })
     );
+  });
+
+  test('POST /api/kids-video-hf/generate prefers structured renderer when scenes are provided', async () => {
+    generateKidsVideoFromPrompt.mockResolvedValue({
+      projectId: 'proj-structured-1',
+      videoUrl: '/uploads/kids-video-hf/proj-structured-1/story-render.mp4',
+      aiImagesEnabled: false,
+      project: {
+        projectId: 'proj-structured-1',
+        characters: [{ name: 'Lion' }, { name: 'Cat' }],
+        scenes: [{ id: 1, title: 'Forest', description: 'Lion and Cat in forest', dialogue: 'Lion: hi' }],
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/generate')
+      .send({
+        prompt: 'lion and cat story',
+        engine: 'cogvideox',
+        storyTitle: 'Lion Cat Story',
+        characters: [{ name: 'Lion' }, { name: 'Cat' }],
+        scenes: [{ id: 1, title: 'Forest', description: 'Lion and Cat in forest', dialogue: 'Lion: hi' }],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(generateKidsVideoFromPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storyTitle: 'Lion Cat Story',
+        providedCharacters: expect.arrayContaining([expect.objectContaining({ name: 'Lion' })]),
+        providedScenes: expect.arrayContaining([expect.objectContaining({ title: 'Forest' })]),
+      })
+    );
+    expect(generateKidsVideoFromCogVideoXPrompt).not.toHaveBeenCalled();
   });
 });

@@ -539,20 +539,54 @@ const escapeXml = (value = '') =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 
-const buildSceneSvg = (scene, story, width, height) => {
-  const sceneTitle = escapeXml(sanitizeText(scene.title || 'Scene'));
-  const textSource = sanitizeText(scene.dialogue || scene.description || '');
-  const descLines = wrapText(textSource, 42, 3);
-  const characters = (story.characters || []).slice(0, 2);
-  const characterSvgs = characters
-    .map((char, index) => {
-      const baseX = index === 0 ? Math.round(width * 0.3) : Math.round(width * 0.68);
-      const headY = Math.round(height * 0.36);
-      const bodyY = headY + 60;
-      const accent = escapeXml(char?.colorPalette?.[1] || (index === 0 ? '#f97316' : '#0ea5e9'));
-      const body = escapeXml(char?.colorPalette?.[0] || (index === 0 ? '#fb7185' : '#14b8a6'));
-      const label = escapeXml(sanitizeText(char?.name || `Character ${index + 1}`));
-      return `
+const buildSceneCharacterSvg = ({ character = {}, index = 0, width = 1280, height = 720 }) => {
+  const baseX = index === 0 ? Math.round(width * 0.3) : Math.round(width * 0.68);
+  const headY = Math.round(height * 0.36);
+  const bodyY = headY + 60;
+  const accent = escapeXml(character?.colorPalette?.[1] || (index === 0 ? '#f97316' : '#0ea5e9'));
+  const body = escapeXml(character?.colorPalette?.[0] || (index === 0 ? '#fb7185' : '#14b8a6'));
+  const label = escapeXml(sanitizeText(character?.name || `Character ${index + 1}`));
+  const animalHint = `${sanitizeText(character?.name)} ${sanitizeText(character?.appearance)}`.toLowerCase();
+
+  if (animalHint.includes('lion')) {
+    return `
+      <g transform="translate(${baseX},0)">
+        <ellipse cx="0" cy="${headY + 138}" rx="72" ry="24" fill="#00000022"/>
+        <circle cx="0" cy="${headY}" r="52" fill="#b45309"/>
+        <circle cx="0" cy="${headY}" r="40" fill="#f59e0b" stroke="#78350f" stroke-width="3"/>
+        <circle cx="-14" cy="${headY - 8}" r="5" fill="#111827"/>
+        <circle cx="14" cy="${headY - 8}" r="5" fill="#111827"/>
+        <path d="M -16 ${headY + 14} Q 0 ${headY + 24} 16 ${headY + 14}" fill="none" stroke="#7c2d12" stroke-width="4" stroke-linecap="round"/>
+        <rect x="-34" y="${bodyY}" width="68" height="92" rx="24" fill="${body}" stroke="#78350f" stroke-width="3"/>
+        <circle cx="-34" cy="${bodyY + 26}" r="12" fill="${accent}" />
+        <circle cx="34" cy="${bodyY + 26}" r="12" fill="${accent}" />
+        <rect x="-24" y="${bodyY + 90}" width="18" height="42" rx="9" fill="#92400e"/>
+        <rect x="6" y="${bodyY + 90}" width="18" height="42" rx="9" fill="#92400e"/>
+        <text x="0" y="${bodyY + 154}" font-size="22" text-anchor="middle" fill="#0f172a">${label}</text>
+      </g>`;
+  }
+
+  if (animalHint.includes('cat')) {
+    return `
+      <g transform="translate(${baseX},0)">
+        <ellipse cx="0" cy="${headY + 138}" rx="72" ry="24" fill="#00000022"/>
+        <polygon points="-22,${headY - 40} -8,${headY - 70} -2,${headY - 38}" fill="#d97706"/>
+        <polygon points="22,${headY - 40} 8,${headY - 70} 2,${headY - 38}" fill="#d97706"/>
+        <circle cx="0" cy="${headY}" r="42" fill="#fbbf24" stroke="#78350f" stroke-width="3"/>
+        <circle cx="-14" cy="${headY - 8}" r="5" fill="#111827"/>
+        <circle cx="14" cy="${headY - 8}" r="5" fill="#111827"/>
+        <path d="M -14 ${headY + 16} Q 0 ${headY + 24} 14 ${headY + 16}" fill="none" stroke="#7c2d12" stroke-width="3" stroke-linecap="round"/>
+        <line x1="-44" y1="${headY + 6}" x2="-20" y2="${headY + 10}" stroke="#7c2d12" stroke-width="2"/>
+        <line x1="44" y1="${headY + 6}" x2="20" y2="${headY + 10}" stroke="#7c2d12" stroke-width="2"/>
+        <rect x="-30" y="${bodyY}" width="60" height="88" rx="22" fill="${body}" stroke="#78350f" stroke-width="3"/>
+        <path d="M 32 ${bodyY + 54} Q 66 ${bodyY + 30} 58 ${bodyY + 6}" fill="none" stroke="#92400e" stroke-width="7" stroke-linecap="round"/>
+        <rect x="-22" y="${bodyY + 86}" width="16" height="40" rx="8" fill="#92400e"/>
+        <rect x="6" y="${bodyY + 86}" width="16" height="40" rx="8" fill="#92400e"/>
+        <text x="0" y="${bodyY + 150}" font-size="22" text-anchor="middle" fill="#0f172a">${label}</text>
+      </g>`;
+  }
+
+  return `
       <g transform="translate(${baseX},0)">
         <ellipse cx="0" cy="${headY + 138}" rx="72" ry="24" fill="#00000022"/>
         <circle cx="0" cy="${headY}" r="46" fill="#fef3c7" stroke="#1f2937" stroke-width="3"/>
@@ -566,7 +600,15 @@ const buildSceneSvg = (scene, story, width, height) => {
         <rect x="6" y="${bodyY + 90}" width="18" height="42" rx="9" fill="#334155"/>
         <text x="0" y="${bodyY + 154}" font-size="22" text-anchor="middle" fill="#0f172a">${label}</text>
       </g>`;
-    })
+};
+
+const buildSceneSvg = (scene, story, width, height) => {
+  const sceneTitle = escapeXml(sanitizeText(scene.title || 'Scene'));
+  const textSource = sanitizeText(scene.dialogue || scene.description || '');
+  const descLines = wrapText(textSource, 42, 3);
+  const characters = (story.characters || []).slice(0, 2);
+  const characterSvgs = characters
+    .map((char, index) => buildSceneCharacterSvg({ character: char, index, width, height }))
     .join('');
   const descSvg = descLines
     .map((line, idx) => `<text x="92" y="${Math.round(height * 0.72) + (idx * 30)}" font-size="26" fill="#0f172a">${escapeXml(line)}</text>`)
@@ -674,31 +716,35 @@ const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, heig
   const vfWithSubtitles = `${zoom},${subtitleFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
   const vfWithoutSubtitles = `${zoom},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
 
-  const baseArgs = [
-    '-y',
-    '-loop', '1',
-    '-i', stillPath,
-    '-i', audioPath,
-    '-t', `${duration}`,
-    '-c:v', 'libx264',
-    '-pix_fmt', 'yuv420p',
-    '-r', `${fps}`,
-    '-c:a', 'aac',
-    '-shortest',
-    clipPath,
-  ];
-
   try {
     await runFfmpeg([
-      ...baseArgs.slice(0, 8),
+      '-y',
+      '-loop', '1',
+      '-i', stillPath,
+      '-i', audioPath,
+      '-t', `${duration}`,
       '-vf', vfWithSubtitles,
-      ...baseArgs.slice(8),
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-r', `${fps}`,
+      '-c:a', 'aac',
+      '-shortest',
+      clipPath,
     ], outputDir);
   } catch (_subtitleError) {
     await runFfmpeg([
-      ...baseArgs.slice(0, 8),
+      '-y',
+      '-loop', '1',
+      '-i', stillPath,
+      '-i', audioPath,
+      '-t', `${duration}`,
       '-vf', vfWithoutSubtitles,
-      ...baseArgs.slice(8),
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-r', `${fps}`,
+      '-c:a', 'aac',
+      '-shortest',
+      clipPath,
     ], outputDir);
   }
 
