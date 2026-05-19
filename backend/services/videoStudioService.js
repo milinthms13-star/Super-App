@@ -879,12 +879,107 @@ const clampSceneCount = (value) => {
   return Math.max(3, Math.min(12, count));
 };
 
+const STORY_LOOKUP_TIMEOUT_MS = Math.max(
+  1200,
+  Math.min(9000, Number(process.env.STORY_LOOKUP_TIMEOUT_MS) || 4200)
+);
+const internetStoryLookupEnabled = !['0', 'false', 'no', 'off'].includes(
+  String(process.env.VIDEO_STUDIO_INTERNET_STORY_LOOKUP_ENABLED || 'true').toLowerCase()
+);
+const WIKIPEDIA_SUMMARY_BASE_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+const WIKIPEDIA_SEARCH_BASE_URL = 'https://en.wikipedia.org/w/api.php';
+
 const normalizeStorySubject = (subject = '') => {
   const cleaned = sanitizeText(subject)
     .replace(/\b(moral\s+story|story\s+for\s+kids|for\s+kids|kids\s+story|kids|story)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return cleaned || sanitizeText(subject || 'Magical friendship');
+};
+
+const sanitizeInternetSummaryText = (value = '') =>
+  sanitizeText(value)
+    .replace(/\s+/g, ' ')
+    .replace(/\((?:listen|help|about this sound file)[^)]+\)/gi, '')
+    .trim();
+
+const splitSummarySentences = (summary = '') =>
+  sanitizeInternetSummaryText(summary)
+    .split(/(?<=[\.\?\!])\s+/)
+    .map((line) => sanitizeText(line))
+    .filter(Boolean);
+
+const fetchJsonWithTimeout = async (url, timeoutMs = STORY_LOOKUP_TIMEOUT_MS) => {
+  if (typeof fetch !== 'function') {
+    throw new Error('Fetch API is unavailable in this runtime.');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const toInternetStoryContext = (payload = {}) => {
+  const title = sanitizeText(payload?.title || '');
+  const summary = sanitizeInternetSummaryText(payload?.extract || payload?.description || '');
+  if (!title || !summary) return null;
+
+  const sourceUrl =
+    sanitizeText(
+      payload?.content_urls?.desktop?.page
+      || payload?.content_urls?.mobile?.page
+      || payload?.canonicalurl
+      || ''
+    ) || `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/\s+/g, '_'))}`;
+
+  return {
+    provider: 'wikipedia',
+    title,
+    summary,
+    sourceUrl,
+  };
+};
+
+const fetchWikipediaStoryContext = async (subject = '') => {
+  const cleanSubject = sanitizeText(subject);
+  if (!cleanSubject || cleanSubject.length < 3) return null;
+  if (!internetStoryLookupEnabled) return null;
+
+  const trySummary = async (title) => {
+    const endpoint = `${WIKIPEDIA_SUMMARY_BASE_URL}/${encodeURIComponent(title)}`;
+    const payload = await fetchJsonWithTimeout(endpoint);
+    return toInternetStoryContext(payload);
+  };
+
+  try {
+    const direct = await trySummary(cleanSubject);
+    if (direct) return direct;
+  } catch (_directError) {
+    // Continue to search fallback.
+  }
+
+  try {
+    const searchUrl =
+      `${WIKIPEDIA_SEARCH_BASE_URL}?action=query&list=search&srsearch=${encodeURIComponent(cleanSubject)}&utf8=1&format=json&srlimit=1`;
+    const searchPayload = await fetchJsonWithTimeout(searchUrl);
+    const bestTitle = sanitizeText(searchPayload?.query?.search?.[0]?.title || '');
+    if (!bestTitle) return null;
+    return await trySummary(bestTitle);
+  } catch (_searchError) {
+    return null;
+  }
 };
 
 const buildKnownStoryTemplate = ({ subject, languageId, ageFilter, storyMode }) => {
@@ -913,10 +1008,40 @@ const buildKnownStoryTemplate = ({ subject, languageId, ageFilter, storyMode }) 
   return null;
 };
 
-const buildFallbackScript = ({ subject, languageId, storyMode, ageFilter }) => {
+const buildFallbackScript = ({ subject, languageId, storyMode, ageFilter, internetStory = null }) => {
   const knownTemplate = buildKnownStoryTemplate({ subject, languageId, ageFilter, storyMode });
   if (knownTemplate) {
     return knownTemplate;
+  }
+
+  if (internetStory && sanitizeText(internetStory.summary)) {
+    const cleanTitle = sanitizeText(internetStory.title) || `Story of ${normalizeStorySubject(subject || 'Magical friendship')}`;
+    const summarySentences = splitSummarySentences(internetStory.summary);
+    const synopsis = sanitizeText(summarySentences.slice(0, 2).join(' ')) || sanitizeText(internetStory.summary);
+    const moral = 'Courage, kindness, and wise choices help everyone grow.';
+    const sceneLabels = ['Opening', 'Challenge', 'Journey', 'Climax', 'Ending'];
+    const sceneBeats = Array.from({ length: 5 }).map((_, index) => {
+      const sentence = sanitizeText(summarySentences[index] || summarySentences[summarySentences.length - 1] || synopsis);
+      return {
+        beat: sceneLabels[index] || `Scene ${index + 1}`,
+        summary: sentence || `Story moment ${index + 1} from ${cleanTitle}.`,
+      };
+    });
+
+    return {
+      title: cleanTitle,
+      synopsis: synopsis || `A child-safe ${storyMode} adaptation inspired by ${cleanTitle}.`,
+      moral,
+      language: languageId,
+      audience: ageFilter,
+      sceneBeats,
+      narration: `${cleanTitle}. ${synopsis} ${moral}`.trim(),
+      source: {
+        provider: sanitizeText(internetStory.provider || 'wikipedia'),
+        title: cleanTitle,
+        url: sanitizeText(internetStory.sourceUrl || ''),
+      },
+    };
   }
 
   const cleanSubject = normalizeStorySubject(subject || 'Magical friendship story');
@@ -949,8 +1074,26 @@ const buildScriptFromSubject = async ({ subject, languageId, storyMode, ageFilte
     throw new Error('Subject is required.');
   }
 
+  const internetStory = await fetchWikipediaStoryContext(cleanSubject);
+  const fallbackScript = buildFallbackScript({
+    subject: cleanSubject,
+    languageId,
+    storyMode,
+    ageFilter,
+    internetStory,
+  });
+
   const targetLanguage = resolveLanguageLabel(languageId);
   const systemPrompt = 'You are an expert kids screenplay writer. Output strict JSON only.';
+  const internetContextBlock = internetStory
+    ? `
+Use this verified public story context as source material when relevant:
+Source provider: ${sanitizeText(internetStory.provider)}
+Source title: ${sanitizeText(internetStory.title)}
+Source summary: ${sanitizeText(internetStory.summary)}
+Source URL: ${sanitizeText(internetStory.sourceUrl)}
+Stay faithful to core events while making it child-safe and age-appropriate.`
+    : '';
   const userPrompt = `Create a safe kids screenplay for topic: "${cleanSubject}".
 Language: ${targetLanguage}
 Mode: ${storyMode}
@@ -958,7 +1101,7 @@ Age group: ${ageFilter}
 Return JSON with keys:
 title, synopsis, moral, narration, sceneBeats[] where each beat has beat and summary.
 Keep language simple and family-friendly.
-IMPORTANT: All text values must be written in ${targetLanguage}.`;
+IMPORTANT: All text values must be written in ${targetLanguage}.${internetContextBlock}`;
 
   const response = await safeGoogleAI([
     { role: 'system', content: systemPrompt },
@@ -967,22 +1110,36 @@ IMPORTANT: All text values must be written in ${targetLanguage}.`;
 
   const parsed = response ? extractJson(response) : null;
   if (!parsed || !Array.isArray(parsed.sceneBeats) || !parsed.sceneBeats.length) {
-    return buildFallbackScript({ subject: cleanSubject, languageId, storyMode, ageFilter });
+    return fallbackScript;
+  }
+
+  const parsedSceneBeats = parsed.sceneBeats
+    .map((beat, index) => ({
+      beat: sanitizeText(beat?.beat) || `Scene ${index + 1}`,
+      summary: sanitizeText(beat?.summary) || '',
+    }))
+    .filter((beat) => beat.summary);
+  if (!parsedSceneBeats.length) {
+    return fallbackScript;
   }
 
   return {
     title: sanitizeText(parsed.title) || `Story of ${cleanSubject}`,
-    synopsis: sanitizeText(parsed.synopsis) || buildFallbackScript({ subject: cleanSubject, languageId, storyMode, ageFilter }).synopsis,
+    synopsis: sanitizeText(parsed.synopsis) || fallbackScript.synopsis,
     moral: sanitizeText(parsed.moral) || 'Kindness and effort always matter.',
     narration: sanitizeText(parsed.narration) || '',
     language: languageId,
     audience: ageFilter,
-    sceneBeats: parsed.sceneBeats
-      .map((beat, index) => ({
-        beat: sanitizeText(beat?.beat) || `Scene ${index + 1}`,
-        summary: sanitizeText(beat?.summary) || '',
-      }))
-      .filter((beat) => beat.summary),
+    sceneBeats: parsedSceneBeats,
+    ...(internetStory
+      ? {
+          source: {
+            provider: sanitizeText(internetStory.provider),
+            title: sanitizeText(internetStory.title),
+            url: sanitizeText(internetStory.sourceUrl),
+          },
+        }
+      : {}),
   };
 };
 

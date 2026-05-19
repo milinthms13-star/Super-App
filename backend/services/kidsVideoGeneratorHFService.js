@@ -47,6 +47,100 @@ const normalizeLanguageCode = (value = 'en') => {
   const primary = raw.split('-')[0];
   return LANGUAGE_CODE_ALIASES[raw] || LANGUAGE_CODE_ALIASES[primary] || 'en';
 };
+const STORY_LOOKUP_TIMEOUT_MS = Math.max(
+  1200,
+  Math.min(9000, Number(process.env.STORY_LOOKUP_TIMEOUT_MS) || 4200)
+);
+const internetStoryLookupEnabled = !['0', 'false', 'no', 'off'].includes(
+  String(process.env.KIDS_VIDEO_INTERNET_STORY_LOOKUP_ENABLED || 'true').toLowerCase()
+);
+const WIKIPEDIA_SUMMARY_BASE_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+const WIKIPEDIA_SEARCH_BASE_URL = 'https://en.wikipedia.org/w/api.php';
+
+const sanitizeInternetSummaryText = (value = '') =>
+  sanitizeText(value)
+    .replace(/\s+/g, ' ')
+    .replace(/\((?:listen|help|about this sound file)[^)]+\)/gi, '')
+    .trim();
+
+const splitSummarySentences = (summary = '') =>
+  sanitizeInternetSummaryText(summary)
+    .split(/(?<=[\.\?\!])\s+/)
+    .map((line) => sanitizeText(line))
+    .filter(Boolean);
+
+const fetchJsonWithTimeout = async (url, timeoutMs = STORY_LOOKUP_TIMEOUT_MS) => {
+  if (typeof fetch !== 'function') {
+    throw new Error('Fetch API is unavailable in this runtime.');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const toInternetStoryContext = (payload = {}) => {
+  const title = sanitizeText(payload?.title || '');
+  const summary = sanitizeInternetSummaryText(payload?.extract || payload?.description || '');
+  if (!title || !summary) return null;
+
+  const sourceUrl =
+    sanitizeText(
+      payload?.content_urls?.desktop?.page
+      || payload?.content_urls?.mobile?.page
+      || payload?.canonicalurl
+      || ''
+    ) || `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/\s+/g, '_'))}`;
+
+  return {
+    provider: 'wikipedia',
+    title,
+    summary,
+    sourceUrl,
+  };
+};
+
+const fetchWikipediaStoryContext = async (subject = '') => {
+  const cleanSubject = sanitizeText(subject);
+  if (!cleanSubject || cleanSubject.length < 3) return null;
+  if (!internetStoryLookupEnabled) return null;
+
+  const trySummary = async (title) => {
+    const endpoint = `${WIKIPEDIA_SUMMARY_BASE_URL}/${encodeURIComponent(title)}`;
+    const payload = await fetchJsonWithTimeout(endpoint);
+    return toInternetStoryContext(payload);
+  };
+
+  try {
+    const direct = await trySummary(cleanSubject);
+    if (direct) return direct;
+  } catch (_directError) {
+    // Continue to search fallback.
+  }
+
+  try {
+    const searchUrl =
+      `${WIKIPEDIA_SEARCH_BASE_URL}?action=query&list=search&srsearch=${encodeURIComponent(cleanSubject)}&utf8=1&format=json&srlimit=1`;
+    const searchPayload = await fetchJsonWithTimeout(searchUrl);
+    const bestTitle = sanitizeText(searchPayload?.query?.search?.[0]?.title || '');
+    if (!bestTitle) return null;
+    return await trySummary(bestTitle);
+  } catch (_searchError) {
+    return null;
+  }
+};
 
 const ensureDirectories = async () => {
   try {
@@ -404,7 +498,66 @@ const buildGenericStory = (prompt = '', sceneCount = 5) => {
   };
 };
 
-const createStoryFromPrompt = (prompt = '', sceneCount = 5) => {
+const buildStoryFromInternetContext = (internetStory = {}, sceneCount = 5) => {
+  const title = sanitizeText(internetStory?.title || 'Story Adventure');
+  const summary = sanitizeInternetSummaryText(internetStory?.summary || '');
+  const summarySentences = splitSummarySentences(summary);
+  const extractedCharacters = extractPromptCharacters(`${title} ${summary}`);
+  const characters = extractedCharacters.length
+    ? extractedCharacters
+    : [
+        {
+          id: 'char-hero',
+          name: 'Hero',
+          role: 'Main Character',
+          appearance: 'friendly child hero with colorful outfit',
+          colorPalette: ['sky blue', 'sunny yellow', 'mint'],
+        },
+        {
+          id: 'char-guide',
+          name: 'Guide',
+          role: 'Support Friend',
+          appearance: 'wise companion with warm smile',
+          colorPalette: ['peach', 'teal', 'cream'],
+        },
+      ];
+  const leadName = sanitizeText(characters[0]?.name || 'Hero');
+  const supportName = sanitizeText(characters[1]?.name || 'Guide');
+  const count = Math.max(3, Math.min(8, Number(sceneCount) || 5));
+  const moral = 'Courage, kindness, and wise choices help everyone grow.';
+  const sceneTitles = ['Opening', 'Challenge', 'Journey', 'Climax', 'Ending'];
+
+  const scenes = Array.from({ length: count }).map((_, index) => {
+    const sentence = sanitizeText(
+      summarySentences[index]
+      || summarySentences[summarySentences.length - 1]
+      || `A key moment from ${title}.`
+    );
+    return {
+      id: index + 1,
+      title: sceneTitles[index] || `Scene ${index + 1}`,
+      description: sentence,
+      dialogue: `${leadName}: ${sentence}\n${supportName}: We can learn from this and move forward together.`,
+      emotion: index === count - 1 ? 'joyful' : (index === 2 ? 'brave' : 'wonder'),
+      durationSeconds: 4,
+    };
+  });
+
+  return {
+    title: title || 'Story Adventure',
+    synopsis: sanitizeText(summarySentences.slice(0, 2).join(' ')) || summary || title,
+    moral,
+    characters,
+    scenes,
+    source: {
+      provider: sanitizeText(internetStory?.provider || 'wikipedia'),
+      title: title || 'Story Adventure',
+      url: sanitizeText(internetStory?.sourceUrl || ''),
+    },
+  };
+};
+
+const createStoryFromPrompt = async (prompt = '', sceneCount = 5) => {
   const normalized = sanitizeText(prompt).toLowerCase();
   if (
     /\brama\b/.test(normalized)
@@ -415,6 +568,10 @@ const createStoryFromPrompt = (prompt = '', sceneCount = 5) => {
   }
   if (/\brabbit\b/.test(normalized) && /\b(tortoise|turtle)\b/.test(normalized)) {
     return buildRabbitTortoiseStory();
+  }
+  const internetStory = await fetchWikipediaStoryContext(prompt);
+  if (internetStory) {
+    return buildStoryFromInternetContext(internetStory, sceneCount);
   }
   return buildGenericStory(prompt, sceneCount);
 };
@@ -814,7 +971,7 @@ const generateKidsVideoFromPrompt = async ({
       providedCharacters,
       providedScenes,
     })
-    : createStoryFromPrompt(cleanPrompt, sceneCount);
+    : await createStoryFromPrompt(cleanPrompt, sceneCount);
   const projectId = uuidv4();
   const { width, height } = getResolution(videoSize);
   const outputDir = path.join(uploadsRoot, safeFileName(projectId));
