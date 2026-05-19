@@ -175,6 +175,10 @@ const ensureSessionsFolder = () => {
   }
 };
 
+const generateSessionToken = () => {
+  return crypto.randomBytes(24).toString('hex');
+};
+
 const saveSessionsToDisk = () => {
   try {
     ensureSessionsFolder();
@@ -223,6 +227,8 @@ const cleanOldSessions = () => {
     saveSessionsToDisk();
   }
 };
+
+loadSessionsFromDisk();
 
 const buildFriendProfile = (friendId) => {
   return AI_FRIENDS[friendId] || AI_FRIENDS.nila;
@@ -415,12 +421,14 @@ const buildLocalSupportReply = (session, userMessage) => {
   return `${namePrefix}${scenarioHint}I hear you. You said: "${snippet}". ${tone} What would help you most right now?`;
 };
 
-const createSession = ({ userId, persona = 'supportive', mood = 'neutral', language = 'en', friendId = 'nila', userName = null, friendCustomName = null, friendCustomAvatar = null, scenario = 'room' }) => {
+const createSession = ({ userId, persona = 'supportive', mood = 'neutral', language = 'en', friendId = 'nila', userName = null, friendCustomName = null, friendCustomAvatar = null, scenario = 'room', voice = null }) => {
   cleanOldSessions();
   const sessionId = crypto.randomUUID();
   const friend = buildFriendProfile(friendId);
+  const normalizedVoice = String(voice || friend.voice || 'female-soft').trim();
   const session = {
     sessionId,
+    sessionToken: generateSessionToken(),
     userId: userId || null,
     userName: normalizeUserName(userName),
     friendId: friend.id,
@@ -429,6 +437,7 @@ const createSession = ({ userId, persona = 'supportive', mood = 'neutral', langu
     friendCustomAvatar: friendCustomAvatar ? String(friendCustomAvatar).trim() : null,
     friendPersonality: friend.personality,
     friendVoice: friend.voice,
+    voice: normalizedVoice,
     scenario: scenario || 'room',
     persona: persona || 'supportive',
     mood: mood || 'neutral',
@@ -440,6 +449,7 @@ const createSession = ({ userId, persona = 'supportive', mood = 'neutral', langu
     topics: [],
     messages: [],
     createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
   sessions.set(sessionId, session);
   saveSessionsToDisk();
@@ -570,26 +580,59 @@ const createAIResponse = async (messages) => {
 };
 
 const generateSpeech = async ({ text, friendId = 'nila', voice, language = 'en' }) => {
-  if (isFreeMode) {
+  if (isFreeMode && !googleTtsClient) {
     return null;
   }
 
-  if (!aiClient) {
+  const voiceName = getSpeechVoice(friendId, voice, language);
+  const languageCode = String(language || 'en').toLowerCase();
+
+  if (aiClient) {
+    try {
+      const speechResponse = await aiClient.audio.speech.create({
+        model: process.env.GEMINI_VOICE_FRIEND_TTS_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        voice: voiceName,
+        input: text,
+        format: 'mp3',
+      });
+
+      const buffer = await normalizeAudioResponse(speechResponse);
+      return buffer.toString('base64');
+    } catch (error) {
+      logger.warn('VoiceFriendService cloud TTS failed, falling back to Google TTS client if available:', error.message);
+    }
+  }
+
+  if (!googleTtsClient) {
     return null;
   }
 
   try {
-    const speechResponse = await aiClient.audio.speech.create({
-      model: process.env.GEMINI_VOICE_FRIEND_TTS_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-      voice: getSpeechVoice(friendId, voice, language),
-      input: text,
-      format: 'mp3',
+    const [response] = await googleTtsClient.synthesizeSpeech({
+      input: { text: String(text || '') },
+      voice: {
+        languageCode: languageCode === 'ml' ? 'ml-IN' : languageCode === 'hi' ? 'hi-IN' : languageCode === 'kn' ? 'kn-IN' : 'en-US',
+        name: voiceName,
+      },
+      audioConfig: {
+        audioEncoding: 'MP3',
+        speakingRate: 1,
+        pitch: 0,
+      },
     });
 
-    const buffer = await normalizeAudioResponse(speechResponse);
-    return buffer.toString('base64');
+    if (Buffer.isBuffer(response?.audioContent)) {
+      return response.audioContent.toString('base64');
+    }
+    if (typeof response?.audioContent === 'string') {
+      return Buffer.from(response.audioContent, 'base64').toString('base64');
+    }
+    if (response?.audioContent instanceof Uint8Array) {
+      return Buffer.from(response.audioContent).toString('base64');
+    }
+    throw new Error('Unexpected Google TTS response format');
   } catch (error) {
-    logger.error('VoiceFriendService speech generation error:', error);
+    logger.error('VoiceFriendService fallback Google TTS generation error:', error);
     return null;
   }
 };
@@ -606,6 +649,9 @@ const sendMessage = async ({ sessionId, message, persona, mood, language, friend
     session.friendName = friend.name;
     session.friendPersonality = friend.personality;
     session.friendVoice = friend.voice;
+  }
+  if (voice) {
+    session.voice = String(voice || session.voice || 'female-soft').trim();
   }
   if (userName !== undefined) {
     session.userName = normalizeUserName(userName);

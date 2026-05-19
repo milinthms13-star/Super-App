@@ -5,9 +5,87 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+const VOICE_FRIEND_SESSION_HEADER = 'x-voicefriend-session-token';
+const sessionRateLimits = new Map();
+
+const createRateLimiter = (maxRequests, windowMs) => {
+  return (req, res, next) => {
+    const key = req.voiceFriendSession?.sessionId || req.ip || 'anonymous';
+    const now = Date.now();
+    const timestamps = sessionRateLimits.get(key) || [];
+    const active = timestamps.filter((ts) => now - ts < windowMs);
+    if (active.length >= maxRequests) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many requests. Please wait and try again.',
+      });
+    }
+    active.push(now);
+    sessionRateLimits.set(key, active);
+    next();
+  };
+};
+
+const getSessionTokenFromRequest = (req) => {
+  return (
+    req.headers[VOICE_FRIEND_SESSION_HEADER] ||
+    req.body?.sessionToken ||
+    req.query?.sessionToken ||
+    ''
+  );
+};
+
+const validateVoiceFriendSession = (req, res, next) => {
+  const sessionId = req.body?.sessionId || req.query?.sessionId || req.params?.sessionId;
+  const sessionToken = String(getSessionTokenFromRequest(req) || '').trim();
+  if (!sessionId || !sessionToken) {
+    return res.status(401).json({ success: false, message: 'Session ID and session token are required.' });
+  }
+
+  const session = voiceFriendService.getSession(sessionId);
+  if (!session) {
+    return res.status(404).json({ success: false, message: 'Voice Friend session not found.' });
+  }
+
+  if (String(session.sessionToken || '').trim() !== sessionToken) {
+    return res.status(403).json({ success: false, message: 'Invalid session token.' });
+  }
+
+  req.voiceFriendSession = session;
+  next();
+};
+
+const initRateLimiter = createRateLimiter(10, 60 * 1000);
+const messageRateLimiter = createRateLimiter(20, 60 * 1000);
+const speechRateLimiter = createRateLimiter(10, 60 * 1000);
+
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const avatarUploadRoot = path.join(__dirname, '../uploads/voicefriend');
+try { fs.mkdirSync(avatarUploadRoot, { recursive: true }); } catch (e) { /* ignore */ }
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, avatarUploadRoot),
+  filename: (req, file, cb) => {
+    const safe = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+    cb(null, safe);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 3 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ALLOWED_AVATAR_TYPES.includes(file.mimetype) || !['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+      return cb(new Error('Unsupported avatar file type. Only JPG, PNG, and WEBP are allowed.'));
+    }
+    cb(null, true);
+  },
+});
+
 const router = express.Router();
 
-router.post('/init', async (req, res) => {
+router.post('/init', initRateLimiter, async (req, res) => {
   try {
     const {
       persona = 'supportive',
@@ -15,12 +93,14 @@ router.post('/init', async (req, res) => {
       language = 'en',
       friendId = 'nila',
       userName,
+      voice,
     } = req.body || {};
     const session = voiceFriendService.createSession({
       persona,
       mood,
       language,
       friendId,
+      voice,
       userName: userName || req.user?.name || null,
       userId: req.user?._id || null,
       friendCustomName: req.body?.friendCustomName,
@@ -32,10 +112,12 @@ router.post('/init', async (req, res) => {
       success: true,
       data: {
         sessionId: session.sessionId,
+        sessionToken: session.sessionToken,
         persona: session.persona,
         mood: session.mood,
         language: session.language,
         friendId: session.friendId,
+        voice: session.voice,
         friendName: session.friendName,
         friendCustomName: session.friendCustomName,
         friendCustomAvatar: session.friendCustomAvatar,
@@ -49,7 +131,7 @@ router.post('/init', async (req, res) => {
   }
 });
 
-router.post('/message', async (req, res) => {
+router.post('/message', validateVoiceFriendSession, messageRateLimiter, async (req, res) => {
   try {
     const {
       sessionId,
@@ -59,6 +141,7 @@ router.post('/message', async (req, res) => {
       language = 'en',
       friendId,
       userName,
+      voice,
     } = req.body || {};
 
     if (!sessionId || !message) {
@@ -75,6 +158,7 @@ router.post('/message', async (req, res) => {
       mood,
       language,
       friendId,
+      voice,
       userName: userName || req.user?.name || null,
       friendCustomName: req.body?.friendCustomName,
       friendCustomAvatar: req.body?.friendCustomAvatar,
@@ -92,16 +176,19 @@ router.post('/message', async (req, res) => {
   }
 });
 
-router.post('/speech', async (req, res) => {
+router.post('/speech', validateVoiceFriendSession, speechRateLimiter, async (req, res) => {
   try {
-    const { text, friendId = 'nila', voice, language = 'en' } = req.body || {};
-    if (!text || !String(text).trim()) {
-      return res.status(400).json({ success: false, message: 'Text is required to generate speech.' });
+    const { sessionId, text, friendId = 'nila', voice, language = 'en' } = req.body || {};
+    if (!sessionId || !text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'sessionId and text are required to generate speech.' });
     }
 
     const audioBase64 = await voiceFriendService.generateSpeech({ text, friendId, voice, language });
     if (!audioBase64) {
-      return res.status(500).json({ success: false, message: 'Speech generation failed.' });
+      return res.json({
+        success: true,
+        data: { audio: null, mimeType: null, message: 'Text-to-speech unavailable. Falling back to browser voice playback.' },
+      });
     }
 
     res.json({
@@ -142,12 +229,12 @@ router.post('/avatar', upload.single('avatar'), async (req, res) => {
   }
 });
 
-router.get('/history/:sessionId', async (req, res) => {
+router.get('/history/:sessionId', validateVoiceFriendSession, async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const session = voiceFriendService.getSession(sessionId);
+    const session = req.voiceFriendSession;
 
-    if (!session) {
+    if (!session || session.sessionId !== sessionId) {
       return res.status(404).json({ success: false, message: 'Session not found' });
     }
 

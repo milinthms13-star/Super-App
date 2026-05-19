@@ -69,6 +69,7 @@ const AI_FRIENDS = [
 ];
 
 const STORAGE_KEY = 'voiceFriendState';
+const VOICE_FRIEND_SESSION_HEADER = 'x-voicefriend-session-token';
 const FACE_PRESET_STORAGE_PREFIX = 'voiceFriendFacePresets';
 const MAX_AVATAR_FILE_SIZE_BYTES = 3 * 1024 * 1024;
 const AVATAR_OUTPUT_SIZE = 512;
@@ -201,13 +202,9 @@ const resolveVoiceFriendAvatarUrl = (value = '') => {
   return rawValue;
 };
 
-const buildRequestHeaders = () => {
-  const token = getStoredAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
 const VoiceFriend = () => {
   const [sessionId, setSessionId] = useState(null);
+  const [sessionToken, setSessionToken] = useState('');
   const [friendId, setFriendId] = useState('nila');
   const [userName, setUserName] = useState('');
   const [persona, setPersona] = useState('supportive');
@@ -227,6 +224,15 @@ const VoiceFriend = () => {
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [newPresetName, setNewPresetName] = useState('');
   const [scenario, setScenario] = useState('room');
+
+  const buildRequestHeaders = () => {
+    const token = getStoredAuthToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    if (sessionToken) {
+      headers[VOICE_FRIEND_SESSION_HEADER] = sessionToken;
+    }
+    return headers;
+  };
   const [voice, setVoice] = useState('female-soft');
   const [persistData, setPersistData] = useState(true);
   const [hasPendingSessionSettings, setHasPendingSessionSettings] = useState(false);
@@ -448,6 +454,8 @@ const VoiceFriend = () => {
 
       if (response?.data?.success) {
         setSessionId(response.data.data.sessionId);
+        setSessionToken(response.data.data.sessionToken || '');
+        setVoice(response.data.data.voice || sessionVoice);
         setStatus('Voice Friend session ready. Start the conversation when you are ready.');
         sessionMetaRef.current = {
           friendId: sessionFriendId,
@@ -513,6 +521,9 @@ const VoiceFriend = () => {
           }
           if (parsed?.voice) {
             setVoice(parsed.voice);
+          }
+          if (parsed?.sessionToken) {
+            setSessionToken(parsed.sessionToken);
           }
           if (parsed?.sessionId) {
             initSession(parsed.sessionId, parsed.friendId, parsed.userName);
@@ -584,6 +595,7 @@ const VoiceFriend = () => {
       const response = await axios.post(
         buildApiUrl('/ai-voice-friend/speech'),
         {
+          sessionId,
           text,
           friendId,
           voice,
@@ -719,6 +731,7 @@ const VoiceFriend = () => {
         savedAt: new Date().toISOString(),
         persistData,
         sessionId,
+        sessionToken,
         friendId,
         userName,
         persona,
@@ -726,12 +739,12 @@ const VoiceFriend = () => {
         language,
         scenario,
         voice,
-        conversation,
+        conversation: conversation.slice(-12),
         friendCustomName,
-        friendCustomAvatar,
+        friendCustomAvatar: String(friendCustomAvatar || '').length < 65536 ? friendCustomAvatar : '',
       })
     );
-  }, [sessionId, friendId, userName, persona, mood, language, scenario, voice, conversation, friendCustomName, friendCustomAvatar, persistData]);
+  }, [sessionId, sessionToken, friendId, userName, persona, mood, language, scenario, voice, conversation, friendCustomName, friendCustomAvatar, persistData]);
 
   useEffect(() => {
     return () => {
