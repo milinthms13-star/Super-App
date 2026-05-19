@@ -79,6 +79,40 @@ const seedDoctors = [
       { date: '2026-05-18', times: ['09:30', '15:00', '18:00'] },
     ],
   },
+  {
+    name: 'Dr. Fathima Rahman',
+    specialty: 'Pediatrician',
+    qualifications: 'MBBS, DCH, MD (Pediatrics)',
+    experienceYears: 9,
+    consultationFee: 550,
+    rating: 4.8,
+    reviewsCount: 144,
+    languages: ['English', 'Malayalam', 'Hindi'],
+    clinicAddress: "BabyCare Children's Clinic, Kannur",
+    availableModes: ['clinic', 'video'],
+    availableSlots: [
+      { date: '2026-05-14', times: ['09:30', '11:30', '16:30'] },
+      { date: '2026-05-15', times: ['10:00', '13:00', '18:00'] },
+      { date: '2026-05-17', times: ['09:00', '12:30', '17:00'] },
+    ],
+  },
+  {
+    name: 'Dr. Vivek Menon',
+    specialty: 'Orthopedic',
+    qualifications: 'MBBS, MS (Orthopedics)',
+    experienceYears: 10,
+    consultationFee: 650,
+    rating: 4.7,
+    reviewsCount: 171,
+    languages: ['English', 'Malayalam', 'Tamil'],
+    clinicAddress: 'Malabar Bone & Joint Center, Thrissur',
+    availableModes: ['clinic', 'video'],
+    availableSlots: [
+      { date: '2026-05-14', times: ['10:30', '14:30', '19:00'] },
+      { date: '2026-05-16', times: ['09:30', '13:00', '17:30'] },
+      { date: '2026-05-18', times: ['11:00', '15:00', '18:30'] },
+    ],
+  },
 ];
 
 const seedLabTests = [
@@ -90,6 +124,10 @@ const seedLabTests = [
   { name: 'CT Scan', price: 3800, homeCollection: false, type: 'scan' },
   { name: 'Ultrasound', price: 1400, homeCollection: false, type: 'scan' },
   { name: 'X-Ray', price: 600, homeCollection: false, type: 'scan' },
+  { name: 'Lipid Profile', price: 650, homeCollection: true, type: 'blood' },
+  { name: 'Liver Function Test', price: 720, homeCollection: true, type: 'blood' },
+  { name: '2D Echo', price: 2200, homeCollection: false, type: 'scan' },
+  { name: 'Mammography', price: 2100, homeCollection: false, type: 'scan' },
 ];
 
 const seedPackages = [
@@ -106,6 +144,10 @@ const seedMedicines = [
   { name: 'Antibiotic Course', price: 320, category: 'Infection', requiresPrescription: true, stock: 90 },
   { name: 'Insulin Pen', price: 980, category: 'Diabetes', requiresPrescription: true, stock: 45 },
   { name: 'Calcium Tablets', price: 220, category: 'Supplements', requiresPrescription: false, stock: 130 },
+  { name: 'Cetirizine 10mg', price: 48, category: 'Allergy', requiresPrescription: false, stock: 190 },
+  { name: 'Amoxicillin 500mg', price: 210, category: 'Infection', requiresPrescription: true, stock: 120 },
+  { name: 'Metformin 500mg', price: 130, category: 'Diabetes', requiresPrescription: true, stock: 150 },
+  { name: 'Omeprazole 20mg', price: 95, category: 'Gastro', requiresPrescription: false, stock: 175 },
 ];
 
 const inMemoryStore = {
@@ -156,27 +198,43 @@ const ensureHealthcareSeedData = async () => {
     return;
   }
 
-  const [doctorCount, labCount, packageCount, medicineCount] = await Promise.all([
-    HealthcareDoctor.countDocuments(),
-    HealthcareLabTest.countDocuments(),
-    HealthcarePackage.countDocuments(),
-    HealthcareMedicine.countDocuments(),
+  const [existingDoctors, existingLabTests, existingPackages, existingMedicines] = await Promise.all([
+    HealthcareDoctor.find({}, { name: 1 }).lean(),
+    HealthcareLabTest.find({}, { name: 1 }).lean(),
+    HealthcarePackage.find({}, { name: 1 }).lean(),
+    HealthcareMedicine.find({}, { name: 1 }).lean(),
   ]);
 
-  if (doctorCount === 0) {
-    await HealthcareDoctor.insertMany(seedDoctors.map((item) => ({ ...item, approvalStatus: 'approved', isActive: true })));
+  const existingDoctorNames = new Set(existingDoctors.map((item) => String(item.name || '').trim().toLowerCase()));
+  const missingDoctors = seedDoctors
+    .filter((item) => !existingDoctorNames.has(String(item.name || '').trim().toLowerCase()))
+    .map((item) => ({ ...item, approvalStatus: 'approved', isActive: true }));
+  if (missingDoctors.length > 0) {
+    await HealthcareDoctor.insertMany(missingDoctors);
   }
 
-  if (labCount === 0) {
-    await HealthcareLabTest.insertMany(seedLabTests.map((item) => ({ ...item, approvalStatus: 'approved', isActive: true })));
+  const existingLabTestNames = new Set(existingLabTests.map((item) => String(item.name || '').trim().toLowerCase()));
+  const missingLabTests = seedLabTests
+    .filter((item) => !existingLabTestNames.has(String(item.name || '').trim().toLowerCase()))
+    .map((item) => ({ ...item, approvalStatus: 'approved', isActive: true }));
+  if (missingLabTests.length > 0) {
+    await HealthcareLabTest.insertMany(missingLabTests);
   }
 
-  if (packageCount === 0) {
-    await HealthcarePackage.insertMany(seedPackages.map((item) => ({ ...item, approvalStatus: 'approved', isActive: true })));
+  const existingPackageNames = new Set(existingPackages.map((item) => String(item.name || '').trim().toLowerCase()));
+  const missingPackages = seedPackages
+    .filter((item) => !existingPackageNames.has(String(item.name || '').trim().toLowerCase()))
+    .map((item) => ({ ...item, approvalStatus: 'approved', isActive: true }));
+  if (missingPackages.length > 0) {
+    await HealthcarePackage.insertMany(missingPackages);
   }
 
-  if (medicineCount === 0) {
-    await HealthcareMedicine.insertMany(seedMedicines.map((item) => ({ ...item, approvalStatus: 'approved', isActive: true })));
+  const existingMedicineNames = new Set(existingMedicines.map((item) => String(item.name || '').trim().toLowerCase()));
+  const missingMedicines = seedMedicines
+    .filter((item) => !existingMedicineNames.has(String(item.name || '').trim().toLowerCase()))
+    .map((item) => ({ ...item, approvalStatus: 'approved', isActive: true }));
+  if (missingMedicines.length > 0) {
+    await HealthcareMedicine.insertMany(missingMedicines);
   }
 };
 

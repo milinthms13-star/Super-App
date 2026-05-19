@@ -102,6 +102,14 @@ const translateTextToLanguage = async (text = '', targetLanguage = 'en') => {
   }
 };
 
+const translatePromptForLanguage = async (prompt = '', targetLanguage = 'en') => {
+  const cleanPrompt = sanitizeText(prompt);
+  if (!cleanPrompt) return cleanPrompt;
+  const normalizedLanguage = normalizeLanguageCode(targetLanguage);
+  if (normalizedLanguage === 'en') return cleanPrompt;
+  return translateTextToLanguage(cleanPrompt, normalizedLanguage);
+};
+
 const localizeStoryForLanguage = async (story = {}, targetLanguage = 'en') => {
   if (!story || targetLanguage === 'en') return story;
 
@@ -1142,6 +1150,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
   numFrames = 200,
   numInferenceSteps = 25,
   language = 'en',
+  storyTitle = '',
 }) => {
   await ensureDirectories();
   const normalizedLanguage = normalizeLanguageCode(language);
@@ -1149,6 +1158,8 @@ const generateKidsVideoFromDiffusersPrompt = async ({
   if (!cleanPrompt) throw new Error('Prompt is required.');
   if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
 
+  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage);
+  const localizedStoryTitle = sanitizeText(storyTitle);
   const projectId = uuidv4();
   const outputDir = path.join(uploadsRoot, safeFileName(projectId));
   await mkdir(outputDir, { recursive: true });
@@ -1161,7 +1172,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
 
   const args = [
     scriptPath,
-    '--prompt', cleanPrompt,
+    '--prompt', localizedPrompt,
     '--output', outputFile,
     '--model', modelId,
     '--num_frames', `${Math.max(16, Math.min(240, Number(numFrames) || 200))}`,
@@ -1195,6 +1206,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
       storyMode: 'moral',
       voiceType: 'kid-female',
       language: normalizedLanguage,
+      storyTitle: localizedStoryTitle,
     });
 
     return {
@@ -1219,8 +1231,10 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     workflowType: 'kids-video-scene-prompt-video',
     aiProvider: 'scene_pipeline',
     renderEngine: 'prompt_video_python',
-    prompt: cleanPrompt,
-    title: 'Prompt Video Render',
+    prompt: localizedPrompt,
+    title: localizedStoryTitle || 'Prompt Video Render',
+    storyTitle: localizedStoryTitle,
+    language: normalizedLanguage,
     videoSize: sanitizeText(videoSize || 'youtube'),
     outputDir,
     outputFile,
@@ -1250,6 +1264,7 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
   videoSize = 'youtube',
   sceneCount = 5,
   language = 'en',
+  storyTitle = '',
 }) => {
   await ensureDirectories();
   const normalizedLanguage = normalizeLanguageCode(language);
@@ -1257,6 +1272,8 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
   if (!cleanPrompt) throw new Error('Prompt is required.');
   if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
 
+  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage);
+  const localizedStoryTitle = sanitizeText(storyTitle);
   const projectId = uuidv4();
   const outputDir = path.join(uploadsRoot, safeFileName(projectId));
   await mkdir(outputDir, { recursive: true });
@@ -1268,7 +1285,7 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
   const fps = Math.max(12, Math.min(30, Number(process.env.HF_STEVE_LIKE_FPS) || 24));
   const args = [
     scriptPath,
-    '--script', cleanPrompt,
+    '--script', localizedPrompt,
     '--output', outputFile,
     '--max_scenes', `${Math.max(3, Math.min(8, Number(sceneCount) || 5))}`,
     '--width', `${width}`,
@@ -1300,8 +1317,10 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
       workflowType: 'kids-video-scene-script',
       aiProvider: 'scene_pipeline',
       renderEngine: 'scene_script_video',
-      prompt: cleanPrompt,
-      title: 'Script-to-Video Render',
+      prompt: localizedPrompt,
+      title: localizedStoryTitle || 'Script-to-Video Render',
+      storyTitle: localizedStoryTitle,
+      language: normalizedLanguage,
       videoSize: sanitizeText(videoSize || 'youtube'),
       outputDir,
       outputFile,
@@ -1334,6 +1353,7 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
       storyMode: 'educational',
       voiceType: 'kid-female',
       language: normalizedLanguage,
+      storyTitle: localizedStoryTitle,
     });
 
     return {
@@ -1356,6 +1376,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
   guidanceScale = 6,
   language = 'en',
   strict = false,
+  storyTitle = '',
 }) => {
   const normalizedLanguage = normalizeLanguageCode(language);
   await ensureDirectories();
@@ -1363,6 +1384,8 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
   if (!cleanPrompt) throw new Error('Prompt is required.');
   if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
 
+  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage);
+  const localizedStoryTitle = sanitizeText(storyTitle);
   const projectId = uuidv4();
   const outputDir = path.join(uploadsRoot, safeFileName(projectId));
   await mkdir(outputDir, { recursive: true });
@@ -1375,7 +1398,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
   const fps = Math.max(4, Math.min(24, Number(process.env.HF_COGVIDEOX_FPS) || 8));
   const args = [
     scriptPath,
-    '--prompt', cleanPrompt,
+    '--prompt', localizedPrompt,
     '--output', outputFile,
     '--model', modelId,
     '--num_frames', `${Math.max(16, Math.min(97, Number(numFrames) || 49))}`,
@@ -1407,8 +1430,10 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
       workflowType: 'kids-video-cogvideox-text-to-video',
       aiProvider: 'scene_pipeline',
       renderEngine: 'cogvideox_text_to_video',
-      prompt: cleanPrompt,
-      title: 'CogVideoX Prompt Render',
+      prompt: localizedPrompt,
+      title: localizedStoryTitle || 'CogVideoX Prompt Render',
+      storyTitle: localizedStoryTitle,
+      language: normalizedLanguage,
       videoSize: sanitizeText(videoSize || 'youtube'),
       outputDir,
       outputFile,
@@ -1419,7 +1444,6 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
       generatorLog: stdout || '',
       pythonCommand: sanitizeText(pythonCommand || ''),
       sceneCount: 1,
-      language: normalizedLanguage,
       width,
       height,
       model: modelId,
@@ -1450,6 +1474,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
       storyMode: 'moral',
       voiceType: 'kid-female',
       language: normalizedLanguage,
+      storyTitle: localizedStoryTitle,
     });
 
     return {

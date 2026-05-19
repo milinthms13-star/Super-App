@@ -126,6 +126,42 @@ export const MOCK_DOCTORS = [
       { date: "2026-05-18", times: ["09:30", "15:00", "18:00"] },
     ],
   },
+  {
+    id: "doc-4",
+    name: "Dr. Fathima Rahman",
+    specialty: "Pediatrician",
+    experienceYears: 9,
+    consultationFee: 550,
+    rating: 4.8,
+    reviewsCount: 144,
+    languages: ["English", "Malayalam", "Hindi"],
+    qualifications: "MBBS, DCH, MD (Pediatrics)",
+    clinicAddress: "BabyCare Children's Clinic, Kannur",
+    availableModes: ["clinic", "video"],
+    availableSlots: [
+      { date: "2026-05-14", times: ["09:30", "11:30", "16:30"] },
+      { date: "2026-05-15", times: ["10:00", "13:00", "18:00"] },
+      { date: "2026-05-17", times: ["09:00", "12:30", "17:00"] },
+    ],
+  },
+  {
+    id: "doc-5",
+    name: "Dr. Vivek Menon",
+    specialty: "Orthopedic",
+    experienceYears: 10,
+    consultationFee: 650,
+    rating: 4.7,
+    reviewsCount: 171,
+    languages: ["English", "Malayalam", "Tamil"],
+    qualifications: "MBBS, MS (Orthopedics)",
+    clinicAddress: "Malabar Bone & Joint Center, Thrissur",
+    availableModes: ["clinic", "video"],
+    availableSlots: [
+      { date: "2026-05-14", times: ["10:30", "14:30", "19:00"] },
+      { date: "2026-05-16", times: ["09:30", "13:00", "17:30"] },
+      { date: "2026-05-18", times: ["11:00", "15:00", "18:30"] },
+    ],
+  },
 ];
 
 export const MOCK_LAB_TESTS = [
@@ -137,6 +173,10 @@ export const MOCK_LAB_TESTS = [
   { id: "scan-2", name: "CT Scan", price: 3800, homeCollection: false, type: "scan" },
   { id: "scan-3", name: "Ultrasound", price: 1400, homeCollection: false, type: "scan" },
   { id: "scan-4", name: "X-Ray", price: 600, homeCollection: false, type: "scan" },
+  { id: "lab-5", name: "Lipid Profile", price: 650, homeCollection: true, type: "blood" },
+  { id: "lab-6", name: "Liver Function Test", price: 720, homeCollection: true, type: "blood" },
+  { id: "scan-5", name: "2D Echo", price: 2200, homeCollection: false, type: "scan" },
+  { id: "scan-6", name: "Mammography", price: 2100, homeCollection: false, type: "scan" },
 ];
 
 export const MOCK_HEALTH_PACKAGES = [
@@ -153,6 +193,10 @@ export const MOCK_MEDICINES = [
   { id: "med-4", name: "Antibiotic Course", price: 320, category: "Infection", requiresPrescription: true },
   { id: "med-5", name: "Insulin Pen", price: 980, category: "Diabetes", requiresPrescription: true },
   { id: "med-6", name: "Calcium Tablets", price: 220, category: "Supplements", requiresPrescription: false },
+  { id: "med-7", name: "Cetirizine 10mg", price: 48, category: "Allergy", requiresPrescription: false },
+  { id: "med-8", name: "Amoxicillin 500mg", price: 210, category: "Infection", requiresPrescription: true },
+  { id: "med-9", name: "Metformin 500mg", price: 130, category: "Diabetes", requiresPrescription: true },
+  { id: "med-10", name: "Omeprazole 20mg", price: 95, category: "Gastro", requiresPrescription: false },
 ];
 
 export const MOCK_RECORDS = [

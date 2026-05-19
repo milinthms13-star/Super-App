@@ -189,6 +189,33 @@ describe('kids-video-hf routes', () => {
     );
   });
 
+  test('POST /api/kids-video-hf/generate forwards storyTitle to prompt renderer', async () => {
+    generateKidsVideoFromPrompt.mockResolvedValue({
+      projectId: 'proj-title-1',
+      videoUrl: '/uploads/kids-video-hf/proj-title-1/story-render.mp4',
+      aiImagesEnabled: false,
+      project: {
+        projectId: 'proj-title-1',
+        scenes: [{ id: 1, title: 'Scene 1' }],
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/generate')
+      .send({
+        prompt: 'A short kids story',
+        storyTitle: 'The Brave Little Elephant',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(generateKidsVideoFromPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storyTitle: 'The Brave Little Elephant',
+      })
+    );
+  });
+
   test('POST /api/kids-video-hf/generate honors forced cogvideox even with structured scenes', async () => {
     generateKidsVideoFromCogVideoXPrompt.mockResolvedValue({
       projectId: 'proj-cog-forced-1',

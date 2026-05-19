@@ -1,4 +1,5 @@
 import axios from "axios";
+import { buildApiUrl } from "../../../utils/api";
 import {
   MOCK_APPOINTMENTS,
   MOCK_DOCTORS,
@@ -9,25 +10,23 @@ import {
   MOCK_RECORDS,
 } from "../data/healthcareMockData";
 
-const API_BASE = "/api";
-
 const endpoints = {
-  doctors: `${API_BASE}/doctors`,
-  labTests: `${API_BASE}/lab-tests`,
-  healthPackages: `${API_BASE}/health-packages`,
-  medicines: `${API_BASE}/medicines`,
-  records: `${API_BASE}/records`,
-  appointments: `${API_BASE}/appointments`,
-  familyProfiles: `${API_BASE}/family-profiles`,
-  pharmacyOrders: `${API_BASE}/pharmacy/orders`,
-  refillReminders: `${API_BASE}/refill-reminders`,
-  emergencySos: `${API_BASE}/emergency/sos`,
-  emergencyLocation: `${API_BASE}/emergency/location`,
-  emergencyIncidents: `${API_BASE}/emergency/incidents`,
-  notifications: `${API_BASE}/notifications`,
-  partnerApplications: `${API_BASE}/partner/applications`,
-  partnerAdminApplications: `${API_BASE}/partner/applications/admin`,
-  partnerDashboard: `${API_BASE}/partner/dashboard`,
+  doctors: buildApiUrl("/doctors"),
+  labTests: buildApiUrl("/lab-tests"),
+  healthPackages: buildApiUrl("/health-packages"),
+  medicines: buildApiUrl("/medicines"),
+  records: buildApiUrl("/records"),
+  appointments: buildApiUrl("/appointments"),
+  familyProfiles: buildApiUrl("/family-profiles"),
+  pharmacyOrders: buildApiUrl("/pharmacy/orders"),
+  refillReminders: buildApiUrl("/refill-reminders"),
+  emergencySos: buildApiUrl("/emergency/sos"),
+  emergencyLocation: buildApiUrl("/emergency/location"),
+  emergencyIncidents: buildApiUrl("/emergency/incidents"),
+  notifications: buildApiUrl("/notifications"),
+  partnerApplications: buildApiUrl("/partner/applications"),
+  partnerAdminApplications: buildApiUrl("/partner/applications/admin"),
+  partnerDashboard: buildApiUrl("/partner/dashboard"),
 };
 
 const authHeaders = () => ({
@@ -62,21 +61,21 @@ export const healthcareApi = {
       const params = specialty ? { specialty } : {};
       const response = await axios.get(endpoints.doctors, { ...authHeaders(), params });
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => MOCK_DOCTORS);
+    }, () => MOCK_DOCTORS, { fallbackStatuses: [401, 403, 404] });
   },
 
   getLabTests: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.labTests, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => MOCK_LAB_TESTS);
+    }, () => MOCK_LAB_TESTS, { fallbackStatuses: [401, 403, 404] });
   },
 
   getHealthPackages: async () => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.healthPackages, authHeaders());
       return Array.isArray(unwrap(response)) ? unwrap(response) : [];
-    }, () => MOCK_HEALTH_PACKAGES);
+    }, () => MOCK_HEALTH_PACKAGES, { fallbackStatuses: [401, 403, 404] });
   },
 
   getMedicines: async (query = "") => {
@@ -94,7 +93,7 @@ export const healthcareApi = {
       return MOCK_MEDICINES.filter((item) => {
         return item.name.toLowerCase().includes(normalizedQuery) || item.category.toLowerCase().includes(normalizedQuery);
       });
-    });
+    }, { fallbackStatuses: [401, 403, 404] });
   },
 
   getRecords: async () => {
@@ -473,6 +472,14 @@ export const healthcareApi = {
   },
 
   getInitialData: async () => {
+    const safeLoad = async (loader, fallbackValue) => {
+      try {
+        return await loader();
+      } catch (_error) {
+        return typeof fallbackValue === "function" ? fallbackValue() : fallbackValue;
+      }
+    };
+
     const [
       doctors,
       labTests,
@@ -488,19 +495,30 @@ export const healthcareApi = {
       pharmacyOrders,
       partnerDashboard,
     ] = await Promise.all([
-      healthcareApi.getDoctors(),
-      healthcareApi.getLabTests(),
-      healthcareApi.getHealthPackages(),
-      healthcareApi.getMedicines(),
-      healthcareApi.getRecords(),
-      healthcareApi.getAppointments(),
-      healthcareApi.getFamilyProfiles(),
-      healthcareApi.getRefillReminders(),
-      healthcareApi.getEmergencyIncidents(),
-      healthcareApi.getNotifications(),
-      healthcareApi.getPartnerApplications(),
-      healthcareApi.getPharmacyOrders(),
-      healthcareApi.getPartnerDashboard(),
+      safeLoad(() => healthcareApi.getDoctors(), MOCK_DOCTORS),
+      safeLoad(() => healthcareApi.getLabTests(), MOCK_LAB_TESTS),
+      safeLoad(() => healthcareApi.getHealthPackages(), MOCK_HEALTH_PACKAGES),
+      safeLoad(() => healthcareApi.getMedicines(), MOCK_MEDICINES),
+      safeLoad(() => healthcareApi.getRecords(), MOCK_RECORDS),
+      safeLoad(() => healthcareApi.getAppointments(), MOCK_APPOINTMENTS),
+      safeLoad(
+        () => healthcareApi.getFamilyProfiles(),
+        () => FAMILY_MEMBERS.map((member, index) => ({ id: `family-${index + 1}`, name: member, relation: member }))
+      ),
+      safeLoad(() => healthcareApi.getRefillReminders(), []),
+      safeLoad(() => healthcareApi.getEmergencyIncidents(), []),
+      safeLoad(() => healthcareApi.getNotifications(), []),
+      safeLoad(() => healthcareApi.getPartnerApplications(), []),
+      safeLoad(() => healthcareApi.getPharmacyOrders(), []),
+      safeLoad(() => healthcareApi.getPartnerDashboard(), {
+        applications: [],
+        stats: {
+          pendingApplications: 0,
+          approvedApplications: 0,
+          totalAppointments: 0,
+          totalPharmacyOrders: 0,
+        },
+      }),
     ]);
 
     return {

@@ -908,7 +908,7 @@ const VoiceFriend = () => {
           </select>
         </div>
         <div className="voice-friend-control-group">
-          <label>
+          <label className="voice-friend-checkbox-label">
             <input
               type="checkbox"
               checked={persistData}

@@ -147,6 +147,7 @@ router.post('/generate', async (req, res) => {
           guidanceScale: req.body?.guidanceScale,
           language: languageCode,
           strict: strictCogVideoX,
+          storyTitle,
         })
       : useLegacyScriptVideo
       ? await generateKidsVideoFromFreeSteveLikePrompt({
@@ -154,6 +155,7 @@ router.post('/generate', async (req, res) => {
           sceneCount: clampSceneCount(req.body?.sceneCount),
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           language: languageCode,
+          storyTitle,
         })
       : shouldUseDiffusers
       ? await generateKidsVideoFromDiffusersPrompt({
@@ -162,6 +164,7 @@ router.post('/generate', async (req, res) => {
           numFrames: req.body?.numFrames,
           numInferenceSteps: req.body?.numInferenceSteps,
           language: languageCode,
+          storyTitle,
         })
       : await generateKidsVideoFromPrompt({
           prompt: effectivePrompt,

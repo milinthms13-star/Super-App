@@ -495,7 +495,7 @@ const KidsStoryVideoMaker = () => {
   const [premiumHD, setPremiumHD] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [aiProvider, setAiProvider] = useState("scene_pipeline");
-  const [hfRenderEngine, setHfRenderEngine] = useState("cogvideox");
+  const [hfRenderEngine, setHfRenderEngine] = useState("");
   const [generatedProject, setGeneratedProject] = useState(null);
   const [generatedScenes, setGeneratedScenes] = useState([]);
   const [videoUrl, setVideoUrl] = useState("");
@@ -1534,7 +1534,7 @@ const KidsStoryVideoMaker = () => {
       };
 
       setError("");
-      setMessage(`Rendering with scene pipeline (${hfRenderEngine})...`);
+      setMessage(`Rendering with scene pipeline (${hfRenderEngine || "default"})...`);
       setIsRendering(true);
       startRenderProgress();
 
@@ -1614,7 +1614,7 @@ const KidsStoryVideoMaker = () => {
           title: sanitizeText(storyTitle || returnedProject?.title || generatedProject?.title || "AI Kids Story Video Generator"),
           storyPrompt: normalizedStoryPrompt,
           aiProvider: "scene_pipeline",
-          renderEngine: selectedEngine || "cogvideox",
+          renderEngine: selectedEngine || returnedProject?.renderEngine || generatedProject?.renderEngine || "scene_pipeline",
           renderedAt: new Date().toISOString(),
           videoUrl: normalizedVideoUrl,
         };
