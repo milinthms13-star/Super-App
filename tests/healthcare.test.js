@@ -6,6 +6,7 @@ import { healthcareApi } from '../src/modules/healthcare/services/healthcareApi'
 
 // Mock the API
 jest.mock('../src/modules/healthcare/services/healthcareApi');
+jest.mock('axios');
 
 // Mock child components to isolate testing
 jest.mock('../src/modules/healthcare/components/DoctorConsultation', () => {
@@ -45,15 +46,16 @@ jest.mock('../src/modules/healthcare/components/ElderlyCare', () => {
 });
 
 jest.mock('../src/modules/healthcare/components/HealthcareNav', () => {
-  return function MockHealthcareNav({ activeSection, onSectionChange }) {
+  return function MockHealthcareNav({ activeSection, onChange, onSectionChange }) {
+    const change = onChange || onSectionChange;
     return (
       <nav data-testid="healthcare-nav">
-        <button onClick={() => onSectionChange('consultation')}>Consultation</button>
-        <button onClick={() => onSectionChange('lab')}>Lab</button>
-        <button onClick={() => onSectionChange('records')}>Records</button>
-        <button onClick={() => onSectionChange('pharmacy')}>Pharmacy</button>
-        <button onClick={() => onSectionChange('emergency')}>Emergency</button>
-        <button onClick={() => onSectionChange('elderly')}>Elderly Care</button>
+        <button onClick={() => change('consultation')}>Consultation</button>
+        <button onClick={() => change('lab')}>Lab</button>
+        <button onClick={() => change('records')}>Records</button>
+        <button onClick={() => change('pharmacy')}>Pharmacy</button>
+        <button onClick={() => change('emergency')}>Emergency</button>
+        <button onClick={() => change('elderly')}>Elderly Care</button>
       </nav>
     );
   };

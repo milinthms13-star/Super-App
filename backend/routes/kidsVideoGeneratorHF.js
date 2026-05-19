@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   generateKidsVideoFromPrompt,
+  generateKidsVideoFromHybridPrompt,
   generateKidsVideoFromDiffusersPrompt,
   generateKidsVideoFromFreeSteveLikePrompt,
   generateKidsVideoFromCogVideoXPrompt,
@@ -111,6 +112,11 @@ router.post('/generate', async (req, res) => {
       requestedEngine === 'cogvideox_2b' ||
       requestedEngine === 'cogvideo' ||
       requestedEngine === 'real_motion_gpu';
+    const useHybrid =
+      requestedEngine === 'hybrid_motion_cogvideox' ||
+      requestedEngine === 'hybrid' ||
+      requestedEngine === 'hybrid_scene_cogvideox' ||
+      requestedEngine === 'scene_hybrid';
     const shouldUseDiffusers = useDiffusers && !disableDiffusers;
 
     const { storyTitle, providedCharacters, providedScenes } = normalizeStructuredStoryInput(req.body || {});
@@ -123,10 +129,24 @@ router.post('/generate', async (req, res) => {
 
     const forceEngine = parseBoolean(req.body?.forceEngine, false);
     const strictCogVideoX = parseBoolean(req.body?.strictCogVideoX, false);
+    const strictHybrid = parseBoolean(req.body?.strictHybrid, strictCogVideoX);
     const effectivePrompt = String(req.body?.enhancedPrompt || prompt || '').trim() || prompt;
     const shouldBypassStructuredRenderer = forceEngine && (useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers);
 
-    const result = (!shouldBypassStructuredRenderer && shouldPreferStructuredRenderer)
+    const result = useHybrid
+      ? await generateKidsVideoFromHybridPrompt({
+          prompt: effectivePrompt,
+          sceneCount: clampSceneCount(req.body?.sceneCount),
+          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
+          storyMode: req.body?.storyMode || 'moral',
+          voiceType: req.body?.voiceType || 'kid-female',
+          language: languageCode,
+          storyTitle,
+          providedCharacters,
+          providedScenes,
+          strict: strictHybrid,
+        })
+      : (!shouldBypassStructuredRenderer && shouldPreferStructuredRenderer)
       ? await generateKidsVideoFromPrompt({
           prompt: effectivePrompt,
           sceneCount: clampSceneCount(req.body?.sceneCount),

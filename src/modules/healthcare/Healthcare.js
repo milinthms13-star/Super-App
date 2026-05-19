@@ -91,7 +91,9 @@ const Healthcare = () => {
       setPharmacyOrders(Array.isArray(response.pharmacyOrders) ? response.pharmacyOrders : []);
       setPartnerDashboard(response.partnerDashboard || null);
     } catch (error) {
-      setErrorMessage(error?.response?.data?.message || "Unable to load healthcare data.");
+      setErrorMessage(
+        error?.response?.data?.message || error?.message || "Unable to load healthcare data."
+      );
     } finally {
       setLoading(false);
     }
@@ -210,6 +212,7 @@ const Healthcare = () => {
   };
 
   const handleCancelAppointment = async (appointmentId) => {
+    const existingAppointment = appointments.find((item) => item.id === appointmentId);
     const updated = await healthcareApi.cancelAppointment(appointmentId);
 
     setAppointments((previous) => {
@@ -237,10 +240,9 @@ const Healthcare = () => {
       });
     });
 
-    const cancelledAppointment = appointments.find((item) => item.id === appointmentId);
     pushNotification({
       title: "Appointment cancelled",
-      message: `Cancelled consultation with ${cancelledAppointment?.doctorName || "doctor"}.`,
+      message: `Cancelled consultation with ${existingAppointment?.doctorName || "doctor"}.`,
       notificationType: "appointment",
     });
 
@@ -604,6 +606,12 @@ const Healthcare = () => {
       <HealthcareHero onBookDoctor={() => setActiveSection("consultation")} onBookLab={() => setActiveSection("lab")} />
 
       <HealthcareNav sections={HEALTHCARE_SECTIONS} activeSection={activeSection} onChange={setActiveSection} />
+
+      {loading ? (
+        <div className="healthcare-loading" role="status" aria-live="polite">
+          Loading healthcare data...
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <div className="healthcare-inline-alert healthcare-error" role="alert">

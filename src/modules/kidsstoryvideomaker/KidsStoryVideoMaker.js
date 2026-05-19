@@ -112,6 +112,7 @@ const AI_PROVIDER_OPTIONS = [
   { id: "pollinations", label: "Pollinations" },
 ];
 const HF_RENDER_ENGINE_OPTIONS = [
+  { id: "hybrid_motion_cogvideox", label: "Hybrid Motion + CogVideoX (Recommended)" },
   { id: "cogvideox", label: "CogVideoX (Real Motion GPU) (Recommended)" },
   { id: "scene_script_video", label: "Script-to-Video (Fallback)" },
   { id: "image_ffmpeg", label: "Image + FFmpeg (Fallback)" },
@@ -161,6 +162,9 @@ const normalizeRenderProvider = (value) => {
 const normalizeRenderEngine = (value) => {
   const normalized = sanitizeText(value).toLowerCase();
   if (!normalized || normalized === "default") return "";
+  if (normalized === "hybrid" || normalized === "hybrid_scene_cogvideox" || normalized === "scene_hybrid") {
+    return "hybrid_motion_cogvideox";
+  }
   if (normalized === "cogvideo" || normalized === "cogvideox_2b" || normalized === "real_motion_gpu") return "cogvideox";
   if (normalized === "cogvideox_text_to_video") return "cogvideox";
   if (normalized === "free_steve_like" || normalized === "steve_like") return "scene_script_video";
@@ -1664,6 +1668,8 @@ const KidsStoryVideoMaker = () => {
         const renderMessage = (
           selectedEngine === "cogvideox"
             ? "CogVideoX render complete with enforced character/story prompt."
+            : selectedEngine === "hybrid_motion_cogvideox"
+              ? "Hybrid render complete with motion-focused CogVideoX shots and scene pipeline continuity."
             : payload.aiImagesEnabled
               ? "Video rendered successfully. Scene pipeline completed with regenerated scenes and AI visuals."
               : "Video rendered successfully. Render completed using fallback visuals."

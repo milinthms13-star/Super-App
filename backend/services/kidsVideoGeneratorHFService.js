@@ -1053,6 +1053,424 @@ const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, heig
   return { clipPath, duration };
 };
 
+const buildHybridScenePrompt = ({ scene = {}, story = {}, storyMode = 'moral' }) => {
+  const title = sanitizeText(story?.title || story?.storyTitle || 'Kids story');
+  const sceneTitle = sanitizeText(scene?.title || 'Story scene');
+  const sceneDescription = sanitizeText(scene?.description || scene?.dialogue || '');
+  const dialogue = sanitizeText(scene?.dialogue || '');
+  const mode = sanitizeText(storyMode || story?.storyMode || 'moral');
+  const characters = (Array.isArray(story?.characters) ? story.characters : [])
+    .slice(0, 3)
+    .map((character) => {
+      const name = sanitizeText(character?.name || '');
+      const appearance = sanitizeText(character?.appearance || '');
+      return `${name}${appearance ? ` (${appearance})` : ''}`;
+    })
+    .filter(Boolean);
+
+  return [
+    `Child-safe animated ${mode} story video scene.`,
+    `Story title: ${title}.`,
+    `Scene title: ${sceneTitle}.`,
+    sceneDescription ? `Scene description: ${sceneDescription}.` : '',
+    dialogue ? `Dialogue cues: ${dialogue}.` : '',
+    characters.length ? `Keep visual consistency for characters: ${characters.join(', ')}.` : '',
+    'Show clear character movement and emotional body language.',
+    'No text overlays, no logos, no watermarks, no violence.',
+    'Cinematic camera motion with stable framing and soft lighting.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
+
+const shouldUseHybridCogScene = (scene = {}) => {
+  const text = `${sanitizeText(scene?.title)} ${sanitizeText(scene?.description)} ${sanitizeText(scene?.dialogue)} ${sanitizeText(scene?.cameraActions)}`.toLowerCase();
+  if (!text) return false;
+  const movementKeywords = [
+    'run', 'running', 'chase', 'jump', 'dance', 'fly', 'swim', 'race', 'sprint', 'walk',
+    'climb', 'spin', 'twirl', 'wave', 'hug', 'fight', 'move', 'motion', 'turn', 'camera',
+    'pan', 'zoom', 'dolly', 'tracking',
+  ];
+  return movementKeywords.some((keyword) => text.includes(keyword));
+};
+
+const renderHybridCogSceneClip = async ({
+  scene,
+  story,
+  storyMode = 'moral',
+  index,
+  outputDir,
+  stillPath,
+  width,
+  height,
+  language = 'en',
+  strict = false,
+}) => {
+  const fps = 24;
+  const narrationText = sanitizeText(scene?.dialogue || scene?.description || scene?.title || 'Story scene');
+  const wordCount = narrationText ? narrationText.split(/\s+/).filter(Boolean).length : 0;
+  const estimatedNarrationSeconds = wordCount > 0 ? (wordCount / 2.2) : 0;
+  const duration = Math.max(3, Math.min(14, Math.max(Number(scene?.durationSeconds) || 4, estimatedNarrationSeconds)));
+  const clipBase = `scene-${String(index + 1).padStart(2, '0')}`;
+  const rawClipPath = path.join(outputDir, `${clipBase}-cog-raw.mp4`);
+  const clipPath = path.join(outputDir, `${clipBase}.mp4`);
+  const speechPath = path.join(outputDir, `${clipBase}-speech.mp3`);
+  const tonePath = path.join(outputDir, `${clipBase}-tone.mp3`);
+  let audioPath = '';
+  let ttsErrorMessage = '';
+
+  const modelId = sanitizeText(process.env.HF_COGVIDEOX_MODEL || 'THUDM/CogVideoX-2b');
+  const hybridFps = Math.max(4, Math.min(24, Number(process.env.HF_HYBRID_COGVIDEOX_FPS) || 8));
+  const hybridNumSteps = Math.max(10, Math.min(80, Number(process.env.HF_HYBRID_COGVIDEOX_STEPS) || 24));
+  const hybridGuidance = Math.max(1, Math.min(12, Number(process.env.HF_HYBRID_COGVIDEOX_GUIDANCE) || 6));
+  const targetFrames = Math.max(16, Math.min(97, Math.round(duration * hybridFps)));
+  const prompt = buildHybridScenePrompt({ scene, story, storyMode });
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'cogvideox_text_to_video.py');
+
+  let pythonLog = '';
+  try {
+    const pythonRun = await runPythonProcess({
+      args: [
+        scriptPath,
+        '--prompt', prompt,
+        '--output', rawClipPath,
+        '--model', modelId,
+        '--num_frames', `${targetFrames}`,
+        '--num_inference_steps', `${hybridNumSteps}`,
+        '--guidance_scale', `${hybridGuidance}`,
+        '--fps', `${hybridFps}`,
+      ],
+      cwd: path.join(__dirname, '..'),
+    });
+    pythonLog = sanitizeText(pythonRun.stdout || '');
+    if (!fs.existsSync(rawClipPath) || fs.statSync(rawClipPath).size < 3000) {
+      throw new Error('CogVideoX hybrid scene output missing.');
+    }
+  } catch (error) {
+    if (strict) {
+      throw error;
+    }
+    const fallbackClip = await renderSceneClip({
+      scene,
+      index,
+      outputDir,
+      stillPath,
+      width,
+      height,
+      language,
+    });
+    return {
+      ...fallbackClip,
+      engineUsed: 'scene_image_ffmpeg_fallback',
+      generatedByAi: false,
+      attempts: ['hybrid_cogvideox_failed_fallback'],
+      warning: sanitizeText(error?.message || 'hybrid cogvideox failed'),
+      pythonLog,
+    };
+  }
+
+  try {
+    const ttsScriptPath = path.join(__dirname, '..', 'scripts', 'scene_tts.py');
+    const languageCode = normalizeLanguageCode(language || 'en');
+    await runPythonProcess({
+      args: [
+        ttsScriptPath,
+        '--text', narrationText,
+        '--output', speechPath,
+        '--lang', languageCode,
+      ],
+      cwd: path.join(__dirname, '..'),
+    });
+    if (fs.existsSync(speechPath) && fs.statSync(speechPath).size > 2048) {
+      audioPath = speechPath;
+    } else {
+      ttsErrorMessage = 'scene_tts.py did not produce valid speech audio';
+    }
+  } catch (error) {
+    ttsErrorMessage = sanitizeText(error?.message || 'scene_tts.py failed');
+  }
+
+  const allowToneFallback = String(process.env.ALLOW_TONE_FALLBACK || 'false').toLowerCase() === 'true';
+  if (!audioPath && allowToneFallback) {
+    const baseHz = 260 + ((index * 47) % 190);
+    const overHz = baseHz + 120;
+    await runFfmpeg([
+      '-y',
+      '-f', 'lavfi',
+      '-i', `aevalsrc=(0.02*sin(2*PI*${baseHz}*t)+0.01*sin(2*PI*${overHz}*t)):s=44100:d=${duration}`,
+      '-c:a', 'libmp3lame',
+      '-b:a', '96k',
+      tonePath,
+    ], outputDir);
+    audioPath = tonePath;
+  }
+
+  if (!audioPath) {
+    if (strict) {
+      throw new Error(`Voice generation failed for hybrid scene ${index + 1}. ${ttsErrorMessage || 'No speech audio created.'}`);
+    }
+    const fallbackClip = await renderSceneClip({
+      scene,
+      index,
+      outputDir,
+      stillPath,
+      width,
+      height,
+      language,
+    });
+    return {
+      ...fallbackClip,
+      engineUsed: 'scene_image_ffmpeg_fallback',
+      generatedByAi: false,
+      attempts: ['hybrid_tts_failed_fallback'],
+      warning: ttsErrorMessage || 'hybrid tts failed',
+      pythonLog,
+    };
+  }
+
+  const subtitleLines = wrapText(narrationText.replace(/\s*\n+\s*/g, ' '), 46, 3);
+  const subtitleText = escapeForDrawText(subtitleLines.join('\n'));
+  const subtitleBoxHeight = Math.max(110, Math.min(220, 66 + (subtitleLines.length * 30)));
+  const subtitleMargin = Math.max(20, Math.round(height * 0.04));
+  const subtitleY = Math.max(10, height - subtitleBoxHeight - subtitleMargin);
+  const subtitleX = 40;
+  const subtitleWidth = Math.max(220, width - (subtitleX * 2));
+  const subtitleFontSize = Math.max(22, Math.round(height * 0.04));
+  const subtitleFilter = [
+    `drawbox=x=${subtitleX}:y=${subtitleY}:w=${subtitleWidth}:h=${subtitleBoxHeight}:color=black@0.48:t=fill`,
+    `drawtext=text='${subtitleText}':fontcolor=white:fontsize=${subtitleFontSize}:line_spacing=8:x=(w-text_w)/2:y=${subtitleY + Math.round(subtitleBoxHeight * 0.22)}:shadowx=2:shadowy=2:shadowcolor=black@0.85`,
+  ].join(',');
+  const vfWithSubtitles = `${subtitleFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+  const vfWithoutSubtitles = `fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+
+  try {
+    await runFfmpeg([
+      '-y',
+      '-i', rawClipPath,
+      '-i', audioPath,
+      '-t', `${duration}`,
+      '-vf', vfWithSubtitles,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-r', `${fps}`,
+      '-c:a', 'aac',
+      '-shortest',
+      clipPath,
+    ], outputDir);
+  } catch (_subtitleError) {
+    await runFfmpeg([
+      '-y',
+      '-i', rawClipPath,
+      '-i', audioPath,
+      '-t', `${duration}`,
+      '-vf', vfWithoutSubtitles,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-r', `${fps}`,
+      '-c:a', 'aac',
+      '-shortest',
+      clipPath,
+    ], outputDir);
+  }
+
+  return {
+    clipPath,
+    duration,
+    engineUsed: 'cogvideox_hybrid_scene',
+    generatedByAi: true,
+    attempts: ['hybrid_cogvideox_scene'],
+    pythonLog,
+  };
+};
+
+const generateKidsVideoFromHybridPrompt = async ({
+  prompt,
+  sceneCount = 5,
+  videoSize = 'youtube',
+  storyMode = 'moral',
+  voiceType = 'kid-female',
+  language = 'en',
+  storyTitle = '',
+  providedCharacters = [],
+  providedScenes = [],
+  strict = false,
+}) => {
+  await ensureDirectories();
+
+  const cleanPrompt = sanitizeText(prompt);
+  if (!cleanPrompt) {
+    throw new Error('Prompt is required.');
+  }
+  if (cleanPrompt.length < 3) {
+    throw new Error('Prompt is too short.');
+  }
+
+  const normalizedLanguage = normalizeLanguageCode(language);
+  const hasStructuredScenes = Array.isArray(providedScenes) && providedScenes.length > 0;
+  const hasStructuredCharacters = Array.isArray(providedCharacters) && providedCharacters.length > 0;
+  const baseStory = hasStructuredScenes || hasStructuredCharacters
+    ? createStoryFromStructuredInput({
+      prompt: cleanPrompt,
+      sceneCount,
+      storyTitle,
+      providedCharacters,
+      providedScenes,
+    })
+    : await createStoryFromPrompt(cleanPrompt, sceneCount);
+
+  const projectId = uuidv4();
+  const { width, height } = getResolution(videoSize);
+  const outputDir = path.join(uploadsRoot, safeFileName(projectId));
+  await mkdir(outputDir, { recursive: true });
+
+  const story = {
+    projectId,
+    createdAt: new Date().toISOString(),
+    workflowType: 'kids-video-hybrid-motion-cogvideox',
+    aiProvider: 'scene_pipeline',
+    renderEngine: 'hybrid_motion_cogvideox',
+    storyMode: sanitizeText(storyMode || 'moral'),
+    voiceType: sanitizeText(voiceType || 'kid-female'),
+    language: normalizedLanguage,
+    videoSize: sanitizeText(videoSize || 'youtube'),
+    prompt: cleanPrompt,
+    ...baseStory,
+    scenes: (baseStory.scenes || []).slice(0, Math.max(3, Math.min(8, Number(sceneCount) || 5))),
+  };
+
+  const translationTelemetry = createTranslationTelemetry(normalizedLanguage);
+  const localizedStory = await localizeStoryForLanguage(story, normalizedLanguage, {
+    telemetry: translationTelemetry,
+  });
+  const translation = finalizeTranslationTelemetry(translationTelemetry);
+
+  const maxCogScenes = Math.max(1, Math.min(4, Number(process.env.HF_HYBRID_MAX_COG_SCENES) || 2));
+  const scenes = Array.isArray(localizedStory.scenes) ? localizedStory.scenes : [];
+  const motionCandidateIndexes = scenes
+    .map((scene, index) => ({ index, scene, dynamic: shouldUseHybridCogScene(scene) }))
+    .filter((entry) => entry.dynamic)
+    .map((entry) => entry.index);
+  const selectedCogIndexes = new Set(motionCandidateIndexes.slice(0, maxCogScenes));
+
+  if (selectedCogIndexes.size === 0 && scenes.length > 0) {
+    selectedCogIndexes.add(0);
+  }
+
+  const clips = [];
+  const sceneRenderMeta = [];
+  for (let index = 0; index < scenes.length; index += 1) {
+    const scene = scenes[index];
+    const stillPath = path.join(outputDir, `scene-${String(index + 1).padStart(2, '0')}-still.png`);
+    await generateSceneImage({
+      scene,
+      story: localizedStory,
+      outputPath: stillPath,
+      width,
+      height,
+    });
+
+    let clipResult;
+    if (selectedCogIndexes.has(index)) {
+      clipResult = await renderHybridCogSceneClip({
+        scene,
+        story: localizedStory,
+        storyMode,
+        index,
+        outputDir,
+        stillPath,
+        width,
+        height,
+        language: normalizedLanguage,
+        strict,
+      });
+    } else {
+      clipResult = await renderSceneClip({
+        scene,
+        index,
+        outputDir,
+        stillPath,
+        width,
+        height,
+        language: normalizedLanguage,
+      });
+      clipResult = {
+        ...clipResult,
+        engineUsed: 'scene_image_ffmpeg',
+        generatedByAi: false,
+        attempts: ['scene_svg_character_layout'],
+      };
+    }
+
+    clips.push(clipResult);
+    sceneRenderMeta.push({
+      sceneId: scene.id,
+      title: scene.title,
+      stillPath,
+      clipPath: clipResult.clipPath,
+      durationSeconds: clipResult.duration,
+      renderEngine: clipResult.engineUsed || 'scene_image_ffmpeg',
+      generatedByAi: Boolean(clipResult.generatedByAi),
+      attempts: Array.isArray(clipResult.attempts) ? clipResult.attempts : [],
+      warning: sanitizeText(clipResult.warning || ''),
+    });
+  }
+
+  const concatPath = path.join(outputDir, 'concat.txt');
+  const concatContent = clips
+    .map((clip) => `file '${clip.clipPath.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`)
+    .join('\n');
+  await writeFile(concatPath, `${concatContent}\n`, 'utf-8');
+
+  const outputFileName = `story-render-${Date.now()}.mp4`;
+  const outputFile = path.join(outputDir, outputFileName);
+  await runFfmpeg([
+    '-y',
+    '-f', 'concat',
+    '-safe', '0',
+    '-i', concatPath,
+    '-c:v', 'libx264',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac',
+    '-movflags', '+faststart',
+    outputFile,
+  ], outputDir);
+
+  const aiImagesEnabled = sceneRenderMeta.some((sceneMeta) => sceneMeta.generatedByAi);
+  const videoUrl = `/uploads/kids-video-hf/${safeFileName(projectId)}/${outputFileName}`;
+
+  const persistedProject = {
+    ...localizedStory,
+    projectId,
+    outputDir,
+    outputFile,
+    videoUrl,
+    renderMode: 'kids-video-hybrid-motion-cogvideox',
+    aiImagesEnabled,
+    scenes: localizedStory.scenes,
+    sceneRenderMeta,
+    hybrid: {
+      selectedCogSceneIndexes: Array.from(selectedCogIndexes),
+      maxCogScenes,
+      strict: Boolean(strict),
+    },
+    translation,
+    renderedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeFile(projectFilePath(projectId), JSON.stringify(persistedProject, null, 2), 'utf-8');
+  await writeFile(path.join(outputDir, 'project.json'), JSON.stringify(persistedProject, null, 2), 'utf-8');
+
+  return {
+    success: true,
+    project: persistedProject,
+    projectId,
+    videoUrl,
+    outputFile,
+    aiImagesEnabled,
+  };
+};
+
 const generateKidsVideoFromPrompt = async ({
   prompt,
   sceneCount = 5,
@@ -1568,6 +1986,7 @@ const getKidsVideoProject = async (projectId) => {
 
 module.exports = {
   generateKidsVideoFromPrompt,
+  generateKidsVideoFromHybridPrompt,
   generateKidsVideoFromDiffusersPrompt,
   generateKidsVideoFromFreeSteveLikePrompt,
   generateKidsVideoFromCogVideoXPrompt,

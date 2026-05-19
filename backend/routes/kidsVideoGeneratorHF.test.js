@@ -1,5 +1,6 @@
 jest.mock('../services/kidsVideoGeneratorHFService', () => ({
   generateKidsVideoFromPrompt: jest.fn(),
+  generateKidsVideoFromHybridPrompt: jest.fn(),
   generateKidsVideoFromDiffusersPrompt: jest.fn(),
   generateKidsVideoFromFreeSteveLikePrompt: jest.fn(),
   generateKidsVideoFromCogVideoXPrompt: jest.fn(),
@@ -10,6 +11,7 @@ const request = require('supertest');
 const app = require('../app');
 const {
   generateKidsVideoFromPrompt,
+  generateKidsVideoFromHybridPrompt,
   generateKidsVideoFromDiffusersPrompt,
   generateKidsVideoFromFreeSteveLikePrompt,
   generateKidsVideoFromCogVideoXPrompt,
@@ -124,6 +126,38 @@ describe('kids-video-hf routes', () => {
         prompt: 'AI helps create videos from script',
         sceneCount: 4,
         language: 'en',
+      })
+    );
+  });
+
+  test('POST /api/kids-video-hf/generate uses hybrid engine when requested', async () => {
+    generateKidsVideoFromHybridPrompt.mockResolvedValue({
+      projectId: 'proj-hybrid-1',
+      videoUrl: '/uploads/kids-video-hf/proj-hybrid-1/story-render.mp4',
+      aiImagesEnabled: true,
+      project: {
+        projectId: 'proj-hybrid-1',
+        workflowType: 'kids-video-hybrid-motion-cogvideox',
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/generate')
+      .send({
+        prompt: 'A kid and robot dancing in a school festival',
+        engine: 'hybrid_motion_cogvideox',
+        strictHybrid: true,
+        sceneCount: 5,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.workflowType).toBe('kids-video-hybrid-motion-cogvideox');
+    expect(generateKidsVideoFromHybridPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'A kid and robot dancing in a school festival',
+        strict: true,
+        sceneCount: 5,
       })
     );
   });

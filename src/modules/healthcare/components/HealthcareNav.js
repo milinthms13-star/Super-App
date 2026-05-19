@@ -1,6 +1,8 @@
 import React from "react";
 
-const HealthcareNav = ({ sections, activeSection, onChange }) => {
+const HealthcareNav = ({ sections, activeSection, onChange, onSectionChange }) => {
+  const handleNavigationChange = onChange || onSectionChange;
+
   return (
     <section className="healthcare-nav" aria-label="Healthcare sections">
       {sections.map((section) => (
@@ -8,7 +10,7 @@ const HealthcareNav = ({ sections, activeSection, onChange }) => {
           key={section.id}
           type="button"
           className={`healthcare-nav-item ${activeSection === section.id ? "active" : ""}`}
-          onClick={() => onChange(section.id)}
+          onClick={() => handleNavigationChange?.(section.id)}
           aria-current={activeSection === section.id ? "page" : undefined}
         >
           <span className="healthcare-nav-icon" aria-hidden="true">{section.icon}</span>
