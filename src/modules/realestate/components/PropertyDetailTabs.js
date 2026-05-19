@@ -138,11 +138,46 @@ const PropertyDetailTabs = ({
           <div className="realestate-map-card">
             <strong>Map location</strong>
             <span>{property.mapLabel}</span>
-            {property.mapLocationLat && property.mapLocationLng ? (
-              <span>
-                {property.mapLocationLat}, {property.mapLocationLng}
-              </span>
-            ) : null}
+            {(() => {
+              const lat = Number(property.mapLocationLat);
+              const lng = Number(property.mapLocationLng);
+              const hasCoordinates =
+                property.mapLocationLat !== "" &&
+                property.mapLocationLng !== "" &&
+                Number.isFinite(lat) &&
+                Number.isFinite(lng);
+              if (hasCoordinates) {
+                return (
+                  <>
+                    <span>
+                      {lat.toFixed(5)}, {lng.toFixed(5)}
+                    </span>
+                    <div className="realestate-map-embed">
+                      <iframe
+                        title="Property location"
+                        src={`https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.01}%2C${lat - 0.01}%2C${lng + 0.01}%2C${lat + 0.01}&layer=mapnik&marker=${lat}%2C${lng}`}
+                        loading="lazy"
+                      />
+                    </div>
+                    <a
+                      href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open live map
+                    </a>
+                  </>
+                );
+              }
+              if (property.mapPreviewUrl) {
+                return (
+                  <div className="realestate-map-preview">
+                    <img src={property.mapPreviewUrl} alt={`Map preview for ${property.title}`} />
+                  </div>
+                );
+              }
+              return <span>Location details will appear here when GPS coordinates are available.</span>;
+            })()}
           </div>
 
           <div className="realestate-contact-card">
@@ -154,7 +189,6 @@ const PropertyDetailTabs = ({
               {property.rating?.toFixed(1)} / 5 from {property.reviewCount || property.reviews?.length || 0} reviews
             </span>
             {property.contactPhone ? <span>Call: {property.contactPhone}</span> : null}
-            {property.whatsappNumber ? <span>WhatsApp: {property.whatsappNumber}</span> : null}
           </div>
 
           <div className="realestate-trust-flags-grid">

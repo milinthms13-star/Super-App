@@ -629,13 +629,17 @@ const RealEstate = () => {
     });
   };
 
-  const handleSendMessage = async () => {
-    if (!selectedProperty || !chatInput.trim()) return;
+  const handleSendMessage = async (messageOverride = "") => {
+    if (!selectedProperty) return;
+    const text = messageOverride.trim() || chatInput.trim();
+    if (!text) return;
     await runAsync("message", async () => {
       try {
-        await sendRealEstateMessage(selectedProperty.id, { text: chatInput.trim() });
+        await sendRealEstateMessage(selectedProperty.id, { text });
         pushToast(`Message delivered to ${selectedProperty.sellerName}.`);
-        setChatInput("");
+        if (!messageOverride) {
+          setChatInput("");
+        }
       } catch (error) {
         pushToast(resolveErrorMessage(error, "Message could not be delivered."), "error");
       }
@@ -1019,6 +1023,33 @@ const RealEstate = () => {
                 maxArea={maxArea}
               />
 
+              <div className="realestate-quick-actions">
+                <button
+                  type="button"
+                  onClick={() => handleApplyFilters({ ...filters, intentFilter: "sale" })}
+                >
+                  🏠 Buy Property
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyFilters({ ...filters, intentFilter: "rent" })}
+                >
+                  🔑 Rent Property
+                </button>
+                <button type="button" onClick={() => setSellerWorkspaceMode(true)}>
+                  ➕ Post Property
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setListingForm((state) => ({ ...state, postingType: "requirement" }));
+                    setSellerWorkspaceMode(true);
+                  }}
+                >
+                  🔍 Post Requirement
+                </button>
+              </div>
+
               <article className="realestate-listing-card">
                 <div className="realestate-section-heading">
                   <h2>Marketplace inventory</h2>
@@ -1279,14 +1310,13 @@ const RealEstate = () => {
                         type="button"
                         className="realestate-secondary-button"
                         onClick={() =>
-                          pushToast(
-                            selectedProperty?.whatsappNumber
-                              ? `WhatsApp enquiry initiated: ${selectedProperty.whatsappNumber}`
-                              : `WhatsApp contact initiated with ${selectedProperty?.sellerName}.`
+                          handleSendMessage(
+                            chatInput.trim() ||
+                              `Hi, I'm interested in ${selectedProperty?.title}. Please share more details.`
                           )
                         }
                       >
-                        WhatsApp contact
+                        Message seller
                       </button>
                       <button type="button" className="realestate-secondary-button" onClick={() => pushToast("Property link copied to clipboard for sharing.")}>
                         Share property

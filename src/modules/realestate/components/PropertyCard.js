@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { calculateEMI } from "../realEstateUtils";
 
 const PropertyCard = ({
   property,
@@ -30,8 +31,10 @@ const PropertyCard = ({
     ? "Under construction"
     : property.possession || "Possession to be announced";
 
-  // Calculate EMI estimate (mock)
-  const emiEstimate = Math.round(property.priceValue * 0.008 * (20 * 12) / ((20 * 12) + 1));
+  const emiEstimate = useMemo(() => {
+    if (isRequirement || !property.priceValue) return 0;
+    return calculateEMI(property.priceValue, 8.5, 20);
+  }, [isRequirement, property.priceValue]);
 
   return (
     <article
@@ -83,7 +86,7 @@ const PropertyCard = ({
           className="realestate-favorite-btn"
           onClick={(event) => {
             event.stopPropagation();
-            onFavoriteToggle(property.id);
+            onFavoriteToggle(property);
           }}
           aria-label={`${isFavorite ? "Remove from" : "Add to"} favorites`}
         >
@@ -211,7 +214,9 @@ const PropertyCard = ({
             {hasSubscription ? (
               <>
                 <span className="realestate-contact-info">👤 {property.listedBy}</span>
-                {property.phone && <span className="realestate-contact-info">📱 {property.phone}</span>}
+                {(property.contactPhone || property.phone) && (
+                  <span className="realestate-contact-info">📱 {property.contactPhone || property.phone}</span>
+                )}
                 {property.supperappId && <span className="realestate-contact-info">🆔 {property.supperappId}</span>}
               </>
             ) : (
