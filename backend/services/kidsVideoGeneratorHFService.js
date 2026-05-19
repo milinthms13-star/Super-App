@@ -1094,6 +1094,204 @@ const shouldUseHybridCogScene = (scene = {}) => {
   return movementKeywords.some((keyword) => text.includes(keyword));
 };
 
+const renderHybridAnimateDiffSceneClip = async ({
+  scene,
+  story,
+  storyMode = 'moral',
+  index,
+  outputDir,
+  stillPath,
+  width,
+  height,
+  language = 'en',
+  strict = false,
+}) => {
+  const fps = 24;
+  const narrationText = sanitizeText(scene?.dialogue || scene?.description || scene?.title || 'Story scene');
+  const wordCount = narrationText ? narrationText.split(/\s+/).filter(Boolean).length : 0;
+  const estimatedNarrationSeconds = wordCount > 0 ? (wordCount / 2.2) : 0;
+  const duration = Math.max(3, Math.min(14, Math.max(Number(scene?.durationSeconds) || 4, estimatedNarrationSeconds)));
+  const clipBase = `scene-${String(index + 1).padStart(2, '0')}`;
+  const rawClipPath = path.join(outputDir, `${clipBase}-ad-raw.mp4`);
+  const clipPath = path.join(outputDir, `${clipBase}.mp4`);
+  const speechPath = path.join(outputDir, `${clipBase}-speech.mp3`);
+  const tonePath = path.join(outputDir, `${clipBase}-tone.mp3`);
+  let audioPath = '';
+  let ttsErrorMessage = '';
+
+  const targetFrames = Math.max(16, Math.min(48, Math.round(duration * Math.max(4, Math.min(12, Number(process.env.HF_HYBRID_ANIMATEDIFF_FPS) || 8)))));
+  const prompt = `${buildHybridScenePrompt({ scene, story, storyMode })} Dynamic motion emphasis with smooth character animation and stable identity.`;
+  const scriptPath = path.join(__dirname, '..', 'scripts', 'animatediff_openpose_scene_video.py');
+  const modelId = sanitizeText(process.env.HF_ANIMATEDIFF_MODEL || 'emilianJR/epiCRealism');
+  const motionAdapter = sanitizeText(process.env.HF_ANIMATEDIFF_MOTION_ADAPTER || 'guoyww/animatediff-motion-adapter-v1-5-2');
+  const controlNet = sanitizeText(process.env.HF_ANIMATEDIFF_CONTROLNET || 'lllyasviel/sd-controlnet-openpose');
+  const animSteps = Math.max(8, Math.min(60, Number(process.env.HF_HYBRID_ANIMATEDIFF_STEPS) || 20));
+  const animGuidance = Math.max(1, Math.min(15, Number(process.env.HF_HYBRID_ANIMATEDIFF_GUIDANCE) || 7));
+  const animWidth = Math.max(384, Math.min(1024, Math.round(width / 2) * 2));
+  const animHeight = Math.max(256, Math.min(768, Math.round(height / 2) * 2));
+  const animFps = Math.max(4, Math.min(24, Number(process.env.HF_HYBRID_ANIMATEDIFF_FPS) || 8));
+
+  let pythonLog = '';
+  try {
+    const pythonRun = await runPythonProcess({
+      args: [
+        scriptPath,
+        '--prompt', prompt,
+        '--output', rawClipPath,
+        '--model', modelId,
+        '--motion_adapter', motionAdapter,
+        '--controlnet', controlNet,
+        '--reference_image', stillPath,
+        '--num_frames', `${targetFrames}`,
+        '--num_inference_steps', `${animSteps}`,
+        '--guidance_scale', `${animGuidance}`,
+        '--width', `${animWidth}`,
+        '--height', `${animHeight}`,
+        '--fps', `${animFps}`,
+      ],
+      cwd: path.join(__dirname, '..'),
+    });
+    pythonLog = sanitizeText(pythonRun.stdout || '');
+    if (!fs.existsSync(rawClipPath) || fs.statSync(rawClipPath).size < 3000) {
+      throw new Error('AnimateDiff phase-2 scene output missing.');
+    }
+  } catch (error) {
+    if (strict) {
+      throw error;
+    }
+    const fallbackClip = await renderSceneClip({
+      scene,
+      index,
+      outputDir,
+      stillPath,
+      width,
+      height,
+      language,
+    });
+    return {
+      ...fallbackClip,
+      engineUsed: 'scene_image_ffmpeg_fallback',
+      generatedByAi: false,
+      attempts: ['hybrid_phase2_animatediff_failed_fallback'],
+      warning: sanitizeText(error?.message || 'hybrid phase2 animatediff failed'),
+      pythonLog,
+    };
+  }
+
+  try {
+    const ttsScriptPath = path.join(__dirname, '..', 'scripts', 'scene_tts.py');
+    const languageCode = normalizeLanguageCode(language || 'en');
+    await runPythonProcess({
+      args: [
+        ttsScriptPath,
+        '--text', narrationText,
+        '--output', speechPath,
+        '--lang', languageCode,
+      ],
+      cwd: path.join(__dirname, '..'),
+    });
+    if (fs.existsSync(speechPath) && fs.statSync(speechPath).size > 2048) {
+      audioPath = speechPath;
+    } else {
+      ttsErrorMessage = 'scene_tts.py did not produce valid speech audio';
+    }
+  } catch (error) {
+    ttsErrorMessage = sanitizeText(error?.message || 'scene_tts.py failed');
+  }
+
+  const allowToneFallback = String(process.env.ALLOW_TONE_FALLBACK || 'false').toLowerCase() === 'true';
+  if (!audioPath && allowToneFallback) {
+    const baseHz = 260 + ((index * 47) % 190);
+    const overHz = baseHz + 120;
+    await runFfmpeg([
+      '-y',
+      '-f', 'lavfi',
+      '-i', `aevalsrc=(0.02*sin(2*PI*${baseHz}*t)+0.01*sin(2*PI*${overHz}*t)):s=44100:d=${duration}`,
+      '-c:a', 'libmp3lame',
+      '-b:a', '96k',
+      tonePath,
+    ], outputDir);
+    audioPath = tonePath;
+  }
+
+  if (!audioPath) {
+    if (strict) {
+      throw new Error(`Voice generation failed for hybrid phase-2 scene ${index + 1}. ${ttsErrorMessage || 'No speech audio created.'}`);
+    }
+    const fallbackClip = await renderSceneClip({
+      scene,
+      index,
+      outputDir,
+      stillPath,
+      width,
+      height,
+      language,
+    });
+    return {
+      ...fallbackClip,
+      engineUsed: 'scene_image_ffmpeg_fallback',
+      generatedByAi: false,
+      attempts: ['hybrid_phase2_tts_failed_fallback'],
+      warning: ttsErrorMessage || 'hybrid phase2 tts failed',
+      pythonLog,
+    };
+  }
+
+  const subtitleLines = wrapText(narrationText.replace(/\s*\n+\s*/g, ' '), 46, 3);
+  const subtitleText = escapeForDrawText(subtitleLines.join('\n'));
+  const subtitleBoxHeight = Math.max(110, Math.min(220, 66 + (subtitleLines.length * 30)));
+  const subtitleMargin = Math.max(20, Math.round(height * 0.04));
+  const subtitleY = Math.max(10, height - subtitleBoxHeight - subtitleMargin);
+  const subtitleX = 40;
+  const subtitleWidth = Math.max(220, width - (subtitleX * 2));
+  const subtitleFontSize = Math.max(22, Math.round(height * 0.04));
+  const subtitleFilter = [
+    `drawbox=x=${subtitleX}:y=${subtitleY}:w=${subtitleWidth}:h=${subtitleBoxHeight}:color=black@0.48:t=fill`,
+    `drawtext=text='${subtitleText}':fontcolor=white:fontsize=${subtitleFontSize}:line_spacing=8:x=(w-text_w)/2:y=${subtitleY + Math.round(subtitleBoxHeight * 0.22)}:shadowx=2:shadowy=2:shadowcolor=black@0.85`,
+  ].join(',');
+  const vfWithSubtitles = `${subtitleFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+  const vfWithoutSubtitles = `fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+
+  try {
+    await runFfmpeg([
+      '-y',
+      '-i', rawClipPath,
+      '-i', audioPath,
+      '-t', `${duration}`,
+      '-vf', vfWithSubtitles,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-r', `${fps}`,
+      '-c:a', 'aac',
+      '-shortest',
+      clipPath,
+    ], outputDir);
+  } catch (_subtitleError) {
+    await runFfmpeg([
+      '-y',
+      '-i', rawClipPath,
+      '-i', audioPath,
+      '-t', `${duration}`,
+      '-vf', vfWithoutSubtitles,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-r', `${fps}`,
+      '-c:a', 'aac',
+      '-shortest',
+      clipPath,
+    ], outputDir);
+  }
+
+  return {
+    clipPath,
+    duration,
+    engineUsed: 'animatediff_openpose_hybrid_scene',
+    generatedByAi: true,
+    attempts: ['hybrid_phase2_animatediff_openpose_scene'],
+    pythonLog,
+  };
+};
+
 const renderHybridCogSceneClip = async ({
   scene,
   story,
@@ -1294,6 +1492,7 @@ const generateKidsVideoFromHybridPrompt = async ({
   providedCharacters = [],
   providedScenes = [],
   strict = false,
+  phase2 = false,
 }) => {
   await ensureDirectories();
 
@@ -1326,9 +1525,9 @@ const generateKidsVideoFromHybridPrompt = async ({
   const story = {
     projectId,
     createdAt: new Date().toISOString(),
-    workflowType: 'kids-video-hybrid-motion-cogvideox',
+    workflowType: phase2 ? 'kids-video-hybrid-phase2-animatediff-openpose-cogvideox' : 'kids-video-hybrid-motion-cogvideox',
     aiProvider: 'scene_pipeline',
-    renderEngine: 'hybrid_motion_cogvideox',
+    renderEngine: phase2 ? 'hybrid_phase2' : 'hybrid_motion_cogvideox',
     storyMode: sanitizeText(storyMode || 'moral'),
     voiceType: sanitizeText(voiceType || 'kid-female'),
     language: normalizedLanguage,
@@ -1345,12 +1544,25 @@ const generateKidsVideoFromHybridPrompt = async ({
   const translation = finalizeTranslationTelemetry(translationTelemetry);
 
   const maxCogScenes = Math.max(1, Math.min(4, Number(process.env.HF_HYBRID_MAX_COG_SCENES) || 2));
+  const maxPhase2Scenes = Math.max(1, Math.min(5, Number(process.env.HF_HYBRID_PHASE2_MAX_ANIMATEDIFF_SCENES) || 3));
   const scenes = Array.isArray(localizedStory.scenes) ? localizedStory.scenes : [];
   const motionCandidateIndexes = scenes
     .map((scene, index) => ({ index, scene, dynamic: shouldUseHybridCogScene(scene) }))
     .filter((entry) => entry.dynamic)
     .map((entry) => entry.index);
   const selectedCogIndexes = new Set(motionCandidateIndexes.slice(0, maxCogScenes));
+  const selectedPhase2Indexes = new Set();
+  if (phase2) {
+    for (const motionIndex of motionCandidateIndexes) {
+      if (selectedCogIndexes.has(motionIndex)) {
+        continue;
+      }
+      selectedPhase2Indexes.add(motionIndex);
+      if (selectedPhase2Indexes.size >= maxPhase2Scenes) {
+        break;
+      }
+    }
+  }
 
   if (selectedCogIndexes.size === 0 && scenes.length > 0) {
     selectedCogIndexes.add(0);
@@ -1372,6 +1584,19 @@ const generateKidsVideoFromHybridPrompt = async ({
     let clipResult;
     if (selectedCogIndexes.has(index)) {
       clipResult = await renderHybridCogSceneClip({
+        scene,
+        story: localizedStory,
+        storyMode,
+        index,
+        outputDir,
+        stillPath,
+        width,
+        height,
+        language: normalizedLanguage,
+        strict,
+      });
+    } else if (phase2 && selectedPhase2Indexes.has(index)) {
+      clipResult = await renderHybridAnimateDiffSceneClip({
         scene,
         story: localizedStory,
         storyMode,
@@ -1444,13 +1669,16 @@ const generateKidsVideoFromHybridPrompt = async ({
     outputDir,
     outputFile,
     videoUrl,
-    renderMode: 'kids-video-hybrid-motion-cogvideox',
+    renderMode: phase2 ? 'kids-video-hybrid-phase2' : 'kids-video-hybrid-motion-cogvideox',
     aiImagesEnabled,
     scenes: localizedStory.scenes,
     sceneRenderMeta,
     hybrid: {
       selectedCogSceneIndexes: Array.from(selectedCogIndexes),
+      selectedPhase2SceneIndexes: Array.from(selectedPhase2Indexes),
       maxCogScenes,
+      maxPhase2Scenes,
+      phase2Enabled: Boolean(phase2),
       strict: Boolean(strict),
     },
     translation,

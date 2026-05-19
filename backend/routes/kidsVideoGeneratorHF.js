@@ -117,6 +117,11 @@ router.post('/generate', async (req, res) => {
       requestedEngine === 'hybrid' ||
       requestedEngine === 'hybrid_scene_cogvideox' ||
       requestedEngine === 'scene_hybrid';
+    const useHybridPhase2 =
+      requestedEngine === 'hybrid_phase2' ||
+      requestedEngine === 'hybrid_motion_animatediff_cogvideox' ||
+      requestedEngine === 'hybrid_animatediff_openpose' ||
+      requestedEngine === 'phase2';
     const shouldUseDiffusers = useDiffusers && !disableDiffusers;
 
     const { storyTitle, providedCharacters, providedScenes } = normalizeStructuredStoryInput(req.body || {});
@@ -133,7 +138,21 @@ router.post('/generate', async (req, res) => {
     const effectivePrompt = String(req.body?.enhancedPrompt || prompt || '').trim() || prompt;
     const shouldBypassStructuredRenderer = forceEngine && (useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers);
 
-    const result = useHybrid
+    const result = useHybridPhase2
+      ? await generateKidsVideoFromHybridPrompt({
+          prompt: effectivePrompt,
+          sceneCount: clampSceneCount(req.body?.sceneCount),
+          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
+          storyMode: req.body?.storyMode || 'moral',
+          voiceType: req.body?.voiceType || 'kid-female',
+          language: languageCode,
+          storyTitle,
+          providedCharacters,
+          providedScenes,
+          strict: strictHybrid,
+          phase2: true,
+        })
+      : useHybrid
       ? await generateKidsVideoFromHybridPrompt({
           prompt: effectivePrompt,
           sceneCount: clampSceneCount(req.body?.sceneCount),

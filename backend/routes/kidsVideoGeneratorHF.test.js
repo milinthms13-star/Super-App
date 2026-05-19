@@ -162,6 +162,39 @@ describe('kids-video-hf routes', () => {
     );
   });
 
+  test('POST /api/kids-video-hf/generate uses hybrid phase2 engine when requested', async () => {
+    generateKidsVideoFromHybridPrompt.mockResolvedValue({
+      projectId: 'proj-hybrid-phase2-1',
+      videoUrl: '/uploads/kids-video-hf/proj-hybrid-phase2-1/story-render.mp4',
+      aiImagesEnabled: true,
+      project: {
+        projectId: 'proj-hybrid-phase2-1',
+        workflowType: 'kids-video-hybrid-phase2-animatediff-openpose-cogvideox',
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/generate')
+      .send({
+        prompt: 'A dancing peacock and rabbit on a moonlit stage',
+        engine: 'hybrid_phase2',
+        strictHybrid: true,
+        sceneCount: 5,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.workflowType).toBe('kids-video-hybrid-phase2-animatediff-openpose-cogvideox');
+    expect(generateKidsVideoFromHybridPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'A dancing peacock and rabbit on a moonlit stage',
+        strict: true,
+        phase2: true,
+        sceneCount: 5,
+      })
+    );
+  });
+
   test('POST /api/kids-video-hf/generate prefers structured renderer when scenes are provided', async () => {
     generateKidsVideoFromPrompt.mockResolvedValue({
       projectId: 'proj-structured-1',

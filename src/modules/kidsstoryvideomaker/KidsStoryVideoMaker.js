@@ -112,6 +112,7 @@ const AI_PROVIDER_OPTIONS = [
   { id: "pollinations", label: "Pollinations" },
 ];
 const HF_RENDER_ENGINE_OPTIONS = [
+  { id: "hybrid_phase2", label: "Hybrid Phase 2 (AnimateDiff + OpenPose + CogVideoX)" },
   { id: "hybrid_motion_cogvideox", label: "Hybrid Motion + CogVideoX (Recommended)" },
   { id: "cogvideox", label: "CogVideoX (Real Motion GPU) (Recommended)" },
   { id: "scene_script_video", label: "Script-to-Video (Fallback)" },
@@ -162,6 +163,14 @@ const normalizeRenderProvider = (value) => {
 const normalizeRenderEngine = (value) => {
   const normalized = sanitizeText(value).toLowerCase();
   if (!normalized || normalized === "default") return "";
+  if (
+    normalized === "hybrid_phase2"
+    || normalized === "hybrid_motion_animatediff_cogvideox"
+    || normalized === "hybrid_animatediff_openpose"
+    || normalized === "phase2"
+  ) {
+    return "hybrid_phase2";
+  }
   if (normalized === "hybrid" || normalized === "hybrid_scene_cogvideox" || normalized === "scene_hybrid") {
     return "hybrid_motion_cogvideox";
   }
@@ -1613,6 +1622,7 @@ const KidsStoryVideoMaker = () => {
               scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
               forceEngine,
               strictCogVideoX: selectedEngine === "cogvideox",
+              strictHybrid: selectedEngine === "hybrid_phase2" || selectedEngine === "hybrid_motion_cogvideox",
               ...(selectedEngine === "cogvideox" && enhancedPromptForCogVideoX
                 ? {
                     enhancedPrompt: enhancedPromptForCogVideoX,
@@ -1668,6 +1678,8 @@ const KidsStoryVideoMaker = () => {
         const renderMessage = (
           selectedEngine === "cogvideox"
             ? "CogVideoX render complete with enforced character/story prompt."
+            : selectedEngine === "hybrid_phase2"
+              ? "Hybrid Phase 2 render complete with AnimateDiff/OpenPose motion scenes plus CogVideoX hero shots."
             : selectedEngine === "hybrid_motion_cogvideox"
               ? "Hybrid render complete with motion-focused CogVideoX shots and scene pipeline continuity."
             : payload.aiImagesEnabled
