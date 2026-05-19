@@ -48,6 +48,28 @@ const LANGUAGE_OPTIONS = [
   { id: "arabic", label: "Arabic", code: "ar-SA" },
 ];
 
+const LANGUAGE_ID_ALIASES = LANGUAGE_OPTIONS.reduce((accumulator, option) => {
+  accumulator[option.id] = option.id;
+  accumulator[option.label.toLowerCase()] = option.id;
+  accumulator[option.code.toLowerCase()] = option.id;
+  accumulator[option.code.toLowerCase().split("-")[0]] = option.id;
+  return accumulator;
+}, {});
+
+const normalizeLanguageId = (value, fallback = LANGUAGE_OPTIONS[0].id) => {
+  const raw = sanitizeText(value).toLowerCase().replace(/_/g, "-");
+  if (!raw) return fallback;
+  return LANGUAGE_ID_ALIASES[raw] || LANGUAGE_ID_ALIASES[raw.split("-")[0]] || fallback;
+};
+
+const getLanguageOption = (value) => {
+  const normalizedId = normalizeLanguageId(value);
+  return LANGUAGE_OPTIONS.find((option) => option.id === normalizedId) || LANGUAGE_OPTIONS[0];
+};
+
+const getLanguageLocale = (value) => getLanguageOption(value)?.code || "en-US";
+const getLanguageCode = (value) => getLanguageLocale(value).split("-")[0].toLowerCase();
+
 const STYLE_OPTIONS = [
   { id: "cartoon", label: "Cartoon", description: "Bright animations, playful characters, and joyful motion." },
   { id: "storybook", label: "Storybook", description: "Illustrated scenes with gentle textures and dreamy storytelling." },
@@ -508,7 +530,7 @@ const KidsStoryVideoMaker = () => {
   });
 
   const languageLabel = useMemo(
-    () => LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.label || "English",
+    () => getLanguageOption(languageId)?.label || "English",
     [languageId]
   );
 
@@ -670,8 +692,7 @@ const KidsStoryVideoMaker = () => {
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    recognition.lang =
-      LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US";
+    recognition.lang = getLanguageLocale(languageId);
 
     recognition.onresult = (event) => {
       const transcript = sanitizeText(event?.results?.[0]?.[0]?.transcript || "");
@@ -898,7 +919,7 @@ const KidsStoryVideoMaker = () => {
     setUploadedText(
       (normalized.storySource || "paste") === "upload" ? normalized.storyPrompt || "" : ""
     );
-    setLanguageId(normalized.language || languageId);
+    setLanguageId(normalizeLanguageId(normalized.language, languageId));
     setStyleId(normalized.style || styleId);
     setVideoSizeId(normalized.videoSize || videoSizeId);
     setVoiceType(normalized.voiceType || voiceType);
@@ -1002,8 +1023,7 @@ const KidsStoryVideoMaker = () => {
           ? "Listening... Say any story subject."
           : "Listening... Say your full story prompt."
       );
-      recognitionRef.current.lang =
-        LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US";
+      recognitionRef.current.lang = getLanguageLocale(languageId);
       recognitionRef.current.start();
     } catch (_error) {
       setVoiceListeningTarget("");
@@ -1535,11 +1555,7 @@ const KidsStoryVideoMaker = () => {
                 storyMode,
               })
             : "";
-        const selectedLanguageCode = (
-          LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US"
-        )
-          .split("-")[0]
-          .toLowerCase();
+        const selectedLanguageCode = getLanguageCode(languageId);
         const { payload, response } = await runCancelableRequest("render-video", (signal) =>
           renderPromptVideoHf(
             {
@@ -1765,7 +1781,7 @@ const KidsStoryVideoMaker = () => {
 
     speech.cancel();
     const utterance = new SpeechSynthesisUtterance(generatedProject.narration);
-    utterance.lang = LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US";
+    utterance.lang = getLanguageLocale(languageId);
     utterance.rate = 0.95;
     utterance.pitch = 1;
     utterance.onstart = () => setIsNarrating(true);

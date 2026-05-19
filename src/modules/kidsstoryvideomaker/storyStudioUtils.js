@@ -18,6 +18,48 @@ const SAFETY_RULES = [
 
 export const sanitizeText = (value = "") => String(value).replace(/\u0000/g, "").trim();
 
+const LANGUAGE_ID_ALIASES = {
+  en: "english",
+  "en-us": "english",
+  english: "english",
+  hi: "hindi",
+  "hi-in": "hindi",
+  hindi: "hindi",
+  ml: "malayalam",
+  "ml-in": "malayalam",
+  malayalam: "malayalam",
+  ta: "tamil",
+  "ta-in": "tamil",
+  tamil: "tamil",
+  te: "telugu",
+  "te-in": "telugu",
+  telugu: "telugu",
+  kn: "kannada",
+  "kn-in": "kannada",
+  kannada: "kannada",
+  bn: "bengali",
+  "bn-in": "bengali",
+  bengali: "bengali",
+  mr: "marathi",
+  "mr-in": "marathi",
+  marathi: "marathi",
+  gu: "gujarati",
+  "gu-in": "gujarati",
+  gujarati: "gujarati",
+  ur: "urdu",
+  "ur-in": "urdu",
+  urdu: "urdu",
+  ar: "arabic",
+  "ar-sa": "arabic",
+  arabic: "arabic",
+};
+
+const normalizeProjectLanguage = (value, fallback = "english") => {
+  const raw = sanitizeText(value).toLowerCase().replace(/_/g, "-");
+  if (!raw) return fallback;
+  return LANGUAGE_ID_ALIASES[raw] || LANGUAGE_ID_ALIASES[raw.split("-")[0]] || fallback;
+};
+
 export const getSafetyFailure = (value = "") => {
   const cleanValue = sanitizeText(value);
   const reasons = SAFETY_RULES.filter((rule) => rule.pattern.test(cleanValue)).map((rule) => ({
@@ -139,7 +181,7 @@ export const normalizeProjectForLocal = (project, overrides = {}) => {
     title: sanitizeText(overrides.title || project?.title || "AI Kids Story Video Generator"),
     storyPrompt: sanitizeText(overrides.storyPrompt || project?.storyPrompt || ""),
     storySource: overrides.storySource || project?.storySource || "paste",
-    language: overrides.language || project?.language || "english",
+    language: normalizeProjectLanguage(overrides.language || project?.language || "english"),
     style: overrides.style || project?.style || "cartoon",
     videoSize: overrides.videoSize || project?.videoSize || "youtube",
     voiceType: overrides.voiceType || project?.voiceType || "kid-female",

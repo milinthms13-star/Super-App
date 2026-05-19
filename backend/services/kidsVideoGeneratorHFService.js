@@ -16,6 +16,37 @@ const projectsRoot = path.join(uploadsRoot, 'projects');
 
 const sanitizeText = (value = '') => String(value || '').replace(/\u0000/g, '').trim();
 const safeFileName = (value = '') => sanitizeText(value).replace(/[^a-zA-Z0-9-_]/g, '_').toLowerCase();
+const LANGUAGE_CODE_ALIASES = {
+  en: 'en',
+  english: 'en',
+  hi: 'hi',
+  hindi: 'hi',
+  ml: 'ml',
+  malayalam: 'ml',
+  ta: 'ta',
+  tamil: 'ta',
+  te: 'te',
+  telugu: 'te',
+  kn: 'kn',
+  kannada: 'kn',
+  bn: 'bn',
+  bengali: 'bn',
+  mr: 'mr',
+  marathi: 'mr',
+  gu: 'gu',
+  gujarati: 'gu',
+  ur: 'ur',
+  urdu: 'ur',
+  ar: 'ar',
+  arabic: 'ar',
+};
+
+const normalizeLanguageCode = (value = 'en') => {
+  const raw = sanitizeText(value).toLowerCase().replace(/_/g, '-');
+  if (!raw) return 'en';
+  const primary = raw.split('-')[0];
+  return LANGUAGE_CODE_ALIASES[raw] || LANGUAGE_CODE_ALIASES[primary] || 'en';
+};
 
 const ensureDirectories = async () => {
   try {
@@ -653,7 +684,7 @@ const renderSceneClip = async ({ scene, index, outputDir, stillPath, width, heig
 
   try {
     const ttsScriptPath = path.join(__dirname, '..', 'scripts', 'scene_tts.py');
-    const languageCode = sanitizeText(language || 'en').split('-')[0].toLowerCase() || 'en';
+    const languageCode = normalizeLanguageCode(language || 'en');
     await runPythonProcess({
       args: [
         ttsScriptPath,
@@ -772,6 +803,7 @@ const generateKidsVideoFromPrompt = async ({
     throw new Error('Prompt is too short.');
   }
 
+  const normalizedLanguage = normalizeLanguageCode(language);
   const hasStructuredScenes = Array.isArray(providedScenes) && providedScenes.length > 0;
   const hasStructuredCharacters = Array.isArray(providedCharacters) && providedCharacters.length > 0;
   const baseStory = hasStructuredScenes || hasStructuredCharacters
@@ -795,6 +827,7 @@ const generateKidsVideoFromPrompt = async ({
     aiProvider: 'scene_pipeline',
     storyMode: sanitizeText(storyMode || 'moral'),
     voiceType: sanitizeText(voiceType || 'kid-female'),
+    language: normalizedLanguage,
     videoSize: sanitizeText(videoSize || 'youtube'),
     prompt: cleanPrompt,
     ...baseStory,
@@ -820,7 +853,7 @@ const generateKidsVideoFromPrompt = async ({
       stillPath,
       width,
       height,
-      language,
+      language: normalizedLanguage,
     });
     clips.push(clipResult);
     sceneRenderMeta.push({
@@ -892,6 +925,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
   language = 'en',
 }) => {
   await ensureDirectories();
+  const normalizedLanguage = normalizeLanguageCode(language);
   const cleanPrompt = sanitizeText(prompt);
   if (!cleanPrompt) throw new Error('Prompt is required.');
   if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
@@ -916,7 +950,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     '--width', `${width}`,
     '--height', `${height}`,
     '--fps', `${Math.max(8, Math.min(24, Number(process.env.HF_TEXT_TO_VIDEO_FPS) || 12))}`,
-    '--lang', sanitizeText(language || 'en'),
+    '--lang', normalizedLanguage,
   ];
 
   let stdout = '';
@@ -941,6 +975,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
       videoSize,
       storyMode: 'moral',
       voiceType: 'kid-female',
+      language: normalizedLanguage,
     });
 
     return {
@@ -998,6 +1033,7 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
   language = 'en',
 }) => {
   await ensureDirectories();
+  const normalizedLanguage = normalizeLanguageCode(language);
   const cleanPrompt = sanitizeText(prompt);
   if (!cleanPrompt) throw new Error('Prompt is required.');
   if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
@@ -1019,7 +1055,7 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
     '--width', `${width}`,
     '--height', `${height}`,
     '--fps', `${fps}`,
-    '--lang', sanitizeText(language || 'en'),
+    '--lang', normalizedLanguage,
   ];
 
   try {
@@ -1078,6 +1114,7 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
       videoSize,
       storyMode: 'educational',
       voiceType: 'kid-female',
+      language: normalizedLanguage,
     });
 
     return {
@@ -1101,6 +1138,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
   language = 'en',
   strict = false,
 }) => {
+  const normalizedLanguage = normalizeLanguageCode(language);
   await ensureDirectories();
   const cleanPrompt = sanitizeText(prompt);
   if (!cleanPrompt) throw new Error('Prompt is required.');
@@ -1162,7 +1200,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
       generatorLog: stdout || '',
       pythonCommand: sanitizeText(pythonCommand || ''),
       sceneCount: 1,
-      language: sanitizeText(language || 'en'),
+      language: normalizedLanguage,
       width,
       height,
       model: modelId,
@@ -1192,6 +1230,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
       videoSize,
       storyMode: 'moral',
       voiceType: 'kid-female',
+      language: normalizedLanguage,
     });
 
     return {

@@ -9,6 +9,38 @@ const {
 
 const router = express.Router();
 
+const LANGUAGE_CODE_ALIASES = {
+  en: 'en',
+  english: 'en',
+  hi: 'hi',
+  hindi: 'hi',
+  ml: 'ml',
+  malayalam: 'ml',
+  ta: 'ta',
+  tamil: 'ta',
+  te: 'te',
+  telugu: 'te',
+  kn: 'kn',
+  kannada: 'kn',
+  bn: 'bn',
+  bengali: 'bn',
+  mr: 'mr',
+  marathi: 'mr',
+  gu: 'gu',
+  gujarati: 'gu',
+  ur: 'ur',
+  urdu: 'ur',
+  ar: 'ar',
+  arabic: 'ar',
+};
+
+const resolveLanguageCode = (body = {}) => {
+  const raw = String(body?.language || body?.lang || body?.languageId || '').trim().toLowerCase().replace(/_/g, '-');
+  if (!raw) return 'en';
+  const primary = raw.split('-')[0];
+  return LANGUAGE_CODE_ALIASES[raw] || LANGUAGE_CODE_ALIASES[primary] || 'en';
+};
+
 const clampSceneCount = (value) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 5;
@@ -62,6 +94,7 @@ router.post('/generate', async (req, res) => {
       });
     }
 
+    const languageCode = resolveLanguageCode(req.body || {});
     const requestedEngine = String(req.body?.engine || req.body?.renderEngine || '').trim().toLowerCase();
     const disableDiffusers = String(process.env.HF_DISABLE_DIFFUSERS || '').trim().toLowerCase() === 'true';
     const useDiffusers =
@@ -100,7 +133,7 @@ router.post('/generate', async (req, res) => {
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           storyMode: req.body?.storyMode || 'moral',
           voiceType: req.body?.voiceType || 'kid-female',
-          language: req.body?.language || req.body?.lang || 'en',
+          language: languageCode,
           storyTitle,
           providedCharacters,
           providedScenes,
@@ -112,7 +145,7 @@ router.post('/generate', async (req, res) => {
           numFrames: req.body?.numFrames,
           numInferenceSteps: req.body?.numInferenceSteps,
           guidanceScale: req.body?.guidanceScale,
-          language: req.body?.language || req.body?.lang || 'en',
+          language: languageCode,
           strict: strictCogVideoX,
         })
       : useLegacyScriptVideo
@@ -120,7 +153,7 @@ router.post('/generate', async (req, res) => {
           prompt: effectivePrompt,
           sceneCount: clampSceneCount(req.body?.sceneCount),
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-          language: req.body?.language || req.body?.lang || 'en',
+          language: languageCode,
         })
       : shouldUseDiffusers
       ? await generateKidsVideoFromDiffusersPrompt({
@@ -128,7 +161,7 @@ router.post('/generate', async (req, res) => {
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           numFrames: req.body?.numFrames,
           numInferenceSteps: req.body?.numInferenceSteps,
-          language: req.body?.language || req.body?.lang || 'en',
+          language: languageCode,
         })
       : await generateKidsVideoFromPrompt({
           prompt: effectivePrompt,
@@ -136,7 +169,7 @@ router.post('/generate', async (req, res) => {
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           storyMode: req.body?.storyMode || 'moral',
           voiceType: req.body?.voiceType || 'kid-female',
-          language: req.body?.language || req.body?.lang || 'en',
+          language: languageCode,
           storyTitle,
           providedCharacters,
           providedScenes,
