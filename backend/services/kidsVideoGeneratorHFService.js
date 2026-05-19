@@ -414,6 +414,67 @@ const runPythonProcess = async ({ args = [], cwd }) => {
   );
 };
 
+const isCommandAvailable = (command = '', args = ['--version']) => {
+  const cleanCommand = sanitizeText(command);
+  if (!cleanCommand) return false;
+  try {
+    const probe = spawnSync(cleanCommand, args, { stdio: 'ignore' });
+    return probe?.status === 0;
+  } catch (_error) {
+    return false;
+  }
+};
+
+const summarizeHybridRenderMeta = (sceneRenderMeta = []) => {
+  const items = Array.isArray(sceneRenderMeta) ? sceneRenderMeta : [];
+  const phase2Count = items.filter((item) => String(item?.renderEngine || '') === 'animatediff_openpose_hybrid_scene').length;
+  const cogCount = items.filter((item) => String(item?.renderEngine || '') === 'cogvideox_hybrid_scene').length;
+  const fallbackCount = items.filter((item) => {
+    const engine = String(item?.renderEngine || '').toLowerCase();
+    return engine.includes('fallback');
+  }).length;
+  const warnings = items
+    .map((item) => sanitizeText(item?.warning || ''))
+    .filter(Boolean)
+    .slice(0, 6);
+
+  return {
+    totalScenes: items.length,
+    phase2SceneCount: phase2Count,
+    cogSceneCount: cogCount,
+    fallbackSceneCount: fallbackCount,
+    warnings,
+  };
+};
+
+const getKidsVideoGeneratorCapabilities = () => {
+  const pythonCommands = getPythonCommandCandidates();
+  const hasPython = pythonCommands.some((candidate) => isCommandAvailable(candidate, ['--version']));
+  const hasFfmpeg = isCommandAvailable(resolveFfmpegBinary(), ['-version']);
+
+  const cogScriptPath = path.join(__dirname, '..', 'scripts', 'cogvideox_text_to_video.py');
+  const phase2ScriptPath = path.join(__dirname, '..', 'scripts', 'animatediff_openpose_scene_video.py');
+  const hasCogScript = fs.existsSync(cogScriptPath);
+  const hasPhase2Script = fs.existsSync(phase2ScriptPath);
+
+  const hybridMotionAvailable = hasPython && hasFfmpeg && hasCogScript;
+  const hybridPhase2Available = hybridMotionAvailable && hasPhase2Script;
+
+  const reasons = [];
+  if (!hasPython) reasons.push('Python runtime unavailable on server');
+  if (!hasFfmpeg) reasons.push('FFmpeg unavailable on server');
+  if (!hasCogScript) reasons.push('CogVideoX script missing');
+  if (!hasPhase2Script) reasons.push('AnimateDiff/OpenPose phase2 script missing');
+
+  return {
+    pythonAvailable: hasPython,
+    ffmpegAvailable: hasFfmpeg,
+    hybridMotionAvailable,
+    hybridPhase2Available,
+    reasons,
+  };
+};
+
 const buildRabbitTortoiseStory = () => ({
   title: 'The Rabbit and the Tortoise',
   synopsis: 'A speedy rabbit laughs at a calm tortoise, but a race teaches everyone that patience and consistency matter.',
@@ -1249,8 +1310,9 @@ const renderHybridAnimateDiffSceneClip = async ({
     `drawbox=x=${subtitleX}:y=${subtitleY}:w=${subtitleWidth}:h=${subtitleBoxHeight}:color=black@0.48:t=fill`,
     `drawtext=text='${subtitleText}':fontcolor=white:fontsize=${subtitleFontSize}:line_spacing=8:x=(w-text_w)/2:y=${subtitleY + Math.round(subtitleBoxHeight * 0.22)}:shadowx=2:shadowy=2:shadowcolor=black@0.85`,
   ].join(',');
-  const vfWithSubtitles = `${subtitleFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
-  const vfWithoutSubtitles = `fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+  const videoExtendFilter = `tpad=stop_mode=clone:stop_duration=${Math.max(1, Math.ceil(duration))}`;
+  const vfWithSubtitles = `${videoExtendFilter},${subtitleFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+  const vfWithoutSubtitles = `${videoExtendFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
 
   try {
     await runFfmpeg([
@@ -1438,8 +1500,9 @@ const renderHybridCogSceneClip = async ({
     `drawbox=x=${subtitleX}:y=${subtitleY}:w=${subtitleWidth}:h=${subtitleBoxHeight}:color=black@0.48:t=fill`,
     `drawtext=text='${subtitleText}':fontcolor=white:fontsize=${subtitleFontSize}:line_spacing=8:x=(w-text_w)/2:y=${subtitleY + Math.round(subtitleBoxHeight * 0.22)}:shadowx=2:shadowy=2:shadowcolor=black@0.85`,
   ].join(',');
-  const vfWithSubtitles = `${subtitleFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
-  const vfWithoutSubtitles = `fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+  const videoExtendFilter = `tpad=stop_mode=clone:stop_duration=${Math.max(1, Math.ceil(duration))}`;
+  const vfWithSubtitles = `${videoExtendFilter},${subtitleFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
+  const vfWithoutSubtitles = `${videoExtendFilter},fade=t=in:st=0:d=0.2,fade=t=out:st=${Math.max(0, duration - 0.35)}:d=0.3`;
 
   try {
     await runFfmpeg([
@@ -1661,6 +1724,21 @@ const generateKidsVideoFromHybridPrompt = async ({
   ], outputDir);
 
   const aiImagesEnabled = sceneRenderMeta.some((sceneMeta) => sceneMeta.generatedByAi);
+  const hybridSummary = summarizeHybridRenderMeta(sceneRenderMeta);
+  const fullyFallback =
+    hybridSummary.totalScenes > 0 &&
+    hybridSummary.phase2SceneCount === 0 &&
+    hybridSummary.cogSceneCount === 0 &&
+    hybridSummary.fallbackSceneCount === hybridSummary.totalScenes;
+  const effectiveWorkflowType = phase2
+    ? (fullyFallback ? 'kids-video-hybrid-phase2-fallback' : 'kids-video-hybrid-phase2-animatediff-openpose-cogvideox')
+    : (fullyFallback ? 'kids-video-hybrid-motion-fallback' : 'kids-video-hybrid-motion-cogvideox');
+  const effectiveRenderMode = phase2
+    ? (fullyFallback ? 'kids-video-hybrid-phase2-fallback' : 'kids-video-hybrid-phase2')
+    : (fullyFallback ? 'kids-video-hybrid-motion-fallback' : 'kids-video-hybrid-motion-cogvideox');
+  const effectiveRenderEngine = fullyFallback
+    ? 'scene_image_ffmpeg_fallback'
+    : (phase2 ? 'hybrid_phase2' : 'hybrid_motion_cogvideox');
   const videoUrl = `/uploads/kids-video-hf/${safeFileName(projectId)}/${outputFileName}`;
 
   const persistedProject = {
@@ -1669,7 +1747,9 @@ const generateKidsVideoFromHybridPrompt = async ({
     outputDir,
     outputFile,
     videoUrl,
-    renderMode: phase2 ? 'kids-video-hybrid-phase2' : 'kids-video-hybrid-motion-cogvideox',
+    workflowType: effectiveWorkflowType,
+    renderMode: effectiveRenderMode,
+    renderEngine: effectiveRenderEngine,
     aiImagesEnabled,
     scenes: localizedStory.scenes,
     sceneRenderMeta,
@@ -1680,6 +1760,7 @@ const generateKidsVideoFromHybridPrompt = async ({
       maxPhase2Scenes,
       phase2Enabled: Boolean(phase2),
       strict: Boolean(strict),
+      summary: hybridSummary,
     },
     translation,
     renderedAt: new Date().toISOString(),
@@ -2221,4 +2302,7 @@ module.exports = {
   getKidsVideoProject,
   translateTextToLanguage,
   localizeStoryForLanguage,
+  shouldUseHybridCogScene,
+  summarizeHybridRenderMeta,
+  getKidsVideoGeneratorCapabilities,
 };

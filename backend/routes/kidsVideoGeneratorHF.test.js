@@ -5,6 +5,13 @@ jest.mock('../services/kidsVideoGeneratorHFService', () => ({
   generateKidsVideoFromFreeSteveLikePrompt: jest.fn(),
   generateKidsVideoFromCogVideoXPrompt: jest.fn(),
   getKidsVideoProject: jest.fn(),
+  getKidsVideoGeneratorCapabilities: jest.fn(() => ({
+    pythonAvailable: true,
+    ffmpegAvailable: true,
+    hybridMotionAvailable: true,
+    hybridPhase2Available: true,
+    reasons: [],
+  })),
 }));
 
 const request = require('supertest');
@@ -16,6 +23,7 @@ const {
   generateKidsVideoFromFreeSteveLikePrompt,
   generateKidsVideoFromCogVideoXPrompt,
   getKidsVideoProject,
+  getKidsVideoGeneratorCapabilities,
 } = require('../services/kidsVideoGeneratorHFService');
 
 describe('kids-video-hf routes', () => {
@@ -64,6 +72,23 @@ describe('kids-video-hf routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body.project.projectId).toBe('proj-2');
+  });
+
+  test('GET /api/kids-video-hf/capabilities returns capability flags', async () => {
+    getKidsVideoGeneratorCapabilities.mockReturnValue({
+      pythonAvailable: true,
+      ffmpegAvailable: true,
+      hybridMotionAvailable: true,
+      hybridPhase2Available: false,
+      reasons: ['AnimateDiff/OpenPose phase2 script missing'],
+    });
+
+    const response = await request(app).get('/api/kids-video-hf/capabilities');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.capabilities.hybridMotionAvailable).toBe(true);
+    expect(response.body.capabilities.hybridPhase2Available).toBe(false);
   });
 
   test('POST /api/kids-video-hf/generate uses diffusers engine when requested', async () => {

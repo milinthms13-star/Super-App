@@ -6,6 +6,7 @@ const {
   generateKidsVideoFromFreeSteveLikePrompt,
   generateKidsVideoFromCogVideoXPrompt,
   getKidsVideoProject,
+  getKidsVideoGeneratorCapabilities,
 } = require('../services/kidsVideoGeneratorHFService');
 
 const router = express.Router();
@@ -225,11 +226,26 @@ router.post('/generate', async (req, res) => {
       aiProvider: 'scene_pipeline',
       aiImagesEnabled: Boolean(result.aiImagesEnabled),
       workflowType: result?.project?.workflowType || 'kids-video-scene-pipeline',
+      capabilities: getKidsVideoGeneratorCapabilities(),
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
       error: error?.message || 'Unable to generate video.',
+    });
+  }
+});
+
+router.get('/capabilities', async (_req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      capabilities: getKidsVideoGeneratorCapabilities(),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Unable to read kids video capabilities.',
     });
   }
 });

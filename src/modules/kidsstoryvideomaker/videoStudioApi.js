@@ -325,6 +325,16 @@ export const renderPromptVideoHf = (requestBody, options = {}) =>
     return result;
   });
 
+export const getKidsVideoHfCapabilities = (options = {}) =>
+  requestVideoStudio('/kids-video-hf/capabilities', {
+    method: 'GET',
+    retries: 0,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, 'kids-video-hf capabilities response');
+    return result;
+  });
+
 export const getProjectDownloadLink = async (projectId, options = {}) => {
   try {
     const result = await requestVideoStudio(`/video-studio/projects/${projectId}/download`, {

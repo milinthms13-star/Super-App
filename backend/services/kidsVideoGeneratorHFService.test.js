@@ -11,6 +11,8 @@ jest.mock('../services/videoStudioService', () => ({
 const {
   localizeStoryForLanguage,
   translateTextToLanguage,
+  shouldUseHybridCogScene,
+  summarizeHybridRenderMeta,
 } = require('./kidsVideoGeneratorHFService');
 
 describe('kidsVideoGeneratorHFService localization', () => {
@@ -62,5 +64,37 @@ describe('kidsVideoGeneratorHFService localization', () => {
     expect(localized.scenes[0].title).toBe(story.scenes[0].title);
     expect(localized.scenes[0].description).toBe(story.scenes[0].description);
     expect(localized.scenes[0].dialogue).toBe(story.scenes[0].dialogue);
+  });
+
+  it('detects dynamic scenes for hybrid engine selection', () => {
+    expect(
+      shouldUseHybridCogScene({
+        title: 'Forest Race',
+        description: 'Rabbit and tortoise run quickly through the forest.',
+        dialogue: 'Run faster!',
+      })
+    ).toBe(true);
+
+    expect(
+      shouldUseHybridCogScene({
+        title: 'Quiet Meadow',
+        description: 'Friends talk softly near a tree.',
+        dialogue: 'What a beautiful day.',
+      })
+    ).toBe(false);
+  });
+
+  it('summarizes hybrid scene render metadata accurately', () => {
+    const summary = summarizeHybridRenderMeta([
+      { renderEngine: 'animatediff_openpose_hybrid_scene', warning: '' },
+      { renderEngine: 'cogvideox_hybrid_scene', warning: '' },
+      { renderEngine: 'scene_image_ffmpeg_fallback', warning: 'fallback happened' },
+    ]);
+
+    expect(summary.totalScenes).toBe(3);
+    expect(summary.phase2SceneCount).toBe(1);
+    expect(summary.cogSceneCount).toBe(1);
+    expect(summary.fallbackSceneCount).toBe(1);
+    expect(summary.warnings.length).toBe(1);
   });
 });

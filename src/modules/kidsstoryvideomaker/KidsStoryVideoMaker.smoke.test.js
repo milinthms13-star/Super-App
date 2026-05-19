@@ -12,33 +12,52 @@ const okResponse = (payload, url = "http://localhost/api/video-studio/create") =
 describe("KidsStoryVideoMaker smoke", () => {
   beforeEach(() => {
     localStorage.clear();
-    global.fetch = jest.fn().mockResolvedValue(
-      okResponse({
-        success: true,
-        project: {
-          projectId: "proj-1",
-          title: "Demo Story",
-          storyPrompt: "A friendly story about teamwork and courage for children.",
-          storySource: "paste",
-          language: "english",
-          style: "cartoon",
-          videoSize: "youtube",
-          voiceType: "kid-female",
-          storyMode: "bedtime",
-          safeMode: true,
-          ageFilter: "5-8",
-          scenes: [
+    global.fetch = jest.fn((requestUrl) => {
+      const url = String(requestUrl || "");
+      if (url.includes("/api/kids-video-hf/capabilities")) {
+        return Promise.resolve(
+          okResponse(
             {
-              id: 1,
-              title: "Start",
-              description: "Friends begin their quest.",
-              dialogue: "Let us help each other.",
-              durationSeconds: 4,
+              success: true,
+              capabilities: {
+                hybridMotionAvailable: true,
+                hybridPhase2Available: true,
+                reasons: [],
+              },
             },
-          ],
-        },
-      })
-    );
+            "http://localhost/api/kids-video-hf/capabilities"
+          )
+        );
+      }
+
+      return Promise.resolve(
+        okResponse({
+          success: true,
+          project: {
+            projectId: "proj-1",
+            title: "Demo Story",
+            storyPrompt: "A friendly story about teamwork and courage for children.",
+            storySource: "paste",
+            language: "english",
+            style: "cartoon",
+            videoSize: "youtube",
+            voiceType: "kid-female",
+            storyMode: "bedtime",
+            safeMode: true,
+            ageFilter: "5-8",
+            scenes: [
+              {
+                id: 1,
+                title: "Start",
+                description: "Friends begin their quest.",
+                dialogue: "Let us help each other.",
+                durationSeconds: 4,
+              },
+            ],
+          },
+        })
+      );
+    });
   });
 
   afterEach(() => {
@@ -105,6 +124,19 @@ describe("KidsStoryVideoMaker smoke", () => {
 
     global.fetch = jest
       .fn()
+      .mockResolvedValueOnce(
+        okResponse(
+          {
+            success: true,
+            capabilities: {
+              hybridMotionAvailable: true,
+              hybridPhase2Available: true,
+              reasons: [],
+            },
+          },
+          "http://localhost/api/kids-video-hf/capabilities"
+        )
+      )
       .mockResolvedValueOnce(createResponse)
       .mockResolvedValueOnce(renderResponse)
       .mockResolvedValueOnce(downloadResponse);

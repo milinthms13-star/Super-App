@@ -28,6 +28,7 @@ import {
   regenerateStage,
   renderProject,
   renderPromptVideoHf,
+  getKidsVideoHfCapabilities,
   waitForRenderedVideo,
 } from "./videoStudioApi";
 import SceneCards from "./components/SceneCards";
@@ -538,6 +539,12 @@ const KidsStoryVideoMaker = () => {
     realCartoonModeEnabled: false,
     defaultAiProvider: "scene_pipeline",
   });
+  const [kidsVideoCapabilities, setKidsVideoCapabilities] = useState({
+    loaded: false,
+    hybridMotionAvailable: false,
+    hybridPhase2Available: false,
+    reasons: ["Checking server runtime capabilities..."],
+  });
   const [dirtySections, setDirtySections] = useState({
     script: false,
     characters: false,
@@ -588,6 +595,84 @@ const KidsStoryVideoMaker = () => {
       return "";
     }
     return ` Translation service fallback was used ${fallbackCount} time${fallbackCount > 1 ? "s" : ""}; some lines may remain in the source language.`;
+  };
+
+  const summarizeHybridFromProject = (projectLike) => {
+    if (projectLike?.hybrid?.summary && typeof projectLike.hybrid.summary === "object") {
+      return projectLike.hybrid.summary;
+    }
+    const sceneRenderMeta = Array.isArray(projectLike?.sceneRenderMeta) ? projectLike.sceneRenderMeta : [];
+    return {
+      phase2SceneCount: sceneRenderMeta.filter((item) => item?.renderEngine === "animatediff_openpose_hybrid_scene").length,
+      cogSceneCount: sceneRenderMeta.filter((item) => item?.renderEngine === "cogvideox_hybrid_scene").length,
+      fallbackSceneCount: sceneRenderMeta.filter((item) => String(item?.renderEngine || "").toLowerCase().includes("fallback")).length,
+      warnings: sceneRenderMeta.map((item) => sanitizeText(item?.warning || "")).filter(Boolean).slice(0, 4),
+    };
+  };
+
+  const getHybridRenderNotice = (projectLike, engineId) => {
+    const engine = normalizeRenderEngine(engineId);
+    if (!engine || (engine !== "hybrid_phase2" && engine !== "hybrid_motion_cogvideox")) {
+      return "";
+    }
+    const summary = summarizeHybridFromProject(projectLike || {});
+    const phase2Count = Number(summary?.phase2SceneCount || 0);
+    const cogCount = Number(summary?.cogSceneCount || 0);
+    const fallbackCount = Number(summary?.fallbackSceneCount || 0);
+    const warningText = Array.isArray(summary?.warnings) && summary.warnings.length ? ` ${summary.warnings[0]}.` : "";
+
+    if (engine === "hybrid_phase2") {
+      if (phase2Count === 0 && cogCount === 0) {
+        return ` Phase 2 models were unavailable; rendered with fallback scenes.${warningText}`;
+      }
+      if (phase2Count === 0 && cogCount > 0) {
+        return ` AnimateDiff/OpenPose was unavailable; used CogVideoX plus fallback scenes.${warningText}`;
+      }
+      if (fallbackCount > 0) {
+        return ` Partial fallback was used for ${fallbackCount} scene${fallbackCount > 1 ? "s" : ""}.${warningText}`;
+      }
+      return "";
+    }
+
+    if (cogCount === 0 && fallbackCount > 0) {
+      return ` Motion-CogVideoX upgrade was unavailable; rendered with fallback scenes.${warningText}`;
+    }
+    if (fallbackCount > 0) {
+      return ` Partial fallback was used for ${fallbackCount} scene${fallbackCount > 1 ? "s" : ""}.${warningText}`;
+    }
+    return "";
+  };
+
+  const applyKidsVideoCapabilities = (capabilities) => {
+    if (!capabilities || typeof capabilities !== "object") {
+      return;
+    }
+    setKidsVideoCapabilities({
+      loaded: true,
+      hybridMotionAvailable: capabilities.hybridMotionAvailable !== false,
+      hybridPhase2Available: capabilities.hybridPhase2Available !== false,
+      reasons: Array.isArray(capabilities.reasons) ? capabilities.reasons : [],
+    });
+  };
+
+  const getEngineAvailability = (engineId) => {
+    const normalizedEngine = normalizeRenderEngine(engineId);
+    if (!normalizedEngine) {
+      return { available: true, reason: "" };
+    }
+    if (normalizedEngine === "hybrid_phase2" && !kidsVideoCapabilities.hybridPhase2Available) {
+      return {
+        available: false,
+        reason: kidsVideoCapabilities.reasons?.[0] || "Hybrid Phase 2 is not available on server runtime.",
+      };
+    }
+    if (normalizedEngine === "hybrid_motion_cogvideox" && !kidsVideoCapabilities.hybridMotionAvailable) {
+      return {
+        available: false,
+        reason: kidsVideoCapabilities.reasons?.[0] || "Hybrid Motion is not available on server runtime.",
+      };
+    }
+    return { available: true, reason: "" };
   };
 
   const applyServiceCapabilities = (payload) => {
@@ -696,6 +781,16 @@ const KidsStoryVideoMaker = () => {
   }, []);
 
   useEffect(() => {
+    if (!hfRenderEngine) {
+      return;
+    }
+    const availability = getEngineAvailability(hfRenderEngine);
+    if (!availability.available) {
+      setHfRenderEngine("");
+    }
+  }, [hfRenderEngine, kidsVideoCapabilities.hybridMotionAvailable, kidsVideoCapabilities.hybridPhase2Available]);
+
+  useEffect(() => {
     return () => {
       window.speechSynthesis?.cancel();
       Object.values(requestControllersRef.current).forEach((controller) => controller?.abort?.());
@@ -703,6 +798,29 @@ const KidsStoryVideoMaker = () => {
       if (recognitionRef.current?.abort) {
         recognitionRef.current.abort();
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { payload } = await getKidsVideoHfCapabilities();
+        if (!active) return;
+        applyKidsVideoCapabilities(payload?.capabilities || {});
+      } catch (_error) {
+        if (!active) return;
+        setKidsVideoCapabilities({
+          loaded: true,
+          hybridMotionAvailable: false,
+          hybridPhase2Available: false,
+          reasons: ["Could not verify Hybrid runtime on server."],
+        });
+      }
+    })();
+
+    return () => {
+      active = false;
     };
   }, []);
 
@@ -1591,6 +1709,10 @@ const KidsStoryVideoMaker = () => {
       try {
         const normalizedEngine = normalizeRenderEngine(hfRenderEngine);
         selectedEngine = normalizedEngine && normalizedEngine !== "image_ffmpeg" ? normalizedEngine : "";
+        const engineAvailability = getEngineAvailability(selectedEngine);
+        if (!engineAvailability.available) {
+          throw new Error(engineAvailability.reason || "Selected render engine is not available right now.");
+        }
         forceEngine = selectedEngine === "cogvideox";
         const enhancedPromptForCogVideoX =
           selectedEngine === "cogvideox"
@@ -1640,6 +1762,7 @@ const KidsStoryVideoMaker = () => {
         );
 
         applyServiceCapabilities(payload);
+        applyKidsVideoCapabilities(payload?.capabilities || {});
         const serviceOrigin = (() => {
           try {
             return new URL(response.url).origin;
@@ -1686,7 +1809,9 @@ const KidsStoryVideoMaker = () => {
               ? "Video rendered successfully. Scene pipeline completed with regenerated scenes and AI visuals."
               : "Video rendered successfully. Render completed using fallback visuals."
         );
-        setMessage(`${renderMessage}${getTranslationFallbackNotice(returnedProject || payload.project || {})}`);
+        setMessage(
+          `${renderMessage}${getHybridRenderNotice(returnedProject || payload.project || {}, selectedEngine)}${getTranslationFallbackNotice(returnedProject || payload.project || {})}`
+        );
         setActiveTab("export");
       } catch (err) {
         setError(formatSafetyError(err));
@@ -1735,6 +1860,7 @@ const KidsStoryVideoMaker = () => {
         throw new Error(payload.error || payload.message || "Video render failed.");
       }
       applyServiceCapabilities(payload);
+      applyKidsVideoCapabilities(payload?.capabilities || {});
       const serviceOrigin = (() => {
         try {
           return new URL(response.url).origin;
@@ -2347,9 +2473,18 @@ const KidsStoryVideoMaker = () => {
                   <select value={hfRenderEngine} onChange={(event) => setHfRenderEngine(event.target.value)}>
                     <option value="">Default (Balanced)</option>
                     {HF_RENDER_ENGINE_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>{option.label}</option>
+                      <option
+                        key={option.id}
+                        value={option.id}
+                        disabled={!getEngineAvailability(option.id).available}
+                      >
+                        {option.label}
+                      </option>
                     ))}
                   </select>
+                  {hfRenderEngine && !getEngineAvailability(hfRenderEngine).available && (
+                    <p className="upload-hint">{getEngineAvailability(hfRenderEngine).reason}</p>
+                  )}
                 </div>
               </div>
 

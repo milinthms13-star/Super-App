@@ -3,6 +3,7 @@ import {
   requestVideoStudio,
   getProjectDownloadLink,
   renderPromptVideoHf,
+  getKidsVideoHfCapabilities,
   waitForRenderedVideo,
 } from "./videoStudioApi";
 
@@ -201,5 +202,25 @@ describe("videoStudioApi", () => {
     const parsedBody = JSON.parse(requestInit.body);
     expect(parsedBody.engine).toBeUndefined();
     expect(parsedBody.renderEngine).toBeUndefined();
+  });
+
+  test("loads kids-video-hf capability flags", async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      jsonResponse({
+        payload: {
+          success: true,
+          capabilities: {
+            hybridMotionAvailable: true,
+            hybridPhase2Available: false,
+          },
+        },
+        url: "http://localhost/api/kids-video-hf/capabilities",
+      })
+    );
+
+    const result = await getKidsVideoHfCapabilities();
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.capabilities.hybridMotionAvailable).toBe(true);
+    expect(result.payload.capabilities.hybridPhase2Available).toBe(false);
   });
 });
