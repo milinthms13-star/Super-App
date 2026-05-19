@@ -186,6 +186,8 @@ export const normalizeProjectForLocal = (project, overrides = {}) => {
     videoSize: overrides.videoSize || project?.videoSize || "youtube",
     voiceType: overrides.voiceType || project?.voiceType || "kid-female",
     storyMode: overrides.storyMode || project?.storyMode || "bedtime",
+    aiProvider: sanitizeText(overrides.aiProvider || project?.aiProvider || "scene_pipeline"),
+    renderEngine: sanitizeText(overrides.renderEngine || project?.renderEngine || ""),
     safeMode:
       typeof overrides.safeMode === "boolean"
         ? overrides.safeMode

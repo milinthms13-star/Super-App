@@ -94,7 +94,20 @@ describe("KidsStoryVideoMaker smoke", () => {
       "http://localhost/api/video-studio/render"
     );
 
-    global.fetch = jest.fn().mockResolvedValueOnce(createResponse).mockResolvedValueOnce(renderResponse);
+    const downloadResponse = okResponse(
+      {
+        success: true,
+        downloadUrl: "http://localhost/videos/story.mp4",
+        videoUrl: "http://localhost/videos/story.mp4",
+      },
+      "http://localhost/api/video-studio/projects/proj-1/download"
+    );
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(createResponse)
+      .mockResolvedValueOnce(renderResponse)
+      .mockResolvedValueOnce(downloadResponse);
 
     const clickSpy = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
@@ -118,7 +131,7 @@ describe("KidsStoryVideoMaker smoke", () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          /Video rendered successfully\.( Preview and export your MP4\.| AI providers are disabled, so quality may use fallback visuals\/audio\.)/i
+          /Video rendered successfully\.( Preview and export your MP4\.| AI providers are disabled, so quality may use fallback visuals\/audio\.| Scene pipeline completed with regenerated scenes and AI visuals\.| Render completed using fallback visuals\.)/i
         )
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Download MP4" })).toBeEnabled();

@@ -147,6 +147,8 @@ const STORY_TEMPLATES = [
 
 const DEFAULT_STORY_PROMPT = STORY_TEMPLATES[0].prompt;
 const MAX_RENDER_CHARACTERS = 2;
+const TOPIC_PROMPT_MIN_LENGTH = 3;
+const AUTOPILOT_TOPIC_THRESHOLD = 40;
 
 const normalizeRenderProvider = (value) => {
   const normalized = sanitizeText(value).toLowerCase();
@@ -158,9 +160,11 @@ const normalizeRenderProvider = (value) => {
 
 const normalizeRenderEngine = (value) => {
   const normalized = sanitizeText(value).toLowerCase();
-  if (!normalized || normalized === "default") return "cogvideox";
+  if (!normalized || normalized === "default") return "";
   if (normalized === "cogvideo" || normalized === "cogvideox_2b" || normalized === "real_motion_gpu") return "cogvideox";
+  if (normalized === "cogvideox_text_to_video") return "cogvideox";
   if (normalized === "free_steve_like" || normalized === "steve_like") return "scene_script_video";
+  if (normalized === "scene_image_ffmpeg_fallback") return "image_ffmpeg";
   if (normalized === "diffusers_t2v") return "prompt_video_python";
   return normalized;
 };
@@ -565,6 +569,14 @@ const KidsStoryVideoMaker = () => {
 
   const hasUnsavedEdits = Object.values(dirtySections).some(Boolean);
 
+  const getTranslationFallbackNotice = (projectLike) => {
+    const fallbackCount = Number(projectLike?.translation?.fallbackCount || 0);
+    if (fallbackCount <= 0) {
+      return "";
+    }
+    return ` Translation service fallback was used ${fallbackCount} time${fallbackCount > 1 ? "s" : ""}; some lines may remain in the source language.`;
+  };
+
   const applyServiceCapabilities = (payload) => {
     if (!payload || typeof payload !== "object") {
       return;
@@ -928,6 +940,7 @@ const KidsStoryVideoMaker = () => {
     setSafeMode(typeof normalized.safeMode === "boolean" ? normalized.safeMode : safeMode);
     setPremiumHD(Boolean(normalized.premiumExport));
     setAiProvider(normalizeRenderProvider(incomingProject.aiProvider || normalized.aiProvider || serviceCapabilities.defaultAiProvider));
+    setHfRenderEngine(normalizeRenderEngine(incomingProject.renderEngine || normalized.renderEngine || ""));
     setVideoUrl(normalizeMediaUrl(normalized.videoUrl || ""));
     setSubjectInput(incomingProject.subject || subjectInput);
     setDirtySections({
@@ -938,7 +951,7 @@ const KidsStoryVideoMaker = () => {
       music: false,
     });
     setError("");
-    setMessage(successText);
+    setMessage(`${successText}${getTranslationFallbackNotice(incomingProject)}`);
   };
 
   const patchCurrentProject = async (partialPayload, successText = "Project updated.") => {
@@ -955,14 +968,15 @@ const KidsStoryVideoMaker = () => {
     applyProjectSnapshotToStudio(payload.project, successText);
   };
 
-  const handleAutopilotGenerate = async () => {
-    const cleanSubject = sanitizeText(subjectInput);
+  const runAutopilotGeneration = async (subjectValue, successText = "Autopilot project generated. You can edit every stage.") => {
+    const cleanSubject = sanitizeText(subjectValue);
     if (!cleanSubject) {
       setError("Please enter any story subject, like space adventure, jungle mystery, or robot school.");
       setMessage("");
-      return;
+      return false;
     }
 
+    setSubjectInput(cleanSubject);
     setIsAutopilotGenerating(true);
     setError("");
     setMessage("Generating full script, characters, scenes, animation plan, and voice map...");
@@ -990,13 +1004,19 @@ const KidsStoryVideoMaker = () => {
       }
       applyServiceCapabilities(payload);
 
-      applyProjectSnapshotToStudio(payload.project, "Autopilot project generated. You can edit every stage.");
+      applyProjectSnapshotToStudio(payload.project, successText);
       setActiveTab("characters");
+      return true;
     } catch (err) {
       setError(formatSafetyError(err));
+      return false;
     } finally {
       setIsAutopilotGenerating(false);
     }
+  };
+
+  const handleAutopilotGenerate = async () => {
+    await runAutopilotGeneration(subjectInput);
   };
 
   const handleVoiceInput = (target) => {
@@ -1183,8 +1203,8 @@ const KidsStoryVideoMaker = () => {
     const storyContent = sanitizeText(storyText);
     const safeTitle = sanitizeText(storyTitle || "AI Kids Story Video Generator");
 
-    if (storyContent.length < MIN_STORY_LENGTH) {
-      setError(`Please provide at least ${MIN_STORY_LENGTH} characters for a meaningful story.`);
+    if (storyContent.length < TOPIC_PROMPT_MIN_LENGTH) {
+      setError(`Please provide at least ${TOPIC_PROMPT_MIN_LENGTH} characters to start generation.`);
       setMessage("");
       return;
     }
@@ -1200,6 +1220,21 @@ const KidsStoryVideoMaker = () => {
       const reasons = localSafety.reasons.map((item) => item.reason).join(", ");
       setError(`Safe mode blocked this prompt due to: ${reasons}.`);
       setMessage("");
+      return;
+    }
+
+    if (storyContent.length < AUTOPILOT_TOPIC_THRESHOLD) {
+      setIsGenerating(true);
+      setError("");
+      setMessage("Topic detected. Expanding it into a full script with scenes and narration...");
+      try {
+        await runAutopilotGeneration(
+          storyContent,
+          "Topic expanded into a full story pipeline. You can now refine scenes and render."
+        );
+      } finally {
+        setIsGenerating(false);
+      }
       return;
     }
 
@@ -1626,13 +1661,14 @@ const KidsStoryVideoMaker = () => {
         setVideoUrl(normalizedVideoUrl);
         setRenderProgress(100);
         setRenderProgressLabel("Render complete.");
-        setMessage(
+        const renderMessage = (
           selectedEngine === "cogvideox"
             ? "CogVideoX render complete with enforced character/story prompt."
             : payload.aiImagesEnabled
-              ? "Scene pipeline render complete with regenerated scenes and AI visuals."
-              : "Render complete using fallback visuals."
+              ? "Video rendered successfully. Scene pipeline completed with regenerated scenes and AI visuals."
+              : "Video rendered successfully. Render completed using fallback visuals."
         );
+        setMessage(`${renderMessage}${getTranslationFallbackNotice(returnedProject || payload.project || {})}`);
         setActiveTab("export");
       } catch (err) {
         setError(formatSafetyError(err));
@@ -1699,11 +1735,12 @@ const KidsStoryVideoMaker = () => {
       setVideoUrl(nextProject.videoUrl);
       setRenderProgress(100);
       setRenderProgressLabel("Render complete.");
-      setMessage(
+      const renderMessage = (
         payload.aiProviderEnabled
           ? "Video rendered successfully with AI character visuals and voice. Preview and export your MP4."
           : "Video rendered successfully. AI providers are disabled, so quality may use fallback visuals/audio."
       );
+      setMessage(`${renderMessage}${getTranslationFallbackNotice(payload.project || {})}`);
       setActiveTab("export");
     } catch (err) {
       const canRecover = shouldAttemptRenderRecovery(err) && Boolean(generatedProject?.projectId);
@@ -1967,6 +2004,8 @@ const KidsStoryVideoMaker = () => {
       videoSize: videoSizeId,
       voiceType,
       storyMode,
+      aiProvider,
+      renderEngine: normalizeRenderEngine(hfRenderEngine),
       safeMode,
       ageFilter,
       scenes: generatedScenes,
@@ -2147,6 +2186,36 @@ const KidsStoryVideoMaker = () => {
               <h2>Create</h2>
               <p>Paste your story or upload text. AI builds scenes, dialogue, and narration automatically.</p>
 
+              <div className="topic-autopilot-card">
+                <label htmlFor="storySubject">Story subject (topic mode)</label>
+                <input
+                  id="storySubject"
+                  type="text"
+                  value={subjectInput}
+                  onChange={(event) => setSubjectInput(event.target.value)}
+                  maxLength={120}
+                  placeholder="Ex: Ramayana, Jungle adventure, Solar system story"
+                />
+                <div className="topic-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => handleVoiceInput("subject")}
+                    disabled={!speechSupported}
+                  >
+                    {voiceListeningTarget === "subject" ? "Stop Subject Voice" : "Voice Subject"}
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleAutopilotGenerate}
+                    disabled={isAutopilotGenerating || isGenerating}
+                  >
+                    {isAutopilotGenerating ? "Generating Topic Script..." : "Generate From Subject"}
+                  </button>
+                </div>
+              </div>
+
               <label htmlFor="storyTitle">Project title</label>
               <input
                 id="storyTitle"
@@ -2194,6 +2263,16 @@ const KidsStoryVideoMaker = () => {
                 }}
                 placeholder={DEFAULT_STORY_PROMPT}
               />
+              <div className="story-voice-row">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => handleVoiceInput("story")}
+                  disabled={!speechSupported}
+                >
+                  {voiceListeningTarget === "story" ? "Stop Story Voice" : "Voice Story Input"}
+                </button>
+              </div>
               <p className={`char-counter ${storyLength > MAX_STORY_LENGTH ? "danger" : ""}`}>
                 {storyLength} / {MAX_STORY_LENGTH} characters
               </p>
@@ -2230,6 +2309,26 @@ const KidsStoryVideoMaker = () => {
                   <label>Voice style</label>
                   <select value={voiceType} onChange={(event) => setVoiceType(event.target.value)}>
                     {VOICE_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="create-grid">
+                <div>
+                  <label>AI provider</label>
+                  <select value={aiProvider} onChange={(event) => setAiProvider(normalizeRenderProvider(event.target.value))}>
+                    {AI_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label>Render engine</label>
+                  <select value={hfRenderEngine} onChange={(event) => setHfRenderEngine(event.target.value)}>
+                    <option value="">Default (Balanced)</option>
+                    {HF_RENDER_ENGINE_OPTIONS.map((option) => (
                       <option key={option.id} value={option.id}>{option.label}</option>
                     ))}
                   </select>
@@ -2289,7 +2388,11 @@ const KidsStoryVideoMaker = () => {
               )}
 
               <div className="story-actions">
-                <button className="primary-button" onClick={handleGenerateProject} disabled={isGenerating}>
+                <button
+                  className="primary-button"
+                  onClick={handleGenerateProject}
+                  disabled={isGenerating || isAutopilotGenerating}
+                >
                   {isGenerating ? "Building AI storyboard..." : "Generate Story Pipeline"}
                 </button>
               </div>

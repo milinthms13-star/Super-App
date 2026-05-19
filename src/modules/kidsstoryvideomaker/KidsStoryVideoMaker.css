@@ -176,6 +176,24 @@
   margin-bottom: 14px;
 }
 
+.topic-autopilot-card {
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid #e2dbff;
+  background: #f7f4ff;
+}
+
+.topic-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.story-voice-row {
+  margin-top: 12px;
+}
+
 .create-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -732,7 +750,8 @@ select:focus-visible {
   .create-grid,
   .dashboard-grid,
   .story-source-row,
-  .advanced-settings-grid {
+  .advanced-settings-grid,
+  .topic-actions {
     grid-template-columns: 1fr;
   }
 

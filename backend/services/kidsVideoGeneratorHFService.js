@@ -78,9 +78,47 @@ const sanitizeInternetSummaryText = (value = '') =>
     .replace(/\((?:listen|help|about this sound file)[^)]+\)/gi, '')
     .trim();
 
-const translateTextToLanguage = async (text = '', targetLanguage = 'en') => {
+const createTranslationTelemetry = (targetLanguage = 'en') => ({
+  targetLanguage: normalizeLanguageCode(targetLanguage || 'en'),
+  attempted: false,
+  fallbackCount: 0,
+  warnings: [],
+});
+
+const noteTranslationFallback = (telemetry, reason = '', context = '') => {
+  if (!telemetry || typeof telemetry !== 'object') return;
+  telemetry.fallbackCount += 1;
+  const reasonText = sanitizeText(reason) || 'translation error';
+  const contextText = sanitizeText(context) || 'text';
+  telemetry.warnings.push(`Fallback to source ${contextText}: ${reasonText}`);
+};
+
+const finalizeTranslationTelemetry = (telemetry) => {
+  if (!telemetry || typeof telemetry !== 'object') return null;
+  const normalizedLanguage = normalizeLanguageCode(telemetry.targetLanguage || 'en');
+  if (!telemetry.attempted || normalizedLanguage === 'en') {
+    return {
+      targetLanguage: normalizedLanguage,
+      translated: normalizedLanguage === 'en',
+      fallbackCount: 0,
+      warnings: [],
+    };
+  }
+  return {
+    targetLanguage: normalizedLanguage,
+    translated: telemetry.fallbackCount === 0,
+    fallbackCount: telemetry.fallbackCount,
+    warnings: telemetry.warnings.slice(0, 6),
+  };
+};
+
+const translateTextToLanguage = async (text = '', targetLanguage = 'en', options = {}) => {
   const cleanText = sanitizeText(text);
   if (!cleanText || targetLanguage === 'en') return cleanText;
+  const telemetry = options?.telemetry;
+  if (telemetry && typeof telemetry === 'object') {
+    telemetry.attempted = true;
+  }
 
   const languageName = LANGUAGE_NAME_BY_CODE[targetLanguage] || targetLanguage;
   try {
@@ -97,36 +135,44 @@ const translateTextToLanguage = async (text = '', targetLanguage = 'en') => {
 
     const translated = sanitizeText(String(aiResponse || cleanText));
     return translated || cleanText;
-  } catch (_error) {
+  } catch (error) {
+    noteTranslationFallback(telemetry, error?.message || 'AI translation unavailable', options?.context || '');
     return cleanText;
   }
 };
 
-const translatePromptForLanguage = async (prompt = '', targetLanguage = 'en') => {
+const translatePromptForLanguage = async (prompt = '', targetLanguage = 'en', options = {}) => {
   const cleanPrompt = sanitizeText(prompt);
   if (!cleanPrompt) return cleanPrompt;
   const normalizedLanguage = normalizeLanguageCode(targetLanguage);
   if (normalizedLanguage === 'en') return cleanPrompt;
-  return translateTextToLanguage(cleanPrompt, normalizedLanguage);
+  return translateTextToLanguage(cleanPrompt, normalizedLanguage, {
+    telemetry: options?.telemetry,
+    context: options?.context || 'prompt',
+  });
 };
 
-const localizeStoryForLanguage = async (story = {}, targetLanguage = 'en') => {
+const localizeStoryForLanguage = async (story = {}, targetLanguage = 'en', options = {}) => {
   if (!story || targetLanguage === 'en') return story;
+  const telemetry = options?.telemetry;
+  if (telemetry && typeof telemetry === 'object') {
+    telemetry.attempted = true;
+  }
 
   const localizedScenes = await Promise.all(
     (Array.isArray(story.scenes) ? story.scenes : []).map(async (scene) => ({
       ...scene,
-      title: await translateTextToLanguage(scene.title, targetLanguage),
-      description: await translateTextToLanguage(scene.description, targetLanguage),
-      dialogue: await translateTextToLanguage(scene.dialogue, targetLanguage),
+      title: await translateTextToLanguage(scene.title, targetLanguage, { telemetry, context: 'scene title' }),
+      description: await translateTextToLanguage(scene.description, targetLanguage, { telemetry, context: 'scene description' }),
+      dialogue: await translateTextToLanguage(scene.dialogue, targetLanguage, { telemetry, context: 'scene dialogue' }),
     }))
   );
 
   return {
     ...story,
-    title: await translateTextToLanguage(story.title, targetLanguage),
-    synopsis: await translateTextToLanguage(story.synopsis, targetLanguage),
-    moral: await translateTextToLanguage(story.moral, targetLanguage),
+    title: await translateTextToLanguage(story.title, targetLanguage, { telemetry, context: 'story title' }),
+    synopsis: await translateTextToLanguage(story.synopsis, targetLanguage, { telemetry, context: 'story synopsis' }),
+    moral: await translateTextToLanguage(story.moral, targetLanguage, { telemetry, context: 'story moral' }),
     scenes: localizedScenes,
   };
 };
@@ -1059,7 +1105,11 @@ const generateKidsVideoFromPrompt = async ({
     scenes: (baseStory.scenes || []).slice(0, Math.max(3, Math.min(8, Number(sceneCount) || 5))),
   };
 
-  const localizedStory = await localizeStoryForLanguage(story, normalizedLanguage);
+  const translationTelemetry = createTranslationTelemetry(normalizedLanguage);
+  const localizedStory = await localizeStoryForLanguage(story, normalizedLanguage, {
+    telemetry: translationTelemetry,
+  });
+  const translation = finalizeTranslationTelemetry(translationTelemetry);
 
   const clips = [];
   const sceneRenderMeta = [];
@@ -1127,6 +1177,7 @@ const generateKidsVideoFromPrompt = async ({
     aiImagesEnabled,
     scenes: localizedStory.scenes,
     sceneRenderMeta,
+    translation,
     renderedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1158,7 +1209,12 @@ const generateKidsVideoFromDiffusersPrompt = async ({
   if (!cleanPrompt) throw new Error('Prompt is required.');
   if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
 
-  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage);
+  const translationTelemetry = createTranslationTelemetry(normalizedLanguage);
+  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage, {
+    telemetry: translationTelemetry,
+    context: 'video prompt',
+  });
+  const translation = finalizeTranslationTelemetry(translationTelemetry);
   const localizedStoryTitle = sanitizeText(storyTitle);
   const projectId = uuidv4();
   const outputDir = path.join(uploadsRoot, safeFileName(projectId));
@@ -1244,6 +1300,7 @@ const generateKidsVideoFromDiffusersPrompt = async ({
     updatedAt: new Date().toISOString(),
     generatorLog: stdout || '',
     pythonCommand: sanitizeText(pythonCommand || ''),
+    translation,
   };
 
   await writeFile(projectFilePath(projectId), JSON.stringify(persistedProject, null, 2), 'utf-8');
@@ -1272,7 +1329,12 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
   if (!cleanPrompt) throw new Error('Prompt is required.');
   if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
 
-  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage);
+  const translationTelemetry = createTranslationTelemetry(normalizedLanguage);
+  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage, {
+    telemetry: translationTelemetry,
+    context: 'video prompt',
+  });
+  const translation = finalizeTranslationTelemetry(translationTelemetry);
   const localizedStoryTitle = sanitizeText(storyTitle);
   const projectId = uuidv4();
   const outputDir = path.join(uploadsRoot, safeFileName(projectId));
@@ -1331,6 +1393,7 @@ const generateKidsVideoFromFreeSteveLikePrompt = async ({
       generatorLog: stdout || '',
       pythonCommand: sanitizeText(pythonCommand || ''),
       sceneCount: Number(parsedScriptOutput?.scene_count || Math.max(3, Math.min(8, Number(sceneCount) || 5))),
+      translation,
     };
 
     await writeFile(projectFilePath(projectId), JSON.stringify(persistedProject, null, 2), 'utf-8');
@@ -1384,7 +1447,12 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
   if (!cleanPrompt) throw new Error('Prompt is required.');
   if (cleanPrompt.length < 3) throw new Error('Prompt is too short.');
 
-  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage);
+  const translationTelemetry = createTranslationTelemetry(normalizedLanguage);
+  const localizedPrompt = await translatePromptForLanguage(cleanPrompt, normalizedLanguage, {
+    telemetry: translationTelemetry,
+    context: 'video prompt',
+  });
+  const translation = finalizeTranslationTelemetry(translationTelemetry);
   const localizedStoryTitle = sanitizeText(storyTitle);
   const projectId = uuidv4();
   const outputDir = path.join(uploadsRoot, safeFileName(projectId));
@@ -1450,6 +1518,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
       numFrames: Number(parsedScriptOutput?.num_frames || Math.max(16, Math.min(97, Number(numFrames) || 49))),
       numInferenceSteps: Number(parsedScriptOutput?.num_inference_steps || Math.max(10, Math.min(80, Number(numInferenceSteps) || 30))),
       guidanceScale: Number(parsedScriptOutput?.guidance_scale || Math.max(1, Math.min(12, Number(guidanceScale) || 6))),
+      translation,
     };
 
     await writeFile(projectFilePath(projectId), JSON.stringify(persistedProject, null, 2), 'utf-8');
