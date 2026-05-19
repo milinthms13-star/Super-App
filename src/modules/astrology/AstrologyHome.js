@@ -8,17 +8,14 @@ import { useAstrologyProfile } from "./hooks/useAstrologyProfile";
 import "../../styles/Astrology.css";
 
 const FEATURE_TABS = [
-  { key: "today", label: "Daily Horoscope", labelMl: "Dainamdina Phalam" },
-  { key: "yearly", label: "Yearly Horoscope", labelMl: "Varshika Phalam" },
-  { key: "total", label: "Total Life Reading", labelMl: "Jeevitha Vayanam" },
-  { key: "kundli", label: "Birth Chart", labelMl: "Janana Chart" },
-  { key: "career", label: "Career", labelMl: "Thozhil" },
-  { key: "finance", label: "Finance", labelMl: "Dhanam" },
-  { key: "match", label: "Marriage", labelMl: "Vivaham" },
-  { key: "remedies", label: "Remedies", labelMl: "Pariharangal" },
-  { key: "panchangam", label: "Panchangam", labelMl: "Panchangam" },
-  { key: "ai", label: "AI Astrology", labelMl: "AI Jyothisham" },
-  { key: "saved", label: "Saved Reports", labelMl: "Save Reports" },
+  { key: "today", label: "Today", labelMl: "ഇന്ന്" },
+  { key: "kundli", label: "Birth Chart", labelMl: "ജനന ചാർട്ട്" },
+  { key: "finance", label: "Finance", labelMl: "ധനം" },
+  { key: "career", label: "Career", labelMl: "തൊഴിൽ" },
+  { key: "match", label: "Marriage", labelMl: "വിവാഹം" },
+  { key: "remedies", label: "Remedies", labelMl: "പരിഹാരം" },
+  { key: "ai", label: "Ask Astro AI", labelMl: "AI ചോദിക്കൂ" },
+  { key: "saved", label: "Saved", labelMl: "സേവ് ചെയ്തത്" },
 ];
 
 const MOBILE_NAV_ITEMS = [
@@ -1225,24 +1222,29 @@ const AstrologyHome = () => {
   };
 
   const handleGenerateReport = async () => {
-    if (!ensureSignedIn()) return;
     if (!hasRequiredBirthDetails) {
       setSaveState({
         type: "error",
-        message: "Enter date of birth, time, place, and gender to generate your personal prediction.",
+        message: "Please enter DOB, birth time, birth place and gender first.",
       });
       return;
     }
 
-    const saveSuccess = await profileApi.handleProfileSave({ preventDefault: () => {} });
-    if (!saveSuccess) {
-      return;
-    }
+    const saveSuccess = currentUser?.id || currentUser?.name
+      ? await profileApi.handleProfileSave({ preventDefault: () => {} })
+      : true;
+
+    if (!saveSuccess) return;
 
     if (question.trim()) setAiQuestion(question.trim());
+
     setActiveSection("today");
     setPersonalizedReady(true);
-    setShowFullPrediction(Boolean(detailedReport));
+    setShowFullPrediction(true);
+    setSaveState({
+      type: "success",
+      message: "Your personalized astrology report is ready.",
+    });
   };
 
   const handleAskAssistant = async () => {

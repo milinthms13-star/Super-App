@@ -920,3 +920,83 @@
     display: flex;
   }
 }
+
+.astro-personal-form-card {
+  border: 2px solid var(--astro-gold);
+  box-shadow: 0 12px 28px rgba(200, 155, 60, 0.22);
+}
+
+.astro-personal-form-card h3::after {
+  content: " - Start here";
+  color: var(--astro-gold);
+  font-size: 0.85rem;
+}
+
+.astro-hero-form {
+  display: grid;
+  gap: 10px;
+}
+
+.astrology-field input,
+.astrology-field select {
+  min-height: 46px;
+  font-size: 1rem;
+}
+
+@media (max-width: 760px) {
+  .astro-first-panel-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .astro-personal-preview-card {
+    order: 2;
+  }
+
+  .astro-quick-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .astro-hero-actions button {
+    width: 100%;
+  }
+}
+
+.astro-personal-form-card {
+  border: 2px solid var(--astro-gold);
+  box-shadow: 0 12px 28px rgba(200, 155, 60, 0.22);
+}
+
+.astro-personal-form-card h3::after {
+  content: " - Start here";
+  color: var(--astro-gold);
+  font-size: 0.85rem;
+}
+
+.astro-hero-form {
+  display: grid;
+  gap: 10px;
+}
+
+.astrology-field input,
+.astrology-field select {
+  min-height: 46px;
+  font-size: 1rem;
+}
+
+@media (max-width: 760px) {
+  .astro-first-panel-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .astro-personal-preview-card {
+    order: 2;
+  }
+
+  .astro-quick-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .astro-hero-actions button {
+    width: 100%;
+  }
+}
