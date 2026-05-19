@@ -15,6 +15,12 @@ const clampSceneCount = (value) => {
   return Math.max(3, Math.min(8, Math.round(parsed)));
 };
 
+const parseBoolean = (value, defaultValue = false) => {
+  if (typeof value === 'boolean') return value;
+  if (value === undefined || value === null || value === '') return defaultValue;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+};
+
 const parseJsonArray = (value) => {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== 'string') return [];
@@ -82,9 +88,14 @@ router.post('/generate', async (req, res) => {
     const requestedPromptOnlyEngine = useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers;
     const shouldPreferStructuredRenderer = hasStructuredStoryContext && requestedPromptOnlyEngine;
 
-    const result = shouldPreferStructuredRenderer
+    const forceEngine = parseBoolean(req.body?.forceEngine, false);
+    const strictCogVideoX = parseBoolean(req.body?.strictCogVideoX, false);
+    const effectivePrompt = String(req.body?.enhancedPrompt || prompt || '').trim() || prompt;
+    const shouldBypassStructuredRenderer = forceEngine && (useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers);
+
+    const result = (!shouldBypassStructuredRenderer && shouldPreferStructuredRenderer)
       ? await generateKidsVideoFromPrompt({
-          prompt,
+          prompt: effectivePrompt,
           sceneCount: clampSceneCount(req.body?.sceneCount),
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           storyMode: req.body?.storyMode || 'moral',
@@ -96,30 +107,31 @@ router.post('/generate', async (req, res) => {
         })
       : useCogVideoX
       ? await generateKidsVideoFromCogVideoXPrompt({
-          prompt,
+          prompt: effectivePrompt,
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           numFrames: req.body?.numFrames,
           numInferenceSteps: req.body?.numInferenceSteps,
           guidanceScale: req.body?.guidanceScale,
           language: req.body?.language || req.body?.lang || 'en',
+          strict: strictCogVideoX,
         })
       : useLegacyScriptVideo
       ? await generateKidsVideoFromFreeSteveLikePrompt({
-          prompt,
+          prompt: effectivePrompt,
           sceneCount: clampSceneCount(req.body?.sceneCount),
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           language: req.body?.language || req.body?.lang || 'en',
         })
       : shouldUseDiffusers
       ? await generateKidsVideoFromDiffusersPrompt({
-          prompt,
+          prompt: effectivePrompt,
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           numFrames: req.body?.numFrames,
           numInferenceSteps: req.body?.numInferenceSteps,
           language: req.body?.language || req.body?.lang || 'en',
         })
       : await generateKidsVideoFromPrompt({
-          prompt,
+          prompt: effectivePrompt,
           sceneCount: clampSceneCount(req.body?.sceneCount),
           videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
           storyMode: req.body?.storyMode || 'moral',

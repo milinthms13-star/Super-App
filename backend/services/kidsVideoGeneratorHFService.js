@@ -1099,6 +1099,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
   numInferenceSteps = 30,
   guidanceScale = 6,
   language = 'en',
+  strict = false,
 }) => {
   await ensureDirectories();
   const cleanPrompt = sanitizeText(prompt);
@@ -1182,7 +1183,7 @@ const generateKidsVideoFromCogVideoXPrompt = async ({
       aiImagesEnabled: true,
     };
   } catch (error) {
-    const strictCogVideoX = String(process.env.HF_COGVIDEOX_STRICT || 'false').toLowerCase() === 'true';
+    const strictCogVideoX = strict || String(process.env.HF_COGVIDEOX_STRICT || 'false').toLowerCase() === 'true';
     if (strictCogVideoX) throw error;
 
     const fallbackResult = await generateKidsVideoFromPrompt({

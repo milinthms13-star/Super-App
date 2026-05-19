@@ -404,6 +404,50 @@ const buildCartoonRenderPayload = ({
 
 const getSceneId = (scene, index) => String(scene?.id || index + 1);
 
+const buildCogVideoPromptFromProject = ({
+  storyTitle,
+  storyPrompt,
+  characters = [],
+  scenes = [],
+  styleId,
+  storyMode,
+}) => {
+  const characterLine = (Array.isArray(characters) ? characters : [])
+    .slice(0, 3)
+    .map((character) => {
+      const name = sanitizeText(character?.name);
+      const role = sanitizeText(character?.role || "character");
+      const appearance = sanitizeText(character?.appearance || "child-safe animated look");
+      return name ? `${name} (${role}): ${appearance}` : "";
+    })
+    .filter(Boolean)
+    .join("; ");
+
+  const sceneLine = (Array.isArray(scenes) ? scenes : [])
+    .slice(0, 5)
+    .map((scene, index) => {
+      const title = sanitizeText(scene?.title || `Scene ${index + 1}`);
+      const description = sanitizeText(scene?.description || scene?.dialogue || "");
+      const emotion = sanitizeText(scene?.emotion || "wonder");
+      return `${title}: ${description} (emotion: ${emotion})`;
+    })
+    .filter(Boolean)
+    .join(" | ");
+
+  return sanitizeText(
+    [
+      `Title: ${sanitizeText(storyTitle || "Kids Story")}`,
+      `Story: ${sanitizeText(storyPrompt || "")}`,
+      `Style: ${sanitizeText(styleId || "cartoon")}, Mode: ${sanitizeText(storyMode || "moral")}, child-safe.`,
+      characterLine ? `Characters: ${characterLine}.` : "",
+      sceneLine ? `Storyboard: ${sceneLine}.` : "",
+      "Keep character identity consistent across the whole video, cinematic motion, no unrelated stock footage.",
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+};
+
 const KidsStoryVideoMaker = () => {
   const { t } = useTranslation();
   const recognitionRef = useRef(null);
@@ -1475,13 +1519,22 @@ const KidsStoryVideoMaker = () => {
       startRenderProgress();
 
       let selectedEngine = "";
-      let forcedStructuredRenderer = false;
+      let forceEngine = false;
       try {
         const normalizedEngine = normalizeRenderEngine(hfRenderEngine);
-        // Hard lock to structured renderer for this flow. Prompt-only engines
-        // have repeatedly ignored character continuity and scene intent.
-        forcedStructuredRenderer = Boolean(normalizedEngine);
-        selectedEngine = "";
+        selectedEngine = normalizedEngine && normalizedEngine !== "image_ffmpeg" ? normalizedEngine : "";
+        forceEngine = selectedEngine === "cogvideox";
+        const enhancedPromptForCogVideoX =
+          selectedEngine === "cogvideox"
+            ? buildCogVideoPromptFromProject({
+                storyTitle: sanitizeText(storyTitle || generatedProject?.title || "AI Kids Story Video Generator"),
+                storyPrompt: normalizedStoryPrompt,
+                characters: normalizedProjectCharacters,
+                scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
+                styleId,
+                storyMode,
+              })
+            : "";
         const selectedLanguageCode = (
           LANGUAGE_OPTIONS.find((option) => option.id === languageId)?.code || "en-US"
         )
@@ -1502,6 +1555,13 @@ const KidsStoryVideoMaker = () => {
               project: pipelineProjectPayload,
               characters: normalizedProjectCharacters,
               scenes: normalizedScenesForPipeline.slice(0, fallbackSceneCount),
+              forceEngine,
+              strictCogVideoX: selectedEngine === "cogvideox",
+              ...(selectedEngine === "cogvideox" && enhancedPromptForCogVideoX
+                ? {
+                    enhancedPrompt: enhancedPromptForCogVideoX,
+                  }
+                : {}),
               ...(selectedEngine
                 ? {
                     engine: selectedEngine,
@@ -1550,9 +1610,9 @@ const KidsStoryVideoMaker = () => {
         setRenderProgress(100);
         setRenderProgressLabel("Render complete.");
         setMessage(
-          forcedStructuredRenderer
-              ? "Character-focused render complete using structured scene renderer."
-              : payload.aiImagesEnabled
+          selectedEngine === "cogvideox"
+            ? "CogVideoX render complete with enforced character/story prompt."
+            : payload.aiImagesEnabled
               ? "Scene pipeline render complete with regenerated scenes and AI visuals."
               : "Render complete using fallback visuals."
         );

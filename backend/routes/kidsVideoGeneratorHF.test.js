@@ -161,4 +161,38 @@ describe('kids-video-hf routes', () => {
     );
     expect(generateKidsVideoFromCogVideoXPrompt).not.toHaveBeenCalled();
   });
+
+  test('POST /api/kids-video-hf/generate honors forced cogvideox even with structured scenes', async () => {
+    generateKidsVideoFromCogVideoXPrompt.mockResolvedValue({
+      projectId: 'proj-cog-forced-1',
+      videoUrl: '/uploads/kids-video-hf/proj-cog-forced-1/story-render.mp4',
+      aiImagesEnabled: true,
+      project: {
+        projectId: 'proj-cog-forced-1',
+        workflowType: 'kids-video-cogvideox-text-to-video',
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/generate')
+      .send({
+        prompt: 'lion and cat story',
+        enhancedPrompt: 'ENHANCED lion cat storyboard prompt',
+        engine: 'cogvideox',
+        strictCogVideoX: true,
+        forceEngine: true,
+        scenes: [{ id: 1, title: 'Forest' }],
+        characters: [{ name: 'Lion' }, { name: 'Cat' }],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(generateKidsVideoFromCogVideoXPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'ENHANCED lion cat storyboard prompt',
+        strict: true,
+      })
+    );
+    expect(generateKidsVideoFromPrompt).not.toHaveBeenCalled();
+  });
 });
