@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import VoiceNoteRecorder from '../../../components/VoiceNoteRecorder';
 import { validateReminderForm } from '../validation';
 import { 
@@ -32,6 +32,26 @@ const CHANNEL_OPTIONS = [
     value: 'Call',
     title: 'Voice call',
     description: 'Triggers an automated phone reminder with your message.',
+  },
+  {
+    value: 'Email',
+    title: 'Email',
+    description: 'Sends a reminder email at your configured reminder times.',
+  },
+  {
+    value: 'WhatsApp',
+    title: 'WhatsApp',
+    description: 'Delivers reminders as WhatsApp messages.',
+  },
+  {
+    value: 'Telegram',
+    title: 'Telegram',
+    description: 'Sends reminders to your Telegram chat.',
+  },
+  {
+    value: 'Push',
+    title: 'Push notification',
+    description: 'Shows reminders on connected devices with push enabled.',
   },
 ];
 

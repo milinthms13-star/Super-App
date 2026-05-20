@@ -195,6 +195,7 @@ const appDataRoutes = require('./routes/appData');
 app.use('/api/auth', authRoutes);
 app.use('/api/appdata', appDataRoutes);
 app.use('/api/app-data', appDataRoutes);
+app.use('/api/realestate', require('./routes/realestate'));
 app.use('/api/business-builder', require('./routes/businessBuilderRoutes'));
 app.use('/api/video-studio', createLazyRouteMiddleware('./routes/videoStudio'));
 app.use('/api/kids-video-hf', createLazyRouteMiddleware('./routes/kidsVideoGeneratorHF'));

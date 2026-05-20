@@ -1552,10 +1552,11 @@ const ChatWindow = ({
 
         {showAISuggestions && chat?._id && latestMessageId && (
           <div className="smart-replies-inline-row">
-            <span className="smart-replies-label">AI replies</span>
+            <span className="smart-replies-label">AI quick replies</span>
             <AISmartReplies
               chatId={chat?._id}
               messageId={latestMessageId}
+              language={currentUser?.preferredLanguage || 'en'}
               onSelectReply={onSelectAISuggestion}
             />
           </div>

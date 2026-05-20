@@ -7,6 +7,9 @@ const healthcareMedicineSchema = new mongoose.Schema(
     category: { type: String, default: '', trim: true, index: true },
     requiresPrescription: { type: Boolean, default: false, index: true },
     stock: { type: Number, default: 0, min: 0 },
+    purpose: { type: String, default: '', trim: true },
+    ingredients: { type: String, default: '', trim: true },
+    warning: { type: String, default: '', trim: true },
     vendorName: { type: String, default: '', trim: true },
     approvalStatus: {
       type: String,

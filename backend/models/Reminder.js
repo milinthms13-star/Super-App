@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 
+const padDatePart = (value) => String(value).padStart(2, '0');
+const getLocalDateString = (date) =>
+  `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+
 const reminderSchema = new mongoose.Schema({
   userId: {
     type: String,
@@ -43,7 +47,7 @@ const reminderSchema = new mongoose.Schema({
   },
   reminders: [{
     type: String,
-    enum: ['Email', 'In-app', 'SMS', 'Call']
+    enum: ['Email', 'In-app', 'SMS', 'Call', 'WhatsApp', 'Telegram', 'Push']
   }],
   recurring: {
     type: String,
@@ -240,6 +244,11 @@ const reminderSchema = new mongoose.Schema({
   // PHASE 1 FEATURES END
 
   // Phase 3 Email field
+  smsPhoneNumber: {
+    type: String
+  },
+
+  // Phase 3 Email field
   email: {
     type: String,
     lowercase: true,
@@ -326,7 +335,7 @@ reminderSchema.methods.isDue = function() {
   if (this.completed) return false;
   const now = new Date();
   const dueDateTime = this.dueTime ?
-    new Date(`${this.dueDate.toISOString().split('T')[0]}T${this.dueTime}`) :
+    new Date(`${getLocalDateString(this.dueDate)}T${this.dueTime}`) :
     new Date(this.dueDate);
   return dueDateTime <= now;
 };
@@ -338,7 +347,7 @@ reminderSchema.methods.needsNotification = function() {
   
   const now = new Date();
   const dueDateTime = this.dueTime ?
-    new Date(`${this.dueDate.toISOString().split('T')[0]}T${this.dueTime}`) :
+    new Date(`${getLocalDateString(this.dueDate)}T${this.dueTime}`) :
     new Date(this.dueDate);
 
   // Check each configured remind-before offset
@@ -368,7 +377,7 @@ reminderSchema.methods.getNextNotificationOffset = function() {
   
   const now = new Date();
   const dueDateTime = this.dueTime ?
-    new Date(`${this.dueDate.toISOString().split('T')[0]}T${this.dueTime}`) :
+    new Date(`${getLocalDateString(this.dueDate)}T${this.dueTime}`) :
     new Date(this.dueDate);
 
   const offsets = this.reminderBeforeOffsets && this.reminderBeforeOffsets.length > 0

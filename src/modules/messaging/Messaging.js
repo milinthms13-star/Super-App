@@ -2536,7 +2536,10 @@ const Messaging = () => {
   };
 
   const handleAISuggestionSelect = (replyText) => {
-    handleSendMessage(replyText);
+    if (!replyText?.trim()) {
+      return;
+    }
+    handleSendMessage(replyText.trim());
     setShowAISuggestions(false);
   };
 

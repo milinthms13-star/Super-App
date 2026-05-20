@@ -13,12 +13,14 @@ import ReminderForm from './components/ReminderForm';
 import ReminderList from './components/ReminderList';
 import ReminderFilters from './components/ReminderFilters';
 import ReminderStats from './components/ReminderStats';
+import ReminderQuickCreate from './components/ReminderQuickCreate';
 import CountdownTimer from './components/CountdownTimer';
 import ErrorAlert from './components/ErrorAlert';
 import TrustedContacts from './TrustedContacts';
 import { announceToScreenReader } from './utils/a11y';
 import { validateReminderForm } from './validation';
 import { toDateInputValue } from './reminderUtils';
+import { toLocalDateValue, toLocalTimeValue } from './reminderSmartUtils';
 
 const INITIAL_FORM = {
   title: '',
@@ -29,6 +31,14 @@ const INITIAL_FORM = {
   dueTime: '',
   reminders: ['In-app'],
   recurring: 'none',
+  reminderBeforeOffsets: [5],
+  snoozeOptions: [5, 10, 15, 30],
+  smsPhoneNumber: '',
+  email: '',
+  whatsappPhoneNumber: '',
+  telegramChatId: '',
+  pushEnabled: false,
+  templateId: '',
   sharedWithTrustedContacts: [],
 };
 
@@ -173,7 +183,13 @@ const ReminderAlert = () => {
 
   // Form handlers
   const clearEditorValues = useCallback(() => {
-    setFormData(INITIAL_FORM);
+    setFormData({
+      ...INITIAL_FORM,
+      reminders: [...INITIAL_FORM.reminders],
+      reminderBeforeOffsets: [...INITIAL_FORM.reminderBeforeOffsets],
+      snoozeOptions: [...INITIAL_FORM.snoozeOptions],
+      sharedWithTrustedContacts: [...INITIAL_FORM.sharedWithTrustedContacts],
+    });
     setVoiceCallData(INITIAL_VOICE_CALL_FORM);
     setEditingTaskId('');
     setSubmitError(null);
@@ -201,6 +217,12 @@ const ReminderAlert = () => {
         return {
           ...current,
           reminders: nextReminderChannels,
+          pushEnabled:
+            value === 'Push'
+              ? checked
+              : nextReminderChannels.includes('Push')
+                ? current.pushEnabled
+                : false,
         };
       });
 
@@ -214,6 +236,59 @@ const ReminderAlert = () => {
           voiceNotePreviewUrl: '',
         }));
       }
+      return;
+    }
+
+    if (type === 'checkbox' && name === 'reminderBeforeOffsets') {
+      const offsetValue = Number(value);
+      if (Number.isNaN(offsetValue)) return;
+      setFormData((current) => {
+        const currentOffsets = Array.isArray(current.reminderBeforeOffsets)
+          ? current.reminderBeforeOffsets
+          : [];
+        const nextOffsets = checked
+          ? [...new Set([...currentOffsets, offsetValue])]
+          : currentOffsets.filter((item) => item !== offsetValue);
+
+        return {
+          ...current,
+          reminderBeforeOffsets: nextOffsets,
+        };
+      });
+      return;
+    }
+
+    if (type === 'checkbox' && name === 'snoozeOptions') {
+      const snoozeValue = Number(value);
+      if (Number.isNaN(snoozeValue)) return;
+      setFormData((current) => {
+        const currentOptions = Array.isArray(current.snoozeOptions) ? current.snoozeOptions : [];
+        const nextOptions = checked
+          ? [...new Set([...currentOptions, snoozeValue])]
+          : currentOptions.filter((item) => item !== snoozeValue);
+
+        return {
+          ...current,
+          snoozeOptions: nextOptions,
+        };
+      });
+      return;
+    }
+
+    if (type === 'checkbox' && name === 'pushEnabled') {
+      setFormData((current) => {
+        const hasPushChannel = current.reminders.includes('Push');
+        const nextReminders = checked
+          ? hasPushChannel
+            ? current.reminders
+            : [...current.reminders, 'Push']
+          : current.reminders.filter((item) => item !== 'Push');
+        return {
+          ...current,
+          pushEnabled: checked,
+          reminders: nextReminders,
+        };
+      });
       return;
     }
 
@@ -288,6 +363,23 @@ const ReminderAlert = () => {
       dueTime: task.dueTime || '',
       reminders: Array.isArray(task.reminders) && task.reminders.length ? task.reminders : ['In-app'],
       recurring: task.recurring || 'none',
+      reminderBeforeOffsets:
+        Array.isArray(task.reminderBeforeOffsets) && task.reminderBeforeOffsets.length
+          ? task.reminderBeforeOffsets
+          : [5],
+      snoozeOptions:
+        Array.isArray(task.snoozeOptions) && task.snoozeOptions.length
+          ? task.snoozeOptions
+          : [5, 10, 15, 30],
+      smsPhoneNumber: task.smsPhoneNumber || '',
+      email: task.email || '',
+      whatsappPhoneNumber: task.whatsappPhoneNumber || '',
+      telegramChatId: task.telegramChatId || '',
+      pushEnabled: Boolean(task.pushEnabled || task.reminders?.includes('Push')),
+      templateId:
+        typeof task.templateId === 'string'
+          ? task.templateId
+          : task.templateId?._id || '',
       sharedWithTrustedContacts: task.sharedWithTrustedContacts || [],
     });
     setVoiceCallData({
@@ -367,7 +459,16 @@ const ReminderAlert = () => {
 
       const payload = {
         ...formData,
-        dueDate: new Date(formData.dueDate),
+        dueDate: toDateInputValue(formData.dueDate),
+        dueTime: formData.dueTime || '',
+        reminderBeforeOffsets:
+          Array.isArray(formData.reminderBeforeOffsets) && formData.reminderBeforeOffsets.length
+            ? formData.reminderBeforeOffsets
+            : [5],
+        snoozeOptions:
+          Array.isArray(formData.snoozeOptions) && formData.snoozeOptions.length
+            ? formData.snoozeOptions
+            : [5, 10, 15, 30],
         recipientPhoneNumber: formData.reminders.includes('Call')
           ? voiceCallData.recipientPhoneNumber
           : '',
@@ -421,6 +522,49 @@ const ReminderAlert = () => {
     loadReminders,
     closeEditor,
   ]);
+
+  const handleQuickCreate = useCallback(
+    async (payload) => {
+      try {
+        setSubmitting(true);
+        setSubmitError(null);
+        await createReminder({
+          ...INITIAL_FORM,
+          ...payload,
+        });
+        await loadReminders();
+        announceToScreenReader('Quick reminder created successfully', 'polite');
+      } catch (err) {
+        console.error('Error creating quick reminder:', err);
+        setSubmitError(err.message || 'Failed to create quick reminder');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [createReminder, loadReminders]
+  );
+
+  const handleTemplateApply = useCallback((template) => {
+    const now = new Date();
+    const defaultDueAt = new Date(now.getTime() + 60 * 60 * 1000);
+    setFormData((current) => ({
+      ...current,
+      title: template.title,
+      category: template.category,
+      priority: template.priority,
+      reminders: Array.isArray(template.reminders) && template.reminders.length
+        ? template.reminders
+        : ['In-app'],
+      reminderBeforeOffsets:
+        Array.isArray(template.reminderBeforeOffsets) && template.reminderBeforeOffsets.length
+          ? template.reminderBeforeOffsets
+          : [5],
+      dueDate: current.dueDate || toLocalDateValue(defaultDueAt),
+      dueTime: current.dueTime || toLocalTimeValue(defaultDueAt),
+      pushEnabled: (template.reminders || []).includes('Push'),
+    }));
+    setShowAddForm(true);
+  }, []);
 
   return (
     <div className="reminderalert-page">
@@ -518,6 +662,13 @@ const ReminderAlert = () => {
       >
         {showAddForm ? 'Close editor' : '+ Add reminder'}
       </button>
+
+      {/* Statistics */}
+      <ReminderQuickCreate
+        submitting={submitting}
+        onCreate={handleQuickCreate}
+        onApplyTemplate={handleTemplateApply}
+      />
 
       {/* Statistics */}
       <ReminderStats stats={stats} reminders={reminders} />

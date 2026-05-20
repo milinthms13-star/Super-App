@@ -1,0 +1,80 @@
+
+/* Healthcare lab/pharmacy selection + info upgrade */
+.healthcare-selection-panel {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 14px;
+  padding: 16px;
+  margin: 14px 0 18px;
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(240, 249, 255, 0.9), rgba(255, 255, 255, 0.95));
+}
+
+.healthcare-partner-summary,
+.healthcare-medical-disclaimer,
+.healthcare-info-card {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.healthcare-partner-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.healthcare-medical-disclaimer {
+  margin: 12px 0;
+  color: #7c2d12;
+  background: #fff7ed;
+  border-color: #fed7aa;
+  font-weight: 700;
+}
+
+.healthcare-info-card {
+  margin: 12px 0 18px;
+}
+
+.healthcare-info-card.compact {
+  margin: 0 0 12px;
+}
+
+.healthcare-info-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.healthcare-info-row span {
+  display: block;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.healthcare-info-row p,
+.healthcare-brief-info {
+  margin: 4px 0;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.healthcare-info-enabled-card {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.healthcare-info-enabled-card small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+}
+
+@media (max-width: 760px) {
+  .healthcare-selection-panel {
+    grid-template-columns: 1fr;
+  }
+}

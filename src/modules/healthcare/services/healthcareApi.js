@@ -13,8 +13,10 @@ import {
 const endpoints = {
   doctors: buildApiUrl("/doctors"),
   labTests: buildApiUrl("/lab-tests"),
+  labTestsInfo: buildApiUrl("/lab-tests/info"),
   healthPackages: buildApiUrl("/health-packages"),
   medicines: buildApiUrl("/medicines"),
+  medicinesInfo: buildApiUrl("/medicines/info"),
   records: buildApiUrl("/records"),
   appointments: buildApiUrl("/appointments"),
   familyProfiles: buildApiUrl("/family-profiles"),
@@ -78,6 +80,31 @@ export const healthcareApi = {
     }, () => MOCK_HEALTH_PACKAGES, { fallbackStatuses: [401, 403, 404] });
   },
 
+  getLabTestInfo: async (query = "") => {
+    return getWithFallback(async () => {
+      const response = await axios.get(endpoints.labTestsInfo, {
+        ...authHeaders(),
+        params: query ? { q: query } : {},
+      });
+      const data = unwrap(response) || {};
+      return {
+        query: data.query || query,
+        matches: Array.isArray(data.matches) ? data.matches : [],
+        fallback: data.fallback || null,
+      };
+    }, () => ({
+      query,
+      matches: [],
+      fallback: query
+        ? {
+            purpose: `${query} test body condition assess cheyyan doctor suggest cheyyunna diagnostic test aanu.`,
+            usedFor: "Symptoms, screening, follow-up, or doctor recommendation based evaluation.",
+            preparation: "Booking before lab preparation/fasting instruction confirm cheyyuka.",
+          }
+        : null,
+    }), { fallbackStatuses: [401, 403, 404] });
+  },
+
   getMedicines: async (query = "") => {
     return getWithFallback(async () => {
       const response = await axios.get(endpoints.medicines, {
@@ -94,6 +121,31 @@ export const healthcareApi = {
         return item.name.toLowerCase().includes(normalizedQuery) || item.category.toLowerCase().includes(normalizedQuery);
       });
     }, { fallbackStatuses: [401, 403, 404] });
+  },
+
+  getMedicineInfo: async (query = "") => {
+    return getWithFallback(async () => {
+      const response = await axios.get(endpoints.medicinesInfo, {
+        ...authHeaders(),
+        params: query ? { q: query } : {},
+      });
+      const data = unwrap(response) || {};
+      return {
+        query: data.query || query,
+        matches: Array.isArray(data.matches) ? data.matches : [],
+        fallback: data.fallback || null,
+      };
+    }, () => ({
+      query,
+      matches: [],
+      fallback: query
+        ? {
+            purpose: `${query} medicine doctor/pharmacist advice anusarich use cheyyenda medicine aanu.`,
+            ingredients: "Exact ingredients brand/strip label anusarich verify cheyyuka.",
+            warning: "Self-medication avoid cheyyuka. Doctor/pharmacist advice follow cheyyuka.",
+          }
+        : null,
+    }), { fallbackStatuses: [401, 403, 404] });
   },
 
   getRecords: async () => {

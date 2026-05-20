@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { healthcareApi } from "../services/healthcareApi";
 
 const formatCurrency = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
 const NEXT_ORDER_STATUS = {
@@ -7,8 +8,35 @@ const NEXT_ORDER_STATUS = {
   out_for_delivery: "delivered",
 };
 
+const PHARMACY_PARTNERS = [
+  { id: "nila-pharma", name: "NilaCare Pharmacy", area: "Kollam", deliveryEta: "45-90 mins", rating: 4.8 },
+  { id: "metro-meds", name: "Metro Meds", area: "Trivandrum", deliveryEta: "Same day", rating: 4.6 },
+  { id: "wellness-plus", name: "Wellness Plus Pharmacy", area: "Kochi", deliveryEta: "2-4 hours", rating: 4.7 },
+  { id: "malabar-meds", name: "Malabar Meds", area: "Calicut", deliveryEta: "Same day", rating: 4.5 },
+];
+
+const getMedicineInfoFromItem = (medicine = {}) => {
+  const fallback = {
+    purpose: `${medicine.name || "This medicine"} doctor/pharmacist advice anusarich use cheyyenda medicine aanu.`,
+    ingredients: medicine.composition || medicine.ingredients || "Exact ingredients brand/strip label anusarich verify cheyyuka.",
+    warning: medicine.requiresPrescription
+      ? "Prescription required. Doctor advice illathe use cheyyaruthu."
+      : "Label instructions and pharmacist advice follow cheyyuka.",
+  };
+
+  const nestedInfo = medicine.info || {};
+  return {
+    purpose: medicine.purpose || nestedInfo.purpose || fallback.purpose,
+    ingredients: medicine.ingredients || nestedInfo.ingredients || fallback.ingredients,
+    warning: medicine.warning || nestedInfo.warning || fallback.warning,
+  };
+};
+
 const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyPayment, onUpdateOrderStatus }) => {
   const [query, setQuery] = useState("");
+  const [selectedPharmacyId, setSelectedPharmacyId] = useState(PHARMACY_PARTNERS[0].id);
+  const [medicineExplanationLoading, setMedicineExplanationLoading] = useState(false);
+  const [medicineExplanation, setMedicineExplanation] = useState({ matches: [], fallback: null });
   const [cart, setCart] = useState([]);
   const [prescriptionFile, setPrescriptionFile] = useState(null);
   const [prescriptionVerified, setPrescriptionVerified] = useState(false);
@@ -25,22 +53,78 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
     paymentMethod: "upi",
   });
 
+  const selectedPharmacy = useMemo(
+    () => PHARMACY_PARTNERS.find((pharmacy) => pharmacy.id === selectedPharmacyId) || PHARMACY_PARTNERS[0],
+    [selectedPharmacyId]
+  );
+
+  const enrichedMedicines = useMemo(() => {
+    return (medicines || []).map((medicine) => ({ ...medicine, info: getMedicineInfoFromItem(medicine) }));
+  }, [medicines]);
+
   const filteredMedicines = useMemo(() => {
     if (!query.trim()) {
-      return medicines;
+      return enrichedMedicines;
     }
 
     const normalizedQuery = query.toLowerCase();
-    return (medicines || []).filter((medicine) => {
+    return enrichedMedicines.filter((medicine) => {
       return (
-        medicine.name.toLowerCase().includes(normalizedQuery) || medicine.category.toLowerCase().includes(normalizedQuery)
+        medicine.name.toLowerCase().includes(normalizedQuery) ||
+        medicine.category.toLowerCase().includes(normalizedQuery) ||
+        medicine.info.purpose.toLowerCase().includes(normalizedQuery) ||
+        medicine.info.ingredients.toLowerCase().includes(normalizedQuery)
       );
     });
-  }, [medicines, query]);
+  }, [enrichedMedicines, query]);
+
+  const explanationRows = useMemo(() => {
+    if (Array.isArray(medicineExplanation.matches) && medicineExplanation.matches.length > 0) {
+      return medicineExplanation.matches.map((item) => ({ ...item, info: getMedicineInfoFromItem(item) }));
+    }
+    return filteredMedicines.slice(0, 3).map((item) => ({ ...item, info: getMedicineInfoFromItem(item) }));
+  }, [filteredMedicines, medicineExplanation.matches]);
 
   const cartTotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
   }, [cart]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setMedicineExplanation({ matches: [], fallback: null });
+      setMedicineExplanationLoading(false);
+      return;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setMedicineExplanationLoading(true);
+      try {
+        const response = await healthcareApi.getMedicineInfo(query);
+        if (!active) {
+          return;
+        }
+        setMedicineExplanation({
+          matches: Array.isArray(response?.matches) ? response.matches : [],
+          fallback: response?.fallback || null,
+        });
+      } catch (_error) {
+        if (!active) {
+          return;
+        }
+        setMedicineExplanation({ matches: [], fallback: null });
+      } finally {
+        if (active) {
+          setMedicineExplanationLoading(false);
+        }
+      }
+    }, 280);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
 
   const addToCart = (medicine) => {
     if (medicine.requiresPrescription && !prescriptionVerified) {
@@ -51,22 +135,21 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
     setCart((previous) => {
       const existingItem = previous.find((item) => item.id === medicine.id);
       if (existingItem) {
-        return previous.map((item) => {
-          if (item.id !== medicine.id) {
-            return item;
-          }
-
-          return {
-            ...item,
-            quantity: item.quantity + 1,
-          };
-        });
+        return previous.map((item) => (item.id === medicine.id ? { ...item, quantity: item.quantity + 1 } : item));
       }
 
-      return [...previous, { ...medicine, quantity: 1 }];
+      return [
+        ...previous,
+        {
+          ...medicine,
+          pharmacyId: selectedPharmacy.id,
+          pharmacyName: selectedPharmacy.name,
+          quantity: 1,
+        },
+      ];
     });
 
-    setFeedbackMessage(`${medicine.name} added to cart.`);
+    setFeedbackMessage(`${medicine.name} added from ${selectedPharmacy.name}.`);
   };
 
   const verifyPrescription = async () => {
@@ -101,6 +184,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
       setFeedbackMessage("Fill all payment and delivery details.");
       return;
     }
+
     const hasPrescriptionMedicines = cart.some((item) => item.requiresPrescription);
     if (hasPrescriptionMedicines && (!prescriptionVerified || !prescriptionFile)) {
       setFeedbackMessage("Prescription verification is required for restricted medicines before checkout.");
@@ -112,6 +196,9 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
     try {
       const created = await onCreateOrder?.({
         order: {
+          pharmacyId: selectedPharmacy.id,
+          pharmacyName: selectedPharmacy.name,
+          pharmacyArea: selectedPharmacy.area,
           items: cart.map((item) => ({
             medicineId: item.id,
             name: item.name,
@@ -119,12 +206,14 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
             price: item.price,
             quantity: item.quantity,
             requiresPrescription: item.requiresPrescription,
+            ingredients: item.info?.ingredients,
+            purpose: item.info?.purpose,
           })),
           deliveryAddress: paymentForm.address,
           phone: paymentForm.phone,
           customerName: paymentForm.fullName,
           paymentMethod: paymentForm.paymentMethod,
-          notes: "",
+          notes: `Selected pharmacy: ${selectedPharmacy.name}, ETA: ${selectedPharmacy.deliveryEta}`,
           prescriptionVerified,
           requiresPrescriptionReview: hasPrescriptionMedicines,
         },
@@ -146,7 +235,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
         address: "",
         paymentMethod: "upi",
       });
-      setFeedbackMessage("Order placed successfully. Payment flow completed.");
+      setFeedbackMessage(`Order placed with ${selectedPharmacy.name}.`);
     } finally {
       setPlacingOrder(false);
     }
@@ -156,7 +245,11 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
     <section className="healthcare-section">
       <div className="healthcare-section-heading">
         <h2>Pharmacy Delivery</h2>
-        <p>Cart and payment flow with prescription safety checks for restricted medicines.</p>
+        <p>Select pharmacy, search medicines, view ingredients/use, and order safely.</p>
+      </div>
+
+      <div className="healthcare-medical-disclaimer">
+        Medicine information is general awareness only. Do not self-medicate. Prescription medicines must be used only after doctor consultation.
       </div>
 
       {feedbackMessage ? (
@@ -165,10 +258,64 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
         </div>
       ) : null}
 
+      <div className="healthcare-selection-panel">
+        <label className="healthcare-field">
+          <span>Select Pharmacy</span>
+          <select value={selectedPharmacyId} onChange={(event) => setSelectedPharmacyId(event.target.value)}>
+            {PHARMACY_PARTNERS.map((pharmacy) => (
+              <option key={pharmacy.id} value={pharmacy.id}>
+                {pharmacy.name} - {pharmacy.area} - {pharmacy.rating}*
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="healthcare-field healthcare-field-full">
+          <span>Search medicine / ingredient</span>
+          <input
+            type="text"
+            className="healthcare-search-input"
+            placeholder="Eg: Paracetamol, Cetirizine, Metformin, fever, allergy"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+
+        <div className="healthcare-partner-summary">
+          <strong>{selectedPharmacy.name}</strong>
+          <span>
+            {selectedPharmacy.area} | Delivery: {selectedPharmacy.deliveryEta}
+          </span>
+        </div>
+      </div>
+
+      {query.trim() ? (
+        <div className="healthcare-info-card">
+          <strong>Medicine explanation</strong>
+          {medicineExplanationLoading ? <p>Checking medicine details...</p> : null}
+          {!medicineExplanationLoading
+            ? explanationRows.map((medicine) => (
+                <div key={medicine.id || medicine.name} className="healthcare-info-row">
+                  <span>{medicine.name}</span>
+                  <p>{medicine.info.purpose}</p>
+                  <small>Ingredients: {medicine.info.ingredients}</small>
+                </div>
+              ))
+            : null}
+          {!medicineExplanationLoading && explanationRows.length === 0 && medicineExplanation.fallback ? (
+            <div className="healthcare-info-row">
+              <span>{query}</span>
+              <p>{medicineExplanation.fallback.purpose}</p>
+              <small>Ingredients: {medicineExplanation.fallback.ingredients}</small>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="healthcare-pharmacy-grid">
         <div className="healthcare-upload-card">
           <h3>Prescription Verification</h3>
-          <p>Required for antibiotics and selected chronic-care medicines.</p>
+          <p>Required for antibiotics, BP, diabetes, insulin, and selected chronic-care medicines.</p>
           <input
             type="file"
             accept="image/*,application/pdf"
@@ -198,32 +345,24 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
         </div>
 
         <div className="healthcare-medicines-section">
-          <label className="healthcare-field">
-            <span>Search medicines</span>
-            <input
-              type="text"
-              className="healthcare-search-input"
-              placeholder="Search by medicine name or category"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-
           {loading ? <p>Loading medicines...</p> : null}
 
           <div className="healthcare-medicines-list">
             {filteredMedicines.map((medicine) => (
-              <article key={medicine.id} className="healthcare-medicine-card">
+              <article key={medicine.id} className="healthcare-medicine-card healthcare-info-enabled-card">
                 <div>
                   <strong>{medicine.name}</strong>
                   <span>
                     {medicine.category} | {formatCurrency(medicine.price)}
                   </span>
+                  <p className="healthcare-brief-info">{medicine.info.purpose}</p>
+                  <small>Ingredients: {medicine.info.ingredients}</small>
                   {medicine.requiresPrescription ? (
                     <span className="healthcare-warning-text">Prescription required</span>
                   ) : (
                     <span className="healthcare-success-text">No prescription required</span>
                   )}
+                  <small className="healthcare-warning-text">{medicine.info.warning}</small>
                 </div>
 
                 <button
@@ -256,6 +395,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
               <strong>{order.id}</strong>
               <span>{(order.items || []).length} item(s)</span>
               <span>Total: {formatCurrency(order.totalAmount || 0)}</span>
+              <span>Pharmacy: {order.pharmacyName || "Selected pharmacy"}</span>
               <span>Order status: {order.orderStatus || "placed"}</span>
               <span>Payment: {order.paymentStatus || "pending"}</span>
               {order.requiresPrescriptionReview ? <span>Prescription: verified</span> : null}
@@ -281,7 +421,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
         <div className="healthcare-modal-overlay" role="dialog" aria-modal="true" aria-label="Pharmacy cart">
           <div className="healthcare-modal">
             <div className="healthcare-modal-header">
-              <h3>Cart</h3>
+              <h3>Cart - {selectedPharmacy.name}</h3>
               <button type="button" className="healthcare-close-button" onClick={() => setShowCart(false)}>
                 Close
               </button>
@@ -296,6 +436,7 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
                   <span>
                     {item.quantity} x {formatCurrency(item.price)}
                   </span>
+                  <small>{item.info?.ingredients}</small>
                 </div>
               ))}
             </div>
@@ -326,6 +467,17 @@ const PharmacyDelivery = ({ medicines, loading, orders, onCreateOrder, onVerifyP
             </div>
 
             <form className="healthcare-form-grid" onSubmit={placeOrder}>
+              <label className="healthcare-field">
+                <span>Pharmacy</span>
+                <select value={selectedPharmacyId} onChange={(event) => setSelectedPharmacyId(event.target.value)}>
+                  {PHARMACY_PARTNERS.map((pharmacy) => (
+                    <option key={pharmacy.id} value={pharmacy.id}>
+                      {pharmacy.name} - {pharmacy.area}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className="healthcare-field">
                 <span>Full Name</span>
                 <input

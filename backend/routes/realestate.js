@@ -55,6 +55,20 @@ router.get('/', redisCache.cacheList('realestate:list'), async (req, res) => {
   }
 });
 
+router.get('/:id', async (req, res) => {
+  try {
+    const property = await realEstateStore.findRealEstatePropertyById(req.params.id);
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Property not found' });
+    }
+
+    res.json({ success: true, data: property });
+  } catch (error) {
+    logger.error('RealEstate detail:', error);
+    res.status(500).json({ success: false, message: 'Fetch failed' });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const { error, value } = realEstateListingCreateSchema.validate(req.body);

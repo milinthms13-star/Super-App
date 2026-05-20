@@ -4,6 +4,12 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const { authenticate, verifyAdmin, hasAdminPrivileges } = require('../middleware/auth');
 const { uploadToS3, deleteFromS3, generateSignedUrl } = require('../utils/s3Storage');
+const {
+  buildLabTestInfo,
+  buildMedicineInfo,
+  explainLabTestQuery,
+  explainMedicineQuery,
+} = require('../services/healthcareInfoService');
 
 const HealthcareDoctor = require('../models/healthcare/HealthcareDoctor');
 const HealthcareLabTest = require('../models/healthcare/HealthcareLabTest');
@@ -423,7 +429,14 @@ router.get('/lab-tests', async (req, res) => {
         query.approvalStatus = approvalStatus;
       }
       const tests = await HealthcareLabTest.find(query).sort({ createdAt: -1 }).lean();
-      return res.status(200).json({ success: true, data: tests.map(toClientObject) });
+      const enrichedTests = tests.map((item) => {
+        const normalized = toClientObject(item);
+        return {
+          ...normalized,
+          info: buildLabTestInfo(normalized),
+        };
+      });
+      return res.status(200).json({ success: true, data: enrichedTests });
     }
 
     const tests = inMemoryStore.labTests.filter((test) => {
@@ -435,9 +448,32 @@ router.get('/lab-tests', async (req, res) => {
       }
       return Boolean(test.isActive);
     });
-    return res.status(200).json({ success: true, data: tests });
+    const enrichedTests = tests.map((test) => ({
+      ...test,
+      info: buildLabTestInfo(test),
+    }));
+    return res.status(200).json({ success: true, data: enrichedTests });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Unable to fetch lab tests', error: error.message });
+  }
+});
+
+router.get('/lab-tests/info', async (req, res) => {
+  try {
+    const queryText = String(req.query.q || '').trim();
+    let availableTests = [];
+
+    if (isMongoReady()) {
+      await ensureHealthcareSeedData();
+      availableTests = await HealthcareLabTest.find({ isActive: true, approvalStatus: 'approved' }).lean();
+    } else {
+      availableTests = inMemoryStore.labTests.filter((test) => Boolean(test.isActive) && test.approvalStatus === 'approved');
+    }
+
+    const explanation = explainLabTestQuery(queryText, availableTests.map(toClientObject));
+    return res.status(200).json({ success: true, data: explanation });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Unable to fetch test explanation', error: error.message });
   }
 });
 
@@ -456,11 +492,20 @@ router.post('/lab-tests', authenticate, async (req, res) => {
         homeCollection: Boolean(payload.homeCollection),
         type: payload.type === 'scan' ? 'scan' : payload.type || 'blood',
         turnaroundHours: parseNumber(payload.turnaroundHours, 24),
+        purpose: payload.purpose || '',
+        usedFor: payload.usedFor || '',
         preparationNotes: payload.preparationNotes || '',
         partnerName: payload.partnerName || req.user.name || '',
         approvalStatus,
       });
-      return res.status(201).json({ success: true, data: toClientObject(created) });
+      const normalized = toClientObject(created);
+      return res.status(201).json({
+        success: true,
+        data: {
+          ...normalized,
+          info: buildLabTestInfo(normalized),
+        },
+      });
     }
 
     const created = {
@@ -470,6 +515,8 @@ router.post('/lab-tests', authenticate, async (req, res) => {
       homeCollection: Boolean(payload.homeCollection),
       type: payload.type === 'scan' ? 'scan' : payload.type || 'blood',
       turnaroundHours: parseNumber(payload.turnaroundHours, 24),
+      purpose: payload.purpose || '',
+      usedFor: payload.usedFor || '',
       preparationNotes: payload.preparationNotes || '',
       partnerName: payload.partnerName || req.user.name || '',
       approvalStatus,
@@ -478,7 +525,13 @@ router.post('/lab-tests', authenticate, async (req, res) => {
       updatedAt: new Date().toISOString(),
     };
     inMemoryStore.labTests.unshift(created);
-    return res.status(201).json({ success: true, data: created });
+    return res.status(201).json({
+      success: true,
+      data: {
+        ...created,
+        info: buildLabTestInfo(created),
+      },
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Unable to create lab test', error: error.message });
   }
@@ -586,7 +639,14 @@ router.get('/medicines', async (req, res) => {
         query.$or = [{ name: { $regex: queryText, $options: 'i' } }, { category: { $regex: queryText, $options: 'i' } }];
       }
       const medicines = await HealthcareMedicine.find(query).sort({ createdAt: -1 }).lean();
-      return res.status(200).json({ success: true, data: medicines.map(toClientObject) });
+      const enrichedMedicines = medicines.map((item) => {
+        const normalized = toClientObject(item);
+        return {
+          ...normalized,
+          info: buildMedicineInfo(normalized),
+        };
+      });
+      return res.status(200).json({ success: true, data: enrichedMedicines });
     }
 
     const medicines = inMemoryStore.medicines.filter((medicine) => {
@@ -601,9 +661,34 @@ router.get('/medicines', async (req, res) => {
       }
       return String(medicine.name).toLowerCase().includes(queryText) || String(medicine.category).toLowerCase().includes(queryText);
     });
-    return res.status(200).json({ success: true, data: medicines });
+    const enrichedMedicines = medicines.map((medicine) => ({
+      ...medicine,
+      info: buildMedicineInfo(medicine),
+    }));
+    return res.status(200).json({ success: true, data: enrichedMedicines });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Unable to fetch medicines', error: error.message });
+  }
+});
+
+router.get('/medicines/info', async (req, res) => {
+  try {
+    const queryText = String(req.query.q || '').trim();
+    let availableMedicines = [];
+
+    if (isMongoReady()) {
+      await ensureHealthcareSeedData();
+      availableMedicines = await HealthcareMedicine.find({ isActive: true, approvalStatus: 'approved' }).lean();
+    } else {
+      availableMedicines = inMemoryStore.medicines.filter(
+        (medicine) => Boolean(medicine.isActive) && medicine.approvalStatus === 'approved'
+      );
+    }
+
+    const explanation = explainMedicineQuery(queryText, availableMedicines.map(toClientObject));
+    return res.status(200).json({ success: true, data: explanation });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Unable to fetch medicine explanation', error: error.message });
   }
 });
 
@@ -622,10 +707,20 @@ router.post('/medicines', authenticate, async (req, res) => {
         category: payload.category || 'General',
         requiresPrescription: Boolean(payload.requiresPrescription),
         stock: parseNumber(payload.stock, 0),
+        purpose: payload.purpose || '',
+        ingredients: payload.ingredients || '',
+        warning: payload.warning || '',
         vendorName: payload.vendorName || req.user.name || '',
         approvalStatus,
       });
-      return res.status(201).json({ success: true, data: toClientObject(created) });
+      const normalized = toClientObject(created);
+      return res.status(201).json({
+        success: true,
+        data: {
+          ...normalized,
+          info: buildMedicineInfo(normalized),
+        },
+      });
     }
 
     const created = {
@@ -635,6 +730,9 @@ router.post('/medicines', authenticate, async (req, res) => {
       category: payload.category || 'General',
       requiresPrescription: Boolean(payload.requiresPrescription),
       stock: parseNumber(payload.stock, 0),
+      purpose: payload.purpose || '',
+      ingredients: payload.ingredients || '',
+      warning: payload.warning || '',
       vendorName: payload.vendorName || req.user.name || '',
       approvalStatus,
       isActive: true,
@@ -642,7 +740,13 @@ router.post('/medicines', authenticate, async (req, res) => {
       updatedAt: new Date().toISOString(),
     };
     inMemoryStore.medicines.unshift(created);
-    return res.status(201).json({ success: true, data: created });
+    return res.status(201).json({
+      success: true,
+      data: {
+        ...created,
+        info: buildMedicineInfo(created),
+      },
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Unable to create medicine', error: error.message });
   }

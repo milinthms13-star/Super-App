@@ -9,7 +9,7 @@
  * @param {string} formData.priority - Priority level (Low|Medium|High)
  * @param {string} formData.dueDate - Due date in YYYY-MM-DD format (required)
  * @param {string} [formData.dueTime] - Due time in HH:mm format
- * @param {string[]} formData.reminders - Reminder channels (In-app|SMS|Call)
+ * @param {string[]} formData.reminders - Reminder channels
  * @param {string} [formData.recipientPhoneNumber] - Phone for voice calls
  * @param {string} [formData.messageType] - Message type (text|audio)
  * @param {string} [formData.voiceMessage] - Text message for voice calls
@@ -28,6 +28,7 @@
  */
 export const validateReminderForm = (formData) => {
   const errors = {};
+  const validChannels = ["In-app", "SMS", "Call", "Email", "WhatsApp", "Telegram", "Push"];
 
   // Title validation
   if (!formData.title?.trim()) {
@@ -86,6 +87,10 @@ export const validateReminderForm = (formData) => {
   // Reminders validation
   if (!formData.reminders || formData.reminders.length === 0) {
     errors.reminders = 'Select at least one reminder channel';
+  } else if (
+    formData.reminders.some((channel) => !validChannels.includes(channel))
+  ) {
+    errors.reminders = "One or more reminder channels are invalid";
   }
 
   // Voice call validation
@@ -102,6 +107,52 @@ export const validateReminderForm = (formData) => {
 
     if (formData.messageType === 'audio' && !formData.voiceNoteUrl?.trim()) {
       errors.voiceNoteUrl = 'Record or upload a voice note for audio reminders';
+    }
+  }
+
+  if (formData.reminders && formData.reminders.includes("SMS")) {
+    if (!formData.smsPhoneNumber?.trim()) {
+      errors.smsPhoneNumber = "Phone number required for SMS reminders";
+    } else if (!isValidPhoneNumber(formData.smsPhoneNumber)) {
+      errors.smsPhoneNumber = "Invalid SMS phone number format";
+    }
+  }
+
+  if (formData.reminders && formData.reminders.includes("Email")) {
+    if (!formData.email?.trim()) {
+      errors.email = "Email address required for email reminders";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.email = "Invalid email format";
+    }
+  }
+
+  if (formData.reminders && formData.reminders.includes("WhatsApp")) {
+    if (!formData.whatsappPhoneNumber?.trim()) {
+      errors.whatsappPhoneNumber = "WhatsApp phone number is required";
+    } else if (!isValidPhoneNumber(formData.whatsappPhoneNumber)) {
+      errors.whatsappPhoneNumber = "Invalid WhatsApp phone number format";
+    }
+  }
+
+  if (formData.reminders && formData.reminders.includes("Telegram")) {
+    if (!formData.telegramChatId?.trim()) {
+      errors.telegramChatId = "Telegram chat ID is required";
+    } else if (!/^-?\d{5,20}$/.test(formData.telegramChatId.trim())) {
+      errors.telegramChatId = "Invalid Telegram chat ID";
+    }
+  }
+
+  if (formData.reminderBeforeOffsets !== undefined) {
+    if (!Array.isArray(formData.reminderBeforeOffsets)) {
+      errors.reminderBeforeOffsets = "Reminder offsets must be a list";
+    } else {
+      const hasInvalidOffset = formData.reminderBeforeOffsets.some((offset) => {
+        const parsed = Number(offset);
+        return !Number.isInteger(parsed) || parsed < 0 || parsed > 10080;
+      });
+      if (hasInvalidOffset) {
+        errors.reminderBeforeOffsets = "Reminder offsets must be between 0 and 10080 minutes";
+      }
     }
   }
 

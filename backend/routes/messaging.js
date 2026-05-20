@@ -18,6 +18,10 @@ const { ensureMessagingUser } = require('../utils/ensureMessagingUser');
 const { generateKeyPair, encryptMessage, decryptMessage, generateKeyFingerprint } = require('../utils/encryption');
 const { generateS3Key, uploadToS3, generateSignedUrl, deleteFromS3 } = require('../utils/s3Storage');
 const { generateAISuggestions } = require('../utils/aiChat');
+const {
+  validateMessagePayload,
+  safeFallbackReplies,
+} = require('../services/messagingUpgradeHelpers');
 const { emitToUser } = require('../config/websocket');
 const { authenticate, authenticateToken } = require('../middleware/auth');
 const logger = require('../utils/logger');
@@ -698,12 +702,18 @@ router.delete('/chats/:chatId/members/:userId', authenticate, attachMessagingUse
 // Send message
 router.post('/messages', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
-    const { chatId, content, messageType, media, replyTo, clientMessageId } = req.body;
-    const normalizedMessageType =
-      typeof messageType === 'string' && messageType.trim() ? messageType.trim() : 'text';
-    const normalizedContent = typeof content === 'string' ? content.trim() : '';
+    const { chatId, media, replyTo } = req.body;
+    const validation = validateMessagePayload(req.body || {});
+    if (!validation.ok) {
+      return res.status(400).json({ message: validation.errors.join(' ') });
+    }
+
+    const normalizedMessageType = validation.normalizedType;
+    const normalizedContent = validation.normalizedContent;
     const normalizedReplyTo = normalizeObjectId(replyTo);
-    const normalizedClientMessageId = normalizeClientMessageId(clientMessageId);
+    const normalizedClientMessageId = normalizeClientMessageId(
+      validation.normalizedClientMessageId
+    );
 
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
       return res.status(400).json({ message: 'Invalid chat ID' });
@@ -2622,6 +2632,7 @@ router.get('/files/chat/:chatId', authenticate, attachMessagingUser, async (req,
 router.post('/ai/replies/generate', authenticate, attachMessagingUser, async (req, res, next) => {
   try {
     const { chatId, messageId } = req.body;
+    const language = String(req.body?.language || 'en').trim().toLowerCase();
 
     if (!mongoose.Types.ObjectId.isValid(chatId) || !mongoose.Types.ObjectId.isValid(messageId)) {
       return res.status(400).json({ message: 'Invalid chat or message ID' });
@@ -2645,32 +2656,46 @@ router.post('/ai/replies/generate', authenticate, attachMessagingUser, async (re
     // Get user settings
     const settings = await MessagingSettings.findOne({ userId: req.user._id });
 
-    // Real AI suggestions via aiChat.js
-    const suggestions = await generateAISuggestions(recentMessages, settings?.ai?.suggestionTone || 'casual');
+    try {
+      // Real AI suggestions via aiChat.js
+      const suggestions = await generateAISuggestions(
+        recentMessages,
+        settings?.ai?.suggestionTone || 'casual'
+      );
 
-    // Save AI reply record
-    const aiReply = new AIReply({
-      chatId,
-      messageId,
-      suggestedBy: req.user._id,
-      suggestions,
-      context: {
-        conversationLength: recentMessages.length,
-        previousMessages: recentMessages.length,
-        topicKeywords: extractKeywords(recentMessages),
-      },
-      model: process.env.GEMINI_MESSAGING_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-      generationTime: Math.random() * 1000 + 500, // Mock timing
-      tokensUsed: Math.floor(Math.random() * 100) + 50,
-    });
+      // Save AI reply record
+      const aiReply = new AIReply({
+        chatId,
+        messageId,
+        suggestedBy: req.user._id,
+        suggestions,
+        context: {
+          conversationLength: recentMessages.length,
+          previousMessages: recentMessages.length,
+          topicKeywords: extractKeywords(recentMessages),
+        },
+        model: process.env.GEMINI_MESSAGING_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        generationTime: Math.random() * 1000 + 500, // Mock timing
+        tokensUsed: Math.floor(Math.random() * 100) + 50,
+      });
 
-    await aiReply.save();
+      await aiReply.save();
 
-    logger.info(`AI replies generated for message ${messageId} in chat ${chatId}`);
-    res.json({
-      suggestions: aiReply.suggestions,
-      replyId: aiReply._id,
-    });
+      logger.info(`AI replies generated for message ${messageId} in chat ${chatId}`);
+      return res.json({
+        suggestions: aiReply.suggestions,
+        replyId: aiReply._id,
+      });
+    } catch (generateError) {
+      logger.warn(
+        `AI reply generation failed for chat ${chatId} message ${messageId}: ${generateError.message}`
+      );
+      return res.json({
+        replyId: null,
+        suggestions: safeFallbackReplies(language),
+        fallback: true,
+      });
+    }
   } catch (err) {
     next(err);
   }

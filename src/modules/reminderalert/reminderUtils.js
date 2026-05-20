@@ -1,10 +1,15 @@
 export const toDateInputValue = (value) => {
+  const toLocalDateValue = (date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+      date.getDate()
+    ).padStart(2, "0")}`;
+
   if (!value) {
     return "";
   }
 
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
+    return toLocalDateValue(value);
   }
 
   const stringValue = String(value).trim();
@@ -22,7 +27,7 @@ export const toDateInputValue = (value) => {
     return "";
   }
 
-  return parsedDate.toISOString().slice(0, 10);
+  return toLocalDateValue(parsedDate);
 };
 
 export const formatReminderDueDate = (dueDate, dueTime) => {

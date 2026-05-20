@@ -1,34 +1,7 @@
 import React, { useCallback } from 'react';
 import { formatReminderDueDate } from '../reminderUtils';
+import { getReminderUrgency } from '../reminderSmartUtils';
 
-/**
- * ReminderCard component - displays a single reminder
- * Memoized for performance optimization
- * 
- * @component
- * @param {Object} props
- * @param {Object} props.reminder - Reminder data
- * @param {string} props.reminder._id - Reminder ID
- * @param {string} props.reminder.title - Reminder title
- * @param {string} props.reminder.priority - Priority level
- * @param {string} props.reminder.category - Category
- * @param {string} props.reminder.dueDate - Due date
- * @param {string} props.reminder.dueTime - Due time
- * @param {boolean} props.reminder.completed - Completion status
- * @param {function} props.onEdit - Edit handler
- * @param {function} props.onDelete - Delete handler
- * @param {function} props.onToggleCompletion - Toggle completion handler
- * @param {function} props.onTriggerVoiceCall - Voice call trigger handler
- * 
- * @example
- * <ReminderCard
- *   reminder={reminder}
- *   onEdit={handleEdit}
- *   onDelete={handleDelete}
- *   onToggleCompletion={handleToggleCompletion}
- *   onTriggerVoiceCall={handleTriggerVoiceCall}
- * />
- */
 const ReminderCard = React.memo(
   ({
     reminder,
@@ -48,6 +21,8 @@ const ReminderCard = React.memo(
       Personal: '#8b5cf6',
       Urgent: '#dc2626'
     };
+
+    const urgency = getReminderUrgency(reminder);
 
     const handleEdit = useCallback(() => {
       onEdit(reminder);
@@ -70,7 +45,6 @@ const ReminderCard = React.memo(
     return (
       <article
         className={`reminderalert-task-card ${reminder.completed ? 'completed' : ''}`}
-        role="article"
         aria-label={`Reminder: ${reminder.title}`}
       >
         <div className="reminderalert-task-topline">
@@ -95,7 +69,7 @@ const ReminderCard = React.memo(
                   style={{ color: priorityColor[reminder.priority] }}
                   aria-label={`Priority: ${reminder.priority}`}
                 >
-                  ● {reminder.priority}
+                  Priority: {reminder.priority}
                 </span>
                 <span
                   className="reminderalert-task-category"
@@ -104,8 +78,11 @@ const ReminderCard = React.memo(
                 >
                   {reminder.category}
                 </span>
+                <span className={`reminderalert-status-pill ${urgency.className}`}>
+                  {urgency.label}
+                </span>
                 <span className="reminderalert-task-due">
-                  📅 {formatReminderDueDate(reminder.dueDate, reminder.dueTime)}
+                  Due: {formatReminderDueDate(reminder.dueDate, reminder.dueTime)}
                 </span>
               </div>
             </div>
@@ -119,7 +96,7 @@ const ReminderCard = React.memo(
                 title={`Trigger voice call to ${reminder.recipientPhoneNumber}`}
                 aria-label={`Trigger voice call for ${reminder.title}`}
               >
-                📞
+                Call
               </button>
             )}
             <button
@@ -128,7 +105,7 @@ const ReminderCard = React.memo(
               title={`Edit "${reminder.title}"`}
               aria-label={`Edit ${reminder.title}`}
             >
-              ✏️
+              Edit
             </button>
             <button
               className="reminderalert-action-btn delete"
@@ -136,7 +113,7 @@ const ReminderCard = React.memo(
               title={`Delete "${reminder.title}"`}
               aria-label={`Delete ${reminder.title}`}
             >
-              🗑️
+              Delete
             </button>
           </div>
         </div>

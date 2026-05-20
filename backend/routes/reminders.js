@@ -31,7 +31,7 @@ const getFileTypeFromMime = (mimetype) => {
 
 const VALID_CATEGORIES = ['Work', 'Personal', 'Urgent'];
 const VALID_PRIORITIES = ['Low', 'Medium', 'High'];
-const VALID_REMINDERS = ['In-app', 'SMS', 'Call'];
+const VALID_REMINDERS = ['Email', 'In-app', 'SMS', 'Call', 'WhatsApp', 'Telegram', 'Push'];
 const VALID_RECURRING = ['none', 'daily', 'weekly', 'monthly'];
 const VALID_FILE_TYPES = ['voice', 'image', 'document', 'video', 'audio'];
 const VALID_TRUSTED_CONTACT_RELATIONSHIPS = ['family', 'friend', 'caregiver', 'colleague', 'other'];
@@ -47,6 +47,15 @@ const attachmentUpload = multer({
 const getReminderOwnerId = (user = {}) => String(user?._id || user?.id || '');
 
 const parseReminderDueDate = (value) => {
+  if (!value) return null;
+
+  const normalizedValue = typeof value === 'string' ? value.trim() : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) {
+    const [year, month, day] = normalizedValue.split('-').map((part) => parseInt(part, 10));
+    const localDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+    return Number.isNaN(localDate.getTime()) ? null : localDate;
+  }
+
   const parsedDate = new Date(value);
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 };
@@ -248,7 +257,15 @@ router.post('/', async (req, res) => {
       dueDate,
       dueTime,
       reminders = ['In-app'],
-      recurring = 'none'
+      recurring = 'none',
+      reminderBeforeOffsets,
+      snoozeOptions,
+      smsPhoneNumber,
+      email,
+      whatsappPhoneNumber,
+      telegramChatId,
+      pushEnabled,
+      templateId
     } = req.body;
 
     const validationMessage = validateReminderFields({
@@ -278,6 +295,20 @@ router.post('/', async (req, res) => {
       dueTime,
       reminders,
       recurring,
+      reminderBeforeOffsets:
+        Array.isArray(reminderBeforeOffsets) && reminderBeforeOffsets.length
+          ? reminderBeforeOffsets
+          : [5],
+      snoozeOptions:
+        Array.isArray(snoozeOptions) && snoozeOptions.length
+          ? snoozeOptions
+          : [5, 10, 15, 30],
+      smsPhoneNumber: String(smsPhoneNumber || '').trim(),
+      email: String(email || '').trim().toLowerCase(),
+      whatsappPhoneNumber: String(whatsappPhoneNumber || '').trim(),
+      telegramChatId: String(telegramChatId || '').trim(),
+      pushEnabled: Boolean(pushEnabled || reminders.includes('Push')),
+      templateId: templateId || undefined,
       status: reminders.length > 1 ? 'Escalation armed' : 'Reminder scheduled'
     });
 
@@ -329,7 +360,15 @@ router.put('/:id', async (req, res) => {
       recipientPhoneNumber,
       voiceMessage,
       messageType,
-      voiceNoteUrl
+      voiceNoteUrl,
+      reminderBeforeOffsets,
+      snoozeOptions,
+      smsPhoneNumber,
+      email,
+      whatsappPhoneNumber,
+      telegramChatId,
+      pushEnabled,
+      templateId
     } = req.body;
 
     const validationMessage = validateReminderFields(
@@ -374,6 +413,40 @@ router.put('/:id', async (req, res) => {
     }
     if (voiceNoteUrl !== undefined) {
       reminder.voiceNoteUrl = String(voiceNoteUrl || '').trim();
+    }
+    if (reminderBeforeOffsets !== undefined) {
+      reminder.reminderBeforeOffsets = Array.isArray(reminderBeforeOffsets) && reminderBeforeOffsets.length
+        ? reminderBeforeOffsets
+        : [5];
+    }
+    if (snoozeOptions !== undefined) {
+      reminder.snoozeOptions = Array.isArray(snoozeOptions) && snoozeOptions.length
+        ? snoozeOptions
+        : [5, 10, 15, 30];
+    }
+    if (smsPhoneNumber !== undefined) {
+      reminder.smsPhoneNumber = String(smsPhoneNumber || '').trim();
+    }
+    if (email !== undefined) {
+      reminder.email = String(email || '').trim().toLowerCase();
+    }
+    if (whatsappPhoneNumber !== undefined) {
+      reminder.whatsappPhoneNumber = String(whatsappPhoneNumber || '').trim();
+    }
+    if (telegramChatId !== undefined) {
+      reminder.telegramChatId = String(telegramChatId || '').trim();
+    }
+    if (pushEnabled !== undefined) {
+      reminder.pushEnabled = Boolean(pushEnabled);
+      if (reminder.pushEnabled && !reminder.reminders.includes('Push')) {
+        reminder.reminders = [...reminder.reminders, 'Push'];
+      }
+      if (!reminder.pushEnabled) {
+        reminder.reminders = reminder.reminders.filter((item) => item !== 'Push');
+      }
+    }
+    if (templateId !== undefined) {
+      reminder.templateId = templateId || undefined;
     }
 
     if (reminder.messageType === 'text') {

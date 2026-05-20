@@ -1,0 +1,118 @@
+.ai-smart-replies-wrap {
+  width: 100%;
+}
+
+.ai-smart-replies {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 6px 2px 8px;
+  scrollbar-width: thin;
+}
+
+.ai-smart-replies-status {
+  font-size: 0.85rem;
+  color: #64748b;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.ai-smart-replies-status.error {
+  color: #b45309;
+  background: #fff7ed;
+}
+
+.ai-smart-replies-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: #b45309;
+  margin: 0 0 4px 2px;
+}
+
+.suggestion-chip {
+  border: 1px solid #dbeafe;
+  background: linear-gradient(135deg, #eff6ff, #ffffff);
+  color: #1e3a8a;
+  border-radius: 999px;
+  padding: 8px 12px;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.suggestion-chip:hover,
+.suggestion-chip.selected {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.smart-replies-inline-row {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 8px 10px 4px;
+  margin-bottom: 8px;
+}
+
+.smart-replies-label {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 2px;
+}
+
+.message-input-area {
+  position: sticky;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid #e5e7eb;
+}
+
+.message-textarea {
+  min-height: 44px;
+  max-height: 120px;
+  resize: none;
+}
+
+.message-delivery-warning {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.linkup-security-note {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e3a8a;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  margin: 10px 0;
+}
+
+@media (max-width: 760px) {
+  .smart-replies-inline-row {
+    margin-left: -4px;
+    margin-right: -4px;
+    border-radius: 12px;
+  }
+
+  .suggestion-chip {
+    max-width: 76vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .message-actions {
+    gap: 6px;
+  }
+}

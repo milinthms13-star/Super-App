@@ -4068,6 +4068,62 @@ router.delete('/classifieds/listings/:listingId', authenticate, async (req, res)
   });
 });
 
+router.get('/realestate/listings', authenticate, async (req, res) => {
+  try {
+    const realestateProperties = await listRealEstateProperties(req.query);
+    return res.json({
+      success: true,
+      data: {
+        moduleData: {
+          realestateProperties,
+        },
+        realestateProperties,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load real estate listings.',
+      error: error.message,
+    });
+  }
+});
+
+router.get('/realestate/listings/:listingId', authenticate, async (req, res) => {
+  try {
+    const listing = useMongoRealEstate()
+      ? await findRealEstatePropertyById(req.params.listingId)
+      : (Array.isArray((await devAppDataStore.readAppData()).moduleData?.realestateProperties)
+          ? (await devAppDataStore.readAppData()).moduleData.realestateProperties
+              .map(serializeRealEstateProperty)
+              .find((item) => matchesRealEstateListingId(item, req.params.listingId))
+          : null);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Real-estate listing not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        moduleData: {
+          realestateProperties: await listRealEstateProperties(req.query),
+        },
+        listing,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load the real estate listing.',
+      error: error.message,
+    });
+  }
+});
+
 router.post('/realestate/listings', authenticate, async (req, res) => {
   const requestedPostingType =
     String(req.body?.postingType || '').trim().toLowerCase() === 'requirement'

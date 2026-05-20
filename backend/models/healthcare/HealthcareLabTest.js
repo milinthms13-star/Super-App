@@ -7,6 +7,8 @@ const healthcareLabTestSchema = new mongoose.Schema(
     homeCollection: { type: Boolean, default: false },
     type: { type: String, enum: ['blood', 'scan', 'other'], default: 'blood', index: true },
     turnaroundHours: { type: Number, default: 24, min: 1 },
+    purpose: { type: String, default: '', trim: true },
+    usedFor: { type: String, default: '', trim: true },
     preparationNotes: { type: String, default: '', trim: true },
     partnerName: { type: String, default: '', trim: true },
     approvalStatus: {

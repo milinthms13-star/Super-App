@@ -5,6 +5,9 @@ import { jsPDF } from "jspdf";
 import { useApp } from "../../contexts/AppContext";
 import { buildApiUrl } from "../../utils/api";
 import { getStoredAuthToken } from "../../utils/auth";
+import ResumeQuickStart from "./ResumeQuickStart";
+import ResumeRolePresetPanel from "./ResumeRolePresetPanel";
+import { ROLE_PRESETS, getResumeHealth, buildWhatsappRecruiterMessage } from "./resumeBuilderUpgradeUtils";
 import "./ResumeBuilder.css";
 
 const LOCAL_DRAFTS_KEY = "resume_builder_local_drafts_v1";
@@ -434,6 +437,7 @@ const ResumeBuilder = () => {
     const existing = new Set(extractKeywords(`${formData.skills} ${formData.summary} ${formData.experience}`));
     return jd.filter((keyword) => !existing.has(keyword)).slice(0, 10);
   }, [formData.experience, formData.skills, formData.summary, jobDescription]);
+  const resumeHealth = useMemo(() => getResumeHealth(previewResume, jobDescription), [jobDescription, previewResume]);
 
   const withBusy = useCallback(async (key, fn) => {
     setBusyKey(key);
@@ -482,11 +486,19 @@ const ResumeBuilder = () => {
       const file = event?.target?.files?.[0];
       if (!file) return;
       setUploadedResumeName(file.name);
+      const fileName = String(file.name || "").toLowerCase();
+      const isLikelyBinary = fileName.endsWith(".pdf") || fileName.endsWith(".doc") || fileName.endsWith(".docx");
+      if (isLikelyBinary) {
+        pushStatus("error", "PDF/DOCX auto-parse is limited in browser mode. Please verify and edit extracted fields.");
+      }
       const reader = new FileReader();
       reader.onload = (e) => {
         const parsed = parseResumeTextToFormData(String(e?.target?.result || ""));
         setFormData((current) => ({ ...current, ...parsed }));
         pushStatus("success", "Resume uploaded and basic details auto-filled.");
+      };
+      reader.onerror = () => {
+        pushStatus("error", "Unable to read this file. Please paste details manually.");
       };
       reader.readAsText(file);
     },
@@ -504,6 +516,64 @@ const ResumeBuilder = () => {
     chooseTemplate("gulf-blue-professional");
     setFormData((current) => ({ ...current, summary: `${rewriteSummaryLocal(current, jobDescription)} Gulf-ready profile with visa and relocation clarity.` }));
   }, [chooseTemplate, jobDescription]);
+
+  const handleQuickResumeAction = useCallback((actionId) => {
+    if (actionId === "gulf") {
+      setResumeType("gulf");
+      setTemplate(hasPremiumAccess ? "gulf-blue-professional" : "simple-ats");
+      setFormData((current) => ({
+        ...current,
+        preferredCountry: current.preferredCountry || "UAE",
+        preferredGulfCountry: current.preferredGulfCountry || "UAE",
+        availableToRelocate: "Yes",
+      }));
+      setActiveSection("ai-builder");
+      setWizardStep(5);
+      return;
+    }
+
+    if (actionId === "ats") {
+      setTemplate("simple-ats");
+      setActiveSection("ats-score");
+      return;
+    }
+
+    if (actionId === "fresher") {
+      setResumeType("fresher");
+      setTemplate(hasPremiumAccess ? "fresher-student" : "simple-ats");
+      setActiveSection("ai-builder");
+      setWizardStep(3);
+      return;
+    }
+
+    setActiveSection("upload");
+  }, [hasPremiumAccess]);
+
+  const applyRolePreset = useCallback(
+    (presetKey) => {
+      const preset = ROLE_PRESETS[presetKey];
+      if (!preset) return;
+
+      setFormData((current) => {
+        const skills = [...new Set([...toList(current.skills), ...preset.skills])];
+        const experienceLine = `${current.targetJob || preset.label} | Company Name | Duration | ${preset.bullets.join("; ")}`;
+        return {
+          ...current,
+          targetJob: current.targetJob || preset.label,
+          skills: skills.join(", "),
+          experience: current.experience ? `${current.experience}\n${experienceLine}` : experienceLine,
+          summary:
+            current.summary ||
+            rewriteSummaryLocal(
+              { ...current, targetJob: current.targetJob || preset.label, skills: skills.join(", ") },
+              jobDescription
+            ),
+        };
+      });
+      pushStatus("success", `${preset.label} preset applied.`);
+    },
+    [jobDescription, pushStatus]
+  );
 
   const handleGenerateResume = useCallback(async () => {
     if (!validateForm()) {
@@ -587,7 +657,7 @@ const ResumeBuilder = () => {
         pushStatus("error", error?.response?.data?.message || "Resume optimization failed.");
       }
     });
-  }, [formData, isAuthenticated, jobDescription, language, pushStatus, request, resumeData, resumeType, template, updateUsage, withBusy]);
+  }, [formData, isAuthenticated, jobDescription, language, pushStatus, request, resumeData, resumeType, template, withBusy]);
 
   const handleCoverLetter = useCallback(async () => {
     const resumePayload = resumeData || buildResumeFromForm(formData, template, resumeType, language);
@@ -675,7 +745,7 @@ const ResumeBuilder = () => {
         await loadResumes();
       } catch (_error) {}
     });
-  }, [atsReport?.score, draftName, formData, isAuthenticated, language, loadResumes, persistLocalDraft, previewResume, request, resumeType, selectedResumeId, template, validateForm, withBusy]);
+  }, [atsReport?.score, draftName, formData, isAuthenticated, language, loadResumes, persistLocalDraft, previewResume, pushStatus, request, resumeType, selectedResumeId, template, validateForm, withBusy]);
 
   const openDraft = useCallback((record) => {
     setFormData((current) => ({ ...current, ...INITIAL_FORM_DATA, ...(record?.formData || {}) }));
@@ -824,6 +894,12 @@ const ResumeBuilder = () => {
         <h4>Skills</h4>
         <div className="resume-skills">{(previewResume?.skills || []).map((skill) => <span key={skill} className="skill-tag">{skill}</span>)}</div>
       </div>
+      <div className="resume-health-card">
+        <strong>Resume Health: {resumeHealth.score}%</strong>
+        <ul>
+          {(resumeHealth.issues || []).slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+        </ul>
+      </div>
     </div>
   );
 
@@ -855,6 +931,8 @@ const ResumeBuilder = () => {
           </div>
         </div>
       </section>
+
+      <ResumeQuickStart onAction={handleQuickResumeAction} />
 
       <nav className="resume-builder-nav" aria-label="Resume builder sections">
         {SECTION_ITEMS.map((item) => (
@@ -911,6 +989,7 @@ const ResumeBuilder = () => {
             </div>
             <div className="wizard-steps-row">{WIZARD_STEPS.map((item, index) => <button key={item.id} type="button" className={`wizard-step-pill ${wizardStep === index ? "active" : ""}`} onClick={() => setWizardStep(index)}>{index + 1}. {item.label}</button>)}</div>
             <div className="wizard-progress-track"><div className="wizard-progress-bar" style={{ width: `${stepProgress}%` }} /></div>
+            {wizardStep >= 2 && wizardStep <= 4 ? <ResumeRolePresetPanel onApply={applyRolePreset} /> : null}
 
             {wizardStep === 0 ? (
               <div className="wizard-step-card form-fields">
@@ -1073,9 +1152,10 @@ const ResumeBuilder = () => {
         {activeSection === "recruiter-email" && (
           <section className="resume-builder-section">
             <div className="section-header"><h2>Recruiter Email Generator</h2><p>Create recruiter outreach email from your resume profile.</p></div>
-            <div className="inline-actions">
+            <div className="resume-copy-actions">
               <button type="button" className="primary-button" onClick={handleRecruiterEmail}>Generate Recruiter Email</button>
               <button type="button" className="secondary-button" onClick={() => copyText(recruiterEmail)} disabled={!recruiterEmail}>Copy Email</button>
+              <button type="button" className="secondary-button" onClick={() => copyText(buildWhatsappRecruiterMessage(previewResume))}>Copy WhatsApp Recruiter Message</button>
             </div>
             <textarea rows={12} value={recruiterEmail} onChange={(e) => setRecruiterEmail(e.target.value)} />
           </section>

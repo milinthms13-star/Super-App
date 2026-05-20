@@ -206,16 +206,130 @@ const serializeRealEstateProperty = (record, index = 0) => {
   };
 };
 
-const listRealEstateProperties = async () => {
+const normalizeBooleanFilter = (value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return undefined;
+};
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildRealEstateListQuery = (filters = {}) => {
+  const query = {};
+
+  if (filters.type) {
+    query.type = String(filters.type).trim();
+  }
+
+  if (filters.intent) {
+    query.intent = String(filters.intent).trim();
+  }
+
+  if (filters.status) {
+    query.status = String(filters.status).trim();
+  }
+
+  if (filters.postingType) {
+    query.postingType = String(filters.postingType).trim();
+  }
+
+  if (filters.verified !== undefined) {
+    const bool = normalizeBooleanFilter(filters.verified);
+    if (typeof bool === 'boolean') {
+      query.verified = bool;
+    }
+  }
+
+  if (filters.featured !== undefined) {
+    const bool = normalizeBooleanFilter(filters.featured);
+    if (typeof bool === 'boolean') {
+      query.featured = bool;
+    }
+  }
+
+  if (filters.location) {
+    query.location = new RegExp(escapeRegex(String(filters.location).trim()), 'i');
+  }
+
+  if (filters.sellerEmail) {
+    query.sellerEmail = String(filters.sellerEmail).trim().toLowerCase();
+  }
+
+  return query;
+};
+
+const filterRealEstateProperties = (properties, filters = {}) => {
+  return properties.filter((property) => {
+    if (filters.type && property.type !== String(filters.type).trim()) {
+      return false;
+    }
+
+    if (filters.intent && property.intent !== String(filters.intent).trim()) {
+      return false;
+    }
+
+    if (filters.status && property.status !== String(filters.status).trim()) {
+      return false;
+    }
+
+    if (filters.postingType && property.postingType !== String(filters.postingType).trim()) {
+      return false;
+    }
+
+    if (filters.verified !== undefined) {
+      const bool = normalizeBooleanFilter(filters.verified);
+      if (typeof bool === 'boolean' && property.verified !== bool) {
+        return false;
+      }
+    }
+
+    if (filters.featured !== undefined) {
+      const bool = normalizeBooleanFilter(filters.featured);
+      if (typeof bool === 'boolean' && property.featured !== bool) {
+        return false;
+      }
+    }
+
+    if (filters.location) {
+      const locationFilter = String(filters.location).trim().toLowerCase();
+      if (!String(property.location || '').toLowerCase().includes(locationFilter)) {
+        return false;
+      }
+    }
+
+    if (filters.sellerEmail) {
+      if (String(property.sellerEmail || '').trim().toLowerCase() !== String(filters.sellerEmail).trim().toLowerCase()) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+};
+
+const listRealEstateProperties = async (filters = {}) => {
   if (useMongoRealEstate()) {
-    const records = await RealEstateProperty.find().sort({ createdAt: -1 });
+    const query = buildRealEstateListQuery(filters);
+    const records = await RealEstateProperty.find(query).sort({ createdAt: -1 });
     return records.map(serializeRealEstateProperty);
   }
 
   const currentData = await devAppDataStore.readAppData();
-  return Array.isArray(currentData.moduleData?.realestateProperties)
+  const properties = Array.isArray(currentData.moduleData?.realestateProperties)
     ? currentData.moduleData.realestateProperties.map(serializeRealEstateProperty)
     : [];
+
+  return filterRealEstateProperties(properties, filters);
 };
 
 const createRealEstateProperty = async (payload) => {

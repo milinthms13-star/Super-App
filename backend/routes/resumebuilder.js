@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const axios = require('axios');
 const authenticate = require('../middleware/auth');
 const ResumeDocument = require('../models/ResumeDocument');
+const { validateResumePayload, sanitizeResumeForStorage } = require('../services/resumeBuilderUpgradeService');
 
 const router = express.Router();
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
@@ -388,6 +389,10 @@ router.post('/generate', authenticate, async (req, res) => {
   try {
     const { formData = {}, template = 'simple-ats', resumeType = 'professional', language = 'en' } =
       req.body || {};
+    const validation = validateResumePayload({ formData, jobDescription: req.body?.jobDescription || '' });
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.errors.join(' ') });
+    }
 
     const fallbackResume = normalizeResumeFromForm(formData, {
       template,
@@ -632,6 +637,11 @@ router.post('/my-resumes', authenticate, async (req, res) => {
       resumeData = {},
       atsScore,
     } = req.body || {};
+    const validation = validateResumePayload({ formData });
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, message: validation.errors.join(' ') });
+    }
+    const safePayload = sanitizeResumeForStorage({ formData, resumeData });
 
     const doc = await ResumeDocument.create({
       userId: req.user._id,
@@ -639,8 +649,8 @@ router.post('/my-resumes', authenticate, async (req, res) => {
       resumeType,
       template,
       language,
-      formData,
-      resumeData,
+      formData: safePayload.formData || {},
+      resumeData: safePayload.resumeData || {},
       atsHistory:
         typeof atsScore === 'number'
           ? [{ score: atsScore, checkedAt: new Date() }]
@@ -674,6 +684,13 @@ router.put('/my-resumes/:id', authenticate, async (req, res) => {
       resumeData,
       atsScore,
     } = req.body || {};
+    if (formData !== undefined) {
+      const validation = validateResumePayload({ formData });
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, message: validation.errors.join(' ') });
+      }
+    }
+    const safePayload = sanitizeResumeForStorage({ formData, resumeData });
 
     const update = {
       lastOpenedAt: new Date(),
@@ -684,8 +701,8 @@ router.put('/my-resumes/:id', authenticate, async (req, res) => {
     if (resumeType !== undefined) update.resumeType = resumeType;
     if (template !== undefined) update.template = template;
     if (language !== undefined) update.language = language;
-    if (formData !== undefined) update.formData = formData;
-    if (resumeData !== undefined) update.resumeData = resumeData;
+    if (formData !== undefined) update.formData = safePayload.formData || {};
+    if (resumeData !== undefined) update.resumeData = safePayload.resumeData || {};
     if (typeof atsScore === 'number') {
       update.$push = {
         atsHistory: {

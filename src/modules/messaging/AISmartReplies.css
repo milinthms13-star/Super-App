@@ -8,12 +8,39 @@
   background: transparent;
 }
 
+.ai-smart-replies-wrap {
+  width: 100%;
+}
+
+.ai-smart-replies-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: #b45309;
+  margin: 0 0 0.3rem 0.1rem;
+}
+
 .ai-smart-replies {
   display: flex;
   flex-wrap: wrap;
   gap: 0.42rem;
   width: 100%;
   box-shadow: none;
+}
+
+.smart-replies-inline-row {
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 8px 10px 4px;
+  margin-bottom: 8px;
+}
+
+.smart-replies-label {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 2px;
 }
 
 .ai-smart-replies-status {
@@ -150,5 +177,19 @@
 @keyframes ai-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .smart-replies-inline-row {
+    margin-left: -4px;
+    margin-right: -4px;
+    border-radius: 12px;
+  }
+
+  .suggestion-chip {
+    max-width: 76vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
