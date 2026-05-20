@@ -204,31 +204,6 @@ router.post('/speech', validateVoiceFriendSession, speechRateLimiter, async (req
   }
 });
 
-// POST /api/ai-voice-friend/avatar - upload avatar image for friend
-const avatarUploadRoot = path.join(__dirname, '../uploads/voicefriend');
-try { fs.mkdirSync(avatarUploadRoot, { recursive: true }); } catch (e) { /* ignore */ }
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, avatarUploadRoot),
-  filename: (req, file, cb) => {
-    const safe = `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-    cb(null, safe);
-  }
-});
-const upload = multer({ storage, limits: { fileSize: 3 * 1024 * 1024 } });
-
-router.post('/avatar', upload.single('avatar'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
-    const fileName = req.file.filename;
-    const publicUrl = `/uploads/voicefriend/${fileName}`;
-    res.json({ success: true, data: { url: publicUrl } });
-  } catch (error) {
-    logger.error('Avatar upload failed:', error);
-    res.status(500).json({ success: false, message: 'Avatar upload failed' });
-  }
-});
-
 router.get('/history/:sessionId', validateVoiceFriendSession, async (req, res) => {
   try {
     const { sessionId } = req.params;

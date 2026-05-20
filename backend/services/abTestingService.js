@@ -294,28 +294,6 @@ class ABTestingService {
   /**
    * Get all active experiments
    */
-  static pruneInMemoryEvents() {
-    const now = Date.now();
-    const originalCount = this.inMemoryEvents.length;
-
-    this.inMemoryEvents = this.inMemoryEvents.filter((event) => {
-      const eventTime = event.timestamp ? new Date(event.timestamp).getTime() : now;
-      return now - eventTime <= this.MAX_IN_MEMORY_EVENT_AGE_MS;
-    });
-
-    if (this.inMemoryEvents.length > this.MAX_IN_MEMORY_EVENTS) {
-      const itemsToRemove = this.inMemoryEvents.length - this.MAX_IN_MEMORY_EVENTS;
-      this.inMemoryEvents.splice(0, itemsToRemove);
-    }
-
-    if (this.inMemoryEvents.length !== originalCount) {
-      logger.warn('Pruned stale in-memory A/B test events', {
-        before: originalCount,
-        after: this.inMemoryEvents.length,
-      });
-    }
-  }
-
   static async getActiveExperiments() {
     try {
       const experimentNames = Object.keys(this.experiments);

@@ -1,0 +1,115 @@
+.tourism-quick-actions-card {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--tourism-border);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(12, 122, 106, 0.08), transparent 45%),
+    var(--tourism-surface);
+}
+
+.tourism-quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.tourism-quick-actions-grid button {
+  border: 1px solid var(--tourism-border);
+  border-radius: 12px;
+  background: var(--tourism-surface-alt);
+  color: var(--tourism-ink);
+  font-weight: 700;
+  padding: 0.75rem;
+  cursor: pointer;
+}
+
+.tourism-package-card-upgraded {
+  overflow: hidden;
+}
+
+.tourism-package-title-row,
+.tourism-card-footer.upgraded {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.tourism-package-body-upgraded {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.tourism-trust-pill {
+  border-radius: 999px;
+  padding: 0.34rem 0.64rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.tourism-trust-pill.high {
+  background: rgba(18, 138, 85, 0.15);
+  color: #0f6840;
+}
+
+.tourism-trust-pill.good {
+  background: rgba(198, 130, 40, 0.2);
+  color: #82520f;
+}
+
+.tourism-trust-pill.pending {
+  background: rgba(184, 63, 78, 0.16);
+  color: #8f2a37;
+}
+
+.tourism-package-safety-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  color: var(--tourism-muted);
+  font-size: 0.84rem;
+}
+
+.tourism-price-summary-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 0.8rem 0;
+}
+
+.tourism-price-summary-card div {
+  border: 1px solid var(--tourism-border);
+  border-radius: 10px;
+  background: var(--tourism-surface-alt);
+  padding: 0.62rem;
+  display: grid;
+}
+
+.tourism-price-summary-card span {
+  color: var(--tourism-muted);
+  font-size: 0.82rem;
+}
+
+.tourism-safety-note {
+  margin: 0.8rem 0;
+  border: 1px solid rgba(198, 130, 40, 0.35);
+  background: rgba(198, 130, 40, 0.12);
+  border-radius: 12px;
+  padding: 0.62rem;
+  color: var(--tourism-ink);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 920px) {
+  .tourism-quick-actions-card,
+  .tourism-price-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .tourism-quick-actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

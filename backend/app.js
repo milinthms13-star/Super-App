@@ -122,6 +122,8 @@ app.use(compression());
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(morgan('combined'));
+app.use('/api/astrology/payment/webhook', express.raw({ type: 'application/json', limit: '20mb' }));
+app.use('/webhooks/payment', express.raw({ type: 'application/json', limit: '20mb' }));
 app.use(express.json({ limit: '20mb', inflate: true }));
 app.use(express.urlencoded({ extended: true, limit: '20mb', inflate: true }));
 app.use(

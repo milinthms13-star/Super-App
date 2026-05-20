@@ -19,6 +19,24 @@ export const tourismService = {
     return response.data?.data?.booking;
   },
 
+  async createCustomRequest(payload) {
+    const response = await axios.post(`${endpoint}/custom-requests`, payload);
+    return response.data?.data?.lead;
+  },
+
+  async createPaymentIntent(payload) {
+    const response = await axios.post(`${endpoint}/payments/intent`, payload);
+    return response.data?.data;
+  },
+
+  async reportPackageIssue(packageId, payload) {
+    const response = await axios.post(
+      `${endpoint}/packages/${encodeURIComponent(packageId)}/report`,
+      payload
+    );
+    return response.data?.data?.complaint;
+  },
+
   async updateBookingStatus(bookingId, status) {
     const response = await axios.patch(`${endpoint}/bookings/${encodeURIComponent(bookingId)}/status`, { status });
     return response.data?.data?.booking;
@@ -76,4 +94,3 @@ export const tourismService = {
     return response.data?.data?.package;
   },
 };
-

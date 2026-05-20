@@ -1,0 +1,161 @@
+.sos-upgrade-panel,
+.sos-profile-card {
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 24px;
+  padding: 18px;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08);
+  margin: 16px 0;
+}
+
+.sos-upgrade-eyebrow {
+  margin: 0 0 8px;
+  color: #dc2626;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.sos-hold-button {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  min-height: 150px;
+  border: none;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #991b1b, #ef4444);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  box-shadow: 0 20px 50px rgba(239, 68, 68, 0.3);
+}
+
+.sos-hold-button strong {
+  font-size: clamp(2rem, 8vw, 4rem);
+  line-height: 1;
+  z-index: 1;
+}
+
+.sos-hold-button span {
+  font-weight: 800;
+  z-index: 1;
+}
+
+.sos-hold-button i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 9px;
+  background: #fef08a;
+  transition: width 80ms linear;
+}
+
+.sos-upgrade-actions,
+.sos-india-calls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.sos-upgrade-actions button,
+.sos-india-calls button,
+.sos-save-profile,
+.sos-cancel-window button {
+  border: none;
+  border-radius: 16px;
+  padding: 12px 14px;
+  font-weight: 850;
+  cursor: pointer;
+  background: #111827;
+  color: #fff;
+}
+
+.sos-india-calls button {
+  background: #f8fafc;
+  color: #111827;
+  border: 1px solid #e2e8f0;
+}
+
+.sos-india-calls span {
+  margin-right: 6px;
+}
+
+.sos-cancel-window {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+}
+
+.sos-cancel-window strong {
+  display: block;
+  color: #991b1b;
+  font-size: 1.1rem;
+}
+
+.sos-upgrade-status,
+.sos-privacy-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.sos-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sos-profile-grid label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-weight: 800;
+}
+
+.sos-profile-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.sos-profile-grid input,
+.sos-profile-grid textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.sos-profile-grid textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.sos-save-profile {
+  margin-top: 12px;
+  background: #16a34a;
+}
+
+@media (max-width: 760px) {
+  .sos-upgrade-panel,
+  .sos-profile-card {
+    border-radius: 18px;
+    padding: 14px;
+  }
+
+  .sos-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sos-hold-button {
+    min-height: 135px;
+  }
+}

@@ -4,6 +4,7 @@ import { tourismService } from "../../services/tourismService";
 import FilterPanel from "./components/FilterPanel";
 import PackageCard from "./components/PackageCard";
 import BookingSheet from "./components/BookingSheet";
+import TourismQuickActions from "./components/TourismQuickActions";
 import VendorPanel from "./components/VendorPanel";
 import AdminPanel from "./components/AdminPanel";
 import BookingHistory from "./components/BookingHistory";
@@ -21,7 +22,9 @@ import {
   TRAVELER_TYPES,
   formatInr,
 } from "./tourismData";
+import { buildTourismWhatsAppMessage, validateTourismBooking } from "./tourismUpgradeUtils";
 import "./TourismMarketplace.css";
+import "./TourismUpgrade.css";
 
 const DEFAULT_BOOKING_FORM = {
   customerName: "",
@@ -48,23 +51,6 @@ const DEFAULT_VENDOR_DRAFT = {
 };
 
 const normalizeText = (value = "") => String(value || "").trim();
-
-const validateBookingForm = (form) => {
-  const errors = {};
-  if (normalizeText(form.customerName).length < 2) {
-    errors.customerName = "Enter a valid name";
-  }
-  if (!/^\S+@\S+\.\S+$/.test(normalizeText(form.customerEmail))) {
-    errors.customerEmail = "Enter a valid email";
-  }
-  if (normalizeText(form.customerPhone).replace(/\D/g, "").length < 10) {
-    errors.customerPhone = "Enter a valid phone number";
-  }
-  if (!normalizeText(form.travelDate)) {
-    errors.travelDate = "Select travel date";
-  }
-  return errors;
-};
 
 const parseList = (value = "", separator = ",") =>
   normalizeText(value)
@@ -300,11 +286,16 @@ const TourismMarketplace = () => {
   const handleSubmitCustomRequest = async (event) => {
     event.preventDefault();
     setLoading("customSubmit", true);
-    setTimeout(() => {
-      setLoading("customSubmit", false);
+    try {
+      await tourismService.createCustomRequest(customRequest);
       pushToast("Custom request submitted. Vendor matching started.");
+      setLoading("customSubmit", false);
       setCustomRequest((current) => ({ ...current, preferences: "" }));
-    }, 500);
+      await loadVendorData();
+    } catch (error) {
+      setLoading("customSubmit", false);
+      pushToast(error?.response?.data?.message || "Unable to submit custom request now.", "error");
+    }
   };
 
   const toggleWishlist = (packageId) => {
@@ -333,8 +324,20 @@ const TourismMarketplace = () => {
 
   const handleAskAgentOnWhatsApp = (pkg) => {
     const phone = normalizeText(pkg.whatsappNumber || pkg.emergencyContact || "+919876500000").replace(/[^\d]/g, "");
-    const text = encodeURIComponent(`Hi, I need details for ${pkg.title} (${pkg.destination}) from NilaTravel.`);
+    const text = buildTourismWhatsAppMessage(pkg, bookingForm);
     window.open(`https://wa.me/${phone}?text=${text}`, "_blank", "noopener,noreferrer");
+  };
+
+  const handleTourismQuickAction = (action) => {
+    if (action.filters?.openCustomRequest) {
+      setActiveTab("custom");
+      return;
+    }
+    if (action.filters?.category) setSelectedCategory(action.filters.category);
+    if (action.filters?.destination) setSelectedDestination(action.filters.destination);
+    if (action.filters?.travelerType) setSelectedTravelerType(action.filters.travelerType);
+    if (action.filters?.maxDays) setMaxDays(action.filters.maxDays);
+    setActiveTab("marketplace");
   };
 
   const handleBookingFormChange = (field, value) => {
@@ -353,7 +356,7 @@ const TourismMarketplace = () => {
       return;
     }
 
-    const validationErrors = validateBookingForm(bookingForm);
+    const validationErrors = validateTourismBooking(bookingForm);
     if (Object.keys(validationErrors).length > 0) {
       setBookingErrors(validationErrors);
       pushToast("Please fix booking form fields before submitting.", "error");
@@ -590,6 +593,7 @@ const TourismMarketplace = () => {
             <h2>Kerala Package Discovery</h2>
             <p>Search by destination, budget, days, traveler type, and hotel category.</p>
           </div>
+          <TourismQuickActions onApplyQuickAction={handleTourismQuickAction} />
           <div className="tourism-search-grid">
             <FilterPanel
               searchText={searchText}
@@ -947,4 +951,3 @@ const TourismMarketplace = () => {
 };
 
 export default TourismMarketplace;
-

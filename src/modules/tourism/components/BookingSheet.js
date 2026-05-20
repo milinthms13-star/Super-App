@@ -1,5 +1,6 @@
 import React from "react";
 import { BOOKING_STATUS_OPTIONS, PAYMENT_OPTIONS, formatInr, HOTEL_CATEGORIES, PICKUP_CITIES } from "../tourismData";
+import { calculateTourismAdvance } from "../tourismUpgradeUtils";
 
 const BookingSheet = ({
   selectedPackage,
@@ -13,6 +14,12 @@ const BookingSheet = ({
   if (!selectedPackage) {
     return null;
   }
+
+  const payment = calculateTourismAdvance(
+    selectedPackage.startPrice,
+    bookingForm.travelerCount,
+    bookingForm.paymentType
+  );
 
   return (
     <div className="tourism-booking-backdrop" onClick={onClose}>
@@ -28,6 +35,12 @@ const BookingSheet = ({
           <p className="tourism-card-meta">
             {selectedPackage.destination} | {selectedPackage.durationDays} days | {selectedPackage.vendor}
           </p>
+
+          <div className="tourism-price-summary-card">
+            <div><span>Total estimate</span><strong>{formatInr(payment.total)}</strong></div>
+            <div><span>Pay now</span><strong>{formatInr(payment.payableNow)}</strong></div>
+            <div><span>Balance</span><strong>{formatInr(payment.balance)}</strong></div>
+          </div>
 
           <div className="tourism-booking-detail-grid">
             <article>
@@ -56,6 +69,10 @@ const BookingSheet = ({
             <p><strong>Emergency contact:</strong> {selectedPackage.emergencyContact || "+91 112"}</p>
             <p><strong>Insurance:</strong> {selectedPackage.insuranceSupport ? "Available" : "Optional add-on"}</p>
             <p><strong>Tourist helpline:</strong> Kerala Tourism Helpline 1800-425-4747</p>
+          </div>
+
+          <div className="tourism-safety-note">
+            Verify ID requirements, weather advisories, permit rules, and final hotel availability before payment.
           </div>
 
           <div className="tourism-booking-form-grid">
@@ -128,6 +145,7 @@ const BookingSheet = ({
                 value={bookingForm.travelerCount}
                 onChange={(event) => onBookingFormChange("travelerCount", Number(event.target.value))}
               />
+              {bookingErrors.travelerCount ? <small className="tourism-field-error">{bookingErrors.travelerCount}</small> : null}
             </label>
             <label className="tourism-field">
               <span>Coupon code</span>
@@ -159,12 +177,12 @@ const BookingSheet = ({
           <div className="tourism-booking-status-preview">
             <strong>Booking status flow:</strong>
             <span>{BOOKING_STATUS_OPTIONS.join(" -> ")}</span>
-            <span>Base package amount: {formatInr(selectedPackage.startPrice)}</span>
+            <span>Per traveler base amount: {formatInr(selectedPackage.startPrice)}</span>
           </div>
 
           <div className="tourism-booking-actions">
             <button type="button" className="tourism-primary-button" disabled={bookingSubmitting} onClick={onSubmitBooking}>
-              {bookingSubmitting ? "Submitting..." : "Submit Booking"}
+              {bookingSubmitting ? "Submitting..." : `Submit Booking | Pay ${formatInr(payment.payableNow)}`}
             </button>
           </div>
         </div>
@@ -174,4 +192,3 @@ const BookingSheet = ({
 };
 
 export default BookingSheet;
-

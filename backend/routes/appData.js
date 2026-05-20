@@ -67,6 +67,10 @@ const {
   getQuestionBank,
   GOVT_PORTALS,
 } = require('../data/skillLearningData');
+const {
+  validateCertificateUploadPayload,
+  buildSkillWalletShareText,
+} = require('../utils/skillDevelopmentBackendHelpers');
 
 const router = express.Router();
 const upload = multer({
@@ -1899,8 +1903,9 @@ router.get('/skilllearning/certificates', authenticate, async (req, res) => {
 
 router.post('/skilllearning/certificates/upload', authenticate, upload.single('certificateFile'), async (req, res) => {
   const { title, issuer, completedOn, credentialId } = req.body;
-  if (!title || !completedOn) {
-    return res.status(400).json({ success: false, message: 'Title and completion date are required.' });
+  const validationErrors = validateCertificateUploadPayload(req.body || {}, req.file);
+  if (validationErrors.length) {
+    return res.status(400).json({ success: false, message: validationErrors.join(' ') });
   }
 
   try {
@@ -1940,7 +1945,8 @@ router.get('/skilllearning/wallet', authenticate, async (req, res) => {
     const courses = getSkillLearningCourses({});
     const userEmail = normalizeEmailAddress(req.user?.email || req.user?.id || req.user?._id);
     const certificates = await SkillCertificate.find({ userEmail }).lean();
-    return res.json({ success: true, data: { courses, certificates } });
+    const shareText = buildSkillWalletShareText(certificates);
+    return res.json({ success: true, data: { courses, certificates, shareText } });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Failed to load wallet data.', error: error.message });
   }

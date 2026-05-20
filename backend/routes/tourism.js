@@ -35,6 +35,110 @@ const buildBookingTotals = (baseAmount, paymentType, couponCode, coupons) => {
   };
 };
 
+router.post('/custom-requests', async (req, res) => {
+  const payload = req.body || {};
+  const travelerName = toNormalizedText(payload.travelerName);
+  const phone = toNormalizedText(payload.phone).replace(/\D/g, '');
+  const destination = toNormalizedText(payload.destination);
+
+  if (!travelerName || phone.length < 10 || !destination) {
+    return res.status(400).json({
+      success: false,
+      message: 'travelerName, phone, and destination are required.',
+    });
+  }
+
+  const now = new Date().toISOString();
+  const lead = {
+    id: createId('lead'),
+    packageId: '',
+    packageTitle: 'Custom request',
+    vendorId: toNormalizedText(payload.vendorId || ''),
+    travelerName,
+    travelerPhone: phone,
+    travelerType: toNormalizedText(payload.travelerType || 'Family'),
+    destination,
+    pickupCity: toNormalizedText(payload.pickupCity),
+    hotelCategory: toNormalizedText(payload.hotelCategory),
+    startDate: toNormalizedText(payload.startDate),
+    days: Math.max(1, toNumber(payload.days, 3)),
+    budget: Math.max(0, toNumber(payload.estimatedBudget, 0)),
+    estimatedBudget: Math.max(0, toNumber(payload.estimatedBudget, 0)),
+    status: 'new',
+    source: 'custom_request',
+    note: toNormalizedText(payload.preferences || ''),
+    priority: toNumber(payload.estimatedBudget, 0) >= 50000 ? 'hot' : 'normal',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await updateTourismData((current) => ({
+    ...current,
+    leads: [lead, ...(Array.isArray(current.leads) ? current.leads : [])],
+  }));
+
+  return res.status(201).json({ success: true, data: { lead } });
+});
+
+router.post('/payments/intent', (req, res) => {
+  const bookingId = toNormalizedText(req.body?.bookingId);
+  const amount = toNumber(req.body?.amount, 0);
+  const paymentType = toNormalizedText(req.body?.paymentType || 'advance').toLowerCase();
+
+  if (!bookingId || amount <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Valid bookingId and amount are required.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      provider: 'manual_or_gateway_pending',
+      orderId: `TOUR-PAY-${Date.now()}`,
+      bookingId,
+      amount,
+      paymentType: paymentType === 'full' ? 'full' : 'advance',
+      status: 'created',
+    },
+  });
+});
+
+router.post('/packages/:packageId/report', async (req, res) => {
+  const packageId = toNormalizedText(req.params.packageId);
+  const reason = toNormalizedText(req.body?.reason || 'Package issue reported');
+  const contact = toNormalizedText(req.body?.contact || '');
+
+  if (!packageId) {
+    return res.status(400).json({
+      success: false,
+      message: 'packageId is required.',
+    });
+  }
+
+  const now = new Date().toISOString();
+  const complaint = {
+    id: createId('cmp'),
+    bookingId: '',
+    packageId,
+    vendorId: '',
+    issue: reason,
+    contact,
+    status: 'open',
+    escalationTimeline: [{ at: now, event: 'Complaint opened' }],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await updateTourismData((current) => ({
+    ...current,
+    complaints: [complaint, ...(Array.isArray(current.complaints) ? current.complaints : [])],
+  }));
+
+  return res.status(201).json({ success: true, data: { complaint } });
+});
+
 router.get('/bootstrap', async (req, res) => {
   const data = await readTourismData();
   const email = toNormalizedEmail(req.query.email);

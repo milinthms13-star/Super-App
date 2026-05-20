@@ -38,38 +38,68 @@ const retryPaymentVerification = async (orderId, maxRetries = 3) => {
   }
 };
 
-// Create payment order
-router.post('/payment/create-order', authenticate, async (req, res) => {
-  try {
-    const { bookingId, consultantId, amountInr } = req.body;
+const findBookingById = async (bookingId) => {
+  if (!bookingId) {
+    return null;
+  }
 
-    if (!bookingId || !amountInr || amountInr < 100) {
-      return res.status(400).json({
+  return AstrologyConsultationBooking.findById(String(bookingId));
+};
+
+const createRazorpayOrderForBooking = async (booking, userId) => {
+  return razorpay.orders.create({
+    amount: Math.round(Number(booking.amountInr || 0) * 100),
+    currency: 'INR',
+    receipt: `booking-${String(booking._id || booking.id || '')}`,
+    notes: {
+      bookingId: String(booking._id || booking.id),
+      consultantId: String(booking.consultantId || ''),
+      userId: String(userId || ''),
+    },
+  });
+};
+
+const getBookingIdFromRequest = (req) => {
+  return String(req.params?.bookingId || req.body?.bookingId || '').trim();
+};
+
+const quoteOrderResponse = (order) => ({
+  orderId: order.id,
+  amountInr: Number(order.amount) / 100,
+  currency: order.currency,
+  keyId: process.env.RAZORPAY_KEY_ID || 'test_key',
+});
+
+const handleCreatePaymentOrder = async (req, res) => {
+  try {
+    const bookingId = getBookingIdFromRequest(req);
+    const userId = String(req.user._id || req.user.id);
+    const booking = await findBookingById(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({
         success: false,
-        message: 'Invalid booking or amount.',
+        message: 'Booking not found.',
       });
     }
 
-    // Create Razorpay order
-    const order = await razorpay.orders.create({
-      amount: amountInr * 100, // Convert to paise
-      currency: 'INR',
-      receipt: `booking-${bookingId}`,
-      notes: {
-        bookingId,
-        consultantId,
-        userId: String(req.user._id || req.user.id),
-      },
+    if (booking.paymentStatus === 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment has already been completed for this booking.',
+      });
+    }
+
+    const order = await createRazorpayOrderForBooking(booking, userId);
+
+    await AstrologyConsultationBooking.findByIdAndUpdate(bookingId, {
+      paymentOrderId: order.id,
+      paymentStatus: 'pending',
     });
 
     return res.json({
       success: true,
-      data: {
-        orderId: order.id,
-        amountInr,
-        currency: 'INR',
-        keyId: process.env.RAZORPAY_KEY_ID || 'test_key',
-      },
+      data: quoteOrderResponse(order),
     });
   } catch (error) {
     return res.status(500).json({
@@ -77,17 +107,20 @@ router.post('/payment/create-order', authenticate, async (req, res) => {
       message: error.message || 'Unable to create payment order.',
     });
   }
-});
+};
 
-// Verify payment signature
-router.post('/payment/verify', authenticate, async (req, res) => {
+// Create payment order
+router.post('/consultations/:bookingId/payment/create-order', authenticate, handleCreatePaymentOrder);
+router.post('/payment/create-order', authenticate, handleCreatePaymentOrder);
+
+const handleVerifyPayment = async (req, res) => {
   const transactionId = `TXN-${Date.now()}`;
   try {
-    const { orderId, paymentId, signature, bookingId } = req.body;
+    const bookingId = getBookingIdFromRequest(req);
+    const { orderId, paymentId, signature } = req.body;
     const userId = String(req.user._id || req.user.id);
 
-    // Validate inputs
-    if (!orderId || !paymentId || !signature || !bookingId) {
+    if (!bookingId || !orderId || !paymentId || !signature) {
       await logTransaction({
         id: transactionId,
         status: 'failed',
@@ -101,42 +134,7 @@ router.post('/payment/verify', authenticate, async (req, res) => {
       });
     }
 
-    // Verify signature
-    const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret');
-    shasum.update(`${orderId}|${paymentId}`);
-    const digest = shasum.digest('hex');
-
-    if (digest !== signature) {
-      await logTransaction({
-        id: transactionId,
-        status: 'failed',
-        reason: 'Invalid signature',
-        orderId,
-        paymentId,
-        userId,
-        timestamp: new Date(),
-      });
-      return res.status(400).json({
-        success: false,
-        message: 'Payment signature verification failed.',
-      });
-    }
-
-    // Fetch payment details from Razorpay with retry
-    const paymentDetails = await retryPaymentVerification(orderId);
-    
-    // Update booking with payment status
-    const booking = await AstrologyConsultationBooking.findByIdAndUpdate(
-      bookingId,
-      {
-        paymentStatus: 'completed',
-        paymentId,
-        paymentDate: new Date(),
-        transactionId,
-      },
-      { new: true }
-    );
-
+    const booking = await findBookingById(bookingId);
     if (!booking) {
       await logTransaction({
         id: transactionId,
@@ -152,12 +150,64 @@ router.post('/payment/verify', authenticate, async (req, res) => {
       });
     }
 
-    // Send success notification
+    if (booking.paymentOrderId && booking.paymentOrderId !== orderId) {
+      await logTransaction({
+        id: transactionId,
+        status: 'failed',
+        reason: 'Order mismatch',
+        bookingId,
+        orderId,
+        bookingOrderId: booking.paymentOrderId,
+        userId,
+        timestamp: new Date(),
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Payment order does not match booking.',
+      });
+    }
+
+    const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret');
+    shasum.update(`${orderId}|${paymentId}`);
+    const digest = shasum.digest('hex');
+
+    if (digest !== signature) {
+      await logTransaction({
+        id: transactionId,
+        status: 'failed',
+        reason: 'Invalid signature',
+        orderId,
+        paymentId,
+        bookingId,
+        userId,
+        timestamp: new Date(),
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Payment signature verification failed.',
+      });
+    }
+
+    await retryPaymentVerification(orderId);
+
+    const updatedBooking = await AstrologyConsultationBooking.findByIdAndUpdate(
+      bookingId,
+      {
+        paymentStatus: 'completed',
+        paymentOrderId: orderId,
+        paymentId,
+        paymentSignature: signature,
+        paymentDate: new Date(),
+        transactionId,
+      },
+      { new: true }
+    );
+
     try {
       await NotificationService.sendNotification(userId, {
         type: 'payment_success',
         title: 'Payment Confirmed',
-        message: `Your consultation booking payment of ₹${booking.amountInr || 'N/A'} has been confirmed.`,
+        message: `Your consultation booking payment of ₹${updatedBooking.amountInr || 'N/A'} has been confirmed.`,
         channels: ['in-app', 'email'],
         data: { bookingId, transactionId },
       });
@@ -171,7 +221,7 @@ router.post('/payment/verify', authenticate, async (req, res) => {
       orderId,
       paymentId,
       bookingId,
-      amountInr: booking.amountInr,
+      amountInr: updatedBooking.amountInr,
       userId,
       timestamp: new Date(),
     });
@@ -180,7 +230,7 @@ router.post('/payment/verify', authenticate, async (req, res) => {
       success: true,
       message: 'Payment verified successfully.',
       data: {
-        ...booking.toObject?.() || booking,
+        ...updatedBooking.toObject?.() || updatedBooking,
         transactionId,
       },
     });
@@ -197,12 +247,15 @@ router.post('/payment/verify', authenticate, async (req, res) => {
       message: error.message || 'Unable to verify payment.',
     });
   }
-});
+};
 
-// Get payment status
-router.get('/payment/:bookingId', authenticate, async (req, res) => {
+router.post('/consultations/:bookingId/payment/verify', authenticate, handleVerifyPayment);
+router.post('/payment/verify', authenticate, handleVerifyPayment);
+
+const handleGetPaymentStatus = async (req, res) => {
   try {
-    const booking = await AstrologyConsultationBooking.findById(req.params.bookingId);
+    const bookingId = getBookingIdFromRequest(req);
+    const booking = await findBookingById(bookingId);
 
     if (!booking) {
       return res.status(404).json({
@@ -217,6 +270,7 @@ router.get('/payment/:bookingId', authenticate, async (req, res) => {
         bookingId: booking._id,
         paymentStatus: booking.paymentStatus || 'pending',
         amountInr: booking.amountInr,
+        paymentOrderId: booking.paymentOrderId || null,
         paymentId: booking.paymentId || null,
         transactionId: booking.transactionId || null,
       },
@@ -227,7 +281,10 @@ router.get('/payment/:bookingId', authenticate, async (req, res) => {
       message: error.message || 'Unable to fetch payment status.',
     });
   }
-});
+};
+
+router.get('/consultations/:bookingId/payment', authenticate, handleGetPaymentStatus);
+router.get('/payment/:bookingId', authenticate, handleGetPaymentStatus);
 
 // Razorpay Webhook Handler
 router.post('/payment/webhook', async (req, res) => {

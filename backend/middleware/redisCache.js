@@ -63,6 +63,7 @@ module.exports = {
   cacheSearch: cacheMiddleware('search'),
   cacheReminders: cacheMiddleware('reminders'),
   cacheReminderStats: cacheMiddleware('reminder-stats'),
+  cacheList: (resourceType) => cacheMiddleware(resourceType),
   generateCacheKey,
 };
 

@@ -1,0 +1,140 @@
+.tourism-quick-actions-card {
+  display: grid;
+  grid-template-columns: 0.9fr 1.6fr;
+  gap: 16px;
+  padding: 18px;
+  margin: 16px 0;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #ecfeff, #f8fafc);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+.tourism-eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #0284c7;
+  font-weight: 800;
+}
+
+.tourism-quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.tourism-quick-actions-grid button {
+  border: 0;
+  border-radius: 18px;
+  padding: 14px 10px;
+  background: #ffffff;
+  color: #0f172a;
+  font-weight: 800;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+}
+
+.tourism-quick-actions-grid span {
+  display: block;
+  font-size: 1.5rem;
+  margin-bottom: 4px;
+}
+
+.tourism-package-card-upgraded {
+  overflow: hidden;
+}
+
+.tourism-package-title-row,
+.tourism-package-safety-row,
+.tourism-card-footer.upgraded {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tourism-package-body-upgraded {
+  padding: 14px;
+}
+
+.tourism-trust-pill {
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 0.75rem;
+  font-weight: 900;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.tourism-trust-pill.high { background: #dcfce7; color: #166534; }
+.tourism-trust-pill.good { background: #fef9c3; color: #854d0e; }
+.tourism-trust-pill.pending { background: #fee2e2; color: #991b1b; }
+
+.tourism-package-safety-row {
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: #475569;
+  margin-top: 10px;
+}
+
+.tourism-price-summary-card {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  background: #f8fafc;
+  margin: 12px 0;
+}
+
+.tourism-price-summary-card div {
+  display: grid;
+  gap: 4px;
+}
+
+.tourism-price-summary-card span {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.tourism-safety-note {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 700;
+}
+
+.tourism-booking-actions.sticky {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  padding-top: 10px;
+}
+
+@media (max-width: 760px) {
+  .tourism-quick-actions-card,
+  .tourism-price-summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .tourism-quick-actions-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tourism-package-title-row,
+  .tourism-card-footer.upgraded {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tourism-inline-actions {
+    width: 100%;
+  }
+
+  .tourism-inline-actions button {
+    flex: 1 1 45%;
+  }
+}

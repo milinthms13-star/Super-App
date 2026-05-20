@@ -3,6 +3,16 @@ import axios from "axios";
 import { jsPDF } from "jspdf";
 import { API_BASE_URL } from "../../utils/api";
 import "./SkillLearningHub.css";
+import "./SkillDevelopmentUpgrade.css";
+import SkillQuickActions from "./SkillQuickActions";
+import SkillCareerPathBuilder from "./SkillCareerPathBuilder";
+import {
+  mergeFilters,
+  scrollToSkillSection,
+  getCourseTrustScore,
+  getReadinessLabel,
+  validateCertificateUpload,
+} from "./skillDevelopmentUtils";
 
 const COURSE_CATEGORIES = [
   { id: 'gulf-ready', title: 'Gulf Ready', description: 'Courses designed for Gulf job readiness and visa-linked skills.' },
@@ -227,6 +237,13 @@ const SkillLearningHub = () => {
     setFilters((current) => ({ ...current, [key]: current[key] === value ? '' : value }));
   };
 
+  const applyQuickFilters = (newFilters) => {
+    setFilters((current) => mergeFilters(current, newFilters));
+    if (newFilters.category) {
+      setSelectedCategory(newFilters.category);
+    }
+  };
+
   const handleEnroll = async (courseId) => {
     if (!courseId) return;
     setIsEnrolling(true);
@@ -262,7 +279,9 @@ const SkillLearningHub = () => {
 
   const handleCertificateUpload = async (event) => {
     event.preventDefault();
-    if (!certificateForm.title || !certificateForm.completedOn) {
+    const validationError = validateCertificateUpload(certificateForm, certificateFile);
+    if (validationError) {
+      alert(validationError);
       return;
     }
 
@@ -344,6 +363,17 @@ const SkillLearningHub = () => {
         </div>
       </section>
 
+      <SkillQuickActions
+        onApplyFilters={applyQuickFilters}
+        onScrollTo={scrollToSkillSection}
+      />
+
+      <SkillCareerPathBuilder
+        form={recommenderForm}
+        setForm={setRecommenderForm}
+        onApplyFilters={applyQuickFilters}
+      />
+
       <section className="skillhub-section">
         <div className="skillhub-section-header">
           <h2>Course Catalog</h2>
@@ -393,9 +423,10 @@ const SkillLearningHub = () => {
         <div className="skillhub-course-grid">
           {courseLoading ? (
             <div className="skillhub-status">Loading courses...</div>
-          ) : filteredCourses.length ? (
-            filteredCourses.map((course) => {
+          ) : selectedCategoryCourses.length ? (
+            selectedCategoryCourses.map((course) => {
               const progress = course.progress || enrolledCourses.some((enrolled) => enrolled.id === course.id) ? 35 : 0;
+              const courseScore = getCourseTrustScore(course);
               return (
                 <article key={course.id} className="skillhub-course-card">
                   <div className="skillhub-course-card-header">
@@ -409,7 +440,13 @@ const SkillLearningHub = () => {
                     <span>{course.level}</span>
                     <span>{course.language}</span>
                     <span>{course.duration}</span>
-                    <span>{course.price === 0 ? 'Free' : `₹${course.price}`}</span>
+                    <span>{course.price === 0 ? 'Free' : `Rs.${course.price}`}</span>
+                  </div>
+                  <div className="skillhub-course-value-row">
+                    <span className="skillhub-course-value-pill">
+                      {getReadinessLabel(courseScore)} | {courseScore}%
+                    </span>
+                    <small>{course.certificateAvailable ? 'Certificate' : 'Learning only'}</small>
                   </div>
                   <div className="skillhub-progress-bar">
                     <div className="skillhub-progress-fill" style={{ width: `${progress}%` }} />
@@ -485,7 +522,7 @@ const SkillLearningHub = () => {
       </section>
 
       <section className="skillhub-dual-grid">
-        <article className="skillhub-panel">
+        <article id="skillhub-mock-test" className="skillhub-panel">
           <h2>Mock Test Practice</h2>
           <form className="skillhub-form" onSubmit={handleMockTestSubmit}>
             <label>
@@ -686,6 +723,9 @@ const SkillLearningHub = () => {
           <p className="skillhub-note">
             Kerala and Gulf career directions included. Use these verified portals for eligibility, certificate value, and free/paid learning.
           </p>
+          <p className="skillhub-disclaimer">
+            Course, certificate and government portal details may change. Verify eligibility, fees and certificate validity on the official portal before applying.
+          </p>
         </article>
       </section>
 
@@ -729,3 +769,4 @@ const SkillLearningHub = () => {
 };
 
 export default SkillLearningHub;
+
