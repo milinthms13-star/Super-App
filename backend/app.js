@@ -244,6 +244,7 @@ app.use('/api', require('./routes/healthcare'));
 app.use('/api/localmarket', require('./routes/localmarket'));
 app.use('/api/localservices', require('./routes/localservices'));
 app.use('/api/resumebuilder', require('./routes/resumebuilder'));
+app.use('/api/socialmedia', require('./routes/socialmedia'));
 app.use('/api/messaging', require('./routes/messaging'));
 app.use('/api/invitations', require('./routes/invitations'));
 app.use('/api/orders', require('./routes/orders'));
