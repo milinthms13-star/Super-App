@@ -22,37 +22,20 @@ const VOICE_COMMAND_HINTS = [
   "repeat step / വീണ്ടും പറയൂ",
   "grocery list / സാധനങ്ങളുടെ ലിസ്റ്റ്",
   "tips / ടിപ്സ്",
-  "ingredients ... / ചേരുവകൾ ...",
-  "allergies ... / അലർജി ...",
   "generate recipe / റെസിപ്പി ഉണ്ടാക്കൂ",
 ];
 
 const mlIncludes = (text, phrases) => phrases.some((phrase) => text.includes(phrase));
 
-const parseJwtPayload = (token) => {
-  if (!token || typeof token !== "string") return null;
+const isAdminToken = (token) => {
   try {
-    const payloadPart = token.split(".")[1];
-    if (!payloadPart) return null;
-    const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
-    return JSON.parse(atob(padded));
+    if (!token) return false;
+    const payload = JSON.parse(atob(token.split(".")[1] || ""));
+    const role = String(payload.role || payload.userRole || "").toLowerCase();
+    return role === "admin" || role === "superadmin";
   } catch (_error) {
-    return null;
+    return false;
   }
-};
-
-const hasAdminRole = (token) => {
-  const payload = parseJwtPayload(token);
-  const rawRoles = [
-    payload?.role,
-    payload?.userRole,
-    ...(Array.isArray(payload?.roles) ? payload.roles : []),
-    ...(Array.isArray(payload?.permissions) ? payload.permissions : []),
-  ];
-  return rawRoles
-    .map((item) => String(item || "").toLowerCase().trim())
-    .some((role) => role === "admin" || role === "superadmin" || role === "finance_admin");
 };
 
 const buildWhatsAppGroceryLink = (groceryData = {}, recipeTitle = "Recipe") => {
@@ -60,22 +43,19 @@ const buildWhatsAppGroceryLink = (groceryData = {}, recipeTitle = "Recipe") => {
   const missingItems = groceryData.missingItems?.length
     ? groceryData.missingItems
     : items.filter((item) => !item.availableAtHome);
-  const rows = missingItems.length ? missingItems : items;
+
+  const lines = missingItems.length ? missingItems : items;
   const message = [
     `Grocery list for ${recipeTitle}`,
-    ...rows.map((item, index) => `${index + 1}. ${item.name}${item.quantity ? ` - ${item.quantity}` : ""}`),
+    ...lines.map((item, index) => `${index + 1}. ${item.name}${item.quantity ? ` - ${item.quantity}` : ""}`),
   ].join("\n");
+
   return `https://wa.me/?text=${encodeURIComponent(message)}`;
 };
 
 const SmartKitchenRecipeHub = () => {
   const token = getStoredAuthToken();
-  const isAdmin = useMemo(
-    () =>
-      hasAdminRole(token) ||
-      ["admin", "superadmin"].includes(String(localStorage.getItem("role") || "").toLowerCase()),
-    [token]
-  );
+  const isAdmin = isAdminToken(token) || localStorage.getItem("role") === "admin";
   const tabs = useMemo(() => (isAdmin ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS), [isAdmin]);
   const [tab, setTab] = useState("home");
   const [status, setStatus] = useState({ type: "", text: "" });
@@ -249,10 +229,7 @@ const SmartKitchenRecipeHub = () => {
         };
 
         const response = await request.post(buildApiUrl("/kitchen/recipes/generate"), payload);
-        setSelectedRecipe({
-          ...(response.data.recipe || {}),
-          allergyWarnings: response.data.allergyWarnings || response.data.recipe?.allergyWarnings || [],
-        });
+        setSelectedRecipe(response.data.recipe);
         setGrocery({
           items: response.data.groceryList || [],
           missingItems: (response.data.groceryList || []).filter((item) => !item.availableAtHome),
@@ -535,13 +512,10 @@ const SmartKitchenRecipeHub = () => {
   }, [loadMeta, loadRecipes, loadTips]);
 
   useEffect(() => {
-    if (tab === "admin" && isAdmin) {
+    if (tab === "admin") {
       loadPendingCommunity();
     }
-    if (tab === "admin" && !isAdmin) {
-      setTab("home");
-    }
-  }, [isAdmin, loadPendingCommunity, tab]);
+  }, [loadPendingCommunity, tab]);
 
   useEffect(() => {
     if (!selectedRecipe?.steps?.length) return undefined;
@@ -742,17 +716,7 @@ const SmartKitchenRecipeHub = () => {
                     type="button"
                     key={item}
                     onClick={() => {
-                      setGeneratorForm((current) => ({
-                        ...current,
-                        category: item.includes("Breakfast")
-                          ? "Breakfast"
-                          : item.includes("Lunch")
-                          ? "Lunch"
-                          : item.includes("Snacks")
-                          ? "Snacks"
-                          : "Dinner",
-                        healthyMode: item.includes("Diabetic") || item.includes("Weight"),
-                      }));
+                      setGeneratorForm((current) => ({ ...current, category: item.includes("Breakfast") ? "Breakfast" : item.includes("Lunch") ? "Lunch" : item.includes("Snacks") ? "Snacks" : "Dinner", healthyMode: item.includes("Diabetic") || item.includes("Weight") }));
                       setTab("generator");
                     }}
                   >
@@ -1020,27 +984,11 @@ const SmartKitchenRecipeHub = () => {
               <div className="kitchen-inline-actions">
                 <button
                   type="button"
-                  onClick={() => {
-                    const presetText = grocery?.share?.whatsappText;
-                    const link = presetText
-                      ? `https://wa.me/?text=${encodeURIComponent(presetText)}`
-                      : buildWhatsAppGroceryLink(grocery, selectedRecipe?.title || "Recipe");
-                    window.open(link, "_blank", "noopener,noreferrer");
-                  }}
+                  onClick={() => window.open(buildWhatsAppGroceryLink(grocery, selectedRecipe?.title || "Recipe"), "_blank")}
                 >
                   Share on WhatsApp
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const localMarketPath = grocery?.share?.localMarketPath;
-                    if (localMarketPath) {
-                      window.location.href = localMarketPath;
-                      return;
-                    }
-                    pushStatus("success", "Connect this to your Local Market module to order missing items.");
-                  }}
-                >
+                <button type="button" onClick={() => pushStatus("success", "Connect this to your Local Market module to order missing items.")}>
                   Order missing items
                 </button>
               </div>

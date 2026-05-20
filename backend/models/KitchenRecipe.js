@@ -37,6 +37,7 @@ const kitchenRecipeSchema = new mongoose.Schema(
     imageUrl: { type: String, default: '', trim: true },
     videoUrl: { type: String, default: '', trim: true },
     calories: { type: Number, default: 0, min: 0 },
+    allergyWarnings: { type: [String], default: [] },
     language: { type: String, default: 'en', trim: true, index: true },
     sourceType: {
       type: String,
@@ -61,4 +62,3 @@ kitchenRecipeSchema.index({ title: 'text', description: 'text', tags: 'text' });
 
 module.exports =
   mongoose.models.KitchenRecipe || mongoose.model('KitchenRecipe', kitchenRecipeSchema);
-

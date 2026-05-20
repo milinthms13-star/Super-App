@@ -45,7 +45,7 @@ const localizedText = {
     prep: (title, cuisine) => `Prep ingredients for ${title}. Wash, chop, and keep them ready with ${cuisine} spice base.`,
     cook: 'Heat pan, add oil, saute aromatics, and add core ingredients. Stir well on medium heat.',
     finish: 'Adjust salt and seasoning, finish with garnish, and serve hot.',
-    description: (cuisine, category) => `Easy ${cuisine} ${String(category || '').toLowerCase()} recipe made with home ingredients.`,
+    description: (cuisine, category) => `Easy ${cuisine} ${category.toLowerCase()} recipe made with home ingredients.`,
     budget: 'Budget-friendly version included.',
     healthy: 'Healthy low-oil adjustments included.',
     allergy: (allergy) => `Potential ${allergy} allergen detected.`,
@@ -100,8 +100,7 @@ const generateSteps = ({ title, cuisine, maxTimeMinutes, language }) => {
   ];
 };
 
-const detectAllergyRisk = (ingredients = [], allergies = [], language = 'en') => {
-  const copy = getCopy(language);
+const detectAllergyRisk = (ingredients = [], allergies = []) => {
   const normalizedIngredients = ingredients.map((item) => item.toLowerCase());
   const normalizedAllergies = normalizeList(allergies).map((item) => item.toLowerCase());
   const risks = [];
@@ -110,7 +109,7 @@ const detectAllergyRisk = (ingredients = [], allergies = [], language = 'en') =>
     const variants = ALLERGENS[allergy] || [allergy];
     const matched = variants.some((variant) => normalizedIngredients.some((item) => item.includes(variant)));
     if (matched) {
-      risks.push(copy.allergy(allergy));
+      risks.push(getCopy('en').allergy(allergy));
     }
   });
 
@@ -165,8 +164,6 @@ const createRecipeFromIngredients = (payload = {}) => {
     `Language support: ${languageLabel[language] || 'English'}.`,
   ].filter(Boolean);
 
-  const allergyWarnings = detectAllergyRisk(allIngredients, payload.allergies, language);
-
   return {
     recipe: {
       title,
@@ -182,11 +179,11 @@ const createRecipeFromIngredients = (payload = {}) => {
       language,
       tags: [category.toLowerCase(), cuisine.toLowerCase(), budgetMode ? 'budget' : '', healthyMode ? 'healthy' : ''].filter(Boolean),
       nutritionGoals: healthyMode ? ['balanced', 'low-oil'] : [],
-      allergyWarnings,
+      allergyWarnings: detectAllergyRisk(allIngredients, payload.allergies),
     },
     groceryList: allIngredients.map((name) => ({ name, quantity: '1 unit', availableAtHome: ingredients.includes(name) })),
     substitutions: buildSubstitutions(allIngredients),
-    allergyWarnings,
+    allergyWarnings: detectAllergyRisk(allIngredients, payload.allergies),
   };
 };
 
@@ -218,3 +215,4 @@ module.exports = {
   buildRecipeVideoPrompt,
   buildAiRecipePrompt,
 };
+
