@@ -1,9 +1,11 @@
 // src/websocket/dashboardWebSocketClient.js
-// Simple WebSocket client for dashboard real-time analytics
+// Socket.IO client for dashboard real-time analytics
+import { io } from 'socket.io-client';
+import { BACKEND_BASE_URL } from '../utils/api';
 
 class DashboardWebSocketClient {
-  constructor(baseUrl = window.location.origin.replace(/^http/, 'ws')) {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl = BACKEND_BASE_URL || window.location.origin) {
+    this.baseUrl = String(baseUrl || window.location.origin).replace(/\/+$/, '');
     this.socket = null;
     this.listeners = new Map();
     this.connected = false;
@@ -12,39 +14,37 @@ class DashboardWebSocketClient {
   connect(token) {
     return new Promise((resolve, reject) => {
       try {
-        const url = `${this.baseUrl}/socket.io/?token=${encodeURIComponent(token)}&EIO=4&transport=websocket`;
-        this.socket = new window.WebSocket(url);
-        this.socket.onopen = () => {
+        this.socket = io(this.baseUrl, {
+          path: '/socket.io',
+          transports: ['websocket', 'polling'],
+          auth: token ? { token } : {},
+          withCredentials: true,
+          reconnection: true,
+        });
+
+        this.socket.on('connect', () => {
           this.connected = true;
           this.emit('connected');
           resolve();
-        };
-        this.socket.onmessage = (event) => this.handleMessage(event);
-        this.socket.onclose = () => {
+        });
+
+        this.socket.on('disconnect', () => {
           this.connected = false;
           this.emit('disconnected');
-        };
-        this.socket.onerror = (err) => {
+        });
+
+        this.socket.on('connect_error', (err) => {
           this.emit('error', err);
           reject(err);
-        };
+        });
+
+        this.socket.onAny((eventType, data) => {
+          this.emit(eventType, data);
+        });
       } catch (err) {
         reject(err);
       }
     });
-  }
-
-  handleMessage(event) {
-    try {
-      // Socket.IO payloads: 42["event",{...}]
-      if (typeof event.data === 'string' && event.data.startsWith('42')) {
-        const payload = JSON.parse(event.data.slice(2));
-        const [eventType, data] = payload;
-        this.emit(eventType, data);
-      }
-    } catch (err) {
-      this.emit('error', err);
-    }
   }
 
   on(eventType, callback) {
@@ -66,14 +66,18 @@ class DashboardWebSocketClient {
   emit(eventType, data) {
     if (this.listeners.has(eventType)) {
       this.listeners.get(eventType).forEach((cb) => {
-        try { cb(data); } catch (e) { /* ignore */ }
+        try {
+          cb(data);
+        } catch (_e) {
+          // Ignore listener errors
+        }
       });
     }
   }
 
   disconnect() {
     if (this.socket) {
-      this.socket.close();
+      this.socket.disconnect();
       this.socket = null;
       this.connected = false;
     }

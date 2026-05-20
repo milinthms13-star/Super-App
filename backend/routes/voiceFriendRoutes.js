@@ -204,6 +204,29 @@ router.post('/speech', validateVoiceFriendSession, speechRateLimiter, async (req
   }
 });
 
+router.post('/avatar', validateVoiceFriendSession, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Avatar image is required.' });
+    }
+
+    const relativeUrl = `/uploads/voicefriend/${req.file.filename}`;
+    req.voiceFriendSession.friendCustomAvatar = relativeUrl;
+
+    res.json({
+      success: true,
+      data: {
+        url: relativeUrl,
+        fileName: req.file.filename,
+      },
+      message: 'Avatar uploaded successfully.',
+    });
+  } catch (error) {
+    logger.error('Error uploading Voice Friend avatar:', error);
+    res.status(500).json({ success: false, message: 'Unable to upload avatar right now.' });
+  }
+});
+
 router.get('/history/:sessionId', validateVoiceFriendSession, async (req, res) => {
   try {
     const { sessionId } = req.params;

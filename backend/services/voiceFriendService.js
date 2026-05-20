@@ -637,7 +637,19 @@ const generateSpeech = async ({ text, friendId = 'nila', voice, language = 'en' 
   }
 };
 
-const sendMessage = async ({ sessionId, message, persona, mood, language, friendId, userName, friendCustomName, friendCustomAvatar, scenario }) => {
+const sendMessage = async ({
+  sessionId,
+  message,
+  persona,
+  mood,
+  language,
+  friendId,
+  userName,
+  friendCustomName,
+  friendCustomAvatar,
+  scenario,
+  voice,
+}) => {
   const session = getSession(sessionId);
   if (!session) {
     throw new Error('Voice friend session not found');
