@@ -23,6 +23,8 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     removeFavorite,
     mockData,
     sendRealEstateEnquiry = async () => null,
+    sendRealEstateMessage = async () => null,
+    scheduleRealEstateVisit = async () => null,
     addRealEstateReview = async () => null,
     reportRealEstateListing = async () => null,
   } = useApp();
@@ -38,10 +40,14 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
   const [sortBy, setSortBy] = useState("featured");
 
   // Property detail state
+  const [enquiryMessage, setEnquiryMessage] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [reviewComment, setReviewComment] = useState("");
   const [reviewRating, setReviewRating] = useState("5");
   const [reportReason, setReportReason] = useState("");
+  const [visitDateTime, setVisitDateTime] = useState("");
+  const [visitMode, setVisitMode] = useState("onsite");
+  const [visitNote, setVisitNote] = useState("");
 
   // Loan calculator state
   const [loanAmount, setLoanAmount] = useState("72");
@@ -50,6 +56,8 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
   const [loanEstimateResult, setLoanEstimateResult] = useState("");
   const [asyncState, setAsyncState] = useState({
     enquiry: false,
+    message: false,
+    visitCreate: false,
     review: false,
     report: false,
   });
@@ -186,34 +194,74 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
   const handlePostPropertyClick = () => redirectToWorkspace({ postingType: "property" });
   const handlePostRequirementClick = () => redirectToWorkspace({ postingType: "requirement" });
 
-  const handleFavoriteToggle = (propertyId) => {
-    const fullId = `realestate-${propertyId}`;
+  const handleFavoriteToggle = (property) => {
+    const fullId = `realestate-${property.id}`;
     if (favoriteIds.has(fullId)) {
       removeFavorite(fullId);
       pushToast("Removed from favorites");
     } else {
       addToFavorites({
         id: fullId,
-        title: selectedProperty?.title || "Property",
-        type: "property",
+        domain: "realestate",
+        title: property.title || "Property",
+        priceLabel: property.priceLabel || "",
+        location: property.location || "",
+        type: property.type || "Property",
       });
       pushToast("Added to favorites");
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!chatInput.trim() || !selectedProperty) return;
+  const handleEnquirySubmit = async () => {
+    if (!selectedProperty) return;
     setAsyncState((s) => ({ ...s, enquiry: true }));
     try {
-      await sendRealEstateEnquiry({
-        propertyId: selectedProperty.id,
-        message: chatInput,
-        userId: currentUser?.email,
+      await sendRealEstateEnquiry(selectedProperty.id, {
+        message: enquiryMessage.trim(),
+        channel: "Enquiry",
       });
-      pushToast("Message sent successfully");
-      setChatInput("");
+      pushToast(enquiryMessage.trim() ? "Enquiry sent successfully" : "Quick enquiry sent");
+      setEnquiryMessage("");
     } finally {
       setAsyncState((s) => ({ ...s, enquiry: false }));
+    }
+  };
+
+  const handleSendMessage = async (messageOverride = "") => {
+    const text = messageOverride.trim() || chatInput.trim();
+    if (!text || !selectedProperty) return;
+    setAsyncState((s) => ({ ...s, message: true }));
+    try {
+      await sendRealEstateMessage(selectedProperty.id, { text });
+      pushToast("Message sent successfully");
+      if (!messageOverride) {
+        setChatInput("");
+      }
+    } finally {
+      setAsyncState((s) => ({ ...s, message: false }));
+    }
+  };
+
+  const handleVisitSchedule = async () => {
+    if (!selectedProperty || !visitDateTime) {
+      pushToast("Pick a visit date and time before scheduling.", "error");
+      return;
+    }
+
+    setAsyncState((s) => ({ ...s, visitCreate: true }));
+    try {
+      await scheduleRealEstateVisit(selectedProperty.id, {
+        scheduledAt: new Date(visitDateTime).toISOString(),
+        durationMinutes: 45,
+        mode: visitMode,
+        note: visitNote.trim(),
+      });
+      setVisitDateTime("");
+      setVisitMode("onsite");
+      setVisitNote("");
+      pushToast("Visit scheduled successfully");
+    } finally {
+      setAsyncState((s) => ({ ...s, visitCreate: false }));
     }
   };
 
@@ -221,11 +269,9 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     if (!reviewComment.trim() || !selectedProperty) return;
     setAsyncState((s) => ({ ...s, review: true }));
     try {
-      await addRealEstateReview({
-        propertyId: selectedProperty.id,
+      await addRealEstateReview(selectedProperty.id, {
         rating: Number(reviewRating),
         comment: reviewComment,
-        author: currentUser?.name || "Anonymous",
       });
       pushToast("Review submitted");
       setReviewComment("");
@@ -238,10 +284,8 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
     if (!reportReason.trim() || !selectedProperty) return;
     setAsyncState((s) => ({ ...s, report: true }));
     try {
-      await reportRealEstateListing({
-        propertyId: selectedProperty.id,
+      await reportRealEstateListing(selectedProperty.id, {
         reason: reportReason,
-        reporter: currentUser?.email,
       });
       pushToast("Report submitted. Our team will review it.");
       setReportReason("");
@@ -459,6 +503,10 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                   />
                 }
                 uiMessages={{
+                  onRequestDocuments: () =>
+                    pushToast("Document request drafted. Owner can share files in chat."),
+                  onViewVerificationHistory: () =>
+                    pushToast("Verification timeline opened (demo)."),
                   messages: (
                     <section className="homesphere-chat-section">
                       <div className="realestate-section-heading">
@@ -483,9 +531,9 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                           type="button"
                           className="realestate-primary-button"
                           onClick={handleSendMessage}
-                          disabled={asyncState.enquiry}
+                          disabled={asyncState.message}
                         >
-                          {asyncState.enquiry ? "Sending..." : "Send message"}
+                          {asyncState.message ? "Sending..." : "Send message"}
                         </button>
                       </div>
                     </section>
@@ -556,6 +604,104 @@ const HomeSphere = ({ onNavigateToDashboard }) => {
                         disabled={asyncState.report}
                       >
                         {asyncState.report ? "Reporting..." : "Report listing"}
+                      </button>
+                    </section>
+                  ),
+                  actions: (
+                    <section className="realestate-chat-card">
+                      <div className="realestate-section-heading">
+                        <h3>Buyer actions</h3>
+                        <p>Send enquiry, schedule visits, and keep communication in one place.</p>
+                      </div>
+                      <div className="realestate-action-stack">
+                        <button
+                          type="button"
+                          className="realestate-primary-button"
+                          onClick={handleEnquirySubmit}
+                          disabled={asyncState.enquiry}
+                        >
+                          {asyncState.enquiry ? "Sending..." : "Send enquiry"}
+                        </button>
+                        <button
+                          type="button"
+                          className="realestate-secondary-button"
+                          onClick={() =>
+                            pushToast(`Call request shared with ${selectedProperty?.sellerName}.`)
+                          }
+                        >
+                          Call owner / agent
+                        </button>
+                        <button
+                          type="button"
+                          className="realestate-secondary-button"
+                          onClick={() =>
+                            handleSendMessage(
+                              chatInput.trim() ||
+                                `Hi, I'm interested in ${selectedProperty?.title}. Please share more details.`
+                            )
+                          }
+                        >
+                          Message seller
+                        </button>
+                        <button
+                          type="button"
+                          className="realestate-secondary-button"
+                          onClick={() =>
+                            pushToast("Property link copied to clipboard for sharing.")
+                          }
+                        >
+                          Share property
+                        </button>
+                      </div>
+
+                      <label className="realestate-field">
+                        <span>Enquiry message</span>
+                        <textarea
+                          rows="3"
+                          value={enquiryMessage}
+                          onChange={(event) => setEnquiryMessage(event.target.value)}
+                          placeholder="Share budget, move-in timeline, or site visit request"
+                        />
+                      </label>
+
+                      <div className="realestate-section-heading">
+                        <h3>Schedule visit</h3>
+                        <p>Book onsite or virtual visits with reminder support.</p>
+                      </div>
+                      <label className="realestate-field">
+                        <span>Visit date and time</span>
+                        <input
+                          type="datetime-local"
+                          value={visitDateTime}
+                          onChange={(event) => setVisitDateTime(event.target.value)}
+                        />
+                      </label>
+                      <label className="realestate-field">
+                        <span>Visit mode</span>
+                        <select
+                          value={visitMode}
+                          onChange={(event) => setVisitMode(event.target.value)}
+                        >
+                          <option value="onsite">Onsite</option>
+                          <option value="virtual">Virtual</option>
+                        </select>
+                      </label>
+                      <label className="realestate-field">
+                        <span>Visit note</span>
+                        <textarea
+                          rows="2"
+                          value={visitNote}
+                          onChange={(event) => setVisitNote(event.target.value)}
+                          placeholder="Share preferred slot, gate access, or video-call details"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="realestate-primary-button"
+                        onClick={handleVisitSchedule}
+                        disabled={asyncState.visitCreate}
+                      >
+                        {asyncState.visitCreate ? "Scheduling..." : "Schedule visit"}
                       </button>
                     </section>
                   ),
