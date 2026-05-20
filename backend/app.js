@@ -296,7 +296,14 @@ safeUse('/api/filters', './routes/advancedFiltersRoutes');
 safeUse('/api/product-specs', './routes/productSpecificationsRoutes');
 app.use('/api/referralprogram', require('./routes/referralprogram'));
 app.use('/api/reminders', require('./routes/reminders'));
+app.use('/api/matrimonial', require('./routes/matrimonial'));
 app.use('/api/matrimonial', require('./routes/matrimonial-kyc'));
+app.use('/api/matrimonial', require('./routes/matrimonial-horoscope'));
+app.use('/api/matrimonial', require('./routes/matrimonial-subscription'));
+app.use('/api/matrimonial', require('./routes/matrimonial-communication'));
+app.use('/api/matrimonial', require('./routes/matrimonial-referral'));
+app.use('/api/matrimonial', require('./routes/matrimonial-admin-analytics'));
+app.use('/api/matrimonial', require('./routes/matrimonial-seo'));
 
 app.use(errorHandler);
 
