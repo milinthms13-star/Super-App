@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import AdminDashboard from "./AdminDashboard";
 
 const mockModerateProduct = jest.fn(() => Promise.resolve());
@@ -15,6 +16,13 @@ jest.mock("../../hooks/useI18n", () => ({
     t: (_key, fallback) => fallback,
   }),
 }));
+
+const renderAdminDashboard = (props) =>
+  render(
+    <MemoryRouter>
+      <AdminDashboard {...props} />
+    </MemoryRouter>
+  );
 
 describe("AdminDashboard moderation remarks", () => {
   beforeEach(() => {
@@ -47,17 +55,15 @@ describe("AdminDashboard moderation remarks", () => {
   });
 
   test("sends the typed remark when approving a product", async () => {
-    render(
-      <AdminDashboard
-        businessCategories={[]}
-        globeMartCategories={[]}
-        registrationApplications={[]}
-        onCreateGlobeMartCategory={jest.fn()}
-        onAddGlobeMartSubcategory={jest.fn()}
-        enabledModules={[]}
-        onToggleModule={jest.fn()}
-      />
-    );
+    renderAdminDashboard({
+      businessCategories: [],
+      globeMartCategories: [],
+      registrationApplications: [],
+      onCreateGlobeMartCategory: jest.fn(),
+      onAddGlobeMartSubcategory: jest.fn(),
+      enabledModules: [],
+      onToggleModule: jest.fn(),
+    });
 
     fireEvent.change(screen.getByLabelText(/remarks/i), {
       target: { value: "Approved after checking the product details." },
@@ -114,17 +120,15 @@ describe("AdminDashboard moderation remarks", () => {
       loadMoreManagedProducts: jest.fn(),
     });
 
-    render(
-      <AdminDashboard
-        businessCategories={[]}
-        globeMartCategories={[]}
-        registrationApplications={[]}
-        onCreateGlobeMartCategory={jest.fn()}
-        onAddGlobeMartSubcategory={jest.fn()}
-        enabledModules={[]}
-        onToggleModule={jest.fn()}
-      />
-    );
+    renderAdminDashboard({
+      businessCategories: [],
+      globeMartCategories: [],
+      registrationApplications: [],
+      onCreateGlobeMartCategory: jest.fn(),
+      onAddGlobeMartSubcategory: jest.fn(),
+      enabledModules: [],
+      onToggleModule: jest.fn(),
+    });
 
     expect(screen.getByText("Fresh Watch")).toBeInTheDocument();
     expect(screen.queryByText("Returned Watch")).not.toBeInTheDocument();
@@ -182,17 +186,15 @@ describe("AdminDashboard moderation remarks", () => {
       loadMoreManagedProducts: jest.fn(),
     });
 
-    render(
-      <AdminDashboard
-        businessCategories={[]}
-        globeMartCategories={[]}
-        registrationApplications={[]}
-        onCreateGlobeMartCategory={jest.fn()}
-        onAddGlobeMartSubcategory={jest.fn()}
-        enabledModules={[]}
-        onToggleModule={jest.fn()}
-      />
-    );
+    renderAdminDashboard({
+      businessCategories: [],
+      globeMartCategories: [],
+      registrationApplications: [],
+      onCreateGlobeMartCategory: jest.fn(),
+      onAddGlobeMartSubcategory: jest.fn(),
+      enabledModules: [],
+      onToggleModule: jest.fn(),
+    });
 
     expect(screen.getByRole("heading", { name: /returns & refund review/i })).toBeInTheDocument();
     expect(screen.getByText("Banana Chips")).toBeInTheDocument();
@@ -212,23 +214,21 @@ describe("AdminDashboard moderation remarks", () => {
   test("adds a subcategory under the selected GlobeMart category", async () => {
     const onAddGlobeMartSubcategory = jest.fn(() => Promise.resolve({ persisted: true }));
 
-    render(
-      <AdminDashboard
-        businessCategories={[]}
-        globeMartCategories={[
-          {
-            id: "electronics",
-            name: "Electronics",
-            subcategories: ["Audio"],
-          },
-        ]}
-        registrationApplications={[]}
-        onCreateGlobeMartCategory={jest.fn()}
-        onAddGlobeMartSubcategory={onAddGlobeMartSubcategory}
-        enabledModules={[]}
-        onToggleModule={jest.fn()}
-      />
-    );
+    renderAdminDashboard({
+      businessCategories: [],
+      globeMartCategories: [
+        {
+          id: "electronics",
+          name: "Electronics",
+          subcategories: ["Audio"],
+        },
+      ],
+      registrationApplications: [],
+      onCreateGlobeMartCategory: jest.fn(),
+      onAddGlobeMartSubcategory,
+      enabledModules: [],
+      onToggleModule: jest.fn(),
+    });
 
     fireEvent.change(screen.getByLabelText(/parent category/i), {
       target: { value: "electronics" },

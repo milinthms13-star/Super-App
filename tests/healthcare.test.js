@@ -11,59 +11,59 @@ jest.mock('axios');
 // Mock child components to isolate testing
 jest.mock('../src/modules/healthcare/components/DoctorConsultation', () => {
   return function MockDoctorConsultation() {
-    return <div data-testid="doctor-consultation">Doctor Consultation Component</div>;
+    return React.createElement('div', { 'data-testid': 'doctor-consultation' }, 'Doctor Consultation Component');
   };
 });
 
 jest.mock('../src/modules/healthcare/components/LabBooking', () => {
   return function MockLabBooking() {
-    return <div data-testid="lab-booking">Lab Booking Component</div>;
+    return React.createElement('div', { 'data-testid': 'lab-booking' }, 'Lab Booking Component');
   };
 });
 
 jest.mock('../src/modules/healthcare/components/RecordsVault', () => {
   return function MockRecordsVault() {
-    return <div data-testid="records-vault">Records Vault Component</div>;
+    return React.createElement('div', { 'data-testid': 'records-vault' }, 'Records Vault Component');
   };
 });
 
 jest.mock('../src/modules/healthcare/components/PharmacyDelivery', () => {
   return function MockPharmacyDelivery() {
-    return <div data-testid="pharmacy-delivery">Pharmacy Delivery Component</div>;
+    return React.createElement('div', { 'data-testid': 'pharmacy-delivery' }, 'Pharmacy Delivery Component');
   };
 });
 
 jest.mock('../src/modules/healthcare/components/EmergencySOS', () => {
   return function MockEmergencySOS() {
-    return <div data-testid="emergency-sos">Emergency SOS Component</div>;
+    return React.createElement('div', { 'data-testid': 'emergency-sos' }, 'Emergency SOS Component');
   };
 });
 
 jest.mock('../src/modules/healthcare/components/ElderlyCare', () => {
   return function MockElderlyCare() {
-    return <div data-testid="elderly-care">Elderly Care Component</div>;
+    return React.createElement('div', { 'data-testid': 'elderly-care' }, 'Elderly Care Component');
   };
 });
 
 jest.mock('../src/modules/healthcare/components/HealthcareNav', () => {
   return function MockHealthcareNav({ activeSection, onChange, onSectionChange }) {
     const change = onChange || onSectionChange;
-    return (
-      <nav data-testid="healthcare-nav">
-        <button onClick={() => change('consultation')}>Consultation</button>
-        <button onClick={() => change('lab')}>Lab</button>
-        <button onClick={() => change('records')}>Records</button>
-        <button onClick={() => change('pharmacy')}>Pharmacy</button>
-        <button onClick={() => change('emergency')}>Emergency</button>
-        <button onClick={() => change('elderly')}>Elderly Care</button>
-      </nav>
+    return React.createElement(
+      'nav',
+      { 'data-testid': 'healthcare-nav' },
+      React.createElement('button', { onClick: () => change('consultation') }, 'Consultation'),
+      React.createElement('button', { onClick: () => change('lab') }, 'Lab'),
+      React.createElement('button', { onClick: () => change('records') }, 'Records'),
+      React.createElement('button', { onClick: () => change('pharmacy') }, 'Pharmacy'),
+      React.createElement('button', { onClick: () => change('emergency') }, 'Emergency'),
+      React.createElement('button', { onClick: () => change('elderly') }, 'Elderly Care')
     );
   };
 });
 
 jest.mock('../src/modules/healthcare/components/HealthcareHero', () => {
   return function MockHealthcareHero() {
-    return <div data-testid="healthcare-hero">Healthcare Hero Component</div>;
+    return React.createElement('div', { 'data-testid': 'healthcare-hero' }, 'Healthcare Hero Component');
   };
 });
 

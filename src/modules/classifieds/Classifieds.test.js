@@ -148,7 +148,7 @@ describe("Classifieds", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: /local buying, selling, discovery, and direct buyer-seller conversations in one flow/i,
+        name: /find nearby listings faster/i,
       })
     ).toBeInTheDocument();
 
@@ -273,21 +273,29 @@ describe("Classifieds", () => {
     render(<Classifieds />);
     await waitForDiscoveryBoot();
 
-    fireEvent.change(document.querySelector('input[name="title"]'), {
+    fireEvent.click(screen.getByRole("button", { name: /open post ad wizard/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /2\.\s*title \+ price/i }));
+    fireEvent.change(screen.getByLabelText(/^title$/i), {
       target: { value: "Used DSLR Camera Kit" },
     });
-    fireEvent.change(document.querySelector('input[name="price"]'), {
+    fireEvent.change(screen.getByLabelText(/^price$/i), {
       target: { value: "42000" },
     });
+
+    fireEvent.change(screen.getByLabelText(/^description$/i), {
+      target: { value: "Camera body, two lenses, tripod, and charger included." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /4\.\s*location/i }));
     fireEvent.change(document.querySelector('input[name="location"]'), {
       target: { value: "Kochi" },
     });
     fireEvent.change(document.querySelector('input[name="pincode"]'), {
       target: { value: "682001" },
     });
-    fireEvent.change(document.querySelector('textarea[name="description"]'), {
-      target: { value: "Camera body, two lenses, tripod, and charger included." },
-    });
+
+    fireEvent.click(screen.getByRole("button", { name: /3\.\s*photos/i }));
     const fileInput = document.querySelector('input[type="file"]');
     const mockImage = new File(["image-bytes"], "camera.jpg", { type: "image/jpeg" });
     fireEvent.change(fileInput, { target: { files: [mockImage] } });
@@ -295,7 +303,8 @@ describe("Classifieds", () => {
       expect(screen.getAllByText(/1 image\(s\) uploaded/i).length).toBeGreaterThan(0);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /submit ad/i }));
+    fireEvent.click(screen.getByRole("button", { name: /5\.\s*preview/i }));
+    fireEvent.click(screen.getByRole("button", { name: /publish ad/i }));
 
     await waitFor(() => {
       expect(mockCreateClassifiedListing).toHaveBeenCalledWith(

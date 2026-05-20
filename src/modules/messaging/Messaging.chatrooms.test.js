@@ -87,7 +87,7 @@ beforeEach(() => {
 test('opens the chatrooms workspace from the LinkUp sidebar', async () => {
   render(<Messaging />);
 
-  fireEvent.click(screen.getByRole('button', { name: /chatrooms/i }));
+  fireEvent.click(screen.getByRole('button', { name: /rooms/i }));
 
   expect(await screen.findByText('Chatroom List')).toBeInTheDocument();
   expect(

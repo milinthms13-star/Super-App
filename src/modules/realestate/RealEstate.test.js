@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import RealEstate from "./RealEstate";
 
 const mockUseApp = jest.fn();
@@ -86,31 +87,39 @@ const createContextState = (overrides = {}) => ({
   ...overrides,
 });
 
+const renderRealEstate = () =>
+  render(
+    <MemoryRouter>
+      <RealEstate />
+    </MemoryRouter>
+  );
+
 describe("RealEstate", () => {
   let contextState;
+
+  beforeAll(() => {
+    if (!window.HTMLElement.prototype.scrollIntoView) {
+      window.HTMLElement.prototype.scrollIntoView = jest.fn();
+    }
+  });
 
   beforeEach(() => {
     contextState = createContextState();
     mockUseApp.mockImplementation(() => contextState);
+    window.HTMLElement.prototype.scrollIntoView = jest.fn();
   });
 
   test("renders marketplace content and filters listings", () => {
-    render(<RealEstate />);
+    renderRealEstate();
 
     expect(
-      screen.getByRole("heading", { name: /homesphere turns property discovery into a verified marketplace/i })
+      screen.getByRole("heading", { name: /find your next home with confidence/i })
     ).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText(/listing intent/i), {
-      target: { value: "rent" },
-    });
+    fireEvent.click(screen.getAllByRole("button", { name: /^Rent$/i })[0]);
 
-    expect(
-      screen.getByRole("heading", { name: /smart rental studio/i, level: 3 })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: /skyline residency 3 bhk/i, level: 3 })
-    ).not.toBeInTheDocument();
+    expect(screen.getByText(/28,000 \/ month/i)).toBeInTheDocument();
+    expect(screen.queryByText(/95 Lakhs/i)).not.toBeInTheDocument();
   });
 
   test("allows seller-side listing submission through the shared app context", async () => {
@@ -160,7 +169,7 @@ describe("RealEstate", () => {
       return createdListing;
     });
 
-    render(<RealEstate />);
+    renderRealEstate();
 
     fireEvent.click(screen.getByRole("button", { name: /property owner/i }));
     fireEvent.change(screen.getByLabelText(/^title$/i), {
@@ -191,13 +200,21 @@ describe("RealEstate", () => {
     });
   });
 
-  test("prevents a buyer account from opening the seller flow", () => {
-    render(<RealEstate />);
+  test("prevents accounts without seller access from opening the seller flow", () => {
+    contextState.currentUser = {
+      id: "admin-1",
+      name: "Admin",
+      email: "admin@malabarbazaar.com",
+      registrationType: "admin",
+      role: "admin",
+    };
+
+    renderRealEstate();
 
     fireEvent.click(screen.getByRole("button", { name: /property owner/i }));
 
     expect(screen.getByText(/cannot access the property owner workspace/i)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /publish a property/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /homesphere posting workspace/i })).not.toBeInTheDocument();
   });
 
   test("allows admins to approve persisted listings", async () => {
@@ -239,7 +256,7 @@ describe("RealEstate", () => {
       return contextState.mockData.realestateProperties.find((property) => property.id === listingId);
     });
 
-    render(<RealEstate />);
+    renderRealEstate();
 
     expect(screen.getAllByText(/^Pending$/i)[0]).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /^actions$/i }));
@@ -247,7 +264,7 @@ describe("RealEstate", () => {
 
     await waitFor(() => {
       expect(contextState.moderateRealEstateListing).toHaveBeenCalledWith("re-pending", "approve");
-      expect(screen.getAllByText(/^Verified$/i).length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText(/listing approved for/i)).toBeInTheDocument();
     });
   });
 
@@ -263,21 +280,25 @@ describe("RealEstate", () => {
     contextState.mockData.realestateProperties = [
       createProperty({
         ownerId: "biz-9",
-        sellerEmail: "biz-9@example.com",
-        sellerName: "Dhanya Realty",
+        sellerEmail: "alt-owner@example.com",
+        sellerName: "Different Display Name",
+        leads: [{ id: "lead-owned", name: "Owned Lead", channel: "Chat", priority: "Hot" }],
       }),
       createProperty({
         id: "re-2",
         ownerId: "other-owner",
         sellerEmail: "other@example.com",
+        sellerName: "Dhanya Realty",
+        leads: [{ id: "lead-other", name: "Other Lead", channel: "Call", priority: "Warm" }],
       }),
     ];
 
-    render(<RealEstate />);
+    renderRealEstate();
 
     fireEvent.click(screen.getByRole("button", { name: /agent \/ broker/i }));
 
-    expect(screen.getAllByText(/^Edit$/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Owned Lead")).toBeInTheDocument();
+    expect(screen.queryByText("Other Lead")).not.toBeInTheDocument();
   });
 
   test("scopes lead management to the seller's own listings", () => {
@@ -304,7 +325,7 @@ describe("RealEstate", () => {
       }),
     ];
 
-    render(<RealEstate />);
+    renderRealEstate();
 
     fireEvent.click(screen.getByRole("button", { name: /agent \/ broker/i }));
 
@@ -330,7 +351,7 @@ describe("RealEstate", () => {
       }),
     ];
 
-    render(<RealEstate />);
+    renderRealEstate();
 
     fireEvent.click(screen.getByRole("button", { name: /agent \/ broker/i }));
     fireEvent.click(screen.getByRole("button", { name: /mark contacted/i }));
@@ -347,7 +368,8 @@ describe("RealEstate", () => {
 
   test("lets buyers schedule a property visit from the detail panel", async () => {
     const expectedVisitIso = new Date("2026-05-10T11:00").toISOString();
-    render(<RealEstate />);
+    renderRealEstate();
+    fireEvent.click(screen.getAllByRole("button", { name: /^View$/i })[0]);
     fireEvent.click(screen.getByRole("tab", { name: /^actions$/i }));
 
     fireEvent.change(screen.getByLabelText(/visit date and time/i), {
@@ -368,7 +390,7 @@ describe("RealEstate", () => {
           note: "Please confirm gate access.",
         })
       );
-      expect(screen.getByText(/visit scheduled for skyline residency 3 bhk/i)).toBeInTheDocument();
+      expect(screen.getByText(/visit scheduled successfully/i)).toBeInTheDocument();
     });
   });
 });

@@ -512,17 +512,8 @@ test("seller product form uses GlobeMart categories from admin app data", async 
   render(<App />);
 
   fireEvent.click((await screen.findAllByRole("button", { name: /globemart/i })).slice(-1)[0]);
-  await waitFor(() => {
-    expect(
-      screen.queryByRole("heading", { level: 2, name: /choose your globemart path/i }) ||
-      screen.queryByRole("heading", { level: 2, name: /create product for approval/i })
-    ).toBeTruthy();
-  });
-
-  const continueAsSellerButtons = screen.queryAllByRole("button", { name: /continue as seller/i });
-  if (continueAsSellerButtons.length > 0) {
-    fireEvent.click(continueAsSellerButtons[0]);
-  }
+  const sellProductsButtons = await screen.findAllByRole("button", { name: /sell products/i });
+  fireEvent.click(sellProductsButtons[sellProductsButtons.length - 1]);
 
   expect(
     await screen.findByRole("heading", { level: 2, name: /create product for approval/i })

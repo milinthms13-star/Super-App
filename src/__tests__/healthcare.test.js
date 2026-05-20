@@ -211,7 +211,7 @@ describe('Healthcare Module', () => {
     render(<Healthcare />);
 
     await waitFor(() => {
-      expect(screen.getByText(/unable to load healthcare data\./i)).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/failed to load healthcare data/i);
     });
   });
 
