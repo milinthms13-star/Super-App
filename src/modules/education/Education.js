@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../../contexts/AppContext";
+import EducationQuickActions from "./EducationQuickActions";
+import EducationStudyPathBuilder from "./EducationStudyPathBuilder";
+import {
+  getCourseValueScore,
+  getScholarshipDisclaimer,
+  validateTuitionRequest,
+} from "./educationUpgradeUtils";
 import "./Education.css";
+import "./EducationUpgrade.css";
 
 const EDUCATION_SECTIONS = [
   {
@@ -39,6 +47,12 @@ const EDUCATION_SECTIONS = [
     description: "Scholarships, schemes and government support",
     icon: "S",
   },
+  {
+    id: "study-path",
+    title: "Study Path",
+    description: "Generate weekly study plans with smart guidance",
+    icon: "P",
+  },
 ];
 
 const TUITION_SUBJECTS = [
@@ -51,6 +65,16 @@ const TUITION_SUBJECTS = [
   "Physics",
   "Chemistry",
   "Biology",
+];
+
+const TUITION_CLASS_LEVELS = [
+  "Class 8",
+  "Class 9",
+  "Class 10",
+  "Plus One",
+  "Plus Two",
+  "College",
+  "Job seeker",
 ];
 
 const SKILL_COURSES = [
@@ -244,6 +268,9 @@ const Education = () => {
   const [courseSearchQuery, setCourseSearchQuery] = useState("");
   const [selectedSubject, setSelectedSubject] = useState(TUITION_SUBJECTS[0]);
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [tuitionClassLevel, setTuitionClassLevel] = useState(TUITION_CLASS_LEVELS[2]);
+  const [tuitionContactPhone, setTuitionContactPhone] = useState("");
+  const [tuitionErrors, setTuitionErrors] = useState({});
   const [scholarshipQuery, setScholarshipQuery] = useState("");
   const [aiQuery, setAiQuery] = useState("");
   const [aiResponse, setAiResponse] = useState("");
@@ -506,6 +533,18 @@ const Education = () => {
   };
 
   const handleTuitionBooking = async () => {
+    const validation = validateTuitionRequest({
+      subject: selectedSubject,
+      classLevel: tuitionClassLevel,
+      contactPhone: tuitionContactPhone,
+    });
+    if (!validation.isValid) {
+      setTuitionErrors(validation.errors);
+      setStatusMessage("Please correct the tuition request details.");
+      return;
+    }
+
+    setTuitionErrors({});
     const successMessage = `Tuition request submitted for ${selectedSubject}. A tutor will contact you soon.`;
     const nextState = {
       enrolledCourseIds,
@@ -522,7 +561,11 @@ const Education = () => {
     try {
       await apiCall('/app-data/education/tuition', 'POST', {
         subject: selectedSubject,
-        details: `Tuition request from ${currentUser?.email || 'guest'} for ${selectedSubject}`,
+        classLevel: tuitionClassLevel,
+        contactPhone: tuitionContactPhone,
+        preferredMode: "online",
+        preferredTime: "",
+        details: `Tuition request from ${currentUser?.email || 'guest'} for ${selectedSubject} (${tuitionClassLevel})`,
       });
       applyEducationState(nextState);
       setStatusMessage(successMessage);
@@ -688,6 +731,15 @@ const Education = () => {
         </aside>
       </section>
 
+      <EducationQuickActions
+        onAction={(action) => {
+          setActiveSection(action.targetSection);
+          if (action.id === "tuition") {
+            setStatusMessage("Select subject, class level and phone, then request tuition.");
+          }
+        }}
+      />
+
       <section className="education-nav">
         {EDUCATION_SECTIONS.map((section) => (
           <button
@@ -729,6 +781,31 @@ const Education = () => {
                     <option key={subject} value={subject}>{subject}</option>
                   ))}
                 </select>
+                {tuitionErrors.subject ? <small className="education-field-error">{tuitionErrors.subject}</small> : null}
+              </label>
+              <label className="education-field" htmlFor="tuition-class-level-select">
+                <span>Class / level</span>
+                <select
+                  id="tuition-class-level-select"
+                  value={tuitionClassLevel}
+                  onChange={(event) => setTuitionClassLevel(event.target.value)}
+                >
+                  {TUITION_CLASS_LEVELS.map((level) => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
+                </select>
+                {tuitionErrors.classLevel ? <small className="education-field-error">{tuitionErrors.classLevel}</small> : null}
+              </label>
+              <label className="education-field" htmlFor="tuition-contact-phone-input">
+                <span>Contact phone (optional)</span>
+                <input
+                  id="tuition-contact-phone-input"
+                  type="tel"
+                  placeholder="Enter parent/student phone"
+                  value={tuitionContactPhone}
+                  onChange={(event) => setTuitionContactPhone(event.target.value)}
+                />
+                {tuitionErrors.contactPhone ? <small className="education-field-error">{tuitionErrors.contactPhone}</small> : null}
               </label>
               <button type="button" className="education-secondary-button" onClick={handleTuitionBooking}>Request Tuition</button>
             </div>
@@ -770,6 +847,10 @@ const Education = () => {
                 <h3>{course.title}</h3>
                 <span>{course.level} | {course.duration}</span>
                 <strong>{course.price}</strong>
+                <div className="education-course-value-row">
+                  <span>Course value score</span>
+                  <strong>{getCourseValueScore(course)}%</strong>
+                </div>
                 <p>{course.description}</p>
                 <div className="education-course-actions">
                   <button
@@ -791,6 +872,14 @@ const Education = () => {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {activeSection === "study-path" && (
+        <section className="education-section">
+          <EducationStudyPathBuilder
+            onApplyPath={(path) => setStatusMessage(`${path.title} added to your study workflow.`)}
+          />
         </section>
       )}
 
@@ -951,6 +1040,7 @@ const Education = () => {
               />
             </label>
           </div>
+          <p className="education-safety-note">{getScholarshipDisclaimer()}</p>
           <div className="education-scholarships-list">
             {filteredScholarships.map((scholarship) => {
               const isApplied = appliedScholarships.includes(scholarship.name);

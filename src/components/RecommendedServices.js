@@ -19,7 +19,6 @@ const MODULE_CATALOG = [
   { id: "messaging", title: "LinkUp", icon: "M", gradient: "linear-gradient(135deg, #4ECDC4 0%, #44A5C2 100%)" },
   { id: "classifieds", title: "TradePost", icon: "T", gradient: "linear-gradient(135deg, #F39C12 0%, #E67E22 100%)" },
   { id: "socialmedia", title: "VibeHub", icon: "S", gradient: "linear-gradient(135deg, #667EEA 0%, #764BA2 100%)" },
-  { id: "localmarket", title: "Local Market", icon: "L", gradient: "linear-gradient(135deg, #00B894 0%, #00A86B 100%)" },
   { id: "matrimonial", title: "SoulMatch", icon: "U", gradient: "linear-gradient(135deg, #FF69B4 0%, #FF1493 100%)" },
   { id: "reminderalert", title: "ReminderAlert", icon: "A", gradient: "linear-gradient(135deg, #FFA500 0%, #FF8C00 100%)" },
   { id: "quicklinks", title: "Quick Links", icon: "Q", gradient: "linear-gradient(135deg, #1ABC9C 0%, #16A085 100%)" },
@@ -29,7 +28,7 @@ const MODULE_CATALOG = [
 
 const RecommendedServices = () => {
   const navigate = useNavigate();
-  const { ecommerceProducts, orders, cart, mockData, currentUser } = useApp();
+  const { ecommerceProducts, orders, mockData, currentUser } = useApp();
   const [activeCategory, setActiveCategory] = useState("trending");
 
   const moduleStats = useMemo(() => {
@@ -49,7 +48,6 @@ const RecommendedServices = () => {
       messaging: Array.isArray(mockData?.conversations) ? mockData.conversations.length : 0,
       classifieds: Array.isArray(mockData?.classifiedsListings) ? mockData.classifiedsListings.length : 0,
       socialmedia: Array.isArray(mockData?.socialMediaPosts) ? mockData.socialMediaPosts.length : 0,
-      localmarket: Number((cart || []).reduce((total, item) => total + Number(item.quantity || 1), 0) || 0),
       matrimonial: Array.isArray(mockData?.matrimonialProfiles) ? mockData.matrimonialProfiles.length : 0,
       reminderalert: 0,
       quicklinks: 0,
@@ -59,7 +57,7 @@ const RecommendedServices = () => {
     };
 
     return values;
-  }, [cart, ecommerceProducts, mockData, orders]);
+  }, [ecommerceProducts, mockData, orders]);
 
   const recommendations = useMemo(() => {
     const ranked = MODULE_CATALOG

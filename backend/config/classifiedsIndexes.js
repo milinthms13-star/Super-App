@@ -10,25 +10,27 @@ const ClassifiedAd = require('../models/ClassifiedAd');
  */
 async function initializeClassifiedsIndexes() {
   try {
-    // Geospatial index for location-based queries
-    await ClassifiedAd.collection.createIndex({ location: '2dsphere' });
-    console.log('✓ Geospatial index created for classifieds location');
+    // Geospatial index for distance queries
+    await ClassifiedAd.collection.createIndex({ coordinates: '2dsphere' });
+    console.log('✓ Geospatial index created for classifieds coordinates');
 
-    // Text indexes for full-text search
+    // Text indexes for full-text search and searchable text fields
     await ClassifiedAd.collection.createIndex({
       title: 'text',
       description: 'text',
       tags: 'text',
       category: 'text',
+      searchableText: 'text',
+      location: 'text',
     });
     console.log('✓ Text search index created for classifieds');
 
-    // Index for filtering by status and expiry
+    // Index for filtering by moderation status and expiry
     await ClassifiedAd.collection.createIndex({
-      status: 1,
+      moderationStatus: 1,
       expiryDate: 1,
     });
-    console.log('✓ Status and expiry index created');
+    console.log('✓ Moderation status and expiry index created');
 
     // Index for seller queries
     await ClassifiedAd.collection.createIndex({
@@ -47,16 +49,19 @@ async function initializeClassifiedsIndexes() {
     // Index for spam detection queries
     await ClassifiedAd.collection.createIndex({
       spamScore: 1,
-      status: 1,
+      moderationStatus: 1,
     });
     console.log('✓ Spam detection index created');
 
-    // TTL index for auto-expiring listings (30 days)
+    // TTL index for auto-expiring listings when autoRenew is disabled
     await ClassifiedAd.collection.createIndex(
       { expiryDate: 1 },
-      { expireAfterSeconds: 0 }
+      {
+        expireAfterSeconds: 0,
+        partialFilterExpression: { autoRenew: false },
+      }
     );
-    console.log('✓ TTL index created for automatic listing expiry');
+    console.log('✓ TTL index created for non-auto-renew classifieds expiry');
 
     return true;
   } catch (error) {

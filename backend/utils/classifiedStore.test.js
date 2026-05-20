@@ -1,9 +1,5 @@
-const {
-  serializeClassifiedAd,
-  buildClassifiedPlanLabel,
-  buildNonExpiredQuery,
-  listClassifiedModuleData,
-} = require('./classifiedStore');
+const classifiedStore = require('./classifiedStore');
+const { serializeClassifiedAd, buildClassifiedPlanLabel, buildNonExpiredQuery, listClassifiedModuleData, searchClassifieds } = classifiedStore;
 const devAppDataStore = require('./devAppDataStore');
 
 describe('classifiedStore', () => {
@@ -183,5 +179,42 @@ describe('classifiedStore', () => {
         reason: 'Needs closer review',
       }),
     ]);
+  });
+
+  test('searchClassifieds in file mode normalizes condition and supports price filtering', async () => {
+    jest.spyOn(devAppDataStore, 'readAppData').mockResolvedValue({
+      moduleData: {
+        classifiedsListings: [
+          {
+            id: 'listing-1',
+            title: 'Used iPhone 12',
+            description: 'Good condition and original charger.',
+            price: 25000,
+            category: 'Electronics',
+            location: 'Kochi',
+            condition: 'Used',
+            moderationStatus: 'approved',
+            expiryDate: '2099-01-01T00:00:00.000Z',
+          },
+        ],
+        classifiedsMessages: [],
+        classifiedsReports: [],
+      },
+    });
+
+    const result = await searchClassifieds({
+      text: 'iPhone',
+      category: 'Electronics',
+      location: 'Kochi',
+      minPrice: 20000,
+      maxPrice: 30000,
+      condition: 'used',
+      sortBy: 'latest',
+      page: 1,
+      limit: 10,
+    });
+
+    expect(result.listings).toHaveLength(1);
+    expect(result.listings[0].id).toBe('listing-1');
   });
 });

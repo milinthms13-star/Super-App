@@ -1,0 +1,139 @@
+.education-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.education-quick-action-card {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px;
+  background: #ffffff;
+  padding: 16px 12px;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.education-quick-action-card:hover {
+  transform: translateY(-2px);
+}
+
+.education-quick-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(13, 122, 105, 0.1);
+  color: #0d7a69;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.education-quick-action-card strong {
+  color: #0f172a;
+  font-size: 0.98rem;
+}
+
+.education-quick-action-card small {
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.education-study-path-card,
+.education-safety-note,
+.education-course-value-row {
+  border-radius: 22px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.education-study-path-card {
+  padding: 20px;
+  margin: 18px 0;
+}
+
+.education-section-heading.compact {
+  margin-bottom: 12px;
+}
+
+.education-study-path-form {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.education-study-plan-preview {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.education-study-plan-preview ul {
+  padding-left: 18px;
+}
+
+.education-study-plan-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.education-safety-note {
+  padding: 12px 14px;
+  background: #fff7ed;
+  color: #9a3412;
+  margin: 14px 0;
+  font-weight: 700;
+}
+
+.education-course-value-row {
+  padding: 10px 12px;
+  background: #f0fdf4;
+  color: #166534;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 10px 0;
+  font-weight: 800;
+}
+
+.education-field-error {
+  margin-top: 6px;
+  color: #b91c1c;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .education-quick-actions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .education-study-path-form {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .education-quick-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .education-study-path-form {
+    grid-template-columns: 1fr;
+  }
+
+  .education-quick-action-card {
+    min-height: 118px;
+  }
+}

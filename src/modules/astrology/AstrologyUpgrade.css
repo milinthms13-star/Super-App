@@ -1,0 +1,161 @@
+.astro-upgrade-start-panel {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.astro-upgrade-hero,
+.astro-upgrade-card {
+  border-radius: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(28, 20, 54, 0.96), rgba(65, 44, 92, 0.94));
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(30, 20, 60, 0.18);
+}
+
+.astro-upgrade-kicker {
+  margin: 0 0 8px;
+  color: #f7d37b;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.astro-upgrade-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 16px;
+}
+
+.astro-upgrade-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.astro-upgrade-full {
+  grid-column: 1 / -1;
+}
+
+.astro-upgrade-form-card label,
+.astro-upgrade-ai-question {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.astro-upgrade-form-card input,
+.astro-upgrade-form-card select,
+.astro-upgrade-ai-question input {
+  min-height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1f1733;
+  font-size: 1rem;
+}
+
+.astro-upgrade-warning {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 184, 77, 0.18);
+  color: #ffe7b3;
+  font-weight: 800;
+}
+
+.astro-upgrade-ai-question {
+  margin-top: 12px;
+}
+
+.astro-upgrade-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.astro-upgrade-primary,
+.astro-upgrade-secondary,
+.astro-upgrade-tabs button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.astro-upgrade-primary {
+  background: #f7c948;
+  color: #201536;
+}
+
+.astro-upgrade-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.astro-upgrade-secondary {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.astro-upgrade-preview-card ul {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+}
+
+.astro-upgrade-preview-card li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.astro-upgrade-preview-card strong {
+  color: #f7d37b;
+}
+
+.astro-upgrade-upsell {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(247, 211, 123, 0.14);
+  line-height: 1.5;
+}
+
+.astro-upgrade-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.astro-upgrade-tabs button {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  background: #fff;
+  color: #24153f;
+  box-shadow: 0 10px 24px rgba(30, 20, 60, 0.12);
+}
+
+@media (max-width: 760px) {
+  .astro-upgrade-grid,
+  .astro-upgrade-form-grid,
+  .astro-upgrade-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .astro-upgrade-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .astro-upgrade-actions button {
+    width: 100%;
+  }
+}
+

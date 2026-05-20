@@ -1,0 +1,138 @@
+.beauty-ai-quick-start {
+  display: grid;
+  gap: 18px;
+  padding: 16px;
+}
+
+.beauty-ai-hero-card,
+.beauty-ai-plan-card,
+.beauty-ai-safety-box,
+.beauty-progress-card {
+  background: #fff7fb;
+  border: 1px solid #f9c6df;
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 12px 28px rgba(190, 24, 93, 0.1);
+}
+
+.beauty-ai-hero-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.beauty-ai-eyebrow {
+  color: #be185d;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.beauty-ai-subtitle {
+  color: #6b7280;
+}
+
+.beauty-ai-hero-badge {
+  align-self: start;
+  background: #be185d;
+  color: #fff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+}
+
+.beauty-ai-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.beauty-ai-form-grid label,
+.beauty-ai-safety-box label,
+.beauty-ai-notes {
+  display: grid;
+  gap: 7px;
+  font-weight: 800;
+}
+
+.beauty-ai-form-grid input,
+.beauty-ai-form-grid select,
+.beauty-ai-safety-box input,
+.beauty-ai-notes textarea {
+  border: 1px solid #f0a9c8;
+  border-radius: 14px;
+  padding: 11px;
+  font-size: 0.95rem;
+}
+
+.beauty-ai-safety-box {
+  display: grid;
+  gap: 10px;
+}
+
+.beauty-ai-warning-box {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 18px;
+  padding: 12px;
+  color: #9a3412;
+  font-weight: 700;
+}
+
+.beauty-ai-primary-btn {
+  border: none;
+  border-radius: 18px;
+  background: #be185d;
+  color: #fff;
+  padding: 14px 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.beauty-ai-plan-header,
+.beauty-progress-header,
+.beauty-ai-actions-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.beauty-ai-actions-row button,
+.beauty-progress-grid button {
+  border: none;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.beauty-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.beauty-progress-grid button.done {
+  background: #16a34a;
+  color: #fff;
+}
+
+.beauty-ai-disclaimer {
+  color: #7f1d1d;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .beauty-ai-hero-card,
+  .beauty-ai-plan-header,
+  .beauty-ai-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .beauty-ai-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .beauty-progress-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

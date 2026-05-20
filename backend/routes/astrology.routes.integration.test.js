@@ -84,6 +84,57 @@ describe('astrology routes integration', () => {
     expect(Number(response.headers['content-length'])).toBeGreaterThan(0);
   });
 
+  test('GET /api/astrology/panchangam returns template metadata for guidance framing', async () => {
+    const response = await request(app)
+      .get('/api/astrology/panchangam')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.meta).toEqual(
+      expect.objectContaining({
+        guidanceOnly: true,
+        isSynthetic: true,
+      })
+    );
+    expect(response.body.data).toEqual(
+      expect.objectContaining({
+        quality: expect.any(Object),
+      })
+    );
+  });
+
+  test('GET /api/astrology/panchangam uses cache on repeat request', async () => {
+    const first = await request(app)
+      .get('/api/astrology/panchangam')
+      .expect(200);
+    const second = await request(app)
+      .get('/api/astrology/panchangam')
+      .expect(200);
+
+    expect(first.body.success).toBe(true);
+    expect(second.body.success).toBe(true);
+    expect(second.body.meta).toEqual(
+      expect.objectContaining({
+        cached: true,
+      })
+    );
+  });
+
+  test('GET /api/astrology/festivals returns template metadata for guidance framing', async () => {
+    const response = await request(app)
+      .get('/api/astrology/festivals')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(Array.isArray(response.body.data)).toBe(true);
+    expect(response.body.meta).toEqual(
+      expect.objectContaining({
+        guidanceOnly: true,
+        isSynthetic: true,
+      })
+    );
+  });
+
   test('POST /api/astrology/consultations/book creates a pending_payment booking for a valid slot', async () => {
     const response = await request(app)
       .post('/api/astrology/consultations/book')
@@ -222,6 +273,24 @@ describe('astrology routes integration', () => {
     );
   });
 
+  test('POST /api/astrology/consultations/:bookingId/payment/verify rejects missing payment fields', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'nambiar-priya',
+        slotId: 'tomorrow-1000',
+      })
+      .expect(201);
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+
+    await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/verify`)
+      .send({
+        orderId: 'order_fake_123',
+      })
+      .expect(400);
+  });
+
   test('GET /api/astrology/analytics/dashboard returns aggregate metrics', async () => {
     await request(app)
       .post('/api/astrology/consultations/book')
@@ -310,6 +379,114 @@ describe('astrology routes integration', () => {
       .get(`/api/astrology/consultations/${bookingId}/payment`)
       .set('x-user-id', 'astro-user-2')
       .expect(403);
+  });
+
+  test('GET /api/astrology/consultations/:bookingId/payment includes bookingStatus field', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+
+    const response = await request(app)
+      .get(`/api/astrology/consultations/${bookingId}/payment`)
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual(
+      expect.objectContaining({
+        bookingStatus: expect.any(String),
+      })
+    );
+  });
+
+  test('POST /api/astrology/consultations/:bookingId/payment/create-order blocks cancelled bookings', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+
+    await request(app)
+      .patch(`/api/astrology/consultations/${bookingId}/status`)
+      .send({ status: 'cancelled' })
+      .expect(200);
+
+    await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/create-order`)
+      .send({})
+      .expect(409);
+  });
+
+  test('POST /api/astrology/payment/webhook/razorpay reconciles booking on payment.captured', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+    const createOrderResponse = await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/create-order`)
+      .send({})
+      .expect(200);
+
+    const orderId = createOrderResponse.body.data.orderId;
+    const webhookPayload = {
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: 'pay_webhook_001',
+            order_id: orderId,
+            notes: {
+              bookingId,
+            },
+          },
+        },
+      },
+    };
+
+    const rawBody = JSON.stringify(webhookPayload);
+    const signature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret')
+      .update(rawBody)
+      .digest('hex');
+
+    const webhookResponse = await request(app)
+      .post('/api/astrology/payment/webhook/razorpay')
+      .set('Content-Type', 'application/json')
+      .set('x-razorpay-signature', signature)
+      .send(rawBody)
+      .expect(200);
+
+    expect(webhookResponse.body.success).toBe(true);
+    expect(webhookResponse.body.data).toEqual(
+      expect.objectContaining({
+        paymentStatus: 'completed',
+      })
+    );
+  });
+
+  test('POST /api/astrology/payment/webhook/razorpay rejects invalid signature', async () => {
+    const response = await request(app)
+      .post('/api/astrology/payment/webhook/razorpay')
+      .set('Content-Type', 'application/json')
+      .set('x-razorpay-signature', 'invalid_signature')
+      .send(JSON.stringify({ event: 'payment.captured' }))
+      .expect(400);
+
+    expect(response.body.success).toBe(false);
   });
 
   test('POST /api/astrology/consultants/add-slot adds a new consultant slot', async () => {

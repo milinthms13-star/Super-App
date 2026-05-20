@@ -44,6 +44,36 @@ const isClassifiedModerationPubliclyVisible = (record = {}) =>
 
 const escapeRegexText = (value = '') => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const isMissingTextIndexError = (error) =>
+  /text query requires text index/i.test(String(error?.message || ''));
+
+// Normalize condition to canonical set to avoid casing/variant mismatch
+const normalizeCondition = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Used';
+  const lower = raw.toLowerCase();
+  if (['new', 'brand new', 'brand-new', 'n'].includes(lower)) return 'New';
+  if (['refurbished', 'refurb', 'refurbish'].includes(lower)) return 'Refurbished';
+  if (['used', 'second hand', 'second-hand', 'preowned', 'pre-owned'].includes(lower)) return 'Used';
+  // default fallback: capitalize first letter
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+};
+
+// Build a simple searchable text used in serialization; this can be indexed in MongoDB
+const buildSearchableText = (plainRecord = {}) => {
+  const parts = [
+    plainRecord.title,
+    plainRecord.description,
+    plainRecord.category,
+    plainRecord.subcategory,
+    plainRecord.location,
+    plainRecord.locality,
+    plainRecord.seller,
+    ...(Array.isArray(plainRecord.tags) ? plainRecord.tags : []),
+  ].filter(Boolean);
+  return parts.join(' ').toLowerCase();
+};
+
 const isPromotionActive = (record = {}, now = new Date()) => {
   const promotionExpiry = parseOptionalDate(record?.promotionPlanExpiry || record?.expiryDate);
   return !promotionExpiry || promotionExpiry >= now;
@@ -168,7 +198,7 @@ const serializeClassifiedAd = (record, index = 0) => {
     location: String(plainRecord.location || 'Kerala').trim(),
     locality: String(plainRecord.locality || plainRecord.location || 'Prime area').trim(),
     coordinates: plainRecord.coordinates || { type: 'Point', coordinates: [0, 0] },
-    condition: String(plainRecord.condition || 'Used').trim(),
+    condition: normalizeCondition(plainRecord.condition || 'Used'),
     featured: Boolean(plainRecord.featured) && isPromotionActive(plainRecord, now),
     urgent: Boolean(plainRecord.urgent) && isPromotionActive(plainRecord, now),
     verified: plainRecord.verified !== false,
@@ -296,13 +326,12 @@ const listClassifiedModuleDataFromMongo = async (filters = {}, options = {}) => 
   }
 
   if (searchText && searchText.trim()) {
-    const searchRegex = new RegExp(escapeRegexText(searchText.trim()), 'i');
+    const term = searchText.trim();
+    // Prefer text index search if configured; fall back to regex across precomputed searchableText
     andConditions.push({
       $or: [
-        { title: searchRegex },
-        { description: searchRegex },
-        { tags: searchRegex },
-        { seller: searchRegex },
+        { $text: { $search: term } },
+        { searchableText: new RegExp(escapeRegexText(term), 'i') },
       ],
     });
   }
@@ -311,12 +340,38 @@ const listClassifiedModuleDataFromMongo = async (filters = {}, options = {}) => 
     query.$and = andConditions;
   }
 
-  const records = await ClassifiedAd.find(query)
-    .sort({ featured: -1, urgent: -1, createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
+  let records;
+  let effectiveQuery = query;
+  try {
+    records = await ClassifiedAd.find(query)
+      .sort({ featured: -1, urgent: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+  } catch (error) {
+    if (isMissingTextIndexError(error) && query.$and) {
+      effectiveQuery = {
+        ...query,
+        $and: query.$and
+          .map((condition) => {
+            if (condition.$or) {
+              return {
+                $or: condition.$or.filter((clause) => !clause.$text),
+              };
+            }
+            return condition;
+          })
+          .filter((condition) => !(condition.$or && condition.$or.length === 0)),
+      };
+      records = await ClassifiedAd.find(effectiveQuery)
+        .sort({ featured: -1, urgent: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+    } else {
+      throw error;
+    }
+  }
 
-  const total = await ClassifiedAd.countDocuments(query);
+  const total = await ClassifiedAd.countDocuments(effectiveQuery);
 
   const listings = records.map((r, i) => serializeClassifiedAd(r, skip + i));
 
@@ -451,6 +506,8 @@ const createClassifiedAd = async (payload) => {
     spamScore,
     flags,
     moderationStatus: spamScore > 50 ? 'flagged' : 'pending',
+    condition: normalizeCondition(payload.condition || 'Used'),
+    searchableText: buildSearchableText(payload),
   };
 
   const created = await ClassifiedAd.create(adData);
@@ -469,12 +526,24 @@ const updateClassifiedAd = async (listingId, payload) => {
     updateData.slug = generateSlug(payload.title, listingId);
   }
 
-  // Recalculate spam score if content changed
-  if (payload.title || payload.description) {
+  // Recalculate spam score and searchable text when relevant fields change
+  if (
+    payload.title ||
+    payload.description ||
+    payload.category ||
+    payload.subcategory ||
+    payload.location ||
+    payload.locality ||
+    payload.seller ||
+    payload.tags ||
+    payload.condition
+  ) {
     const ad = await ClassifiedAd.findById(listingId);
     const fullListing = { ...ad.toObject(), ...updateData };
     updateData.spamScore = calculateSpamScore(fullListing);
     updateData.flags = detectSuspiciousFlags(fullListing);
+    updateData.condition = normalizeCondition(fullListing.condition || 'Used');
+    updateData.searchableText = buildSearchableText(fullListing);
   }
 
   // Update coordinates if location changed
@@ -693,6 +762,7 @@ const searchClassifieds = async (query = {}, options = {}) => {
         skip: 0,
       }
     );
+    const normalizedCondition = condition ? normalizeCondition(condition) : null;
     const filteredListings = sortClassifiedRecords(
       (Array.isArray(moduleData.classifiedsListings) ? moduleData.classifiedsListings : []).filter((listing) => {
         const price = Number(listing?.price || 0);
@@ -705,7 +775,7 @@ const searchClassifieds = async (query = {}, options = {}) => {
           return false;
         }
 
-        if (condition && listing.condition !== condition) {
+        if (normalizedCondition && listing.condition !== normalizedCondition) {
           return false;
         }
 
@@ -738,6 +808,7 @@ const searchClassifieds = async (query = {}, options = {}) => {
   } = query;
 
   const { skip = (page - 1) * limit } = options;
+  const normalizedCondition = condition ? normalizeCondition(condition) : null;
 
   const expiryFilter = buildNonExpiredQuery(new Date());
 
@@ -753,56 +824,66 @@ const searchClassifieds = async (query = {}, options = {}) => {
     dbQuery.$and = dbQuery.$and || [];
     dbQuery.$and.push({
       $or: [
-        { title: searchRegex },
-        { description: searchRegex },
-        { tags: searchRegex },
-        { seller: searchRegex },
+        { $text: { $search: text.trim() } },
+        { searchableText: searchRegex },
       ],
     });
   }
 
-  if (category) {
+  if (category && category !== 'All') {
     dbQuery.category = category;
   }
 
-  if (location) {
+  if (location && location !== 'All') {
     dbQuery.location = location;
   }
 
-  if (minPrice > 0 || maxPrice < Infinity) {
-    dbQuery.price = { $gte: minPrice, $lte: maxPrice };
+  if ((minPrice > 0 && minPrice !== Infinity) || maxPrice < Infinity) {
+    dbQuery.price = {};
+    if (minPrice > 0 && minPrice !== Infinity) {
+      dbQuery.price.$gte = minPrice;
+    }
+    if (maxPrice < Infinity) {
+      dbQuery.price.$lte = maxPrice;
+    }
   }
 
-  if (condition) {
-    dbQuery.condition = condition;
+  if (normalizedCondition) {
+    dbQuery.condition = normalizedCondition;
   }
 
-  // Apply sorting
-  let sortOptions = {};
-  switch (sortBy) {
-    case 'latest':
-      sortOptions = { createdAt: -1 };
-      break;
-    case 'price-low':
-      sortOptions = { price: 1 };
-      break;
-    case 'price-high':
-      sortOptions = { price: -1 };
-      break;
-    case 'popular':
-      sortOptions = { chats: -1, favorites: -1 };
-      break;
-    case 'featured':
-    default:
-      sortOptions = { featured: -1, urgent: -1, createdAt: -1 };
+  let effectiveQuery = dbQuery;
+  let records;
+  try {
+    records = await ClassifiedAd.find(dbQuery)
+      .sort({ featured: -1, urgent: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+  } catch (error) {
+    if (isMissingTextIndexError(error) && dbQuery.$and) {
+      effectiveQuery = {
+        ...dbQuery,
+        $and: dbQuery.$and
+          .map((condition) => {
+            if (condition.$or) {
+              return {
+                $or: condition.$or.filter((clause) => !clause.$text),
+              };
+            }
+            return condition;
+          })
+          .filter((condition) => !(condition.$or && condition.$or.length === 0)),
+      };
+      records = await ClassifiedAd.find(effectiveQuery)
+        .sort({ featured: -1, urgent: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+    } else {
+      throw error;
+    }
   }
 
-  const records = await ClassifiedAd.find(dbQuery)
-    .sort(sortOptions)
-    .skip(skip)
-    .limit(limit);
-
-  const total = await ClassifiedAd.countDocuments(dbQuery);
+  const total = await ClassifiedAd.countDocuments(effectiveQuery);
 
   return {
     listings: records.map((r, i) => serializeClassifiedAd(r, skip + i)),

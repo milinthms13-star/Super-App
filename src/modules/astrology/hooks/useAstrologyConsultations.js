@@ -52,6 +52,18 @@ const getStatusClassName = (value) => {
   return "astrology-status-warning";
 };
 
+const deriveBookingStatus = (booking = {}) => {
+  const normalizedStatus = String(booking.status || "").toLowerCase();
+  const normalizedPaymentStatus = String(booking.paymentStatus || "").toLowerCase();
+  if (!normalizedStatus && normalizedPaymentStatus === "completed") {
+    return "confirmed";
+  }
+  if (normalizedPaymentStatus === "completed" && normalizedStatus === "pending_payment") {
+    return "confirmed";
+  }
+  return normalizedStatus || "pending_payment";
+};
+
 export const useAstrologyConsultations = ({
   activeSection,
   currentUser,
@@ -219,6 +231,7 @@ export const useAstrologyConsultations = ({
               ...currentBooking,
               paymentOrderId: order.orderId,
               paymentStatus: "pending",
+              status: "pending_payment",
             }
           : currentBooking
       );
@@ -344,6 +357,11 @@ export const useAstrologyConsultations = ({
         const paymentStatus = await astrologyService.getConsultationPaymentStatus(booking.id);
         const updatedBooking = {
           ...booking,
+          status: deriveBookingStatus({
+            ...booking,
+            status: paymentStatus.bookingStatus || booking.status,
+            paymentStatus: paymentStatus.paymentStatus || booking.paymentStatus,
+          }),
           paymentStatus: paymentStatus.paymentStatus || booking.paymentStatus,
           paymentOrderId: paymentStatus.paymentOrderId || booking.paymentOrderId,
           paymentId: paymentStatus.paymentId || booking.paymentId,

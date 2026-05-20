@@ -12,7 +12,6 @@ export const SUPPORT_MODULE_OPTIONS = [
   { value: 'devadarshan', label: 'Devadarshan' },
   { value: 'hyperlocal', label: 'Nila Hyperlocal Delivery' },
   { value: 'localservices', label: 'Local Services Marketplace' },
-  { value: 'localmarket', label: 'Local Market' },
   { value: 'ridesharing', label: 'SwiftRide' },
   { value: 'matrimonial', label: 'SoulMatch' },
   { value: 'socialmedia', label: 'VibeHub' },

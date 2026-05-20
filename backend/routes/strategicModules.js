@@ -11,10 +11,10 @@ const MODULE_META = {
     priority: 'highest',
     monetization: ['SaaS plans', 'AI credits', 'Monthly subscriptions'],
   },
-  gulfjobsmigration: {
-    title: 'Kerala + Gulf Jobs Migration',
+  gulfservices: {
+    title: 'Gulf Services + Jobs Migration',
     priority: 'high',
-    monetization: ['Candidate premium', 'Recruiter plans', 'Verification fees'],
+    monetization: ['Service commissions', 'Candidate premium', 'Recruiter plans', 'Verification fees'],
   },
   womensafetyfamily: {
     title: 'Women Safety + Family Protection',
@@ -46,7 +46,13 @@ router.get('/meta', authenticate, (_req, res) => {
 });
 
 router.get('/meta/:moduleId', authenticate, (req, res) => {
-  const moduleId = String(req.params.moduleId || '').trim().toLowerCase();
+  const requestedModuleId = String(req.params.moduleId || '').trim().toLowerCase();
+  const moduleId =
+    requestedModuleId === 'gulfjobsmigration' ||
+    requestedModuleId === 'gulfjobmigration' ||
+    requestedModuleId === 'kerala-gulf-jobs-migration'
+      ? 'gulfservices'
+      : requestedModuleId;
   const moduleMeta = MODULE_META[moduleId];
 
   if (!moduleMeta) {

@@ -1,0 +1,167 @@
+.kids-story-generator-shell {
+  display: grid;
+  gap: 18px;
+  padding: 16px;
+}
+
+.kids-story-hero-card,
+.kids-story-safety-card,
+.kids-story-output-card {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 24px;
+  padding: 18px;
+  background: linear-gradient(135deg, #fff7ed, #eef2ff);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.08);
+}
+
+.kids-story-hero-card {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 18px;
+  align-items: center;
+}
+
+.kids-story-eyebrow {
+  color: #7c3aed;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  margin: 0 0 6px;
+}
+
+.kids-story-hero-card h2 {
+  margin: 0 0 8px;
+  color: #111827;
+}
+
+.kids-story-mode-pills,
+.kids-story-safety-grid,
+.kids-story-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.kids-story-mode-pills button,
+.kids-story-safety-grid button,
+.kids-story-actions button,
+.kids-story-generate-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.kids-story-mode-pills button {
+  background: #ffffff;
+  color: #374151;
+}
+
+.kids-story-mode-pills button.active,
+.kids-story-safety-grid button.enabled,
+.kids-story-actions .primary,
+.kids-story-generate-btn {
+  background: #7c3aed;
+  color: #ffffff;
+}
+
+.kids-story-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.kids-story-field {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+  color: #374151;
+}
+
+.story-idea-field {
+  grid-column: span 3;
+}
+
+.kids-story-field input,
+.kids-story-field select,
+.kids-story-field textarea,
+.kids-story-title-input,
+.kids-story-textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 16px;
+  padding: 12px;
+  font-size: 1rem;
+  background: #fff;
+}
+
+.kids-story-generate-btn {
+  justify-self: start;
+  min-width: 220px;
+  box-shadow: 0 12px 26px rgba(124, 58, 237, 0.26);
+}
+
+.kids-story-generate-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kids-story-status {
+  font-weight: 800;
+  color: #4c1d95;
+}
+
+.kids-story-output-header {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.kids-story-title-input {
+  font-size: 1.25rem;
+  font-weight: 900;
+  min-width: min(540px, 100%);
+}
+
+.kids-story-textarea {
+  width: 100%;
+  min-height: 320px;
+  margin-top: 14px;
+  line-height: 1.6;
+}
+
+.kids-story-extra-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.kids-story-extra-grid > div {
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+@media (max-width: 760px) {
+  .kids-story-hero-card,
+  .kids-story-form-grid,
+  .kids-story-extra-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .story-idea-field {
+    grid-column: span 1;
+  }
+
+  .kids-story-output-header {
+    flex-direction: column;
+  }
+
+  .kids-story-actions button,
+  .kids-story-generate-btn {
+    width: 100%;
+  }
+}

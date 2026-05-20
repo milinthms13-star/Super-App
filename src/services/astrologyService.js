@@ -276,6 +276,13 @@ const normalizeConsultationBooking = (payload = {}) => ({
   createdAt: payload.createdAt || "",
 });
 
+const normalizeContentMeta = (meta = {}) => ({
+  source: String(meta.source || "").trim(),
+  guidanceOnly: Boolean(meta.guidanceOnly),
+  isSynthetic: Boolean(meta.isSynthetic),
+  note: String(meta.note || "").trim(),
+});
+
 const extractFileNameFromContentDisposition = (contentDisposition = "") => {
   const headerValue = String(contentDisposition || "");
   const fileNameMatch = headerValue.match(/filename="?([^";]+)"?/i);
@@ -449,6 +456,12 @@ export const astrologyService = {
       rahuKalam: "10:30 AM - 12:00 PM",
       yamagandam: "03:00 PM - 04:30 PM",
       gulika: "07:30 AM - 09:00 AM",
+      _meta: {
+        source: "fallback",
+        guidanceOnly: true,
+        isSynthetic: true,
+        note: "Showing fallback Panchangam guidance values.",
+      },
     };
 
     try {
@@ -456,7 +469,10 @@ export const astrologyService = {
       if (!response.data?.success || !response.data?.data) {
         throw new Error("Unable to fetch Panchangam details.");
       }
-      return response.data.data;
+      return {
+        ...response.data.data,
+        _meta: normalizeContentMeta(response.data?.meta || response.data?.data?.quality || {}),
+      };
     } catch (error) {
       throw buildServiceError(error, fallback, "Unable to fetch Panchangam details.");
     }
@@ -486,7 +502,10 @@ export const astrologyService = {
       if (!response.data?.success || !Array.isArray(response.data?.data)) {
         throw new Error("Unable to fetch festival updates.");
       }
-      return response.data.data;
+      return response.data.data.map((item) => ({
+        ...item,
+        _meta: normalizeContentMeta(response.data?.meta || {}),
+      }));
     } catch (error) {
       throw buildServiceError(error, fallback, "Unable to fetch festival updates.");
     }
@@ -513,10 +532,10 @@ export const astrologyService = {
         summary: "A period of relationship focus with potential growth through discipline.",
       },
       planets: [
-        { planet: "Sun", position: "10° Aries" },
-        { planet: "Moon", position: "22° Cancer" },
-        { planet: "Mars", position: "05° Gemini" },
-        { planet: "Mercury", position: "18° Taurus" },
+        { planet: "Sun", position: "10 deg Aries" },
+        { planet: "Moon", position: "22 deg Cancer" },
+        { planet: "Mars", position: "05 deg Gemini" },
+        { planet: "Mercury", position: "18 deg Taurus" },
       ],
       remedies: [
         "Begin the day with focused breathing and prayer.",
@@ -530,7 +549,15 @@ export const astrologyService = {
       if (!response.data?.success || !response.data?.data) {
         throw new Error("Unable to generate Kundli.");
       }
-      return response.data.data;
+      return {
+        ...response.data.data,
+        quality: {
+          ...normalizeContentMeta(response.data?.meta || {}),
+          ...(response.data?.data?.quality && typeof response.data.data.quality === "object"
+            ? response.data.data.quality
+            : {}),
+        },
+      };
     } catch (error) {
       throw buildServiceError(error, fallback, "Unable to generate Kundli.");
     }
@@ -542,6 +569,12 @@ export const astrologyService = {
       summary:
         "Your signs have strong emotional alignment, with small adjustments needed around timing and finances.",
       keyMatch: "Rasi Porutham: Sama, Gana Porutham: Maitra, Vasya Porutham: Anuradha",
+      quality: {
+        source: "fallback",
+        guidanceOnly: true,
+        isSynthetic: true,
+        note: "Compatibility fallback is guidance-oriented.",
+      },
     };
 
     try {
@@ -552,7 +585,15 @@ export const astrologyService = {
       if (!response.data?.success || !response.data?.data) {
         throw new Error("Unable to calculate compatibility.");
       }
-      return response.data.data;
+      return {
+        ...response.data.data,
+        quality: {
+          ...normalizeContentMeta(response.data?.meta || {}),
+          ...(response.data?.data?.quality && typeof response.data.data.quality === "object"
+            ? response.data.data.quality
+            : {}),
+        },
+      };
     } catch (error) {
       throw buildServiceError(error, fallback, "Unable to calculate compatibility.");
     }
@@ -566,6 +607,12 @@ export const astrologyService = {
         "Start the day with a short prayer or breathing exercise.",
         "Wear copper or green for calm energy this week.",
       ],
+      quality: {
+        source: "fallback",
+        guidanceOnly: true,
+        isSynthetic: true,
+        note: "Assistant fallback uses template guidance.",
+      },
     };
 
     try {
@@ -576,7 +623,15 @@ export const astrologyService = {
       if (!response.data?.success || !response.data?.data) {
         throw new Error("Unable to answer your astrology question.");
       }
-      return response.data.data;
+      return {
+        ...response.data.data,
+        quality: {
+          ...normalizeContentMeta(response.data?.meta || {}),
+          ...(response.data?.data?.quality && typeof response.data.data.quality === "object"
+            ? response.data.data.quality
+            : {}),
+        },
+      };
     } catch (error) {
       throw buildServiceError(error, fallback, "Unable to answer your astrology question.");
     }
@@ -588,7 +643,7 @@ export const astrologyService = {
         id: "acharya-madhav",
         name: "Madhav Acharya",
         specialty: "Kerala Jathakam, Matchmaking, Remedies",
-        rate: "₹1,200 / 15 min",
+        rate: "INR 1,200 / 15 min",
         amountInr: 1200,
         availability: "Today 4:00 PM - 7:00 PM",
         availableSlots: [
@@ -600,7 +655,7 @@ export const astrologyService = {
         id: "nambiar-priya",
         name: "Priya Nambiar",
         specialty: "Kundli, Nakshatra counseling, Blessings rituals",
-        rate: "₹950 / 15 min",
+        rate: "INR 950 / 15 min",
         amountInr: 950,
         availability: "Tomorrow 10:00 AM - 1:00 PM",
         availableSlots: [
@@ -810,7 +865,14 @@ export const astrologyService = {
         throw new Error("Unable to load consultation payment status.");
       }
 
-      return response.data.data;
+      return {
+        ...response.data.data,
+        bookingStatus:
+          String(response.data.data?.bookingStatus || "").trim() ||
+          (String(response.data.data?.paymentStatus || "").toLowerCase() === "completed"
+            ? "confirmed"
+            : "pending_payment"),
+      };
     } catch (error) {
       throw buildServiceError(error, null, "Unable to load consultation payment status.");
     }

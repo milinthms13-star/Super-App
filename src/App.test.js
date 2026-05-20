@@ -318,16 +318,16 @@ test("shows saved custom links on the launch page next to enabled categories", a
   ).toBeInTheDocument();
 });
 
-test("shows Local Market and AstroNila on the launch page when they are enabled", async () => {
+test("shows Hyperlocal Delivery and AstroNila on the launch page when they are enabled", async () => {
   mockAxiosForApp({
     publicAppData: createPublicAppData({
-      enabledModules: ["ecommerce", "localmarket", "astrology"],
+      enabledModules: ["ecommerce", "hyperlocal", "astrology"],
     }),
   });
 
   render(<App />);
 
-  expect(await screen.findByRole("button", { name: /local market/i })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: /nila hyperlocal delivery/i })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /astronila/i })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /linkup/i })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /feastly/i })).not.toBeInTheDocument();

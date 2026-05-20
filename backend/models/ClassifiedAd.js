@@ -299,6 +299,11 @@ const ClassifiedAdSchema = new mongoose.Schema(
       default: [],
       index: true,
     },
+    searchableText: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     mapLabel: {
       type: String,
       default: '',
@@ -392,8 +397,65 @@ const ClassifiedAdSchema = new mongoose.Schema(
   }
 );
 
+const normalizeConditionValue = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return 'Used';
+  const lower = raw.toLowerCase();
+  if (['new', 'brand new', 'brand-new', 'n'].includes(lower)) return 'New';
+  if (['refurbished', 'refurb', 'refurbish'].includes(lower)) return 'Refurbished';
+  if (['used', 'second hand', 'second-hand', 'preowned', 'pre-owned'].includes(lower)) return 'Used';
+  if (['like new', 'likenew'].includes(lower)) return 'Like New';
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+};
+
+const buildSearchableText = (doc = {}) => {
+  const parts = [
+    doc.title,
+    doc.description,
+    doc.category,
+    doc.subcategory,
+    doc.location,
+    doc.locality,
+    doc.seller,
+    ...(Array.isArray(doc.tags) ? doc.tags : []),
+  ].filter(Boolean);
+  return parts.join(' ').toLowerCase();
+};
+
+ClassifiedAdSchema.pre('save', function (next) {
+  this.condition = normalizeConditionValue(this.condition);
+  this.searchableText = buildSearchableText(this);
+  next();
+});
+
+ClassifiedAdSchema.pre('findOneAndUpdate', async function (next) {
+  const update = this.getUpdate();
+  if (!update) {
+    return next();
+  }
+
+  const currentDoc = await this.model.findOne(this.getQuery()).lean();
+  if (!currentDoc) {
+    return next();
+  }
+
+  const updateData = update.$set ? { ...currentDoc, ...update.$set } : { ...currentDoc, ...update };
+  const normalizedCondition = normalizeConditionValue(updateData.condition);
+  const searchableText = buildSearchableText(updateData);
+
+  if (!update.$set) {
+    update.$set = {};
+  }
+
+  update.$set.condition = normalizedCondition;
+  update.$set.searchableText = searchableText;
+  this.setUpdate(update);
+  next();
+});
+
 // Create geospatial index for distance queries
 ClassifiedAdSchema.index({ coordinates: '2dsphere' });
+ClassifiedAdSchema.index({ searchableText: 'text', title: 'text', description: 'text', tags: 'text', category: 'text', location: 'text' });
 // Composite indexes for common queries
 ClassifiedAdSchema.index({ category: 1, location: 1, moderationStatus: 1 });
 ClassifiedAdSchema.index({ sellerEmail: 1, createdAt: -1 });

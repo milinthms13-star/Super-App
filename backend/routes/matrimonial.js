@@ -12,6 +12,7 @@ const { authenticate } = require('../middleware/auth');
 const { createModerateRateLimiter } = require('../middleware/rateLimiter');
 const subscriptionService = require('../utils/subscriptionService');
 const logger = require('../utils/logger');
+const { sanitizeMatrimonialMessage } = require('../utils/matrimonialBackendUpgradeHelpers');
 
 const router = express.Router();
 
@@ -73,9 +74,7 @@ const normalizePhone = (value) => {
 };
 
 const normalizeText = (value, fallback = '') =>
-  String(value == null ? fallback : value)
-    .replace(/<[^>]*>/g, '')
-    .trim();
+  sanitizeMatrimonialMessage(value == null ? fallback : value);
 
 const parseBoolean = (value, fallback = false) => {
   if (value === true || value === false) {
@@ -904,7 +903,7 @@ router.post('/interests', interestLimiter, async (req, res) => {
     const interest = {
       fromProfileId: currentProfile._id,
       toProfileId: targetProfile._id,
-      message: normalizeText(message),
+      message: sanitizeMatrimonialMessage(message),
       status: 'sent',
     };
 
@@ -1070,7 +1069,7 @@ router.post('/messages', messageLimiter, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid profile ID' });
     }
 
-    const trimmedContent = normalizeText(content);
+    const trimmedContent = sanitizeMatrimonialMessage(content);
     if (!trimmedContent) {
       return res.status(400).json({ success: false, message: 'Message content required' });
     }
@@ -1177,7 +1176,7 @@ router.post('/profiles/:profileId/block', blockLimiter, async (req, res) => {
 router.post('/profiles/:profileId/report', reportLimiter, async (req, res) => {
   try {
     const { profileId } = req.params;
-    const reason = normalizeText(req.body.reason);
+    const reason = sanitizeMatrimonialMessage(req.body.reason);
 
     if (!mongoose.Types.ObjectId.isValid(profileId)) {
       return res.status(400).json({ success: false, message: 'Invalid profile ID' });

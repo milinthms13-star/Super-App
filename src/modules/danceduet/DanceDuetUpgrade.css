@@ -1,0 +1,34 @@
+.dance-duet-studio { padding: 20px; background: #f8fafc; min-height: 100vh; color: #0f172a; }
+.dance-duet-hero { display: flex; justify-content: space-between; gap: 16px; align-items: stretch; padding: 22px; border-radius: 28px; background: linear-gradient(135deg, #111827, #4c1d95); color: #fff; box-shadow: 0 18px 44px rgba(15, 23, 42, .22); }
+.dance-duet-eyebrow { margin: 0 0 8px; color: #fcd34d; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.dance-duet-hero h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 3rem); }
+.dance-duet-hero p { max-width: 720px; opacity: .9; }
+.dance-duet-score-card { min-width: 150px; border-radius: 22px; padding: 16px; background: rgba(255,255,255,.14); display: grid; place-items: center; text-align: center; }
+.dance-duet-score-card strong { font-size: 2.2rem; }
+.dance-duet-card, .dance-duet-result-card { margin-top: 18px; border-radius: 26px; background: #fff; padding: 18px; box-shadow: 0 16px 40px rgba(15, 23, 42, .10); }
+.dance-duet-upload-grid, .dance-duet-options-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.dance-duet-upload-box { min-height: 150px; border: 2px dashed #c4b5fd; border-radius: 22px; padding: 16px; display: grid; gap: 8px; cursor: pointer; background: #faf5ff; }
+.dance-duet-upload-box input { margin-top: 8px; }
+.dance-duet-upload-box strong { word-break: break-word; }
+.dance-duet-options-grid { margin-top: 14px; }
+.dance-duet-options-grid label { display: grid; gap: 7px; font-weight: 800; }
+.dance-duet-options-grid select, .dance-duet-options-grid input { min-height: 44px; border: 1px solid #dbe4f0; border-radius: 14px; padding: 8px 10px; }
+.dance-duet-options-grid small { color: #64748b; font-weight: 600; }
+.dance-duet-switch-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.dance-duet-switch-row label { padding: 10px 12px; border-radius: 999px; background: #f1f5f9; font-weight: 700; }
+.dance-duet-tips { display: grid; gap: 8px; margin-top: 14px; }
+.dance-duet-tips span { padding: 10px 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 16px; color: #92400e; font-weight: 700; }
+.dance-duet-progress { display: grid; gap: 8px; margin-top: 16px; }
+.dance-duet-progress div { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 16px; background: #f1f5f9; font-weight: 700; color: #64748b; }
+.dance-duet-progress span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #cbd5e1; color: #fff; }
+.dance-duet-progress div.active { color: #065f46; background: #ecfdf5; }
+.dance-duet-progress div.active span { background: #10b981; }
+.dance-duet-action-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
+.dance-duet-action-row button, .dance-duet-result-actions a, .dance-duet-result-actions button { border: 0; border-radius: 999px; padding: 12px 18px; background: #7c3aed; color: #fff; font-weight: 900; cursor: pointer; text-decoration: none; }
+.dance-duet-action-row button:disabled { opacity: .5; cursor: not-allowed; }
+.dance-duet-warning, .dance-duet-error { margin-top: 12px; padding: 12px; border-radius: 16px; font-weight: 800; }
+.dance-duet-warning { background: #fffbeb; color: #92400e; }
+.dance-duet-error { background: #fef2f2; color: #991b1b; }
+.dance-duet-result-video { width: 100%; max-height: 70vh; border-radius: 22px; background: #000; }
+.dance-duet-result-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+@media (max-width: 760px) { .dance-duet-studio { padding: 12px; } .dance-duet-hero { flex-direction: column; border-radius: 22px; } .dance-duet-upload-grid, .dance-duet-options-grid { grid-template-columns: 1fr; } .dance-duet-action-row button { width: 100%; } }

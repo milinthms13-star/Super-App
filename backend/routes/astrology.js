@@ -4,6 +4,7 @@ const PDFDocument = require('pdfkit');
 const rateLimit = require('express-rate-limit');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const logger = require('../utils/logger');
 
 const authMiddleware = require('../middleware/auth');
 const AstrologyUserProfile = require('../models/AstrologyUserProfile');
@@ -11,6 +12,12 @@ const AstrologyConsultationBooking = require('../models/AstrologyConsultationBoo
 const devAstrologyStore = require('../utils/devAstrologyStore');
 const NotificationService = require('../services/NotificationService');
 const ABTestingService = require('../services/abTestingService');
+const astrologyProviderService = require('../services/astrologyProviderService');
+const {
+  validateAstrologyProfileInput,
+  buildAstrologyReportPayload,
+  getAstrologyLegalDisclaimer,
+} = require('../utils/astrologyBackendUpgradeHelpers');
 const {
   getDailyHoroscope,
   getSignDetails,
@@ -49,6 +56,28 @@ const compatibilityLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many compatibility checks. Please try again shortly.',
+  },
+});
+
+const bookingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many booking actions. Please try again in a minute.',
+  },
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many payment actions. Please try again shortly.',
   },
 });
 
@@ -428,6 +457,12 @@ const buildCompatibility = (sign, partnerSign) => {
     score,
     summary,
     keyMatch,
+    quality: {
+      source: 'template-engine',
+      isSynthetic: true,
+      guidanceOnly: true,
+      note: 'Compatibility score is guidance-oriented and not a deterministic life outcome guarantee.',
+    },
   };
 };
 
@@ -547,6 +582,12 @@ const getPanchangamData = () => ({
   yamagandam: '03:00 PM - 04:30 PM',
   gulika: '07:30 AM - 09:00 AM',
   updatedAt: new Date().toISOString(),
+  quality: {
+    source: 'curated-template',
+    isSynthetic: true,
+    guidanceOnly: true,
+    note: 'Panchangam values are currently curated guidance values in this environment.',
+  },
 });
 
 const getFestivalData = () => [
@@ -566,6 +607,13 @@ const getFestivalData = () => [
     note: 'Traditionally observed for ancestral remembrance and spiritual grounding.',
   },
 ];
+
+const TEMPLATE_CONTENT_META = {
+  source: 'template-engine',
+  guidanceOnly: true,
+  isSynthetic: true,
+  note: 'This endpoint currently returns guidance-oriented template content.',
+};
 
 const findProfileByUserId = async (userId) => {
   if (shouldUseDevStore()) {
@@ -654,6 +702,20 @@ const updateConsultationBookingById = async (bookingId, updates = {}) => {
     { $set: updates },
     { new: true }
   ).lean();
+};
+
+const findConsultationBookingByPaymentOrderId = async (paymentOrderId) => {
+  const normalizedOrderId = sanitizeText(paymentOrderId, 120);
+  if (!normalizedOrderId) {
+    return null;
+  }
+
+  if (shouldUseDevStore()) {
+    const allBookings = await devAstrologyStore.listAllBookings();
+    return allBookings.find((booking) => String(booking.paymentOrderId || '') === normalizedOrderId) || null;
+  }
+
+  return AstrologyConsultationBooking.findOne({ paymentOrderId: normalizedOrderId }).lean();
 };
 
 const formatPeriodStart = (period) => {
@@ -1578,17 +1640,32 @@ router.put('/profile', authenticate, async (req, res) => {
   }
 });
 
-router.get('/panchangam', (req, res) => {
+router.get('/panchangam', async (req, res) => {
+  const result = await astrologyProviderService.getPanchangam({
+    date: req.query?.date || '',
+    timezone: req.query?.timezone || 'Asia/Kolkata',
+    fallbackData: getPanchangamData(),
+  });
+  logger.info(`Astrology panchangam served from ${result.meta.source}`);
   return res.json({
     success: true,
-    data: getPanchangamData(),
+    data: result.data,
+    meta: result.meta,
   });
 });
 
-router.get('/festivals', (req, res) => {
+router.get('/festivals', async (req, res) => {
+  const result = await astrologyProviderService.getFestivals({
+    region: req.query?.region || 'IN-KL',
+    month: req.query?.month || '',
+    year: req.query?.year || '',
+    fallbackData: getFestivalData(),
+  });
+  logger.info(`Astrology festivals served from ${result.meta.source}`);
   return res.json({
     success: true,
-    data: getFestivalData(),
+    data: result.data,
+    meta: result.meta,
   });
 });
 
@@ -1596,12 +1673,28 @@ router.post('/kundli', authenticate, async (req, res) => {
   try {
     const userId = String(req.user._id || req.user.id);
     const profile = await findProfileByUserId(userId);
-    const fallbackSign = normalizeSign(req.body?.profile?.sign || profile?.sign || 'aries');
-    const kundliData = buildKundliData(req.body?.profile || profile || {}, fallbackSign);
+    const payloadProfile = req.body?.profile || profile || {};
+    const fallbackSign = normalizeSign(payloadProfile?.sign || profile?.sign || 'aries');
+    const inputValidation = validateAstrologyProfileInput(payloadProfile);
+
+    if (!inputValidation.ok) {
+      return res.status(400).json({
+        success: false,
+        message: inputValidation.errors[0] || 'Invalid birth profile details.',
+        errors: inputValidation.errors,
+      });
+    }
+
+    const kundliData = buildKundliData(payloadProfile, fallbackSign);
+    const reportPayload = buildAstrologyReportPayload(payloadProfile, 'free');
 
     return res.json({
       success: true,
       data: kundliData,
+      meta: {
+        reportPayload,
+        disclaimer: getAstrologyLegalDisclaimer(),
+      },
     });
   } catch (error) {
     return res.status(400).json({
@@ -1634,7 +1727,7 @@ router.post('/kundli/report', authenticate, async (req, res) => {
   }
 });
 
-router.post('/compatibility', compatibilityLimiter, (req, res) => {
+router.post('/compatibility', compatibilityLimiter, async (req, res) => {
   const sign = normalizeSign(req.body?.sign);
   const partnerSign = normalizeSign(req.body?.partnerSign);
 
@@ -1645,13 +1738,21 @@ router.post('/compatibility', compatibilityLimiter, (req, res) => {
     });
   }
 
+  const fallbackData = buildCompatibility(sign, partnerSign);
+  const result = await astrologyProviderService.getCompatibility({
+    sign,
+    partnerSign,
+    fallbackData,
+  });
+
   return res.json({
     success: true,
-    data: buildCompatibility(sign, partnerSign),
+    data: result.data,
+    meta: result.meta,
   });
 });
 
-router.post('/assistant', assistantLimiter, (req, res) => {
+router.post('/assistant', assistantLimiter, async (req, res) => {
   const sign = normalizeSign(req.body?.sign || 'aries');
   const signDetails = getSignDetails(sign) || zodiacSigns[0];
   const question = sanitizeText(req.body?.question, 500);
@@ -1663,17 +1764,31 @@ router.post('/assistant', assistantLimiter, (req, res) => {
     });
   }
 
+  const fallbackData = {
+    answer: `For ${signDetails.label}, prioritize clear routines and family harmony. Your question suggests focusing on one practical step each day.`,
+    tips: [
+      'Begin the day with a short calm routine before major decisions.',
+      'Use a fixed time window for financial planning and communication.',
+      `For ${signDetails.label}, patience and consistency improve outcomes this week.`,
+    ],
+    sign: signDetails.sign,
+    quality: {
+      source: 'template-engine',
+      guidanceOnly: true,
+      isSynthetic: true,
+      note: 'Assistant response is currently guidance-oriented template output.',
+    },
+  };
+  const result = await astrologyProviderService.getAssistantReply({
+    sign: signDetails.sign,
+    question,
+    fallbackData,
+  });
+
   return res.json({
     success: true,
-    data: {
-      answer: `For ${signDetails.label}, prioritize clear routines and family harmony. Your question suggests focusing on one practical step each day.`,
-      tips: [
-        'Begin the day with a short calm routine before major decisions.',
-        'Use a fixed time window for financial planning and communication.',
-        `For ${signDetails.label}, patience and consistency improve outcomes this week.`,
-      ],
-      sign: signDetails.sign,
-    },
+    data: result.data,
+    meta: result.meta,
   });
 });
 
@@ -1791,7 +1906,7 @@ router.delete('/consultants/remove-slot', authenticate, async (req, res) => {
   });
 });
 
-router.post('/consultations/book', authenticate, async (req, res) => {
+router.post('/consultations/book', authenticate, bookingLimiter, async (req, res) => {
   try {
     const userId = String(req.user._id || req.user.id);
     const consultant = getConsultantById(req.body?.consultantId);
@@ -1974,7 +2089,7 @@ router.get('/consultations/consultant-earnings', authenticate, async (req, res) 
   }
 });
 
-router.patch('/consultations/:bookingId/status', authenticate, async (req, res) => {
+router.patch('/consultations/:bookingId/status', authenticate, bookingLimiter, async (req, res) => {
   try {
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const nextStatus = sanitizeText(req.body?.status, 20);
@@ -2048,7 +2163,7 @@ router.get('/consultations', authenticate, async (req, res) => {
   }
 });
 
-router.post('/consultations/:bookingId/payment/create-order', authenticate, async (req, res) => {
+router.post('/consultations/:bookingId/payment/create-order', authenticate, paymentLimiter, async (req, res) => {
   try {
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const booking = await findConsultationBookingById(bookingId);
@@ -2058,6 +2173,19 @@ router.post('/consultations/:bookingId/payment/create-order', authenticate, asyn
     }
 
     const amountInr = Number(booking.amountInr || 0);
+    if (String(booking.status || '').toLowerCase() === 'cancelled') {
+      return res.status(409).json({
+        success: false,
+        message: 'Cannot create payment order for a cancelled booking.',
+      });
+    }
+    if (String(booking.paymentStatus || '').toLowerCase() === 'completed') {
+      return res.status(409).json({
+        success: false,
+        message: 'Payment is already completed for this booking.',
+        data: booking,
+      });
+    }
     if (amountInr < 100) {
       return res.status(400).json({
         success: false,
@@ -2100,7 +2228,7 @@ router.post('/consultations/:bookingId/payment/create-order', authenticate, asyn
   }
 });
 
-router.post('/consultations/:bookingId/payment/verify', authenticate, async (req, res) => {
+router.post('/consultations/:bookingId/payment/verify', authenticate, paymentLimiter, async (req, res) => {
   try {
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const { orderId, paymentId, signature } = req.body || {};
@@ -2109,13 +2237,44 @@ router.post('/consultations/:bookingId/payment/verify', authenticate, async (req
     if (!ensureBookingAccess(booking, req, res)) {
       return;
     }
+    const normalizedPaymentId = sanitizeText(paymentId, 120);
+    const normalizedSignature = sanitizeText(signature, 200);
+    if (!normalizedPaymentId || !normalizedSignature) {
+      return res.status(400).json({
+        success: false,
+        message: 'paymentId and signature are required for verification.',
+      });
+    }
+
+    if (
+      String(booking.paymentStatus || '').toLowerCase() === 'completed' &&
+      booking.paymentId &&
+      String(booking.paymentId) === normalizedPaymentId
+    ) {
+      return res.json({
+        success: true,
+        data: booking,
+      });
+    }
 
     const expectedOrderId = sanitizeText(orderId || booking.paymentOrderId, 120);
+    if (!expectedOrderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'orderId is required for verification.',
+      });
+    }
+    if (booking.paymentOrderId && expectedOrderId !== String(booking.paymentOrderId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provided orderId does not match booking payment order.',
+      });
+    }
     const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret');
-    shasum.update(`${expectedOrderId}|${paymentId}`);
+    shasum.update(`${expectedOrderId}|${normalizedPaymentId}`);
     const digest = shasum.digest('hex');
 
-    if (digest !== signature) {
+    if (digest !== normalizedSignature) {
       return res.status(400).json({
         success: false,
         message: 'Payment verification failed.',
@@ -2125,8 +2284,8 @@ router.post('/consultations/:bookingId/payment/verify', authenticate, async (req
     const updatedBooking = await updateConsultationBookingById(booking.id || booking._id || bookingId, {
       paymentStatus: 'completed',
       paymentOrderId: expectedOrderId,
-      paymentId: sanitizeText(paymentId, 120),
-      paymentSignature: sanitizeText(signature, 200),
+      paymentId: normalizedPaymentId,
+      paymentSignature: normalizedSignature,
       paymentDate: new Date(),
       status: booking.status === 'cancelled' ? 'cancelled' : 'confirmed',
     });
@@ -2143,7 +2302,7 @@ router.post('/consultations/:bookingId/payment/verify', authenticate, async (req
   }
 });
 
-router.get('/consultations/:bookingId/payment', authenticate, async (req, res) => {
+router.get('/consultations/:bookingId/payment', authenticate, paymentLimiter, async (req, res) => {
   try {
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const booking = await findConsultationBookingById(bookingId);
@@ -2157,6 +2316,7 @@ router.get('/consultations/:bookingId/payment', authenticate, async (req, res) =
       data: {
         bookingId: booking.id || booking._id || bookingId,
         paymentStatus: booking.paymentStatus || 'pending',
+        bookingStatus: booking.status || 'pending_payment',
         paymentOrderId: booking.paymentOrderId || '',
         paymentId: booking.paymentId || '',
         amountInr: Number(booking.amountInr || 0),
@@ -2166,6 +2326,106 @@ router.get('/consultations/:bookingId/payment', authenticate, async (req, res) =
     return res.status(500).json({
       success: false,
       message: error.message || 'Unable to fetch payment status.',
+    });
+  }
+});
+
+router.post('/payment/webhook/razorpay', async (req, res) => {
+  try {
+    const signatureHeader = sanitizeText(
+      req.headers['x-razorpay-signature'] || req.headers['X-Razorpay-Signature'],
+      256
+    );
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || 'test_secret';
+
+    const rawBodyBuffer =
+      Buffer.isBuffer(req.body)
+        ? req.body
+        : Buffer.from(
+            typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}),
+            'utf8'
+          );
+    const computedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(rawBodyBuffer)
+      .digest('hex');
+
+    if (!signatureHeader || computedSignature !== signatureHeader) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Razorpay webhook signature.',
+      });
+    }
+
+    const payloadText = rawBodyBuffer.toString('utf8');
+    const eventPayload = payloadText ? JSON.parse(payloadText) : {};
+    const eventName = sanitizeText(eventPayload?.event, 80).toLowerCase();
+    const paymentEntity = eventPayload?.payload?.payment?.entity || {};
+    const orderEntity = eventPayload?.payload?.order?.entity || {};
+
+    const webhookOrderId = sanitizeText(
+      paymentEntity?.order_id || paymentEntity?.orderId || orderEntity?.id || '',
+      120
+    );
+    const webhookPaymentId = sanitizeText(paymentEntity?.id || paymentEntity?.payment_id || '', 120);
+    const webhookNotes = paymentEntity?.notes && typeof paymentEntity.notes === 'object' ? paymentEntity.notes : {};
+    const notesBookingId = sanitizeText(webhookNotes?.bookingId || webhookNotes?.booking_id || '', 80);
+
+    let booking = notesBookingId ? await findConsultationBookingById(notesBookingId) : null;
+    if (!booking && webhookOrderId) {
+      booking = await findConsultationBookingByPaymentOrderId(webhookOrderId);
+    }
+
+    if (!booking) {
+      logger.warn(`Astrology webhook ignored: no booking mapped for event=${eventName} orderId=${webhookOrderId}`);
+      return res.status(202).json({
+        success: true,
+        message: 'Webhook received. No matching booking found.',
+      });
+    }
+
+    const normalizedEvent = eventName || 'unknown';
+    const bookingId = booking.id || booking._id;
+    const updates = {};
+    if (webhookOrderId) {
+      updates.paymentOrderId = webhookOrderId;
+    }
+    if (webhookPaymentId) {
+      updates.paymentId = webhookPaymentId;
+    }
+
+    if (normalizedEvent === 'payment.captured' || normalizedEvent === 'payment.authorized') {
+      updates.paymentStatus = 'completed';
+      updates.paymentDate = new Date();
+      updates.status = String(booking.status || '').toLowerCase() === 'cancelled' ? 'cancelled' : 'confirmed';
+    } else if (normalizedEvent === 'payment.failed') {
+      updates.paymentStatus = 'failed';
+      if (String(booking.status || '').toLowerCase() !== 'cancelled') {
+        updates.status = 'pending_payment';
+      }
+    } else if (normalizedEvent === 'order.paid') {
+      updates.paymentStatus = 'completed';
+      updates.paymentDate = new Date();
+      updates.status = String(booking.status || '').toLowerCase() === 'cancelled' ? 'cancelled' : 'confirmed';
+    } else {
+      updates.paymentStatus = booking.paymentStatus || 'pending';
+      updates.status = booking.status || 'pending_payment';
+    }
+
+    const updatedBooking = await updateConsultationBookingById(bookingId, updates);
+    logger.info(
+      `Astrology webhook reconciled booking=${bookingId} event=${normalizedEvent} paymentStatus=${updates.paymentStatus}`
+    );
+
+    return res.json({
+      success: true,
+      data: updatedBooking || booking,
+    });
+  } catch (error) {
+    logger.error(`Astrology webhook reconciliation failed: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to process webhook.',
     });
   }
 });

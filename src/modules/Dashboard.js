@@ -225,14 +225,6 @@ const Icon = ({ type, className = "" }) => {
           <path d="M9 11h6" />
         </svg>
       );
-  case "localmarket":
-      return (
-        <svg {...common}>
-          <path d="M3 5h2l2 10h10l2-7H7" />
-          <circle cx="10" cy="19" r="1.5" />
-          <circle cx="17" cy="19" r="1.5" />
-        </svg>
-      );
 case "astrology":
       return (
         <svg {...common}>
@@ -445,18 +437,6 @@ const MODULE_CONFIG = [
     emoji: "KS",
   },
   {
-    id: "promptvideogenerator",
-    nameKey: "modules.promptvideogenerator",
-    fallbackName: "Prompt Video Generator",
-    icon: "photostudio",
-    descriptionKey: "dashboard.moduleDescriptions.promptvideogenerator",
-    fallbackDescription:
-      "Generate real-feel videos from a prompt with optional customer character UI uploads and auto-render output.",
-    stats: "Prompt-to-video pipeline",
-    gradient: "linear-gradient(135deg, #0B5ED7 0%, #129e8a 45%, #f59e0b 100%)",
-    emoji: "PV",
-  },
-  {
     id: "karaokeduet",
     nameKey: "modules.karaokeduet",
     fallbackName: "Remote Karaoke Duet",
@@ -529,30 +509,6 @@ const MODULE_CONFIG = [
     emoji: "KH",
   },
   {
-    id: "aibusinessos",
-    nameKey: "modules.aibusinessos",
-    fallbackName: "AI Business Operating System",
-    icon: "businessbuilder",
-    descriptionKey: "dashboard.moduleDescriptions.aibusinessos",
-    fallbackDescription:
-      "AI operating stack for SMEs with invoice, GST billing, CRM, inventory, marketing, and analytics automation.",
-    stats: "SME AI infra",
-    gradient: "linear-gradient(135deg, #0F172A 0%, #1D4ED8 45%, #0EA5A7 100%)",
-    emoji: "OS",
-  },
-  {
-    id: "gulfjobsmigration",
-    nameKey: "modules.gulfjobsmigration",
-    fallbackName: "Kerala + Gulf Jobs Migration",
-    icon: "gulfservices",
-    descriptionKey: "dashboard.moduleDescriptions.gulfjobsmigration",
-    fallbackDescription:
-      "End-to-end job and migration support with document verification, visa tracking, interview AI, and overseas onboarding.",
-    stats: "Kerala-GCC talent flow",
-    gradient: "linear-gradient(135deg, #0F4C81 0%, #1E3A8A 45%, #22D3EE 100%)",
-    emoji: "GM",
-  },
-  {
     id: "womensafetyfamily",
     nameKey: "modules.womensafetyfamily",
     fallbackName: "Women Safety + Family Protection",
@@ -568,7 +524,7 @@ const MODULE_CONFIG = [
     id: "hyperlocalaicommerce",
     nameKey: "modules.hyperlocalaicommerce",
     fallbackName: "Hyperlocal AI Commerce",
-    icon: "localmarket",
+    icon: "hyperlocal",
     descriptionKey: "dashboard.moduleDescriptions.hyperlocalaicommerce",
     fallbackDescription:
       "AI commerce engine for local conversion with voice shopping, captioning, recommendations, and offer optimization.",
@@ -733,17 +689,6 @@ const MODULE_CONFIG = [
     emoji: "HD",
   },
   {
-    id: "localmarket",
-    nameKey: "modules.localmarket",
-    fallbackName: "Local Market",
-    icon: "localmarket",
-    descriptionKey: "dashboard.moduleDescriptions.localmarket",
-    fallbackDescription: "Local vendors, fresh produce, handmade goods, and neighborhood services",
-    stats: "50K+ Vendors",
-    gradient: "linear-gradient(135deg, #00B894 0%, #00A86B 100%)",
-    emoji: "🏪",
-  },
-  {
     id: "ridesharing",
     nameKey: "modules.ridesharing",
     fallbackName: "SwiftRide",
@@ -846,7 +791,6 @@ const MODULE_CATEGORY_MAP = {
   messaging: "core",
   classifieds: "core",
   realestate: "core",
-  localmarket: "core",
   socialmedia: "core",
   matrimonial: "core",
   tourism: "travel",
@@ -865,8 +809,6 @@ const MODULE_CATEGORY_MAP = {
   karaokeduet: "business",
   beautyai: "business",
   kitchen: "business",
-  aibusinessos: "business",
-  gulfjobsmigration: "business",
   hyperlocalaicommerce: "business",
   nilaaistudio: "business",
   trustlayer: "business",
@@ -1340,12 +1282,11 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "resumebuilder" ||
         module.id === "photostudio" ||
         module.id === "kidsstoryvideomaker" ||
-        module.id === "promptvideogenerator" ||
         module.id === "karaokeduet" ||
         module.id === "beautyai" ||
         module.id === "kitchen" ||
-        module.id === "aibusinessos" ||
-        module.id === "gulfjobsmigration" ||
+        module.id === "businessbuilder" ||
+        module.id === "gulfservices" ||
         module.id === "womensafetyfamily" ||
         module.id === "hyperlocalaicommerce" ||
         module.id === "nilaaistudio" ||

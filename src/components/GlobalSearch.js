@@ -24,7 +24,7 @@ const GlobalSearch = () => {
     { id: "localservices", label: "Local Services Marketplace", icon: "L", module: "localservices" },
     { id: "jobs", label: "Jobs & Services", icon: "J", module: "classifieds" },
     { id: "posts", label: "Community Posts", icon: "S", module: "socialmedia" },
-    { id: "listings", label: "Local Listings", icon: "L", module: "localmarket" },
+    { id: "listings", label: "Local Listings", icon: "L", module: "hyperlocal" },
   ];
 
   const performSearch = (query) => {

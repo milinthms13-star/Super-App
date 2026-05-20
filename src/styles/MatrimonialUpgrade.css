@@ -1,0 +1,142 @@
+.matrimonial-quick-actions-panel {
+  border-radius: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #fff7ed, #fff1f2);
+  border: 1px solid rgba(244, 114, 182, 0.22);
+  margin-bottom: 18px;
+}
+
+.matrimonial-quick-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.matrimonial-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 900;
+  color: #be123c;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.matrimonial-profile-score-card {
+  min-width: 145px;
+  border-radius: 20px;
+  padding: 14px;
+  background: #fff;
+  box-shadow: 0 12px 26px rgba(190, 18, 60, 0.14);
+  text-align: center;
+}
+
+.matrimonial-profile-score-card strong {
+  display: block;
+  font-size: 1.8rem;
+  color: #be123c;
+}
+
+.matrimonial-profile-score-card span,
+.matrimonial-profile-score-card small {
+  display: block;
+  color: #64748b;
+}
+
+.matrimonial-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.matrimonial-quick-action-card {
+  border: none;
+  border-radius: 20px;
+  padding: 16px;
+  background: #fff;
+  color: #111827;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+}
+
+.matrimonial-quick-icon,
+.matrimonial-quick-action-card strong,
+.matrimonial-quick-action-card small {
+  display: block;
+}
+
+.matrimonial-quick-icon {
+  font-size: 1rem;
+}
+
+.matrimonial-quick-action-card strong {
+  margin-top: 8px;
+}
+
+.matrimonial-quick-action-card small {
+  margin-top: 4px;
+  color: #64748b;
+}
+
+.matrimonial-safety-box {
+  border-radius: 20px;
+  padding: 16px;
+  margin: 14px 0;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.matrimonial-safety-box h3 {
+  margin-top: 0;
+}
+
+.matrimonial-safety-box li {
+  margin-bottom: 6px;
+}
+
+.matrimonial-safety-box p {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.matrimonial-trust-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin-top: 8px;
+}
+
+.matrimonial-trust-pill.trust-high {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.matrimonial-trust-pill.trust-good {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.matrimonial-trust-pill.trust-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.matrimonial-match-score-badge {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: #334155;
+}
+
+@media (max-width: 760px) {
+  .matrimonial-quick-header {
+    flex-direction: column;
+  }
+
+  .matrimonial-quick-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -22,10 +22,37 @@ const educationTuitionRequestSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    classLevel: {
+      type: String,
+      default: "",
+      trim: true,
+      index: true,
+    },
+    contactPhone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    preferredMode: {
+      type: String,
+      default: "online",
+      trim: true,
+    },
+    preferredTime: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     details: {
       type: String,
       default: '',
       trim: true,
+    },
+    priority: {
+      type: String,
+      default: "normal",
+      trim: true,
+      index: true,
     },
     status: {
       type: String,
@@ -38,4 +65,3 @@ const educationTuitionRequestSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model('EducationTuitionRequest', educationTuitionRequestSchema);
-

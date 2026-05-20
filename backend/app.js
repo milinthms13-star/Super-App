@@ -207,7 +207,7 @@ app.use('/api/realestate', require('./routes/realestate'));
 app.use('/api/business-builder', require('./routes/businessBuilderRoutes'));
 app.use('/api/video-studio', createLazyRouteMiddleware('./routes/videoStudio'));
 app.use('/api/kids-video-hf', createLazyRouteMiddleware('./routes/kidsVideoGeneratorHF'));
-app.use('/api/prompt-video', createLazyRouteMiddleware('./routes/promptVideoGenerator'));
+app.use('/api/kids-story', createLazyRouteMiddleware('./routes/kidsStoryGeneratorRoutes'));
 app.use('/api/photo-studio', require('./routes/photoStudio'));
 app.use('/api/voice-input', require('./routes/voiceInput'));
 app.use('/api/ai-voice-friend', require('./routes/voiceFriendRoutes'));

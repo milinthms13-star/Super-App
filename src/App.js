@@ -53,11 +53,9 @@ const HyperlocalDeliveryHub = React.lazy(() =>
 const LocalServicesMarketplace = React.lazy(() =>
   import("./modules/localservices/LocalServicesMarketplace")
 );
-const LocalMarket = React.lazy(() => import("./modules/localmarket/LocalMarket"));
 const BusinessBuilder = React.lazy(() => import("./modules/businessbuilder/BusinessBuilder"));
 const NilaAIHub = React.lazy(() => import("./modules/nilaaihub/NilaAIHub"));
 const KidsStoryVideoMaker = React.lazy(() => import("./modules/kidsstoryvideomaker/KidsStoryVideoMaker"));
-const PromptVideoGenerator = React.lazy(() => import("./modules/promptvideogenerator/PromptVideoGenerator"));
 const GulfServices = React.lazy(() => import("./modules/gulfservices/GulfServices"));
 const HotelBooking = React.lazy(() => import("./modules/hotelbooking/HotelBooking"));
 const Healthcare = React.lazy(() => import("./modules/healthcare/Healthcare"));
@@ -70,8 +68,7 @@ const VoiceFriend = React.lazy(() => import("./modules/voicefriend/VoiceFriend")
 const LivePlaceExplorer = React.lazy(() => import("./modules/liveplaceexplorer/LivePlaceExplorer"));
 const NilaBeautyAI = React.lazy(() => import("./modules/beautyai/NilaBeautyAI"));
 const SmartKitchenRecipeHub = React.lazy(() => import("./modules/kitchen/SmartKitchenRecipeHub"));
-const AIBusinessOS = React.lazy(() => import("./modules/aibusinessos/AIBusinessOS"));
-const GulfJobsMigration = React.lazy(() => import("./modules/gulfjobsmigration/GulfJobsMigration"));
+
 const WomenSafetyFamily = React.lazy(() => import("./modules/womensafetyfamily/WomenSafetyFamily"));
 const HyperlocalAICommerce = React.lazy(() => import("./modules/hyperlocalaicommerce/HyperlocalAICommerce"));
 const NilaAIStudio = React.lazy(() => import("./modules/nilaaistudio/NilaAIStudio"));
@@ -145,6 +142,7 @@ const EMPTY_APP_DATA = {
 
 const PREVIEW_ENABLED_MODULES = [
   "ecommerce",
+
   "messaging",
   "classifieds",
   "realestate",
@@ -158,7 +156,6 @@ const PREVIEW_ENABLED_MODULES = [
   "devadarshan",
   "hyperlocal",
   "localservices",
-  "localmarket",
   "ridesharing",
   "matrimonial",
   "socialmedia",
@@ -166,7 +163,6 @@ const PREVIEW_ENABLED_MODULES = [
   "sosalert",
   "astrology",
   "kidsstoryvideomaker",
-  "promptvideogenerator",
   "photostudio",
   "karaokeduet",
   "danceduet",
@@ -174,8 +170,6 @@ const PREVIEW_ENABLED_MODULES = [
   "liveplaceexplorer",
   "beautyai",
   "kitchen",
-  "aibusinessos",
-  "gulfjobsmigration",
   "womensafetyfamily",
   "hyperlocalaicommerce",
   "nilaaistudio",
@@ -189,7 +183,6 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "realestate",
   "socialmedia",
   "matrimonial",
-  "localmarket",
   "localservices",
   "hyperlocal",
   "tourism",
@@ -208,8 +201,6 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "liveplaceexplorer",
   "beautyai",
   "kitchen",
-  "aibusinessos",
-  "gulfjobsmigration",
   "womensafetyfamily",
   "hyperlocalaicommerce",
   "nilaaistudio",
@@ -219,7 +210,6 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "education",
   "nilaaihub",
   "kidsstoryvideomaker",
-  "promptvideogenerator",
   "finance",
   "billpay",
   "fooddelivery",
@@ -1253,7 +1243,6 @@ function AppShell() {
               <Route path="business-builder" element={<BusinessBuilder />} />
               <Route path="nila-ai-hub" element={<NilaAIHub />} />
               <Route path="kids-story-video-maker" element={<KidsStoryVideoMaker />} />
-              <Route path="prompt-video-generator" element={<PromptVideoGenerator />} />
               <Route path="gulf-services" element={<GulfServices />} />
               <Route path="hotelbooking" element={<HotelBooking />} />
               <Route path="healthcare" element={<Healthcare />} />
@@ -1266,8 +1255,9 @@ function AppShell() {
               <Route path="remote-karaoke-duet" element={<RemoteKaraokeDuet />} />
               <Route path="nila-beauty-ai" element={<NilaBeautyAI />} />
               <Route path="smart-kitchen-recipe-hub" element={<SmartKitchenRecipeHub />} />
-              <Route path="ai-business-os" element={<AIBusinessOS />} />
-              <Route path="kerala-gulf-jobs-migration" element={<GulfJobsMigration />} />
+
+              <Route path="kerala-gulf-jobs-migration" element={<Navigate to="/gulf-services" replace />} />
+
               <Route path="women-safety-family-protection" element={<WomenSafetyFamily />} />
               <Route path="hyperlocal-ai-commerce" element={<HyperlocalAICommerce />} />
               <Route path="nila-ai-studio" element={<NilaAIStudio />} />
@@ -1282,8 +1272,8 @@ function AppShell() {
               <Route path="fooddelivery" element={<FoodDelivery />} />
               <Route path="devadarshan" element={<DevadarshanHub />} />
               <Route path="hyperlocal" element={<HyperlocalDeliveryHub />} />
+              <Route path="localmarket" element={<Navigate to="/hyperlocal" replace />} />
               <Route path="localservices" element={<LocalServicesMarketplace />} />
-              <Route path="localmarket" element={<LocalMarket />} />
               <Route path="ridesharing" element={<RideSharing />} />
               <Route path="ridesharing/driver-map" element={<DriverMap />} />
               <Route path="maps" element={<DriverMap />} />

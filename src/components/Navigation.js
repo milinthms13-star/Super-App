@@ -31,7 +31,7 @@ const MODULE_CATEGORIES = {
   commerce: {
     label: "Commerce",
     icon: "🛍️",
-    modules: ["ecommerce", "classifieds", "localmarket"],
+    modules: ["ecommerce", "classifieds"],
   },
   social: {
     label: "Social",
@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "promptvideogenerator", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen", "aibusinessos", "gulfjobsmigration", "womensafetyfamily", "hyperlocalaicommerce", "nilaaistudio", "trustlayer"],
+    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen", "womensafetyfamily", "hyperlocalaicommerce", "nilaaistudio", "trustlayer"],
   },
   utilities: {
     label: "Utilities",
@@ -108,8 +108,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "localservices", label: t("modules.localservices", "Local Services Marketplace"), icon: "LS", sellerVisible: true },
     { id: "nilaaihub", label: t("modules.nilaaihub", "Nila AI Hub"), icon: "🤖" },
     { id: "kidsstoryvideomaker", label: t("modules.kidsstoryvideomaker", "AI Kids Story Video Generator"), icon: "🎬" },
-    { id: "promptvideogenerator", label: t("modules.promptvideogenerator", "Prompt Video Generator"), icon: "🎥" },
-    { id: "gulfservices", label: t("modules.gulfservices", "Gulf Services"), icon: "🌍" },
+    { id: "gulfservices", label: t("modules.gulfservices", "Gulf Services"), icon: "🌍", sellerVisible: true },
     { id: "hotelbooking", label: t("modules.hotelbooking", "NilaStay"), icon: "🏨" },
     { id: "healthcare", label: t("modules.healthcare", "NilaCare"), icon: "🏥" },
     { id: "bustrainbooking", label: t("modules.bustrainbooking", "NilaTravel Bus/Train"), icon: "🚆" },
@@ -118,15 +117,13 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "karaokeduet", label: t("modules.karaokeduet", "Remote Karaoke Duet"), icon: "KD", sellerVisible: true },
     { id: "beautyai", label: t("modules.beautyai", "Nila Beauty AI"), icon: "BA", sellerVisible: true },
     { id: "kitchen", label: t("modules.kitchen", "Smart Kitchen & Recipe Hub"), icon: "KH", sellerVisible: true },
-    { id: "aibusinessos", label: t("modules.aibusinessos", "AI Business Operating System"), icon: "OS", sellerVisible: true },
-    { id: "gulfjobsmigration", label: t("modules.gulfjobsmigration", "Kerala + Gulf Jobs Migration"), icon: "GM", sellerVisible: true },
+
     { id: "womensafetyfamily", label: t("modules.womensafetyfamily", "Women Safety + Family Protection"), icon: "SF", sellerVisible: true },
     { id: "hyperlocalaicommerce", label: t("modules.hyperlocalaicommerce", "Hyperlocal AI Commerce"), icon: "HC", sellerVisible: true },
     { id: "nilaaistudio", label: t("modules.nilaaistudio", "Nila AI Studio"), icon: "NS", sellerVisible: true },
     { id: "trustlayer", label: t("modules.trustlayer", "Trust Layer"), icon: "TL", sellerVisible: true },
     { id: "businessservices", label: t("modules.businessservices", "Business Services Hub"), icon: "💼" },
     { id: "jobportal", label: t("modules.jobportal", "NilaJobs"), icon: "🔎" },
-    { id: "localmarket", label: t("modules.localmarket", "Local Market"), icon: "🏪" },
     { id: "businessbuilder", label: t("modules.businessbuilder", "AI Business Builder"), icon: "🚀", sellerVisible: true },
     { id: "ridesharing", label: t("modules.ridesharing", "SwiftRide"), icon: "🚗" },
     { id: "maps", label: t("modules.maps", "Maps"), icon: "🗺️", sellerVisible: true },

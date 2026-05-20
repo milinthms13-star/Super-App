@@ -3,6 +3,8 @@
   margin: 0 auto;
   padding: 1.2rem 1rem 6rem;
   color: #1f2937;
+  display: grid;
+  gap: 1rem;
 }
 
 .beauty-hero,
@@ -31,30 +33,7 @@
   font-size: clamp(1.7rem, 2.6vw, 2.7rem);
 }
 
-.beauty-tabs {
-  margin: 0.95rem 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.5rem;
-}
-
-.beauty-tabs button {
-  border: 1px solid #cdded8;
-  border-radius: 12px;
-  background: #fff;
-  padding: 0.62rem 0.6rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.beauty-tabs button.active {
-  background: rgba(20, 184, 166, 0.11);
-  border-color: #0f766e;
-  color: #0f766e;
-}
-
 .beauty-status {
-  margin-bottom: 0.85rem;
   border: 1px solid #b9d8d2;
   border-radius: 10px;
   background: #f0fdfa;
@@ -71,7 +50,6 @@
 
 .beauty-card {
   padding: 1rem;
-  margin-bottom: 0.95rem;
 }
 
 .beauty-card h2,
@@ -88,29 +66,24 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.beauty-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.62rem;
+.beauty-list {
+  margin: 0;
+  padding-left: 1rem;
 }
 
-.beauty-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-weight: 600;
+.beauty-safety {
+  border: 1px solid #f4cfcf;
+  background: #fff5f5;
+  border-radius: 14px;
+  padding: 0.8rem;
 }
 
-.beauty-form input,
-.beauty-form select {
-  border: 1px solid #cfe1db;
-  border-radius: 10px;
-  padding: 0.58rem 0.65rem;
-  font: inherit;
-}
-
-.beauty-hidden {
-  display: none;
+.beauty-tip {
+  margin-bottom: 0.75rem;
+  border: 1px solid #f0d7b4;
+  background: #fffaf2;
+  border-radius: 14px;
+  padding: 0.78rem;
 }
 
 .beauty-primary {
@@ -121,90 +94,9 @@
   padding: 0.62rem 0.84rem;
   font-weight: 700;
   cursor: pointer;
-  margin-right: 0.45rem;
-  margin-bottom: 0.5rem;
-}
-
-.beauty-primary.ghost {
-  background: #fff;
-  color: #0f766e;
-}
-
-.beauty-consent {
-  margin-top: 0.4rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-weight: 600;
-}
-
-.beauty-chip-wall {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.beauty-chip-wall span {
-  border: 1px solid #bfd9d2;
-  border-radius: 999px;
-  background: #f0fdfa;
-  color: #0f766e;
-  padding: 0.24rem 0.66rem;
-  font-size: 0.83rem;
-  font-weight: 600;
-}
-
-.beauty-tip {
-  margin-top: 0.7rem;
-  border: 1px solid #f0d7b4;
-  background: #fffaf2;
-  border-radius: 14px;
-  padding: 0.78rem;
-}
-
-.beauty-preview {
-  width: 100%;
-  max-width: 280px;
-  border: 1px solid #d8e5e2;
-  border-radius: 14px;
-}
-
-.beauty-list {
-  margin: 0;
-  padding-left: 1rem;
-}
-
-.beauty-flow {
-  margin: 0 0 0.8rem;
-  padding-left: 1.2rem;
-}
-
-.beauty-challenge {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.42rem;
-  margin-bottom: 0.45rem;
-}
-
-.beauty-check {
-  border: 1px solid #d2e0dc;
-  border-radius: 9px;
-  padding: 0.4rem 0.56rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.beauty-safety {
-  border: 1px solid #f4cfcf;
-  background: #fff5f5;
-  border-radius: 14px;
-  padding: 0.8rem;
 }
 
 .beauty-admin-panel {
-  margin-top: 0.9rem;
   border: 1px solid #dce7e4;
   border-radius: 12px;
   background: #f8fffd;
@@ -231,16 +123,226 @@
 }
 
 .beauty-subscription-editor {
-  margin-top: 0.4rem;
-  border-top: 1px dashed #bfd9d2;
-  padding-top: 0.7rem;
+  border: 1px dashed #bfd9d2;
+  border-radius: 12px;
+  background: #f6fffb;
+  padding: 0.8rem;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
 }
 
+.beauty-ai-quick-start {
+  display: grid;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid #d7e4e1;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+}
+
+.beauty-ai-hero-card,
+.beauty-ai-plan-card,
+.beauty-ai-safety-box,
+.beauty-progress-card {
+  background: #fff7fb;
+  border: 1px solid #f9c6df;
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 12px 28px rgba(190, 24, 93, 0.1);
+}
+
+.beauty-ai-hero-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.beauty-ai-eyebrow {
+  color: #be185d;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.beauty-ai-subtitle {
+  color: #6b7280;
+}
+
+.beauty-ai-hero-badge {
+  align-self: start;
+  background: #be185d;
+  color: #fff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 800;
+}
+
+.beauty-ai-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.beauty-ai-form-grid label,
+.beauty-ai-safety-box label,
+.beauty-ai-notes {
+  display: grid;
+  gap: 7px;
+  font-weight: 800;
+}
+
+.beauty-ai-form-grid input,
+.beauty-ai-form-grid select,
+.beauty-ai-safety-box input,
+.beauty-ai-notes textarea {
+  border: 1px solid #f0a9c8;
+  border-radius: 14px;
+  padding: 11px;
+  font-size: 0.95rem;
+}
+
+.beauty-consent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.beauty-ai-safety-box {
+  display: grid;
+  gap: 10px;
+}
+
+.beauty-ai-warning-box {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 18px;
+  padding: 12px;
+  color: #9a3412;
+  font-weight: 700;
+}
+
+.beauty-ai-primary-btn {
+  border: none;
+  border-radius: 18px;
+  background: #be185d;
+  color: #fff;
+  padding: 14px 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.beauty-ai-selfie-preview img {
+  width: 100%;
+  max-width: 300px;
+  border: 1px solid #f0a9c8;
+  border-radius: 14px;
+}
+
+.beauty-ai-plan-header,
+.beauty-progress-header,
+.beauty-ai-actions-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.beauty-ai-actions-row button,
+.beauty-progress-grid button,
+.beauty-progress-comparison button {
+  border: none;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.beauty-ai-plan-section {
+  margin-top: 0.65rem;
+}
+
+.beauty-ai-ml-hints {
+  border: 1px solid #d9f0e9;
+  border-radius: 14px;
+  background: #f2fffa;
+  padding: 0.75rem;
+}
+
+.beauty-ai-ml-hints ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.15rem;
+}
+
+.beauty-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.beauty-progress-grid button.done {
+  background: #16a34a;
+  color: #fff;
+}
+
+.beauty-progress-comparison {
+  margin-top: 0.8rem;
+  border-top: 1px dashed #f0a9c8;
+  padding-top: 0.8rem;
+}
+
+.beauty-progress-images {
+  margin-top: 0.7rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.beauty-progress-images figure {
+  margin: 0;
+}
+
+.beauty-progress-images img {
+  width: 100%;
+  max-height: 250px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #f0a9c8;
+}
+
+.beauty-progress-images figcaption {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.beauty-ai-disclaimer {
+  color: #7f1d1d;
+  font-size: 0.9rem;
+}
+
 @media (max-width: 960px) {
   .beauty-grid.two {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .beauty-ai-hero-card,
+  .beauty-ai-plan-header,
+  .beauty-ai-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .beauty-ai-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .beauty-progress-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .beauty-progress-images {
     grid-template-columns: 1fr;
   }
 }

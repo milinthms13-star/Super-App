@@ -4,7 +4,7 @@ const DEFAULT_BUSINESS_CATEGORIES = [
   { id: 'classifieds', name: 'TradePost', fee: 1299, requiresFoodLicense: false },
   { id: 'realestate', name: 'HomeSphere', fee: 1499, requiresFoodLicense: false },
   { id: 'fooddelivery', name: 'Feastly', fee: 1999, requiresFoodLicense: true },
-  { id: 'localmarket', name: 'Local Market', fee: 1299, requiresFoodLicense: false },
+  { id: 'hyperlocal', name: 'Nila Hyperlocal Delivery', fee: 1299, requiresFoodLicense: false },
   { id: 'ridesharing', name: 'SwiftRide', fee: 1099, requiresFoodLicense: false },
   { id: 'matrimonial', name: 'SoulMatch', fee: 1599, requiresFoodLicense: false },
   { id: 'socialmedia', name: 'VibeHub', fee: 899, requiresFoodLicense: false },

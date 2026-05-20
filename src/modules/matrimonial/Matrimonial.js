@@ -3,6 +3,7 @@ import axios from "axios";
 import { useApp } from "../../contexts/AppContext";
 import "../../styles/Matrimonial.css";
 import "../../styles/MatrimonialFrontend.css";
+import "../../styles/MatrimonialUpgrade.css";
 import PropTypes from "prop-types";
 import {
   API_BASE_URL,
@@ -34,6 +35,14 @@ import BlueTickBadge from "./BlueTickBadge";
 import HoroscopeMatching from "./HoroscopeMatching";
 import SubscriptionManagement from "./SubscriptionManagement";
 import PaymentGateway from "./PaymentGateway";
+import MatrimonialQuickActions from "./MatrimonialQuickActions";
+import MatrimonialSafetyBox from "./MatrimonialSafetyBox";
+import {
+  calculateMatrimonialTrustScore,
+  getMatchVerdict,
+  openMatrimonialWhatsApp,
+  validateMatrimonialInterestNote,
+} from "./matrimonialUpgradeUtils.js";
 
 // Debounce hook for search and filters
 const useDebounce = (value, delay) => {
@@ -434,6 +443,8 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
     visibleProfiles.find((profile) => profile.id === selectedProfileId) ||
     visibleProfiles[0] ||
     null;
+  const selectedProfileTrust = calculateMatrimonialTrustScore(selectedProfile || {});
+  const selectedMatchVerdict = getMatchVerdict(Number(selectedProfile?.matchScore || 0));
 
   const topMatches = visibleProfiles.slice(0, 3);
   const shortlistedMatches = useMemo(
@@ -621,6 +632,11 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
       setStatusMessage("Type a message before sending.");
       return;
     }
+    const messageValidation = validateMatrimonialInterestNote(draft);
+    if (messageValidation) {
+      setStatusMessage(messageValidation);
+      return;
+    }
 
     try {
       await sendMatrimonialMessage(thread.profileId, draft);
@@ -637,6 +653,19 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
       );
     }
   }, [loadMessageThreads, messageComposer]);
+
+  const handleQuickActionTab = useCallback((targetTab) => {
+    const mappedTab =
+      targetTab === "profile"
+        ? "profile-completion"
+        : targetTab === "interests"
+          ? "requests"
+          : targetTab;
+    setActiveTab(mappedTab);
+    if (mappedTab === "profile-completion") {
+      setStatusMessage("Complete your profile and verification fields to improve trust.");
+    }
+  }, []);
 
   const handleAdminModeration = useCallback(async (profile, action) => {
     try {
@@ -1069,6 +1098,13 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
           </button>
         </div>
       </section>
+
+      <MatrimonialQuickActions
+        completion={calculateProfileCompletion(profileForm)}
+        isVerified={Boolean(matrimonialProfile?.verified || matrimonialProfile?.verificationStatus === "verified")}
+        onAction={handleQuickActionTab}
+      />
+      <MatrimonialSafetyBox />
 
       <section className="matrimonial-overview">
         <article className="matrimonial-stat-card">
@@ -1787,6 +1823,20 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
                       {selectedProfile.age} years · {sanitizeText(selectedProfile.maritalStatus)}
                     </p>
                     <p>{sanitizeText(selectedProfile.lastActiveLabel)}</p>
+                    <span
+                      className={`matrimonial-trust-pill trust-${
+                        selectedProfileTrust.score >= 80
+                          ? "high"
+                          : selectedProfileTrust.score >= 55
+                            ? "good"
+                            : "pending"
+                      }`}
+                    >
+                      {selectedProfileTrust.label}
+                    </span>
+                    <p className="matrimonial-match-score-badge">
+                      Match quality: {selectedMatchVerdict.label}
+                    </p>
                   </div>
                 </div>
                 <dl className="matrimonial-detail-grid">
@@ -1862,6 +1912,19 @@ const Matrimonial = ({ onProfileUpdate = null }) => {
                     aria-label={`${isPremiumPreview ? "Open secure chat with" : "Premium messaging required for"} ${sanitizeText(selectedProfile.name)}`}
                   >
                     {isPremiumPreview ? "Open Secure Chat" : "Premium Messaging Required"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    disabled={
+                      !isPremiumPreview ||
+                      !String(selectedProfile.phone || "").trim() ||
+                      selectedProfile.contactVisibility === "hidden"
+                    }
+                    onClick={() => openMatrimonialWhatsApp(selectedProfile.phone, selectedProfile)}
+                    aria-label={`Open WhatsApp family contact for ${sanitizeText(selectedProfile.name)}`}
+                  >
+                    {isPremiumPreview ? "WhatsApp Family" : "Premium Required for Contact"}
                   </button>
                   <button
                     type="button"

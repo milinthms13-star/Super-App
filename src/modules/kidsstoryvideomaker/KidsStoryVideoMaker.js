@@ -34,6 +34,7 @@ import {
 import SceneCards from "./components/SceneCards";
 import TimelineCards from "./components/TimelineCards";
 import CharacterCards from "./components/CharacterCards";
+import KidsStoryGeneratorPanel from "./KidsStoryGeneratorPanel";
 
 const LANGUAGE_OPTIONS = [
   { id: "english", label: "English", code: "en-US" },
@@ -2442,6 +2443,25 @@ const KidsStoryVideoMaker = () => {
     setMessage("");
   };
 
+  const handleConvertStoryToVideo = (story) => {
+    const nextStoryText = sanitizeText(story?.storyText || "");
+    const nextTitle = sanitizeText(story?.title || "") || "AI Kids Story Video Generator";
+    if (!nextStoryText) {
+      setError("Generated story text is empty. Please generate the story again.");
+      return;
+    }
+
+    setStoryTitle(nextTitle);
+    setSubjectInput(nextTitle);
+    setStoryPrompt(nextStoryText);
+    setStorySource("paste");
+    setUploadedText("");
+    setUploadedFileName("");
+    setError("");
+    setMessage("Story moved to video pipeline. Click Generate Story Pipeline to build scenes.");
+    setActiveTab("create");
+  };
+
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     setError("");
@@ -2502,6 +2522,7 @@ const KidsStoryVideoMaker = () => {
 
       <section className="studio-tabs">
         {[
+          { id: "story-generator", label: t("kidsstory.tabs.storyGenerator", { defaultValue: "Story Generator" }) },
           { id: "create", label: t("kidsstory.tabs.create", { defaultValue: "Create" }) },
           { id: "scenes", label: t("kidsstory.tabs.scenes", { defaultValue: "Scenes" }) },
           { id: "export", label: t("kidsstory.tabs.export", { defaultValue: "Export" }) },
@@ -2546,6 +2567,10 @@ const KidsStoryVideoMaker = () => {
         </aside>
 
         <main className="studio-main" ref={mainContentRef}>
+          {activeTab === "story-generator" && (
+            <KidsStoryGeneratorPanel onConvertToVideo={handleConvertStoryToVideo} />
+          )}
+
           {activeTab === "dashboard" && (
             <div className="studio-card dashboard-card">
               <h2>Dashboard</h2>

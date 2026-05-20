@@ -22,6 +22,16 @@ import ScheduledPosting from "./ScheduledPosting";
 import BulkImport from "./BulkImport";
 import QuickDuplicate from "./QuickDuplicate";
 import TradePostHome from "./TradePostHome";
+import ClassifiedsQuickActions from "./ClassifiedsQuickActions";
+import SafeTradeBox from "./SafeTradeBox";
+import {
+  getListingLeadPriority,
+  getListingRiskWarnings,
+  getListingTrustScore,
+  normalizePhoneForIndia,
+  validateClassifiedsForm,
+} from "./classifiedsUpgradeUtils";
+import "./ClassifiedsUpgrade.css";
 
 // Map component - uses environment variable for API key
 const MapComponent = ({ location, latitude = 0, longitude = 0 }) => {
@@ -174,6 +184,8 @@ const DEFAULT_AD_FORM = {
   location: "",
   district: "Ernakulam",
   pincode: "",
+  contactPhone: "",
+  whatsappNumber: "",
   condition: "Used",
   mediaCount: "4",
   plan: "free",
@@ -259,6 +271,9 @@ const normalizeListing = (listing, index) => ({
     Array.isArray(listing?.contactOptions) && listing.contactOptions.length > 0
       ? listing.contactOptions
       : ["Chat"],
+  phone: String(listing?.phone || listing?.contactPhone || "").trim(),
+  contactPhone: String(listing?.contactPhone || listing?.phone || "").trim(),
+  whatsappNumber: String(listing?.whatsappNumber || "").trim(),
   mediaGallery:
     Array.isArray(listing?.mediaGallery) && listing.mediaGallery.length > 0
       ? listing.mediaGallery
@@ -268,6 +283,9 @@ const normalizeListing = (listing, index) => ({
   monetizationPlan: listing?.monetizationPlan || (listing?.featured ? "Featured" : "Free"),
   spamScore: listing?.spamScore || 0,
   spamFlags: listing?.spamFlags || [],
+  riskScore: Number(listing?.riskScore || 0),
+  riskFlags: Array.isArray(listing?.riskFlags) ? listing.riskFlags : [],
+  safetyLabel: String(listing?.safetyLabel || ""),
   responseTimeMinutes: listing?.responseTimeMinutes || (listing?.verified ? 60 : 180),
   isOnline: listing?.isOnline || false,
   priceHistory: listing?.priceHistory || [],
@@ -411,6 +429,8 @@ const Classifieds = () => {
   const [districtFilter, setDistrictFilter] = useState("All Districts");
   const [pincodeFilter, setPincodeFilter] = useState("");
   const [nearMeOnly, setNearMeOnly] = useState(false);
+  const [listingTypeFilter, setListingTypeFilter] = useState("all");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [conditionFilter, setConditionFilter] = useState([]);
   const [priceFilter, setPriceFilter] = useState([]);
   const [sortBy, setSortBy] = useState("featured");
@@ -810,6 +830,9 @@ const Classifieds = () => {
             String(listing?.sellerEmail || "").trim().toLowerCase()
         );
       const matchesCondition = conditionFilter.length === 0 || conditionFilter.includes(listing.condition);
+      const matchesListingType =
+        listingTypeFilter === "all" || String(listing.listingType || "sell").toLowerCase() === listingTypeFilter;
+      const matchesVerifiedOnly = !verifiedOnly || Boolean(listing.verified);
       
       const matchesPrice = 
         priceFilter.length === 0 ||
@@ -831,6 +854,8 @@ const Classifieds = () => {
         isNotBlocked &&
         isNotAdminBanned &&
         matchesCondition &&
+        matchesListingType &&
+        matchesVerifiedOnly &&
         matchesPrice
       );
     });
@@ -864,6 +889,8 @@ const Classifieds = () => {
     currentUserDistrict,
     currentUserPincode,
     districtFilter,
+    listingTypeFilter,
+    verifiedOnly,
     blockedUsers,
     adminBannedUsers,
     locationFilter,
@@ -886,7 +913,7 @@ const Classifieds = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchText, categoryFilter, locationFilter, districtFilter, pincodeFilter, nearMeOnly, conditionFilter, priceFilter, sortBy]);
+  }, [searchText, categoryFilter, locationFilter, districtFilter, pincodeFilter, nearMeOnly, listingTypeFilter, verifiedOnly, conditionFilter, priceFilter, sortBy]);
 
   useEffect(() => {
     if (!filteredListings.length) {
@@ -916,6 +943,8 @@ const Classifieds = () => {
         location: editingListing.location || "",
         district: editingListing.district || "Ernakulam",
         pincode: editingListing.pincode || "",
+        contactPhone: editingListing.contactPhone || editingListing.phone || "",
+        whatsappNumber: editingListing.whatsappNumber || "",
         condition: editingListing.condition || "Used",
         mediaCount: editingListing.mediaCount || "4",
         plan: editingListing.featured ? "featured" : editingListing.urgent ? "urgent" : "free",
@@ -939,6 +968,8 @@ const Classifieds = () => {
     : 0;
   const selectedListingType = resolveListingType(selectedListing || {});
   const selectedCounterpartyLabel = getCounterpartyLabel(selectedListing || {});
+  const selectedListingTrust = getListingTrustScore(selectedListing || {});
+  const selectedListingWarnings = getListingRiskWarnings(selectedListing || {});
 
   const sellerListings = useMemo(
     () => {
@@ -1282,6 +1313,20 @@ const Classifieds = () => {
     addToast("Nearby filter enabled using your profile district.", "success");
   };
 
+  const handleQuickActionFilterApply = (nextFilters = {}) => {
+    if (nextFilters.listingTypeFilter) {
+      setListingTypeFilter(nextFilters.listingTypeFilter);
+    }
+    if (nextFilters.verifiedOnly !== undefined) {
+      setVerifiedOnly(Boolean(nextFilters.verifiedOnly));
+    }
+    if (nextFilters.nearMeOnly !== undefined) {
+      setNearMeOnly(Boolean(nextFilters.nearMeOnly));
+    }
+    setActiveRole("buyer");
+    addToast("Quick action applied.", "info");
+  };
+
   const handleQuickChatMessage = (message) => {
     setChatInput(message);
   };
@@ -1379,6 +1424,14 @@ const Classifieds = () => {
   const handleListingSubmit = async (event) => {
     event.preventDefault();
     const isBuyerRequirement = listingForm.listingType === "buy";
+    const validation = validateClassifiedsForm(listingForm);
+    if (!validation.isValid) {
+      const firstError = Object.values(validation.errors)[0];
+      if (firstError) {
+        setStatusMessage(firstError);
+        return;
+      }
+    }
 
     if (!listingForm.title.trim() || !listingForm.description.trim() || !listingForm.location.trim()) {
       setStatusMessage("Add a title, description, and location before publishing an ad.");
@@ -1537,6 +1590,15 @@ const Classifieds = () => {
     }
   };
 
+  const handleReportFromSafetyBox = (listing) => {
+    if (!listing) return;
+    setSelectedListingId(listing.id);
+    if (!reportReason.trim()) {
+      setReportReason("Possible scam keywords or unsafe trade request.");
+    }
+    setStatusMessage("Review report reason and click Report ad.");
+  };
+
   const handleAdminAction = async (action, successMessage) => {
     if (!selectedListing) {
       return;
@@ -1626,6 +1688,18 @@ const Classifieds = () => {
           </div>
         </div>
       </section>
+
+      <ClassifiedsQuickActions
+        onFilterApply={handleQuickActionFilterApply}
+        onPostAd={() => {
+          setListingForm((current) => ({ ...current, listingType: "sell" }));
+          openPostComposer();
+        }}
+        onPostRequirement={() => {
+          setListingForm((current) => ({ ...current, listingType: "buy" }));
+          openPostComposer({ forceSeller: false });
+        }}
+      />
 
       <section className="classifieds-mobile-quickbar" aria-label="Mobile quick listing controls">
         <div className="classifieds-mobile-search-wrap">
@@ -2127,6 +2201,9 @@ const Classifieds = () => {
                 const favoriteId = `classifieds-${listing.id}`;
                 const isSaved = favoriteIds.has(favoriteId);
                 const isSelected = selectedListings.has(listing.id);
+                const trust = getListingTrustScore(listing);
+                const riskWarnings = getListingRiskWarnings(listing);
+                const leadPriority = getListingLeadPriority(listing);
 
                 return (
                   <article
@@ -2167,8 +2244,12 @@ const Classifieds = () => {
                         </span>
                         {listing.featured ? <span className="classifieds-badge accent">Featured</span> : null}
                         {listing.urgent ? <span className="classifieds-badge urgent">Urgent</span> : null}
+                        <span className={`classifieds-trust-pill trust-${trust.level}`}>{trust.label}</span>
                         <span className={`classifieds-badge ${listing.verified ? "verified" : "pending"}`}>
                           {listing.verified ? "Verified" : "Pending review"}
+                        </span>
+                        <span className={`classifieds-badge ${leadPriority.level === "hot" ? "urgent" : "pending"}`}>
+                          {leadPriority.label}
                         </span>
                       </div>
                       <h3>{listing.title}</h3>
@@ -2202,6 +2283,9 @@ const Classifieds = () => {
                             <span key={`${listing.id}-${tag}`}>{tag}</span>
                           ))}
                       </div>
+                      {riskWarnings[0] ? (
+                        <div className="classifieds-risk-warning">{riskWarnings[0]}</div>
+                      ) : null}
                     </div>
                     <button
                       type="button"
@@ -2461,6 +2545,36 @@ const Classifieds = () => {
                       }))
                     }
                     placeholder="6-digit pincode"
+                  />
+                </label>
+
+                <label className="classifieds-field" style={{ display: postComposerStep === 4 ? "grid" : "none" }}>
+                  <span>Contact phone (optional)</span>
+                  <input
+                    name="contactPhone"
+                    value={listingForm.contactPhone}
+                    onChange={(event) =>
+                      setListingForm((current) => ({
+                        ...current,
+                        contactPhone: event.target.value.replace(/[^\d+]/g, "").slice(0, 15),
+                      }))
+                    }
+                    placeholder="10-digit mobile"
+                  />
+                </label>
+
+                <label className="classifieds-field" style={{ display: postComposerStep === 4 ? "grid" : "none" }}>
+                  <span>WhatsApp number (optional)</span>
+                  <input
+                    name="whatsappNumber"
+                    value={listingForm.whatsappNumber}
+                    onChange={(event) =>
+                      setListingForm((current) => ({
+                        ...current,
+                        whatsappNumber: event.target.value.replace(/[^\d+]/g, "").slice(0, 15),
+                      }))
+                    }
+                    placeholder="If different from phone"
                   />
                 </label>
 
@@ -2806,6 +2920,9 @@ const Classifieds = () => {
                       </span>
                       {selectedListing.featured ? <span className="classifieds-badge accent">Featured</span> : null}
                       {selectedListing.urgent ? <span className="classifieds-badge urgent">Urgent</span> : null}
+                      <span className={`classifieds-trust-pill trust-${selectedListingTrust.level}`}>
+                        {selectedListingTrust.label}
+                      </span>
                       <span className={`classifieds-badge ${selectedListing.verified ? "verified" : "pending"}`}>
                         {selectedListing.verified
                           ? `Verified ${selectedCounterpartyLabel.toLowerCase()}`
@@ -2821,6 +2938,13 @@ const Classifieds = () => {
                       <p className="classifieds-detail-description">
                         <strong>Moderator note:</strong> {selectedListing.moderationNotes}
                       </p>
+                    ) : null}
+                    {selectedListingWarnings.length ? (
+                      <div className="classifieds-warning-list">
+                        {selectedListingWarnings.slice(0, 2).map((warning) => (
+                          <span key={warning}>{warning}</span>
+                        ))}
+                      </div>
                     ) : null}
                   </div>
                   <button
@@ -3183,6 +3307,21 @@ const Classifieds = () => {
                     >
                       Block user
                     </button>
+                    {(selectedListing.phone || selectedListing.contactPhone || selectedListing.whatsappNumber) ? (
+                      <button
+                        type="button"
+                        className="classifieds-inline-button"
+                        onClick={() => {
+                          const normalizedPhone = normalizePhoneForIndia(
+                            selectedListing.phone || selectedListing.contactPhone || selectedListing.whatsappNumber
+                          );
+                          if (!normalizedPhone) return;
+                          window.open(`https://wa.me/${normalizedPhone}`, "_blank", "noopener,noreferrer");
+                        }}
+                      >
+                        WhatsApp seller
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="classifieds-inline-button danger"
@@ -3201,6 +3340,7 @@ const Classifieds = () => {
                       placeholder="Explain why this listing should be reviewed"
                     />
                   </label>
+                  <SafeTradeBox listing={selectedListing} onReport={handleReportFromSafetyBox} />
                   <p className="classifieds-detail-description">Stored reports for this ad: {selectedReportCount}</p>
                   <div className="classifieds-blocked-users">
                     <strong>Blocked users</strong>

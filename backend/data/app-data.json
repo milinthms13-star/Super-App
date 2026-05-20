@@ -31,8 +31,8 @@
       "requiresFoodLicense": true
     },
     {
-      "id": "localmarket",
-      "name": "Local Market",
+      "id": "hyperlocal",
+      "name": "Nila Hyperlocal Delivery",
       "fee": 1299,
       "requiresFoodLicense": false
     },
@@ -120,14 +120,13 @@
     "classifieds",
     "realestate",
     "fooddelivery",
-    "localmarket",
+    "hyperlocal",
     "ridesharing",
     "matrimonial",
     "socialmedia",
     "reminderalert",
     "sosalert",
-    "astrology",
-    "promptvideogenerator"
+    "astrology"
   ],
   "registrationApplications": [
     {

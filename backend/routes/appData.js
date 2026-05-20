@@ -71,6 +71,11 @@ const {
   validateCertificateUploadPayload,
   buildSkillWalletShareText,
 } = require('../utils/skillDevelopmentBackendHelpers');
+const {
+  calculateClassifiedRiskScore,
+  sanitizeClassifiedContact,
+  buildClassifiedLeadPriority,
+} = require('../utils/classifiedsBackendUpgradeHelpers');
 
 const router = express.Router();
 const upload = multer({
@@ -124,7 +129,11 @@ const MODULE_ID_ALIASES = {
   vazhipadu: "devadarshan",
   poojalink: "devadarshan",
   blessinghub: "devadarshan",
+  devotionalecosystem: "devadarshan",
+  "devotional-ecosystem": "devadarshan",
   localservice: "localservices",
+  localmarket: "hyperlocal",
+  "local-market": "hyperlocal",
   "photo-studio-ai-ar": "photostudio",
   photostudioaiar: "photostudio",
   photostudio: "photostudio",
@@ -152,9 +161,12 @@ const MODULE_ID_ALIASES = {
   "ai-business-os": "aibusinessos",
   businessos: "aibusinessos",
   "ai-business-operating-system": "aibusinessos",
-  "kerala-gulf-jobs-migration": "gulfjobsmigration",
-  gulfjobs: "gulfjobsmigration",
-  migration: "gulfjobsmigration",
+  gulfjobsmigration: "gulfservices",
+  gulfjobmigration: "gulfservices",
+  "gulf-job-migration": "gulfservices",
+  "kerala-gulf-jobs-migration": "gulfservices",
+  gulfjobs: "gulfservices",
+  migration: "gulfservices",
   "women-safety-family-protection": "womensafetyfamily",
   womensafety: "womensafetyfamily",
   familysafety: "womensafetyfamily",
@@ -170,12 +182,6 @@ const MODULE_ID_ALIASES = {
   "kids-video": "kidsstoryvideomaker",
   "kids-story-video-maker": "kidsstoryvideomaker",
   kidsstoryvideomaker: "kidsstoryvideomaker",
-  "prompt-video-generator": "promptvideogenerator",
-  "prompt-video": "promptvideogenerator",
-  promptvideo: "promptvideogenerator",
-  videoprompt: "promptvideogenerator",
-  "ai-video-generator": "promptvideogenerator",
-  promptvideogenerator: "promptvideogenerator",
   "gulf-services": "gulfservices",
   gulfservice: "gulfservices",
   "nila-ai-hub": "nilaaihub",
@@ -364,6 +370,8 @@ const classifiedsListingSchema = Joi.object({
   price: Joi.number().min(1).required(),
   category: Joi.string().trim().min(2).max(60).required(),
   location: Joi.string().trim().min(2).max(120).required(),
+  contactPhone: Joi.string().allow('').trim().max(15).default(''),
+  whatsappNumber: Joi.string().allow('').trim().max(15).default(''),
   condition: Joi.string().valid('New', 'Like New', 'Used').default('Used'),
   mediaCount: Joi.number().integer().min(0).max(12).default(1),
   mediaGallery: Joi.array().items(classifiedsMediaItemSchema).max(12).default([]),
@@ -568,8 +576,37 @@ const educationGroupJoinSchema = Joi.object({
 
 const educationTuitionRequestSchema = Joi.object({
   subject: Joi.string().trim().required(),
+  classLevel: Joi.string().trim().allow('').max(80).default(''),
+  contactPhone: Joi.string().trim().allow('').max(20).default(''),
+  preferredMode: Joi.string().trim().valid('online', 'offline', 'hybrid').default('online'),
+  preferredTime: Joi.string().trim().allow('').max(80).default(''),
   details: Joi.string().allow('').trim().default(''),
 });
+
+const buildEducationTuitionPriority = ({
+  subject = '',
+  classLevel = '',
+  preferredTime = '',
+  contactPhone = '',
+}) => {
+  let score = 0;
+  const normalizedSubject = String(subject || '').trim().toLowerCase();
+  const normalizedClassLevel = String(classLevel || '').trim().toLowerCase();
+  const normalizedPreferredTime = String(preferredTime || '').trim();
+  const normalizedContactPhone = String(contactPhone || '').replace(/\D/g, '');
+
+  if (normalizedSubject) score += 20;
+  if (normalizedClassLevel) score += 20;
+  if (normalizedPreferredTime) score += 20;
+  if (normalizedContactPhone) score += 30;
+  if (/class 10|plus two|sslc|neet|jee/.test(`${normalizedClassLevel} ${normalizedSubject}`)) {
+    score += 10;
+  }
+
+  if (score >= 80) return 'hot';
+  if (score >= 50) return 'warm';
+  return 'normal';
+};
 
 const educationPaymentConfirmSchema = Joi.object({
   paymentId: Joi.string().trim().required(),
@@ -837,6 +874,9 @@ const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
     Array.isArray(listing.contactOptions) && listing.contactOptions.length > 0
       ? listing.contactOptions
       : ['Chat'],
+  phone: String(listing.phone || listing.contactPhone || '').trim(),
+  contactPhone: String(listing.contactPhone || listing.phone || '').trim(),
+  whatsappNumber: String(listing.whatsappNumber || '').trim(),
   mediaGallery: normalizeClassifiedMediaGallery(listing.mediaGallery),
   monetizationPlan: String(
     listing.monetizationPlan ||
@@ -859,6 +899,23 @@ const normalizeClassifiedsListingRecord = (listing = {}, index = 0) => ({
     listing.totalReviews ||
       (Array.isArray(listing.reviews) ? listing.reviews.length : 0)
   ),
+  spamScore: Number(listing.spamScore || 0),
+  spamFlags: Array.isArray(listing.spamFlags) ? listing.spamFlags : [],
+  riskScore: Number(listing.riskScore || 0),
+  riskFlags: Array.isArray(listing.riskFlags) ? listing.riskFlags : [],
+  safetyLabel: String(listing.safetyLabel || '').trim(),
+  leadPriority:
+    typeof listing.leadPriority === 'object' && listing.leadPriority !== null
+      ? {
+          level: String(listing.leadPriority.level || 'normal').trim(),
+          label: String(listing.leadPriority.label || 'Normal').trim(),
+          score: Number(listing.leadPriority.score || 0),
+        }
+      : {
+          level: 'normal',
+          label: 'Normal',
+          score: 0,
+        },
   moderationStatus: String(listing.moderationStatus || (listing.verified === false ? 'pending' : 'approved')).trim(),
   moderationNotes: String(listing.moderationNotes || '').trim(),
   moderationUpdatedAt: listing.moderationUpdatedAt
@@ -2403,12 +2460,30 @@ router.post('/education/tuition', authenticate, async (req, res) => {
   try {
     const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
     const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+    const normalizedContactPhone = String(value.contactPhone || '').replace(/\D/g, '');
+    if (normalizedContactPhone && normalizedContactPhone.length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid contact phone number.',
+      });
+    }
+    const priority = buildEducationTuitionPriority({
+      subject: value.subject,
+      classLevel: value.classLevel,
+      preferredTime: value.preferredTime,
+      contactPhone: normalizedContactPhone,
+    });
 
     const tuitionRecord = await EducationTuitionRequest.create({
       requestId: buildEducationRecordId('education-tuition'),
       userEmail,
       subject: value.subject,
+      classLevel: value.classLevel,
+      contactPhone: normalizedContactPhone,
+      preferredMode: value.preferredMode,
+      preferredTime: value.preferredTime,
       details: value.details,
+      priority,
       status: 'submitted',
     });
 
@@ -2463,12 +2538,15 @@ router.get('/classifieds/search', searchLimiter, async (req, res) => {
       limit = 20,
     } = req.query;
 
+    const parsedMinPrice = Number(minPrice);
+    const parsedMaxPrice = Number(maxPrice);
+
     const result = await searchClassifieds({
       text,
       category,
       location,
-      minPrice: Number(minPrice) || 0,
-      maxPrice: maxPrice === 'Infinity' ? Infinity : Number(maxPrice) || Infinity,
+      minPrice: Number.isFinite(parsedMinPrice) ? parsedMinPrice : 0,
+      maxPrice: Number.isFinite(parsedMaxPrice) ? parsedMaxPrice : Infinity,
       condition,
       sortBy,
       page: Number(page) || 1,
@@ -3235,10 +3313,32 @@ router.post('/classifieds/listings', authenticate, createListingLimiter, async (
       ? crypto.randomUUID()
       : `classified-${Date.now()}`;
   const lifecycleFields = buildClassifiedLifecycleFields(value.plan, now);
+  const contact = sanitizeClassifiedContact({
+    phone: value.contactPhone,
+    contactPhone: value.contactPhone,
+    whatsappNumber: value.whatsappNumber,
+    email: req.user.email,
+  });
+  const risk = calculateClassifiedRiskScore({
+    ...value,
+    ...contact,
+  });
+  const leadPriority = buildClassifiedLeadPriority({
+    ...value,
+    category: value.category,
+    price: value.price,
+  });
+  const moderationStatus =
+    req.user.email?.trim().toLowerCase() === ADMIN_EMAIL
+      ? risk.score >= 70
+        ? 'pending'
+        : 'approved'
+      : 'pending';
 
   const createdListing = normalizeClassifiedsListingRecord({
     id: listingId,
     ...value,
+    ...contact,
     listingType: value.listingType,
     ...lifecycleFields,
     seller: sellerName,
@@ -3268,8 +3368,13 @@ router.post('/classifieds/listings', authenticate, createListingLimiter, async (
     tags: [value.category, value.condition, 'New ad'],
     mapLabel: `${value.location} local discovery zone`,
     monetizationPlan: buildClassifiedPlanLabel(value.plan),
-    moderationStatus:
-      req.user.email?.trim().toLowerCase() === ADMIN_EMAIL ? 'approved' : 'pending',
+    moderationStatus,
+    spamScore: risk.score,
+    spamFlags: risk.flags,
+    riskScore: risk.score,
+    riskFlags: risk.flags,
+    safetyLabel: risk.safetyLabel,
+    leadPriority,
     reviews: [],
     averageRating: 0,
     totalReviews: 0,

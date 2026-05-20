@@ -3,6 +3,10 @@ const fs = require('fs/promises');
 const path = require('path');
 
 const auth = require('../middleware/auth');
+const {
+  buildBeautyPrompt,
+  validateBeautyPayload,
+} = require('../services/beautyAiBackendHelpers');
 
 const router = express.Router();
 const authenticate = auth.authenticate || auth;
@@ -187,6 +191,73 @@ const buildRoutines = (analysisInput = {}) => {
   return { morningRoutine, nightRoutine, weeklyPlan, remedies };
 };
 
+const buildSafetyWarnings = (safety = {}) => {
+  const warnings = [];
+
+  if (safety.sensitiveSkin) {
+    warnings.push('Patch test every new product for at least 24 hours before full-face use.');
+  }
+  if (safety.pregnantOrBreastfeeding) {
+    warnings.push('Avoid strong active ingredients unless approved by your doctor.');
+  }
+  if (safety.usingSkinMedicine) {
+    warnings.push('Do not mix acne or skin medicine with new active products without dermatologist advice.');
+  }
+  if (normalizeText(safety.knownAllergy)) {
+    warnings.push(`Avoid ingredients related to: ${normalizeText(safety.knownAllergy)}.`);
+  }
+
+  return warnings;
+};
+
+const toNumber = (value, fallback = 0) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const normalizeSelfieSignals = (signals = {}) => {
+  const rednessScore = Math.min(1, Math.max(0, toNumber(signals.rednessScore, 0.3)));
+  const textureScore = Math.min(1, Math.max(0, toNumber(signals.textureScore, 0.3)));
+  const brightnessScore = Math.min(1, Math.max(0, toNumber(signals.brightnessScore, 0.5)));
+  const confidence = Math.min(1, Math.max(0, toNumber(signals.confidence, 0.5)));
+
+  return {
+    rednessScore,
+    textureScore,
+    brightnessScore,
+    confidence,
+  };
+};
+
+const scoreFromSignals = (signals = {}) => {
+  const normalized = normalizeSelfieSignals(signals);
+  const penalty =
+    normalized.rednessScore * 12 +
+    normalized.textureScore * 10 +
+    Math.max(0, 0.55 - normalized.brightnessScore) * 8;
+  return Math.max(42, Math.round(82 - penalty));
+};
+
+const eventPlanAddons = (eventType = '') => {
+  const normalized = normalizeLower(eventType);
+  if (normalized.includes('bridal')) {
+    return ['Start 4-week glow prep', 'Schedule 2 trial makeup sessions', 'Hydration + sleep tracker daily'];
+  }
+  if (normalized.includes('festival')) {
+    return ['Add de-tan care 2x weekly', 'Practice lightweight makeup look', 'Avoid last-minute unknown products'];
+  }
+  if (normalized.includes('interview')) {
+    return ['Keep routine minimal and calm', 'Focus on hydration and SPF', 'Prep low-shine grooming night before'];
+  }
+  if (normalized.includes('teen')) {
+    return ['Use gentle acne-safe routine', 'Avoid harsh scrubs', 'Track breakout triggers'];
+  }
+  if (normalized.includes('men-grooming')) {
+    return ['Shave-care soothing routine', 'Beard area hygiene checks', 'Weekly scalp + skin reset'];
+  }
+  return ['Keep routine consistent for 7 days', 'Take weekly progress selfie'];
+};
+
 router.get('/tips/today', authenticate, async (req, res) => {
   try {
     const language = normalizeLower(req.query.language || 'en');
@@ -314,6 +385,76 @@ router.post('/generate-plan', authenticate, async (req, res) => {
   }
 });
 
+router.post('/plan', authenticate, async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const validation = validateBeautyPayload(payload);
+    if (!validation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: validation.errors,
+      });
+    }
+
+    const safety = payload.safety || {};
+    const warnings = buildSafetyWarnings(safety);
+    const signals = normalizeSelfieSignals(payload.selfieSignals || {});
+    const score = scoreFromSignals(signals);
+
+    const concern = normalizeText(payload.concern || 'General care');
+    const eventType = normalizeText(payload.eventType || 'daily-glow');
+    const skinType = detectSkinType(payload.skinType, concern);
+    const routines = buildRoutines({
+      concern,
+      preference: payload.preference || 'balanced',
+    });
+    const products = pickProducts(normalizeLower(payload.budget || 'medium'));
+
+    return res.json({
+      success: true,
+      prompt: buildBeautyPrompt(payload),
+      analysis: {
+        skinType,
+        skinScore: score,
+        concern,
+        selfieSignals: signals,
+        severeConcernDetected:
+          concern.toLowerCase().includes('infection') ||
+          concern.toLowerCase().includes('burn') ||
+          concern.toLowerCase().includes('allergy'),
+      },
+      plan: {
+        title: payload.language === 'ml' ? 'സുരക്ഷിത ബ്യൂട്ടി പ്ലാൻ' : 'Safe Beauty Plan',
+        score,
+        summary:
+          payload.language === 'ml'
+            ? 'ഇത് പൊതുവായ skincare guidance ആണ്. ഗുരുതര പ്രശ്നങ്ങൾക്ക് ഡെർമറ്റോളജിസ്റ്റിനെ സമീപിക്കുക.'
+            : 'This is general skincare guidance. Consult a dermatologist for severe concerns.',
+        morning: routines.morningRoutine,
+        night: routines.nightRoutine,
+        avoid: [
+          'Do not use steroid creams without dermatologist advice.',
+          'Avoid bleaching creams and unknown fairness products.',
+          ...warnings.map((item) => `Safety: ${item}`),
+        ],
+        products,
+        eventPlan: eventPlanAddons(eventType),
+      },
+      warnings,
+      bookingHooks: {
+        salonModule: 'localservices',
+        productModule: 'localmarket',
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate safety-first beauty plan.',
+      error: error.message,
+    });
+  }
+});
+
 router.get('/products/recommendations', authenticate, async (req, res) => {
   const budget = normalizeLower(req.query.budget || 'medium');
   const concern = normalizeText(req.query.concern || 'General care');
@@ -334,6 +475,7 @@ router.post('/progress-log', authenticate, async (req, res) => {
     const done = Boolean(req.body.done);
     const note = normalizeText(req.body.note || '');
     const skinScore = Number(req.body.skinScore || 0);
+    const selfieSnapshotLabel = normalizeText(req.body.selfieSnapshotLabel || '');
 
     if (!day || day < 1 || day > 30) {
       return res.status(400).json({
@@ -353,6 +495,7 @@ router.post('/progress-log', authenticate, async (req, res) => {
       done,
       note,
       skinScore: Number.isFinite(skinScore) ? skinScore : 0,
+      selfieSnapshotLabel,
       updatedAt: new Date().toISOString(),
     };
 
