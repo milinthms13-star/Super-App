@@ -35,7 +35,7 @@ const AdminHotelPanel = ({ currentUser }) => {
     try {
       // Load stats and hotels from API if available, otherwise fallback to mock/localStorage
       try {
-        const statsRes = await apiCall("/admin/hotel-stats");
+        const statsRes = await apiCall("/hotelbooking/admin/stats");
         if (statsRes?.data) {
           setStats(statsRes.data);
         } else {
@@ -55,7 +55,7 @@ const AdminHotelPanel = ({ currentUser }) => {
 
       let pendingHotelsData = [];
       try {
-        const pendingRes = await apiCall("/admin/hotels/pending");
+        const pendingRes = await apiCall("/hotelbooking/admin/hotels/pending");
         pendingHotelsData = pendingRes?.data || [];
       } catch (apiError) {
         console.warn("Pending hotels API failed, falling back to localStorage/mock:", apiError);
@@ -87,7 +87,7 @@ const AdminHotelPanel = ({ currentUser }) => {
 
       let verifiedHotelsData = [];
       try {
-        const verifiedRes = await apiCall("/admin/hotels/verified");
+        const verifiedRes = await apiCall("/hotelbooking/admin/hotels/verified");
         verifiedHotelsData = verifiedRes?.data || [];
       } catch (apiError) {
         console.warn("Verified hotels API failed, falling back to localStorage/mock:", apiError);
@@ -130,7 +130,10 @@ const AdminHotelPanel = ({ currentUser }) => {
   const handleApproveHotel = async (hotelId) => {
     try {
       try {
-        await apiCall(`/admin/hotels/${hotelId}/verify`, "POST", { verified: true });
+        await apiCall(`/hotelbooking/admin/hotels/${hotelId}/status`, "PUT", {
+          status: "Approved",
+          verified: true,
+        });
       } catch (apiError) {
         console.warn("Approve hotel API failed, using local state fallback:", apiError);
       }
@@ -168,7 +171,10 @@ const AdminHotelPanel = ({ currentUser }) => {
       }
 
       try {
-        await apiCall(`/admin/hotels/${hotelId}/reject`, "POST", { rejected: true });
+        await apiCall(`/hotelbooking/admin/hotels/${hotelId}/status`, "PUT", {
+          status: "Rejected",
+          verified: false,
+        });
       } catch (apiError) {
         console.warn("Reject hotel API failed, using local state fallback:", apiError);
       }
@@ -189,7 +195,7 @@ const AdminHotelPanel = ({ currentUser }) => {
   const handleUpdateCommissionSettings = async () => {
     try {
       try {
-        await apiCall("/admin/commission/update", "PUT", commissionFormData);
+        await apiCall("/hotelbooking/admin/commission", "PUT", commissionFormData);
       } catch (apiError) {
         console.warn("Commission update API failed, using local state fallback:", apiError);
       }

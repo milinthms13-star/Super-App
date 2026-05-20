@@ -8,6 +8,13 @@ const SOCIAL_DRAFT_STORAGE_PREFIX = "vibehub-social-composer";
 const buildDraftStorageKey = (userId) =>
   `${SOCIAL_DRAFT_STORAGE_PREFIX}:${String(userId || "guest")}`;
 
+const CAPTION_SUGGESTIONS = [
+  "Discover local stories and creators with #NilaHub",
+  "Community first, growth next. What are you building today?",
+  "Fresh reel drop. Tell us your favorite moment.",
+  "From Kerala to global audience, one post at a time.",
+];
+
 const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
   const { currentUser } = useApp();
   const [content, setContent] = useState("");
@@ -17,6 +24,10 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
   const [scheduleAt, setScheduleAt] = useState("");
   const [showScheduleOptions, setShowScheduleOptions] = useState(false);
   const [composerNotice, setComposerNotice] = useState("");
+  const [postType, setPostType] = useState("text");
+  const [category, setCategory] = useState("Community");
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [pollText, setPollText] = useState("");
   const fileInputRef = useRef(null);
   const restoredDraftRef = useRef(false);
 
@@ -33,6 +44,10 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
     setScheduleAt("");
     setShowScheduleOptions(false);
     setComposerNotice("");
+    setPostType("text");
+    setCategory("Community");
+    setMediaUrl("");
+    setPollText("");
     restoredDraftRef.current = false;
 
     if (typeof window !== "undefined") {
@@ -55,10 +70,14 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
       setContent(String(parsedDraft?.content || ""));
       setImages(Array.isArray(parsedDraft?.images) ? parsedDraft.images : []);
       setPrivacy(String(parsedDraft?.privacy || "public"));
+      setPostType(String(parsedDraft?.postType || "text"));
+      setCategory(String(parsedDraft?.category || "Community"));
+      setMediaUrl(String(parsedDraft?.mediaUrl || ""));
+      setPollText(String(parsedDraft?.pollText || ""));
       restoredDraftRef.current = true;
       setComposerNotice("Recovered your local draft from the last session.");
     } catch (error) {
-      // Keep the composer usable even if local draft restoration fails.
+      // Keep composer usable even if local draft restoration fails.
     }
   }, [draftStorageKey]);
 
@@ -71,16 +90,20 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
       content,
       images,
       privacy,
+      postType,
+      category,
+      mediaUrl,
+      pollText,
       updatedAt: new Date().toISOString(),
     };
 
-    if (!content.trim() && images.length === 0) {
+    if (!content.trim() && images.length === 0 && !mediaUrl.trim() && !pollText.trim()) {
       window.localStorage.removeItem(draftStorageKey);
       return;
     }
 
     window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
-  }, [content, draftStorageKey, images, privacy]);
+  }, [category, content, draftStorageKey, images, mediaUrl, pollText, postType, privacy]);
 
   const handleImageSelect = (event) => {
     const files = Array.from(event.target.files || []);
@@ -107,22 +130,65 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
     setImages((current) => current.filter((_, imageIndex) => imageIndex !== index));
   };
 
-  const buildPostPayload = () => ({
-    content: content.trim(),
-    images: images.map((image) => ({
+  const getPollOptions = () =>
+    pollText
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 6)
+      .map((text) => ({ text, voteCount: 0 }));
+
+  const buildPostPayload = () => {
+    const payloadImages = images.map((image) => ({
       url: image.url,
       caption: "",
-    })),
-    privacy,
-    hashtags: (content.match(/#\w+/g) || []).map((item) => item.replace("#", "")),
-  });
+    }));
+
+    if ((postType === "image" || postType === "reel") && mediaUrl.trim()) {
+      payloadImages.unshift({
+        url: mediaUrl.trim(),
+        caption: "",
+      });
+    }
+
+    const payloadVideos =
+      postType === "video" || postType === "reel"
+        ? mediaUrl.trim()
+          ? [{ url: mediaUrl.trim() }]
+          : []
+        : [];
+
+    return {
+      content: content.trim(),
+      postType,
+      category,
+      pollOptions: postType === "poll" ? getPollOptions() : [],
+      images: payloadImages,
+      videos: payloadVideos,
+      privacy,
+      hashtags: (content.match(/#\w+/g) || []).map((item) => item.replace("#", "")),
+    };
+  };
 
   const validateComposer = (action = "publish") => {
-    if (!content.trim() && images.length === 0) {
+    const pollOptions = getPollOptions();
+    const hasMediaInput = images.length > 0 || Boolean(mediaUrl.trim());
+
+    if (postType === "poll" && pollOptions.length < 2) {
+      window.alert("Poll posts need at least two options (one option per line).");
+      return false;
+    }
+
+    if ((postType === "image" || postType === "video" || postType === "reel") && !hasMediaInput) {
+      window.alert("Add media URL or upload image for this post type.");
+      return false;
+    }
+
+    if (!content.trim() && !hasMediaInput && postType !== "poll") {
       window.alert(
         action === "draft"
           ? "Add some content or media before saving this draft."
-          : "Please add some content or images."
+          : "Please add some content or media."
       );
       return false;
     }
@@ -189,6 +255,11 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
     );
   };
 
+  const handleGenerateCaption = () => {
+    const suggestion = CAPTION_SUGGESTIONS[Math.floor(Math.random() * CAPTION_SUGGESTIONS.length)];
+    setContent((current) => (current.trim() ? current : suggestion));
+  };
+
   return (
     <div className="create-post">
       <div className="create-post-header">
@@ -198,7 +269,7 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
           className="user-avatar"
         />
         <textarea
-          placeholder="What's on your mind?"
+          placeholder="Share update, photo, reel, poll, or community story..."
           value={content}
           onChange={(event) => setContent(event.target.value)}
           className="post-input"
@@ -207,6 +278,45 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
       </div>
 
       {composerNotice ? <p className="composer-notice">{composerNotice}</p> : null}
+
+      <div className="composer-controls">
+        <select value={postType} onChange={(event) => setPostType(event.target.value)}>
+          <option value="text">Text</option>
+          <option value="image">Image</option>
+          <option value="video">Video</option>
+          <option value="reel">Reel</option>
+          <option value="poll">Poll</option>
+        </select>
+
+        <select value={category} onChange={(event) => setCategory(event.target.value)}>
+          <option value="Community">Community</option>
+          <option value="Reels">Reels</option>
+          <option value="Polls">Polls</option>
+          <option value="Business">Business</option>
+          <option value="Travel">Travel</option>
+          <option value="Food">Food</option>
+          <option value="General">General</option>
+        </select>
+      </div>
+
+      {(postType === "video" || postType === "reel" || postType === "image") ? (
+        <input
+          className="media-url-input"
+          placeholder="Paste media URL (image/video/reel)"
+          value={mediaUrl}
+          onChange={(event) => setMediaUrl(event.target.value)}
+        />
+      ) : null}
+
+      {postType === "poll" ? (
+        <textarea
+          className="poll-input"
+          placeholder={"Poll options (one per line)\nOption 1\nOption 2"}
+          value={pollText}
+          onChange={(event) => setPollText(event.target.value)}
+          rows="4"
+        />
+      ) : null}
 
       {images.length > 0 ? (
         <div className="image-previews">
@@ -261,6 +371,10 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
           <option value="friends">Friends</option>
         </select>
 
+        <button className="action-btn" onClick={handleGenerateCaption} disabled={Boolean(loading)} type="button">
+          AI Caption
+        </button>
+
         <button
           className="action-btn"
           onClick={handleSaveDraft}
@@ -293,7 +407,7 @@ const CreatePost = ({ onPostCreated, onSaveDraft, onSchedulePost }) => {
         <button
           className="submit-btn"
           onClick={handlePublish}
-          disabled={Boolean(loading) || (!content.trim() && images.length === 0)}
+          disabled={Boolean(loading)}
           type="button"
         >
           {loading === "publish" ? "Posting..." : "Post"}

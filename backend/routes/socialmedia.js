@@ -22,6 +22,24 @@ const SOCIAL_POST_STATUS = {
   SCHEDULED: 'scheduled',
 };
 
+const SOCIAL_POST_TYPE = {
+  TEXT: 'text',
+  IMAGE: 'image',
+  VIDEO: 'video',
+  REEL: 'reel',
+  POLL: 'poll',
+};
+
+const SOCIAL_POST_CATEGORIES = new Set([
+  'Community',
+  'Reels',
+  'Polls',
+  'Business',
+  'Travel',
+  'Food',
+  'General',
+]);
+
 const normalizeSocialPostStatus = (value) => {
   const normalizedValue = String(value || '').trim().toLowerCase();
 
@@ -35,6 +53,39 @@ const normalizeSocialPostStatus = (value) => {
 
   return SOCIAL_POST_STATUS.PUBLISHED;
 };
+
+const normalizeSocialPostType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+
+  if (Object.values(SOCIAL_POST_TYPE).includes(normalized)) {
+    return normalized;
+  }
+
+  return SOCIAL_POST_TYPE.TEXT;
+};
+
+const normalizeSocialPostCategory = (value) => {
+  const normalized = String(value || '').trim();
+  if (SOCIAL_POST_CATEGORIES.has(normalized)) {
+    return normalized;
+  }
+  return 'Community';
+};
+
+const normalizePollOptions = (pollOptions = []) =>
+  (Array.isArray(pollOptions) ? pollOptions : [])
+    .map((option) => {
+      if (typeof option === 'string') {
+        return { text: option.trim(), voteCount: 0 };
+      }
+
+      return {
+        text: String(option?.text || '').trim(),
+        voteCount: Number(option?.voteCount || 0),
+      };
+    })
+    .filter((option) => Boolean(option.text))
+    .slice(0, 6);
 
 const normalizeHashtags = (hashtags = [], content = '') => {
   const explicitTags = Array.isArray(hashtags) ? hashtags : [];
@@ -117,6 +168,9 @@ router.post('/posts/create', authenticate, async (req, res, next) => {
       content,
       images,
       videos,
+      postType,
+      category,
+      pollOptions,
       privacy,
       allowedUsers,
       location,
@@ -128,6 +182,9 @@ router.post('/posts/create', authenticate, async (req, res, next) => {
     const trimmedContent = String(content || '').trim();
     const normalizedImages = Array.isArray(images) ? images : [];
     const normalizedVideos = Array.isArray(videos) ? videos : [];
+    const normalizedPostType = normalizeSocialPostType(postType);
+    const normalizedCategory = normalizeSocialPostCategory(category);
+    const normalizedPollOptions = normalizePollOptions(pollOptions);
     const lifecycle = resolveSocialPostLifecycle({ status, scheduledFor });
 
     if (lifecycle.error) {
@@ -143,9 +200,20 @@ router.post('/posts/create', authenticate, async (req, res, next) => {
       return res.status(400).json({ message: 'Post content or media is required' });
     }
 
+    if (normalizedPostType === SOCIAL_POST_TYPE.POLL && normalizedPollOptions.length < 2) {
+      return res.status(400).json({ message: 'Poll posts require at least two options' });
+    }
+
     const newPost = new SocialPost({
       author: req.user._id,
       content: trimmedContent,
+      postType:
+        normalizedPostType === SOCIAL_POST_TYPE.TEXT &&
+        normalizedVideos.length > 0
+          ? SOCIAL_POST_TYPE.VIDEO
+          : normalizedPostType,
+      category: normalizedCategory,
+      pollOptions: normalizedPollOptions,
       images: normalizedImages,
       videos: normalizedVideos,
       privacy: privacy || 'public',
@@ -210,7 +278,7 @@ router.get('/posts/:postId([0-9a-fA-F]{24})', authenticate, async (req, res, nex
 // Get user's feed
 router.get('/feed', authenticate, async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, sort = 'recent' } = req.query;
+    const { page = 1, limit = 10, sort = 'recent', category, type } = req.query;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const pageLimit = Math.min(parseInt(limit), 50);
@@ -237,6 +305,17 @@ router.get('/feed', authenticate, async (req, res, next) => {
       isDeleted: false,
       ...buildPublishedPostQuery(),
     };
+
+    const normalizedType = normalizeSocialPostType(type);
+    const categoryQuery = String(category || '').trim();
+
+    if (categoryQuery && SOCIAL_POST_CATEGORIES.has(categoryQuery)) {
+      feedQuery.category = categoryQuery;
+    }
+
+    if (type && normalizedType) {
+      feedQuery.postType = normalizedType;
+    }
 
     const posts = await SocialPost.find(feedQuery)
       .populate('author', 'name avatar email')
@@ -303,7 +382,18 @@ router.get('/posts/scheduled', authenticate, async (req, res, next) => {
 router.put('/posts/:postId([0-9a-fA-F]{24})', authenticate, async (req, res, next) => {
   try {
     const { postId } = req.params;
-    const { content, privacy, allowedUsers, status, scheduledFor, images, videos } = req.body;
+    const {
+      content,
+      privacy,
+      allowedUsers,
+      status,
+      scheduledFor,
+      images,
+      videos,
+      postType,
+      category,
+      pollOptions,
+    } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(postId)) {
       return res.status(400).json({ message: 'Invalid post ID' });
@@ -336,6 +426,15 @@ router.put('/posts/:postId([0-9a-fA-F]{24})', authenticate, async (req, res, nex
     if (videos !== undefined) {
       post.videos = Array.isArray(videos) ? videos : [];
     }
+    if (postType !== undefined) {
+      post.postType = normalizeSocialPostType(postType);
+    }
+    if (category !== undefined) {
+      post.category = normalizeSocialPostCategory(category);
+    }
+    if (pollOptions !== undefined) {
+      post.pollOptions = normalizePollOptions(pollOptions);
+    }
 
     if (status !== undefined || scheduledFor !== undefined) {
       const lifecycle = resolveSocialPostLifecycle({
@@ -359,6 +458,10 @@ router.put('/posts/:postId([0-9a-fA-F]{24})', authenticate, async (req, res, nex
       post.status = lifecycle.status;
       post.scheduledFor = lifecycle.scheduledFor;
       post.publishedAt = lifecycle.publishedAt;
+    }
+
+    if (post.postType === SOCIAL_POST_TYPE.POLL && (!Array.isArray(post.pollOptions) || post.pollOptions.length < 2)) {
+      return res.status(400).json({ message: 'Poll posts require at least two options' });
     }
 
     post.hashtags = normalizeHashtags(req.body.hashtags !== undefined ? req.body.hashtags : post.hashtags, post.content);
@@ -1185,8 +1288,18 @@ router.get('/search/posts', authenticate, async (req, res, next) => {
 
     const total = await SocialPost.countDocuments(postSearchQuery);
 
+    const hydratedPosts = posts.map((post) => ({
+      ...post,
+      liked: Array.isArray(post.likes)
+        ? post.likes.some((entry) => String(entry?.userId) === String(req.user._id))
+        : false,
+      saved: Array.isArray(post.savedBy)
+        ? post.savedBy.some((userId) => String(userId) === String(req.user._id))
+        : false,
+    }));
+
     res.json({
-      posts,
+      posts: hydratedPosts,
       pagination: {
         page: parseInt(page),
         limit: pageLimit,

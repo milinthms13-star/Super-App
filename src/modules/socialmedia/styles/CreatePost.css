@@ -49,6 +49,39 @@
   font-size: 14px;
 }
 
+.composer-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.composer-controls select,
+.media-url-input,
+.poll-input {
+  width: 100%;
+  border: 2px solid #f0f0f0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.composer-controls select:focus,
+.media-url-input:focus,
+.poll-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.media-url-input,
+.poll-input {
+  margin-bottom: 12px;
+}
+
+.poll-input {
+  resize: vertical;
+}
+
 .image-previews {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
@@ -177,4 +210,10 @@
 .submit-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .composer-controls {
+    grid-template-columns: 1fr;
+  }
 }

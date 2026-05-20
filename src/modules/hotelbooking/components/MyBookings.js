@@ -18,8 +18,31 @@ const MyBookings = ({ userId, currentUser }) => {
 
         let savedBookings = [];
         try {
-          const response = await apiCall("/hotelbookings/bookings", "GET", { userId });
-          savedBookings = response?.bookings || response?.data?.bookings || response?.data || response || [];
+          const response = await apiCall("/hotelbooking/bookings/my", "GET");
+          const rawBookings = response?.bookings || response?.data?.bookings || response?.data || response || [];
+          savedBookings = (Array.isArray(rawBookings) ? rawBookings : []).map((booking) => {
+            const backendStatus = String(booking.status || booking.bookingStatus || "pending").toLowerCase();
+            const mappedStatus =
+              backendStatus === "confirmed" || backendStatus === "checked in" ? "confirmed" :
+              backendStatus === "completed" ? "completed" :
+              backendStatus === "cancelled" || backendStatus === "rejected" ? "cancelled" :
+              "pending";
+
+            return {
+              ...booking,
+              _id: booking._id || booking.id,
+              status: mappedStatus,
+              bookingStatus: booking.bookingStatus || booking.status,
+              checkInDate: booking.checkInDate || booking.checkIn,
+              checkOutDate: booking.checkOutDate || booking.checkOut,
+              numberOfNights: booking.numberOfNights || booking.nights || 1,
+              numberOfGuests: booking.numberOfGuests || booking.guests || 1,
+              roomType: booking.roomType || "Standard",
+              guestPhone: booking.guestPhone || booking.phone || "",
+              totalPrice: booking.totalPrice || booking.totalAmount || booking.finalTotal || 0,
+              finalTotal: booking.finalTotal || booking.totalAmount || booking.totalPrice || 0,
+            };
+          });
         } catch (apiError) {
           console.warn("MyBookings API failed, using localStorage:", apiError);
           const raw = localStorage.getItem(`bookings_${userId}`);
@@ -49,7 +72,7 @@ const MyBookings = ({ userId, currentUser }) => {
       setCancelingBooking(bookingId);
 
       try {
-        await apiCall(`/hotelbookings/bookings/${bookingId}/cancel`, "POST", {
+        await apiCall(`/hotelbooking/bookings/${bookingId}/cancel`, "POST", {
           cancellationReason: "User requested cancellation",
         });
       } catch (apiError) {

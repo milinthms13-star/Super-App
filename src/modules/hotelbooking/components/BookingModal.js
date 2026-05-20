@@ -24,6 +24,12 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
   const selectedRoom = useMemo(() => {
     return hotel?.rooms?.find(r => r.type === formData.roomType);
   }, [hotel, formData.roomType]);
+  const selectedRoomAvailable = useMemo(() => {
+    if (!selectedRoom) return true;
+    if (typeof selectedRoom.available === "boolean") return selectedRoom.available;
+    if (typeof selectedRoom.availableRooms === "number") return selectedRoom.availableRooms > 0;
+    return true;
+  }, [selectedRoom]);
 
   const pricePerNight = selectedRoom?.price || hotel?.price || 0;
   const totalPrice = pricePerNight * nights;
@@ -52,6 +58,9 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
 
     if (!formData.roomType) {
       newErrors.roomType = "Room type is required";
+    }
+    if (!selectedRoomAvailable) {
+      newErrors.roomType = "Selected room is currently unavailable";
     }
 
     setErrors(newErrors);
@@ -86,6 +95,7 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
       const bookingData = {
         hotelId: hotel?.id,
         hotelName: hotel?.name,
+        location: hotel?.location,
         roomType: formData.roomType,
         guestName: formData.guestName,
         guestEmail: formData.guestEmail,
@@ -94,6 +104,7 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
         checkOutDate: checkOut,
         numberOfNights: nights,
         numberOfGuests: guests,
+        numberOfRooms: 1,
         pricePerNight,
         totalPrice,
         gst,
@@ -222,7 +233,7 @@ const BookingModal = ({ hotel, checkIn, checkOut, guests, onClose, onSubmit }) =
                   <option value="">Select a room type</option>
                   {hotel.rooms?.map(room => (
                     <option key={room.type} value={room.type}>
-                      {room.type} - ₹{room.price.toLocaleString()}/night {room.available ? "✓ Available" : "⚠ Unavailable"}
+                      {room.type} - ₹{room.price.toLocaleString()}/night {(typeof room.availableRooms === "number" ? room.availableRooms > 0 : room.available) ? "✓ Available" : "⚠ Unavailable"}
                     </option>
                   ))}
                 </select>

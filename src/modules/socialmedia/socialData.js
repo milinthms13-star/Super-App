@@ -112,12 +112,48 @@ export const normalizeSocialPosts = (posts = []) =>
         ? [{ url: getMediaSrc(post.image, `${author.name} post`) }]
         : [];
 
+    const videos = Array.isArray(post?.videos) && post.videos.length > 0
+      ? post.videos.map((video, videoIndex) => ({
+          url: getMediaSrc(video?.url || video, `${author.name} video ${videoIndex + 1}`),
+          thumbnail: video?.thumbnail || "",
+          duration: Number(video?.duration || 0),
+        }))
+      : [];
+
+    const pollOptions = Array.isArray(post?.pollOptions)
+      ? post.pollOptions
+          .map((option) => {
+            if (typeof option === "string") {
+              return { text: option, voteCount: 0 };
+            }
+
+            return {
+              text: String(option?.text || "").trim(),
+              voteCount: Number(option?.voteCount || 0),
+            };
+          })
+          .filter((option) => Boolean(option.text))
+      : [];
+
+    const inferredPostType = post?.postType
+      || post?.type
+      || (pollOptions.length > 0
+        ? "poll"
+        : videos.length > 0
+          ? "video"
+          : images.length > 0
+            ? "image"
+            : "text");
+
     return {
       _id: String(post?._id || post?.id || `post-${index + 1}`),
       author,
       content: post?.content || "",
       images,
-      videos: Array.isArray(post?.videos) ? post.videos : [],
+      videos,
+      postType: String(inferredPostType).toLowerCase(),
+      category: post?.category || "Community",
+      pollOptions,
       likeCount: Number(post?.likeCount ?? post?.likes ?? 0),
       commentCount,
       shareCount: Number(post?.shareCount ?? Math.max(0, Math.round(commentCount / 3))),

@@ -236,7 +236,7 @@ const PartnerDashboard = ({ currentUser }) => {
     try {
       // Try API calls first, fallback to localStorage
       try {
-        const propertiesRes = await apiCall(`/api/partner/properties/${currentUser.id}`);
+        const propertiesRes = await apiCall("/hotelbooking/partner/hotels");
         setProperties(propertiesRes?.data || []);
       } catch (apiError) {
         console.warn("API call failed, using localStorage:", apiError);
@@ -245,8 +245,22 @@ const PartnerDashboard = ({ currentUser }) => {
       }
 
       try {
-        const bookingsRes = await apiCall(`/api/partner/booking-requests/${currentUser.id}`);
-        setBookingRequests(bookingsRes?.data || []);
+        const bookingsRes = await apiCall("/hotelbooking/partner/bookings");
+        const partnerBookings = (bookingsRes?.data || []).map((item) => {
+          const rawStatus = String(item.bookingStatus || item.status || "").toLowerCase();
+          const normalizedStatus =
+            rawStatus === "confirmed" || rawStatus === "completed" || rawStatus === "checked in"
+              ? "approved"
+              : rawStatus === "cancelled" || rawStatus === "rejected"
+              ? "rejected"
+              : "pending";
+          return {
+            ...item,
+            status: normalizedStatus,
+            totalPrice: item.totalPrice || item.finalTotal || 0,
+          };
+        });
+        setBookingRequests(partnerBookings);
       } catch (apiError) {
         console.warn("API call failed, using localStorage:", apiError);
         const savedBookingRequests = localStorage.getItem(`booking_requests_${currentUser?.id}`);
@@ -343,7 +357,9 @@ const PartnerDashboard = ({ currentUser }) => {
     try {
       const propertyData = { ...propertyForm, ownerId: currentUser?.id };
       const isEditing = Boolean(editingProperty);
-      const endpoint = isEditing ? `/api/hotels/${editingProperty._id}` : "/api/hotels/create";
+      const endpoint = isEditing
+        ? `/hotelbooking/partner/hotels/${editingProperty._id}`
+        : "/hotelbooking/hotels";
       const method = isEditing ? "PUT" : "POST";
 
       try {
@@ -397,7 +413,10 @@ const PartnerDashboard = ({ currentUser }) => {
   const handleApproveBookingRequest = async (requestId) => {
     try {
       try {
-        await apiCall(`/api/partner/booking-requests/${requestId}/approve`, "POST");
+        await apiCall(`/hotelbooking/partner/bookings/${requestId}/status`, "PUT", {
+          bookingStatus: "Confirmed",
+          partnerNote: "Approved by partner",
+        });
       } catch (apiError) {
         console.warn("API call failed, using localStorage:", apiError);
       }
@@ -418,7 +437,10 @@ const PartnerDashboard = ({ currentUser }) => {
   const handleRejectBookingRequest = async (requestId) => {
     try {
       try {
-        await apiCall(`/api/partner/booking-requests/${requestId}/reject`, "POST");
+        await apiCall(`/hotelbooking/partner/bookings/${requestId}/status`, "PUT", {
+          bookingStatus: "Rejected",
+          partnerNote: "Rejected by partner",
+        });
       } catch (apiError) {
         console.warn("API call failed, using localStorage:", apiError);
       }

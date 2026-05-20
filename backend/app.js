@@ -314,6 +314,8 @@ app.use('/api/matrimonial', require('./routes/matrimonial-referral'));
 app.use('/api/matrimonial', require('./routes/matrimonial-admin-analytics'));
 app.use('/api/matrimonial', require('./routes/matrimonial-seo'));
 app.use('/api/jobportal', require('./routes/jobportal'));
+app.use('/api/hotelbooking', require('./routes/hotelbooking'));
+app.use('/api/hotelbookings', require('./routes/hotelbooking'));
 
 app.use(errorHandler);
 

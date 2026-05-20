@@ -1,134 +1,254 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../contexts/AppContext";
+import { getAvatarSrc, normalizeSocialUser } from "../socialData";
 import "../styles/PostCard.css";
 
-const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers, typingUsers }) => {
-  const { currentUser } = useApp();
+const buildComments = (comments = []) =>
+  (Array.isArray(comments) ? comments : []).map((comment, index) => ({
+    _id: String(comment?._id || comment?.id || `comment-${index + 1}`),
+    author: normalizeSocialUser(comment?.author || {}, `Commenter ${index + 1}`),
+    content: String(comment?.content || ""),
+    createdAt: comment?.createdAt || new Date().toISOString(),
+  }));
+
+const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers = new Set(), typingUsers = new Map() }) => {
+  const { currentUser, apiCall } = useApp();
   const [liked, setLiked] = useState(Boolean(post.liked));
   const [saved, setSaved] = useState(Boolean(post.saved));
   const [likeCount, setLikeCount] = useState(Number(post.likeCount || 0));
+  const [shareCount, setShareCount] = useState(Number(post.shareCount || 0));
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState(Array.isArray(post.commentsList) ? post.commentsList : []);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [comments, setComments] = useState(buildComments(post.commentsList));
   const [commentText, setCommentText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(post.content);
+  const [actionMessage, setActionMessage] = useState("");
+  const [actionLoading, setActionLoading] = useState("");
 
   useEffect(() => {
     setLiked(Boolean(post.liked));
     setSaved(Boolean(post.saved));
     setLikeCount(Number(post.likeCount || 0));
-    setComments(Array.isArray(post.commentsList) ? post.commentsList : []);
+    setShareCount(Number(post.shareCount || 0));
+    setComments(buildComments(post.commentsList));
+    setCommentsLoaded(false);
     setEditedContent(post.content);
   }, [post]);
 
-  const isOwnPost = String(currentUser?._id || currentUser?.id) === String(post.author._id);
+  const author = useMemo(() => normalizeSocialUser(post.author, "User"), [post.author]);
+  const isOwnPost = String(currentUser?._id || currentUser?.id) === String(author._id);
   const createdAt = new Date(post.createdAt).toLocaleDateString();
-  const isOnline = onlineUsers.has(post.author._id);
-  const isTyping = typingUsers.has(`${post.author._id}_comment`);
+  const isOnline = onlineUsers.has(author._id);
+  const isTyping = typingUsers.has(`${author._id}_comment`);
+  const hasVideo = Array.isArray(post.videos) && post.videos.length > 0;
+  const hasPoll = Array.isArray(post.pollOptions) && post.pollOptions.length > 0;
 
-  const handleLike = () => {
-    const nextLiked = !liked;
-    const nextLikeCount = nextLiked ? likeCount + 1 : Math.max(0, likeCount - 1);
-
-    setLiked(nextLiked);
-    setLikeCount(nextLikeCount);
+  const publishLocalUpdate = (nextValues = {}) => {
     onPostUpdated({
       ...post,
-      liked: nextLiked,
-      likeCount: nextLikeCount,
-      commentsList: comments,
-      commentCount: comments.length,
-      saved,
+      ...nextValues,
+      liked: nextValues.liked ?? liked,
+      saved: nextValues.saved ?? saved,
+      likeCount: nextValues.likeCount ?? likeCount,
+      shareCount: nextValues.shareCount ?? shareCount,
+      commentsList: nextValues.commentsList ?? comments,
+      commentCount: (nextValues.commentsList ?? comments).length,
     });
   };
 
-  const handleSave = () => {
-    const nextSaved = !saved;
-    setSaved(nextSaved);
-    onPostUpdated({
-      ...post,
-      liked,
-      likeCount,
-      saved: nextSaved,
-      commentsList: comments,
-      commentCount: comments.length,
-    });
-  };
+  const handleLike = async () => {
+    const wasLiked = liked;
+    const optimisticCount = wasLiked ? Math.max(0, likeCount - 1) : likeCount + 1;
 
-  const handleDelete = () => {
-    if (window.confirm("Are you sure you want to delete this post?")) {
-      onPostDeleted(post._id);
+    setLiked(!wasLiked);
+    setLikeCount(optimisticCount);
+
+    try {
+      const endpoint = wasLiked
+        ? `/socialmedia/posts/${post._id}/unlike`
+        : `/socialmedia/posts/${post._id}/like`;
+      const response = await apiCall(endpoint, "POST");
+      const serverCount = Number(response?.post?.likeCount ?? optimisticCount);
+      const serverLiked = response?.liked ?? !wasLiked;
+      setLiked(Boolean(serverLiked));
+      setLikeCount(serverCount);
+      publishLocalUpdate({ liked: Boolean(serverLiked), likeCount: serverCount });
+    } catch (error) {
+      setLiked(wasLiked);
+      setLikeCount(likeCount);
+      setActionMessage("Could not update like right now.");
     }
   };
 
-  const handleUpdate = () => {
+  const handleSave = async () => {
+    const wasSaved = saved;
+    setSaved(!wasSaved);
+
+    try {
+      const endpoint = wasSaved
+        ? `/socialmedia/posts/${post._id}/unsave`
+        : `/socialmedia/posts/${post._id}/save`;
+      const response = await apiCall(endpoint, "POST");
+      const serverSaved = response?.saved ?? !wasSaved;
+      setSaved(Boolean(serverSaved));
+      publishLocalUpdate({ saved: Boolean(serverSaved) });
+    } catch (error) {
+      setSaved(wasSaved);
+      setActionMessage("Could not update save status right now.");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete this post?")) {
+      return;
+    }
+
+    setActionLoading("delete");
+    try {
+      await apiCall(`/socialmedia/posts/${post._id}`, "DELETE");
+      onPostDeleted(post._id);
+    } catch (error) {
+      setActionMessage("Unable to delete this post.");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const handleUpdate = async () => {
     const nextContent = editedContent.trim();
     if (!nextContent) {
       return;
     }
 
-    onPostUpdated({
-      ...post,
-      content: nextContent,
-      liked,
-      saved,
-      likeCount,
-      commentsList: comments,
-      commentCount: comments.length,
-    });
-    setIsEditing(false);
+    setActionLoading("update");
+    try {
+      const response = await apiCall(`/socialmedia/posts/${post._id}`, "PUT", {
+        content: nextContent,
+      });
+      const updated = response?.post;
+      const normalizedContent = updated?.content || nextContent;
+      publishLocalUpdate({ content: normalizedContent });
+      setEditedContent(normalizedContent);
+      setIsEditing(false);
+      setActionMessage("Post updated.");
+    } catch (error) {
+      setActionMessage("Unable to update post.");
+    } finally {
+      setActionLoading("");
+    }
   };
 
-  const handleShare = () => {
-    window.alert("Post shared successfully.");
-    onPostUpdated({
-      ...post,
-      liked,
-      saved,
-      likeCount,
-      commentsList: comments,
-      commentCount: comments.length,
-      shareCount: Number(post.shareCount || 0) + 1,
-    });
+  const handleShare = async () => {
+    setActionLoading("share");
+    try {
+      await apiCall(`/socialmedia/posts/${post._id}/share`, "POST");
+      const nextShareCount = shareCount + 1;
+      setShareCount(nextShareCount);
+      publishLocalUpdate({ shareCount: nextShareCount });
+      setActionMessage("Post shared successfully.");
+    } catch (error) {
+      setActionMessage("Unable to share post right now.");
+    } finally {
+      setActionLoading("");
+    }
   };
 
-  const handleCommentSubmit = () => {
+  const loadComments = async () => {
+    setActionLoading("comments");
+    try {
+      const response = await apiCall(`/socialmedia/posts/${post._id}/comments`, "GET");
+      const commentList = buildComments(response?.comments || []);
+      setComments(commentList);
+      setCommentsLoaded(true);
+      publishLocalUpdate({ commentsList: commentList });
+    } catch (error) {
+      setActionMessage("Unable to load comments right now.");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const toggleComments = async () => {
+    const nextShow = !showComments;
+    setShowComments(nextShow);
+    if (nextShow && !commentsLoaded) {
+      await loadComments();
+    }
+  };
+
+  const handleCommentSubmit = async () => {
     if (!commentText.trim()) {
       return;
     }
 
-    const comment = {
-      _id: `comment-${Date.now()}`,
-      author: {
-        _id: String(currentUser?._id || currentUser?.id || "me"),
-        name: currentUser?.name || "You",
-        avatar: currentUser?.avatar || "",
-      },
-      content: commentText.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    const nextComments = [...comments, comment];
+    setActionLoading("comment");
+    try {
+      const response = await apiCall(`/socialmedia/posts/${post._id}/comments`, "POST", {
+        content: commentText.trim(),
+      });
 
-    setComments(nextComments);
-    setCommentText("");
-    onPostUpdated({
-      ...post,
-      liked,
-      saved,
-      likeCount,
-      commentsList: nextComments,
-      commentCount: nextComments.length,
-    });
+      const createdComment = response?.comment;
+      const normalizedComment = buildComments([createdComment])[0];
+      const nextComments = [normalizedComment, ...comments];
+      setComments(nextComments);
+      setCommentText("");
+      publishLocalUpdate({ commentsList: nextComments });
+    } catch (error) {
+      setActionMessage("Unable to add comment right now.");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const handleReport = async () => {
+    const reason = window.prompt("Report reason (spam, abuse, misinformation, etc.)");
+    if (!reason || !reason.trim()) {
+      return;
+    }
+
+    setActionLoading("report");
+    try {
+      await apiCall("/socialmedia/report", "POST", {
+        reportedObjectType: "post",
+        reportedObjectId: post._id,
+        reportReason: "other",
+        description: reason.trim(),
+      });
+      setActionMessage("Thanks. Report submitted for moderation review.");
+    } catch (error) {
+      setActionMessage("Unable to submit report right now.");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!window.confirm(`Block ${author.name}? You can unblock later from settings.`)) {
+      return;
+    }
+
+    setActionLoading("block");
+    try {
+      await apiCall(`/socialmedia/users/${author._id}/block`, "POST");
+      setActionMessage(`${author.name} has been blocked.`);
+    } catch (error) {
+      setActionMessage("Unable to block this user right now.");
+    } finally {
+      setActionLoading("");
+    }
   };
 
   return (
     <div className="post-card">
       <div className="post-header">
         <div className="author-info">
-          <img src={post.author.avatar} alt={post.author.name} className="author-avatar" />
+          <img src={getAvatarSrc(author.avatar, author.name)} alt={author.name} className="author-avatar" />
           <div className="author-details">
-            <h4>{post.author.name}</h4>
+            <h4>{author.name}</h4>
             <span className="post-time">{createdAt}</span>
+            {isOnline ? <span className="presence-indicator online">Online</span> : null}
+            {isTyping ? <span className="presence-indicator typing">Typing...</span> : null}
           </div>
         </div>
 
@@ -137,7 +257,9 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers, typingUsers
             <button className="menu-btn">...</button>
             <div className="menu-dropdown">
               <button onClick={() => setIsEditing(true)}>Edit</button>
-              <button onClick={handleDelete}>Delete</button>
+              <button onClick={handleDelete} disabled={actionLoading === "delete"}>
+                {actionLoading === "delete" ? "Deleting..." : "Delete"}
+              </button>
             </div>
           </div>
         ) : null}
@@ -148,8 +270,8 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers, typingUsers
           <div className="edit-mode">
             <textarea value={editedContent} onChange={(event) => setEditedContent(event.target.value)} />
             <div className="edit-actions">
-              <button onClick={handleUpdate} className="save-btn">
-                Save
+              <button onClick={handleUpdate} className="save-btn" disabled={actionLoading === "update"}>
+                {actionLoading === "update" ? "Saving..." : "Save"}
               </button>
               <button onClick={() => setIsEditing(false)} className="cancel-btn">
                 Cancel
@@ -167,28 +289,58 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers, typingUsers
             ))}
           </div>
         ) : null}
+
+        {hasVideo ? (
+          <div className={`post-videos ${post.postType === "reel" ? "reel-mode" : ""}`}>
+            {post.videos.map((video, index) => (
+              <video key={`${post._id}-video-${index}`} src={video.url || video} controls preload="metadata" />
+            ))}
+          </div>
+        ) : null}
+
+        {hasPoll ? (
+          <div className="post-poll">
+            {post.pollOptions.map((option, index) => (
+              <button key={`${post._id}-poll-${index}`} type="button">
+                {option.text} <span>{Number(option.voteCount || 0)} votes</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="post-stats">
         <span>{likeCount} likes</span>
         <span>{comments.length} comments</span>
-        <span>{post.shareCount || 0} shares</span>
+        <span>{shareCount} shares</span>
       </div>
 
       <div className="post-actions">
-        <button className={`action-btn ${liked ? "liked" : ""}`} onClick={handleLike}>
+        <button className={`action-btn ${liked ? "liked" : ""}`} onClick={handleLike} disabled={actionLoading === "like"}>
           {liked ? "Unlike" : "Like"}
         </button>
-        <button className="action-btn" onClick={() => setShowComments((current) => !current)}>
+        <button className="action-btn" onClick={toggleComments} disabled={actionLoading === "comments"}>
           Comment
         </button>
-        <button className="action-btn" onClick={handleShare}>
+        <button className="action-btn" onClick={handleShare} disabled={actionLoading === "share"}>
           Share
         </button>
         <button className={`action-btn ${saved ? "saved" : ""}`} onClick={handleSave}>
           {saved ? "Saved" : "Save"}
         </button>
+        {!isOwnPost ? (
+          <>
+            <button className="action-btn report" onClick={handleReport} disabled={actionLoading === "report"}>
+              Report
+            </button>
+            <button className="action-btn report" onClick={handleBlockUser} disabled={actionLoading === "block"}>
+              Block
+            </button>
+          </>
+        ) : null}
       </div>
+
+      {actionMessage ? <p className="post-action-message">{actionMessage}</p> : null}
 
       {showComments ? (
         <div className="comments-section">
@@ -204,14 +356,14 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers, typingUsers
                 }
               }}
             />
-            <button onClick={handleCommentSubmit} disabled={!commentText.trim()}>
-              Send
+            <button onClick={handleCommentSubmit} disabled={!commentText.trim() || actionLoading === "comment"}>
+              {actionLoading === "comment" ? "Sending..." : "Send"}
             </button>
           </div>
           <div className="comments-list">
             {comments.map((comment) => (
               <div key={comment._id} className="comment">
-                <img src={comment.author.avatar} alt={comment.author.name} />
+                <img src={getAvatarSrc(comment.author.avatar, comment.author.name)} alt={comment.author.name} />
                 <div className="comment-content">
                   <strong>{comment.author.name}</strong>
                   <p>{comment.content}</p>

@@ -14,6 +14,31 @@ const SocialPostSchema = new mongoose.Schema(
       maxlength: 5000,
       default: '',
     },
+    postType: {
+      type: String,
+      enum: ['text', 'image', 'video', 'reel', 'poll'],
+      default: 'text',
+      index: true,
+    },
+    category: {
+      type: String,
+      enum: ['Community', 'Reels', 'Polls', 'Business', 'Travel', 'Food', 'General'],
+      default: 'Community',
+      index: true,
+    },
+    pollOptions: [
+      {
+        text: {
+          type: String,
+          trim: true,
+          maxlength: 120,
+        },
+        voteCount: {
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
     images: [
       {
         url: {

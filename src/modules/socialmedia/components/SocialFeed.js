@@ -60,15 +60,35 @@ const SocialFeed = ({ realTimePosts, socket, onlineUsers, typingUsers }) => {
   const [scheduledPosts, setScheduledPosts] = useState([]);
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState("recent");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [statusMessage, setStatusMessage] = useState("");
   const [loadingFeed, setLoadingFeed] = useState(true);
+
+  const buildFeedPath = useCallback(() => {
+    const query = new URLSearchParams();
+
+    if (sortBy === "trending") {
+      query.set("sort", "trending");
+    }
+    if (categoryFilter !== "All") {
+      query.set("category", categoryFilter);
+    }
+    if (typeFilter !== "all") {
+      query.set("type", typeFilter);
+    }
+
+    const encoded = query.toString();
+    return encoded ? `/socialmedia/feed?${encoded}` : "/socialmedia/feed";
+  }, [categoryFilter, sortBy, typeFilter]);
 
   const loadSocialWorkspace = useCallback(async () => {
     setLoadingFeed(true);
 
     try {
+      const feedPath = buildFeedPath();
       const [feedResponse, draftsResponse, scheduledResponse] = await Promise.all([
-        apiCall("/socialmedia/feed", "GET"),
+        apiCall(feedPath, "GET"),
         apiCall("/socialmedia/posts/drafts", "GET"),
         apiCall("/socialmedia/posts/scheduled", "GET"),
       ]);
@@ -85,7 +105,7 @@ const SocialFeed = ({ realTimePosts, socket, onlineUsers, typingUsers }) => {
     } finally {
       setLoadingFeed(false);
     }
-  }, [apiCall, mockData?.socialMediaPosts]);
+  }, [apiCall, buildFeedPath, mockData?.socialMediaPosts]);
 
   useEffect(() => {
     loadSocialWorkspace();
@@ -100,15 +120,23 @@ const SocialFeed = ({ realTimePosts, socket, onlineUsers, typingUsers }) => {
     setPosts((current) => mergeUniquePosts(normalizedRealtimePosts, current));
   }, [realTimePosts]);
 
+  const filteredPosts = useMemo(() => {
+    return posts.filter((post) => {
+      const categoryMatch = categoryFilter === "All" || String(post.category || "Community") === categoryFilter;
+      const typeMatch = typeFilter === "all" || String(post.postType || "text") === typeFilter;
+      return categoryMatch && typeMatch;
+    });
+  }, [categoryFilter, posts, typeFilter]);
+
   const visiblePosts = useMemo(() => {
-    const sortedPosts = sortPosts(posts, sortBy);
+    const sortedPosts = sortPosts(filteredPosts, sortBy);
     return sortedPosts.slice(0, page * PAGE_SIZE);
-  }, [page, posts, sortBy]);
+  }, [filteredPosts, page, sortBy]);
 
   const hasMore = useMemo(() => {
-    const sortedPosts = sortPosts(posts, sortBy);
+    const sortedPosts = sortPosts(filteredPosts, sortBy);
     return sortedPosts.length > page * PAGE_SIZE;
-  }, [page, posts, sortBy]);
+  }, [filteredPosts, page, sortBy]);
 
   const handlePublishPost = async (postPayload) => {
     const response = await apiCall("/socialmedia/posts/create", "POST", postPayload);
@@ -192,6 +220,15 @@ const SocialFeed = ({ realTimePosts, socket, onlineUsers, typingUsers }) => {
     setPage(1);
   };
 
+  const creatorSnapshot = useMemo(
+    () => ({
+      posts: filteredPosts.length,
+      likes: filteredPosts.reduce((sum, post) => sum + Number(post.likeCount || 0), 0),
+      comments: filteredPosts.reduce((sum, post) => sum + Number(post.commentCount || 0), 0),
+    }),
+    [filteredPosts]
+  );
+
   return (
     <div className="social-feed">
       <div className="feed-header">
@@ -211,6 +248,58 @@ const SocialFeed = ({ realTimePosts, socket, onlineUsers, typingUsers }) => {
           >
             Trending
           </button>
+        </div>
+      </div>
+
+      <div className="feed-toolbar">
+        <div className="feed-filters">
+          {["All", "Community", "Reels", "Polls", "Business"].map((item) => (
+            <button
+              key={item}
+              className={`sort-btn ${categoryFilter === item ? "active" : ""}`}
+              onClick={() => {
+                setCategoryFilter(item);
+                setPage(1);
+              }}
+              type="button"
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        <div className="feed-type-filter">
+          <label htmlFor="feed-type-filter">Post Type</label>
+          <select
+            id="feed-type-filter"
+            value={typeFilter}
+            onChange={(event) => {
+              setTypeFilter(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="all">All</option>
+            <option value="text">Text</option>
+            <option value="image">Image</option>
+            <option value="video">Video</option>
+            <option value="reel">Reel</option>
+            <option value="poll">Poll</option>
+          </select>
+        </div>
+
+        <div className="feed-snapshot">
+          <div>
+            <strong>{creatorSnapshot.posts}</strong>
+            <span>Posts</span>
+          </div>
+          <div>
+            <strong>{creatorSnapshot.likes}</strong>
+            <span>Likes</span>
+          </div>
+          <div>
+            <strong>{creatorSnapshot.comments}</strong>
+            <span>Comments</span>
+          </div>
         </div>
       </div>
 

@@ -80,6 +80,59 @@ const HotelBooking = () => {
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(null);
+  const [hotels, setHotels] = useState([]);
+  const [hotelsLoading, setHotelsLoading] = useState(false);
+
+  const normalizeHotel = (hotel = {}) => ({
+    ...hotel,
+    id: hotel.id || hotel._id,
+    _id: hotel._id || hotel.id,
+    name: hotel.name || hotel.businessName || "Unnamed Property",
+    businessName: hotel.businessName || hotel.name || "Unnamed Property",
+    location: hotel.location || hotel.city || "",
+    type: hotel.type || hotel.propertyType || "Hotel",
+    propertyType: hotel.propertyType || hotel.type || "Hotel",
+    price: Number(hotel.price || hotel.pricePerNight || 0),
+    pricePerNight: Number(hotel.pricePerNight || hotel.price || 0),
+    rating: Number(hotel.rating || 0),
+    reviews: Number(hotel.reviews || 0),
+    rooms: Array.isArray(hotel.rooms) ? hotel.rooms : [],
+    images: Array.isArray(hotel.images) ? hotel.images : [],
+    amenities: Array.isArray(hotel.amenities) ? hotel.amenities : [],
+    verified: Boolean(hotel.verified || String(hotel.status || "").toLowerCase() === "approved"),
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    const loadHotels = async () => {
+      try {
+        setHotelsLoading(true);
+        const response = await apiCall("/hotelbooking/hotels", "GET", {
+          destination: searchLocation || undefined,
+          minPrice: 0,
+          maxPrice: budget,
+        });
+        const items = response?.data || response?.hotels || [];
+        if (mounted) {
+          setHotels(Array.isArray(items) ? items.map(normalizeHotel) : []);
+        }
+      } catch (error) {
+        console.warn("Hotel API unavailable, using local sample data:", error);
+        if (mounted) {
+          setHotels([]);
+        }
+      } finally {
+        if (mounted) {
+          setHotelsLoading(false);
+        }
+      }
+    };
+
+    loadHotels();
+    return () => {
+      mounted = false;
+    };
+  }, [apiCall, budget, searchLocation]);
 
   // Validate dates
   const isValidDateRange = useMemo(() => {
@@ -95,7 +148,10 @@ const HotelBooking = () => {
 
   // Filter hotels with availability checking
   const filteredHotels = useMemo(() => {
-    let filtered = SAMPLE_HOTELS.filter(hotel => {
+    const baseHotels = hotels.length > 0
+      ? hotels
+      : SAMPLE_HOTELS.map((hotel) => normalizeHotel(hotel));
+    let filtered = baseHotels.filter(hotel => {
       const locationMatch = !searchLocation || hotel.location.toLowerCase().includes(searchLocation.toLowerCase());
       const budgetMatch = hotel.price <= budget;
       const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(hotel.type);
@@ -116,7 +172,7 @@ const HotelBooking = () => {
     });
 
     return filtered;
-  }, [searchLocation, budget, selectedTypes, selectedAmenities, sortBy]);
+  }, [searchLocation, budget, selectedTypes, selectedAmenities, sortBy, hotels]);
 
   // Handle booking submission
   const handleBookingSubmit = async (bookingData) => {
@@ -125,17 +181,32 @@ const HotelBooking = () => {
       ...bookingData,
       _id: Date.now().toString(),
       userId,
-      status: bookingData.status || "confirmed",
+      status: bookingData.status || "pending",
+      bookingStatus: bookingData.bookingStatus || "Pending",
     };
 
     try {
-      const response = await apiCall("/hotelbookings/bookings", "POST", bookingData);
+      const response = await apiCall("/hotelbooking/bookings", "POST", {
+        hotelId: bookingData.hotelId,
+        hotelName: bookingData.hotelName,
+        location: bookingData.location,
+        roomType: bookingData.roomType,
+        guestName: bookingData.guestName,
+        guestEmail: bookingData.guestEmail,
+        guestPhone: bookingData.guestPhone,
+        checkInDate: bookingData.checkInDate,
+        checkOutDate: bookingData.checkOutDate,
+        numberOfGuests: bookingData.numberOfGuests,
+        numberOfRooms: bookingData.numberOfRooms || 1,
+        pricePerNight: bookingData.pricePerNight,
+        specialRequests: bookingData.specialRequests,
+      });
       const newBooking = response?.booking || response?.data?.booking || response?.data || response || fallbackBooking;
       const existingBookings = JSON.parse(localStorage.getItem(`bookings_${userId}`) || "[]");
       existingBookings.push(newBooking);
       localStorage.setItem(`bookings_${userId}`, JSON.stringify(existingBookings));
 
-      setBookingSuccess(`Booking confirmed for ${newBooking.hotelName}! Confirmation sent to ${newBooking.guestEmail || bookingData.guestEmail}`);
+      setBookingSuccess(`Booking submitted for ${newBooking.hotelName}. Confirmation sent to ${newBooking.guestEmail || bookingData.guestEmail}`);
       setTimeout(() => setBookingSuccess(null), 5000);
       setActiveTab("bookings");
     } catch (error) {
@@ -172,7 +243,7 @@ const HotelBooking = () => {
     }
     const nights = Math.max(1, Math.ceil((new Date(checkOut) - new Date(checkIn)) / (1000 * 60 * 60 * 24)));
     const totalPrice = hotel.price * nights;
-    const message = `Hi! I'm interested in booking at ${hotel.name}, ${hotel.location}.\n\nDetails:\nCheckCheck-in: ${new Date(checkIn).toLocaleDateString()}\nCheck-out: ${new Date(checkOut).toLocaleDateString()}\nNights: ${nights}\nGuests: ${guests}\nRoom Type: ${hotel.rooms?.[0]?.type || "Standard"}\nTotal: ₹${totalPrice.toLocaleString()}\n\nPlease confirm availability and send booking details.`;
+    const message = `Hi! I'm interested in booking at ${hotel.name}, ${hotel.location}.\n\nDetails:\nCheck-in: ${new Date(checkIn).toLocaleDateString()}\nCheck-out: ${new Date(checkOut).toLocaleDateString()}\nNights: ${nights}\nGuests: ${guests}\nRoom Type: ${hotel.rooms?.[0]?.type || "Standard"}\nTotal: ₹${totalPrice.toLocaleString()}\n\nPlease confirm availability and send booking details.`;
     const whatsappLink = `https://wa.me/${hotel.contact.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
     window.open(whatsappLink, "_blank");
   };
@@ -189,7 +260,6 @@ const HotelBooking = () => {
 
   // Determine if user should see admin panel (role check)
   const isAdmin = currentUser?.role === "admin" || currentUser?.registrationType === "admin";
-  const isPartner = currentUser?.role === "partner" || currentUser?.registrationType === "partner";
 
   return (
     <div className="hotel-booking-shell">
@@ -280,7 +350,7 @@ const HotelBooking = () => {
 
             <div className="hotel-booking-results">
               <div className="hotel-booking-results-header">
-                <h2>{filteredHotels.length} Properties Found</h2>
+                <h2>{filteredHotels.length} Properties Found {hotelsLoading ? "(syncing...)" : ""}</h2>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                   <option value="rating">Sort by Rating</option>
                   <option value="price-low">Price: Low to High</option>
@@ -345,3 +415,4 @@ const HotelBooking = () => {
 };
 
 export default HotelBooking;
+
