@@ -4,11 +4,19 @@
  */
 
 const request = require('supertest');
+const mongoose = require('mongoose');
 const app = require('../../server');
 const User = require('../../models/User');
 const SOSContact = require('../../models/SosContact');
 const SOSIncident = require('../../models/SosIncident');
 const TrackingLink = require('../../models/TrackingLink');
+
+const TEST_DB =
+  process.env.MONGODB_TEST_URI ||
+  process.env.TEST_MONGODB_URI ||
+  process.env.MONGODB_URI ||
+  process.env.DATABASE_URL ||
+  'mongodb://localhost:27017/sos-test';
 
 let authToken;
 let userId;
@@ -25,13 +33,20 @@ const generateAuthToken = async () => {
     password: 'Test@123456',
   });
   userId = user._id;
-  authToken = user.generateAuthToken();
+  authToken = userId.toString();
   return authToken;
 };
 
 describe('SOS Module Phase 1 Tests', () => {
   // Setup and teardown
   beforeAll(async () => {
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(TEST_DB, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+    }
+
     await generateAuthToken();
   });
 
@@ -41,6 +56,10 @@ describe('SOS Module Phase 1 Tests', () => {
     await SOSContact.deleteMany({});
     await SOSIncident.deleteMany({});
     await TrackingLink.deleteMany({});
+
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
   });
 
   // ==================== ENDPOINT 1: Send OTP ====================
@@ -113,12 +132,14 @@ describe('SOS Module Phase 1 Tests', () => {
     });
 
     it('should be rate limited after 5 attempts', async () => {
+      const limitedPhone = '9876543255';
+
       for (let i = 0; i < 5; i++) {
         await request(app)
           .post('/api/sos/send-contact-otp')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
-            phone: `98765432${i}0`,
+            phone: limitedPhone,
             name: `Contact ${i}`,
           });
       }
@@ -127,7 +148,7 @@ describe('SOS Module Phase 1 Tests', () => {
         .post('/api/sos/send-contact-otp')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
-          phone: '9876543255',
+          phone: limitedPhone,
           name: 'Contact 6',
         });
 
@@ -140,22 +161,20 @@ describe('SOS Module Phase 1 Tests', () => {
   describe('POST /api/sos/verify-contact-otp', () => {
     let testContactId;
     let correctOTP;
-
-    beforeAll(async () => {
-      // Create a contact with OTP
+    const createOtpContact = async (phone, name) => {
       const res = await request(app)
         .post('/api/sos/send-contact-otp')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({
-          phone: '8765432109',
-          name: 'Verify Test Contact',
-        });
+        .send({ phone, name });
 
-      testContactId = res.body.contactId;
+      const contact = await SOSContact.findById(res.body.contactId).select('+otp');
+      return { contactId: res.body.contactId, otp: contact?.otp };
+    };
 
-      // Get the OTP from database for testing
-      const contact = await SOSContact.findById(testContactId).select('+otp');
-      correctOTP = contact.otp;
+    beforeAll(async () => {
+      const seeded = await createOtpContact('8765432109', 'Verify Test Contact');
+      testContactId = seeded.contactId;
+      correctOTP = seeded.otp;
     });
 
     it('should verify correct OTP', async () => {
@@ -174,11 +193,12 @@ describe('SOS Module Phase 1 Tests', () => {
     });
 
     it('should fail with incorrect OTP', async () => {
+      const seeded = await createOtpContact('8765432110', 'Incorrect OTP Contact');
       const res = await request(app)
         .post('/api/sos/verify-contact-otp')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
-          contactId: testContactId,
+          contactId: seeded.contactId,
           otp: '000000',
         });
 
@@ -201,12 +221,14 @@ describe('SOS Module Phase 1 Tests', () => {
     });
 
     it('should fail after 3 wrong attempts', async () => {
+      const seeded = await createOtpContact('8765432111', 'Max Attempt Contact');
+
       for (let i = 0; i < 3; i++) {
         await request(app)
           .post('/api/sos/verify-contact-otp')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
-            contactId: testContactId,
+            contactId: seeded.contactId,
             otp: '000000',
           });
       }
@@ -215,7 +237,7 @@ describe('SOS Module Phase 1 Tests', () => {
         .post('/api/sos/verify-contact-otp')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
-          contactId: testContactId,
+          contactId: seeded.contactId,
           otp: '000000',
         });
 
@@ -438,31 +460,27 @@ describe('SOS Module Phase 1 Tests', () => {
     });
 
     it('should be rate limited after 3 alerts per minute', async () => {
+      const rateLimitedPayload = {
+        reason: 'Medical',
+        latitude: 13.1111,
+        longitude: 77.6111,
+        accuracy: 25,
+        channels: ['SMS'],
+      };
+
       // Send 3 alerts
       for (let i = 0; i < 3; i++) {
         await request(app)
           .post('/api/sos/send-alert')
           .set('Authorization', `Bearer ${authToken}`)
-          .send({
-            reason: 'Medical',
-            latitude: 12.9716 + i * 0.01,
-            longitude: 77.5946 + i * 0.01,
-            accuracy: 25,
-            channels: ['SMS'],
-          });
+          .send(rateLimitedPayload);
       }
 
       // 4th alert should be rate limited
       const res = await request(app)
         .post('/api/sos/send-alert')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({
-          reason: 'Medical',
-          latitude: 13.0,
-          longitude: 77.6,
-          accuracy: 25,
-          channels: ['SMS'],
-        });
+        .send(rateLimitedPayload);
 
       expect(res.status).toBe(429);
     });

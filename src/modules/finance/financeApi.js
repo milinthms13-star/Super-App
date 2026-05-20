@@ -31,6 +31,11 @@ export const financeApi = {
     return response.data;
   },
 
+  getEmiQuote: async (params = {}) => {
+    const response = await axios.get(`${FINANCE_API_BASE}/emi${buildQueryString(params)}`);
+    return response.data;
+  },
+
   createLead: async (formData) => {
     const response = await axios.post(`${FINANCE_API_BASE}/leads`, formData, {
       headers: { "Content-Type": "multipart/form-data" },

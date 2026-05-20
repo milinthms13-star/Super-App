@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getStoredAuthToken } from '../../utils/auth';
 import {
   DANCE_STAGE_MODES,
@@ -21,10 +21,16 @@ const processingSteps = [
 const DanceDuetQuickStudio = () => {
   const [video1File, setVideo1File] = useState(null);
   const [video2File, setVideo2File] = useState(null);
+  const [musicFile, setMusicFile] = useState(null);
   const [backgroundFile, setBackgroundFile] = useState(null);
   const [stageMode, setStageMode] = useState('auto');
   const [outputFormat, setOutputFormat] = useState('reel');
   const [backgroundColor, setBackgroundColor] = useState('black');
+  const [delayB, setDelayB] = useState(0);
+  const [trimStart1, setTrimStart1] = useState(0);
+  const [trimEnd1, setTrimEnd1] = useState(0);
+  const [trimStart2, setTrimStart2] = useState(0);
+  const [trimEnd2, setTrimEnd2] = useState(0);
   const [removeBackground, setRemoveBackground] = useState(false);
   const [syncAudio, setSyncAudio] = useState(true);
   const [mirrorSecondVideo, setMirrorSecondVideo] = useState(false);
@@ -34,6 +40,10 @@ const DanceDuetQuickStudio = () => {
   const [warning, setWarning] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [previewVideo1Url, setPreviewVideo1Url] = useState('');
+  const [previewVideo2Url, setPreviewVideo2Url] = useState('');
+  const previewRef1 = useRef(null);
+  const previewRef2 = useRef(null);
 
   const readiness = useMemo(
     () => getDanceReadinessScore({ video1File, video2File, removeBackground, stageMode, outputFormat }),
@@ -41,6 +51,26 @@ const DanceDuetQuickStudio = () => {
   );
 
   const canMerge = video1File && video2File && !isProcessing;
+
+  useEffect(() => {
+    if (!video1File) {
+      setPreviewVideo1Url('');
+      return undefined;
+    }
+    const objectUrl = URL.createObjectURL(video1File);
+    setPreviewVideo1Url(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [video1File]);
+
+  useEffect(() => {
+    if (!video2File) {
+      setPreviewVideo2Url('');
+      return undefined;
+    }
+    const objectUrl = URL.createObjectURL(video2File);
+    setPreviewVideo2Url(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [video2File]);
 
   const handleVideoChange = (setter) => (event) => {
     const file = event.target.files?.[0] || null;
@@ -61,6 +91,22 @@ const DanceDuetQuickStudio = () => {
     });
   };
 
+  const previewSync = () => {
+    if (!previewRef1.current || !previewRef2.current) {
+      setErrorMessage('Upload both videos to preview sync.');
+      return;
+    }
+    const delay = Math.max(0, Number(delayB || 0));
+    previewRef1.current.pause();
+    previewRef2.current.pause();
+    previewRef1.current.currentTime = Math.max(0, Number(trimStart1 || 0));
+    previewRef2.current.currentTime = Math.max(0, Number(trimStart2 || 0));
+    previewRef1.current.play().catch(() => undefined);
+    window.setTimeout(() => {
+      previewRef2.current?.play().catch(() => undefined);
+    }, delay * 1000);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setErrorMessage('');
@@ -75,9 +121,15 @@ const DanceDuetQuickStudio = () => {
       formData.append('video1', video1File);
       formData.append('video2', video2File);
       if (backgroundFile) formData.append('backgroundImage', backgroundFile);
+      if (musicFile) formData.append('music', musicFile);
       formData.append('mode', stageMode);
       formData.append('outputFormat', outputFormat);
       formData.append('backgroundColor', backgroundColor);
+      formData.append('delayB', String(delayB || 0));
+      formData.append('trimStart1', String(trimStart1 || 0));
+      formData.append('trimEnd1', String(trimEnd1 || 0));
+      formData.append('trimStart2', String(trimStart2 || 0));
+      formData.append('trimEnd2', String(trimEnd2 || 0));
       formData.append('removeBackground', String(removeBackground));
       formData.append('syncAudio', String(syncAudio));
       formData.append('mirrorSecondVideo', String(mirrorSecondVideo));
@@ -135,6 +187,12 @@ const DanceDuetQuickStudio = () => {
             <strong>{video2File ? video2File.name : 'Upload video 2'}</strong>
             {video2File && <small>{formatFileSize(video2File.size)}</small>}
           </label>
+
+          <label className="dance-duet-upload-box">
+            <span>Optional background music</span>
+            <input type="file" accept="audio/*" onChange={(event) => setMusicFile(event.target.files?.[0] || null)} />
+            <strong>{musicFile ? musicFile.name : 'Upload music (optional)'}</strong>
+          </label>
         </div>
 
         <div className="dance-duet-options-grid">
@@ -144,6 +202,18 @@ const DanceDuetQuickStudio = () => {
               {DANCE_STAGE_MODES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <small>{DANCE_STAGE_MODES.find((item) => item.value === stageMode)?.helper}</small>
+          </label>
+
+          <label>
+            Dancer B delay (seconds)
+            <input
+              type="number"
+              min="0"
+              max="10"
+              step="0.1"
+              value={delayB}
+              onChange={(event) => setDelayB(event.target.value)}
+            />
           </label>
 
           <label>
@@ -168,6 +238,22 @@ const DanceDuetQuickStudio = () => {
             Optional stage background
             <input type="file" accept="image/png,image/jpeg" onChange={(event) => setBackgroundFile(event.target.files?.[0] || null)} />
           </label>
+
+          <label>
+            Trim dancer 1 start/end (sec)
+            <div className="dance-duet-trim-row">
+              <input type="number" min="0" max="120" step="0.1" value={trimStart1} onChange={(event) => setTrimStart1(event.target.value)} />
+              <input type="number" min="0" max="120" step="0.1" value={trimEnd1} onChange={(event) => setTrimEnd1(event.target.value)} />
+            </div>
+          </label>
+
+          <label>
+            Trim dancer 2 start/end (sec)
+            <div className="dance-duet-trim-row">
+              <input type="number" min="0" max="120" step="0.1" value={trimStart2} onChange={(event) => setTrimStart2(event.target.value)} />
+              <input type="number" min="0" max="120" step="0.1" value={trimEnd2} onChange={(event) => setTrimEnd2(event.target.value)} />
+            </div>
+          </label>
         </div>
 
         <div className="dance-duet-switch-row">
@@ -191,6 +277,7 @@ const DanceDuetQuickStudio = () => {
         )}
 
         <div className="dance-duet-action-row">
+          <button type="button" onClick={previewSync} disabled={!video1File || !video2File || isProcessing}>Preview Sync</button>
           <button type="submit" disabled={!canMerge}>{isProcessing ? 'Creating...' : 'Create 10/10 Dance Duet'}</button>
           <p>{status}</p>
         </div>
@@ -198,6 +285,17 @@ const DanceDuetQuickStudio = () => {
         {warning && <div className="dance-duet-warning">⚠️ {warning}</div>}
         {errorMessage && <div className="dance-duet-error">{errorMessage}</div>}
       </form>
+
+      <section className={`dance-duet-preview-grid ${stageMode === 'vertical-reel' ? 'vertical' : ''}`}>
+        <article>
+          <h3>Dancer A Preview</h3>
+          {previewVideo1Url ? <video ref={previewRef1} controls src={previewVideo1Url} /> : <p>Upload first video.</p>}
+        </article>
+        <article>
+          <h3>Dancer B Preview</h3>
+          {previewVideo2Url ? <video ref={previewRef2} controls src={previewVideo2Url} /> : <p>Upload second video.</p>}
+        </article>
+      </section>
 
       {outputUrl && (
         <section className="dance-duet-result-card">

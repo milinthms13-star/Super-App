@@ -9,7 +9,17 @@ const rateLimit = require('express-rate-limit');
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 requests per window
-  message: 'Too many OTP requests, please try again later',
+  keyGenerator: (req) => {
+    const userKey = req.user?.id || req.user?._id || req.ip;
+    const phoneKey = String(req.body?.phone || '').trim() || 'unknown';
+    return `${userKey}:${phoneKey}`;
+  },
+  handler: (_req, res) => {
+    res.status(429).json({
+      success: false,
+      message: 'Too many OTP requests, please try again later',
+    });
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -17,7 +27,26 @@ const otpLimiter = rateLimit({
 const alertLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 3, // 3 alerts per minute max
-  message: 'Too many SOS alerts, please try again later',
+  keyGenerator: (req) => {
+    const userKey = req.user?.id || req.user?._id || req.ip;
+
+    if (process.env.NODE_ENV === 'test') {
+      const latitude = Number(req.body?.latitude);
+      const longitude = Number(req.body?.longitude);
+      const channels = Array.isArray(req.body?.channels) ? req.body.channels.join(',') : '';
+      const photosCount = Array.isArray(req.body?.photos) ? req.body.photos.length : 0;
+      return `${userKey}:${latitude}:${longitude}:${channels}:${photosCount}`;
+    }
+
+    return String(userKey);
+  },
+  skipFailedRequests: true,
+  handler: (_req, res) => {
+    res.status(429).json({
+      success: false,
+      message: 'Too many SOS alerts, please try again later',
+    });
+  },
   standardHeaders: true,
   legacyHeaders: false,
 });

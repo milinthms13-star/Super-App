@@ -1,0 +1,149 @@
+.kd10-shell {
+  margin-top: 1rem;
+}
+
+.kd10-hero {
+  border: 1px solid #dbc9ff;
+  border-radius: 18px;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(216, 180, 254, 0.35), transparent 40%),
+    radial-gradient(circle at 88% 18%, rgba(251, 207, 232, 0.28), transparent 42%),
+    linear-gradient(145deg, #fdf4ff 0%, #eff6ff 100%);
+}
+
+.kd10-tag {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #7e22ce;
+  text-transform: uppercase;
+}
+
+.kd10-hero h2 {
+  margin: 0.3rem 0 0.4rem;
+  color: #1f1147;
+}
+
+.kd10-hero p {
+  margin: 0;
+  color: #4c3f6b;
+}
+
+.kd10-status {
+  margin-top: 0.7rem;
+  border: 1px solid;
+  border-radius: 12px;
+  padding: 0.6rem 0.8rem;
+  font-weight: 600;
+}
+
+.kd10-status.success {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.12);
+  color: #14532d;
+}
+
+.kd10-status.error {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(248, 113, 113, 0.12);
+  color: #991b1b;
+}
+
+.kd10-grid {
+  margin-top: 0.8rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.kd10-card {
+  border: 1px solid #d8e3f3;
+  border-radius: 16px;
+  padding: 0.9rem;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.kd10-card h3 {
+  margin-top: 0;
+}
+
+.kd10-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+  font-weight: 600;
+}
+
+.kd10-card p {
+  color: #4b5563;
+}
+
+.kd10-upload {
+  display: block;
+  border: 2px dashed #c084fc;
+  border-radius: 12px;
+  padding: 0.65rem;
+  text-align: center;
+  color: #6b21a8;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 0.3rem;
+}
+
+.kd10-card input,
+.kd10-card textarea {
+  border: 1px solid #cfdaee;
+  border-radius: 10px;
+  padding: 0.6rem 0.65rem;
+  font: inherit;
+}
+
+.kd10-card textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.kd10-card audio {
+  width: 100%;
+}
+
+.kd10-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.kd10-actions button,
+.kd10-export button {
+  border: 1px solid #7e22ce;
+  background: #f5ebff;
+  color: #5b1b9d;
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.kd10-actions button:disabled,
+.kd10-export button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kd10-export {
+  margin-top: 0.8rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 980px) {
+  .kd10-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

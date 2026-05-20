@@ -3,6 +3,7 @@ import axios from "axios";
 import { io } from "socket.io-client";
 import { BACKEND_BASE_URL, buildApiUrl } from "../../utils/api";
 import { getStoredAuthToken } from "../../utils/auth";
+import KaraokeDuetStudio10 from "./KaraokeDuetStudio10";
 import "./RemoteKaraokeDuet.css";
 
 const DEFAULT_LYRICS = `0|Duet starts now...
@@ -556,6 +557,7 @@ const RemoteKaraokeDuet = () => {
       </header>
 
       {status.text ? <div className={`karaoke-status ${status.type}`}>{status.text}</div> : null}
+      <KaraokeDuetStudio10 />
 
       <div className="karaoke-grid">
         <article className="karaoke-card">

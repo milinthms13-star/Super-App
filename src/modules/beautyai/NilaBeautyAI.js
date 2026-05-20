@@ -16,6 +16,7 @@ const NilaBeautyAI = () => {
   const [todaysTip, setTodaysTip] = useState("");
   const [planBundle, setPlanBundle] = useState(null);
   const [progressLogs, setProgressLogs] = useState([]);
+  const [savedPlans, setSavedPlans] = useState([]);
   const [isAdminControlsVisible, setIsAdminControlsVisible] = useState(false);
   const [subscriptionRules, setSubscriptionRules] = useState(null);
   const [adminTipForm, setAdminTipForm] = useState({
@@ -74,6 +75,17 @@ const NilaBeautyAI = () => {
     });
   }, [request, withBusy]);
 
+  const loadSavedPlans = useCallback(async () => {
+    await withBusy("saved-plans", async () => {
+      try {
+        const response = await request.get(buildApiUrl("/beauty-ai/plans/my"));
+        setSavedPlans(Array.isArray(response.data?.data) ? response.data.data : []);
+      } catch (_error) {
+        setSavedPlans([]);
+      }
+    });
+  }, [request, withBusy]);
+
   const loadAdminSettings = useCallback(async () => {
     await withBusy("admin-settings", async () => {
       try {
@@ -89,8 +101,9 @@ const NilaBeautyAI = () => {
   useEffect(() => {
     loadTips();
     loadProgress();
+    loadSavedPlans();
     loadAdminSettings();
-  }, [loadAdminSettings, loadProgress, loadTips]);
+  }, [loadAdminSettings, loadProgress, loadSavedPlans, loadTips]);
 
   const handlePlanReady = useCallback(
     (bundle) => {
@@ -98,6 +111,56 @@ const NilaBeautyAI = () => {
       loadProgress();
     },
     [loadProgress]
+  );
+
+  const saveCurrentPlan = useCallback(
+    async (bundle) => {
+      const source = bundle || planBundle;
+      if (!source?.plan) {
+        pushStatus("error", "Generate a plan before saving.");
+        return;
+      }
+      await withBusy("save-plan", async () => {
+        try {
+          const profile = source.profile || source.form || {};
+          const payload = {
+            gender: profile.gender || "",
+            age: profile.age || null,
+            skinType: profile.skinType || "",
+            hairType: profile.hairType || "",
+            budget: profile.budget || "",
+            language: profile.language || "en",
+            selectedConcerns: profile.selectedConcerns || [],
+            photoUrl: source.selfiePreview || "",
+            photoName: source.selfieMeta?.fileName || source.selfieFile?.name || "",
+            plan: source.plan,
+            eventType: profile.eventType || "daily-glow",
+            selfieSignals: source.selfieSignals || {},
+          };
+          await request.post(buildApiUrl("/beauty-ai/plans"), payload);
+          pushStatus("success", "Beauty plan saved.");
+          loadSavedPlans();
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to save beauty plan.");
+        }
+      });
+    },
+    [loadSavedPlans, planBundle, pushStatus, request, withBusy]
+  );
+
+  const archivePlan = useCallback(
+    async (planId) => {
+      await withBusy(`archive-${planId}`, async () => {
+        try {
+          await request.put(buildApiUrl(`/beauty-ai/plans/${encodeURIComponent(planId)}/archive`));
+          pushStatus("success", "Beauty plan archived.");
+          loadSavedPlans();
+        } catch (error) {
+          pushStatus("error", error?.response?.data?.message || "Failed to archive beauty plan.");
+        }
+      });
+    },
+    [loadSavedPlans, pushStatus, request, withBusy]
   );
 
   const handleBookSalon = useCallback(
@@ -172,6 +235,7 @@ const NilaBeautyAI = () => {
         onPlanReady={handlePlanReady}
         onBookSalon={handleBookSalon}
         onOrderProducts={handleOrderProducts}
+        onSavePlan={saveCurrentPlan}
         pushStatus={pushStatus}
       />
 
@@ -183,6 +247,36 @@ const NilaBeautyAI = () => {
         pushStatus={pushStatus}
         onEntriesUpdate={() => {}}
       />
+
+      <section className="beauty-card">
+        <h2>Saved Beauty Plans</h2>
+        {busyKey === "saved-plans" ? <p>Loading plans...</p> : null}
+        {!savedPlans.length ? <p>No saved beauty plans yet.</p> : null}
+        <div className="beauty-saved-plan-grid">
+          {savedPlans.map((entry) => (
+            <article key={entry._id} className="beauty-saved-plan-card">
+              <h3>{entry?.plan?.title || "Beauty Plan"}</h3>
+              <p>
+                {entry.skinType || "Skin type N/A"} | {entry.hairType || "Hair type N/A"} |{" "}
+                {(entry.selectedConcerns || []).join(", ") || "No concerns selected"}
+              </p>
+              <p>Status: {entry.status || "Active"}</p>
+              <p>Saved: {entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : "N/A"}</p>
+              {entry.photoUrl ? <img src={entry.photoUrl} alt="Saved beauty plan selfie" /> : null}
+              {entry.status !== "Archived" ? (
+                <button
+                  type="button"
+                  className="beauty-primary"
+                  onClick={() => archivePlan(entry._id)}
+                  disabled={busyKey === `archive-${entry._id}`}
+                >
+                  {busyKey === `archive-${entry._id}` ? "Archiving..." : "Archive"}
+                </button>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="beauty-card">
         <h2>Safety and Do-Not-Use Guidance</h2>

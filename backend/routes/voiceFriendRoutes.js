@@ -165,9 +165,19 @@ router.post('/message', validateVoiceFriendSession, messageRateLimiter, async (r
       scenario: req.body?.scenario,
     });
 
+    const reply =
+      result?.reply ||
+      result?.response ||
+      result?.message ||
+      result?.text ||
+      'I am listening. Tell me more about what happened.';
+
     res.json({
       success: true,
-      data: result,
+      data: {
+        ...result,
+        reply,
+      },
       message: 'Voice Friend response generated',
     });
   } catch (error) {

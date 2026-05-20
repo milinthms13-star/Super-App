@@ -5,6 +5,7 @@ import DoctorConsultation from "./components/DoctorConsultation";
 import ElderlyCare from "./components/ElderlyCare";
 import EmergencySOS from "./components/EmergencySOS";
 import FamilyProfiles from "./components/FamilyProfiles";
+import Healthcare10Home from "./Healthcare10Home";
 import HealthcareHero from "./components/HealthcareHero";
 import HealthcareNav from "./components/HealthcareNav";
 import LabBooking from "./components/LabBooking";
@@ -21,7 +22,7 @@ import {
 import { healthcareApi } from "./services/healthcareApi";
 
 const Healthcare = () => {
-  const [activeSection, setActiveSection] = useState("consultation");
+  const [activeSection, setActiveSection] = useState("home");
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -37,6 +38,14 @@ const Healthcare = () => {
   const [notifications, setNotifications] = useState([]);
   const [partnerApplications, setPartnerApplications] = useState([]);
   const [partnerDashboard, setPartnerDashboard] = useState(null);
+  const [dashboardSummary, setDashboardSummary] = useState({
+    appointments: 0,
+    pharmacyOrders: 0,
+    records: 0,
+    reminders: 0,
+    emergencyCases: 0,
+    healthScore: 42,
+  });
   const [pharmacyOrders, setPharmacyOrders] = useState([]);
   const [adminApplications, setAdminApplications] = useState([]);
   const [recordAuditLog, setRecordAuditLog] = useState([]);
@@ -90,6 +99,15 @@ const Healthcare = () => {
       setPartnerApplications(Array.isArray(response.partnerApplications) ? response.partnerApplications : []);
       setPharmacyOrders(Array.isArray(response.pharmacyOrders) ? response.pharmacyOrders : []);
       setPartnerDashboard(response.partnerDashboard || null);
+      const summaryResponse = await healthcareApi.getHealthcareSummary();
+      setDashboardSummary({
+        appointments: Number(summaryResponse?.appointments ?? 0),
+        pharmacyOrders: Number(summaryResponse?.pharmacyOrders ?? 0),
+        records: Number(summaryResponse?.records ?? 0),
+        reminders: Number(summaryResponse?.reminders ?? 0),
+        emergencyCases: Number(summaryResponse?.emergencyCases ?? 0),
+        healthScore: Number(summaryResponse?.healthScore ?? 42),
+      });
     } catch (error) {
       setErrorMessage(
         error?.response?.data?.message || error?.message || "Unable to load healthcare data."
@@ -130,6 +148,26 @@ const Healthcare = () => {
       setAdminApplications(Array.isArray(rows) ? rows : []);
     });
   }, [isAdmin]);
+
+  const handleSelectPrimaryAction = useCallback((section) => {
+    if (section === "doctor") {
+      setActiveSection("consultation");
+      return;
+    }
+    if (section === "lab") {
+      setActiveSection("lab");
+      return;
+    }
+    if (section === "pharmacy") {
+      setActiveSection("pharmacy");
+      return;
+    }
+    if (section === "emergency") {
+      setActiveSection("emergency");
+      return;
+    }
+    setActiveSection(section);
+  }, []);
 
   const handleCreateAppointment = async (payload) => {
     const lifecycleSeed =
@@ -600,6 +638,20 @@ const Healthcare = () => {
     "Self",
     ...familyProfiles.map((profile) => profile.name || profile.relation).filter(Boolean),
   ];
+
+  if (activeSection === "home") {
+    return (
+      <div className="healthcare-shell">
+        <Healthcare10Home
+          onSelect={handleSelectPrimaryAction}
+          summary={dashboardSummary}
+          recentOrders={pharmacyOrders}
+          loading={loading}
+          errorMessage={errorMessage}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="healthcare-shell">

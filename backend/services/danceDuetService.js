@@ -24,6 +24,11 @@ const safeMode = (value = 'auto') => {
   return allowed.includes(String(value)) ? String(value) : 'auto';
 };
 const safeFormat = (value = 'reel') => (String(value) === 'landscape' ? 'landscape' : 'reel');
+const toNumber = (value, fallback = 0) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+const safeSeconds = (value, min = 0, max = 60) => Math.max(min, Math.min(max, toNumber(value, 0)));
 
 const saveUploadedFile = async (buffer, filename, folder = 'inputs') => {
   await ensureUploadsRoot();
@@ -45,18 +50,64 @@ const canvasByFormat = (format) => format === 'landscape'
   ? { width: 1280, height: 720, dancerWidth: 560, dancerHeight: 680 }
   : { width: 720, height: 1280, dancerWidth: 620, dancerHeight: 580 };
 
-const buildDancerFilter = ({ inputIndex, label, width, height, removeBackground, chromaColor, mirror }) => {
+const buildDancerFilter = ({
+  inputIndex,
+  label,
+  width,
+  height,
+  removeBackground,
+  chromaColor,
+  mirror,
+  trimStart = 0,
+  trimEnd = 0,
+  delaySeconds = 0,
+}) => {
+  const trimDuration = trimEnd > trimStart ? `trim=start=${trimStart}:end=${trimEnd},setpts=PTS-STARTPTS,` : '';
+  const delayPad = delaySeconds > 0 ? `tpad=start_duration=${delaySeconds},` : '';
   const chroma = removeBackground ? `chromakey=${chromaColor}:0.28:0.12,format=rgba,` : '';
   const flip = mirror ? 'hflip,' : '';
-  return `[${inputIndex}:v]${flip}${chroma}scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1[${label}]`;
+  return `[${inputIndex}:v]${trimDuration}${delayPad}${flip}${chroma}scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1[${label}]`;
 };
 
-const buildStageFilter = ({ mode, format, removeBackground, chromaColor, mirrorSecondVideo }) => {
+const buildStageFilter = ({
+  mode,
+  format,
+  removeBackground,
+  chromaColor,
+  mirrorSecondVideo,
+  secondVideoDelaySeconds = 0,
+  trimStart1 = 0,
+  trimEnd1 = 0,
+  trimStart2 = 0,
+  trimEnd2 = 0,
+}) => {
   const canvas = canvasByFormat(format);
   const { width, height, dancerWidth, dancerHeight } = canvas;
   const filters = [
-    buildDancerFilter({ inputIndex: 0, label: 'v0', width: dancerWidth, height: dancerHeight, removeBackground, chromaColor, mirror: false }),
-    buildDancerFilter({ inputIndex: 1, label: 'v1', width: dancerWidth, height: dancerHeight, removeBackground, chromaColor, mirror: mirrorSecondVideo }),
+    buildDancerFilter({
+      inputIndex: 0,
+      label: 'v0',
+      width: dancerWidth,
+      height: dancerHeight,
+      removeBackground,
+      chromaColor,
+      mirror: false,
+      trimStart: trimStart1,
+      trimEnd: trimEnd1,
+      delaySeconds: 0,
+    }),
+    buildDancerFilter({
+      inputIndex: 1,
+      label: 'v1',
+      width: dancerWidth,
+      height: dancerHeight,
+      removeBackground,
+      chromaColor,
+      mirror: mirrorSecondVideo,
+      trimStart: trimStart2,
+      trimEnd: trimEnd2,
+      delaySeconds: secondVideoDelaySeconds,
+    }),
     `[2:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1[bgout]`,
   ];
 
@@ -87,12 +138,18 @@ const mergeDanceDuet = async ({
   video1Buffer,
   video2Buffer,
   backgroundBuffer,
+  musicBuffer,
   mode = 'auto',
   outputFormat = 'reel',
   backgroundColor = 'black',
   removeBackground = false,
   syncAudio = true,
   mirrorSecondVideo = false,
+  secondVideoDelaySeconds = 0,
+  trimStart1 = 0,
+  trimEnd1 = 0,
+  trimStart2 = 0,
+  trimEnd2 = 0,
 }) => {
   if (!video1Buffer || !video2Buffer) throw new Error('Both dance videos are required.');
 
@@ -100,6 +157,7 @@ const mergeDanceDuet = async ({
   await ensureUploadsRoot();
   const video1Path = await saveUploadedFile(video1Buffer, `${sessionId}-video1.mp4`, 'inputs');
   const video2Path = await saveUploadedFile(video2Buffer, `${sessionId}-video2.mp4`, 'inputs');
+  const musicPath = musicBuffer ? await saveUploadedFile(musicBuffer, `${sessionId}-music.mp3`, 'music') : null;
   const outputFolder = path.join(uploadsRoot, 'outputs');
   await mkdir(outputFolder, { recursive: true });
   const outputFilename = `dance-duet-${sessionId}.mp4`;
@@ -122,6 +180,11 @@ const mergeDanceDuet = async ({
     removeBackground: boolValue(removeBackground),
     chromaColor,
     mirrorSecondVideo: boolValue(mirrorSecondVideo),
+    secondVideoDelaySeconds: safeSeconds(secondVideoDelaySeconds, 0, 10),
+    trimStart1: safeSeconds(trimStart1, 0, 120),
+    trimEnd1: safeSeconds(trimEnd1, 0, 120),
+    trimStart2: safeSeconds(trimStart2, 0, 120),
+    trimEnd2: safeSeconds(trimEnd2, 0, 120),
   });
 
   const ffmpegArgs = [
@@ -129,9 +192,10 @@ const mergeDanceDuet = async ({
     '-i', video1Path,
     '-i', video2Path,
     ...bgInput,
+    ...(musicPath ? ['-i', musicPath] : []),
     '-filter_complex', filterComplex,
     '-map', '[outv]',
-    ...(boolValue(syncAudio) ? ['-map', '0:a?'] : ['-an']),
+    ...(musicPath ? ['-map', '3:a'] : boolValue(syncAudio) ? ['-map', '0:a?'] : ['-an']),
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-crf', '22',

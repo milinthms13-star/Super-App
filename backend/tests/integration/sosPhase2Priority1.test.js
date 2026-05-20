@@ -11,7 +11,13 @@ const SOSIncident = require('../../models/SosIncident');
 const SOSContact = require('../../models/SosContact');
 const AudioRecording = require('../../models/AudioRecording');
 const SpamReport = require('../../models/SpamReport');
-const { generateToken } = require('../../middleware/auth');
+
+const TEST_DB =
+  process.env.MONGODB_TEST_URI ||
+  process.env.TEST_MONGODB_URI ||
+  process.env.MONGODB_URI ||
+  process.env.DATABASE_URL ||
+  'mongodb://localhost:27017/sos-test';
 
 // Dummy audio data (base64 encoded WAV)
 const DUMMY_AUDIO_BASE64 = 'UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQIAAAAAAA==';
@@ -23,6 +29,13 @@ describe('Phase 2: Audio Recording & Spam Detection Tests', () => {
   let incidentId;
 
   beforeAll(async () => {
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(TEST_DB, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      });
+    }
+
     // Create test user
     testUser = await User.create({
       name: 'Test Audio User',
@@ -31,7 +44,7 @@ describe('Phase 2: Audio Recording & Spam Detection Tests', () => {
     });
 
     userId = testUser._id;
-    authToken = generateToken(userId);
+    authToken = userId.toString();
   });
 
   afterAll(async () => {
@@ -40,6 +53,10 @@ describe('Phase 2: Audio Recording & Spam Detection Tests', () => {
     await SOSIncident.deleteMany({ userId });
     await AudioRecording.deleteMany({ userId });
     await SpamReport.deleteMany({ userId });
+
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
   });
 
   describe('Audio Recording Feature', () => {
@@ -150,7 +167,7 @@ describe('Phase 2: Audio Recording & Spam Detection Tests', () => {
     });
 
     test('GET /audio/:incidentId - Reject unauthorized access', async () => {
-      const fakeToken = generateToken(new mongoose.Types.ObjectId());
+      const fakeToken = new mongoose.Types.ObjectId().toString();
       const response = await request(app)
         .get(`/api/sos/audio/${incidentId}`)
         .set('Authorization', `Bearer ${fakeToken}`);

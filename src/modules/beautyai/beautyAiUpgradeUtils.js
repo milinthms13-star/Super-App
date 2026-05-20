@@ -14,6 +14,17 @@ export const BEAUTY_EVENTS = [
   { value: "men-grooming", label: "Men grooming" },
 ];
 
+export const BEAUTY_CONCERNS = [
+  "Acne",
+  "Dark Spots",
+  "Pigmentation",
+  "Dry Skin",
+  "Oily Skin",
+  "Dandruff",
+  "Hair Fall",
+  "Frizz",
+];
+
 export const DEFAULT_WEEK = Array.from({ length: 7 }, (_, index) => ({
   day: index + 1,
   completed: false,
@@ -24,9 +35,13 @@ export const DEFAULT_WEEK = Array.from({ length: 7 }, (_, index) => ({
 export const buildBeautyRequest = (form, selfieMeta = {}, selfieSignals = {}) => ({
   language: form.language,
   concern: form.concern,
+  selectedConcerns: Array.isArray(form.selectedConcerns) ? form.selectedConcerns : [],
+  gender: String(form.gender || ""),
+  age: Number(form.age || 0) || null,
   budget: form.budget,
   eventType: form.eventType,
   skinType: form.skinType,
+  hairType: form.hairType,
   notes: String(form.notes || "").trim(),
   preference: "balanced",
   safety: {
@@ -91,6 +106,11 @@ export const getBeautyPlanFallback = (form, score = 70) => ({
     textByLanguage(form.language, "ഉറങ്ങുന്നതിന് മുമ്പ് മുഖം വൃത്തിയാക്കുക", "Clean your face before sleep"),
     textByLanguage(form.language, "രാത്രിയിൽ routine ലളിതമാക്കുക", "Keep your night routine simple"),
     textByLanguage(form.language, "7 ദിവസത്തിന് ശേഷം progress photo എടുക്കുക", "Take a progress photo after 7 days"),
+  ],
+  hair: [
+    textByLanguage(form.language, "Mild shampoo routine", "Mild shampoo routine"),
+    textByLanguage(form.language, "Condition hair lengths", "Condition hair lengths"),
+    textByLanguage(form.language, "Consult a doctor if hair fall is severe", "Consult a doctor if hair fall is severe"),
   ],
   avoid: [
     "Do not use steroid creams without dermatologist advice.",

@@ -59,6 +59,26 @@ const normalizeArrayField = (value = '') =>
         .map((item) => item.trim())
         .filter(Boolean);
 
+const normalizeSkill = (value = '') => String(value || '').trim().toLowerCase();
+
+const calculateMatchScore = (jobSkills = [], applicantSkills = []) => {
+  const normalizedJobSkills = normalizeArrayField(jobSkills).map(normalizeSkill).filter(Boolean);
+  const normalizedApplicantSkills = normalizeArrayField(applicantSkills).map(normalizeSkill).filter(Boolean);
+
+  if (!normalizedJobSkills.length && !normalizedApplicantSkills.length) {
+    return { score: 50, matchedSkills: [] };
+  }
+
+  if (!normalizedApplicantSkills.length) {
+    return { score: 45, matchedSkills: [] };
+  }
+
+  const matchedSkills = normalizedJobSkills.filter((skill) => normalizedApplicantSkills.includes(skill));
+  const uniqueMatchedSkills = Array.from(new Set(matchedSkills));
+  const score = Math.min(100, 50 + uniqueMatchedSkills.length * 15);
+  return { score, matchedSkills: uniqueMatchedSkills };
+};
+
 const parseSalaryNumbers = (salaryText = '') => {
   const matches = String(salaryText || '')
     .replace(/,/g, '')
@@ -113,6 +133,7 @@ router.get('/jobs', async (req, res) => {
       location,
       experience,
       skills,
+      applicantSkills,
       district,
       quickFilter,
       q,
@@ -141,7 +162,8 @@ router.get('/jobs', async (req, res) => {
       ];
     }
 
-    if (quickFilter === 'remote') query.workMode = 'remote';
+    if (quickFilter === 'remote' || quickFilter === 'wfh') query.workMode = 'remote';
+    if (quickFilter === 'it') query.type = 'it';
     if (quickFilter === 'gulf') query.type = 'gulf';
     if (quickFilter === 'urgent') query.isUrgent = true;
     if (quickFilter === 'high-salary') query.salaryMax = { $gte: 75000 };
@@ -152,12 +174,23 @@ router.get('/jobs', async (req, res) => {
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .select('-__v');
+    const applicantSkillsList = normalizeArrayField(applicantSkills);
+    const jobsWithMatch = applicantSkillsList.length
+      ? jobs.map((job) => {
+          const match = calculateMatchScore(job.skills, applicantSkillsList);
+          return {
+            ...job.toObject(),
+            aiMatchScore: match.score,
+            matchedSkills: match.matchedSkills,
+          };
+        })
+      : jobs;
 
     const total = await Job.countDocuments(query);
 
     res.json({
       success: true,
-      data: jobs,
+      data: jobsWithMatch,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -394,13 +427,25 @@ router.post('/jobs/:id/apply', authenticateToken, upload.single('resume'), async
       return res.status(400).json({ success: false, message: 'Already applied for this job' });
     }
 
+    const profile = await JobSeekerProfile.findOne({ userId: req.user.id }).lean();
+    const applicantSkills = normalizeArrayField(req.body.skills || profile?.skills || []);
+    const matchResult = calculateMatchScore(job.skills, applicantSkills);
+    const fallbackEmail = String(profile?.email || req.user.email || '').trim().toLowerCase();
+    const fallbackName = String(profile?.fullName || req.user.name || '').trim();
+    const fallbackPhone = String(profile?.phone || '').trim();
+
     const applicationData = {
       jobId: req.params.id,
       applicantId: req.user.id,
+      name: String(req.body.name || fallbackName || '').trim(),
+      email: String(req.body.email || fallbackEmail || '').trim().toLowerCase(),
+      phone: String(req.body.phone || fallbackPhone || '').trim(),
+      skills: applicantSkills,
+      matchScore: matchResult.score,
       coverLetter: req.body.coverLetter,
       expectedSalary: req.body.expectedSalary,
       availability: req.body.availability,
-      resumeUrl: req.file ? `/uploads/jobportal/${req.file.filename}` : null
+      resumeUrl: req.file ? `/uploads/jobportal/${req.file.filename}` : String(req.body.resumeUrl || '').trim() || null
     };
 
     const application = new JobApplication(applicationData);
@@ -445,7 +490,7 @@ router.get('/jobs/:id/applications', authenticateToken, async (req, res) => {
           model: 'JobSeekerProfile'
         }
       })
-      .sort('-appliedAt');
+      .sort({ matchScore: -1, appliedAt: -1 });
 
     res.json({ success: true, data: applications });
   } catch (error) {
@@ -671,7 +716,7 @@ router.get('/my-applications', authenticateToken, async (req, res) => {
     const applications = await JobApplication.find({ applicantId: req.user.id })
       .populate({
         path: 'jobId',
-        select: 'title company location salary type status'
+        select: 'title company location salary type status workMode'
       })
       .sort('-appliedAt');
 
@@ -809,16 +854,48 @@ router.get('/employer/dashboard', authenticateToken, async (req, res) => {
       },
       { applied: 0, viewed: 0, shortlisted: 0, interview: 0, selected: 0, rejected: 0 }
     );
+    const matchScoreStats = applications.reduce(
+      (acc, item) => {
+        const score = Number(item.matchScore || 0);
+        if (Number.isFinite(score) && score > 0) {
+          acc.sum += score;
+          acc.count += 1;
+        }
+        return acc;
+      },
+      { sum: 0, count: 0 }
+    );
 
     const jobApplicationCountById = applications.reduce((acc, item) => {
       const id = String(item.jobId?._id || item.jobId || '');
       acc[id] = (acc[id] || 0) + 1;
       return acc;
     }, {});
+    const jobTopMatchById = applications.reduce((acc, item) => {
+      const id = String(item.jobId?._id || item.jobId || '');
+      const score = Number(item.matchScore || 0);
+      if (!acc[id] || score > acc[id]) {
+        acc[id] = score;
+      }
+      return acc;
+    }, {});
+    const jobMatchSumById = applications.reduce((acc, item) => {
+      const id = String(item.jobId?._id || item.jobId || '');
+      const score = Number(item.matchScore || 0);
+      if (!Number.isFinite(score)) return acc;
+      acc[id] = acc[id] || { sum: 0, count: 0 };
+      acc[id].sum += score;
+      acc[id].count += 1;
+      return acc;
+    }, {});
 
     const jobsWithStats = myJobs.map((job) => ({
       ...job,
       applicationCount: jobApplicationCountById[String(job._id)] || 0,
+      topMatchScore: jobTopMatchById[String(job._id)] || 0,
+      avgMatchScore: jobMatchSumById[String(job._id)]
+        ? Math.round(jobMatchSumById[String(job._id)].sum / jobMatchSumById[String(job._id)].count)
+        : 0,
     }));
 
     res.json({
@@ -827,6 +904,8 @@ router.get('/employer/dashboard', authenticateToken, async (req, res) => {
         stats: {
           activeJobs: myJobs.length,
           totalApplications: applications.length,
+          averageMatchScore:
+            matchScoreStats.count > 0 ? Math.round(matchScoreStats.sum / matchScoreStats.count) : 0,
           ...statusCount,
         },
         jobs: jobsWithStats,

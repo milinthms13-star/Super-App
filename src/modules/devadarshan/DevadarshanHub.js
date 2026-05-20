@@ -50,6 +50,43 @@ const EVENT_TYPES = [
   "Temple Special Pooja",
 ];
 
+const DEVOTIONAL_CONTENT = {
+  en: {
+    prayer: "May your day be filled with peace, clarity, protection, and divine blessings.",
+    slokas: [
+      "Om Namo Narayanaya",
+      "Om Namah Shivaya",
+      "Lokah Samastah Sukhino Bhavantu",
+    ],
+    bhajans: [
+      "Achyutham Keshavam",
+      "Harivarasanam",
+      "Krishna Nee Begane",
+    ],
+    stories: [
+      "Daily reminder: Offer gratitude before every prayer.",
+      "Festival focus: Prepare offerings and arrive early for darshan on peak days.",
+    ],
+  },
+  ml: {
+    prayer: "നിങ്ങളുടെ ദിനം സമാധാനവും വ്യക്തതയും ദൈവാനുഗ്രഹവും നിറഞ്ഞതാകട്ടെ.",
+    slokas: [
+      "ഓം നമോ നാരായണായ",
+      "ഓം നമഃ ശിവായ",
+      "ലോകാഃ സമസ്താഃ സുഖിനോ ഭവന്തു",
+    ],
+    bhajans: [
+      "ഹരിവരാസനം",
+      "കൃഷ്ണ നീ ബേഗനെ",
+      "അച്യുതം കേശവം",
+    ],
+    stories: [
+      "ദൈനംദിന പ്രാർത്ഥനയ്ക്ക് മുമ്പ് നന്ദി പറയാൻ സമയം കണ്ടെത്തുക.",
+      "ഉത്സവദിവസങ്ങളിൽ ദർശനത്തിനായി നേരത്തെ എത്താൻ പ്ലാൻ ചെയ്യുക.",
+    ],
+  },
+};
+
 const INITIAL_PROFILE = {
   primaryNakshatra: "",
   preferredPooja: "Archana",
@@ -106,6 +143,7 @@ const SECTION_ORDER = [
   { id: "directory", label: "Temples" },
   { id: "booking", label: "Vazhipadu" },
   { id: "calendar", label: "Calendar" },
+  { id: "devotional", label: "Devotional" },
   { id: "donation", label: "Donation" },
   { id: "my", label: "My Devadarshan" },
   { id: "profile", label: "Profile" },
@@ -115,6 +153,48 @@ const SECTION_ORDER = [
 
 const generateId = (prefix) => `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 900 + 100)}`;
 const formatINR = (value) => `INR ${Number(value || 0).toLocaleString("en-IN")}`;
+
+const parseTimeToMinutes = (value = "") => {
+  const trimmed = String(value || "").trim();
+  const matched = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!matched) return null;
+  let hour = Number(matched[1]);
+  const minute = Number(matched[2]);
+  const period = matched[3].toUpperCase();
+  if (hour === 12) hour = 0;
+  if (period === "PM") hour += 12;
+  return hour * 60 + minute;
+};
+
+const parseTempleDarshanWindows = (timings = "") =>
+  String(timings || "")
+    .split(",")
+    .map((windowText) => {
+      const [startRaw, endRaw] = windowText.split("-").map((segment) => String(segment || "").trim());
+      const startMinutes = parseTimeToMinutes(startRaw);
+      const endMinutes = parseTimeToMinutes(endRaw);
+      if (startMinutes === null || endMinutes === null) return null;
+      return { startRaw, endRaw, startMinutes, endMinutes };
+    })
+    .filter(Boolean);
+
+const getTempleDarshanStatus = (timings = "", now = new Date()) => {
+  const windows = parseTempleDarshanWindows(timings);
+  if (!windows.length) return { isOpen: false, note: "Timing update unavailable" };
+
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const activeWindow = windows.find((windowItem) => nowMinutes >= windowItem.startMinutes && nowMinutes <= windowItem.endMinutes);
+  if (activeWindow) {
+    return { isOpen: true, note: `Open now till ${activeWindow.endRaw}` };
+  }
+
+  const nextWindow = windows.find((windowItem) => nowMinutes < windowItem.startMinutes);
+  if (nextWindow) {
+    return { isOpen: false, note: `Reopens at ${nextWindow.startRaw}` };
+  }
+
+  return { isOpen: false, note: `Today darshan closed. Opens tomorrow at ${windows[0].startRaw}` };
+};
 
 const downloadBlob = (filename, blob) => {
   const url = window.URL.createObjectURL(blob);
@@ -172,6 +252,7 @@ const DevadarshanHub = () => {
   const [selectedPaymentGateway, setSelectedPaymentGateway] = useState("razorpay");
   const [bookingTimelines, setBookingTimelines] = useState({});
   const [expandedBookingId, setExpandedBookingId] = useState("");
+  const [devotionalLanguage, setDevotionalLanguage] = useState("en");
 
   const apiBase = `${BACKEND_BASE_URL}/api/devadarshan`;
 
@@ -293,6 +374,10 @@ const DevadarshanHub = () => {
     () => temples.find((item) => item.id === selectedTempleId) || temples[0],
     [temples, selectedTempleId]
   );
+  const selectedTempleDarshanStatus = useMemo(
+    () => getTempleDarshanStatus(selectedTemple?.timings),
+    [selectedTemple?.timings]
+  );
 
   const selectedTemplePoojas = useMemo(
     () => selectedTemple?.poojas || [],
@@ -351,6 +436,7 @@ const DevadarshanHub = () => {
     { id: "nearby-temples", title: "Nearby Temples", value: `${nearbyTemples.length} found nearby`, action: () => setActiveSection("directory") },
     { id: "vazhipadu", title: "Vazhipadu Booking", value: `${upcomingBookings.length} active bookings`, action: () => setActiveSection("booking") },
     { id: "events", title: "Temple Events", value: `${festivalEvents.length} events listed`, action: () => setActiveSection("calendar") },
+    { id: "devotional", title: "Devotional Hub", value: "Slokas, bhajans, and daily prayer", action: () => setActiveSection("devotional") },
     { id: "live", title: "Live Pooja", value: `${temples.filter((item) => item.liveDarshanUrl).length} temples live-ready`, action: () => setActiveSection("live") },
     { id: "my-bookings", title: "My Bookings", value: `${bookings.length + donations.length} total records`, action: () => setActiveSection("my") },
     { id: "notifications", title: "Notifications", value: `${notifications.length} updates`, action: () => setActiveSection("dashboard") },
@@ -380,6 +466,21 @@ const DevadarshanHub = () => {
   const handleApiError = (error, fallbackMessage) => {
     showStatus(error?.response?.data?.message || error?.message || fallbackMessage);
   };
+
+  const playDailyPrayer = useCallback(() => {
+    const content = DEVOTIONAL_CONTENT[devotionalLanguage] || DEVOTIONAL_CONTENT.en;
+    const prayerText = content.prayer;
+    if (!window.speechSynthesis || !prayerText) {
+      showStatus("Prayer audio is not supported on this browser.");
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(prayerText);
+    utterance.lang = devotionalLanguage === "ml" ? "ml-IN" : "en-IN";
+    utterance.rate = 0.95;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    showStatus(devotionalLanguage === "ml" ? "പ്രഭാത പ്രാർത്ഥന പ്ലേ ചെയ്യുന്നു." : "Playing morning prayer.");
+  }, [devotionalLanguage]);
 
   const toggleFavoriteTemple = async (templeId) => {
     try {
@@ -770,6 +871,9 @@ const DevadarshanHub = () => {
           <button type="button" onClick={() => setActiveSection("donation")} className="secondary">
             Quick Donate
           </button>
+          <button type="button" onClick={playDailyPrayer} className="secondary">
+            Play Morning Prayer
+          </button>
         </div>
         <nav className="devadarshan-nav">
           {headerSections.map((section) => (
@@ -856,7 +960,9 @@ const DevadarshanHub = () => {
           </div>
 
           <div className="devadarshan-cards">
-            {filteredTemples.map((temple) => (
+            {filteredTemples.map((temple) => {
+              const darshanStatus = getTempleDarshanStatus(temple.timings);
+              return (
               <article key={temple.id} className={`devadarshan-card ${selectedTempleId === temple.id ? "selected" : ""}`}>
                 <div className="card-top-row">
                   <h3>{temple.name}</h3>
@@ -866,6 +972,12 @@ const DevadarshanHub = () => {
                 </div>
                 <p>{temple.district} | {temple.deity} | {temple.templeType}</p>
                 <p>Timings: {temple.timings}</p>
+                <p>
+                  Darshan:{" "}
+                  <span className={`badge ${darshanStatus.isOpen ? "open" : "closed"}`}>
+                    {darshanStatus.note}
+                  </span>
+                </p>
                 <p>Contact: {temple.contact}</p>
                 <p>Dress code: {temple.dressCode}</p>
                 <p>Rules: {temple.rules}</p>
@@ -884,7 +996,8 @@ const DevadarshanHub = () => {
                   <a href={temple.mapUrl} target="_blank" rel="noreferrer">Map Direction</a>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
           <div className="devadarshan-details">
             <article className="devadarshan-panel">
@@ -893,6 +1006,12 @@ const DevadarshanHub = () => {
               <p><strong>District:</strong> {selectedTemple?.district}</p>
               <p><strong>Deity:</strong> {selectedTemple?.deity}</p>
               <p><strong>Timings:</strong> {selectedTemple?.timings}</p>
+              <p>
+                <strong>Today Darshan:</strong>{" "}
+                <span className={`badge ${selectedTempleDarshanStatus.isOpen ? "open" : "closed"}`}>
+                  {selectedTempleDarshanStatus.note}
+                </span>
+              </p>
               <p><strong>Contact:</strong> {selectedTemple?.contact}</p>
               <p><strong>Official contact:</strong> {selectedTemple?.officialContact}</p>
               <p><strong>Verified:</strong> {selectedTemple?.verified ? "Yes" : "No"}</p>
@@ -1068,6 +1187,57 @@ const DevadarshanHub = () => {
                 </article>
               );
             })}
+          </div>
+        </section>
+      )}
+
+      {activeSection === "devotional" && (
+        <section className="devadarshan-section">
+          <h2>Devotional Content</h2>
+          <div className="devadarshan-grid">
+            <article className="devadarshan-panel">
+              <h3>Today's Prayer</h3>
+              <label>
+                Language
+                <select
+                  value={devotionalLanguage}
+                  onChange={(event) => setDevotionalLanguage(event.target.value)}
+                >
+                  <option value="en">English</option>
+                  <option value="ml">Malayalam</option>
+                </select>
+              </label>
+              <p className="devadarshan-note">{DEVOTIONAL_CONTENT[devotionalLanguage]?.prayer}</p>
+              <button type="button" onClick={playDailyPrayer}>
+                Play Morning Prayer
+              </button>
+            </article>
+            <article className="devadarshan-panel">
+              <h3>Slokas & Bhajans</h3>
+              <p><strong>Slokas</strong></p>
+              <ul className="devadarshan-list">
+                {(DEVOTIONAL_CONTENT[devotionalLanguage]?.slokas || []).map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              <p><strong>Bhajans</strong></p>
+              <ul className="devadarshan-list">
+                {(DEVOTIONAL_CONTENT[devotionalLanguage]?.bhajans || []).map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </article>
+            <article className="devadarshan-panel">
+              <h3>Daily Devotional Notes</h3>
+              <ul className="devadarshan-list">
+                {(DEVOTIONAL_CONTENT[devotionalLanguage]?.stories || []).map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              <button type="button" className="secondary" onClick={() => setActiveSection("calendar")}>
+                Open Festival Calendar
+              </button>
+            </article>
           </div>
         </section>
       )}
@@ -1443,7 +1613,7 @@ const DevadarshanHub = () => {
       )}
 
       <nav className="devadarshan-bottom-nav">
-        {SECTION_ORDER.slice(0, 6).map((section) => (
+        {SECTION_ORDER.filter((section) => ["dashboard", "directory", "booking", "devotional", "donation", "my"].includes(section.id)).map((section) => (
           <button
             key={section.id}
             type="button"

@@ -1,12 +1,14 @@
 import React from "react";
 
-const JobCard = ({ job, isSaved, hasApplied, onOpen, onSaveToggle, onApply }) => {
+const JobCard = ({ job, isSaved, hasApplied, onOpen, onSaveToggle, onApply, matchScore }) => {
   const jobId = job?._id || job?.id;
+  const normalizedScore = Number.isFinite(Number(matchScore)) ? Math.max(0, Math.min(100, Number(matchScore))) : null;
   return (
     <article className="jp-job-card">
       <div className="jp-job-card-head">
         <h3>{job?.title || "Untitled Role"}</h3>
         <div className="jp-job-badges">
+          {normalizedScore !== null ? <span className="jp-badge jp-badge-match">Match {Math.round(normalizedScore)}%</span> : null}
           {job?.isVerified ? <span className="jp-badge jp-badge-verified">Verified</span> : null}
           {job?.isUrgent ? <span className="jp-badge jp-badge-urgent">Urgent</span> : null}
         </div>

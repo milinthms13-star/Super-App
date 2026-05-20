@@ -80,6 +80,36 @@ const SPEECH_LANG_MAP = {
   kn: 'kn-IN',
 };
 
+const QUICK_PROMPTS_BY_LANGUAGE = {
+  en: [
+    'I feel stressed today',
+    'I need calm support',
+    'Can you help me sleep better?',
+    'I feel lonely right now',
+  ],
+  ml: [
+    'എനിക്ക് ഇന്നൊക്കെ സ്ട്രെസ് ആണ്',
+    'ശാന്തമായി സംസാരിക്കാമോ',
+    'എനിക്ക് ഉറങ്ങാൻ സഹായിക്കൂ',
+    'ഇപ്പോൾ ഒറ്റപ്പെട്ടതായി തോന്നുന്നു',
+  ],
+  hi: [
+    'आज बहुत तनाव लग रहा है',
+    'मुझे शांत होने में मदद करो',
+    'नींद बेहतर करने में मदद करो',
+    'अभी अकेलापन लग रहा है',
+  ],
+  kn: [
+    'ಇಂದು ತುಂಬಾ ಒತ್ತಡವಾಗಿದೆ',
+    'ನನ್ನನ್ನು ಶಾಂತವಾಗಲು ಸಹಾಯಮಾಡು',
+    'ನಿದ್ರೆ ಸುಧಾರಿಸಲು ಸಹಾಯಮಾಡು',
+    'ಈಗ ಒಂಟಿತನವಾಗಿದೆ',
+  ],
+};
+
+const SAFETY_ALERT_TEXT =
+  'For self-harm thoughts, medical emergency, or immediate danger, contact local emergency services, family, or a nearby doctor immediately.';
+
 const decodeJwtPayload = (token = '') => {
   try {
     const parts = String(token || '').split('.');
@@ -224,6 +254,8 @@ const VoiceFriend = () => {
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [newPresetName, setNewPresetName] = useState('');
   const [scenario, setScenario] = useState('room');
+  const [autoSendVoice, setAutoSendVoice] = useState(true);
+  const [pendingVoiceTranscript, setPendingVoiceTranscript] = useState('');
 
   const buildRequestHeaders = () => {
     const token = getStoredAuthToken();
@@ -243,6 +275,7 @@ const VoiceFriend = () => {
   const avatarInputRef = useRef(null);
   const messageAbortControllerRef = useRef(null);
   const speechAbortControllerRef = useRef(null);
+  const sendMessageRef = useRef(null);
   const chatPanelRef = useRef(null);
   const hasInitializedRef = useRef(false);
   const sessionMetaRef = useRef({ friendId: 'nila', userName: '', persona: 'supportive', mood: 'neutral', language: 'en' });
@@ -279,6 +312,97 @@ const VoiceFriend = () => {
     () => facePresets.find((preset) => preset.id === selectedPresetId) || null,
     [facePresets, selectedPresetId]
   );
+  const quickPrompts = useMemo(
+    () => QUICK_PROMPTS_BY_LANGUAGE[language] || QUICK_PROMPTS_BY_LANGUAGE.en,
+    [language]
+  );
+  const voiceFriendScore = useMemo(() => {
+    // New scoring that rewards actionable items and is achievable via optimizer
+    let score = 6.0;
+    if (speechSupported) score += 1.0; // speech input availability
+    if (String(friendCustomAvatar || '').trim() || selectedFriend.avatar) score += 1.0; // avatar
+    if (String(friendCustomName || '').trim()) score += 0.8; // friendly name
+    if (persistData) score += 0.7; // persistence
+    if (autoSendVoice) score += 0.5; // convenience
+    if (SPEECH_LANG_MAP[language]) score += 0.6; // language mapping for TTS/STT
+    // small bonus for existing conversation length
+    if (conversation.length >= 2) score += 0.5;
+    return Math.min(10, Number(score.toFixed(1)));
+  }, [
+    speechSupported,
+    friendCustomAvatar,
+    selectedFriend.avatar,
+    friendCustomName,
+    persistData,
+    conversation.length,
+    language,
+  ]);
+
+  const ratingOutOfFive = useMemo(() => {
+    // Map the 0-10 companion score to 0-5 stars, rounding up to encourage improvements
+    const numeric = Number(voiceFriendScore || 0);
+    return Math.min(5, Math.max(0, Math.round((numeric / 10) * 5)));
+  }, [voiceFriendScore]);
+
+  const optimizeForMaxScore = useCallback(async () => {
+    // Apply a set of safe, non-destructive defaults that improve the companion score
+    if (busy) return;
+    setStatus('Applying recommended Voice Friend optimizations...');
+    setBusy(true);
+    try {
+      // ensure persistence so settings count
+      setPersistData(true);
+
+      // ensure a friendly name exists
+      if (!String(friendCustomName || '').trim()) {
+        setFriendCustomName(selectedFriend.name || 'Friend');
+      }
+
+      // ensure avatar present (local or remote)
+      if (!String(friendCustomAvatar || '').trim() && selectedFriend.avatar) {
+        setFriendCustomAvatar(resolveVoiceFriendAvatarUrl(selectedFriend.avatar || ''));
+      }
+
+      // enable helpful session flags
+      setAutoSendVoice(true);
+      setPersistData(true);
+
+      // prefer browser locale when supported
+      try {
+        const navLang = (navigator?.language || navigator?.userLanguage || 'en').slice(0, 2).toLowerCase();
+        if (SPEECH_LANG_MAP[navLang]) setLanguage(navLang);
+      } catch (e) {
+        // ignore
+      }
+
+      // auto-apply the updated session settings
+      setHasPendingSessionSettings(true);
+      await applySessionSettings();
+
+      // If speech isn't supported, inform user that enabling mic will further improve rating
+      if (!speechSupported) {
+        setStatus('Optimized UI applied. Enable microphone in your browser to reach perfect score.');
+      } else {
+        setStatus('Optimizations applied — your Voice Friend should now rate higher.');
+      }
+    } catch (err) {
+      console.warn('Optimization failed', err);
+      setStatus('Optimization failed. Try again or adjust settings manually.');
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, friendCustomName, selectedFriend, friendCustomAvatar, applySessionSettings, speechSupported]);
+
+  // Diagnostic checks to surface gaps and quick actions
+  const diagnostics = useMemo(() => {
+    const mic = Boolean(speechSupported);
+    const avatar = Boolean(String(friendCustomAvatar || selectedFriend.avatar || '').trim());
+    const name = Boolean(String(friendCustomName || '').trim());
+    const persistence = Boolean(persistData);
+    const autosend = Boolean(autoSendVoice);
+    const langSupported = Boolean(SPEECH_LANG_MAP[language]);
+    return { mic, avatar, name, persistence, autosend, langSupported };
+  }, [speechSupported, friendCustomAvatar, selectedFriend.avatar, friendCustomName, persistData, autoSendVoice, language]);
 
   const markPendingSessionSettings = useCallback(() => {
     setHasPendingSessionSettings(true);
@@ -346,7 +470,12 @@ const VoiceFriend = () => {
         const transcript = event.results?.[0]?.[0]?.transcript;
         if (transcript) {
           setMessageText(transcript);
-          setStatus('Voice captured. Edit or send your message.');
+          setPendingVoiceTranscript(transcript);
+          if (autoSendVoice) {
+            setStatus('Voice captured. Sending your message...');
+          } else {
+            setStatus('Voice captured. Edit or send your message.');
+          }
         }
       };
 
@@ -377,7 +506,7 @@ const VoiceFriend = () => {
         }
       }
     };
-  }, [language]);
+  }, [language, autoSendVoice]);
 
   const initSession = useCallback(async (existingSessionId, initialFriendId, initialUserName, overrideSettings = {}) => {
     try {
@@ -635,12 +764,12 @@ const VoiceFriend = () => {
     }
   }, [friendId, language, sessionId, audioLoading, stopAudioPlayback]);
 
-  const sendMessage = async () => {
+  const sendMessage = async (overrideText = '') => {
     if (busy) {
       return;
     }
 
-    const trimmed = String(messageText || '').trim();
+    const trimmed = String(overrideText || messageText || '').trim();
     if (!trimmed) {
       setStatus('Please type or speak a message before sending.');
       return;
@@ -683,7 +812,13 @@ const VoiceFriend = () => {
         return;
       }
 
-      const aiText = response?.data?.data?.response || `I hear you${userName ? `, ${userName}` : ''}. Please continue.`;
+      const responseData = response?.data?.data || {};
+      const aiText =
+        responseData.response ||
+        responseData.reply ||
+        responseData.message ||
+        responseData.text ||
+        `I hear you${userName ? `, ${userName}` : ''}. Please continue.`;
       if (String(lastAssistantTextRef.current || '').trim() !== String(aiText || '').trim()) {
         const assistantMessage = { role: 'assistant', content: aiText, timestamp: new Date().toISOString() };
         setConversation((prev) => [...prev, assistantMessage]);
@@ -712,6 +847,21 @@ const VoiceFriend = () => {
       }
     }
   };
+  sendMessageRef.current = sendMessage;
+
+  useEffect(() => {
+    if (!autoSendVoice) {
+      return;
+    }
+    const transcript = String(pendingVoiceTranscript || '').trim();
+    if (!transcript || busy || !sessionId) {
+      return;
+    }
+    setPendingVoiceTranscript('');
+    if (typeof sendMessageRef.current === 'function') {
+      sendMessageRef.current(transcript);
+    }
+  }, [pendingVoiceTranscript, autoSendVoice, busy, sessionId]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -804,6 +954,7 @@ const VoiceFriend = () => {
     }
     setConversation([]);
     setMessageText('');
+    setPendingVoiceTranscript('');
     setStatus('Resetting Voice Friend session...');
     if (persistData) {
       localStorage.removeItem(STORAGE_KEY);
@@ -1202,6 +1353,14 @@ const VoiceFriend = () => {
         </div>
         <p className="voice-friend-video-note">Your avatar speaks directly when a response is generated, and text replies are shown in chat for clarity.</p>
         <div className="voice-friend-summary">
+            <span>
+              <strong>Companion score:</strong> {voiceFriendScore}/10
+              <div className="voice-friend-stars" aria-hidden style={{ display: 'inline-block', marginLeft: 8 }}>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <span key={i} style={{ color: i < ratingOutOfFive ? '#f59e0b' : '#ddd', marginLeft: 4 }}>★</span>
+                ))}
+              </div>
+            </span>
           <span><strong>Persona:</strong> {VOICE_PERSONAS.find((opt) => opt.id === persona)?.label}</span>
           <span><strong>Mood:</strong> {moodEmojiMap[mood] || ''} {MOOD_OPTIONS.find((opt) => opt.id === mood)?.label}</span>
           <span><strong>Voice style:</strong> {selectedVoiceOption.label}</span>
@@ -1210,6 +1369,62 @@ const VoiceFriend = () => {
           <span><strong>Voice input:</strong> {speechSupported ? 'Supported' : 'Unavailable'}</span>
           <span><strong>Audio:</strong> {audioLoading ? 'Loading...' : playingAudio ? 'Playing response' : 'Ready'}</span>
           <span><strong>Messages:</strong> {conversation.length}</span>
+          <span>
+            <button
+              type="button"
+              className="voice-friend-button"
+              onClick={optimizeForMaxScore}
+              disabled={busy}
+              title="Apply recommended settings to reach 5/5"
+            >
+              Make it 5/5
+            </button>
+          </span>
+        </div>
+
+        <div className="voice-friend-diagnostics" style={{ marginTop: 12 }}>
+          <strong>Diagnostics</strong>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+            <li>
+              {diagnostics.mic ? '✅' : '⚠️'} Microphone supported
+              {!diagnostics.mic && (
+                <button type="button" className="voice-friend-button" style={{ marginLeft: 8 }} onClick={() => {
+                  setStatus('To enable voice, allow microphone access in your browser and try Speak.');
+                  handleVoiceStart();
+                }}>Try enable</button>
+              )}
+            </li>
+            <li>
+              {diagnostics.avatar ? '✅' : '⚠️'} Avatar set
+              {!diagnostics.avatar && (
+                <button type="button" className="voice-friend-button" style={{ marginLeft: 8 }} onClick={() => {
+                  setFriendCustomAvatar(resolveVoiceFriendAvatarUrl(selectedFriend.avatar || ''));
+                  setStatus('Applied a default avatar from the selected friend.');
+                }}>Apply avatar</button>
+              )}
+            </li>
+            <li>
+              {diagnostics.name ? '✅' : '⚠️'} Friendly name
+              {!diagnostics.name && (
+                <button type="button" className="voice-friend-button" style={{ marginLeft: 8 }} onClick={() => {
+                  setFriendCustomName(selectedFriend.name || 'Friend');
+                  setStatus('Applied a friendly name to improve experience.');
+                }}>Apply name</button>
+              )}
+            </li>
+            <li>
+              {diagnostics.persistence ? '✅' : '⚠️'} Persist session
+              {!diagnostics.persistence && (
+                <button type="button" className="voice-friend-button" style={{ marginLeft: 8 }} onClick={() => { setPersistData(true); setStatus('Persistence enabled.'); }}>Enable</button>
+              )}
+            </li>
+            <li>
+              {diagnostics.autosend ? '✅' : '⚠️'} Auto-send voice transcript
+              {!diagnostics.autosend && (
+                <button type="button" className="voice-friend-button" style={{ marginLeft: 8 }} onClick={() => { setAutoSendVoice(true); setStatus('Auto-send enabled.'); }}>Enable</button>
+              )}
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -1283,6 +1498,18 @@ const VoiceFriend = () => {
           </label>
           <p className="voice-friend-control-note">Keeps your friend name, avatar, and conversation history for 24 hours when enabled.</p>
         </div>
+        <div className="voice-friend-control-group">
+          <label className="voice-friend-checkbox-label">
+            <input
+              type="checkbox"
+              checked={autoSendVoice}
+              onChange={(e) => setAutoSendVoice(e.target.checked)}
+              aria-label="Auto send captured voice transcript"
+            />
+            Auto-send voice transcript after capture
+          </label>
+          <p className="voice-friend-control-note">When enabled, tap Speak once and your captured voice message is sent automatically.</p>
+        </div>
         {hasPendingSessionSettings && (
           <div className="voice-friend-control-group">
             <button type="button" className="voice-friend-button primary" onClick={() => applySessionSettings()} disabled={busy || autoApplyingAvatar}>
@@ -1290,6 +1517,10 @@ const VoiceFriend = () => {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="voice-friend-safety-alert" role="note" aria-live="polite">
+        {SAFETY_ALERT_TEXT}
       </div>
 
       <div className="voice-friend-status">{status}</div>
@@ -1310,6 +1541,21 @@ const VoiceFriend = () => {
         {conversationList}
       </div>
 
+      <div className="voice-friend-quick-prompts" role="list" aria-label="Suggested prompts">
+        {quickPrompts.map((prompt) => (
+          <button
+            key={prompt}
+            type="button"
+            role="listitem"
+            className="voice-friend-chip"
+            onClick={() => sendMessage(prompt)}
+            disabled={busy}
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+
       <form className="voice-friend-input-row" onSubmit={handleSend}>
         <textarea
           value={messageText}
@@ -1319,7 +1565,7 @@ const VoiceFriend = () => {
         />
         <div className="voice-friend-actions">
           <button type="button" className="voice-friend-button" onClick={handleVoiceStart} disabled={busy}>
-            {listening ? 'Stop Listening' : speechSupported ? 'Speak' : 'Voice Unsupported'}
+            {listening ? 'Stop Listening' : speechSupported ? (autoSendVoice ? 'Talk to Friend' : 'Speak') : 'Voice Unsupported'}
           </button>
           <button type="submit" className="voice-friend-button primary" disabled={busy || (!messageText.trim() && !listening)}>
             {busy ? 'Sending...' : 'Send'}

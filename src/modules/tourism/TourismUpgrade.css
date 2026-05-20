@@ -113,3 +113,46 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.tourism-planner-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.tourism-planner-itinerary {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.tourism-planner-day {
+  border: 1px solid var(--tourism-border);
+  border-radius: 12px;
+  background: var(--tourism-surface-alt);
+  padding: 0.65rem;
+}
+
+.tourism-planner-day p {
+  margin: 0.35rem 0;
+  color: var(--tourism-muted);
+}
+
+.tourism-planner-day small {
+  color: var(--tourism-primary-dark);
+}
+
+.tourism-planner-nearby {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.tourism-planner-nearby h4 {
+  margin: 0 0 0.35rem;
+}
+
+@media (max-width: 1080px) {
+  .tourism-planner-grid {
+    grid-template-columns: 1fr;
+  }
+}

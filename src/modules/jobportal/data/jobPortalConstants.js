@@ -7,7 +7,8 @@ export const JOB_TYPE_OPTIONS = [
 
 export const QUICK_FILTERS = [
   { id: "all", label: "All Jobs" },
-  { id: "remote", label: "Remote Jobs" },
+  { id: "wfh", label: "WFH / Remote" },
+  { id: "it", label: "IT Jobs" },
   { id: "gulf", label: "Gulf Jobs" },
   { id: "urgent", label: "Urgent Hiring" },
   { id: "high-salary", label: "High Salary" },

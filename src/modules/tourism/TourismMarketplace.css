@@ -120,7 +120,7 @@
 
 .tourism-nav {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.9rem;
   margin: 1.2rem 0;
 }
@@ -573,4 +573,3 @@
     background: linear-gradient(90deg, #1a2c39 25%, #1f3646 37%, #1a2c39 63%);
   }
 }
-

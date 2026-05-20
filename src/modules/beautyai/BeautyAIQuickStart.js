@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
+  BEAUTY_CONCERNS,
   BEAUTY_EVENTS,
   BEAUTY_LANGUAGES,
   buildBeautyRequest,
@@ -13,10 +14,14 @@ import { buildApiUrl } from "../../utils/api";
 
 const DEFAULT_FORM = {
   language: "ml",
+  gender: "Female",
+  age: "",
   concern: "acne",
   budget: "low",
   eventType: "daily-glow",
   skinType: "normal",
+  hairType: "normal",
+  selectedConcerns: [],
   notes: "",
   sensitiveSkin: false,
   knownAllergy: "",
@@ -30,6 +35,7 @@ const DEFAULT_PLAN = {
   score: 0,
   morning: [],
   night: [],
+  hair: [],
   avoid: [],
   products: [],
   eventPlan: [],
@@ -46,6 +52,7 @@ const BeautyAIQuickStart = ({
   onPlanReady,
   onBookSalon,
   onOrderProducts,
+  onSavePlan,
   pushStatus,
 }) => {
   const [form, setForm] = useState(DEFAULT_FORM);
@@ -53,11 +60,19 @@ const BeautyAIQuickStart = ({
   const [selfieFile, setSelfieFile] = useState(null);
   const [selfiePreview, setSelfiePreview] = useState("");
   const [plan, setPlan] = useState(DEFAULT_PLAN);
+  const [routineChecks, setRoutineChecks] = useState({});
 
   const warnings = useMemo(() => getSafetyWarnings(form), [form]);
   const malayalamPrompts = useMemo(() => getMalayalamHelperPrompts(), []);
 
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const toggleConcern = (concern) =>
+    setForm((prev) => ({
+      ...prev,
+      selectedConcerns: prev.selectedConcerns.includes(concern)
+        ? prev.selectedConcerns.filter((item) => item !== concern)
+        : [...prev.selectedConcerns, concern],
+    }));
 
   const handleSelfie = (event) => {
     const file = event.target.files?.[0];
@@ -75,14 +90,10 @@ const BeautyAIQuickStart = ({
     const reader = new FileReader();
     reader.onload = () => setSelfiePreview(String(reader.result || ""));
     reader.readAsDataURL(file);
-    pushStatus?.("success", "Selfie uploaded. Complete safety questions and generate your plan.");
+    pushStatus?.("success", "Photo uploaded. Continue to generate your plan.");
   };
 
   const generatePlan = async () => {
-    if (!selfieFile) {
-      pushStatus?.("error", "Please upload a selfie first.");
-      return;
-    }
     if (!form.consent) {
       pushStatus?.("error", "Please confirm consent before analysis.");
       return;
@@ -90,8 +101,17 @@ const BeautyAIQuickStart = ({
 
     setLoading(true);
     try {
-      const selfieSignals = await extractSelfieSignals(selfieFile);
+      const selfieSignals = selfieFile
+        ? await extractSelfieSignals(selfieFile)
+        : {
+            rednessScore: 0.3,
+            textureScore: 0.3,
+            brightnessScore: 0.5,
+            confidence: 0.4,
+          };
+      const primaryConcern = form.selectedConcerns[0] || form.concern;
       const payload = buildBeautyRequest(form, buildSelfieMeta(selfieFile), selfieSignals);
+      payload.concern = primaryConcern;
 
       let apiPlan = null;
       let apiScore = 0;
@@ -117,19 +137,38 @@ const BeautyAIQuickStart = ({
             avoid: Array.isArray(apiPlan.avoid) ? apiPlan.avoid : fallbackPlan.avoid,
             products: Array.isArray(apiPlan.products) ? apiPlan.products : fallbackPlan.products,
             eventPlan: Array.isArray(apiPlan.eventPlan) ? apiPlan.eventPlan : fallbackPlan.eventPlan,
+            hair: Array.isArray(apiPlan.hair) ? apiPlan.hair : fallbackPlan.hair || [],
           }
         : fallbackPlan;
 
       setPlan(finalPlan);
+      setRoutineChecks({});
       onPlanReady?.({
         plan: finalPlan,
         selfiePreview,
         selfieMeta: buildSelfieMeta(selfieFile),
+        selfieSignals,
+        profile: {
+          gender: form.gender,
+          age: form.age,
+          skinType: form.skinType,
+          hairType: form.hairType,
+          budget: form.budget,
+          language: form.language,
+          eventType: form.eventType,
+          selectedConcerns: form.selectedConcerns,
+        },
       });
       pushStatus?.("success", "Beauty plan generated. Review routine, avoid list, and event plan.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const routineCheckKey = (group, index) => `${group}-${index}`;
+  const toggleRoutineCheck = (group, index) => {
+    const key = routineCheckKey(group, index);
+    setRoutineChecks((current) => ({ ...current, [key]: !current[key] }));
   };
 
   return (
@@ -147,11 +186,30 @@ const BeautyAIQuickStart = ({
 
       <div className="beauty-ai-form-grid">
         <label>
-          Upload selfie
+          Upload selfie (optional)
           <input type="file" accept="image/*" capture="user" onChange={handleSelfie} />
         </label>
         <label>
-          Concern
+          Gender
+          <select value={form.gender} onChange={(event) => update("gender", event.target.value)}>
+            <option value="Female">Female</option>
+            <option value="Male">Male</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
+        <label>
+          Age
+          <input
+            type="number"
+            min="0"
+            max="120"
+            value={form.age}
+            onChange={(event) => update("age", event.target.value)}
+            placeholder="Age"
+          />
+        </label>
+        <label>
+          Primary concern
           <select value={form.concern} onChange={(event) => update("concern", event.target.value)}>
             <option value="acne">Pimples / Acne</option>
             <option value="pigmentation">Pigmentation / Dark spots</option>
@@ -191,6 +249,16 @@ const BeautyAIQuickStart = ({
           </select>
         </label>
         <label>
+          Hair type
+          <select value={form.hairType} onChange={(event) => update("hairType", event.target.value)}>
+            <option value="normal">Normal</option>
+            <option value="dry">Dry</option>
+            <option value="oily">Oily</option>
+            <option value="curly">Curly</option>
+            <option value="frizzy">Frizzy</option>
+          </select>
+        </label>
+        <label>
           Language
           <select value={form.language} onChange={(event) => update("language", event.target.value)}>
             {BEAUTY_LANGUAGES.map((entry) => (
@@ -200,6 +268,22 @@ const BeautyAIQuickStart = ({
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="beauty-ai-concern-chips">
+        <strong>Select concerns</strong>
+        <div className="beauty-ai-chip-wrap">
+          {BEAUTY_CONCERNS.map((concern) => (
+            <button
+              key={concern}
+              type="button"
+              className={form.selectedConcerns.includes(concern) ? "active" : ""}
+              onClick={() => toggleConcern(concern)}
+            >
+              {concern}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="beauty-ai-safety-box">
@@ -278,7 +362,9 @@ const BeautyAIQuickStart = ({
         <div className="beauty-ai-selfie-preview">
           <img src={selfiePreview} alt="Beauty selfie preview" />
         </div>
-      ) : null}
+      ) : (
+        <p className="beauty-ai-disclaimer">Photo is optional. You can still generate a guided plan.</p>
+      )}
 
       {plan.title ? (
         <div className="beauty-ai-plan-card">
@@ -289,20 +375,53 @@ const BeautyAIQuickStart = ({
 
           <div className="beauty-ai-plan-section">
             <h4>Morning routine</h4>
-            <ol>
-              {(plan.morning || []).map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
+            {(plan.morning || []).map((step, index) => (
+              <label key={step} className="beauty-ai-check">
+                <input
+                  type="checkbox"
+                  checked={Boolean(routineChecks[routineCheckKey("morning", index)])}
+                  onChange={() => toggleRoutineCheck("morning", index)}
+                />
+                {step}
+              </label>
+            ))}
           </div>
 
           <div className="beauty-ai-plan-section">
             <h4>Night routine</h4>
-            <ol>
-              {(plan.night || []).map((step) => (
-                <li key={step}>{step}</li>
+            {(plan.night || []).map((step, index) => (
+              <label key={step} className="beauty-ai-check">
+                <input
+                  type="checkbox"
+                  checked={Boolean(routineChecks[routineCheckKey("night", index)])}
+                  onChange={() => toggleRoutineCheck("night", index)}
+                />
+                {step}
+              </label>
+            ))}
+          </div>
+
+          <div className="beauty-ai-plan-section">
+            <h4>Hair routine</h4>
+            {(plan.hair || []).map((step, index) => (
+              <label key={step} className="beauty-ai-check">
+                <input
+                  type="checkbox"
+                  checked={Boolean(routineChecks[routineCheckKey("hair", index)])}
+                  onChange={() => toggleRoutineCheck("hair", index)}
+                />
+                {step}
+              </label>
+            ))}
+          </div>
+
+          <div className="beauty-ai-plan-section">
+            <h4>Products by budget</h4>
+            <ul>
+              {(plan.products || []).map((item) => (
+                <li key={item}>{item}</li>
               ))}
-            </ol>
+            </ul>
           </div>
 
           <div className="beauty-ai-plan-section">
@@ -332,6 +451,9 @@ const BeautyAIQuickStart = ({
             </button>
             <button type="button" onClick={() => onOrderProducts?.(plan.products || [])}>
               Order Products
+            </button>
+            <button type="button" onClick={() => onSavePlan?.({ form, plan, selfiePreview, selfieFile })}>
+              Save Plan
             </button>
           </div>
         </div>

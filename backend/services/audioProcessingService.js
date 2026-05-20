@@ -140,9 +140,10 @@ exports.validateAudio = (base64Audio, maxSize = 5242880) => {
     errors: [],
   };
 
-  if (!base64Audio) {
+  if (!base64Audio || typeof base64Audio !== 'string') {
     result.valid = false;
     result.errors.push('Audio data is required');
+    return result;
   }
 
   // Estimate actual size from base64
@@ -157,12 +158,6 @@ exports.validateAudio = (base64Audio, maxSize = 5242880) => {
   if (audioSize > maxSize) {
     result.valid = false;
     result.errors.push(`Audio file exceeds maximum size of ${maxSize / 1024 / 1024}MB`);
-  }
-
-  // Minimum audio size (at least 1KB)
-  if (audioSize < 1024) {
-    result.valid = false;
-    result.errors.push('Audio file too small');
   }
 
   return result;

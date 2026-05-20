@@ -71,6 +71,23 @@ const normalizeStatus = (value = "") => {
   return "Applied";
 };
 
+const normalizeSkillsText = (value = "") =>
+  String(value || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+const calculateSkillMatchScore = (jobSkills = [], candidateSkills = []) => {
+  const normalizedJobSkills = Array.isArray(jobSkills)
+    ? jobSkills.map((skill) => String(skill || "").trim().toLowerCase()).filter(Boolean)
+    : [];
+
+  if (!candidateSkills.length && !normalizedJobSkills.length) return 50;
+  if (!candidateSkills.length) return 45;
+  const matched = normalizedJobSkills.filter((skill) => candidateSkills.includes(skill));
+  return Math.min(100, 50 + Array.from(new Set(matched)).length * 15);
+};
+
 const JobPortal = () => {
   const { user } = useApp();
   const token = getStoredAuthToken();
@@ -115,6 +132,7 @@ const JobPortal = () => {
 
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantInput, setAssistantInput] = useState("");
+  const [aiSkillInput, setAiSkillInput] = useState("");
   const [assistantMessages, setAssistantMessages] = useState([
     {
       id: "boot",
@@ -194,6 +212,9 @@ const JobPortal = () => {
         availability: profile.availability || "immediate",
         gulfReady: Boolean(profile.gulfReady),
       });
+      setAiSkillInput((current) =>
+        current || (Array.isArray(profile.skills) ? profile.skills.join(", ") : "")
+      );
     } catch (error) {
       pushToast("error", error?.response?.data?.message || "Unable to load profile.");
     }
@@ -255,6 +276,25 @@ const JobPortal = () => {
     return Math.min(score, 100);
   }, [profileFiles.resume, profileForm]);
 
+  const candidateSkills = useMemo(
+    () => normalizeSkillsText(aiSkillInput || profileForm.skills || ""),
+    [aiSkillInput, profileForm.skills]
+  );
+
+  const getJobMatchScore = useCallback(
+    (job) => calculateSkillMatchScore(job?.skills, candidateSkills),
+    [candidateSkills]
+  );
+
+  const displayedJobs = useMemo(() => {
+    const jobsCopy = [...jobs];
+    return jobsCopy.sort((a, b) => {
+      const featuredDelta = Number(Boolean(b?.isFeatured)) - Number(Boolean(a?.isFeatured));
+      if (featuredDelta !== 0) return featuredDelta;
+      return getJobMatchScore(b) - getJobMatchScore(a);
+    });
+  }, [getJobMatchScore, jobs]);
+
   const openJobDetails = async (jobId) => {
     try {
       const response = await jobPortalApi.getJob(jobId);
@@ -296,6 +336,10 @@ const JobPortal = () => {
       if (payload?.expectedSalary) formData.append("expectedSalary", payload.expectedSalary);
       if (payload?.availability) formData.append("availability", payload.availability);
       if (payload?.resumeFile) formData.append("resume", payload.resumeFile);
+      formData.append("skills", aiSkillInput || profileForm.skills || "");
+      formData.append("name", profileForm.fullName || user?.name || "");
+      formData.append("email", profileForm.email || currentEmail || "");
+      formData.append("phone", profileForm.phone || "");
       await jobPortalApi.applyJob(jobId, formData);
       pushToast("success", "Application submitted successfully.");
       loadApplications();
@@ -468,6 +512,22 @@ const JobPortal = () => {
       <main className="jp-content">
         {activeTab === "home" ? (
           <>
+            <section className="jp-panel jp-ai-panel">
+              <div className="jp-panel-head">
+                <h2>AI Job Match</h2>
+                <p>Enter your skills to rank jobs by fit score and improve employer shortlisting quality.</p>
+              </div>
+              <textarea
+                className="jp-ai-input"
+                value={aiSkillInput}
+                onChange={(event) => setAiSkillInput(event.target.value)}
+                placeholder="React, Node.js, Tally, Sales, CRM, Arabic..."
+              />
+              <p className="jp-muted-text">
+                Current matching skills: {candidateSkills.length ? candidateSkills.join(", ") : "Add skills for match scoring"}
+              </p>
+            </section>
+
             <section className="jp-panel">
               <div className="jp-filter-grid">
                 <input
@@ -521,14 +581,15 @@ const JobPortal = () => {
               <h2>Live Job Listings</h2>
               {jobsLoading ? <p>Loading jobs...</p> : null}
               {jobsError ? <p className="jp-error-text">{jobsError}</p> : null}
-              {!jobsLoading && !jobsError && jobs.length === 0 ? <p>No jobs found for current filters.</p> : null}
+              {!jobsLoading && !jobsError && displayedJobs.length === 0 ? <p>No jobs found for current filters.</p> : null}
               <div className="jp-job-grid">
-                {jobs.map((job) => {
+                {displayedJobs.map((job) => {
                   const jobId = String(job?._id || job?.id || "");
                   return (
                     <JobCard
                       key={jobId}
                       job={job}
+                      matchScore={getJobMatchScore(job)}
                       isSaved={savedJobIds.has(jobId)}
                       hasApplied={appliedJobIds.has(jobId)}
                       onOpen={openJobDetails}
@@ -572,6 +633,7 @@ const JobPortal = () => {
                   <JobCard
                     key={jobId}
                     job={job}
+                    matchScore={getJobMatchScore(job)}
                     isSaved
                     hasApplied={appliedJobIds.has(jobId)}
                     onOpen={openJobDetails}

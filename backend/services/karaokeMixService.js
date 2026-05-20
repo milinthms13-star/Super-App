@@ -7,6 +7,7 @@ const ffmpegPath = require('ffmpeg-static');
 
 const MIX_OUTPUT_DIR = path.join(__dirname, '..', 'uploads', 'karaoke-duet', 'mixes');
 const MIX_TEMP_DIR = path.join(__dirname, '..', 'uploads', 'karaoke-duet', 'temp');
+const STUDIO_EXPORT_DIR = path.join(__dirname, '..', 'uploads', 'karaoke-duet', 'exports');
 
 const ensureDirectory = async (targetPath) => {
   await fs.promises.mkdir(targetPath, { recursive: true });
@@ -97,6 +98,24 @@ const getTakeDelayMs = (roomStartedAtMs, take = {}) => {
 const statSize = async (targetPath) => {
   const stat = await fs.promises.stat(targetPath);
   return stat.size;
+};
+
+const extensionFromAudioMimeType = (mimeType = '') => {
+  const normalized = String(mimeType || '').toLowerCase();
+  if (normalized.includes('wav')) return '.wav';
+  if (normalized.includes('ogg')) return '.ogg';
+  if (normalized.includes('mpeg') || normalized.includes('mp3')) return '.mp3';
+  if (normalized.includes('aac') || normalized.includes('mp4')) return '.m4a';
+  return '.webm';
+};
+
+const writeTempBuffer = async ({ buffer, mimeType = '', label = 'audio' }) => {
+  await ensureDirectory(MIX_TEMP_DIR);
+  const extension = extensionFromAudioMimeType(mimeType);
+  const filename = `${label}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}${extension}`;
+  const absolutePath = path.join(MIX_TEMP_DIR, filename);
+  await fs.promises.writeFile(absolutePath, buffer);
+  return absolutePath;
 };
 
 const mixDuetRoom = async ({ room, outputFormats = ['mp3', 'wav'] }) => {
@@ -194,6 +213,96 @@ const mixDuetRoom = async ({ room, outputFormats = ['mp3', 'wav'] }) => {
   };
 };
 
+const mixStudioKaraokeDuet = async ({
+  trackBuffer,
+  trackMimeType,
+  voiceABuffer,
+  voiceAMimeType,
+  voiceBBuffer,
+  voiceBMimeType,
+  delayASeconds = 0,
+  delayBSeconds = 0,
+  volumeA = 1,
+  volumeB = 1,
+}) => {
+  if (!trackBuffer || !voiceABuffer || !voiceBBuffer) {
+    throw new Error('Track, Singer A, and Singer B audio are required.');
+  }
+
+  await ensureDirectory(MIX_TEMP_DIR);
+  await ensureDirectory(STUDIO_EXPORT_DIR);
+
+  const trackPath = await writeTempBuffer({
+    buffer: trackBuffer,
+    mimeType: trackMimeType,
+    label: 'track',
+  });
+  const voiceAPath = await writeTempBuffer({
+    buffer: voiceABuffer,
+    mimeType: voiceAMimeType,
+    label: 'voice-a',
+  });
+  const voiceBPath = await writeTempBuffer({
+    buffer: voiceBBuffer,
+    mimeType: voiceBMimeType,
+    label: 'voice-b',
+  });
+
+  const outputName = `karaoke-duet-${Date.now()}-${crypto.randomBytes(3).toString('hex')}.mp3`;
+  const outputPath = path.join(STUDIO_EXPORT_DIR, outputName);
+
+  const safeDelayA = Math.max(0, Number(delayASeconds) || 0);
+  const safeDelayB = Math.max(0, Number(delayBSeconds) || 0);
+  const safeVolumeA = Math.max(0, Number(volumeA) || 0);
+  const safeVolumeB = Math.max(0, Number(volumeB) || 0);
+  const delayAMs = Math.round(safeDelayA * 1000);
+  const delayBMs = Math.round(safeDelayB * 1000);
+
+  const filterComplex = [
+    `[0:a]volume=0.78[track]`,
+    `[1:a]adelay=${delayAMs}|${delayAMs},volume=${safeVolumeA},aecho=0.8:0.88:55:0.22[a]`,
+    `[2:a]adelay=${delayBMs}|${delayBMs},volume=${safeVolumeB},aecho=0.8:0.88:55:0.22[b]`,
+    `[track][a][b]amix=inputs=3:duration=longest:dropout_transition=2,loudnorm=I=-16:TP=-1.5:LRA=11[mixout]`,
+  ].join(';');
+
+  try {
+    await runFfmpeg([
+      '-y',
+      '-i',
+      trackPath,
+      '-i',
+      voiceAPath,
+      '-i',
+      voiceBPath,
+      '-filter_complex',
+      filterComplex,
+      '-map',
+      '[mixout]',
+      '-codec:a',
+      'libmp3lame',
+      '-b:a',
+      '192k',
+      outputPath,
+    ]);
+  } finally {
+    await Promise.all(
+      [trackPath, voiceAPath, voiceBPath].map(async (tempPath) => {
+        try {
+          await fs.promises.unlink(tempPath);
+        } catch (_error) {
+          // best-effort cleanup
+        }
+      })
+    );
+  }
+
+  return {
+    outputUrl: publicUrlForAbsolutePath(outputPath),
+    fileSizeBytes: await statSize(outputPath),
+  };
+};
+
 module.exports = {
   mixDuetRoom,
+  mixStudioKaraokeDuet,
 };

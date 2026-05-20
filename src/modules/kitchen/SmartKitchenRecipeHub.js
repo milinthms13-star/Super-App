@@ -10,6 +10,7 @@ const BASE_TABS = [
   { id: "details", label: "Recipe" },
   { id: "cooking", label: "Cooking Mode" },
   { id: "grocery", label: "Grocery" },
+  { id: "mealplan", label: "Meal Plan" },
   { id: "tips", label: "Tips" },
   { id: "community", label: "Community" },
 ];
@@ -86,6 +87,17 @@ const SmartKitchenRecipeHub = () => {
   const [todayTip, setTodayTip] = useState(null);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [grocery, setGrocery] = useState(null);
+  const [recipeFinder, setRecipeFinder] = useState({ search: "", type: "All" });
+  const [mealPlanForm, setMealPlanForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    breakfast: "",
+    lunch: "",
+    dinner: "",
+    snacks: "",
+    notes: "",
+  });
+  const [mealPlanGrocery, setMealPlanGrocery] = useState([]);
+  const [mealPlans, setMealPlans] = useState([]);
   const [pendingCommunity, setPendingCommunity] = useState([]);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [handsFreeMode, setHandsFreeMode] = useState(false);
@@ -528,6 +540,90 @@ const SmartKitchenRecipeHub = () => {
     voiceEnabled,
   ]);
 
+  const captureIngredientVoice = useCallback(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      pushStatus("error", "Voice input is not supported on this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = getVoiceLanguageCode();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = String(event?.results?.[0]?.[0]?.transcript || "").trim();
+      if (!transcript) return;
+      setGeneratorForm((current) => ({
+        ...current,
+        ingredients: current.ingredients ? `${current.ingredients}, ${transcript}` : transcript,
+      }));
+      pushStatus("success", "Voice ingredients added.");
+    };
+    recognition.onerror = () => {
+      pushStatus("error", "Could not capture voice input.");
+    };
+
+    recognition.start();
+  }, [getVoiceLanguageCode, pushStatus]);
+
+  const loadMealPlans = useCallback(async () => {
+    await withBusy("meal-plan-load", async () => {
+      try {
+        const response = await request.get(buildApiUrl("/kitchen/meal-plans/my"));
+        setMealPlans(response.data.plans || []);
+      } catch (error) {
+        pushStatus("error", error?.response?.data?.message || "Failed to load meal plans.");
+      }
+    });
+  }, [pushStatus, request, withBusy]);
+
+  const buildMealPlanGrocery = useCallback(async () => {
+    await withBusy("meal-plan-grocery", async () => {
+      const recipes = [
+        mealPlanForm.breakfast,
+        mealPlanForm.lunch,
+        mealPlanForm.dinner,
+        mealPlanForm.snacks,
+      ]
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+
+      if (!recipes.length) {
+        setMealPlanGrocery([]);
+        pushStatus("error", "Add at least one recipe name to generate grocery list.");
+        return;
+      }
+
+      try {
+        const response = await request.post(buildApiUrl("/kitchen/grocery-list/from-recipes"), {
+          recipes,
+        });
+        setMealPlanGrocery(response.data.groceryList || []);
+        pushStatus("success", "Meal plan grocery list generated.");
+      } catch (error) {
+        pushStatus("error", error?.response?.data?.message || "Failed to generate meal plan grocery list.");
+      }
+    });
+  }, [mealPlanForm.breakfast, mealPlanForm.dinner, mealPlanForm.lunch, mealPlanForm.snacks, pushStatus, request, withBusy]);
+
+  const saveMealPlan = useCallback(async () => {
+    await withBusy("meal-plan-save", async () => {
+      try {
+        const payload = {
+          ...mealPlanForm,
+          groceryList: mealPlanGrocery,
+        };
+        await request.post(buildApiUrl("/kitchen/meal-plans"), payload);
+        pushStatus("success", "Meal plan saved.");
+        loadMealPlans();
+      } catch (error) {
+        pushStatus("error", error?.response?.data?.message || "Failed to save meal plan.");
+      }
+    });
+  }, [loadMealPlans, mealPlanForm, mealPlanGrocery, pushStatus, request, withBusy]);
+
   useEffect(() => {
     loadMeta();
     loadRecipes();
@@ -542,6 +638,12 @@ const SmartKitchenRecipeHub = () => {
       setTab("home");
     }
   }, [isAdmin, loadPendingCommunity, tab]);
+
+  useEffect(() => {
+    if (tab === "mealplan") {
+      loadMealPlans();
+    }
+  }, [loadMealPlans, tab]);
 
   useEffect(() => {
     if (!selectedRecipe?.steps?.length) return undefined;
@@ -570,6 +672,25 @@ const SmartKitchenRecipeHub = () => {
   }, [stopListening]);
 
   const trendyRecipes = recipes.slice(0, 6);
+  const filteredRecipeSuggestions = useMemo(() => {
+    const search = recipeFinder.search.trim().toLowerCase();
+    return recipes
+      .filter((recipe) =>
+        recipeFinder.type === "All"
+          ? true
+          : recipeFinder.type === "Veg"
+          ? recipe.vegType === "veg" || recipe.vegType === "vegan"
+          : recipe.vegType === "non-veg" || recipe.vegType === "egg"
+      )
+      .filter((recipe) => {
+        if (!search) return true;
+        return [recipe.title, recipe.description, recipe.category, recipe.cuisine]
+          .join(" ")
+          .toLowerCase()
+          .includes(search);
+      })
+      .slice(0, 8);
+  }, [recipeFinder.search, recipeFinder.type, recipes]);
 
   return (
     <section className="kitchen-shell">
@@ -699,6 +820,9 @@ const SmartKitchenRecipeHub = () => {
                   }
                 />
               </label>
+              <button type="button" className="kitchen-secondary-action" onClick={captureIngredientVoice}>
+                Voice Ingredient Input
+              </button>
               <div className="kitchen-grid two compact">
                 <label>
                   Language
@@ -735,6 +859,32 @@ const SmartKitchenRecipeHub = () => {
             </div>
             <div>
               <p><strong>Today's tip:</strong> {todayTip?.tipText || "Loading daily tip..."}</p>
+              <h3>Recipe Finder</h3>
+              <div className="kitchen-grid two compact">
+                <label>
+                  Search
+                  <input
+                    placeholder="Search by name or cuisine"
+                    value={recipeFinder.search}
+                    onChange={(event) =>
+                      setRecipeFinder((current) => ({ ...current, search: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Type
+                  <select
+                    value={recipeFinder.type}
+                    onChange={(event) =>
+                      setRecipeFinder((current) => ({ ...current, type: event.target.value }))
+                    }
+                  >
+                    <option value="All">All</option>
+                    <option value="Veg">Veg</option>
+                    <option value="Non Veg">Non Veg</option>
+                  </select>
+                </label>
+              </div>
               <h3>Quick recipe modes</h3>
               <div className="kitchen-chip-wall kitchen-action-chips">
                 {["Breakfast", "Lunch", "Dinner", "Snacks", "Kids recipes", "Diabetic-friendly", "Weight-loss", "10-minute recipes"].map((item) => (
@@ -761,7 +911,7 @@ const SmartKitchenRecipeHub = () => {
                 ))}
               </div>
               <h3>Trending Recipes</h3>
-              {trendyRecipes.slice(0, 3).map((recipe) => (
+              {(filteredRecipeSuggestions.length ? filteredRecipeSuggestions : trendyRecipes.slice(0, 3)).map((recipe) => (
                 <article key={recipe.id || recipe._id} className="kitchen-list-item">
                   <strong>{recipe.title}</strong>
                   <p>{recipe.cuisine} | {recipe.category} | {recipe.cookingTime} min</p>
@@ -790,6 +940,9 @@ const SmartKitchenRecipeHub = () => {
                   }
                 />
               </label>
+              <button type="button" onClick={captureIngredientVoice}>
+                Voice Ingredient Input
+              </button>
               <label>
                 Cuisine
                 <select
@@ -958,6 +1111,17 @@ const SmartKitchenRecipeHub = () => {
               <div className="kitchen-inline-actions">
                 <button
                   type="button"
+                  onClick={() => {
+                    const prevIndex = Math.max(cookingIndex - 1, 0);
+                    setCookingIndex(prevIndex);
+                    setTimerSeconds(Number(selectedRecipe.steps?.[prevIndex]?.timerSeconds || 0));
+                    speakText(selectedRecipe.steps?.[prevIndex]?.instruction || "No previous step available.");
+                  }}
+                >
+                  Previous Step
+                </button>
+                <button
+                  type="button"
                   onClick={() => speakText(currentStep.instruction)}
                 >
                   Voice Read
@@ -974,6 +1138,7 @@ const SmartKitchenRecipeHub = () => {
                     const nextIndex = Math.min(cookingIndex + 1, (selectedRecipe.steps || []).length - 1);
                     setCookingIndex(nextIndex);
                     setTimerSeconds(Number(selectedRecipe.steps?.[nextIndex]?.timerSeconds || 0));
+                    speakText(selectedRecipe.steps?.[nextIndex]?.instruction || "No next step available.");
                   }}
                 >
                   Next Step
@@ -1046,6 +1211,117 @@ const SmartKitchenRecipeHub = () => {
               </div>
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {tab === "mealplan" ? (
+        <section className="kitchen-card">
+          <h2>Weekly Meal Planner</h2>
+          <div className="kitchen-grid two">
+            <div className="kitchen-form">
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={mealPlanForm.date}
+                  onChange={(event) =>
+                    setMealPlanForm((current) => ({ ...current, date: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                Breakfast
+                <input
+                  placeholder="Example: Kerala Vegetable Upma"
+                  value={mealPlanForm.breakfast}
+                  onChange={(event) =>
+                    setMealPlanForm((current) => ({ ...current, breakfast: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                Lunch
+                <input
+                  placeholder="Example: Sambar Rice"
+                  value={mealPlanForm.lunch}
+                  onChange={(event) =>
+                    setMealPlanForm((current) => ({ ...current, lunch: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                Dinner
+                <input
+                  placeholder="Example: Egg Curry with Chapati"
+                  value={mealPlanForm.dinner}
+                  onChange={(event) =>
+                    setMealPlanForm((current) => ({ ...current, dinner: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                Snacks
+                <input
+                  placeholder="Example: Banana smoothie"
+                  value={mealPlanForm.snacks}
+                  onChange={(event) =>
+                    setMealPlanForm((current) => ({ ...current, snacks: event.target.value }))
+                  }
+                />
+              </label>
+              <label>
+                Notes
+                <textarea
+                  rows={3}
+                  placeholder="Diabetic / weight-loss notes or prep reminders"
+                  value={mealPlanForm.notes}
+                  onChange={(event) =>
+                    setMealPlanForm((current) => ({ ...current, notes: event.target.value }))
+                  }
+                />
+              </label>
+              <div className="kitchen-inline-actions">
+                <button type="button" onClick={buildMealPlanGrocery} disabled={busyKey === "meal-plan-grocery"}>
+                  {busyKey === "meal-plan-grocery" ? "Building Grocery..." : "Generate Grocery"}
+                </button>
+                <button type="button" onClick={saveMealPlan} disabled={busyKey === "meal-plan-save"}>
+                  {busyKey === "meal-plan-save" ? "Saving..." : "Save Meal Plan"}
+                </button>
+              </div>
+            </div>
+            <div>
+              <h3>Auto Grocery List</h3>
+              {!mealPlanGrocery.length ? <p>Generate from your meal plan recipes.</p> : null}
+              {mealPlanGrocery.length ? (
+                <ul>
+                  {mealPlanGrocery.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="kitchen-inline-actions">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard?.writeText(mealPlanGrocery.join(", "))
+                  }
+                  disabled={!mealPlanGrocery.length}
+                >
+                  Copy Grocery List
+                </button>
+              </div>
+              <h3>Saved Meal Plans</h3>
+              {mealPlans.length === 0 ? <p>No saved meal plans yet.</p> : null}
+              {mealPlans.slice(0, 8).map((plan) => (
+                <article key={plan._id} className="kitchen-list-item">
+                  <strong>{new Date(plan.date).toLocaleDateString()}</strong>
+                  <p>
+                    Breakfast: {plan.breakfast || "-"} | Lunch: {plan.lunch || "-"} | Dinner: {plan.dinner || "-"}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
         </section>
       ) : null}
 

@@ -5,6 +5,7 @@ const KitchenRecipe = require('../models/KitchenRecipe');
 const KitchenTip = require('../models/KitchenTip');
 const SavedRecipe = require('../models/SavedRecipe');
 const GroceryList = require('../models/GroceryList');
+const KitchenMealPlan = require('../models/KitchenMealPlan');
 const CommunityRecipe = require('../models/CommunityRecipe');
 const RecipeReview = require('../models/RecipeReview');
 const {
@@ -377,6 +378,98 @@ router.post('/grocery-list', authenticate, async (req, res) => {
   }
 });
 
+router.post('/meal-plans', authenticate, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const {
+      date,
+      breakfast = '',
+      lunch = '',
+      dinner = '',
+      snacks = '',
+      notes = '',
+      groceryList = [],
+    } = req.body || {};
+
+    const parsedDate = new Date(date || Date.now());
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Valid date is required.' });
+    }
+
+    const normalizedList = normalizeList(groceryList);
+    const plan = await KitchenMealPlan.create({
+      userId,
+      date: parsedDate,
+      breakfast: String(breakfast || '').trim(),
+      lunch: String(lunch || '').trim(),
+      dinner: String(dinner || '').trim(),
+      snacks: String(snacks || '').trim(),
+      notes: String(notes || '').trim(),
+      groceryList: normalizedList,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Meal plan saved.',
+      plan,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to save meal plan.', error: error.message });
+  }
+});
+
+router.get('/meal-plans/my', authenticate, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const plans = await KitchenMealPlan.find({ userId }).sort({ date: -1, createdAt: -1 }).limit(40).lean();
+    return res.json({
+      success: true,
+      count: plans.length,
+      plans,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load meal plans.', error: error.message });
+  }
+});
+
+router.post('/grocery-list/from-recipes', authenticate, async (req, res) => {
+  try {
+    const recipeRefs = Array.isArray(req.body?.recipes) ? req.body.recipes : [];
+    const pickedNames = recipeRefs
+      .map((entry) => String(entry?.title || entry?.name || entry || '').trim())
+      .filter(Boolean);
+
+    if (!pickedNames.length) {
+      return res.json({ success: true, groceryList: [] });
+    }
+
+    const recipeDocs = await KitchenRecipe.find(
+      { title: { $in: pickedNames }, status: 'approved' },
+      { ingredients: 1, title: 1 }
+    ).lean();
+
+    const grocerySet = new Set();
+    recipeDocs.forEach((doc) => {
+      (doc.ingredients || []).forEach((ingredient) => {
+        const name = String(ingredient?.name || '').trim();
+        if (name) grocerySet.add(name);
+      });
+    });
+
+    return res.json({
+      success: true,
+      groceryList: Array.from(grocerySet),
+      matchedRecipes: recipeDocs.map((doc) => doc.title),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to build grocery list from meal plan.',
+      error: error.message,
+    });
+  }
+});
+
 router.post('/community-recipe', authenticate, async (req, res) => {
   try {
     const userId = getUserId(req);
@@ -469,4 +562,3 @@ router.put('/admin/approve-recipe/:id', authenticate, verifyAdmin, async (req, r
 });
 
 module.exports = router;
-

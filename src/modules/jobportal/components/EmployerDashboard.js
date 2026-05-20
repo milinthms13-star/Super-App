@@ -26,6 +26,7 @@ const EmployerDashboard = ({
         <article><h3>{stats.totalApplications || 0}</h3><p>Total Applications</p></article>
         <article><h3>{stats.shortlisted || 0}</h3><p>Shortlisted</p></article>
         <article><h3>{stats.selected || 0}</h3><p>Selected</p></article>
+        <article><h3>{stats.averageMatchScore || 0}%</h3><p>Avg Match Score</p></article>
       </div>
 
       <h3>Your Jobs</h3>
@@ -38,6 +39,9 @@ const EmployerDashboard = ({
               <div>
                 <strong>{job.title}</strong>
                 <p>{job.location} | {job.salary}</p>
+                {(job.topMatchScore || job.avgMatchScore) ? (
+                  <p>Top Match: {job.topMatchScore || 0}% | Avg Match: {job.avgMatchScore || 0}%</p>
+                ) : null}
               </div>
               <div>
                 <span className="jp-row-count">{job.applicationCount || 0} applicants</span>
@@ -63,6 +67,9 @@ const EmployerDashboard = ({
                   <div>
                     <strong>{application?.applicantId?.name || "Applicant"}</strong>
                     <p>{application?.applicantId?.email || "No email available"}</p>
+                    {Number.isFinite(Number(application?.matchScore)) && Number(application?.matchScore) > 0 ? (
+                      <p>AI Match: {Math.round(Number(application.matchScore))}%</p>
+                    ) : null}
                   </div>
                   <div>
                     <label htmlFor={`status-${application._id}`} className="jp-inline-label">Status</label>

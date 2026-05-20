@@ -1,7 +1,9 @@
 const express = require('express');
 const { createId, readTourismData, updateTourismData } = require('../utils/tourismStore');
+const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
+const { authenticate, hasAdminPrivileges } = authMiddleware;
 
 const BOOKING_STATUSES = new Set(['pending', 'confirmed', 'paid', 'cancelled']);
 const LEAD_STATUSES = new Set(['new', 'contacted', 'proposal_shared', 'negotiation', 'confirmed', 'lost']);
@@ -13,6 +15,124 @@ const toNormalizedEmail = (value = '') => String(value || '').trim().toLowerCase
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const DESTINATION_PLANNER_LIBRARY = {
+  Munnar: {
+    attractions: ['Top Station', 'Mattupetty Dam', 'Tea Museum', 'Echo Point'],
+    food: ['Kerala meals', 'Cardamom tea', 'Malabar snacks'],
+    stays: ['Tea estate stay', '4-star hill resort', 'Nature homestay'],
+  },
+  Alleppey: {
+    attractions: ['Punnamada Lake', 'Kuttanad canals', 'Village boat route', 'Beach sunset'],
+    food: ['Houseboat seafood', 'Karimeen dishes', 'Traditional sadya'],
+    stays: ['Premium houseboat', 'Backwater resort', 'Family homestay'],
+  },
+  Wayanad: {
+    attractions: ['Edakkal Caves', 'Banasura Dam', 'Pookode Lake', 'Soochipara Falls'],
+    food: ['Malabar biryani', 'Spice tea', 'Tribal food tasting'],
+    stays: ['Jungle resort', 'Coffee estate stay', 'Budget cottage'],
+  },
+  Kovalam: {
+    attractions: ['Lighthouse Beach', 'Hawa Beach', 'Vizhinjam harbor', 'Coastal viewpoints'],
+    food: ['Beachside seafood', 'Fish curry meals', 'Fresh juices'],
+    stays: ['Beach resort', 'Sea-view hotel', 'Budget stay'],
+  },
+};
+
+const buildPlannerResponse = (payload = {}) => {
+  const destination = toNormalizedText(payload.destination || 'Munnar');
+  const travelerType = toNormalizedText(payload.travelerType || 'Family');
+  const days = Math.min(10, Math.max(1, toNumber(payload.days, 3)));
+  const budget = Math.max(0, toNumber(payload.budget, 0));
+  const library = DESTINATION_PLANNER_LIBRARY[destination] || DESTINATION_PLANNER_LIBRARY.Munnar;
+
+  const dayPlan = Array.from({ length: days }).map((_, index) => {
+    const attraction = library.attractions[index % library.attractions.length];
+    const food = library.food[index % library.food.length];
+    const stay = library.stays[index % library.stays.length];
+    return {
+      day: index + 1,
+      summary: `${attraction} with ${food}`,
+      details: [
+        `Morning: ${attraction}`,
+        `Afternoon: Local food and nearby exploration`,
+        `Evening: Rest at ${stay}`,
+      ],
+    };
+  });
+
+  const perDayBudget = days > 0 ? Math.round(budget / days) : 0;
+
+  return {
+    destination,
+    travelerType,
+    days,
+    confidence: destination ? 92 : 75,
+    budgetSummary: {
+      totalBudget: budget,
+      perDayBudget,
+      recommendation:
+        budget > 0
+          ? `Allocate around INR ${perDayBudget.toLocaleString('en-IN')} per day including local commute and meals.`
+          : 'Set a budget for tighter recommendations.',
+    },
+    nearby: library,
+    dayPlan,
+  };
+};
+
+const EXTERNAL_BOOKING_STATUS_TO_INTERNAL = {
+  'new enquiry': 'pending',
+  contacted: 'pending',
+  'payment pending': 'pending',
+  confirmed: 'confirmed',
+  completed: 'paid',
+  cancelled: 'cancelled',
+};
+
+const INTERNAL_BOOKING_STATUS_TO_EXTERNAL = {
+  pending: 'New Enquiry',
+  confirmed: 'Confirmed',
+  paid: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+const normalizePhoneDigits = (value = '') => String(value || '').replace(/\D/g, '');
+
+const mapIncomingBookingStatus = (status = '') => {
+  const normalized = String(status || '').trim().toLowerCase();
+  if (BOOKING_STATUSES.has(normalized)) return normalized;
+  return EXTERNAL_BOOKING_STATUS_TO_INTERNAL[normalized] || '';
+};
+
+const toTourismBookingView = (booking = {}) => {
+  const guests = Number(booking.travelerCount || booking.guests || 1);
+  const baseAmount = Number(
+    booking.amountSummary?.baseAmount ||
+      booking.totalAmount ||
+      booking.estimatedBudget ||
+      0
+  );
+  const payableAmount = Number(
+    booking.amountSummary?.payableAmount ||
+      booking.totalAmount ||
+      0
+  );
+  const status = String(booking.bookingStatus || 'pending').toLowerCase();
+
+  return {
+    ...booking,
+    packageTitle: booking.packageTitle || booking.title || 'Tour package',
+    destination: booking.destination || '',
+    name: booking.customerName || booking.travelerName || '',
+    phone: booking.customerPhone || booking.travelerPhone || '',
+    travelDate: booking.travelDate || booking.startDate || '',
+    guests,
+    pickup: booking.pickupCity || booking.pickup || '',
+    totalAmount: baseAmount || payableAmount,
+    status: INTERNAL_BOOKING_STATUS_TO_EXTERNAL[status] || 'New Enquiry',
+  };
 };
 
 const buildBookingTotals = (baseAmount, paymentType, couponCode, coupons) => {
@@ -105,6 +225,21 @@ router.post('/payments/intent', (req, res) => {
   });
 });
 
+router.post('/planner/itinerary', (req, res) => {
+  try {
+    const itinerary = buildPlannerResponse(req.body || {});
+    return res.json({
+      success: true,
+      data: itinerary,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to generate itinerary right now.',
+    });
+  }
+});
+
 router.post('/packages/:packageId/report', async (req, res) => {
   const packageId = toNormalizedText(req.params.packageId);
   const reason = toNormalizedText(req.body?.reason || 'Package issue reported');
@@ -174,6 +309,32 @@ router.get('/bookings', async (req, res) => {
     return true;
   });
   return res.json({ success: true, data: { bookings } });
+});
+
+router.get('/bookings/my', authenticate, async (req, res) => {
+  try {
+    const data = await readTourismData();
+    const userEmail = toNormalizedEmail(req.user?.email || '');
+    const userPhoneDigits = normalizePhoneDigits(req.user?.phone || '');
+
+    const bookings = data.bookings.filter((booking) => {
+      const bookingEmail = toNormalizedEmail(booking.customerEmail || '');
+      const bookingPhoneDigits = normalizePhoneDigits(booking.customerPhone || '');
+      if (userEmail && bookingEmail && bookingEmail === userEmail) return true;
+      if (userPhoneDigits && bookingPhoneDigits && bookingPhoneDigits.endsWith(userPhoneDigits.slice(-10))) return true;
+      return false;
+    });
+
+    return res.json({
+      success: true,
+      data: bookings.map(toTourismBookingView),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load your tourism bookings.',
+    });
+  }
 });
 
 router.post('/bookings', async (req, res) => {
@@ -269,8 +430,8 @@ router.post('/bookings', async (req, res) => {
 });
 
 router.patch('/bookings/:bookingId/status', async (req, res) => {
-  const status = toNormalizedText(req.body?.status).toLowerCase();
-  if (!BOOKING_STATUSES.has(status)) {
+  const status = mapIncomingBookingStatus(req.body?.status);
+  if (!status || !BOOKING_STATUSES.has(status)) {
     return res.status(400).json({
       success: false,
       message: 'Invalid status. Allowed: pending, confirmed, paid, cancelled.',
@@ -304,6 +465,109 @@ router.patch('/bookings/:bookingId/status', async (req, res) => {
     success: true,
     data: { booking: updatedBooking },
   });
+});
+
+router.get('/admin/bookings', authenticate, async (req, res) => {
+  try {
+    if (!hasAdminPrivileges(req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required.',
+      });
+    }
+
+    const data = await readTourismData();
+    const search = toNormalizedText(req.query.search || '').toLowerCase();
+    const requestedStatus = mapIncomingBookingStatus(req.query.status);
+
+    let bookings = Array.isArray(data.bookings) ? data.bookings : [];
+    if (requestedStatus) {
+      bookings = bookings.filter((booking) => String(booking.bookingStatus || '').toLowerCase() === requestedStatus);
+    }
+    if (search) {
+      bookings = bookings.filter((booking) => {
+        const haystack = [
+          booking.packageTitle,
+          booking.destination,
+          booking.customerName,
+          booking.customerPhone,
+          booking.customerEmail,
+          booking.pickupCity,
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ');
+        return haystack.includes(search);
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: bookings.map(toTourismBookingView),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load admin tourism bookings.',
+    });
+  }
+});
+
+router.put('/admin/bookings/:bookingId/status', authenticate, async (req, res) => {
+  try {
+    if (!hasAdminPrivileges(req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required.',
+      });
+    }
+
+    const status = mapIncomingBookingStatus(req.body?.status);
+    if (!status || !BOOKING_STATUSES.has(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Allowed: New Enquiry, Contacted, Payment Pending, Confirmed, Completed, Cancelled.',
+      });
+    }
+
+    const vendorId = toNormalizedText(req.body?.vendorId || '');
+    const adminNote = toNormalizedText(req.body?.adminNote || '');
+
+    let updatedBooking = null;
+    await updateTourismData((current) => {
+      const nextBookings = (Array.isArray(current.bookings) ? current.bookings : []).map((booking) => {
+        if (String(booking.id) !== String(req.params.bookingId)) {
+          return booking;
+        }
+        updatedBooking = {
+          ...booking,
+          bookingStatus: status,
+          vendorId: vendorId || booking.vendorId || '',
+          adminNote: adminNote || booking.adminNote || '',
+          updatedAt: new Date().toISOString(),
+        };
+        return updatedBooking;
+      });
+      return { ...current, bookings: nextBookings };
+    });
+
+    if (!updatedBooking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: toTourismBookingView(updatedBooking),
+      message: 'Booking status updated',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to update booking status.',
+    });
+  }
 });
 
 router.post('/reviews', async (req, res) => {

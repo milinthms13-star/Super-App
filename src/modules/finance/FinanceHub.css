@@ -412,6 +412,83 @@
   }
 }
 
+.finance-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.finance-overview-card {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.finance-overview-card h3 {
+  margin: 0;
+  color: #0d2858;
+}
+
+.finance-overview-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.finance-overview-form-grid label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.finance-overview-form-grid input,
+.finance-overview-form-grid select {
+  border: 1px solid #d1d9e6;
+  border-radius: 10px;
+  padding: 0.52rem 0.62rem;
+  font-size: 0.88rem;
+}
+
+.finance-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.finance-overview-metrics div {
+  border: 1px solid rgba(30, 64, 175, 0.14);
+  border-radius: 10px;
+  padding: 0.52rem;
+  background: #f8fbff;
+}
+
+.finance-overview-metrics span {
+  display: block;
+  color: #52607a;
+  font-size: 0.75rem;
+}
+
+.finance-overview-metrics strong {
+  color: #0b3d80;
+  font-size: 0.93rem;
+}
+
+@media (max-width: 920px) {
+  .finance-overview-grid,
+  .finance-overview-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-overview-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Redesign Layer: Finance Hub Experience */
 .finance-hub-page {
   --finance-bg-top: #fff4e5;

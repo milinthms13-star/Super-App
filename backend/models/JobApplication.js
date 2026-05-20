@@ -36,6 +36,29 @@ const jobApplicationSchema = new mongoose.Schema({
   resumeUrl: {
     type: String
   },
+  name: {
+    type: String,
+    trim: true
+  },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true
+  },
+  phone: {
+    type: String,
+    trim: true
+  },
+  skills: [{
+    type: String,
+    trim: true
+  }],
+  matchScore: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0
+  },
   coverLetter: {
     type: String
   },

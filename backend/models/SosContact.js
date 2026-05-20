@@ -30,6 +30,26 @@ const sosContactSchema = new mongoose.Schema({
     enum: ['SMS', 'WhatsApp', 'Call'],
     default: ['SMS']
   }],
+  otp: {
+    type: String,
+    select: false
+  },
+  otpExpiry: {
+    type: Date,
+    select: false
+  },
+  otpAttempts: {
+    type: Number,
+    default: 0,
+    select: false
+  },
+  verified: {
+    type: Boolean,
+    default: false
+  },
+  verifiedAt: {
+    type: Date
+  },
   isActive: {
     type: Boolean,
     default: true

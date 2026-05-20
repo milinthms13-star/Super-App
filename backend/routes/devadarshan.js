@@ -398,6 +398,46 @@ router.get('/bootstrap', authenticate, async (req, res) => {
   }
 });
 
+router.get('/temples', async (req, res) => {
+  try {
+    await ensureSeedData();
+    const search = String(req.query.search || '').trim();
+    const district = String(req.query.district || '').trim();
+    const deity = String(req.query.deity || '').trim();
+
+    const query = {};
+    if (district) query.district = new RegExp(district, 'i');
+    if (deity) query.deity = new RegExp(deity, 'i');
+    if (search) {
+      query.$or = [
+        { name: new RegExp(search, 'i') },
+        { deity: new RegExp(search, 'i') },
+        { district: new RegExp(search, 'i') },
+        { templeType: new RegExp(search, 'i') },
+      ];
+    }
+
+    const temples = await DevadarshanTemple.find(query).sort({ name: 1 }).lean();
+    return res.json({
+      success: true,
+      data: temples.map((item) => ({
+        ...item,
+        id: item.templeId,
+        timing: item.timings,
+        offerings: (item.poojas || []).map((pooja) => ({
+          name: pooja.name,
+          amount: pooja.price,
+          description: pooja.prasadamSupported ? 'Prasadam supported' : 'No prasadam',
+        })),
+        status: item.verified ? 'Approved' : 'Pending',
+      })),
+    });
+  } catch (error) {
+    logger.error('devadarshan list temples error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load temples.' });
+  }
+});
+
 router.post('/preferences/favorites/:templeId/toggle', authenticate, async (req, res) => {
   try {
     const state = await getOrCreateState(req.user.email);
@@ -619,6 +659,30 @@ router.post('/bookings', authenticate, async (req, res) => {
   } catch (err) {
     logger.error('devadarshan create booking error:', err);
     return res.status(500).json({ success: false, message: 'Unable to create booking.' });
+  }
+});
+
+router.get('/bookings/my', authenticate, async (req, res) => {
+  try {
+    const userEmail = String(req.user.email || '').trim().toLowerCase();
+    const bookings = await DevadarshanBooking.find({ customerEmail: userEmail }).sort({ createdAt: -1 }).lean();
+    return res.json({
+      success: true,
+      data: bookings.map((item) => ({
+        ...item,
+        id: item.bookingCode,
+        templeName: item.templeName,
+        deity: '',
+        offering: item.poojaType,
+        date: item.bookingDate,
+        amount: item.amount,
+        paymentStatus: item.paymentStatus,
+        bookingStatus: item.status,
+      })),
+    });
+  } catch (error) {
+    logger.error('devadarshan my bookings error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load bookings.' });
   }
 });
 
@@ -1034,6 +1098,37 @@ router.get('/donations/:donationCode/receipt', authenticate, async (req, res) =>
   }
 });
 
+router.get('/admin/bookings', authenticate, verifyAdmin, async (req, res) => {
+  try {
+    const bookingStatus = String(req.query.bookingStatus || '').trim();
+    const paymentStatus = String(req.query.paymentStatus || '').trim();
+    const search = String(req.query.search || '').trim();
+    const query = {};
+    if (bookingStatus) query.status = bookingStatus;
+    if (paymentStatus) query.paymentStatus = paymentStatus;
+    if (search) {
+      query.$or = [
+        { templeName: new RegExp(search, 'i') },
+        { devoteeName: new RegExp(search, 'i') },
+        { customerName: new RegExp(search, 'i') },
+        { customerEmail: new RegExp(search, 'i') },
+      ];
+    }
+    const bookings = await DevadarshanBooking.find(query).sort({ createdAt: -1 }).lean();
+    return res.json({
+      success: true,
+      data: bookings.map((item) => ({
+        ...item,
+        id: item.bookingCode,
+        bookingStatus: item.status,
+      })),
+    });
+  } catch (error) {
+    logger.error('devadarshan admin bookings list error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load admin bookings.' });
+  }
+});
+
 router.post('/admin/temples', authenticate, verifyAdmin, async (req, res) => {
   try {
     const { error, value } = adminTempleSchema.validate(req.body || {}, { stripUnknown: true });
@@ -1117,33 +1212,46 @@ router.patch('/admin/temples/:templeId/verify', authenticate, verifyAdmin, async
   }
 });
 
-router.patch('/admin/bookings/:bookingCode/status', authenticate, verifyAdmin, async (req, res) => {
+const handleAdminBookingStatusUpdate = async (req, res) => {
   try {
-    const { error, value } = adminStatusSchema.validate(req.body || {}, { stripUnknown: true });
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
+    const bookingCode = String(req.params.bookingCode || req.params.id || '').trim();
+    const requestedStatus = String(req.body?.status || req.body?.bookingStatus || '').trim();
+    const requestedPaymentStatus = String(req.body?.paymentStatus || '').trim();
+    const adminNote = String(req.body?.adminNote || '').trim();
+
+    if (!bookingCode) {
+      return res.status(400).json({ success: false, message: 'Booking id is required.' });
     }
 
-    const booking = await DevadarshanBooking.findOne({ bookingCode: String(req.params.bookingCode || '').trim() });
+    const booking = await DevadarshanBooking.findOne({ bookingCode });
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found.' });
     }
 
-    if (!canTransitionBookingStatus(booking.status, value.status)) {
-      return res.status(409).json({
-        success: false,
-        message: `Booking status cannot move from ${booking.status} to ${value.status}.`,
-      });
+    if (requestedStatus) {
+      if (!BOOKING_STATUSES.includes(requestedStatus)) {
+        return res.status(400).json({ success: false, message: `status must be one of ${BOOKING_STATUSES.join(', ')}.` });
+      }
+      if (!canTransitionBookingStatus(booking.status, requestedStatus)) {
+        return res.status(409).json({
+          success: false,
+          message: `Booking status cannot move from ${booking.status} to ${requestedStatus}.`,
+        });
+      }
+      booking.status = requestedStatus;
+      if (requestedStatus === 'Confirmed') {
+        booking.adminApprovalStatus = 'Approved by Admin';
+      }
+      if (requestedStatus === 'Completed') {
+        booking.refundStatus = 'Not Requested';
+      }
+      addBookingTimelineEntry(booking, requestedStatus, 'admin', adminNote || 'Status updated by admin.');
     }
 
-    booking.status = value.status;
-    if (value.status === 'Confirmed') {
-      booking.adminApprovalStatus = 'Approved by Admin';
+    if (requestedPaymentStatus) {
+      booking.paymentStatus = requestedPaymentStatus;
     }
-    if (value.status === 'Completed') {
-      booking.refundStatus = 'Not Requested';
-    }
-    addBookingTimelineEntry(booking, value.status, 'admin', 'Status updated by admin.');
+
     await booking.save();
 
     const state = await getOrCreateState(booking.customerEmail);
@@ -1154,7 +1262,10 @@ router.patch('/admin/bookings/:bookingCode/status', authenticate, verifyAdmin, a
     logger.error('devadarshan admin update booking status error:', err);
     return res.status(500).json({ success: false, message: 'Unable to update booking status.' });
   }
-});
+};
+
+router.patch('/admin/bookings/:bookingCode/status', authenticate, verifyAdmin, handleAdminBookingStatusUpdate);
+router.put('/admin/bookings/:id/status', authenticate, verifyAdmin, handleAdminBookingStatusUpdate);
 
 module.exports = router;
 module.exports.__private__ = {

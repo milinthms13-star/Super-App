@@ -1380,6 +1380,7 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
     }
     const totalAmount = normalizedItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
     if (isMongoReady()) {
+      const initialStatus = requiresPrescription ? 'verified' : 'placed';
       const created = await HealthcarePharmacyOrder.create({
         userId,
         items: normalizedItems,
@@ -1394,7 +1395,8 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
         prescriptionStorageKey,
         paymentMethod: payload.paymentMethod || 'upi',
         paymentStatus: 'pending',
-        orderStatus: requiresPrescription ? 'verified' : 'placed',
+        orderStatus: initialStatus,
+        orderTimeline: [{ status: initialStatus, at: new Date() }],
       });
       await addNotification({
         userId,
@@ -1405,6 +1407,7 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
       });
       return res.status(201).json({ success: true, data: toClientObject(created) });
     }
+    const initialStatus = requiresPrescription ? 'verified' : 'placed';
     const created = {
       id: `pharm-order-${Date.now()}-${crypto.randomUUID()}`,
       userId,
@@ -1420,7 +1423,8 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
       prescriptionStorageKey,
       paymentMethod: payload.paymentMethod || 'upi',
       paymentStatus: 'pending',
-      orderStatus: requiresPrescription ? 'verified' : 'placed',
+      orderStatus: initialStatus,
+      orderTimeline: [{ status: initialStatus, at: new Date().toISOString() }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1452,6 +1456,74 @@ router.get('/pharmacy/orders', authenticate, async (req, res) => {
   }
 });
 
+router.patch('/pharmacy/orders/:orderId', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const userId = userIdString(req);
+    const payload = req.body || {};
+    const allowedStatuses = ['placed', 'verified', 'processing', 'out_for_delivery', 'delivered', 'cancelled'];
+    const orderStatus = payload.orderStatus ? String(payload.orderStatus).trim() : undefined;
+    const paymentStatus = payload.paymentStatus ? String(payload.paymentStatus).trim().toLowerCase() : undefined;
+
+    if (orderStatus && !allowedStatuses.includes(orderStatus)) {
+      return res.status(400).json({ success: false, message: 'Invalid orderStatus value' });
+    }
+
+    if (isMongoReady()) {
+      const order = await HealthcarePharmacyOrder.findOne({ _id: orderId, userId });
+      if (!order) {
+        return res.status(404).json({ success: false, message: 'Order not found' });
+      }
+
+      if (orderStatus) {
+        order.orderStatus = orderStatus;
+        order.orderTimeline = Array.isArray(order.orderTimeline) ? order.orderTimeline : [];
+        order.orderTimeline.push({ status: orderStatus, at: new Date() });
+      }
+
+      if (paymentStatus) {
+        const normalizedPayment = paymentStatus === 'success' ? 'paid' : paymentStatus;
+        order.paymentStatus = normalizedPayment;
+      }
+
+      if (payload.deliveryAddress) {
+        order.deliveryAddress = String(payload.deliveryAddress);
+      }
+      if (payload.notes) {
+        order.notes = String(payload.notes);
+      }
+
+      await order.save();
+      return res.status(200).json({ success: true, data: toClientObject(order) });
+    }
+
+    const index = inMemoryStore.pharmacyOrders.findIndex((order) => order.id === orderId && order.userId === userId);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (orderStatus) {
+      inMemoryStore.pharmacyOrders[index].orderStatus = orderStatus;
+      inMemoryStore.pharmacyOrders[index].orderTimeline = inMemoryStore.pharmacyOrders[index].orderTimeline || [];
+      inMemoryStore.pharmacyOrders[index].orderTimeline.push({ status: orderStatus, at: new Date().toISOString() });
+    }
+    if (paymentStatus) {
+      inMemoryStore.pharmacyOrders[index].paymentStatus = paymentStatus === 'success' ? 'paid' : paymentStatus;
+    }
+    if (payload.deliveryAddress) {
+      inMemoryStore.pharmacyOrders[index].deliveryAddress = String(payload.deliveryAddress);
+    }
+    if (payload.notes) {
+      inMemoryStore.pharmacyOrders[index].notes = String(payload.notes);
+    }
+    inMemoryStore.pharmacyOrders[index].updatedAt = new Date().toISOString();
+
+    return res.status(200).json({ success: true, data: inMemoryStore.pharmacyOrders[index] });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Unable to update pharmacy order', error: error.message });
+  }
+});
+
 router.post('/pharmacy/orders/:orderId/payment/verify', authenticate, async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -1466,6 +1538,11 @@ router.post('/pharmacy/orders/:orderId/payment/verify', authenticate, async (req
       }
       order.paymentStatus = normalizedStatus;
       order.paymentReference = paymentReference || order.paymentReference;
+      if (normalizedStatus === 'paid' && order.orderStatus !== 'delivered') {
+        order.orderStatus = order.orderStatus === 'verified' ? 'processing' : 'processing';
+        order.orderTimeline = Array.isArray(order.orderTimeline) ? order.orderTimeline : [];
+        order.orderTimeline.push({ status: order.orderStatus, at: new Date() });
+      }
       await order.save();
       if (normalizedStatus === 'paid') {
         await addNotification({
@@ -1489,6 +1566,9 @@ router.post('/pharmacy/orders/:orderId/payment/verify', authenticate, async (req
       updatedAt: new Date().toISOString(),
     };
     if (normalizedStatus === 'paid') {
+      inMemoryStore.pharmacyOrders[index].orderStatus = inMemoryStore.pharmacyOrders[index].orderStatus === 'verified' ? 'processing' : 'processing';
+      inMemoryStore.pharmacyOrders[index].orderTimeline = inMemoryStore.pharmacyOrders[index].orderTimeline || [];
+      inMemoryStore.pharmacyOrders[index].orderTimeline.push({ status: inMemoryStore.pharmacyOrders[index].orderStatus, at: new Date().toISOString() });
       await addNotification({
         userId,
         title: 'Pharmacy payment successful',
@@ -1935,6 +2015,57 @@ router.patch('/partner/applications/:applicationId/review', authenticate, verify
     return res.status(200).json({ success: true, data: inMemoryStore.partnerApplications[index] });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Unable to review partner application', error: error.message });
+  }
+});
+
+router.get('/dashboard/summary', authenticate, async (req, res) => {
+  try {
+    const userId = userIdString(req);
+    if (isMongoReady()) {
+      const [appointments, pharmacyOrders, records, reminders, emergencyCases, pendingApprovals] = await Promise.all([
+        HealthcareAppointment.countDocuments({ userId }),
+        HealthcarePharmacyOrder.countDocuments({ userId }),
+        HealthcareRecord.countDocuments({ userId }),
+        HealthcareRefillReminder.countDocuments({ userId }),
+        HealthcareEmergencyIncident.countDocuments({ userId }),
+        HealthcarePartnerApplication.countDocuments({ userId, status: 'pending' }),
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          appointments,
+          pharmacyOrders,
+          records,
+          reminders,
+          emergencyCases,
+          pendingApprovals,
+          healthScore: Math.min(100, 40 + records * 3 + reminders * 5 + appointments * 2),
+        },
+      });
+    }
+
+    const appointments = inMemoryStore.appointments.filter((item) => String(item.userId) === userId).length;
+    const pharmacyOrders = inMemoryStore.pharmacyOrders.filter((item) => String(item.userId) === userId).length;
+    const records = inMemoryStore.records.filter((item) => String(item.userId) === userId).length;
+    const reminders = inMemoryStore.refillReminders.filter((item) => String(item.userId) === userId).length;
+    const emergencyCases = inMemoryStore.incidents.filter((item) => String(item.userId) === userId).length;
+    const pendingApprovals = inMemoryStore.partnerApplications.filter((item) => String(item.userId) === userId && item.status === 'pending').length;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        appointments,
+        pharmacyOrders,
+        records,
+        reminders,
+        emergencyCases,
+        pendingApprovals,
+        healthScore: Math.min(100, 40 + records * 3 + reminders * 5 + appointments * 2),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Unable to load healthcare dashboard', error: error.message });
   }
 });
 

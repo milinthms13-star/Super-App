@@ -1,0 +1,285 @@
+.health10 {
+  padding: 20px;
+  background: #f8fafc;
+  min-height: 100vh;
+}
+
+.health10-hero {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  gap: 20px;
+  padding: 28px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #0f766e, #0f172a);
+  color: white;
+}
+
+.health10-tag {
+  color: #99f6e4;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.health10-hero h1 {
+  font-size: 42px;
+  margin: 8px 0;
+}
+
+.health10-hero p {
+  color: #d1fae5;
+  max-width: 650px;
+}
+
+.symptom-card {
+  background: white;
+  color: #0f172a;
+  border-radius: 24px;
+  padding: 18px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+}
+
+.symptom-card textarea {
+  width: 100%;
+  height: 95px;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 12px;
+  resize: none;
+  outline: none;
+}
+
+.symptom-card button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 13px;
+  border: none;
+  border-radius: 16px;
+  background: #0f766e;
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.symptom-card small {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+}
+
+.health10-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.health10-summary div {
+  background: white;
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.health10-summary strong {
+  display: block;
+  margin-bottom: 10px;
+  color: #0f172a;
+}
+
+.health10-summary p {
+  font-size: 24px;
+  margin: 0;
+  color: #064e3b;
+  font-weight: 700;
+}
+
+.health10-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.health10-service {
+  text-align: left;
+  border: none;
+  background: white;
+  border-radius: 24px;
+  padding: 22px;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.health10-service:hover {
+  transform: translateY(-5px);
+}
+
+.health10-service span {
+  font-size: 34px;
+}
+
+.health10-service h3 {
+  margin: 14px 0 6px;
+}
+
+.health10-service p {
+  color: #64748b;
+  min-height: 42px;
+}
+
+.health10-service strong {
+  color: #0f766e;
+}
+
+.health10-strip {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.health10-strip div {
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  padding: 18px;
+  border-radius: 20px;
+}
+
+.health10-strip p {
+  margin-bottom: 0;
+  color: #475569;
+}
+
+.health10-status {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  font-weight: 700;
+}
+
+.health10-orders {
+  margin-top: 28px;
+}
+
+.health10-orders-header {
+  margin-bottom: 14px;
+}
+
+.health10-orders-header h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.health10-orders-header p {
+  margin: 8px 0 0;
+  color: #475569;
+}
+
+.health10-order-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.health10-order-card {
+  background: white;
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 16px 35px rgba(15, 23, 42, 0.08);
+  display: grid;
+  gap: 14px;
+}
+
+.health10-order-meta {
+  display: grid;
+  gap: 8px;
+  color: #0f172a;
+}
+
+.health10-order-meta strong {
+  font-size: 16px;
+}
+
+.health10-order-meta span {
+  font-size: 14px;
+  color: #475569;
+}
+
+.health10-order-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.health10-order-status-pill,
+.health10-order-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+}
+
+.health10-order-status-pill.placed,
+.health10-order-pill.placed {
+  background: #0284c7;
+}
+
+.health10-order-status-pill.verified,
+.health10-order-pill.verified {
+  background: #0f766e;
+}
+
+.health10-order-status-pill.processing,
+.health10-order-pill.processing {
+  background: #f59e0b;
+}
+
+.health10-order-status-pill.out_for_delivery,
+.health10-order-pill.out_for_delivery {
+  background: #2563eb;
+}
+
+.health10-order-status-pill.delivered,
+.health10-order-pill.delivered {
+  background: #15803d;
+}
+
+.health10-order-status-pill.cancelled,
+.health10-order-pill.cancelled {
+  background: #dc2626;
+}
+
+.health10-order-empty {
+  background: white;
+  border-radius: 22px;
+  padding: 22px;
+  color: #475569;
+  border: 1px dashed #cbd5e1;
+}
+
+.health10-loading {
+  background: #ecfeff;
+  color: #0f766e;
+  border: 1px solid #7dd3fc;
+}
+
+.health10-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+@media (max-width: 900px) {
+  .health10-hero,
+  .health10-grid,
+  .health10-strip,
+  .health10-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .health10-hero h1 {
+    font-size: 30px;
+  }
+}

@@ -8,6 +8,7 @@ import TourismQuickActions from "./components/TourismQuickActions";
 import VendorPanel from "./components/VendorPanel";
 import AdminPanel from "./components/AdminPanel";
 import BookingHistory from "./components/BookingHistory";
+import TourismPlannerDesk from "./components/TourismPlannerDesk";
 import {
   FALLBACK_ADMIN_REVIEW_ITEMS,
   FALLBACK_COUPONS,
@@ -329,6 +330,10 @@ const TourismMarketplace = () => {
   };
 
   const handleTourismQuickAction = (action) => {
+    if (action.filters?.openPlanner) {
+      setActiveTab("planner");
+      return;
+    }
     if (action.filters?.openCustomRequest) {
       setActiveTab("custom");
       return;
@@ -573,6 +578,9 @@ const TourismMarketplace = () => {
         <button type="button" className={`tourism-nav-item ${activeTab === "marketplace" ? "active" : ""}`} onClick={() => setActiveTab("marketplace")}>
           Marketplace
         </button>
+        <button type="button" className={`tourism-nav-item ${activeTab === "planner" ? "active" : ""}`} onClick={() => setActiveTab("planner")}>
+          AI Planner
+        </button>
         <button type="button" className={`tourism-nav-item ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}>
           Booking History
         </button>
@@ -753,6 +761,14 @@ const TourismMarketplace = () => {
           bookings={bookingHistory}
           loading={loadingState.bookingRefresh}
           onRefresh={loadBookings}
+        />
+      )}
+
+      {activeTab === "planner" && (
+        <TourismPlannerDesk
+          packages={filteredPackages.length ? filteredPackages : dataState.packages}
+          onBookPackage={setSelectedPackageId}
+          onOpenCustomDesk={() => setActiveTab("custom")}
         />
       )}
 

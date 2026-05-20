@@ -704,6 +704,7 @@ const sendMessage = async ({
     friendId: session.friendId,
     friendName: session.friendName,
     response: finalText,
+    reply: finalText,
   };
 };
 

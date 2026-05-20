@@ -27,6 +27,9 @@ const ApplicationsBoard = ({ applications, loading }) => (
             <div>
               <strong>{application?.jobId?.title || "Job removed"}</strong>
               <p>{application?.jobId?.company || "Unknown company"} | {application?.jobId?.location || "N/A"}</p>
+              {Number.isFinite(Number(application?.matchScore)) && Number(application?.matchScore) > 0 ? (
+                <p>AI Match: {Math.round(Number(application.matchScore))}%</p>
+              ) : null}
             </div>
             <div>
               <span className={`jp-status-chip jp-status-${normalizeStatus(application.status).toLowerCase()}`}>

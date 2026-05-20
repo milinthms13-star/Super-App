@@ -6,12 +6,13 @@ const multer = require('multer');
 
 const authenticate = require('../middleware/auth');
 const KaraokeDuetRoom = require('../models/KaraokeDuetRoom');
-const { mixDuetRoom } = require('../services/karaokeMixService');
+const { mixDuetRoom, mixStudioKaraokeDuet } = require('../services/karaokeMixService');
 
 const router = express.Router();
 
 const MAX_TAKE_SIZE_BYTES = 60 * 1024 * 1024;
 const TAKES_DIR = path.join(__dirname, '..', 'uploads', 'karaoke-duet', 'takes');
+const MAX_STUDIO_AUDIO_SIZE_BYTES = 200 * 1024 * 1024;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -27,6 +28,19 @@ const upload = multer({
     cb(null, true);
   },
 });
+
+const uploadStudio = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_STUDIO_AUDIO_SIZE_BYTES },
+});
+
+const supportedStudioAudioMime = /^(audio\/(mpeg|mp3|wav|x-wav|aac|mp4|ogg|webm|x-m4a)|application\/octet-stream)$/i;
+
+const validateStudioAudioFile = (file, label) => {
+  if (!file || !file.buffer || !supportedStudioAudioMime.test(String(file.mimetype || ''))) {
+    throw new Error(`Invalid ${label}. Please upload MP3/WAV/AAC/WEBM/OGG audio.`);
+  }
+};
 
 const ROOM_STATUS = {
   waiting: 'waiting',
@@ -478,5 +492,59 @@ router.get('/rooms/:roomCode/final-output', authenticate, async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch final output.', error: error.message });
   }
 });
+
+router.post(
+  '/export',
+  authenticate,
+  uploadStudio.fields([
+    { name: 'track', maxCount: 1 },
+    { name: 'voiceA', maxCount: 1 },
+    { name: 'voiceB', maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const track = req.files?.track?.[0];
+      const voiceA = req.files?.voiceA?.[0];
+      const voiceB = req.files?.voiceB?.[0];
+
+      validateStudioAudioFile(track, 'karaoke track');
+      validateStudioAudioFile(voiceA, 'Singer A recording');
+      validateStudioAudioFile(voiceB, 'Singer B recording');
+
+      const result = await mixStudioKaraokeDuet({
+        trackBuffer: track.buffer,
+        trackMimeType: track.mimetype,
+        voiceABuffer: voiceA.buffer,
+        voiceAMimeType: voiceA.mimetype,
+        voiceBBuffer: voiceB.buffer,
+        voiceBMimeType: voiceB.mimetype,
+        delayASeconds: req.body?.delayA,
+        delayBSeconds: req.body?.delayB,
+        volumeA: req.body?.volumeA,
+        volumeB: req.body?.volumeB,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Karaoke duet exported successfully.',
+        data: {
+          outputUrl: result.outputUrl,
+          fileSizeBytes: result.fileSizeBytes,
+        },
+      });
+    } catch (error) {
+      const message = String(error?.message || 'Audio mixing failed.');
+      const isValidationError =
+        message.startsWith('Invalid ') ||
+        message.includes('required') ||
+        message.includes('Please upload');
+
+      return res.status(isValidationError ? 400 : 500).json({
+        success: false,
+        message,
+      });
+    }
+  }
+);
 
 module.exports = router;

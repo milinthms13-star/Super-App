@@ -326,6 +326,17 @@
   font-weight: 600;
 }
 
+.voice-friend-safety-alert {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(194, 65, 12, 0.25);
+  background: linear-gradient(145deg, rgba(255, 247, 237, 0.95), rgba(255, 255, 255, 0.9));
+  color: #9a3412;
+  font-size: 0.87rem;
+  line-height: 1.45;
+}
+
 .voice-friend-typing {
   margin: 8px 0 4px;
 }
@@ -392,6 +403,35 @@
   flex-direction: column;
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.voice-friend-quick-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.voice-friend-chip {
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--vf-ink-800);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.voice-friend-chip:hover {
+  border-color: rgba(14, 165, 164, 0.48);
+  background: rgba(240, 253, 250, 0.95);
+}
+
+.voice-friend-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .voice-friend-bubble {

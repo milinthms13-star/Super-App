@@ -29,6 +29,7 @@ const endpoints = {
   partnerApplications: buildApiUrl("/partner/applications"),
   partnerAdminApplications: buildApiUrl("/partner/applications/admin"),
   partnerDashboard: buildApiUrl("/partner/dashboard"),
+  dashboardSummary: buildApiUrl("/dashboard/summary"),
 };
 
 const authHeaders = () => ({
@@ -521,6 +522,30 @@ export const healthcareApi = {
         totalPharmacyOrders: 0,
       },
     }), { fallbackStatuses: [401, 403] });
+  },
+
+  getHealthcareSummary: async () => {
+    return getWithFallback(async () => {
+      const response = await axios.get(endpoints.dashboardSummary, authHeaders());
+      const data = unwrap(response) || {};
+      return {
+        appointments: Number(data.appointments ?? 0),
+        pharmacyOrders: Number(data.pharmacyOrders ?? 0),
+        records: Number(data.records ?? 0),
+        reminders: Number(data.reminders ?? 0),
+        emergencyCases: Number(data.emergencyCases ?? 0),
+        pendingApprovals: Number(data.pendingApprovals ?? 0),
+        healthScore: Number(data.healthScore ?? 42),
+      };
+    }, {
+      appointments: 0,
+      pharmacyOrders: 0,
+      records: 0,
+      reminders: 0,
+      emergencyCases: 0,
+      pendingApprovals: 0,
+      healthScore: 42,
+    }, { fallbackStatuses: [401, 403, 404] });
   },
 
   getInitialData: async () => {

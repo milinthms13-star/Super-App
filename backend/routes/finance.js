@@ -347,6 +347,36 @@ const toNumber = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const calculateEmiQuote = (amount, annualRate, tenureMonths) => {
+  const principal = Math.max(0, toNumber(amount, 0));
+  const rate = Math.max(0, toNumber(annualRate, 0));
+  const months = Math.max(0, Math.floor(toNumber(tenureMonths, 0)));
+
+  if (!principal || !months) {
+    return { emi: 0, totalPayable: 0, totalInterest: 0 };
+  }
+
+  const monthlyRate = rate / 12 / 100;
+  if (!monthlyRate) {
+    const emiNoInterest = principal / months;
+    const roundedNoInterest = Number(emiNoInterest.toFixed(2));
+    const totalNoInterest = Number((roundedNoInterest * months).toFixed(2));
+    return {
+      emi: roundedNoInterest,
+      totalPayable: totalNoInterest,
+      totalInterest: Number((totalNoInterest - principal).toFixed(2)),
+    };
+  }
+
+  const factor = Math.pow(1 + monthlyRate, months);
+  const emi = (principal * monthlyRate * factor) / (factor - 1);
+  const roundedEmi = Number(emi.toFixed(2));
+  const totalPayable = Number((roundedEmi * months).toFixed(2));
+  const totalInterest = Number((totalPayable - principal).toFixed(2));
+
+  return { emi: roundedEmi, totalPayable, totalInterest };
+};
+
 const getAuditActor = (req) => {
   const user = req.user || {};
   const role = isFinanceAdmin(user)
@@ -594,6 +624,35 @@ router.post('/eligibility', publicReadLimiter, async (req, res) => {
   } catch (error) {
     logger.error('finance eligibility save error:', error);
     return res.status(500).json({ success: false, message: 'Unable to process eligibility.' });
+  }
+});
+
+router.get('/emi', publicReadLimiter, async (req, res) => {
+  try {
+    const amount = toNumber(req.query.amount, 0);
+    const rate = toNumber(req.query.rate, 12);
+    const months = Math.max(1, Math.floor(toNumber(req.query.months, 36)));
+
+    if (amount <= 0) {
+      return res.status(400).json({ success: false, message: 'Amount must be greater than zero.' });
+    }
+
+    const quote = calculateEmiQuote(amount, rate, months);
+
+    return res.json({
+      success: true,
+      data: {
+        amount,
+        rate,
+        months,
+        emi: quote.emi,
+        totalPayable: quote.totalPayable,
+        totalInterest: quote.totalInterest,
+      },
+    });
+  } catch (error) {
+    logger.error('finance emi quote error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to calculate EMI quote.' });
   }
 });
 

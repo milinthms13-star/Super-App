@@ -3,6 +3,7 @@ const fs = require('fs/promises');
 const path = require('path');
 
 const auth = require('../middleware/auth');
+const BeautyPlan = require('../models/BeautyPlan');
 const {
   buildBeautyPrompt,
   validateBeautyPayload,
@@ -77,6 +78,18 @@ const DEFAULT_PRODUCTS = {
 
 const normalizeText = (value = '') => String(value || '').trim();
 const normalizeLower = (value = '') => normalizeText(value).toLowerCase();
+const normalizeArray = (value = []) =>
+  Array.isArray(value)
+    ? value.map((item) => normalizeText(item)).filter(Boolean)
+    : String(value || '')
+        .split(',')
+        .map((item) => normalizeText(item))
+        .filter(Boolean);
+
+const resolveUserId = (req) => {
+  const raw = req.user?._id || req.user?.id || req.auth?.sub || '';
+  return normalizeText(raw);
+};
 
 const getUserKey = (req) =>
   normalizeLower(req.user?.email || req.user?.id || req.user?._id || req.auth?.sub || 'guest');
@@ -258,6 +271,55 @@ const eventPlanAddons = (eventType = '') => {
   return ['Keep routine consistent for 7 days', 'Take weekly progress selfie'];
 };
 
+const generateStructuredBeautyPlan = ({
+  skinType = 'normal',
+  hairType = 'normal',
+  selectedConcerns = [],
+  budget = 'medium',
+  language = 'en',
+  eventType = 'daily-glow',
+  safety = {},
+  signals = {},
+}) => {
+  const concerns = normalizeArray(selectedConcerns).map((item) => normalizeLower(item));
+  const lowerSkinType = normalizeLower(skinType || 'normal');
+  const lowerHairType = normalizeLower(hairType || 'normal');
+  const score = scoreFromSignals(signals);
+
+  const morning = [
+    'Gentle cleanser',
+    lowerSkinType === 'dry' ? 'Hydrating moisturizer' : 'Light moisturizer',
+    'Sunscreen SPF 30+',
+  ];
+  const night = [
+    'Cleanse face',
+    concerns.includes('acne') ? 'Use acne-safe treatment only if suitable' : 'Apply serum if suitable',
+    'Moisturizer',
+  ];
+  const hair = [
+    lowerHairType === 'dry' ? 'Oil massage once or twice weekly' : 'Mild shampoo routine',
+    concerns.includes('dandruff') ? 'Use anti-dandruff shampoo twice weekly' : 'Use gentle shampoo',
+    concerns.includes('hair fall')
+      ? 'Check stress, sleep, and diet. Consult doctor if hair fall is severe.'
+      : 'Use conditioner on hair lengths',
+  ];
+
+  return {
+    title: language === 'ml' ? 'സ്വകാര്യ ബ്യൂട്ടി റൂട്ടീൻ പ്ലാൻ' : 'Personal Beauty Routine Plan',
+    score,
+    morning,
+    night,
+    hair,
+    products: pickProducts(normalizeLower(budget || 'medium')),
+    avoid: [
+      'Avoid steroid creams without dermatologist advice.',
+      'Avoid bleaching creams and unknown fairness products.',
+      ...buildSafetyWarnings(safety).map((warning) => `Safety: ${warning}`),
+    ],
+    eventPlan: eventPlanAddons(eventType),
+  };
+};
+
 router.get('/tips/today', authenticate, async (req, res) => {
   try {
     const language = normalizeLower(req.query.language || 'en');
@@ -401,14 +463,26 @@ router.post('/plan', authenticate, async (req, res) => {
     const signals = normalizeSelfieSignals(payload.selfieSignals || {});
     const score = scoreFromSignals(signals);
 
-    const concern = normalizeText(payload.concern || 'General care');
+    const selectedConcerns = normalizeArray(payload.selectedConcerns || []);
+    const concern = normalizeText(payload.concern || selectedConcerns[0] || 'General care');
     const eventType = normalizeText(payload.eventType || 'daily-glow');
     const skinType = detectSkinType(payload.skinType, concern);
+    const hairType = normalizeText(payload.hairType || 'normal');
     const routines = buildRoutines({
       concern,
       preference: payload.preference || 'balanced',
     });
     const products = pickProducts(normalizeLower(payload.budget || 'medium'));
+    const structuredPlan = generateStructuredBeautyPlan({
+      skinType,
+      hairType,
+      selectedConcerns,
+      budget: payload.budget,
+      language: payload.language,
+      eventType,
+      safety,
+      signals,
+    });
 
     return res.json({
       success: true,
@@ -430,15 +504,16 @@ router.post('/plan', authenticate, async (req, res) => {
           payload.language === 'ml'
             ? 'ഇത് പൊതുവായ skincare guidance ആണ്. ഗുരുതര പ്രശ്നങ്ങൾക്ക് ഡെർമറ്റോളജിസ്റ്റിനെ സമീപിക്കുക.'
             : 'This is general skincare guidance. Consult a dermatologist for severe concerns.',
-        morning: routines.morningRoutine,
-        night: routines.nightRoutine,
+        morning: structuredPlan.morning.length ? structuredPlan.morning : routines.morningRoutine,
+        night: structuredPlan.night.length ? structuredPlan.night : routines.nightRoutine,
+        hair: structuredPlan.hair,
         avoid: [
           'Do not use steroid creams without dermatologist advice.',
           'Avoid bleaching creams and unknown fairness products.',
           ...warnings.map((item) => `Safety: ${item}`),
         ],
-        products,
-        eventPlan: eventPlanAddons(eventType),
+        products: structuredPlan.products.length ? structuredPlan.products : products,
+        eventPlan: structuredPlan.eventPlan.length ? structuredPlan.eventPlan : eventPlanAddons(eventType),
       },
       warnings,
       bookingHooks: {
@@ -466,6 +541,145 @@ router.get('/products/recommendations', authenticate, async (req, res) => {
     concern,
     products: pickProducts(tier),
   });
+});
+
+router.post('/plans', authenticate, async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+
+    const {
+      gender = '',
+      age = null,
+      skinType = '',
+      hairType = '',
+      budget = 'medium',
+      language = 'en',
+      selectedConcerns = [],
+      photoUrl = '',
+      photoName = '',
+      plan = null,
+      eventType = 'daily-glow',
+      safety = {},
+      selfieSignals = {},
+    } = req.body || {};
+
+    const generatedPlan =
+      plan && typeof plan === 'object'
+        ? {
+            title: normalizeText(plan.title || ''),
+            score: Number(plan.score || 0),
+            morning: normalizeArray(plan.morning || []),
+            night: normalizeArray(plan.night || []),
+            hair: normalizeArray(plan.hair || []),
+            products: normalizeArray(plan.products || []),
+            avoid: normalizeArray(plan.avoid || []),
+            eventPlan: normalizeArray(plan.eventPlan || []),
+          }
+        : generateStructuredBeautyPlan({
+            skinType,
+            hairType,
+            selectedConcerns,
+            budget,
+            language,
+            eventType,
+            safety,
+            signals: selfieSignals,
+          });
+
+    const savedPlan = await BeautyPlan.create({
+      userId,
+      gender: normalizeText(gender),
+      age: Number.isFinite(Number(age)) ? Number(age) : undefined,
+      skinType: normalizeText(skinType),
+      hairType: normalizeText(hairType),
+      budget: normalizeText(budget),
+      language: normalizeLower(language || 'en'),
+      selectedConcerns: normalizeArray(selectedConcerns),
+      photoUrl: normalizeText(photoUrl),
+      photoName: normalizeText(photoName),
+      plan: generatedPlan,
+      status: 'Active',
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: savedPlan,
+      message: 'Beauty plan created',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to create beauty plan',
+      error: error.message,
+    });
+  }
+});
+
+router.get('/plans/my', authenticate, async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+
+    const plans = await BeautyPlan.find({ userId }).sort({ createdAt: -1 }).lean();
+    return res.json({
+      success: true,
+      data: plans,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to load beauty plans',
+      error: error.message,
+    });
+  }
+});
+
+router.put('/plans/:id/archive', authenticate, async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+
+    const plan = await BeautyPlan.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      { status: 'Archived' },
+      { new: true }
+    );
+
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plan not found',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: plan,
+      message: 'Beauty plan archived',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to archive beauty plan',
+      error: error.message,
+    });
+  }
 });
 
 router.post('/progress-log', authenticate, async (req, res) => {

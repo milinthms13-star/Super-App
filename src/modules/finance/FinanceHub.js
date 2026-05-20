@@ -8,6 +8,7 @@ import EmiCalculatorTab from "./components/EmiCalculatorTab";
 import ApplyLeadTab from "./components/ApplyLeadTab";
 import TrackingDashTab from "./components/TrackingDashTab";
 import SchemesTab from "./components/SchemesTab";
+import FinanceOverviewTab from "./components/FinanceOverviewTab";
 
 import { calculateEmi, buildEmiSchedule, exportEmiScheduleCsv } from "./services/financeMath";
 import { getLeadFormErrors, getEligibilityFormErrors } from "./services/financeValidation";
@@ -50,6 +51,7 @@ const getRelatedLoanCategories = (category) => {
 };
 
 const TABS = [
+  { id: "overview", label: "Finance 10/10" },
   { id: "loans", label: "Compare Offers" },
   { id: "eligibility", label: "Check Eligibility" },
   { id: "emi", label: "EMI Plan" },
@@ -240,6 +242,16 @@ const GOVERNMENT_SCHEMES = [
   },
 ];
 
+const QUICK_LOAN_TYPE_TO_CATEGORY = {
+  "personal loan": "personal",
+  "business loan": "business",
+  "gold loan": "gold",
+  "home loan": "home",
+  "vehicle loan": "vehicle",
+  "education loan": "education",
+  "msme loan": "msme",
+};
+
 const INITIAL_ELIGIBILITY_FORM = {
   fullName: "",
   phone: "",
@@ -312,6 +324,25 @@ const INITIAL_COMMISSION_FORM = {
   status: "pending",
 };
 
+const QUICK_ASSIST_INITIAL = {
+  name: "",
+  phone: "",
+  loanType: "Personal Loan",
+  monthlyIncome: "50000",
+  employmentType: "Salaried",
+  city: "",
+  consent: false,
+};
+
+const FINANCE_PULSE_INITIAL = {
+  monthlyIncome: "65000",
+  monthlyExpenses: "28000",
+  monthlyLoanEmi: "7000",
+  monthlySavingsGoal: "15000",
+  creditScore: "730",
+  riskProfile: "medium",
+};
+
 const createEmptyDocuments = () => ({
   aadhaar: [],
   pan: [],
@@ -347,7 +378,7 @@ const pickInstitutions = (response) => response?.data?.institutions || response?
 const pickPayload = (response) => response?.data || response || null;
 
 const FinanceHub = () => {
-  const [activeTab, setActiveTab] = useState("loans");
+  const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [stateFilter, setStateFilter] = useState("all");
@@ -398,10 +429,14 @@ const FinanceHub = () => {
   const [quickJourney, setQuickJourney] = useState({
     loanCategory: "business",
     amount: "500000",
+    interest: "12",
+    tenureMonths: "60",
     monthlyIncome: "50000",
     state: DEFAULT_STATE,
     district: getDistrictsForState(DEFAULT_STATE)[0] || "Kollam",
   });
+  const [quickAssist, setQuickAssist] = useState(QUICK_ASSIST_INITIAL);
+  const [financePulse, setFinancePulse] = useState(FINANCE_PULSE_INITIAL);
 
   const summaryCards = useMemo(
     () => [
@@ -462,6 +497,24 @@ const FinanceHub = () => {
     () => getDistrictsForState(quickJourney.state),
     [quickJourney.state]
   );
+
+  const quickEligibilityScore = useMemo(() => {
+    const income = Number(quickAssist.monthlyIncome || 0);
+    let score = 40;
+    if (income >= 25000) score += 20;
+    if (income >= 50000) score += 15;
+    if (String(quickAssist.employmentType || "").toLowerCase() === "salaried") score += 10;
+    if (String(quickAssist.city || "").trim()) score += 5;
+    if (quickAssist.consent) score += 10;
+    return Math.min(100, score);
+  }, [quickAssist]);
+
+  const quickEmi = useMemo(() => {
+    const principal = Number(quickJourney.amount || 0);
+    const annualInterest = Number(quickJourney.interest || 0);
+    const months = Number(quickJourney.tenureMonths || 0);
+    return calculateEmi(principal, annualInterest, months);
+  }, [quickJourney.amount, quickJourney.interest, quickJourney.tenureMonths]);
 
   const filteredInstitutions = useMemo(
     () =>
@@ -928,6 +981,54 @@ const FinanceHub = () => {
     setActiveTab("apply");
   };
 
+  const continueQuickAssistToApply = () => {
+    const normalizedPhone = String(quickAssist.phone || "").replace(/\D/g, "").slice(-10);
+    const normalizedLoanType = String(quickAssist.loanType || "").trim().toLowerCase();
+    const mappedCategory = QUICK_LOAN_TYPE_TO_CATEGORY[normalizedLoanType] || quickJourney.loanCategory;
+
+    if (!quickAssist.name || !normalizedPhone || !quickAssist.consent) {
+      setWorkflowMessage("Enter quick assist name, 10 digit phone, and consent to continue.");
+      return;
+    }
+
+    setLeadForm((current) => ({
+      ...current,
+      fullName: quickAssist.name,
+      phone: normalizedPhone,
+      loanCategory: mappedCategory,
+      amount: quickJourney.amount,
+      preferredInterestRate: quickJourney.interest,
+      preferredTenureMonths: quickJourney.tenureMonths,
+      state: quickJourney.state,
+      district: quickAssist.city || quickJourney.district,
+      consentPrivacy: true,
+      consentKyc: true,
+      consentDisclaimer: true,
+      documentNotes:
+        `${current.documentNotes || ""}${current.documentNotes ? "\n" : ""}` +
+        `Quick Assist Score: ${quickEligibilityScore}/100 | Employment: ${quickAssist.employmentType} | Monthly Income: INR ${quickAssist.monthlyIncome || 0}`,
+    }));
+
+    setEligibilityForm((current) => ({
+      ...current,
+      fullName: quickAssist.name,
+      phone: normalizedPhone,
+      loanCategory: mappedCategory,
+      monthlyIncome: quickAssist.monthlyIncome || current.monthlyIncome,
+      requiredAmount: quickJourney.amount,
+      state: quickJourney.state,
+      district: quickAssist.city || quickJourney.district,
+      employmentType:
+        String(quickAssist.employmentType || "").toLowerCase().includes("salary")
+          ? "salaried"
+          : current.employmentType,
+    }));
+
+    setTrackPhone(normalizedPhone);
+    setWorkflowMessage("Quick assist data moved to full apply form. Review documents and submit.");
+    setActiveTab("apply");
+  };
+
   const openApplyWithInstitution = (institution) => {
     if (!institution) return;
 
@@ -1134,6 +1235,24 @@ const FinanceHub = () => {
           </article>
         ))}
       </section>
+
+      {activeTab === "overview" ? (
+        <FinanceOverviewTab
+          quickJourney={quickJourney}
+          setQuickJourney={setQuickJourney}
+          financePulse={financePulse}
+          setFinancePulse={setFinancePulse}
+          quickAssist={quickAssist}
+          setQuickAssist={setQuickAssist}
+          quickEligibilityScore={quickEligibilityScore}
+          quickEmi={quickEmi}
+          onQuickAssistContinue={continueQuickAssistToApply}
+          states={SOUTH_INDIA_STATES}
+          districtsByState={SOUTH_INDIA_REGIONS}
+          financeApiEnabled={true}
+          formatCurrency={formatCurrency}
+        />
+      ) : null}
 
       {activeTab === "loans" ? (
         <LoanMarketplaceTab

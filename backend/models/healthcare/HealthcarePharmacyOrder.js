@@ -39,6 +39,15 @@ const healthcarePharmacyOrderSchema = new mongoose.Schema(
       default: 'placed',
       index: true,
     },
+    orderTimeline: {
+      type: [
+        {
+          status: { type: String, trim: true },
+          at: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

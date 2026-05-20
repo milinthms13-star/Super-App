@@ -1,1 +1,108 @@
-import axios from 'axios';\n\n\nconst API_BASE_URL = '/api/messaging';\n\nconst getAuthHeaders = () => ({\n  headers: {\n    Authorization: `Bearer ${localStorage.getItem('token') || ''}`,\n  },\n});\n\nexport const messagingService = {\n  // Chat\n  getChats: async (filters = {}) => {\n    const params = new URLSearchParams(filters);\n    const { data } = await axios.get(`${API_BASE_URL}/chats?${params}`, getAuthHeaders());\n    return data.chats;\n  },\n\n  getChat: async (chatId) => {\n    const { data } = await axios.get(`${API_BASE_URL}/chats/${chatId}`, getAuthHeaders());\n    return data.chat;\n  },\n\n  sendMessage: async (chatId, content) => {\n    const { data } = await axios.post(`${API_BASE_URL}/messages`, { chatId, content }, getAuthHeaders());\n    return data.message;\n  },\n\n  // Calls\n  initiateCall: async (chatId, recipientId, callType) => {\n    const { data } = await axios.post(`${API_BASE_URL}/calls/initiate`, { chatId, recipientId, callType }, getAuthHeaders());\n    return data.call;\n  },\n\n  acceptCall: async (callId, sdpAnswer) => {\n    const { data } = await axios.post(`${API_BASE_URL}/calls/${callId}/accept`, { sdpAnswer }, getAuthHeaders());\n    return data.call;\n  },\n\n  endCall: async (callId) => {\n    const { data } = await axios.post(`${API_BASE_URL}/calls/${callId}/end`, getAuthHeaders());\n    return data.call;\n  },\n\n  // Files\n  uploadFile: async (chatId, fileName, fileData, mimeType) => {\n    const formData = new FormData();\n    formData.append('chatId', chatId);\n    formData.append('fileName', fileName);\n    formData.append('fileData', fileData);\n    formData.append('mimeType', mimeType);\n\n    const { data } = await axios.post(`${API_BASE_URL}/files/upload`, formData, {\n      headers: {\n        ...getAuthHeaders().headers,\n        'Content-Type': 'multipart/form-data',\n      },\n    });\n    return data.file;\n  },\n\n  // Contacts\n  getContacts: async (filters = {}) => {\n    const params = new URLSearchParams(filters);\n    const { data } = await axios.get(`${API_BASE_URL}/contacts?${params}`, getAuthHeaders());\n    return data.contacts;\n  },\n\n  // AI Replies\n  generateAIReplies: async (chatId, messageId) => {\n    const { data } = await axios.post(`${API_BASE_URL}/ai/replies/generate`, { chatId, messageId }, getAuthHeaders());\n    return data.suggestions;\n  },\n\n  // Notifications\n  getNotifications: async (filters = {}) => {\n    const params = new URLSearchParams(filters);\n    const { data } = await axios.get(`${API_BASE_URL}/notifications?${params}`, getAuthHeaders());\n    return data.notifications;\n  },\n\n  markNotificationRead: async (notificationId) => {\n    const { data } = await axios.put(`${API_BASE_URL}/notifications/${notificationId}/read`, getAuthHeaders());\n    return data.notification;\n  },\n};\n
+import axios from "axios";
+import { buildApiUrl } from "../utils/api";
+import { getStoredAuthToken } from "../utils/auth";
+
+const API_BASE_URL = buildApiUrl("/messaging");
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 20000,
+});
+
+api.interceptors.request.use((config) => {
+  const token = getStoredAuthToken() || localStorage.getItem("token") || "";
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+const toBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = String(reader.result || "");
+      const base64 = raw.includes(",") ? raw.split(",")[1] : raw;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error("Failed to read file."));
+    reader.readAsDataURL(file);
+  });
+
+const normalizeChatId = (chat) => String(chat?._id || chat?.id || "");
+
+export const messagingService = {
+  async getChats(filters = {}) {
+    const { data } = await api.get("/chats", { params: filters });
+    return Array.isArray(data?.chats) ? data.chats : [];
+  },
+
+  async getMessages(chatId, page = 1, limit = 30) {
+    const { data } = await api.get(`/messages/${chatId}`, {
+      params: { page, limit },
+    });
+    return {
+      messages: Array.isArray(data?.messages) ? data.messages : [],
+      pagination: data?.pagination || null,
+    };
+  },
+
+  async sendMessage({ chatId, content, messageType = "text", media, replyTo, clientMessageId }) {
+    const resolvedClientMessageId =
+      clientMessageId ||
+      (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+    const payload = {
+      chatId,
+      content,
+      messageType,
+      media,
+      replyTo,
+      clientMessageId: resolvedClientMessageId,
+    };
+
+    const { data } = await api.post("/messages", payload);
+    return data?.message;
+  },
+
+  async markChatRead(chatId) {
+    const { data } = await api.put(`/chats/${chatId}/mark-read`);
+    return data;
+  },
+
+  async searchMessages(query, chatId) {
+    const { data } = await api.get("/search/messages", {
+      params: { q: query, chatId },
+    });
+    return Array.isArray(data?.messages) ? data.messages : [];
+  },
+
+  async uploadFile(chatId, file) {
+    const fileData = await toBase64(file);
+    const payload = {
+      chatId,
+      fileName: file.name,
+      fileSize: Number(file.size || 0),
+      mimeType: file.type || "application/octet-stream",
+      fileData,
+    };
+
+    const { data } = await api.post("/files/upload", payload);
+    return data?.file;
+  },
+
+  async generateAIReplies(chatId, messageId) {
+    const { data } = await api.post("/ai/replies/generate", {
+      chatId,
+      messageId,
+      language: "en",
+    });
+    return Array.isArray(data?.suggestions) ? data.suggestions : [];
+  },
+
+  getChatId(chat) {
+    return normalizeChatId(chat);
+  },
+};

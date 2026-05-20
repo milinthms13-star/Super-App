@@ -103,53 +103,72 @@ describe('Healthcare Module', () => {
     jest.clearAllMocks();
   });
 
-  test('renders healthcare module with hero and navigation', async () => {
+  test('renders healthcare module home screen and loads initial data', async () => {
     render(<Healthcare />);
 
-    // Check if hero component is rendered
-    expect(screen.getByTestId('healthcare-hero')).toBeInTheDocument();
-
-    // Check if navigation is rendered
-    expect(screen.getByTestId('healthcare-nav')).toBeInTheDocument();
-
-    // Wait for data loading
-    await waitFor(() => {
-      expect(healthcareApi.getInitialData).toHaveBeenCalled();
-    });
-  });
-
-  test('loads initial data on mount', async () => {
-    render(<Healthcare />);
+    expect(screen.getByTestId('healthcare-10home')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(healthcareApi.getInitialData).toHaveBeenCalledTimes(1);
     });
   });
 
-  test('displays consultation section by default', async () => {
+  test('switches to doctor consultation from home action', async () => {
     render(<Healthcare />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
+      expect(screen.getByTestId('healthcare-10home')).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByRole('button', { name: /Find Doctor/i }));
+
+    expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
   });
 
-  test('switches to lab booking section when navigation clicked', async () => {
+  test('switches to lab booking section from home action', async () => {
     render(<Healthcare />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
+      expect(screen.getByTestId('healthcare-10home')).toBeInTheDocument();
     });
 
-    // Click lab booking button
-    fireEvent.click(screen.getByText('Lab'));
+    fireEvent.click(screen.getByRole('button', { name: /Book Test/i }));
 
     expect(screen.getByTestId('lab-booking')).toBeInTheDocument();
   });
 
-  test('switches to records vault section', async () => {
+  test('switches to pharmacy delivery section from home action', async () => {
     render(<Healthcare />);
 
+    await waitFor(() => {
+      expect(screen.getByTestId('healthcare-10home')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Order Medicine/i }));
+
+    expect(screen.getByTestId('pharmacy-delivery')).toBeInTheDocument();
+  });
+
+  test('switches to emergency section from home action', async () => {
+    render(<Healthcare />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('healthcare-10home')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Open SOS/i }));
+
+    expect(screen.getByTestId('emergency-sos')).toBeInTheDocument();
+  });
+
+  test('switches to records vault section via navigation', async () => {
+    render(<Healthcare />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('healthcare-10home')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Find Doctor/i }));
     await waitFor(() => {
       expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
     });
@@ -159,33 +178,14 @@ describe('Healthcare Module', () => {
     expect(screen.getByTestId('records-vault')).toBeInTheDocument();
   });
 
-  test('switches to pharmacy delivery section', async () => {
+  test('switches to elderly care section via navigation', async () => {
     render(<Healthcare />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
+      expect(screen.getByTestId('healthcare-10home')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Pharmacy'));
-
-    expect(screen.getByTestId('pharmacy-delivery')).toBeInTheDocument();
-  });
-
-  test('switches to emergency section', async () => {
-    render(<Healthcare />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText('Emergency'));
-
-    expect(screen.getByTestId('emergency-sos')).toBeInTheDocument();
-  });
-
-  test('switches to elderly care section', async () => {
-    render(<Healthcare />);
-
+    fireEvent.click(screen.getByRole('button', { name: /Find Doctor/i }));
     await waitFor(() => {
       expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
     });
@@ -200,7 +200,7 @@ describe('Healthcare Module', () => {
 
     render(<Healthcare />);
 
-    expect(screen.getByTestId('doctor-consultation')).toBeInTheDocument();
+    expect(screen.getByTestId('healthcare-10home')).toBeInTheDocument();
     expect(healthcareApi.getInitialData).toHaveBeenCalledTimes(1);
   });
 

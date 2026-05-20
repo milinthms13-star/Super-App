@@ -213,9 +213,12 @@ app.use('/api/voice-input', require('./routes/voiceInput'));
 app.use('/api/ai-voice-friend', require('./routes/voiceFriendRoutes'));
 app.use('/api/live-place-explorer', require('./routes/livePlaceExplorer'));
 app.use('/api/dance-duet', require('./routes/danceDuet'));
+app.use('/api/danceduet', require('./routes/danceDuet'));
 app.use('/api/karaoke-duet', require('./routes/karaokeDuet'));
+app.use('/api/karaokeduet', require('./routes/karaokeDuet'));
 app.use('/api/kitchen', require('./routes/kitchen'));
 app.use('/api/beauty-ai', require('./routes/beautyAI'));
+app.use('/api/beautyai', require('./routes/beautyAI'));
 app.use('/api/strategic-modules', require('./routes/strategicModules'));
 
 app.use('/api/messaging/v4/reactions', require('./routes/messageReactionsRoutes'));
@@ -310,6 +313,7 @@ app.use('/api/matrimonial', require('./routes/matrimonial-communication'));
 app.use('/api/matrimonial', require('./routes/matrimonial-referral'));
 app.use('/api/matrimonial', require('./routes/matrimonial-admin-analytics'));
 app.use('/api/matrimonial', require('./routes/matrimonial-seo'));
+app.use('/api/jobportal', require('./routes/jobportal'));
 
 app.use(errorHandler);
 
