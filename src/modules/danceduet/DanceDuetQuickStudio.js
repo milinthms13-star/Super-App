@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { getStoredAuthToken } from '../../utils/auth';
 import {
   DANCE_STAGE_MODES,
   DANCE_OUTPUT_FORMATS,
@@ -81,7 +82,12 @@ const DanceDuetQuickStudio = () => {
       formData.append('syncAudio', String(syncAudio));
       formData.append('mirrorSecondVideo', String(mirrorSecondVideo));
 
-      const response = await fetch('/api/dance-duet/merge', { method: 'POST', body: formData });
+      const token = getStoredAuthToken();
+      const response = await fetch('/api/dance-duet/merge', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
       const result = await response.json();
       if (!response.ok || !result?.success) {
         throw new Error(result?.message || result?.error || 'Failed to merge dance videos.');
