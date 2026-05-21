@@ -469,19 +469,16 @@ The profile page stores user account details.
 - Update profile information
 - Save contact or preference changes
 
-## 44. Module Ratings
+## 44. Admin module subscription screen
 
-The module ratings page shows module-level performance or rating data.
+This screen is available from the admin dashboard.
 
 ### Common actions
-- Open the ratings table
-- Review rating metrics
-- Compare module performance where data is available
+- Review subscription-related data
+- Manage module subscription access
+- Inspect admin-controlled service states
 
-### Notes
-If the backend does not provide rating data, the page may show an empty or placeholder state.
-
-## 45. Admin module subscription screen
+## Module availability and access
 
 This screen is available from the admin dashboard.
 
@@ -573,7 +570,6 @@ Useful files in this repository include:
 - `src/modules/` — all module implementations
 - `src/components/` — shared UI components
 - `src/utils/moduleRoutes.js` — route and module path helpers
-- `src/modules/moduleratings/ModuleRatings.js` — module ratings page
 - `src/modules/finance/` — finance module implementation
 - `src/modules/healthcare/` — healthcare module implementation
 - `src/modules/freelancer/` — freelancer module implementation

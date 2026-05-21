@@ -243,6 +243,44 @@ const GulfFraudReportSchema = new Schema(
   { timestamps: true }
 );
 
+const GulfPaymentIdempotencySchema = new Schema(
+  {
+    cacheKey: { type: String, required: true, unique: true, index: true },
+    idempotencyKey: { type: String, trim: true, default: '' },
+    caller: { type: String, trim: true, default: '' },
+    responsePayload: { type: Schema.Types.Mixed, default: {} },
+    expiresAt: { type: Date, required: true, index: true },
+  },
+  { timestamps: true }
+);
+
+const GulfPaymentWebhookEventSchema = new Schema(
+  {
+    eventId: { type: String, required: true, unique: true, index: true },
+    eventType: { type: String, trim: true, default: '' },
+    status: { type: String, trim: true, default: 'processing', index: true },
+    processedAt: { type: Date, default: null },
+    failureReason: { type: String, trim: true, default: '' },
+  },
+  { timestamps: true }
+);
+
+const GulfAdminAuditEventSchema = new Schema(
+  {
+    auditId: { type: String, required: true, unique: true, index: true },
+    entityType: { type: String, trim: true, required: true, index: true },
+    entityId: { type: String, trim: true, required: true, index: true },
+    action: { type: String, trim: true, required: true, index: true },
+    actorId: { type: String, trim: true, default: '' },
+    actorEmail: { type: String, trim: true, default: '' },
+    actorRole: { type: String, trim: true, default: '' },
+    before: { type: Schema.Types.Mixed, default: {} },
+    after: { type: Schema.Types.Mixed, default: {} },
+    note: { type: String, trim: true, default: '' },
+  },
+  { timestamps: true }
+);
+
 module.exports = {
   GulfVisaRequest: mongoose.model('GulfVisaRequest', GulfVisaRequestSchema),
   GulfJob: mongoose.model('GulfJob', GulfJobSchema),
@@ -257,4 +295,10 @@ module.exports = {
   GulfRecruiter: mongoose.model('GulfRecruiter', GulfRecruiterSchema),
   GulfApplication: mongoose.models.GulfApplication || mongoose.model('GulfApplication', GulfApplicationSchema),
   GulfFraudReport: mongoose.models.GulfFraudReport || mongoose.model('GulfFraudReport', GulfFraudReportSchema),
+  GulfPaymentIdempotency:
+    mongoose.models.GulfPaymentIdempotency || mongoose.model('GulfPaymentIdempotency', GulfPaymentIdempotencySchema),
+  GulfPaymentWebhookEvent:
+    mongoose.models.GulfPaymentWebhookEvent || mongoose.model('GulfPaymentWebhookEvent', GulfPaymentWebhookEventSchema),
+  GulfAdminAuditEvent:
+    mongoose.models.GulfAdminAuditEvent || mongoose.model('GulfAdminAuditEvent', GulfAdminAuditEventSchema),
 };

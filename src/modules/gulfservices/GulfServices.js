@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useI18n from '../../hooks/useI18n';
 import { gulfservicesApi } from './gulfservicesApi';
+import GulfModalShell from './components/modals/GulfModalShell';
 import './GulfServices.css';
 
 const COUNTRIES = ['UAE', 'Saudi Arabia', 'Qatar', 'Oman', 'Kuwait', 'Bahrain'];
@@ -45,116 +46,6 @@ const SERVICE_CATEGORIES = [
   { id: 'returnee', title: 'Returnee Help', icon: 'R', desc: 'Returnee jobs, business setup and NRI assistance.' },
   { id: 'nri', title: 'NRI Services', icon: 'N', desc: 'Investment, property and banking for NRIs.' },
   { id: 'emergency', title: 'Emergency Gulf Help', icon: 'E', desc: 'Passport lost, visa expired, legal help and embassy contact.' },
-];
-
-const SAMPLE_JOBS = [
-  {
-    id: 'gulf-hospitality-uae',
-    title: 'Hospitality Team Lead',
-    company: 'Al Nahar Group',
-    country: 'UAE',
-    category: 'Hospitality',
-    summary: 'Verified UAE hospitality role with visa support and onboarding assistance.',
-    salary: { min: 2200, max: 2800 },
-    description: 'Lead a hospitality team in a verified UAE employer network with employer-led visa processing.',
-    recruiter: 'recruiter-1',
-    verified: true,
-    accommodation: true,
-    food: true,
-    urgentHiring: false,
-    visaType: 'Employment',
-    experience: 3,
-  },
-  {
-    id: 'gulf-construction-qatar',
-    title: 'Site Engineer',
-    company: 'Gulf Connect',
-    country: 'Qatar',
-    category: 'Construction',
-    summary: 'Qatar engineering role with document guidance and fraud protection.',
-    salary: { min: 2600, max: 3200 },
-    description: 'Construction site engineer position with certified recruiter support and pre-interview coaching.',
-    recruiter: 'recruiter-2',
-    verified: true,
-    accommodation: true,
-    food: true,
-    urgentHiring: true,
-    visaType: 'Employment',
-    experience: 5,
-  },
-  {
-    id: 'gulf-healthcare-saudi',
-    title: 'Clinical Nurse',
-    company: 'Skyline Careers',
-    country: 'Saudi Arabia',
-    category: 'Healthcare',
-    summary: 'GAMCA-ready nurse role with employer verification and interview prep.',
-    salary: { min: 3000, max: 3600 },
-    description: 'Clinical nursing job offering full medical support and visa tracking for Gulf deployment.',
-    recruiter: 'recruiter-3',
-    verified: true,
-    accommodation: true,
-    food: true,
-    urgentHiring: false,
-    visaType: 'Employment',
-    experience: 2,
-  },
-  {
-    id: 'gulf-it-oman',
-    title: 'IT Support Specialist',
-    company: 'MetroWorks',
-    country: 'Oman',
-    category: 'IT & Engineering',
-    summary: 'IT support role with visa-friendly package and onboarding support.',
-    salary: { min: 2200, max: 3000 },
-    description: 'IT role with a verified recruiter and Gulf-specific relocation assistance.',
-    recruiter: 'recruiter-1',
-    verified: true,
-    accommodation: false,
-    food: false,
-    urgentHiring: true,
-    visaType: 'Employment',
-    experience: 1,
-  },
-];
-
-const SAMPLE_RECRUITERS = [
-  {
-    id: 'recruiter-1',
-    name: 'Al Nahar Employment Services',
-    country: 'UAE',
-    licenseNumber: 'UAE-12345',
-    registrationNumber: 'KSA-67890',
-    verified: true,
-    status: 'active',
-    successCases: 420,
-    rating: 4.8,
-    reviews: 152,
-  },
-  {
-    id: 'recruiter-2',
-    name: 'Gulf Verified Recruiters',
-    country: 'Qatar',
-    licenseNumber: 'QA-56432',
-    registrationNumber: 'OM-01472',
-    verified: true,
-    status: 'active',
-    successCases: 310,
-    rating: 4.6,
-    reviews: 98,
-  },
-  {
-    id: 'recruiter-3',
-    name: 'Skyline Gulf Careers',
-    country: 'Saudi Arabia',
-    licenseNumber: 'SA-99881',
-    registrationNumber: 'BH-11324',
-    verified: true,
-    status: 'active',
-    successCases: 275,
-    rating: 4.7,
-    reviews: 121,
-  },
 ];
 
 const DOCUMENT_CHECKLIST = [
@@ -338,9 +229,9 @@ const GulfServices = () => {
         const bootstrap = await gulfservicesApi.bootstrap();
         setBootstrapData(bootstrap.data.constants);
         const recruitersResponse = await gulfservicesApi.getVerifiedRecruiters();
-        setRecruiters(recruitersResponse.data.recruiters || SAMPLE_RECRUITERS);
+        setRecruiters(recruitersResponse.data.recruiters || bootstrap?.data?.constants?.trustedRecruiters || []);
       } catch (error) {
-        setRecruiters(SAMPLE_RECRUITERS);
+        setRecruiters([]);
       } finally {
         setLoading(false);
       }
@@ -354,9 +245,9 @@ const GulfServices = () => {
       setLoading(true);
       try {
         const jobsResponse = await gulfservicesApi.getJobs({ country: selectedCountry });
-        setJobs(jobsResponse.data.jobs || SAMPLE_JOBS);
+        setJobs(jobsResponse.data.jobs || []);
       } catch (error) {
-        setJobs(SAMPLE_JOBS);
+        setJobs([]);
       } finally {
         setLoading(false);
       }
@@ -490,7 +381,7 @@ const GulfServices = () => {
   }, [activeModal]);
 
   const getRecruiterDetails = (recruiterId) => {
-    return recruiters.find((r) => r.id === recruiterId) || SAMPLE_RECRUITERS.find((r) => r.id === recruiterId);
+    return recruiters.find((r) => r.id === recruiterId);
   };
 
   const loadMyApplications = useCallback(async () => {
@@ -890,6 +781,44 @@ const GulfServices = () => {
   // Modal content renderer
   const renderModal = () => {
     if (!activeModal) return null;
+    const shellHandledModals = new Set(['visa', 'jobs', 'attestation', 'lead', 'fraud']);
+    if (shellHandledModals.has(activeModal)) {
+      return (
+        <GulfModalShell
+          activeModal={activeModal}
+          closeModal={closeModal}
+          loading={loading}
+          submitVisa={submitVisa}
+          visaForm={visaForm}
+          setVisaForm={setVisaForm}
+          submitJobApplication={submitJobApplication}
+          selectedCountry={selectedCountry}
+          setSelectedCountry={setSelectedCountry}
+          availableCountries={availableCountries}
+          availableJobCategories={availableJobCategories}
+          jobFilters={jobFilters}
+          setJobFilters={setJobFilters}
+          filteredJobs={filteredJobs}
+          selectedJob={selectedJob}
+          setSelectedJob={setSelectedJob}
+          getRecruiterDetails={getRecruiterDetails}
+          jobApplicationForm={jobApplicationForm}
+          setJobApplicationForm={setJobApplicationForm}
+          handleInputChange={handleInputChange}
+          handleFileChange={handleFileChange}
+          submitAttestation={submitAttestation}
+          attestationForm={attestationForm}
+          setAttestationForm={setAttestationForm}
+          submitLead={submitLead}
+          leadForm={leadForm}
+          setLeadForm={setLeadForm}
+          supportWhatsapp={supportWhatsapp}
+          submitFraudReport={submitFraudReport}
+          fraudForm={fraudForm}
+          setFraudForm={setFraudForm}
+        />
+      );
+    }
 
     const modalClasses = `gulf-services-modal gulf-services-modal-${activeModal}`;
 
@@ -2010,7 +1939,7 @@ const GulfServices = () => {
             <button type="button" className="btn btn-secondary" onClick={() => setActiveModal('recruiter')}>Recruiter Onboarding</button>
           </div>
           <div className="gulf-services-job-list">
-            {(recruiters.length ? recruiters : SAMPLE_RECRUITERS).map((recruiter) => (
+            {recruiters.map((recruiter) => (
               <article key={recruiter.id} className="gulf-services-card gulf-services-recruiter-card">
                 <div className="gulf-services-recruiter-header">
                   <strong>{recruiter.name}</strong>
@@ -2021,6 +1950,7 @@ const GulfServices = () => {
                 <p>{recruiter.successCases} successful placements • {recruiter.rating} stars ({recruiter.reviews} reviews)</p>
               </article>
             ))}
+            {!recruiters.length ? <p className="gulf-services-empty-state">No verified recruiters available right now.</p> : null}
           </div>
         </div>
       </section>
@@ -2088,6 +2018,10 @@ const GulfServices = () => {
 };
 
 export default GulfServices;
+
+
+
+
 
 
 

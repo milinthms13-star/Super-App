@@ -36,6 +36,9 @@ const {
   GulfRecruiter,
   GulfApplication,
   GulfFraudReport,
+  GulfPaymentIdempotency,
+  GulfPaymentWebhookEvent,
+  GulfAdminAuditEvent,
 } = require('../models/gulfservices');
 
 const SAMPLE_JOBS = [
@@ -137,6 +140,7 @@ const PAYMENT_MIN_AMOUNT = 1;
 const PAYMENT_MAX_AMOUNT = 10000;
 const PAYMENT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
 const paymentIntentCache = new Map();
+const PAYMENT_CACHE_SWEEP_MAX = 20;
 
 const toObjectIdString = (value) => {
   if (!value) return '';
@@ -207,6 +211,7 @@ const normalizeVisaType = (value = '') => {
 const isMongoObjectId = (value = '') => /^[a-f\d]{24}$/i.test(String(value || ''));
 const resolveUserId = (req) => String(req?.user?._id || req?.user?.id || '').trim();
 const resolveUserEmail = (req) => String(req?.user?.email || '').trim().toLowerCase();
+const resolveUserRole = (req) => String(req?.user?.role || req?.user?.registrationType || '').trim().toLowerCase();
 const averageHours = (records = [], startField, endField) => {
   const durations = records
     .map((item) => {
@@ -226,7 +231,18 @@ const buildPaymentCacheKey = (req, payload, idempotencyKey) => {
   const caller = resolveUserId(req) || resolveUserEmail(req) || String(req.ip || 'anonymous');
   return `${caller}:${idempotencyKey}:${payload.currency}:${payload.amount}:${payload.type || ''}:${payload.id || ''}`;
 };
-const readPaymentCache = (key) => {
+const sweepInMemoryPaymentCache = () => {
+  if (!paymentIntentCache.size) return;
+  let scanned = 0;
+  for (const [cacheKey, entry] of paymentIntentCache.entries()) {
+    scanned += 1;
+    if (!entry || Date.now() - Number(entry.createdAt || 0) > PAYMENT_IDEMPOTENCY_TTL_MS) {
+      paymentIntentCache.delete(cacheKey);
+    }
+    if (scanned >= PAYMENT_CACHE_SWEEP_MAX) break;
+  }
+};
+const readInMemoryPaymentCache = (key) => {
   const cached = paymentIntentCache.get(key);
   if (!cached) return null;
   if (Date.now() - cached.createdAt > PAYMENT_IDEMPOTENCY_TTL_MS) {
@@ -235,8 +251,60 @@ const readPaymentCache = (key) => {
   }
   return cached.data;
 };
-const writePaymentCache = (key, data) => {
+const writeInMemoryPaymentCache = (key, data) => {
   paymentIntentCache.set(key, { data, createdAt: Date.now() });
+};
+const readPaymentCache = async (key) => {
+  sweepInMemoryPaymentCache();
+  const localCached = readInMemoryPaymentCache(key);
+  if (localCached) return localCached;
+
+  const persisted = await GulfPaymentIdempotency.findOne({ cacheKey: key }).lean();
+  if (!persisted) return null;
+  const expiresAtTs = new Date(persisted.expiresAt).getTime();
+  if (!Number.isFinite(expiresAtTs) || expiresAtTs <= Date.now()) {
+    await GulfPaymentIdempotency.deleteOne({ cacheKey: key }).catch(() => {});
+    return null;
+  }
+
+  writeInMemoryPaymentCache(key, persisted.responsePayload);
+  return persisted.responsePayload;
+};
+const writePaymentCache = async (key, data, idempotencyKey, caller) => {
+  writeInMemoryPaymentCache(key, data);
+  await GulfPaymentIdempotency.findOneAndUpdate(
+    { cacheKey: key },
+    {
+      $set: {
+        responsePayload: data,
+        idempotencyKey: String(idempotencyKey || '').trim(),
+        caller: String(caller || '').trim(),
+        expiresAt: new Date(Date.now() + PAYMENT_IDEMPOTENCY_TTL_MS),
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+};
+const buildAuditActor = (req) => ({
+  actorId: resolveUserId(req),
+  actorEmail: resolveUserEmail(req),
+  actorRole: resolveUserRole(req),
+});
+const recordAdminAudit = async (req, entry = {}) => {
+  const { actorId, actorEmail, actorRole } = buildAuditActor(req);
+  const auditId = `AUD-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  await GulfAdminAuditEvent.create({
+    auditId,
+    entityType: String(entry.entityType || '').trim(),
+    entityId: String(entry.entityId || '').trim(),
+    action: String(entry.action || '').trim(),
+    actorId,
+    actorEmail,
+    actorRole,
+    before: entry.before || {},
+    after: entry.after || {},
+    note: String(entry.note || '').trim(),
+  });
 };
 
 // ============ RATE LIMITING ============
@@ -274,9 +342,8 @@ const paymentsCreateLimiter = rateLimit({
 const uploadsRoot = path.join(__dirname, '../uploads/gulfservices');
 const documentUploads = path.join(uploadsRoot, 'documents');
 const cvUploads = path.join(uploadsRoot, 'cv');
-const passportUploads = path.join(uploadsRoot, 'passport');
 
-[uploadsRoot, documentUploads, cvUploads, passportUploads].forEach((dir) => {
+[uploadsRoot, documentUploads, cvUploads].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -310,7 +377,6 @@ const createUploader = (dir) =>
 
 const docUpload = createUploader(documentUploads);
 const cvUpload = createUploader(cvUploads);
-const passportUpload = createUploader(passportUploads);
 
 // ============ VALIDATION SCHEMAS ============
 const visaRequestSchema = Joi.object({
@@ -853,6 +919,29 @@ router.put('/admin/applications/:id/status', authenticate, verifyAdmin, async (r
       { new: true }
     );
 
+    try {
+      await recordAdminAudit(req, {
+        entityType: 'gulf_application',
+        entityId: String(existing._id || ''),
+        action: 'application_status_updated',
+        before: {
+          visaStatus: existing.visaStatus || '',
+          agentName: existing.agentName || '',
+          agentVerified: Boolean(existing.agentVerified),
+          adminNote: existing.adminNote || '',
+        },
+        after: {
+          visaStatus: updated?.visaStatus || value.visaStatus,
+          agentName: updated?.agentName || value.agentName || '',
+          agentVerified: Boolean(updated?.agentVerified),
+          adminNote: updated?.adminNote || value.adminNote || '',
+        },
+        note: value.adminNote || '',
+      });
+    } catch (auditError) {
+      logger.warn('gulf applications admin audit create error:', auditError);
+    }
+
     return res.json({ success: true, data: updated, message: 'Gulf application updated.' });
   } catch (error) {
     logger.error('gulf applications admin status error:', error);
@@ -1281,7 +1370,7 @@ router.post('/payments/create', paymentsCreateLimiter, optionalToken, async (req
 
     if (idempotencyKey) {
       const cacheKey = buildPaymentCacheKey(req, payload, idempotencyKey);
-      const cached = readPaymentCache(cacheKey);
+      const cached = await readPaymentCache(cacheKey);
       if (cached) {
         return res.json({
           success: true,
@@ -1314,7 +1403,8 @@ router.post('/payments/create', paymentsCreateLimiter, optionalToken, async (req
 
     if (idempotencyKey) {
       const cacheKey = buildPaymentCacheKey(req, payload, idempotencyKey);
-      writePaymentCache(cacheKey, responsePayload);
+      const caller = resolveUserId(req) || resolveUserEmail(req) || String(req.ip || 'anonymous');
+      await writePaymentCache(cacheKey, responsePayload, idempotencyKey, caller);
     }
 
     return res.json({
@@ -1328,6 +1418,7 @@ router.post('/payments/create', paymentsCreateLimiter, optionalToken, async (req
 });
 
 router.post('/payments/webhook', async (req, res) => {
+  let eventRecord = null;
   try {
     const webhookSecret = String(process.env.GULF_STRIPE_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || '').trim();
     const signature = String(req.get('stripe-signature') || '').trim();
@@ -1349,6 +1440,22 @@ router.post('/payments/webhook', async (req, res) => {
 
     const payload = event?.data?.object;
     const eventType = String(event?.type || 'unknown');
+    const eventId = String(event?.id || '').trim();
+
+    if (eventId) {
+      try {
+        eventRecord = await GulfPaymentWebhookEvent.create({
+          eventId,
+          eventType,
+          status: 'processing',
+        });
+      } catch (err) {
+        if (Number(err?.code) === 11000) {
+          return res.json({ received: true, duplicate: true });
+        }
+        throw err;
+      }
+    }
 
     if (eventType === 'payment_intent.succeeded' && payload) {
       const pi = payload;
@@ -1373,8 +1480,27 @@ router.post('/payments/webhook', async (req, res) => {
       }
     }
 
+    if (eventRecord && eventRecord._id) {
+      await GulfPaymentWebhookEvent.findByIdAndUpdate(eventRecord._id, {
+        $set: {
+          status: 'processed',
+          processedAt: new Date(),
+          failureReason: '',
+        },
+      });
+    }
+
     res.json({ received: true });
   } catch (error) {
+    if (eventRecord && eventRecord._id) {
+      await GulfPaymentWebhookEvent.findByIdAndUpdate(eventRecord._id, {
+        $set: {
+          status: 'failed',
+          processedAt: new Date(),
+          failureReason: String(error?.message || '').slice(0, 500),
+        },
+      }).catch(() => {});
+    }
     const signatureError = String(error?.message || '').toLowerCase().includes('signature');
     logger.error('payments.webhook error:', error);
     res.status(signatureError ? 400 : 500).json({
@@ -1462,12 +1588,36 @@ router.put('/admin/recruiters/:id/verify', authenticate, verifyAdmin, async (req
     const rec = await GulfRecruiter.findById(req.params.id);
     if (!rec) return res.status(404).json({ success: false, message: 'Recruiter not found.' });
 
+    const previousState = {
+      verified: Boolean(rec.verified),
+      status: String(rec.status || ''),
+      verificationNotes: String(rec.verificationNotes || ''),
+      verifiedAt: rec.verifiedAt || null,
+    };
+
     rec.verified = Boolean(verified);
     rec.status = rec.verified ? 'active' : 'rejected';
     rec.verificationNotes = String(notes || '').trim();
     rec.verifiedAt = rec.verified ? new Date() : rec.verifiedAt;
 
     await rec.save();
+    try {
+      await recordAdminAudit(req, {
+        entityType: 'gulf_recruiter',
+        entityId: String(rec._id || ''),
+        action: 'recruiter_verification_updated',
+        before: previousState,
+        after: {
+          verified: Boolean(rec.verified),
+          status: String(rec.status || ''),
+          verificationNotes: String(rec.verificationNotes || ''),
+          verifiedAt: rec.verifiedAt || null,
+        },
+        note: String(notes || '').trim(),
+      });
+    } catch (auditError) {
+      logger.warn('gulf recruiter verify audit create error:', auditError);
+    }
     return res.json({ success: true, data: rec, message: rec.verified ? 'Recruiter verified.' : 'Recruiter marked as rejected.' });
   } catch (error) {
     logger.error('admin recruiter verify error:', error);
@@ -1532,19 +1682,36 @@ router.put('/admin/fraud-reports/:reportId/status', authenticate, verifyAdmin, a
       return res.status(400).json({ success: false, message: error.details[0].message });
     }
 
-    const report = await GulfFraudReport.findOneAndUpdate(
-      { reportId: String(req.params.reportId || '').trim() },
-      {
-        $set: {
-          status: value.status,
-          adminNote: String(value.adminNote || '').trim(),
-        },
-      },
-      { new: true }
-    );
+    const reportId = String(req.params.reportId || '').trim();
+    const report = await GulfFraudReport.findOne({ reportId });
 
     if (!report) {
       return res.status(404).json({ success: false, message: 'Fraud report not found.' });
+    }
+
+    const previousState = {
+      status: String(report.status || ''),
+      adminNote: String(report.adminNote || ''),
+    };
+
+    report.status = value.status;
+    report.adminNote = String(value.adminNote || '').trim();
+    await report.save();
+
+    try {
+      await recordAdminAudit(req, {
+        entityType: 'gulf_fraud_report',
+        entityId: reportId,
+        action: 'fraud_report_status_updated',
+        before: previousState,
+        after: {
+          status: String(report.status || ''),
+          adminNote: String(report.adminNote || ''),
+        },
+        note: String(value.adminNote || '').trim(),
+      });
+    } catch (auditError) {
+      logger.warn('gulf fraud report admin audit create error:', auditError);
     }
 
     return res.json({ success: true, data: report, message: 'Fraud report updated.' });

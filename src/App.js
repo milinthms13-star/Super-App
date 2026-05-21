@@ -72,7 +72,6 @@ const SmartKitchenRecipeHub = React.lazy(() => import("./modules/kitchen/SmartKi
 const WomenSafetyFamily = React.lazy(() => import("./modules/womensafetyfamily/WomenSafetyFamily"));
 const TrustLayer = React.lazy(() => import("./modules/trustlayer/TrustLayer"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
-const ModuleRatings = React.lazy(() => import("./modules/moduleratings/ModuleRatings"));
 const JobPortal = React.lazy(() => import("./modules/jobportal/JobPortal"));
 const Education = React.lazy(() => import("./modules/education/Education"));
 const TourismMarketplace = React.lazy(() => import("./modules/tourism/TourismMarketplace"));
@@ -1336,7 +1335,6 @@ function AppShell() {
               <Route path="astrology" element={<AstrologyHome />} />
               <Route path="astrology-consultant-admin" element={<ConsultantAdminPanel />} />
               <Route path="astrology-analytics" element={<AstrologyAnalyticsDashboard />} />
-              <Route path="module-ratings" element={<ModuleRatings />} />
               <Route path="support" element={<Support />} />
 
               <Route 

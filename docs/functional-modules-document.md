@@ -180,7 +180,6 @@ Important references:
 - `/astrology`
 - `/astrology-consultant-admin`
 - `/astrology-analytics`
-- `/module-ratings`
 
 ### Legacy routes / redirects
 
@@ -877,17 +876,6 @@ These aliases keep older links and alternate naming schemes working.
   - issue navigation
   - user assistance flows
 
-## 52) Module Ratings
-- **Route:** `/module-ratings`
-- **Entry file:** `src/modules/moduleratings/ModuleRatings.js`
-- **Purpose:** module scoring and rating dashboard
-- **Primary responsibilities:**
-  - fetch module ratings from backend app data
-  - display rating, review count, score, and status
-  - show empty state when no data is available
-- **Backend references:**
-  - `backend/routes/appData.js`
-  - `backend/routes/analyticsRoutes.js`
   - `backend/routes/ratingReviewRoutes.js`
 
 ## 53) Profile

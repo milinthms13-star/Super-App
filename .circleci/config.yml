@@ -584,6 +584,114 @@ jobs:
       - store_artifacts:
           path: coverage
 
+  backend_gulfservices_tests:
+    docker:
+      - image: cimg/node:20.12
+    working_directory: ~/repo/backend
+    steps:
+      - checkout:
+          path: ~/repo
+      - restore_cache:
+          keys:
+            - backend-npm-v2-{{ checksum "package-lock.json" }}
+            - backend-npm-v2-
+      - run:
+          name: Install backend dependencies
+          command: npm ci
+      - run:
+          name: Run GulfServices backend integration tests with JUnit and coverage
+          command: |
+            mkdir -p test-results coverage
+            JEST_JUNIT_OUTPUT_DIR=./test-results \
+            JEST_JUNIT_OUTPUT_NAME=gulfservices-backend-junit.xml \
+            npx jest --config jest.gulfservices.config.js routes/gulfservices.routes.integration.test.js --watchAll=false --runInBand --coverage --coverageReporters=json-summary --coverageReporters=text --coverageReporters=lcov --reporters=default --reporters=jest-junit
+      - run:
+          name: Enforce backend GulfServices coverage thresholds
+          command: |
+            node -e "const fs=require('fs'); const p='coverage/coverage-summary.json'; if(!fs.existsSync(p)){console.error('Missing '+p); process.exit(1);} const summary=JSON.parse(fs.readFileSync(p,'utf8')); const t=summary.total||{}; const req={lines:5,functions:5,branches:5,statements:5}; const bad=Object.entries(req).filter(([k,v])=>!t[k] || Number(t[k].pct||0)<v); if(bad.length){console.error('Coverage thresholds failed:', bad.map(([k,v])=>k+':'+(t[k]?t[k].pct:0)+'<'+v).join(', ')); process.exit(1);} console.log('Coverage thresholds passed.');"
+      - save_cache:
+          key: backend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: coverage
+
+  frontend_gulfservices_tests:
+    docker:
+      - image: cimg/node:20.12
+    working_directory: ~/repo
+    environment:
+      CI: "true"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-npm-v2-{{ checksum "package-lock.json" }}
+            - frontend-npm-v2-
+      - run:
+          name: Install frontend dependencies
+          command: npm ci
+      - run:
+          name: Run GulfServices frontend tests with JUnit and coverage
+          command: |
+            mkdir -p test-results coverage
+            JEST_JUNIT_OUTPUT_DIR=./test-results \
+            JEST_JUNIT_OUTPUT_NAME=gulfservices-frontend-junit.xml \
+            npm test -- --watchAll=false --runInBand --testPathPattern=src/modules/gulfservices/gulfservices.components.test.js --coverage --collectCoverageFrom='src/modules/gulfservices/**/*.{js,jsx}' --coverageReporters=json-summary --coverageReporters=text --coverageReporters=lcov --reporters=default --reporters=jest-junit
+      - run:
+          name: Enforce frontend GulfServices coverage thresholds
+          command: |
+            node -e "const fs=require('fs'); const p='coverage/coverage-summary.json'; if(!fs.existsSync(p)){console.error('Missing '+p); process.exit(1);} const summary=JSON.parse(fs.readFileSync(p,'utf8')); const t=summary.total||{}; const req={lines:1,functions:1,branches:1,statements:1}; const bad=Object.entries(req).filter(([k,v])=>!t[k] || Number(t[k].pct||0)<v); if(bad.length){console.error('Coverage thresholds failed:', bad.map(([k,v])=>k+':'+(t[k]?t[k].pct:0)+'<'+v).join(', ')); process.exit(1);} console.log('Coverage thresholds passed.');"
+      - save_cache:
+          key: frontend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: coverage
+
+  frontend_gulfservices_e2e:
+    docker:
+      - image: cimg/node:20.12-browsers
+    working_directory: ~/repo
+    environment:
+      CI: "true"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-npm-v2-{{ checksum "package-lock.json" }}
+            - frontend-npm-v2-
+      - run:
+          name: Install frontend dependencies
+          command: npm ci
+      - run:
+          name: Run GulfServices Cypress E2E smoke flow
+          command: |
+            mkdir -p test-results
+            npm start > /tmp/frontend.log 2>&1 &
+            npx wait-on http://localhost:3000
+            npx cypress run --spec cypress/e2e/gulfservices-go-live.cy.js --browser chrome
+      - save_cache:
+          key: frontend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_artifacts:
+          path: /tmp/frontend.log
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: cypress/screenshots
+      - store_artifacts:
+          path: cypress/videos
+
   freelancer_main_gate:
     docker:
       - image: cimg/base:stable
@@ -591,6 +699,14 @@ jobs:
       - run:
           name: Main branch Freelancer quality gate summary
           command: echo "Freelancer backend and frontend quality gates passed on main."
+
+  gulfservices_main_gate:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Main branch GulfServices quality gate summary
+          command: echo "GulfServices backend, frontend and e2e quality gates passed on main."
 
 workflows:
   beautyai_quality_gates:
@@ -723,6 +839,33 @@ workflows:
           requires:
             - backend_freelancer_tests
             - frontend_freelancer_tests
+          filters:
+            branches:
+              only:
+                - main
+
+  gulfservices_quality_gates:
+    jobs:
+      - backend_gulfservices_tests:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - frontend_gulfservices_tests:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - frontend_gulfservices_e2e:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - gulfservices_main_gate:
+          requires:
+            - backend_gulfservices_tests
+            - frontend_gulfservices_tests
+            - frontend_gulfservices_e2e
           filters:
             branches:
               only:
