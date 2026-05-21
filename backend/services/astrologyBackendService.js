@@ -24,12 +24,24 @@ const {
 
 const shouldUseDevStore = () =>
   process.env.NODE_ENV !== 'production' && mongoose.connection.readyState !== 1;
+const isProduction = process.env.NODE_ENV === 'production';
 const isTestEnv = process.env.NODE_ENV === 'test';
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || 'test_key',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || 'test_secret',
-});
+const getRazorpayCredentials = () => {
+  const keyId = String(process.env.RAZORPAY_KEY_ID || '').trim();
+  const keySecret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
+
+  if (isProduction && (!keyId || !keySecret)) {
+    throw new Error('Razorpay credentials must be configured in production.');
+  }
+
+  return {
+    key_id: keyId || 'test_key',
+    key_secret: keySecret || 'test_secret',
+  };
+};
+
+const razorpay = new Razorpay(getRazorpayCredentials());
 
 const assistantLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -375,52 +387,58 @@ const buildKundliData = (profile = {}, fallbackSign = 'aries') => {
   };
 };
 
-const buildKundliPdfBuffer = (kundliData, profileName = 'Astrology User') =>
+const buildKundliPdfStream = (kundliData, profileName = 'Astrology User') => {
+  const pdf = new PDFDocument({ size: 'A4', margin: 48 });
+
+  pdf.fontSize(18).text('Kundli Report', { align: 'center' });
+  pdf.moveDown(0.5);
+  pdf
+    .fontSize(10)
+    .fillColor('#555555')
+    .text(`Generated: ${new Date(kundliData.generatedAt || Date.now()).toLocaleString('en-IN')}`, {
+      align: 'center',
+    });
+  pdf.fillColor('#111111');
+  pdf.moveDown();
+
+  pdf.fontSize(12).text(`Name: ${profileName}`);
+  pdf.text(`Sign: ${kundliData.label || kundliData.sign}`);
+  pdf.text(`Ascendant: ${kundliData.birthChart?.ascendant || 'Mesha'}`);
+  pdf.moveDown();
+
+  pdf.fontSize(13).text('Dasha');
+  pdf
+    .fontSize(11)
+    .text(`Current: ${kundliData.dasha?.current || '-'}`)
+    .text(`Next: ${kundliData.dasha?.next || '-'}`)
+    .text(`${kundliData.dasha?.summary || ''}`);
+  pdf.moveDown();
+
+  pdf.fontSize(13).text('Planetary Positions');
+  (Array.isArray(kundliData.planets) ? kundliData.planets : []).forEach((item) => {
+    pdf.fontSize(11).text(`- ${item.planet}: ${item.position}`);
+  });
+  pdf.moveDown();
+
+  pdf.fontSize(13).text('Recommendations');
+  (Array.isArray(kundliData.remedies) ? kundliData.remedies : []).forEach((tip) => {
+    pdf.fontSize(11).text(`- ${tip}`);
+  });
+
+  pdf.end();
+  return pdf;
+};
+
+const pdfStreamToBuffer = (pdfStream) =>
   new Promise((resolve, reject) => {
     const chunks = [];
-    const pdf = new PDFDocument({ size: 'A4', margin: 48 });
-
-    pdf.on('data', (chunk) => chunks.push(chunk));
-    pdf.on('end', () => resolve(Buffer.concat(chunks)));
-    pdf.on('error', reject);
-
-    pdf.fontSize(18).text('Kundli Report', { align: 'center' });
-    pdf.moveDown(0.5);
-    pdf
-      .fontSize(10)
-      .fillColor('#555555')
-      .text(`Generated: ${new Date(kundliData.generatedAt || Date.now()).toLocaleString('en-IN')}`, {
-        align: 'center',
-      });
-    pdf.fillColor('#111111');
-    pdf.moveDown();
-
-    pdf.fontSize(12).text(`Name: ${profileName}`);
-    pdf.text(`Sign: ${kundliData.label || kundliData.sign}`);
-    pdf.text(`Ascendant: ${kundliData.birthChart?.ascendant || 'Mesha'}`);
-    pdf.moveDown();
-
-    pdf.fontSize(13).text('Dasha');
-    pdf
-      .fontSize(11)
-      .text(`Current: ${kundliData.dasha?.current || '-'}`)
-      .text(`Next: ${kundliData.dasha?.next || '-'}`)
-      .text(`${kundliData.dasha?.summary || ''}`);
-    pdf.moveDown();
-
-    pdf.fontSize(13).text('Planetary Positions');
-    (Array.isArray(kundliData.planets) ? kundliData.planets : []).forEach((item) => {
-      pdf.fontSize(11).text(`- ${item.planet}: ${item.position}`);
-    });
-    pdf.moveDown();
-
-    pdf.fontSize(13).text('Recommendations');
-    (Array.isArray(kundliData.remedies) ? kundliData.remedies : []).forEach((tip) => {
-      pdf.fontSize(11).text(`- ${tip}`);
-    });
-
-    pdf.end();
+    pdfStream.on('data', (chunk) => chunks.push(chunk));
+    pdfStream.on('end', () => resolve(Buffer.concat(chunks)));
+    pdfStream.on('error', reject);
   });
+
+const buildKundliPdfBuffer = (kundliData, profileName = 'Astrology User') =>
+  pdfStreamToBuffer(buildKundliPdfStream(kundliData, profileName));
 
 const hashText = (value = '') => {
   let hash = 0;
@@ -2086,39 +2104,38 @@ const buildAnalyticsCsv = (metrics = {}) => {
   return rows.map((row) => row.join(',')).join('\n');
 };
 
-const buildAnalyticsPdfBuffer = (metrics = {}, period = 'month') =>
-  new Promise((resolve, reject) => {
-    const chunks = [];
-    const pdf = new PDFDocument({ size: 'A4', margin: 48 });
-    pdf.on('data', (chunk) => chunks.push(chunk));
-    pdf.on('end', () => resolve(Buffer.concat(chunks)));
-    pdf.on('error', reject);
+const buildAnalyticsPdfStream = (metrics = {}, period = 'month') => {
+  const pdf = new PDFDocument({ size: 'A4', margin: 48 });
 
-    pdf.fontSize(18).text('Astrology Analytics Report', { align: 'center' });
-    pdf.moveDown(0.5);
-    pdf.fontSize(11).text(`Period: ${period}`);
-    pdf.text(`Generated: ${new Date().toLocaleString('en-IN')}`);
-    pdf.moveDown();
+  pdf.fontSize(18).text('Astrology Analytics Report', { align: 'center' });
+  pdf.moveDown(0.5);
+  pdf.fontSize(11).text(`Period: ${period}`);
+  pdf.text(`Generated: ${new Date().toLocaleString('en-IN')}`);
+  pdf.moveDown();
 
-    pdf.fontSize(12).text(`Total bookings: ${metrics.totalBookings || 0}`);
-    pdf.text(`Completed bookings: ${metrics.completedBookings || 0}`);
-    pdf.text(`Cancelled bookings: ${metrics.cancelledBookings || 0}`);
-    pdf.text(`Total revenue: INR ${Number(metrics.totalRevenue || 0).toLocaleString('en-IN')}`);
-    pdf.moveDown();
-    pdf.fontSize(13).text('Top consultants');
+  pdf.fontSize(12).text(`Total bookings: ${metrics.totalBookings || 0}`);
+  pdf.text(`Completed bookings: ${metrics.completedBookings || 0}`);
+  pdf.text(`Cancelled bookings: ${metrics.cancelledBookings || 0}`);
+  pdf.text(`Total revenue: INR ${Number(metrics.totalRevenue || 0).toLocaleString('en-IN')}`);
+  pdf.moveDown();
+  pdf.fontSize(13).text('Top consultants');
 
-    (metrics.topConsultants || []).forEach((consultant) => {
-      pdf
-        .fontSize(11)
-        .text(
-          `- ${consultant.name}: ${consultant.bookings} bookings, INR ${Number(
-            consultant.revenue || 0
-          ).toLocaleString('en-IN')}`
-        );
-    });
-
-    pdf.end();
+  (metrics.topConsultants || []).forEach((consultant) => {
+    pdf
+      .fontSize(11)
+      .text(
+        `- ${consultant.name}: ${consultant.bookings} bookings, INR ${Number(
+          consultant.revenue || 0
+        ).toLocaleString('en-IN')}`
+      );
   });
+
+  pdf.end();
+  return pdf;
+};
+
+const buildAnalyticsPdfBuffer = (metrics = {}, period = 'month') =>
+  pdfStreamToBuffer(buildAnalyticsPdfStream(metrics, period));
 
 module.exports = {
   shouldUseDevStore,
@@ -2147,6 +2164,7 @@ module.exports = {
   normalizeCompatibilityHistory,
   getKundliFallbackProfile,
   buildKundliData,
+  buildKundliPdfStream,
   buildKundliPdfBuffer,
   hashText,
   buildCompatibility,
@@ -2188,6 +2206,7 @@ module.exports = {
   drawScoreBarChart,
   buildAnalyticsMetrics,
   buildAnalyticsCsv,
+  buildAnalyticsPdfStream,
   buildAnalyticsPdfBuffer,
   buildHoroscopePdfBuffer,
   zodiacSigns,

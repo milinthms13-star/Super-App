@@ -34,7 +34,7 @@ const {
   normalizeCompatibilityHistory,
   getKundliFallbackProfile,
   buildKundliData,
-  buildKundliPdfBuffer,
+  buildKundliPdfStream,
   hashText,
   buildCompatibility,
   listConsultantsPersistent,
@@ -67,7 +67,7 @@ const {
   drawScoreBarChart,
   buildAnalyticsMetrics,
   buildAnalyticsCsv,
-  buildAnalyticsPdfBuffer,
+  buildAnalyticsPdfStream,
   buildHoroscopePdfBuffer,
   razorpay,
   assistantLimiter,
@@ -169,6 +169,27 @@ const validateRequest = (req, res, next) => {
   });
 };
 
+const consultantIdParamValidators = [
+  param('consultantId').exists().isString().isLength({ min: 3, max: 80 }),
+  validateRequest,
+];
+
+const consultantSlotActionValidators = [
+  body('consultantId').optional().isString().isLength({ min: 3, max: 80 }),
+  body('slotTime').optional().isString().isLength({ min: 2, max: 80 }),
+  body('slotLabel').optional().isString().isLength({ min: 2, max: 80 }),
+  body('slotId').optional().isString().isLength({ min: 2, max: 80 }),
+  body().custom((value, { req }) => {
+    return Boolean(req.body?.slotTime || req.body?.slotLabel || req.body?.slotId);
+  }).withMessage('slotTime, slotLabel, or slotId is required.'),
+  validateRequest,
+];
+
+const analyticsDashboardValidators = [
+  query('period').optional().isString().isLength({ min: 3, max: 16 }),
+  validateRequest,
+];
+
 const profileValidators = [
   body('sign').optional().isString().isLength({ min: 3, max: 20 }),
   body('birthDate').optional().isISO8601(),
@@ -221,6 +242,73 @@ const consultantQueryValidators = [
   query('consultantId').optional().isString().isLength({ min: 3, max: 80 }),
   validateRequest,
 ];
+
+const compatibilityValidators = [
+  body('sign').exists().isString().isLength({ min: 3, max: 20 }),
+  body('partnerSign').exists().isString().isLength({ min: 3, max: 20 }),
+  validateRequest,
+];
+
+const assistantValidators = [
+  body('sign').optional().isString().isLength({ min: 3, max: 20 }),
+  body('question').exists().isString().isLength({ min: 3, max: 500 }),
+  validateRequest,
+];
+
+const analyticsAlertsValidators = [
+  query('lookbackHours').optional().isInt({ min: 1, max: 240 }),
+  validateRequest,
+];
+
+const analyticsReportValidators = [
+  query('period').optional().isString().isLength({ min: 3, max: 16 }),
+  query('format').optional().isString().isIn(['pdf', 'csv']),
+  validateRequest,
+];
+
+const horoscopeReportValidators = [
+  query('period').optional().isString().isLength({ min: 3, max: 16 }),
+  query('sign').optional().isString().isLength({ min: 3, max: 20 }),
+  query('language').optional().isString().isLength({ min: 2, max: 8 }),
+  validateRequest,
+];
+
+const experimentsTrackValidators = [
+  body('experimentName').exists().isString().isLength({ min: 3, max: 64 }),
+  body('eventType').exists().isString().isLength({ min: 3, max: 32 }),
+  body('eventData').optional().isObject(),
+  validateRequest,
+];
+
+const experimentsResultsValidators = [
+  param('experimentName').exists().isString().isLength({ min: 3, max: 64 }),
+  validateRequest,
+];
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+const toPublicConsultantPayload = (consultant = {}) => ({
+  id: sanitizeText(consultant.id || consultant.consultantId, 80),
+  name: sanitizeText(consultant.name, 120),
+  specialty: sanitizeText(consultant.specialty, 240),
+  rate: sanitizeText(consultant.rate, 60),
+  amountInr: Number(consultant.amountInr || 0),
+  availability: sanitizeText(consultant.availability, 120),
+  availableSlots: Array.isArray(consultant.availableSlots)
+    ? consultant.availableSlots
+        .map((slot) => ({
+          id: sanitizeText(slot?.id, 80),
+          label: sanitizeText(slot?.label, 80),
+          date: sanitizeText(slot?.date, 40),
+        }))
+        .filter((slot) => slot.id && slot.label)
+    : [],
+  languages: Array.isArray(consultant.languages)
+    ? consultant.languages.map((entry) => sanitizeText(entry, 40)).filter(Boolean)
+    : [],
+  rating: Number(consultant.rating || 0),
+  bio: sanitizeText(consultant.bio, 500),
+});
 
 router.get('/signs', (req, res) => {
   res.json({
@@ -480,13 +568,21 @@ router.post('/kundli/report', authenticate, async (req, res) => {
     const fallbackSign = normalizeSign(payloadProfile?.sign || profile?.sign || 'aries');
     const kundliData = buildKundliData(payloadProfile, fallbackSign);
     const profileName = sanitizeText(payloadProfile?.name || req.user?.name || 'Astrology User', 80);
-    const pdfBuffer = await buildKundliPdfBuffer(kundliData, profileName);
     const reportDate = new Date().toISOString().slice(0, 10);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="kundli-report-${reportDate}.pdf"`);
-    res.setHeader('Content-Length', String(pdfBuffer.length));
-    return res.send(pdfBuffer);
+    const pdfStream = buildKundliPdfStream(kundliData, profileName);
+    pdfStream.on('error', (streamError) => {
+      logger.error(`Kundli PDF stream error: ${streamError.message}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Unable to generate Kundli PDF report.',
+        });
+      }
+    });
+    return pdfStream.pipe(res);
   } catch (error) {
     return res.status(400).json({
       success: false,
@@ -495,7 +591,7 @@ router.post('/kundli/report', authenticate, async (req, res) => {
   }
 });
 
-router.post('/compatibility', compatibilityLimiter, async (req, res) => {
+router.post('/compatibility', compatibilityValidators, compatibilityLimiter, async (req, res) => {
   const sign = normalizeSign(req.body?.sign);
   const partnerSign = normalizeSign(req.body?.partnerSign);
 
@@ -520,7 +616,7 @@ router.post('/compatibility', compatibilityLimiter, async (req, res) => {
   });
 });
 
-router.post('/assistant', assistantLimiter, async (req, res) => {
+router.post('/assistant', assistantValidators, assistantLimiter, async (req, res) => {
   const sign = normalizeSign(req.body?.sign || 'aries');
   const signDetails = getSignDetails(sign) || zodiacSigns[0];
   const question = sanitizeText(req.body?.question, 500);
@@ -566,7 +662,7 @@ router.get('/consultants', async (req, res) => {
     const consultants = await listConsultantsPersistent();
     return res.json({
       success: true,
-      data: consultants,
+      data: consultants.map((consultant) => toPublicConsultantPayload(consultant)),
     });
   } catch (error) {
     return res.status(500).json({
@@ -576,7 +672,7 @@ router.get('/consultants', async (req, res) => {
   }
 });
 
-router.get('/consultants/:consultantId', authenticate, async (req, res) => {
+router.get('/consultants/:consultantId', authenticate, consultantIdParamValidators, async (req, res) => {
   const consultantId = sanitizeText(req.params.consultantId, 80);
   if (!ensureConsultantScopeAccess(req, res, consultantId)) {
     return;
@@ -596,7 +692,7 @@ router.get('/consultants/:consultantId', authenticate, async (req, res) => {
   });
 });
 
-router.put('/consultants/:consultantId', authenticate, async (req, res) => {
+router.put('/consultants/:consultantId', authenticate, consultantIdParamValidators, async (req, res) => {
   const consultantId = sanitizeText(req.params.consultantId, 80);
   if (!ensureConsultantScopeAccess(req, res, consultantId)) {
     return;
@@ -641,7 +737,7 @@ router.put('/consultants/:consultantId', authenticate, async (req, res) => {
   });
 });
 
-router.post('/consultants/add-slot', authenticate, consultantScopeValidators, async (req, res) => {
+router.post('/consultants/add-slot', authenticate, consultantSlotActionValidators, async (req, res) => {
   const consultantId = sanitizeText(req.body?.consultantId || req.user?.consultantId || req.user?.id || '', 80);
   if (!ensureConsultantScopeAccess(req, res, consultantId)) {
     return;
@@ -662,7 +758,7 @@ router.post('/consultants/add-slot', authenticate, consultantScopeValidators, as
   });
 });
 
-router.delete('/consultants/remove-slot', authenticate, consultantScopeValidators, async (req, res) => {
+router.delete('/consultants/remove-slot', authenticate, consultantSlotActionValidators, async (req, res) => {
   const consultantId = sanitizeText(req.body?.consultantId || req.user?.consultantId || req.user?.id || '', 80);
   if (!ensureConsultantScopeAccess(req, res, consultantId)) {
     return;
@@ -1045,6 +1141,14 @@ router.post(
       return res.status(409).json({
         success: false,
         message: 'Cannot create payment order for a cancelled booking.',
+      });
+    }
+
+    if (isProduction && (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET)) {
+      logger.error('Astrology payment order blocked: Razorpay credentials are not configured.');
+      return res.status(503).json({
+        success: false,
+        message: 'Payment service temporarily unavailable. Please try again later.',
       });
     }
     if (String(booking.paymentStatus || '').toLowerCase() === 'completed') {
@@ -1498,7 +1602,7 @@ router.post('/payment/webhook/razorpay', async (req, res) => {
   }
 });
 
-router.get('/analytics/dashboard', authenticate, async (req, res) => {
+router.get('/analytics/dashboard', authenticate, analyticsDashboardValidators, async (req, res) => {
   try {
     if (!hasAdminPrivileges(req.user)) {
       return res.status(403).json({
@@ -1526,7 +1630,7 @@ router.get('/analytics/dashboard', authenticate, async (req, res) => {
   }
 });
 
-router.get('/analytics/alerts', authenticate, async (req, res) => {
+router.get('/analytics/alerts', authenticate, analyticsAlertsValidators, async (req, res) => {
   try {
     if (!hasAdminPrivileges(req.user)) {
       return res.status(403).json({
@@ -1549,7 +1653,7 @@ router.get('/analytics/alerts', authenticate, async (req, res) => {
   }
 });
 
-router.get('/analytics/report', authenticate, async (req, res) => {
+router.get('/analytics/report', authenticate, analyticsReportValidators, async (req, res) => {
   try {
     if (!hasAdminPrivileges(req.user)) {
       return res.status(403).json({
@@ -1574,11 +1678,19 @@ router.get('/analytics/report', authenticate, async (req, res) => {
       return res.send(csvBuffer);
     }
 
-    const pdfBuffer = await buildAnalyticsPdfBuffer(metrics, period);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="astrology-report-${period}.pdf"`);
-    res.setHeader('Content-Length', String(pdfBuffer.length));
-    return res.send(pdfBuffer);
+    const pdfStream = buildAnalyticsPdfStream(metrics, period);
+    pdfStream.on('error', (streamError) => {
+      logger.error(`Analytics PDF stream error: ${streamError.message}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Unable to generate analytics report.',
+        });
+      }
+    });
+    return pdfStream.pipe(res);
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -1587,7 +1699,7 @@ router.get('/analytics/report', authenticate, async (req, res) => {
   }
 });
 
-router.get('/horoscope/report', authenticate, async (req, res) => {
+router.get('/horoscope/report', authenticate, horoscopeReportValidators, async (req, res) => {
   try {
     const period = sanitizeText(String(req.query?.period || 'year'), 16).toLowerCase();
     const sign = normalizeSign(String(req.query?.sign || 'aries'));
@@ -1623,7 +1735,7 @@ router.get('/experiments/variants', authenticate, async (req, res) => {
   });
 });
 
-router.post('/experiments/track', authenticate, async (req, res) => {
+router.post('/experiments/track', authenticate, experimentsTrackValidators, async (req, res) => {
   const userId = String(req.user._id || req.user.id);
   const experimentName = sanitizeText(req.body?.experimentName, 64);
   const eventType = sanitizeText(req.body?.eventType, 32);
@@ -1643,7 +1755,7 @@ router.post('/experiments/track', authenticate, async (req, res) => {
   });
 });
 
-router.get('/experiments/results/:experimentName', authenticate, async (req, res) => {
+router.get('/experiments/results/:experimentName', authenticate, experimentsResultsValidators, async (req, res) => {
   if (!hasAdminPrivileges(req.user)) {
     return res.status(403).json({
       success: false,
@@ -1695,6 +1807,8 @@ router.__testables = {
   shouldUseDevStore,
   sanitizeText,
   buildCompatibility,
+  normalizeHexDigest,
+  secureDigestEquals,
 };
 
 module.exports = router;

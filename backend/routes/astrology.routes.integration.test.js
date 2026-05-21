@@ -71,7 +71,8 @@ describe('astrology routes integration', () => {
 
     expect(response.headers['content-type']).toContain('application/pdf');
     expect(response.headers['content-disposition']).toContain('attachment; filename="kundli-report-');
-    expect(Number(response.headers['content-length'])).toBeGreaterThan(0);
+    expect(Buffer.isBuffer(response.body)).toBe(true);
+    expect(response.body.length).toBeGreaterThan(0);
   });
 
   test('GET /api/astrology/horoscope/report returns a downloadable PDF for a valid sign and period', async () => {

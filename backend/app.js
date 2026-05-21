@@ -54,16 +54,16 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 const uploadsDirectory = path.join(__dirname, 'uploads');
 const videoStudioDirectory = path.join(uploadsDirectory, 'video-studio');
+const isProduction = process.env.NODE_ENV === 'production';
 const DEFAULT_FRONTEND_ORIGINS = [
   'https://super-app-7j9x.onrender.com',
   'https://super-app-api.onrender.com',
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:3002',
 ];
+if (!isProduction) {
+  DEFAULT_FRONTEND_ORIGINS.push('http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002');
+}
 const DEFAULT_FRONTEND_ORIGIN_PATTERNS = [
   /^https:\/\/super-app-[a-z0-9-]+\.onrender\.com$/i,
-  /^https:\/\/.+\.onrender\.com$/i,
 ];
 
 const normalizeOrigin = (origin) =>
@@ -85,18 +85,27 @@ const configuredFrontendOrigins = [
 
 const allowedOriginSet = new Set(configuredFrontendOrigins);
 
+const isLoopbackOrigin = (origin) => {
+  try {
+    const parsed = new URL(origin);
+    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  } catch (_error) {
+    return false;
+  }
+};
+
 const corsOrigin = (origin, callback) => {
   const normalizedOrigin = normalizeOrigin(origin);
   const matchesDefaultPattern = DEFAULT_FRONTEND_ORIGIN_PATTERNS.some((pattern) =>
     pattern.test(normalizedOrigin)
   );
+  const localLoopbackAllowed = !isProduction && isLoopbackOrigin(normalizedOrigin);
 
   if (
     !origin ||
-    normalizedOrigin.includes('localhost') ||
-    normalizedOrigin.includes('127.0.0.1') ||
+    localLoopbackAllowed ||
     matchesDefaultPattern ||
-    configuredFrontendOrigins.length === 0 ||
+    (!isProduction && configuredFrontendOrigins.length === 0) ||
     configuredFrontendOrigins.includes('*') ||
     allowedOriginSet.has(normalizedOrigin)
   ) {
