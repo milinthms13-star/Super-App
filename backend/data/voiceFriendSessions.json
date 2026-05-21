@@ -264,5 +264,138 @@
     ],
     "createdAt": 1779362276183,
     "updatedAt": 1779362276183
+  },
+  "a4fafc19-d7a1-4771-814c-892aa807f6fa": {
+    "sessionId": "a4fafc19-d7a1-4771-814c-892aa807f6fa",
+    "sessionToken": "46808b4738821a2094fffba208a730a499240d4feb332717",
+    "userId": "user123",
+    "userName": null,
+    "friendId": "nila",
+    "friendName": "Nila",
+    "friendCustomName": null,
+    "friendCustomAvatar": null,
+    "friendPersonality": "Caring, emotional, and patient",
+    "friendVoice": "female-soft",
+    "voice": "female-soft",
+    "scenario": "room",
+    "persona": "supportive",
+    "mood": "neutral",
+    "language": "en",
+    "favoritePlaces": [],
+    "favoriteActivities": [],
+    "favoriteFoods": [],
+    "preferences": [],
+    "topics": [],
+    "messages": [],
+    "createdAt": 1779363218170,
+    "updatedAt": 1779363218170
+  },
+  "1cde0286-5608-4298-b2fc-0e934de06fb9": {
+    "sessionId": "1cde0286-5608-4298-b2fc-0e934de06fb9",
+    "sessionToken": "a7e96135c57caa9caa487a109712c6fe0e2bd52e17f0ba30",
+    "userId": "user123",
+    "userName": null,
+    "friendId": "nila",
+    "friendName": "Nila",
+    "friendCustomName": null,
+    "friendCustomAvatar": null,
+    "friendPersonality": "Caring, emotional, and patient",
+    "friendVoice": "female-soft",
+    "voice": "female-soft",
+    "scenario": "room",
+    "persona": "mindful",
+    "mood": "anxious",
+    "language": "en",
+    "favoritePlaces": [],
+    "favoriteActivities": [],
+    "favoriteFoods": [],
+    "preferences": [],
+    "topics": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello",
+        "timestamp": "2026-05-21T11:33:38.179Z"
+      },
+      {
+        "role": "assistant",
+        "content": "I am here with you.",
+        "timestamp": "2026-05-21T11:33:38.179Z"
+      }
+    ],
+    "createdAt": 1779363218176,
+    "updatedAt": 1779363218176
+  },
+  "f739189e-ca56-4a7d-8f0b-ff84672759b1": {
+    "sessionId": "f739189e-ca56-4a7d-8f0b-ff84672759b1",
+    "sessionToken": "bb7703e34d3d2b0cfb88bac49a528b5abaf65232292810e0",
+    "userId": "user123",
+    "userName": null,
+    "friendId": "nila",
+    "friendName": "Nila",
+    "friendCustomName": null,
+    "friendCustomAvatar": null,
+    "friendPersonality": "Caring, emotional, and patient",
+    "friendVoice": "female-soft",
+    "voice": "female-soft",
+    "scenario": "room",
+    "persona": "supportive",
+    "mood": "neutral",
+    "language": "ml",
+    "favoritePlaces": [],
+    "favoriteActivities": [],
+    "favoriteFoods": [],
+    "preferences": [],
+    "topics": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi there",
+        "timestamp": "2026-05-21T11:33:38.191Z"
+      },
+      {
+        "role": "assistant",
+        "content": "I am here with you.",
+        "timestamp": "2026-05-21T11:33:38.191Z"
+      }
+    ],
+    "createdAt": 1779363218189,
+    "updatedAt": 1779363218189
+  },
+  "f2049d82-af77-4a5a-a23b-2f76976084de": {
+    "sessionId": "f2049d82-af77-4a5a-a23b-2f76976084de",
+    "sessionToken": "b79f33948e73912305474e5c62801f5a7e161faa7d94785c",
+    "userId": "user123",
+    "userName": null,
+    "friendId": "nila",
+    "friendName": "Nila",
+    "friendCustomName": null,
+    "friendCustomAvatar": "/uploads/voicefriend/custom-face.jpg",
+    "friendPersonality": "Caring, emotional, and patient",
+    "friendVoice": "female-soft",
+    "voice": "female-soft",
+    "scenario": "room",
+    "persona": "supportive",
+    "mood": "neutral",
+    "language": "en",
+    "favoritePlaces": [],
+    "favoriteActivities": [],
+    "favoriteFoods": [],
+    "preferences": [],
+    "topics": [],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello",
+        "timestamp": "2026-05-21T11:33:38.197Z"
+      },
+      {
+        "role": "assistant",
+        "content": "I am here with you.",
+        "timestamp": "2026-05-21T11:33:38.197Z"
+      }
+    ],
+    "createdAt": 1779363218195,
+    "updatedAt": 1779363218195
   }
 }

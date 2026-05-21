@@ -20,6 +20,7 @@ const safeFileName = (value = '') => sanitizeText(value).replace(/[^a-zA-Z0-9-_]
 const KIDS_SAFETY_RULES = [
   { code: 'self_harm', pattern: /\b(suicide|self[-\s]?harm|kill myself)\b/gi, replacement: 'help and care' },
   { code: 'graphic_violence', pattern: /\b(gore|bloodbath|behead|torture)\b/gi, replacement: 'safe challenge' },
+  { code: 'violence', pattern: /\b(kill|killed|killing|murder|shoot|stab|slay)\b/gi, replacement: 'help' },
   { code: 'weaponry', pattern: /\b(gun|rifle|shotgun|bomb|grenade|knife attack)\b/gi, replacement: 'safe toy prop' },
   { code: 'abuse', pattern: /\b(abuse|bully violently|harass)\b/gi, replacement: 'kindness and respect' },
   { code: 'adult_content', pattern: /\b(sex|sexual|nude|porn|explicit adult)\b/gi, replacement: 'family-friendly moment' },
@@ -1768,6 +1769,9 @@ const getSceneHybridMotionIntentScore = (scene = {}) => {
   if (background && dynamicLocationKeywords.some((keyword) => background.toLowerCase().includes(keyword))) {
     score += 1.4;
   }
+  if (dynamicLocationKeywords.some((keyword) => fullText.includes(keyword))) {
+    score += 1.4;
+  }
   if (weather && /rain|storm|snow|wind|thunder|blizzard|sleet|fog|mist/i.test(weather.toLowerCase())) {
     score += 0.8;
   }
@@ -1780,7 +1784,7 @@ const getSceneHybridMotionIntentScore = (scene = {}) => {
   if (background && /ride|race|battle|journey|travel|explore|adventure/.test(background.toLowerCase())) {
     score += 1.2;
   }
-  if (/quiet|sit|reading|rest|sleep|calm|talk softly|listen quietly/.test(fullText)) {
+  if (/\b(quiet|sit|reading|rest|sleep|calm)\b|talk softly|listen quietly/.test(fullText)) {
     score -= 0.9;
   }
   if (fullText.includes('camera')) {
