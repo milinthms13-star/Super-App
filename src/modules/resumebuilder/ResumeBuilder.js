@@ -32,6 +32,7 @@ const INITIAL_FORM_DATA = {
   languages: "English, Malayalam",
   linkedin: "",
   passportStatus: "",
+  passportNumber: "",
   visaStatus: "",
   currentVisaType: "",
   visaExpiry: "",
@@ -223,6 +224,7 @@ const buildResumeFromForm = (formData = {}, template = "simple-ats", resumeType 
   languages: toList(formData.languages),
   gulfProfile: {
     passportStatus: clean(formData.passportStatus),
+    passportNumber: clean(formData.passportNumber),
     visaStatus: clean(formData.visaStatus),
     currentVisaType: clean(formData.currentVisaType),
     visaExpiry: clean(formData.visaExpiry),
@@ -281,6 +283,7 @@ const formatResumeText = (resume = {}) => {
   lines.push("");
   lines.push("GULF PROFILE");
   const gulf = resume.gulfProfile || {};
+  lines.push(`Passport Number: ${gulf.passportNumber || "N/A"}`);
   lines.push(`Visa Status: ${gulf.visaStatus || "N/A"}`);
   lines.push(`Current Visa Type: ${gulf.currentVisaType || "N/A"}`);
   lines.push(`Relocation: ${gulf.availableToRelocate || "N/A"}`);
@@ -309,6 +312,276 @@ const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
     suggestions,
     sectionCompleteness,
     checkedAt: new Date().toISOString(),
+  };
+};
+
+const buildLiveScoreCard = ({ resume = {}, jobDescription = "", atsReport = null, resumeHealth = null }) => {
+  const sectionCompleteness = computeSectionCompleteness(resume);
+  const resumeText = formatResumeText(resume);
+  const jdKeywords = extractKeywords(jobDescription);
+  const resumeKeywords = extractKeywords(resumeText);
+  const matchedKeywords = jdKeywords.filter((keyword) => resumeKeywords.includes(keyword));
+  const keywordScore = atsReport?.keywordMatchPercent ?? (jdKeywords.length ? Math.round((matchedKeywords.length / jdKeywords.length) * 100) : 50);
+  const qualityScore = resumeHealth?.score ?? 55;
+  const atsScore = atsReport?.score ?? Math.max(25, Math.min(100, Math.round(sectionCompleteness.percent * 0.45 + keywordScore * 0.4 + qualityScore * 0.15)));
+  const jobMatchScore = jdKeywords.length ? Math.max(35, Math.min(100, Math.round(keywordScore * 0.85 + sectionCompleteness.percent * 0.15))) : 50;
+  return {
+    atsScore,
+    jobMatchScore,
+    sectionCompleteness: sectionCompleteness.percent,
+    keywordScore,
+    matchedKeywordCount: matchedKeywords.length,
+    totalKeywordCount: jdKeywords.length,
+  };
+};
+
+const toTitleCase = (value = "") =>
+  String(value || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
+const mergeUniqueCaseInsensitive = (existing = [], incoming = []) => {
+  const merged = [...existing];
+  const existingSet = new Set(existing.map((item) => String(item || "").toLowerCase()));
+  incoming.forEach((item) => {
+    const normalized = String(item || "").toLowerCase();
+    if (normalized && !existingSet.has(normalized)) {
+      existingSet.add(normalized);
+      merged.push(item);
+    }
+  });
+  return merged;
+};
+
+const buildSectionRewritePlan = ({ sectionId = "", topMissing = [], targetRole = "" }) => {
+  if (!topMissing.length) {
+    return {
+      rewriteSuggestion: "No rewrite needed for this section.",
+      exactRewrite: "",
+      rewriteKeywords: [],
+      applyMode: "none",
+      applyLabel: "Already Aligned",
+    };
+  }
+
+  if (sectionId === "profile") {
+    const role = clean(targetRole) || "professional role";
+    const exactRewrite = `Results-driven ${role} with hands-on experience in ${topMissing
+      .slice(0, 3)
+      .join(", ")}. Improved delivery speed, quality, and stakeholder outcomes with measurable impact.`;
+    return {
+      rewriteSuggestion: "Replace your current summary with this exact draft.",
+      exactRewrite,
+      rewriteKeywords: topMissing.slice(0, 3),
+      applyMode: "replace",
+      applyLabel: "Replace Summary",
+    };
+  }
+
+  if (sectionId === "skills") {
+    const exactRewrite = topMissing.join(", ");
+    return {
+      rewriteSuggestion: "Add these exact keywords to your skills list.",
+      exactRewrite,
+      rewriteKeywords: topMissing,
+      applyMode: "merge-list",
+      applyLabel: "Add Skills",
+    };
+  }
+
+  if (sectionId === "experience") {
+    const exactRewrite = `Role | Company | Duration | Applied ${topMissing[0]}${topMissing[1] ? ` and ${topMissing[1]}` : ""} to reduce turnaround time by 20% while improving quality metrics.`;
+    return {
+      rewriteSuggestion: "Append this exact impact bullet line in Experience.",
+      exactRewrite,
+      rewriteKeywords: topMissing.slice(0, 2),
+      applyMode: "append-line",
+      applyLabel: "Add Experience Bullet",
+    };
+  }
+
+  if (sectionId === "projects") {
+    const exactRewrite = `Project Name | ${topMissing.slice(0, 2).join(", ")} | Built and shipped a solution with a measurable business outcome.`;
+    return {
+      rewriteSuggestion: "Append this exact project entry in Projects.",
+      exactRewrite,
+      rewriteKeywords: topMissing.slice(0, 2),
+      applyMode: "append-line",
+      applyLabel: "Add Project Entry",
+    };
+  }
+
+  if (sectionId === "certifications") {
+    const rewriteKeywords = topMissing.map((keyword) => `Certification in ${toTitleCase(keyword)}`);
+    return {
+      rewriteSuggestion: "Add these certification-ready lines.",
+      exactRewrite: rewriteKeywords.join(", "),
+      rewriteKeywords,
+      applyMode: "merge-list",
+      applyLabel: "Add Certifications",
+    };
+  }
+
+  return {
+    rewriteSuggestion: "No rewrite needed for this section.",
+    exactRewrite: "",
+    rewriteKeywords: [],
+    applyMode: "none",
+    applyLabel: "Already Aligned",
+  };
+};
+
+const applySectionRewriteToFormData = (current = {}, section = {}) => {
+  const rewriteKeywords = Array.isArray(section.rewriteKeywords) ? section.rewriteKeywords : [];
+  const exactRewrite = clean(section.exactRewrite);
+
+  if (section.id === "profile" && exactRewrite) {
+    return { ...current, summary: exactRewrite };
+  }
+
+  if (section.id === "skills" && rewriteKeywords.length) {
+    const nextSkills = mergeUniqueCaseInsensitive(toList(current.skills), rewriteKeywords);
+    return { ...current, skills: nextSkills.join(", ") };
+  }
+
+  if (section.id === "experience" && exactRewrite) {
+    const existingLines = toLines(current.experience);
+    const nextExperience = existingLines.includes(exactRewrite)
+      ? current.experience
+      : current.experience
+        ? `${current.experience}\n${exactRewrite}`
+        : exactRewrite;
+    return { ...current, experience: nextExperience };
+  }
+
+  if (section.id === "projects" && exactRewrite) {
+    const existingLines = toLines(current.projects);
+    const nextProjects = existingLines.includes(exactRewrite)
+      ? current.projects
+      : current.projects
+        ? `${current.projects}\n${exactRewrite}`
+        : exactRewrite;
+    return { ...current, projects: nextProjects };
+  }
+
+  if (section.id === "certifications" && rewriteKeywords.length) {
+    const nextCertifications = mergeUniqueCaseInsensitive(toList(current.certifications), rewriteKeywords);
+    return { ...current, certifications: nextCertifications.join(", ") };
+  }
+
+  return current;
+};
+
+const applySectionRewriteToResumeData = (current = {}, section = {}) => {
+  if (!current) return current;
+  const rewriteKeywords = Array.isArray(section.rewriteKeywords) ? section.rewriteKeywords : [];
+  const exactRewrite = clean(section.exactRewrite);
+
+  if (section.id === "profile" && exactRewrite) {
+    return { ...current, profile: exactRewrite };
+  }
+
+  if (section.id === "skills" && rewriteKeywords.length) {
+    const nextSkills = mergeUniqueCaseInsensitive(current.skills || [], rewriteKeywords);
+    return { ...current, skills: nextSkills };
+  }
+
+  if (section.id === "experience" && exactRewrite) {
+    const parsedLine = parseExperience(exactRewrite)[0];
+    if (!parsedLine) return current;
+    const existing = current.experience || [];
+    const exists = existing.some((item) => clean(`${item.role} | ${item.company} | ${item.duration} | ${(item.bullets || []).join(", ")}`) === exactRewrite);
+    return exists ? current : { ...current, experience: [...existing, parsedLine] };
+  }
+
+  if (section.id === "projects" && exactRewrite) {
+    const parsedLine = parseProjects(exactRewrite)[0];
+    if (!parsedLine) return current;
+    const existing = current.projects || [];
+    const exists = existing.some((item) => clean(`${item.name} | ${item.tech} | ${item.summary}`) === exactRewrite);
+    return exists ? current : { ...current, projects: [...existing, parsedLine] };
+  }
+
+  if (section.id === "certifications" && rewriteKeywords.length) {
+    const nextCertifications = mergeUniqueCaseInsensitive(current.certifications || [], rewriteKeywords);
+    return { ...current, certifications: nextCertifications };
+  }
+
+  return current;
+};
+
+const buildJobMatchBreakdown = ({ resume = {}, jobDescription = "" }) => {
+  const jdKeywords = extractKeywords(jobDescription);
+  const safeResume = resume || {};
+  const sections = [
+    {
+      id: "profile",
+      label: "Professional Summary",
+      text: clean(safeResume.profile),
+    },
+    {
+      id: "skills",
+      label: "Skills",
+      text: (safeResume.skills || []).join(", "),
+    },
+    {
+      id: "experience",
+      label: "Experience",
+      text: (safeResume.experience || [])
+        .map((item) => `${item.role || ""} ${item.company || ""} ${(item.bullets || []).join(" ")}`.trim())
+        .join(" "),
+    },
+    {
+      id: "projects",
+      label: "Projects",
+      text: (safeResume.projects || [])
+        .map((item) => `${item.name || ""} ${item.tech || ""} ${item.summary || ""}`.trim())
+        .join(" "),
+    },
+    {
+      id: "certifications",
+      label: "Certifications",
+      text: (safeResume.certifications || []).join(", "),
+    },
+  ];
+
+  const sectionBreakdown = sections.map((section) => {
+    const sectionKeywords = extractKeywords(section.text);
+    const matchedKeywords = jdKeywords.filter((keyword) => sectionKeywords.includes(keyword));
+    const missingKeywords = jdKeywords.filter((keyword) => !sectionKeywords.includes(keyword));
+    const topMissing = missingKeywords.slice(0, 4);
+    const coverage = jdKeywords.length ? Math.round((matchedKeywords.length / jdKeywords.length) * 100) : 0;
+    const rewritePlan = buildSectionRewritePlan({
+      sectionId: section.id,
+      topMissing,
+      targetRole: safeResume?.header?.targetJob || "",
+    });
+
+    return {
+      ...section,
+      coverage,
+      matchedKeywords,
+      missingKeywords,
+      topMissing,
+      rewriteSuggestion: rewritePlan.rewriteSuggestion,
+      exactRewrite: rewritePlan.exactRewrite,
+      rewriteKeywords: rewritePlan.rewriteKeywords,
+      applyMode: rewritePlan.applyMode,
+      applyLabel: rewritePlan.applyLabel,
+      hasRewrite: Boolean(rewritePlan.exactRewrite),
+    };
+  });
+
+  const strongestSection = [...sectionBreakdown].sort((a, b) => b.coverage - a.coverage)[0] || null;
+  const weakestSection = [...sectionBreakdown].sort((a, b) => a.coverage - b.coverage)[0] || null;
+
+  return {
+    jdKeywords,
+    sections: sectionBreakdown,
+    strongestSection,
+    weakestSection,
   };
 };
 
@@ -438,6 +711,14 @@ const ResumeBuilder = () => {
     return jd.filter((keyword) => !existing.has(keyword)).slice(0, 10);
   }, [formData.experience, formData.skills, formData.summary, jobDescription]);
   const resumeHealth = useMemo(() => getResumeHealth(previewResume, jobDescription), [jobDescription, previewResume]);
+  const scoreCard = useMemo(
+    () => buildLiveScoreCard({ resume: previewResume, jobDescription, atsReport, resumeHealth }),
+    [atsReport, jobDescription, previewResume, resumeHealth]
+  );
+  const jobMatchBreakdown = useMemo(
+    () => buildJobMatchBreakdown({ resume: previewResume, jobDescription }),
+    [jobDescription, previewResume]
+  );
 
   const withBusy = useCallback(async (key, fn) => {
     setBusyKey(key);
@@ -659,6 +940,34 @@ const ResumeBuilder = () => {
     });
   }, [formData, isAuthenticated, jobDescription, language, pushStatus, request, resumeData, resumeType, template, withBusy]);
 
+  const handleApplySectionRewrite = useCallback(
+    (sectionId) => {
+      const targetSection = (jobMatchBreakdown?.sections || []).find((section) => section.id === sectionId);
+      if (!targetSection) return;
+      if (!targetSection.hasRewrite) {
+        pushStatus("success", `${targetSection.label} is already aligned.`);
+        return;
+      }
+
+      setFormData((current) => applySectionRewriteToFormData(current, targetSection));
+      setResumeData((current) => applySectionRewriteToResumeData(current, targetSection));
+      pushStatus("success", `Applied exact rewrite to ${targetSection.label}.`);
+    },
+    [jobMatchBreakdown?.sections, pushStatus]
+  );
+
+  const handleApplyAllSectionRewrites = useCallback(() => {
+    const actionableSections = (jobMatchBreakdown?.sections || []).filter((section) => section.hasRewrite);
+    if (!actionableSections.length) {
+      pushStatus("success", "All tracked sections are already aligned.");
+      return;
+    }
+
+    setFormData((current) => actionableSections.reduce((next, section) => applySectionRewriteToFormData(next, section), current));
+    setResumeData((current) => actionableSections.reduce((next, section) => applySectionRewriteToResumeData(next, section), current));
+    pushStatus("success", `Applied rewrite suggestions across ${actionableSections.length} section(s).`);
+  }, [jobMatchBreakdown?.sections, pushStatus]);
+
   const handleCoverLetter = useCallback(async () => {
     const resumePayload = resumeData || buildResumeFromForm(formData, template, resumeType, language);
     if (!isAuthenticated) {
@@ -879,6 +1188,23 @@ const ResumeBuilder = () => {
     await navigator.clipboard.writeText(text);
   }, []);
 
+  const handleCopySectionRewrite = useCallback(
+    async (sectionId) => {
+      const targetSection = (jobMatchBreakdown?.sections || []).find((section) => section.id === sectionId);
+      if (!targetSection?.hasRewrite || !targetSection.exactRewrite) {
+        pushStatus("error", "No rewrite text available for this section.");
+        return;
+      }
+      try {
+        await copyText(targetSection.exactRewrite);
+        pushStatus("success", `Copied rewrite for ${targetSection.label}.`);
+      } catch (_error) {
+        pushStatus("error", "Clipboard copy failed on this browser.");
+      }
+    },
+    [copyText, jobMatchBreakdown?.sections, pushStatus]
+  );
+
   const renderPreview = () => (
     <div className={`resume-live-preview template-${template}`}>
       <div className="preview-head">
@@ -900,6 +1226,14 @@ const ResumeBuilder = () => {
           {(resumeHealth.issues || []).slice(0, 4).map((item) => <li key={item}>{item}</li>)}
         </ul>
       </div>
+      {resumeType === "gulf" ? (
+        <div className="resume-health-card">
+          <strong>Gulf Readiness</strong>
+          <p className="mini-score">Passport: {previewResume?.gulfProfile?.passportStatus || "Not set"}</p>
+          <p className="mini-score">Passport No: {previewResume?.gulfProfile?.passportNumber || "Not set"}</p>
+          <p className="mini-score">Visa: {previewResume?.gulfProfile?.visaStatus || "Not set"}</p>
+        </div>
+      ) : null}
     </div>
   );
 
@@ -918,16 +1252,60 @@ const ResumeBuilder = () => {
             <span>LinkedIn + Recruiter Email</span>
           </div>
           <p className="plan-notice">{hasPremiumAccess ? "Premium unlocked." : "Free plan: 1 resume, 1 ATS check, 2 templates."}</p>
+          <div className="resume-hero-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setFormData((current) => ({ ...current, summary: rewriteSummaryLocal(current, jobDescription) }))}
+            >
+              AI Rewrite Summary
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setFormData((current) => ({ ...current, experience: rewriteExperienceLocal(current.experience) }))}
+            >
+              AI Improve Experience
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                setActiveSection("ats-score");
+                if (clean(jobDescription)) {
+                  void handleAtsCheck();
+                }
+              }}
+            >
+              Run ATS + Job Match
+            </button>
+          </div>
         </div>
         <div className="resume-builder-hero-visual">
-          <div className="resume-preview-card">
-            <div className="resume-header">
-              <h3>{previewResume?.header?.fullName || "Candidate Name"}</h3>
-              <p>{previewResume?.header?.targetJob || "Target Job Role"}</p>
+          <div className="resume-hero-score-stack">
+            <div className="resume-preview-card">
+              <div className="resume-header">
+                <h3>{previewResume?.header?.fullName || "Candidate Name"}</h3>
+                <p>{previewResume?.header?.targetJob || "Target Job Role"}</p>
+              </div>
+              <div className="resume-skills">{(previewResume?.skills || []).slice(0, 3).map((skill) => <span key={skill} className="skill-tag">{skill}</span>)}</div>
+              <p className="mini-score">Profile Completion: {completeness}%</p>
+              <p className="mini-score">Wizard Progress: {stepProgress}%</p>
             </div>
-            <div className="resume-skills">{(previewResume?.skills || []).slice(0, 3).map((skill) => <span key={skill} className="skill-tag">{skill}</span>)}</div>
-            <p className="mini-score">Profile Completion: {completeness}%</p>
-            <p className="mini-score">Wizard Progress: {stepProgress}%</p>
+            <div className="resume-score-grid">
+              <article>
+                <span>ATS Score</span>
+                <strong>{scoreCard.atsScore}%</strong>
+                <small>Sections {scoreCard.sectionCompleteness}%</small>
+              </article>
+              <article>
+                <span>Job Match</span>
+                <strong>{scoreCard.jobMatchScore}%</strong>
+                <small>
+                  {scoreCard.matchedKeywordCount}/{scoreCard.totalKeywordCount || 0} keywords
+                </small>
+              </article>
+            </div>
           </div>
         </div>
       </section>
@@ -1045,6 +1423,8 @@ const ResumeBuilder = () => {
             {wizardStep === 5 ? (
               <div className="wizard-step-card form-fields">
                 <h3>Gulf Details</h3>
+                <label>Passport Status</label><input value={formData.passportStatus} onChange={handleInputChange("passportStatus")} />
+                <label>Passport Number</label><input value={formData.passportNumber} onChange={handleInputChange("passportNumber")} />
                 <label>Visa Status</label><input value={formData.visaStatus} onChange={handleInputChange("visaStatus")} />
                 <label>Current Visa Type</label><input value={formData.currentVisaType} onChange={handleInputChange("currentVisaType")} />
                 <label>Visa Expiry</label><input type="date" value={formData.visaExpiry} onChange={handleInputChange("visaExpiry")} />
@@ -1120,11 +1500,90 @@ const ResumeBuilder = () => {
         {activeSection === "job-match" && (
           <section className="resume-builder-section">
             <div className="section-header"><h2>Job Match</h2><p>Keyword and skill matching against target JD.</p></div>
+            <div className="score-summary-strip">
+              <article>
+                <span>Match Score</span>
+                <strong>{scoreCard.jobMatchScore}%</strong>
+              </article>
+              <article>
+                <span>Keyword Fit</span>
+                <strong>{scoreCard.keywordScore}%</strong>
+              </article>
+              <article>
+                <span>Matched Keywords</span>
+                <strong>{scoreCard.matchedKeywordCount}/{scoreCard.totalKeywordCount || 0}</strong>
+              </article>
+            </div>
             <div className="job-optimizer">
               <textarea rows={9} value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} />
               <button type="button" className="primary-button" onClick={handleOptimizeResume} disabled={busyKey === "optimize"}>{busyKey === "optimize" ? "Optimizing..." : "Optimize Resume For Job"}</button>
             </div>
             <div className="optimization-results"><h4>Missing Skill Suggestions</h4><p>{missingSkills.length ? missingSkills.join(", ") : "No missing skills detected."}</p></div>
+            <div className="job-match-breakdown-panel">
+              <div className="job-match-breakdown-head">
+                <div>
+                  <h4>Job Match Breakdown Panel</h4>
+                  <p>
+                    Strongest: <strong>{jobMatchBreakdown?.strongestSection?.label || "N/A"}</strong> | Weakest:{" "}
+                    <strong>{jobMatchBreakdown?.weakestSection?.label || "N/A"}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleApplyAllSectionRewrites}
+                >
+                  Apply All Rewrites
+                </button>
+              </div>
+              <div className="job-match-breakdown-grid">
+                {(jobMatchBreakdown?.sections || []).map((section) => (
+                  <article key={section.id} className="job-match-section-card">
+                    <div className="job-match-section-top">
+                      <h5>{section.label}</h5>
+                      <span>{section.coverage}% match</span>
+                    </div>
+                    <div className="job-match-keyword-columns">
+                      <div>
+                        <p className="job-match-pill-title">Matched Keywords</p>
+                        <p className="job-match-pill-list">{section.matchedKeywords.length ? section.matchedKeywords.slice(0, 8).join(", ") : "None yet"}</p>
+                      </div>
+                      <div>
+                        <p className="job-match-pill-title">Missing Keywords</p>
+                        <p className="job-match-pill-list">{section.topMissing.length ? section.topMissing.join(", ") : "No critical gaps"}</p>
+                      </div>
+                    </div>
+                    <p className="job-match-rewrite-note">{section.rewriteSuggestion}</p>
+                    <div className="job-match-exact-rewrite">
+                      <p>Exact Rewrite Suggestion</p>
+                      <textarea
+                        rows={3}
+                        value={section.exactRewrite || "Section is already aligned with the target JD."}
+                        readOnly
+                      />
+                    </div>
+                    <div className="job-match-card-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => handleCopySectionRewrite(section.id)}
+                        disabled={!section.hasRewrite}
+                      >
+                        Copy Rewrite
+                      </button>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => handleApplySectionRewrite(section.id)}
+                        disabled={!section.hasRewrite}
+                      >
+                        {section.applyLabel || "Apply Rewrite"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
             {renderPreview()}
           </section>
         )}
@@ -1215,3 +1674,4 @@ const ResumeBuilder = () => {
 
 export { toList, toLines, clean, extractKeywords, parseResumeTextToFormData, rewriteSummaryLocal, rewriteExperienceLocal, inferRoleSkills, buildResumeFromForm, computeSectionCompleteness, formatResumeText, buildLocalAtsReport };
 export default ResumeBuilder;
+

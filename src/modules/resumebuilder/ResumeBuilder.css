@@ -71,6 +71,20 @@
   justify-content: center;
 }
 
+.resume-hero-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.resume-hero-score-stack {
+  width: 100%;
+  max-width: 360px;
+  display: grid;
+  gap: 0.75rem;
+}
+
 .resume-preview-card {
   background: white;
   border: 1px solid var(--resume-builder-border);
@@ -106,6 +120,38 @@
   border-radius: 12px;
   font-size: 0.8rem;
   font-weight: 500;
+}
+
+.resume-score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.resume-score-grid article {
+  background: #ffffff;
+  border: 1px solid var(--resume-builder-border);
+  border-radius: 14px;
+  padding: 0.7rem 0.8rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.resume-score-grid span {
+  color: var(--resume-builder-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.resume-score-grid strong {
+  color: var(--resume-builder-primary);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.resume-score-grid small {
+  color: var(--resume-builder-muted);
+  font-size: 0.75rem;
 }
 
 .resume-builder-nav {
@@ -163,6 +209,33 @@
 
 .resume-builder-content {
   margin-top: 1.25rem;
+}
+
+.score-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.score-summary-strip article {
+  border: 1px solid var(--resume-builder-border);
+  background: var(--resume-builder-surface-alt);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.score-summary-strip span {
+  font-size: 0.78rem;
+  color: var(--resume-builder-muted);
+  font-weight: 700;
+}
+
+.score-summary-strip strong {
+  font-size: 1.3rem;
+  color: var(--resume-builder-primary);
 }
 
 .resume-builder-section {
@@ -543,6 +616,130 @@
 .optimization-results h4 {
   margin: 0 0 1rem;
   color: var(--resume-builder-success);
+}
+
+.job-match-breakdown-panel {
+  margin-top: 1.25rem;
+  border: 1px solid var(--resume-builder-border);
+  border-radius: 14px;
+  padding: 1rem;
+  background: #ffffff;
+}
+
+.job-match-breakdown-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.job-match-breakdown-head h4 {
+  margin: 0;
+  color: var(--resume-builder-primary);
+}
+
+.job-match-breakdown-head p {
+  margin: 0.4rem 0 0;
+  color: var(--resume-builder-muted);
+  font-size: 0.92rem;
+}
+
+.job-match-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.85rem;
+}
+
+.job-match-section-card {
+  border: 1px solid var(--resume-builder-border);
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: var(--resume-builder-surface-alt);
+  display: grid;
+  gap: 0.7rem;
+}
+
+.job-match-section-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.job-match-section-top h5 {
+  margin: 0;
+  color: var(--resume-builder-primary);
+}
+
+.job-match-section-top span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.12);
+  border-radius: 999px;
+  padding: 0.25rem 0.5rem;
+}
+
+.job-match-keyword-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.job-match-pill-title {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--resume-builder-muted);
+}
+
+.job-match-pill-list {
+  margin: 0.35rem 0 0;
+  color: var(--resume-builder-ink);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.job-match-rewrite-note {
+  margin: 0;
+  color: var(--resume-builder-primary-dark);
+  font-size: 0.88rem;
+}
+
+.job-match-exact-rewrite p {
+  margin: 0 0 0.4rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--resume-builder-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.job-match-exact-rewrite textarea {
+  width: 100%;
+  border: 1px solid var(--resume-builder-border);
+  border-radius: 8px;
+  padding: 0.65rem;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+  background: #f8fafc;
+  color: var(--resume-builder-ink);
+}
+
+.job-match-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.job-match-card-actions .primary-button,
+.job-match-card-actions .secondary-button {
+  padding: 0.65rem 0.95rem;
+  font-size: 0.88rem;
 }
 
 .optimized-content h5 {
@@ -1049,6 +1246,27 @@
   }
 
   .builder-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .resume-hero-actions {
+    flex-direction: column;
+  }
+
+  .resume-hero-actions .primary-button,
+  .resume-hero-actions .secondary-button {
+    width: 100%;
+  }
+
+  .resume-score-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .job-match-breakdown-head {
+    flex-direction: column;
+  }
+
+  .job-match-keyword-columns {
     grid-template-columns: 1fr;
   }
 

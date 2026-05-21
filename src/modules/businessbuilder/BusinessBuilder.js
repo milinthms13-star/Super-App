@@ -132,6 +132,8 @@ const STORAGE_KEYS = {
   businessPlan: "business_builder_plan_v2",
   generatedDocs: "business_builder_generated_docs_v2",
   schemeProfile: "business_builder_scheme_profile_v2",
+  builder10Form: "business_builder_10x_form_v1",
+  builder10Plans: "business_builder_10x_plans_v1",
 };
 
 const INITIAL_BUSINESS_FORM = {
@@ -238,6 +240,38 @@ const INITIAL_SCHEME_PROFILE = {
   isMinorityEntrepreneur: false,
 };
 
+const BUSINESS_BUILDER_10X_CATEGORIES = [
+  "Ecommerce",
+  "Food",
+  "Services",
+  "Tourism",
+  "Healthcare",
+  "Education",
+  "Technology",
+  "Beauty",
+];
+
+const INITIAL_BUILDER10_FORM = {
+  businessName: "",
+  category: "Ecommerce",
+  location: "Kerala",
+  targetCustomers: "",
+  investment: 50000,
+  monthlyTarget: 100000,
+  language: "English",
+};
+
+const BUSINESS_BUILDER_10X_UPGRADE_MAP = [
+  { area: "Idea Builder", upgrade: "Business idea, category, and target customers", status: "ready" },
+  { area: "Brand Kit", upgrade: "Name, tagline, logo prompt, and color palette", status: "ready" },
+  { area: "Legal Setup", upgrade: "GST, Udyam, and company structure checklist", status: "ready" },
+  { area: "Finance", upgrade: "Startup cost view, revenue model, and monthly target", status: "ready" },
+  { area: "Documents", upgrade: "Business plan docs, pitch summary, and invoice flows", status: "ready" },
+  { area: "Launch", upgrade: "30-day action roadmap with execution checklist", status: "ready" },
+  { area: "AI", upgrade: "Plan generation connected to OpenAI-backed APIs", status: "next" },
+  { area: "Monetization", upgrade: "Premium plan exports, legal leads, and referral engine", status: "next" },
+];
+
 const BUSINESS_PLAN_SECTIONS = [
   { key: "businessSummary", label: "Business summary" },
   { key: "marketAnalysis", label: "Market analysis" },
@@ -254,6 +288,7 @@ const TAB_CONFIG = [
   { id: "dashboard", label: "Growth Dashboard", subtitle: "Readiness KPIs, milestones, and next best action." },
   { id: "wizard", label: "Launch Wizard", subtitle: "Guided inputs from business idea to execution details." },
   { id: "ai-plan", label: "AI Plan Generator", subtitle: "Generate strategy, roadmap, and brand assets." },
+  { id: "builder10x", label: "10X Builder", subtitle: "Brand kit + legal + finance + launch roadmap in one panel." },
   { id: "cost", label: "Startup Cost", subtitle: "Project investment, burn rate, and break-even window." },
   { id: "schemes", label: "Scheme Hub", subtitle: "Find subsidy, loan, and eligibility-based opportunities." },
   { id: "documents", label: "Document Generator", subtitle: "Produce operational and sales-ready business docs." },
@@ -464,6 +499,17 @@ const getNextAction = ({ businessForm, launchForm, plan, checklist }) => {
   return "Create your first invoice or mini app listing to start execution.";
 };
 
+const map10xCategoryToBusinessType = (category) => {
+  if (category === "Ecommerce") return "Retail";
+  if (category === "Food") return "Food";
+  if (category === "Services") return "Service";
+  if (category === "Tourism") return "Travel";
+  if (category === "Healthcare") return "Health";
+  if (category === "Education") return "Education";
+  if (category === "Beauty") return "Beauty";
+  return "Other";
+};
+
 const BusinessBuilder = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
 
@@ -484,6 +530,10 @@ const BusinessBuilder = () => {
   const [brandingIdeas, setBrandingIdeas] = useState(null);
   const [documentPreview, setDocumentPreview] = useState("");
   const [generatedDocuments, setGeneratedDocuments] = useState(() => loadFromStorage(STORAGE_KEYS.generatedDocs, []));
+  const [builder10Form, setBuilder10Form] = useState(() => loadFromStorage(STORAGE_KEYS.builder10Form, INITIAL_BUILDER10_FORM));
+  const [builder10Plans, setBuilder10Plans] = useState(() => loadFromStorage(STORAGE_KEYS.builder10Plans, []));
+  const [builder10AiPlan, setBuilder10AiPlan] = useState(null);
+  const [builder10Generating, setBuilder10Generating] = useState(false);
 
   const [businesses, setBusinesses] = useState([]);
   const [activeBusinessId, setActiveBusinessId] = useState("");
@@ -564,6 +614,26 @@ const BusinessBuilder = () => {
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEYS.schemeProfile, JSON.stringify(schemeProfile));
   }, [schemeProfile]);
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.builder10Form, JSON.stringify(builder10Form));
+  }, [builder10Form]);
+
+  useEffect(() => {
+    window.localStorage.setItem(STORAGE_KEYS.builder10Plans, JSON.stringify(builder10Plans));
+  }, [builder10Plans]);
+
+  useEffect(() => {
+    setBuilder10Form((current) => {
+      if (hasValue(current.businessName) || !hasValue(businessForm.businessName)) {
+        return current;
+      }
+      return {
+        ...current,
+        businessName: businessForm.businessName,
+      };
+    });
+  }, [businessForm.businessName]);
 
   const applyBusinessToForm = (business = {}) => {
     const address = business.address || {};
@@ -788,6 +858,10 @@ const BusinessBuilder = () => {
 
   const handleDocumentChange = (field, value) => {
     setDocumentForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleBuilder10Change = (field, value) => {
+    setBuilder10Form((current) => ({ ...current, [field]: value }));
   };
 
   const handleSaveBusiness = async (event) => {
@@ -1088,6 +1162,119 @@ const BusinessBuilder = () => {
     }
   };
 
+  const saveBuilder10Plan = () => {
+    const record = {
+      id: `bb10-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      ...builder10Form,
+      businessType: map10xCategoryToBusinessType(builder10Form.category),
+    };
+    setBuilder10Plans((current) => [record, ...current].slice(0, 30));
+    showStatus("Business Builder 10X plan saved.");
+  };
+
+  const copyBuilder10Plan = async () => {
+    const legalChecklist = [
+      "Choose structure: Proprietorship / Partnership / Pvt Ltd",
+      "Apply Udyam registration (MSME) if eligible",
+      "Check GST applicability by turnover and business type",
+      "Open current account and setup invoicing",
+      "Define payment and compliance process",
+    ];
+    const text = [
+      `Business Name: ${builder10Form.businessName || "Your Business"}`,
+      `Category: ${builder10Form.category}`,
+      `Location: ${builder10Form.location}`,
+      `Target Customers: ${builder10Form.targetCustomers || "Not specified"}`,
+      `Investment: ${formatINR(builder10Form.investment)}`,
+      `Monthly Revenue Target: ${formatINR(builder10Form.monthlyTarget)}`,
+      "",
+      "Legal Checklist:",
+      ...legalChecklist.map((item, index) => `${index + 1}. ${item}`),
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(text);
+      showStatus("10X plan copied to clipboard.");
+    } catch (error) {
+      showStatus("Copy failed. Please copy manually from the panel.");
+    }
+  };
+
+  const applyBuilder10PlanToWorkspace = () => {
+    const mappedType = map10xCategoryToBusinessType(builder10Form.category);
+    setBusinessForm((current) => ({
+      ...current,
+      businessName: builder10Form.businessName || current.businessName,
+      businessType: mappedType,
+    }));
+    setLaunchForm((current) => ({
+      ...current,
+      targetCustomers: builder10Form.targetCustomers || current.targetCustomers,
+      serviceArea: builder10Form.location || current.serviceArea,
+      plannedBudget: String(builder10Form.investment || current.plannedBudget || ""),
+    }));
+    setCostForm((current) => ({
+      ...current,
+      expectedMonthlyRevenue: parseNumber(builder10Form.monthlyTarget || current.expectedMonthlyRevenue),
+    }));
+    showStatus("Applied 10X inputs to your workspace. Open AI Plan for full strategy generation.");
+  };
+
+  const generateBuilder10AiPlan = async () => {
+    if (!activeBusinessId) {
+      showStatus("Create and save a business profile before generating AI plan.");
+      return;
+    }
+
+    try {
+      setBuilder10Generating(true);
+      const response = await axios.post(
+        `/api/business-builder/businesses/${activeBusinessId}/generate-plan-ai`,
+        { ...builder10Form }
+      );
+      if (response.data?.success && response.data?.data) {
+        setBuilder10AiPlan(response.data.data);
+        showStatus("AI 10X plan generated successfully.");
+      }
+    } catch (error) {
+      showStatus("Unable to generate AI 10X plan right now.");
+    } finally {
+      setBuilder10Generating(false);
+    }
+  };
+
+  const downloadBuilder10PlanPdf = async () => {
+    if (!activeBusinessId) {
+      showStatus("Create and save a business profile before downloading plan PDF.");
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `/api/business-builder/businesses/${activeBusinessId}/ai-plan/pdf`,
+        {
+          blueprint: builder10Form,
+          plan: builder10AiPlan || builder10Plan,
+        },
+        { responseType: "blob" }
+      );
+
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `business-plan-${activeBusinessId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showStatus("Business plan PDF downloaded.");
+    } catch (error) {
+      showStatus("Unable to export business plan PDF.");
+    }
+  };
+
   const toggleChecklist = (id) => {
     setChecklist((current) =>
       current.map((item) =>
@@ -1157,6 +1344,54 @@ const BusinessBuilder = () => {
       return true;
     });
   }, [businessForm.businessType, launchForm.plannedBudget, schemeProfile]);
+
+  const builder10Plan = useMemo(() => {
+    const businessName = builder10Form.businessName || "Your Business";
+    const monthlyTarget = parseNumber(builder10Form.monthlyTarget);
+    const investment = parseNumber(builder10Form.investment);
+    const runwayMonths = monthlyTarget > 0 ? Math.max(1, Math.floor(investment / (monthlyTarget * 0.45 || 1))) : 0;
+
+    const revenueModel =
+      builder10Form.category === "Ecommerce"
+        ? "Product sales, seller commission, delivery fees, and featured listings."
+        : "Service fees, subscriptions, consultation packages, and partner commissions.";
+
+    return {
+      tagline: `${businessName} - Trusted solutions for modern customers`,
+      revenueModel,
+      legalChecklist: [
+        "Choose structure: Proprietorship / Partnership / Pvt Ltd",
+        "Apply Udyam registration (MSME) if eligible",
+        "Check GST applicability by turnover and business type",
+        "Open a current account with accounting workflow",
+        "Setup invoice process and compliance cadence",
+      ],
+      launchPlan: [
+        "Week 1: Finalize business name, positioning, and core offer.",
+        "Week 2: Launch landing page, WhatsApp profile, and social handles.",
+        "Week 3: Close first 10 customers or vendors with feedback loops.",
+        "Week 4: Run acquisition campaign and track conversion economics.",
+      ],
+      logoPrompt: `Create a premium logo for ${businessName} in the ${builder10Form.category} category, with a modern, trustworthy style suitable for ${builder10Form.location} and global customers.`,
+      monthlyTarget,
+      investment,
+      runwayMonths,
+    };
+  }, [builder10Form]);
+
+  const builder10Readiness = useMemo(() => {
+    const checks = [
+      hasValue(builder10Form.businessName),
+      hasValue(builder10Form.targetCustomers),
+      hasValue(builder10Form.location),
+      parseNumber(builder10Form.investment) > 0,
+      parseNumber(builder10Form.monthlyTarget) > 0,
+    ];
+    const completed = checks.filter(Boolean).length;
+    return Math.round((completed / checks.length) * 100);
+  }, [builder10Form]);
+
+  const activeBuilder10Plan = builder10AiPlan || builder10Plan;
 
   const dashboardMetrics = useMemo(() => {
     const profileReady = businessForm.businessName && businessForm.phone && businessForm.email;
@@ -1430,6 +1665,225 @@ const BusinessBuilder = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === "builder10x" && (
+        <div className="section-card">
+          <h2>Business Builder 10X Upgrade</h2>
+          <p className="section-subtitle">
+            Convert idea to launch-ready business blueprint with brand kit, legal checklist, finance targets, and a 30-day rollout.
+          </p>
+
+          <div className="bb10x-hero">
+            <div className="bb10x-hero-copy">
+              <p className="bb10x-tag">NilaHub Business Builder</p>
+              <h3>Build your business plan, brand kit, and launch roadmap</h3>
+              <p>
+                This workspace merges your proposed upgrade directly into the current module and keeps data compatible with AI Plan, Cost, and Documents tabs.
+              </p>
+            </div>
+            <div className="bb10x-readiness">
+              <span>Startup readiness</span>
+              <strong>{builder10Readiness}%</strong>
+              <p>Complete name, customer segment, budget, and monthly target for stronger plan quality.</p>
+            </div>
+          </div>
+
+          <div className="bb10x-layout">
+            <aside className="bb10x-form card-shell">
+              <h3>Business details</h3>
+              <label>
+                Business Name
+                <input
+                  value={builder10Form.businessName}
+                  onChange={(event) => handleBuilder10Change("businessName", event.target.value)}
+                  placeholder="Example: MalabarBazaar"
+                />
+              </label>
+
+              <label>
+                Category
+                <select
+                  value={builder10Form.category}
+                  onChange={(event) => handleBuilder10Change("category", event.target.value)}
+                >
+                  {BUSINESS_BUILDER_10X_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Location
+                <input
+                  value={builder10Form.location}
+                  onChange={(event) => handleBuilder10Change("location", event.target.value)}
+                />
+              </label>
+
+              <label>
+                Target Customers
+                <textarea
+                  value={builder10Form.targetCustomers}
+                  onChange={(event) => handleBuilder10Change("targetCustomers", event.target.value)}
+                  placeholder="Example: Kerala homemade product sellers and global buyers"
+                />
+              </label>
+
+              <label>
+                Initial Investment (INR)
+                <input
+                  type="number"
+                  min="0"
+                  value={builder10Form.investment}
+                  onChange={(event) => handleBuilder10Change("investment", parseNumber(event.target.value))}
+                />
+              </label>
+
+              <label>
+                Monthly Revenue Target (INR)
+                <input
+                  type="number"
+                  min="0"
+                  value={builder10Form.monthlyTarget}
+                  onChange={(event) => handleBuilder10Change("monthlyTarget", parseNumber(event.target.value))}
+                />
+              </label>
+
+              <label>
+                Language
+                <select
+                  value={builder10Form.language}
+                  onChange={(event) => handleBuilder10Change("language", event.target.value)}
+                >
+                  <option value="English">English</option>
+                  <option value="Malayalam">Malayalam</option>
+                </select>
+              </label>
+
+              <div className="bb10x-action-row">
+                <button type="button" className="button-primary" onClick={saveBuilder10Plan}>
+                  Save 10X Plan
+                </button>
+                <button type="button" className="button-secondary" onClick={copyBuilder10Plan}>
+                  Copy Plan
+                </button>
+                <button type="button" className="button-secondary" onClick={applyBuilder10PlanToWorkspace}>
+                  Apply to Workspace
+                </button>
+                <button type="button" className="button-primary" onClick={generateBuilder10AiPlan} disabled={builder10Generating}>
+                  {builder10Generating ? "Generating AI Plan..." : "Generate AI 10X Plan"}
+                </button>
+                <button type="button" className="button-secondary" onClick={downloadBuilder10PlanPdf}>
+                  Download Plan PDF
+                </button>
+              </div>
+            </aside>
+
+            <main className="bb10x-preview">
+              <div className="card-shell bb10x-card">
+                <h3>{builder10Form.businessName || "Your Business Name"}</h3>
+                <p className="bb10x-tagline">{activeBuilder10Plan?.tagline || activeBuilder10Plan?.branding?.tagline || builder10Plan.tagline}</p>
+                <div className="bb10x-mini-grid">
+                  <div>
+                    <strong>Category</strong>
+                    <span>{builder10Form.category}</span>
+                  </div>
+                  <div>
+                    <strong>Location</strong>
+                    <span>{builder10Form.location}</span>
+                  </div>
+                  <div>
+                    <strong>Investment</strong>
+                    <span>{formatINR(activeBuilder10Plan?.investment || builder10Plan.investment)}</span>
+                  </div>
+                  <div>
+                    <strong>Monthly Target</strong>
+                    <span>{formatINR(activeBuilder10Plan?.monthlyTarget || builder10Plan.monthlyTarget)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card-shell bb10x-card">
+                <h3>Revenue Model</h3>
+                <p>{activeBuilder10Plan?.revenueModel || builder10Plan.revenueModel}</p>
+                <p className="section-note">Estimated runway: {activeBuilder10Plan?.runwayMonths || builder10Plan.runwayMonths} months (early-stage heuristic).</p>
+              </div>
+
+              {builder10AiPlan && (
+                <div className="card-shell bb10x-card">
+                  <h3>AI Strategy Breakdown</h3>
+                  <p><strong>Summary:</strong> {builder10AiPlan.summary}</p>
+                  <p><strong>Market Analysis:</strong> {builder10AiPlan.marketAnalysis}</p>
+                  <p><strong>Competitor Analysis:</strong> {builder10AiPlan.competitorAnalysis}</p>
+                  <p><strong>Cost Estimation:</strong> {builder10AiPlan.costEstimation}</p>
+                  <p><strong>Profit Projection:</strong> {builder10AiPlan.profitProjection}</p>
+                </div>
+              )}
+
+              <div className="card-shell bb10x-card">
+                <h3>Legal and Setup Checklist</h3>
+                <div className="bb10x-checklist">
+                  {(activeBuilder10Plan?.legalChecklist || builder10Plan.legalChecklist).map((item) => (
+                    <label key={item} className="bb10x-check">
+                      <input type="checkbox" />
+                      <span>{item}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card-shell bb10x-card">
+                <h3>30-Day Launch Plan</h3>
+                <ol>
+                  {(activeBuilder10Plan?.launchPlan || activeBuilder10Plan?.roadmap30 || builder10Plan.launchPlan).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ol>
+              </div>
+
+              <div className="card-shell bb10x-card">
+                <h3>Logo and Branding Prompt</h3>
+                <p>{activeBuilder10Plan?.logoPrompt || activeBuilder10Plan?.branding?.logoPrompt || builder10Plan.logoPrompt}</p>
+              </div>
+
+              <div className="card-shell bb10x-card">
+                <h3>10/10 Improvement Plan</h3>
+                <div className="bb10x-roadmap">
+                  {BUSINESS_BUILDER_10X_UPGRADE_MAP.map((item) => (
+                    <div className="bb10x-roadmap-item" key={item.area}>
+                      <div>
+                        <strong>{item.area}</strong>
+                        <p>{item.upgrade}</p>
+                      </div>
+                      <span className={`bb10x-badge ${item.status}`}>{item.status === "ready" ? "Available" : "Next phase"}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="section-note">
+                  Current rating: 8.8/10. To reach 10/10, connect AI plan generation to backend model APIs, add PDF-ready business-plan exports, and create verified legal partner lead flow.
+                </p>
+              </div>
+            </main>
+          </div>
+
+          <div className="list-section">
+            <h3>Saved 10X plans</h3>
+            {builder10Plans.length === 0 ? (
+              <p>No 10X plans saved yet.</p>
+            ) : (
+              <div className="document-history">
+                {builder10Plans.map((plan) => (
+                  <div key={plan.id} className="document-card">
+                    <strong>{plan.businessName || "Untitled Plan"}</strong>
+                    <p>{plan.category} | {plan.location}</p>
+                    <p>{new Date(plan.createdAt).toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

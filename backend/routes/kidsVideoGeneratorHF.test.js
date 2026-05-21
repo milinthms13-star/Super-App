@@ -13,6 +13,11 @@ jest.mock('../services/kidsVideoGeneratorHFService', () => ({
     reasons: [],
   })),
 }));
+jest.mock('sharp', () => () => ({
+  png: () => ({
+    toFile: jest.fn(async () => {}),
+  }),
+}));
 
 const request = require('supertest');
 const app = require('../app');
@@ -59,6 +64,60 @@ describe('kids-video-hf routes', () => {
         sceneCount: 5,
       })
     );
+  });
+
+  test('POST /api/kids-video-hf/jobs creates async render job', async () => {
+    generateKidsVideoFromPrompt.mockResolvedValue({
+      projectId: 'proj-job-1',
+      videoUrl: '/uploads/kids-video-hf/proj-job-1/story-render-123.mp4',
+      aiImagesEnabled: true,
+      project: {
+        projectId: 'proj-job-1',
+        scenes: [{ id: 1, title: 'Scene 1' }],
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/kids-video-hf/jobs')
+      .send({
+        prompt: 'Rabbit and tortoise race story',
+        sceneCount: 5,
+      });
+
+    expect(response.status).toBe(202);
+    expect(response.body.success).toBe(true);
+    expect(response.body.jobId).toBeTruthy();
+    expect(response.body.status).toBe('queued');
+    expect(response.body.pollUrl).toContain(`/api/kids-video-hf/jobs/${response.body.jobId}`);
+  });
+
+  test('GET /api/kids-video-hf/jobs/:jobId returns job status', async () => {
+    generateKidsVideoFromPrompt.mockResolvedValue({
+      projectId: 'proj-job-2',
+      videoUrl: '/uploads/kids-video-hf/proj-job-2/story-render-123.mp4',
+      aiImagesEnabled: true,
+      project: {
+        projectId: 'proj-job-2',
+        scenes: [{ id: 1, title: 'Scene 1' }],
+      },
+    });
+
+    const createResponse = await request(app)
+      .post('/api/kids-video-hf/jobs')
+      .send({
+        prompt: 'A short story',
+        sceneCount: 4,
+      });
+    const jobId = createResponse.body.jobId;
+    expect(jobId).toBeTruthy();
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const statusResponse = await request(app).get(`/api/kids-video-hf/jobs/${jobId}`);
+
+    expect(statusResponse.status).toBe(200);
+    expect(statusResponse.body.success).toBe(true);
+    expect(statusResponse.body.jobId).toBe(jobId);
+    expect(['queued', 'processing', 'completed']).toContain(statusResponse.body.status);
   });
 
   test('GET /api/kids-video-hf/projects/:projectId returns project', async () => {

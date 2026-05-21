@@ -190,11 +190,22 @@ const normalizeResumeFromForm = (formData = {}, options = {}) => {
     languages,
     gulfProfile: {
       passportStatus: cleanText(formData.passportStatus),
+      passportNumber: cleanText(formData.passportNumber),
       visaStatus: cleanText(formData.visaStatus),
+      currentVisaType: cleanText(formData.currentVisaType),
+      visaExpiry: cleanText(formData.visaExpiry),
+      transferableVisa: cleanText(formData.transferableVisa),
+      availableToRelocate: cleanText(formData.availableToRelocate),
+      preferredGulfCountry: cleanText(formData.preferredGulfCountry),
+      workPermitStatus: cleanText(formData.workPermitStatus),
       gccExperience: cleanText(formData.gccExperience),
       drivingLicense: cleanText(formData.drivingLicense),
+      drivingLicenseCountry: cleanText(formData.drivingLicenseCountry),
+      joiningAvailability: cleanText(formData.joiningAvailability),
       expectedSalary: cleanText(formData.expectedSalary),
       noticePeriod: cleanText(formData.noticePeriod),
+      accommodationRequired: cleanText(formData.accommodationRequired),
+      industryCategory: cleanText(formData.industryCategory),
     },
     template: cleanText(options.template || 'simple-ats'),
     resumeType: cleanText(options.resumeType || 'professional'),
@@ -227,6 +238,11 @@ const buildResumePlainText = (resume = {}) => {
   );
   (resume.certifications || []).forEach((item) => lines.push(cleanText(item)));
   (resume.languages || []).forEach((item) => lines.push(cleanText(item)));
+  const gulf = resume.gulfProfile || {};
+  lines.push(cleanText(gulf.passportStatus));
+  lines.push(cleanText(gulf.passportNumber));
+  lines.push(cleanText(gulf.visaStatus));
+  lines.push(cleanText(gulf.currentVisaType));
 
   return lines.filter(Boolean).join('\n');
 };

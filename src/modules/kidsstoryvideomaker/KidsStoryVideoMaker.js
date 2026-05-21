@@ -28,6 +28,8 @@ import {
   regenerateStage,
   renderProject,
   renderPromptVideoHf,
+  startKidsVideoHfJob,
+  waitForKidsVideoHfJob,
   getKidsVideoHfCapabilities,
   waitForRenderedVideo,
 } from "./videoStudioApi";
@@ -271,15 +273,32 @@ const createClientFallbackProject = ({
 
   const lines = rawLines.length ? rawLines.slice(0, 5) : ["A child discovers a magical surprise and learns teamwork."];
 
-  const scenes = lines.map((line, index) => ({
-    id: index + 1,
-    title: FALLBACK_SCENE_TITLES[index] || `Scene ${index + 1}`,
-    description: line,
-    emotion: index === 0 ? "curious" : index === 2 ? "brave" : index === 4 ? "joyful" : "wonder",
-    characters: [{ name: "Main Hero", role: "Hero", voice: voiceType }],
-    cameraActions: FALLBACK_CAMERA_ACTIONS[index] || "subtle move",
-    dialogue: `"${line}"`,
-  }));
+  const scenes = lines.map((line, index) => {
+    const sceneBackground = index === 1 ? "forest clearing" : index === 2 ? "sparkling river" : "colorful cartoon world";
+    const sceneWeather = index === 3 ? "light breeze" : "sunny";
+    const sceneTimeOfDay = index === 4 ? "Golden hour" : "Morning";
+    const sceneContract = {
+      cameraActions: FALLBACK_CAMERA_ACTIONS[index] || "subtle move",
+      background: sceneBackground,
+      weather: sceneWeather,
+      timeOfDay: sceneTimeOfDay,
+    };
+
+    return {
+      id: index + 1,
+      title: FALLBACK_SCENE_TITLES[index] || `Scene ${index + 1}`,
+      description: line,
+      emotion: index === 0 ? "curious" : index === 2 ? "brave" : index === 4 ? "joyful" : "wonder",
+      characters: [{ name: "Main Hero", role: "Hero", voice: voiceType }],
+      cameraActions: FALLBACK_CAMERA_ACTIONS[index] || "subtle move",
+      dialogue: `"${line}"`,
+      background: sceneBackground,
+      weather: sceneWeather,
+      timeOfDay: sceneTimeOfDay,
+      sceneContract,
+      environmentMotifs: [sceneBackground, sceneWeather, sceneTimeOfDay],
+    };
+  });
 
   return {
     projectId: `local-${Date.now()}`,
@@ -414,15 +433,46 @@ const buildCartoonRenderPayload = ({
         ? spokenLines.map((line) => `${line.speaker}: ${line.text}`).join("\n")
         : `Narrator: ${scene.description}`;
 
+    const sceneContractInput =
+      scene?.sceneContract && typeof scene.sceneContract === "object" ? scene.sceneContract : {};
+    const sceneContract = {
+      cameraActions: sanitizeText(sceneContractInput.cameraActions || scene.cameraActions || "soft pan"),
+      background: sanitizeText(sceneContractInput.background || scene.background || scene.description || scene.title || ""),
+      weather: sanitizeText(sceneContractInput.weather || scene.weather || "sunny"),
+      timeOfDay: sanitizeText(sceneContractInput.timeOfDay || scene.timeOfDay || "Morning"),
+    };
+    const environmentMotifs = Array.from(
+      new Set(
+        [
+          ...(Array.isArray(scene.environmentMotifs) ? scene.environmentMotifs : []),
+          sceneContract.background,
+          sceneContract.weather,
+          sceneContract.timeOfDay,
+        ]
+          .map((motif) => sanitizeText(motif).trim())
+          .filter(Boolean)
+      )
+    );
+
+    const nextScene = scenes[index + 1];
+    const transitionPrompt = nextScene
+      ? `Transition smoothly from ${sanitizeText(scene.title)} to ${sanitizeText(nextScene.title)}. Focus on ${sanitizeText(nextScene.description || nextScene.dialogue || nextScene.title)}.`
+      : "";
+
     return {
       ...scene,
       characters: sceneCharacters,
       dialogue: cleanDialogue,
       spokenLines,
+      sceneContract,
+      transitionPrompt,
+      environmentMotifs,
       visualPrompt: [
         `REAL CARTOON ANIMATION FRAME, ${styleId} kids cartoon style`,
         `scene title: ${scene.title}`,
-        `background: ${scene.background || scene.description}`,
+        `background: ${sceneContract.background}`,
+        `weather: ${sceneContract.weather}`,
+        `time of day: ${sceneContract.timeOfDay}`,
         `characters visible on screen: ${sceneCharacters
           .map(
             (character) =>
@@ -430,12 +480,12 @@ const buildCartoonRenderPayload = ({
           )
           .join("; ")}`,
         `emotion: ${scene.emotion || "happy wonder"}`,
-        `camera motion: ${scene.cameraActions || "gentle zoom and pan"}`,
+        `camera motion: ${sceneContract.cameraActions}`,
         "full body characters, expressive faces, mouth animation, child-safe, colorful, no text-only slide",
       ].join(". "),
       animationPlan: {
         shotType: index === 0 ? "wide establishing shot" : "medium character shot",
-        cameraMotion: scene.cameraActions || "gentle zoom",
+        cameraMotion: sceneContract.cameraActions,
         characterMotion: "characters blink, wave, walk slightly, and mouth opens while speaking",
         lipSync: true,
         renderMode: "cartoon_characters_not_slides",
@@ -1998,9 +2048,54 @@ const KidsStoryVideoMaker = () => {
           });
           return formData;
         })();
-        const { payload, response } = await runCancelableRequest("render-video", (signal) =>
-          renderPromptVideoHf(renderRequestBody, { signal })
-        );
+        let renderPayloadResponse = null;
+        let renderPayloadData = null;
+        try {
+          const { payload: jobPayload } = await runCancelableRequest("render-video-job-start", (signal) =>
+            startKidsVideoHfJob(renderRequestBody, { signal })
+          );
+          const jobId = sanitizeText(jobPayload?.jobId || "");
+          if (!jobId) {
+            throw new Error("Render job was created without a job ID.");
+          }
+          setRenderProgress((current) => Math.max(current, Number(jobPayload?.progress || 8)));
+          setRenderProgressLabel("Render job queued. Preparing storyboard and scene assets...");
+          setMessage("Render job started. Building scenes, subtitles, and animation clips...");
+
+          const { payload, response } = await runCancelableRequest("render-video-job-poll", (signal) =>
+            waitForKidsVideoHfJob(jobId, {
+              signal,
+              onProgress: (progressUpdate) => {
+                const nextProgress = Number(progressUpdate?.progress || 0);
+                const nextLabel = sanitizeText(progressUpdate?.message || "");
+                setRenderProgress((current) => Math.max(current, Math.min(98, Math.max(0, nextProgress))));
+                if (nextLabel) {
+                  setRenderProgressLabel(nextLabel);
+                }
+              },
+            })
+          );
+          renderPayloadData = payload;
+          renderPayloadResponse = response;
+        } catch (jobError) {
+          const jobStatusCode = Number(jobError?.status || 0);
+          const shouldFallbackToDirectRender =
+            jobStatusCode === 404 ||
+            jobStatusCode === 405 ||
+            String(jobError?.code || "").toUpperCase() === "REQUEST_FAILED";
+
+          if (!shouldFallbackToDirectRender) {
+            throw jobError;
+          }
+
+          const { payload, response } = await runCancelableRequest("render-video", (signal) =>
+            renderPromptVideoHf(renderRequestBody, { signal })
+          );
+          renderPayloadData = payload;
+          renderPayloadResponse = response;
+        }
+        const payload = renderPayloadData;
+        const response = renderPayloadResponse;
 
         applyServiceCapabilities(payload);
         applyKidsVideoCapabilities(payload?.capabilities || {});

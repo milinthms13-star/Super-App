@@ -32,4 +32,29 @@ export const gulfservicesApi = {
   reportEmergency: async (data) => handleResponse(await axios.post(`${BASE}/emergency/report`, data)),
   getVerifiedRecruiters: async () => handleResponse(await axios.get(`${BASE}/recruiters/verified`)),
   reportFraud: async (data) => handleResponse(await axios.post(`${BASE}/fraud/report`, data)),
+  createApplication: async (data) =>
+    handleResponse(
+      await axios.post(`${BASE}/applications`, data, {
+        headers: buildAuthHeaders(),
+      })
+    ),
+  getMyApplications: async () =>
+    handleResponse(
+      await axios.get(`${BASE}/applications/my`, {
+        headers: buildAuthHeaders(),
+      })
+    ),
+  getAdminApplications: async (filters = {}) =>
+    handleResponse(
+      await axios.get(`${BASE}/admin/applications`, {
+        params: filters,
+        headers: buildAuthHeaders(),
+      })
+    ),
+  updateApplicationStatus: async (id, data) =>
+    handleResponse(
+      await axios.put(`${BASE}/admin/applications/${encodeURIComponent(id)}/status`, data, {
+        headers: buildAuthHeaders(),
+      })
+    ),
 };

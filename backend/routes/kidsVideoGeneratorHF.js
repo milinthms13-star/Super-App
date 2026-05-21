@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const multer = require('multer');
+const { v4: uuidv4 } = require('uuid');
 const {
   generateKidsVideoFromPrompt,
   generateKidsVideoFromHybridPrompt,
@@ -192,145 +193,180 @@ const mergeUploadedFacesIntoCharacters = ({
   return merged;
 };
 
+const executeKidsVideoGeneration = async ({ body = {}, files = [] }) => {
+  const prompt = String(body?.prompt || body?.storyPrompt || '').trim();
+  if (!prompt) {
+    const error = new Error('Prompt is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const languageCode = resolveLanguageCode(body || {});
+  const requestedEngine = String(body?.engine || body?.renderEngine || '').trim().toLowerCase();
+  const disableDiffusers = String(process.env.HF_DISABLE_DIFFUSERS || '').trim().toLowerCase() === 'true';
+  const useDiffusers =
+    requestedEngine === 'diffusers_t2v' ||
+    requestedEngine === 'prompt_video_python' ||
+    requestedEngine === 'text_to_video' ||
+    requestedEngine === 'damo-text-to-video';
+  const useLegacyScriptVideo =
+    requestedEngine === 'free_steve_like' ||
+    requestedEngine === 'steve_like' ||
+    requestedEngine === 'script_to_video';
+  const useCogVideoX =
+    requestedEngine === 'cogvideox' ||
+    requestedEngine === 'cogvideox_2b' ||
+    requestedEngine === 'cogvideo' ||
+    requestedEngine === 'real_motion_gpu';
+  const useHybrid =
+    requestedEngine === 'hybrid_motion_cogvideox' ||
+    requestedEngine === 'hybrid' ||
+    requestedEngine === 'hybrid_scene_cogvideox' ||
+    requestedEngine === 'scene_hybrid';
+  const useHybridPhase2 =
+    requestedEngine === 'hybrid_phase2' ||
+    requestedEngine === 'hybrid_motion_animatediff_cogvideox' ||
+    requestedEngine === 'hybrid_animatediff_openpose' ||
+    requestedEngine === 'phase2';
+  const shouldUseDiffusers = useDiffusers && !disableDiffusers;
+
+  const { storyTitle, providedCharacters, providedScenes } = normalizeStructuredStoryInput(body || {});
+  const uploadedCharacterImages = saveUploadedCharacterImages(
+    sanitizeText(body?.projectId || body?.storyTitle || `request-${Date.now()}`),
+    files || []
+  );
+  const mergedProvidedCharacters = mergeUploadedFacesIntoCharacters({
+    providedCharacters,
+    uploadedImages: uploadedCharacterImages,
+  });
+
+  const hasStructuredStoryContext =
+    (Array.isArray(providedScenes) && providedScenes.length > 0)
+    || (Array.isArray(mergedProvidedCharacters) && mergedProvidedCharacters.length > 0);
+  const requestedPromptOnlyEngine = useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers;
+  const shouldPreferStructuredRenderer = hasStructuredStoryContext && requestedPromptOnlyEngine;
+
+  const forceEngine = parseBoolean(body?.forceEngine, false);
+  const strictCogVideoX = parseBoolean(body?.strictCogVideoX, false);
+  const strictHybrid = parseBoolean(body?.strictHybrid, strictCogVideoX);
+  const effectivePrompt = String(body?.enhancedPrompt || prompt || '').trim() || prompt;
+  const shouldBypassStructuredRenderer = forceEngine && (useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers);
+
+  const result = useHybridPhase2
+    ? await generateKidsVideoFromHybridPrompt({
+        prompt: effectivePrompt,
+        sceneCount: clampSceneCount(body?.sceneCount),
+        videoSize: body?.videoSize || body?.videoSizeId || 'youtube',
+        storyMode: body?.storyMode || 'moral',
+        voiceType: body?.voiceType || 'kid-female',
+        language: languageCode,
+        storyTitle,
+        providedCharacters: mergedProvidedCharacters,
+        providedScenes,
+        strict: strictHybrid,
+        phase2: true,
+      })
+    : useHybrid
+    ? await generateKidsVideoFromHybridPrompt({
+        prompt: effectivePrompt,
+        sceneCount: clampSceneCount(body?.sceneCount),
+        videoSize: body?.videoSize || body?.videoSizeId || 'youtube',
+        storyMode: body?.storyMode || 'moral',
+        voiceType: body?.voiceType || 'kid-female',
+        language: languageCode,
+        storyTitle,
+        providedCharacters: mergedProvidedCharacters,
+        providedScenes,
+        strict: strictHybrid,
+      })
+    : (!shouldBypassStructuredRenderer && shouldPreferStructuredRenderer)
+    ? await generateKidsVideoFromPrompt({
+        prompt: effectivePrompt,
+        sceneCount: clampSceneCount(body?.sceneCount),
+        videoSize: body?.videoSize || body?.videoSizeId || 'youtube',
+        storyMode: body?.storyMode || 'moral',
+        voiceType: body?.voiceType || 'kid-female',
+        language: languageCode,
+        storyTitle,
+        providedCharacters: mergedProvidedCharacters,
+        providedScenes,
+      })
+    : useCogVideoX
+    ? await generateKidsVideoFromCogVideoXPrompt({
+        prompt: effectivePrompt,
+        videoSize: body?.videoSize || body?.videoSizeId || 'youtube',
+        numFrames: body?.numFrames,
+        numInferenceSteps: body?.numInferenceSteps,
+        guidanceScale: body?.guidanceScale,
+        language: languageCode,
+        strict: strictCogVideoX,
+        storyTitle,
+      })
+    : useLegacyScriptVideo
+    ? await generateKidsVideoFromFreeSteveLikePrompt({
+        prompt: effectivePrompt,
+        sceneCount: clampSceneCount(body?.sceneCount),
+        videoSize: body?.videoSize || body?.videoSizeId || 'youtube',
+        language: languageCode,
+        storyTitle,
+      })
+    : shouldUseDiffusers
+    ? await generateKidsVideoFromDiffusersPrompt({
+        prompt: effectivePrompt,
+        videoSize: body?.videoSize || body?.videoSizeId || 'youtube',
+        numFrames: body?.numFrames,
+        numInferenceSteps: body?.numInferenceSteps,
+        language: languageCode,
+        storyTitle,
+      })
+    : await generateKidsVideoFromPrompt({
+        prompt: effectivePrompt,
+        sceneCount: clampSceneCount(body?.sceneCount),
+        videoSize: body?.videoSize || body?.videoSizeId || 'youtube',
+        storyMode: body?.storyMode || 'moral',
+        voiceType: body?.voiceType || 'kid-female',
+        language: languageCode,
+        storyTitle,
+        providedCharacters: mergedProvidedCharacters,
+        providedScenes,
+      });
+
+  return {
+    result,
+    uploadedCharacterImages,
+  };
+};
+
+const kidsVideoJobs = new Map();
+const KIDS_VIDEO_JOB_TTL_MS = 1000 * 60 * 60 * 6;
+const trimKidsVideoJobs = () => {
+  const now = Date.now();
+  for (const [jobId, job] of kidsVideoJobs.entries()) {
+    if (now - Number(job?.updatedAtMs || now) > KIDS_VIDEO_JOB_TTL_MS) {
+      kidsVideoJobs.delete(jobId);
+    }
+  }
+};
+
+const updateKidsVideoJob = (jobId, patch = {}) => {
+  const current = kidsVideoJobs.get(jobId);
+  if (!current) return null;
+  const next = {
+    ...current,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+    updatedAtMs: Date.now(),
+  };
+  kidsVideoJobs.set(jobId, next);
+  return next;
+};
+
 router.post('/generate', upload.array('characterImages', 8), async (req, res) => {
   try {
-    const prompt = String(req.body?.prompt || req.body?.storyPrompt || '').trim();
-    if (!prompt) {
-      return res.status(400).json({
-        success: false,
-        error: 'Prompt is required.',
-      });
-    }
-
-    const languageCode = resolveLanguageCode(req.body || {});
-    const requestedEngine = String(req.body?.engine || req.body?.renderEngine || '').trim().toLowerCase();
-    const disableDiffusers = String(process.env.HF_DISABLE_DIFFUSERS || '').trim().toLowerCase() === 'true';
-    const useDiffusers =
-      requestedEngine === 'diffusers_t2v' ||
-      requestedEngine === 'prompt_video_python' ||
-      requestedEngine === 'text_to_video' ||
-      requestedEngine === 'damo-text-to-video';
-    const useLegacyScriptVideo =
-      requestedEngine === 'free_steve_like' ||
-      requestedEngine === 'steve_like' ||
-      requestedEngine === 'script_to_video';
-    const useCogVideoX =
-      requestedEngine === 'cogvideox' ||
-      requestedEngine === 'cogvideox_2b' ||
-      requestedEngine === 'cogvideo' ||
-      requestedEngine === 'real_motion_gpu';
-    const useHybrid =
-      requestedEngine === 'hybrid_motion_cogvideox' ||
-      requestedEngine === 'hybrid' ||
-      requestedEngine === 'hybrid_scene_cogvideox' ||
-      requestedEngine === 'scene_hybrid';
-    const useHybridPhase2 =
-      requestedEngine === 'hybrid_phase2' ||
-      requestedEngine === 'hybrid_motion_animatediff_cogvideox' ||
-      requestedEngine === 'hybrid_animatediff_openpose' ||
-      requestedEngine === 'phase2';
-    const shouldUseDiffusers = useDiffusers && !disableDiffusers;
-
-    const { storyTitle, providedCharacters, providedScenes } = normalizeStructuredStoryInput(req.body || {});
-    const uploadedCharacterImages = saveUploadedCharacterImages(
-      sanitizeText(req.body?.projectId || req.body?.storyTitle || `request-${Date.now()}`),
-      req.files || []
-    );
-    const mergedProvidedCharacters = mergeUploadedFacesIntoCharacters({
-      providedCharacters,
-      uploadedImages: uploadedCharacterImages,
+    const { result, uploadedCharacterImages } = await executeKidsVideoGeneration({
+      body: req.body || {},
+      files: req.files || [],
     });
-
-    const hasStructuredStoryContext =
-      (Array.isArray(providedScenes) && providedScenes.length > 0)
-      || (Array.isArray(mergedProvidedCharacters) && mergedProvidedCharacters.length > 0);
-    const requestedPromptOnlyEngine = useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers;
-    const shouldPreferStructuredRenderer = hasStructuredStoryContext && requestedPromptOnlyEngine;
-
-    const forceEngine = parseBoolean(req.body?.forceEngine, false);
-    const strictCogVideoX = parseBoolean(req.body?.strictCogVideoX, false);
-    const strictHybrid = parseBoolean(req.body?.strictHybrid, strictCogVideoX);
-    const effectivePrompt = String(req.body?.enhancedPrompt || prompt || '').trim() || prompt;
-    const shouldBypassStructuredRenderer = forceEngine && (useCogVideoX || useLegacyScriptVideo || shouldUseDiffusers);
-
-    const result = useHybridPhase2
-      ? await generateKidsVideoFromHybridPrompt({
-          prompt: effectivePrompt,
-          sceneCount: clampSceneCount(req.body?.sceneCount),
-          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-          storyMode: req.body?.storyMode || 'moral',
-          voiceType: req.body?.voiceType || 'kid-female',
-          language: languageCode,
-          storyTitle,
-          providedCharacters: mergedProvidedCharacters,
-          providedScenes,
-          strict: strictHybrid,
-          phase2: true,
-        })
-      : useHybrid
-      ? await generateKidsVideoFromHybridPrompt({
-          prompt: effectivePrompt,
-          sceneCount: clampSceneCount(req.body?.sceneCount),
-          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-          storyMode: req.body?.storyMode || 'moral',
-          voiceType: req.body?.voiceType || 'kid-female',
-          language: languageCode,
-          storyTitle,
-          providedCharacters: mergedProvidedCharacters,
-          providedScenes,
-          strict: strictHybrid,
-        })
-      : (!shouldBypassStructuredRenderer && shouldPreferStructuredRenderer)
-      ? await generateKidsVideoFromPrompt({
-          prompt: effectivePrompt,
-          sceneCount: clampSceneCount(req.body?.sceneCount),
-          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-          storyMode: req.body?.storyMode || 'moral',
-          voiceType: req.body?.voiceType || 'kid-female',
-          language: languageCode,
-          storyTitle,
-          providedCharacters: mergedProvidedCharacters,
-          providedScenes,
-        })
-      : useCogVideoX
-      ? await generateKidsVideoFromCogVideoXPrompt({
-          prompt: effectivePrompt,
-          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-          numFrames: req.body?.numFrames,
-          numInferenceSteps: req.body?.numInferenceSteps,
-          guidanceScale: req.body?.guidanceScale,
-          language: languageCode,
-          strict: strictCogVideoX,
-          storyTitle,
-        })
-      : useLegacyScriptVideo
-      ? await generateKidsVideoFromFreeSteveLikePrompt({
-          prompt: effectivePrompt,
-          sceneCount: clampSceneCount(req.body?.sceneCount),
-          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-          language: languageCode,
-          storyTitle,
-        })
-      : shouldUseDiffusers
-      ? await generateKidsVideoFromDiffusersPrompt({
-          prompt: effectivePrompt,
-          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-          numFrames: req.body?.numFrames,
-          numInferenceSteps: req.body?.numInferenceSteps,
-          language: languageCode,
-          storyTitle,
-        })
-      : await generateKidsVideoFromPrompt({
-          prompt: effectivePrompt,
-          sceneCount: clampSceneCount(req.body?.sceneCount),
-          videoSize: req.body?.videoSize || req.body?.videoSizeId || 'youtube',
-          storyMode: req.body?.storyMode || 'moral',
-          voiceType: req.body?.voiceType || 'kid-female',
-          language: languageCode,
-          storyTitle,
-          providedCharacters: mergedProvidedCharacters,
-          providedScenes,
-        });
 
     return res.status(200).json({
       success: true,
@@ -347,11 +383,153 @@ router.post('/generate', upload.array('characterImages', 8), async (req, res) =>
       })),
     });
   } catch (error) {
-    return res.status(500).json({
+    const statusCode = Number(error?.statusCode || 500);
+    return res.status(statusCode).json({
       success: false,
       error: error?.message || 'Unable to generate video.',
     });
   }
+});
+
+router.post('/jobs', upload.array('characterImages', 8), async (req, res) => {
+  try {
+    const prompt = String(req.body?.prompt || req.body?.storyPrompt || '').trim();
+    if (!prompt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompt is required.',
+      });
+    }
+
+    trimKidsVideoJobs();
+    const jobId = uuidv4();
+    const initialJob = {
+      jobId,
+      status: 'queued',
+      progress: 5,
+      message: 'Job queued. Waiting for worker.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdAtMs: Date.now(),
+      updatedAtMs: Date.now(),
+      result: null,
+      error: '',
+      capabilities: getKidsVideoGeneratorCapabilities(),
+    };
+    kidsVideoJobs.set(jobId, initialJob);
+
+    const requestBody = { ...(req.body || {}) };
+    const requestFiles = Array.isArray(req.files) ? req.files.slice() : [];
+
+    setImmediate(async () => {
+      let progressTimer = null;
+      try {
+        updateKidsVideoJob(jobId, {
+          status: 'processing',
+          progress: 18,
+          message: 'Generating storyboard, scenes, and narration...',
+        });
+        progressTimer = setInterval(() => {
+          const current = kidsVideoJobs.get(jobId);
+          if (!current || current.status !== 'processing') return;
+          const nextProgress = Math.min(84, Number(current.progress || 18) + 6);
+          updateKidsVideoJob(jobId, {
+            progress: nextProgress,
+            message: nextProgress >= 66
+              ? 'Rendering scene clips and transitions...'
+              : 'Preparing story assets and subtitles...',
+          });
+        }, 4000);
+
+        const { result, uploadedCharacterImages } = await executeKidsVideoGeneration({
+          body: requestBody,
+          files: requestFiles,
+        });
+
+        updateKidsVideoJob(jobId, {
+          status: 'completed',
+          progress: 100,
+          message: 'Render complete.',
+          result: {
+            success: true,
+            projectId: result.projectId,
+            project: result.project,
+            videoUrl: result.videoUrl,
+            aiProvider: 'scene_pipeline',
+            aiImagesEnabled: Boolean(result.aiImagesEnabled),
+            workflowType: result?.project?.workflowType || 'kids-video-scene-pipeline',
+            capabilities: getKidsVideoGeneratorCapabilities(),
+            uploadedCharacterImages: uploadedCharacterImages.map((item) => ({
+              imageUrl: item.imageUrl,
+              originalName: item.originalName,
+            })),
+          },
+          error: '',
+        });
+      } catch (error) {
+        updateKidsVideoJob(jobId, {
+          status: 'failed',
+          progress: 100,
+          message: 'Render failed.',
+          error: sanitizeText(error?.message || 'Unable to generate video.'),
+        });
+      } finally {
+        if (progressTimer) {
+          clearInterval(progressTimer);
+        }
+      }
+    });
+
+    return res.status(202).json({
+      success: true,
+      jobId,
+      status: 'queued',
+      progress: 5,
+      pollUrl: `/api/kids-video-hf/jobs/${jobId}`,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Unable to create render job.',
+    });
+  }
+});
+
+router.get('/jobs/:jobId', async (req, res) => {
+  const jobId = sanitizeText(req.params?.jobId || '');
+  const job = kidsVideoJobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({
+      success: false,
+      error: 'Job not found.',
+      status: 'not_found',
+    });
+  }
+
+  const responsePayload = {
+    success: true,
+    jobId,
+    status: job.status,
+    progress: Number(job.progress || 0),
+    message: sanitizeText(job.message || ''),
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+
+  if (job.status === 'completed' && job.result) {
+    responsePayload.result = {
+      ...job.result,
+      uploadedCharacterImages: (job.result.uploadedCharacterImages || []).map((item) => ({
+        ...item,
+        imageUrl: toAbsoluteUrl(req, item.imageUrl),
+      })),
+    };
+  }
+  if (job.status === 'failed') {
+    responsePayload.error = sanitizeText(job.error || 'Render failed.');
+  }
+
+  return res.status(200).json(responsePayload);
 });
 
 router.get('/capabilities', async (_req, res) => {

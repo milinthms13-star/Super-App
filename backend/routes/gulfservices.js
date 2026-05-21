@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 
 const logger = require('../utils/logger');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, verifyAdmin, optionalToken } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -29,6 +29,7 @@ const {
   GulfJob,
   GulfUser,
   GulfRecruiter,
+  GulfApplication,
 } = require('../models/gulfservices');
 
 const SAMPLE_JOBS = [
@@ -111,6 +112,18 @@ const SAMPLE_RECRUITERS = [
 
 const VISA_TYPES = ['Visit', 'Employment', 'Family', 'Student', 'Business'];
 const VALID_COUNTRIES = ['UAE', 'Saudi Arabia', 'Qatar', 'Oman', 'Kuwait', 'Bahrain'];
+const VISA_WORKFLOW_STATUSES = [
+  'Applied',
+  'Offer Letter Pending',
+  'Offer Letter Received',
+  'Medical Pending',
+  'Medical Completed',
+  'Visa Processing',
+  'Visa Approved',
+  'Visa Stamped',
+  'Travel Ready',
+  'Rejected',
+];
 
 const toObjectIdString = (value) => {
   if (!value) return '';
@@ -145,6 +158,32 @@ const formatJob = (job = {}) => {
 };
 
 const normalizePhone = (value = '') => String(value || '').replace(/[^\d+]/g, '').trim();
+const normalizePassportNo = (value = '') =>
+  String(value || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .trim();
+const parseCompletedDocs = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+  } catch (_error) {
+    // fallback split
+  }
+
+  return raw
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
 const normalizeVisaType = (value = '') => {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return '';
@@ -153,6 +192,8 @@ const normalizeVisaType = (value = '') => {
 };
 
 const isMongoObjectId = (value = '') => /^[a-f\d]{24}$/i.test(String(value || ''));
+const resolveUserId = (req) => String(req?.user?._id || req?.user?.id || '').trim();
+const resolveUserEmail = (req) => String(req?.user?.email || '').trim().toLowerCase();
 
 // ============ RATE LIMITING ============
 const applicationLimiter = rateLimit({
@@ -237,6 +278,7 @@ const jobApplicationSchema = Joi.object({
   fullName: Joi.string().required(),
   email: Joi.string().email().required(),
   phone: Joi.string().pattern(/^\+?[0-9]{8,15}$/).required(),
+  passportNo: Joi.string().trim().min(6).max(20).allow(''),
   experience: Joi.number().min(0).max(50),
   currentCompany: Joi.string(),
   expectedSalary: Joi.number().min(0),
@@ -266,6 +308,25 @@ const fraudReportSchema = Joi.object({
   recruiterId: Joi.string().trim().allow(''),
   issueDescription: Joi.string().trim().min(12).max(4000).required(),
   phone: Joi.string().pattern(/^\+?[0-9]{8,15}$/).required(),
+});
+
+const gulfApplicationSchema = Joi.object({
+  name: Joi.string().trim().required(),
+  email: Joi.string().email().allow(''),
+  phone: Joi.string().pattern(/^\+?[0-9]{8,15}$/).required(),
+  passportNo: Joi.string().trim().min(6).max(20).required(),
+  jobTitle: Joi.string().trim().required(),
+  country: Joi.string().valid(...VALID_COUNTRIES).required(),
+  company: Joi.string().trim().allow(''),
+  salary: Joi.string().trim().allow(''),
+  completedDocs: Joi.array().items(Joi.string().trim()).default([]),
+});
+
+const gulfAdminStatusSchema = Joi.object({
+  visaStatus: Joi.string().valid(...VISA_WORKFLOW_STATUSES).required(),
+  agentName: Joi.string().trim().allow(''),
+  agentVerified: Joi.boolean().default(false),
+  adminNote: Joi.string().trim().allow(''),
 });
 
 // ============ BOOTSTRAP ENDPOINT ============
@@ -425,11 +486,12 @@ router.get('/jobs/:jobId', async (req, res) => {
   }
 });
 
-router.post('/jobs/:jobId/apply', applicationLimiter, documentUploadLimiter, cvUpload.single('cv'), async (req, res) => {
+router.post('/jobs/:jobId/apply', applicationLimiter, documentUploadLimiter, optionalToken, cvUpload.single('cv'), async (req, res) => {
   try {
     const normalizedPayload = {
       ...req.body,
       phone: normalizePhone(req.body?.phone),
+      passportNo: normalizePassportNo(req.body?.passportNo),
     };
 
     const { error, value } = jobApplicationSchema.validate(normalizedPayload);
@@ -453,6 +515,23 @@ router.post('/jobs/:jobId/apply', applicationLimiter, documentUploadLimiter, cvU
       createdAt: new Date(),
     });
 
+    // Also persist into the unified Gulf application workflow tracker.
+    await GulfApplication.create({
+      userId: resolveUserId(req),
+      name: value.fullName,
+      email: value.email,
+      phone: value.phone,
+      passportNo: normalizePassportNo(req.body?.passportNo),
+      jobTitle: job.title || '',
+      country: job.country || '',
+      company: job.company || '',
+      salary: `${Number(job.salary?.min || 0)}-${Number(job.salary?.max || 0)}`,
+      completedDocs: parseCompletedDocs(req.body?.completedDocs),
+      visaStatus: 'Applied',
+      timeline: [{ status: 'Applied', note: 'Job application received', date: new Date() }],
+      source: 'job-apply',
+    });
+
     logger.info('Job application created:', application.applicationId);
 
     res.status(201).json({
@@ -463,6 +542,127 @@ router.post('/jobs/:jobId/apply', applicationLimiter, documentUploadLimiter, cvU
   } catch (error) {
     logger.error('job apply error:', error);
     res.status(500).json({ success: false, message: 'Unable to submit job application.' });
+  }
+});
+
+// ============ UNIFIED GULF APPLICATION WORKFLOW ============
+router.post('/applications', authenticate, async (req, res) => {
+  try {
+    const normalizedPayload = {
+      ...req.body,
+      phone: normalizePhone(req.body?.phone),
+      passportNo: normalizePassportNo(req.body?.passportNo),
+      completedDocs: parseCompletedDocs(req.body?.completedDocs),
+      email: String(req.body?.email || resolveUserEmail(req) || '').trim().toLowerCase(),
+    };
+
+    const { error, value } = gulfApplicationSchema.validate(normalizedPayload);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    const app = await GulfApplication.create({
+      ...value,
+      userId: resolveUserId(req),
+      visaStatus: 'Applied',
+      timeline: [{ status: 'Applied', note: 'Application submitted', date: new Date() }],
+      source: 'direct-application',
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Gulf application submitted.',
+      data: app,
+    });
+  } catch (error) {
+    logger.error('gulf applications create error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to submit Gulf application.' });
+  }
+});
+
+router.get('/applications/my', authenticate, async (req, res) => {
+  try {
+    const userId = resolveUserId(req);
+    const email = resolveUserEmail(req);
+    if (!userId && !email) {
+      return res.status(400).json({ success: false, message: 'Authenticated user identity is required.' });
+    }
+
+    const query =
+      userId && email
+        ? { $or: [{ userId }, { email }] }
+        : userId
+          ? { userId }
+          : { email };
+    const applications = await GulfApplication.find(query).sort({ createdAt: -1 }).limit(200).lean();
+    return res.json({ success: true, data: applications });
+  } catch (error) {
+    logger.error('gulf applications my error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to fetch your Gulf applications.' });
+  }
+});
+
+router.get('/admin/applications', authenticate, verifyAdmin, async (req, res) => {
+  try {
+    const { visaStatus, country, search } = req.query;
+    const filter = {};
+    if (visaStatus) filter.visaStatus = String(visaStatus).trim();
+    if (country) filter.country = String(country).trim();
+    if (search) {
+      const rx = new RegExp(String(search).trim(), 'i');
+      filter.$or = [{ name: rx }, { phone: rx }, { passportNo: rx }, { jobTitle: rx }, { company: rx }];
+    }
+
+    const applications = await GulfApplication.find(filter).sort({ createdAt: -1 }).limit(500).lean();
+    return res.json({ success: true, data: applications });
+  } catch (error) {
+    logger.error('gulf applications admin list error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to fetch admin Gulf applications.' });
+  }
+});
+
+router.put('/admin/applications/:id/status', authenticate, verifyAdmin, async (req, res) => {
+  try {
+    const payload = {
+      ...req.body,
+      agentName: String(req.body?.agentName || '').trim(),
+      adminNote: String(req.body?.adminNote || '').trim(),
+    };
+    const { error, value } = gulfAdminStatusSchema.validate(payload);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    const existing = await GulfApplication.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Application not found.' });
+    }
+
+    const timeline = Array.isArray(existing.timeline) ? [...existing.timeline] : [];
+    timeline.push({
+      status: value.visaStatus,
+      note: value.adminNote || `Status updated by admin${value.agentName ? ` (${value.agentName})` : ''}`,
+      date: new Date(),
+    });
+
+    const updated = await GulfApplication.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          visaStatus: value.visaStatus,
+          agentName: value.agentName || '',
+          agentVerified: Boolean(value.agentVerified),
+          adminNote: value.adminNote || '',
+          timeline,
+        },
+      },
+      { new: true }
+    );
+
+    return res.json({ success: true, data: updated, message: 'Gulf application updated.' });
+  } catch (error) {
+    logger.error('gulf applications admin status error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to update Gulf application.' });
   }
 });
 

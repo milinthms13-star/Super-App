@@ -174,6 +174,44 @@ const GulfRecruiterSchema = new Schema(
   { timestamps: true }
 );
 
+const GulfApplicationSchema = new Schema(
+  {
+    userId: { type: String, trim: true, index: true, default: '' },
+    name: { type: String, trim: true, required: true },
+    phone: { type: String, trim: true, required: true },
+    passportNo: { type: String, trim: true, required: true, index: true },
+    email: { type: String, trim: true, default: '', index: true },
+    jobTitle: { type: String, trim: true, required: true },
+    country: { type: String, trim: true, required: true, index: true },
+    company: { type: String, trim: true, default: '' },
+    salary: { type: String, trim: true, default: '' },
+    completedDocs: { type: [String], default: [] },
+    visaStatus: {
+      type: String,
+      enum: [
+        'Applied',
+        'Offer Letter Pending',
+        'Offer Letter Received',
+        'Medical Pending',
+        'Medical Completed',
+        'Visa Processing',
+        'Visa Approved',
+        'Visa Stamped',
+        'Travel Ready',
+        'Rejected',
+      ],
+      default: 'Applied',
+      index: true,
+    },
+    timeline: { type: [timelineEntrySchema], default: [{ status: 'Applied', note: 'Application submitted' }] },
+    agentName: { type: String, trim: true, default: '' },
+    agentVerified: { type: Boolean, default: false },
+    adminNote: { type: String, trim: true, default: '' },
+    source: { type: String, trim: true, default: 'gulf-services' },
+  },
+  { timestamps: true }
+);
+
 module.exports = {
   GulfVisaRequest: mongoose.model('GulfVisaRequest', GulfVisaRequestSchema),
   GulfJob: mongoose.model('GulfJob', GulfJobSchema),
@@ -186,4 +224,5 @@ module.exports = {
   GulfEmergencyCase: mongoose.model('GulfEmergencyCase', GulfEmergencyCaseSchema),
   GulfUser: mongoose.model('GulfUser', GulfUserSchema),
   GulfRecruiter: mongoose.model('GulfRecruiter', GulfRecruiterSchema),
+  GulfApplication: mongoose.models.GulfApplication || mongoose.model('GulfApplication', GulfApplicationSchema),
 };

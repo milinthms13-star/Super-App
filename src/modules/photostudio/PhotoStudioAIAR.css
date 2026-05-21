@@ -418,3 +418,59 @@
   font-weight: 700;
   text-align: center;
 }
+
+.photostudio-progress-line {
+  margin-top: 0.45rem;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.photostudio-ar-runtime {
+  position: relative;
+  border: 1px solid #d7e2ee;
+  background: #020617;
+  border-radius: 14px;
+  min-height: 240px;
+  overflow: hidden;
+}
+
+.photostudio-ar-video,
+.photostudio-ar-canvas {
+  width: 100%;
+  height: auto;
+  min-height: 240px;
+  display: block;
+}
+
+.photostudio-ar-video {
+  visibility: hidden;
+  position: absolute;
+  inset: 0;
+}
+
+.photostudio-ar-canvas {
+  position: relative;
+  z-index: 2;
+}
+
+.photostudio-ar-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #cbd5e1;
+  background: rgba(2, 6, 23, 0.7);
+  z-index: 3;
+  padding: 0.8rem;
+  text-align: center;
+}
+
+.viewer-360.interactive {
+  animation: none;
+  cursor: ew-resize;
+}
+
+.photostudio-paywall {
+  border: 1px solid #f59e0b;
+  background: linear-gradient(180deg, #fffbeb 0%, #fffdf5 100%);
+}

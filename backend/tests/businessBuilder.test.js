@@ -191,6 +191,47 @@ describe('Business Builder API', () => {
       expect(response.body.data).toHaveProperty('revenueModel');
     });
 
+    test('should generate AI 10X business plan', async () => {
+      const response = await request(app)
+        .post(`/api/business-builder/businesses/${testBusiness.businessId}/generate-plan-ai`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          businessName: 'Test Business',
+          category: 'Ecommerce',
+          location: 'Kerala',
+          targetCustomers: 'Local sellers and digital buyers',
+          investment: 120000,
+          monthlyTarget: 250000,
+          language: 'English',
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('summary');
+      expect(response.body.data).toHaveProperty('roadmap30');
+      expect(Array.isArray(response.body.data.roadmap30)).toBe(true);
+    });
+
+    test('should export AI plan as PDF', async () => {
+      const response = await request(app)
+        .post(`/api/business-builder/businesses/${testBusiness.businessId}/ai-plan/pdf`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          blueprint: {
+            businessName: 'Test Business',
+            category: 'Ecommerce',
+            location: 'Kerala',
+            targetCustomers: 'Local sellers and digital buyers',
+            investment: 120000,
+            monthlyTarget: 250000,
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toBe('application/pdf');
+      expect(response.headers['content-disposition']).toContain('attachment');
+    });
+
     test('should get eligible government schemes', async () => {
       const response = await request(app)
         .get(`/api/business-builder/businesses/${testBusiness.businessId}/schemes`)

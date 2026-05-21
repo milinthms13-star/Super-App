@@ -7,6 +7,7 @@ const BusinessBuilderOrder = require('../models/BusinessBuilderOrder');
 const BusinessBuilderEvent = require('../models/BusinessBuilderEvent');
 const BusinessBuilderAsset = require('../models/BusinessBuilderAsset');
 const PDFDocument = require('pdfkit');
+const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
@@ -46,6 +47,25 @@ const sanitizeUtm = (utm = {}) => ({
   term: String(utm.term || '').trim().slice(0, 120),
   content: String(utm.content || '').trim().slice(0, 120),
 });
+
+const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
+const DEFAULT_BUSINESS_BUILDER_MODEL = String(process.env.OPENAI_BUSINESS_BUILDER_MODEL || 'gpt-4.1-mini').trim();
+
+const parseJsonResponse = (content = '', fallbackValue = null) => {
+  if (!content) return fallbackValue;
+  try {
+    const raw = String(content);
+    const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    let candidate = fencedMatch ? fencedMatch[1] : raw;
+    const objectMatch = candidate.match(/([\s\S]*?\{[\s\S]*\})/);
+    candidate = objectMatch ? objectMatch[1] : candidate;
+    return JSON.parse(candidate.trim());
+  } catch (_error) {
+    return fallbackValue;
+  }
+};
+
+const asTrimmed = (value = '') => String(value || '').trim();
 
 class BusinessBuilderService {
   // Business CRUD operations
@@ -224,6 +244,250 @@ class BusinessBuilderService {
     } catch (error) {
       throw new Error(`Failed to generate business plan: ${error.message}`);
     }
+  }
+
+  buildFallback10xAiPlan(business, blueprint = {}) {
+    const businessName = asTrimmed(blueprint.businessName || business?.businessName || 'Your Business');
+    const category = asTrimmed(blueprint.category || business?.businessType || 'Service');
+    const location = asTrimmed(blueprint.location || business?.address?.city || 'India');
+    const targetCustomers = asTrimmed(blueprint.targetCustomers || business?.launchForm?.targetCustomers || 'local customers');
+    const investment = Math.max(toNumber(blueprint.investment, business?.getCostSummary?.().oneTimeInvestment || 0), 0);
+    const monthlyTarget = Math.max(toNumber(blueprint.monthlyTarget, business?.costForm?.expectedMonthlyRevenue || 0), 0);
+    const monthlyExpense = Math.max(toNumber(business?.getCostSummary?.().monthlyExpenses, monthlyTarget * 0.55), 0);
+    const monthlyProfit = monthlyTarget - monthlyExpense;
+    const breakEvenMonths = monthlyProfit > 0 ? Math.ceil(investment / monthlyProfit) : null;
+
+    return {
+      summary: `${businessName} is positioned as a ${category.toLowerCase()} business in ${location}, targeting ${targetCustomers}.`,
+      marketAnalysis: `Demand in ${location} can be captured through trust-led positioning, fast response, and digital discoverability. Focus on repeat use-cases and referral loops.`,
+      competitorAnalysis: `Compete against informal sellers and established brands by differentiating on quality consistency, transparent pricing, and service reliability.`,
+      revenueModel: category.toLowerCase() === 'ecommerce'
+        ? 'Primary: product sales. Secondary: seller commissions, delivery fees, and featured listings.'
+        : 'Primary: service packages and consultation. Secondary: subscriptions, maintenance contracts, and partner referrals.',
+      costEstimation: `Estimated setup investment: INR ${investment.toLocaleString('en-IN')}. Estimated monthly expenses: INR ${monthlyExpense.toLocaleString('en-IN')}.`,
+      profitProjection: `Monthly target revenue: INR ${monthlyTarget.toLocaleString('en-IN')}. Estimated monthly profit: INR ${monthlyProfit.toLocaleString('en-IN')}.${breakEvenMonths ? ` Break-even in approximately ${breakEvenMonths} months.` : ' Improve margin or reduce fixed costs to reach break-even faster.'}`,
+      swot: {
+        strengths: ['Localized market understanding', 'Fast founder-led decisions', 'Personalized customer handling'],
+        weaknesses: ['Early-stage brand awareness', 'Execution dependency on small team', 'Limited initial capital buffer'],
+        opportunities: ['Digital acquisition channels', 'Government support schemes', 'Cross-sell/upsell bundles'],
+        threats: ['Price wars', 'Seasonal demand swings', 'Customer acquisition cost volatility'],
+      },
+      legalChecklist: [
+        'Finalize structure: Proprietorship / Partnership / Pvt Ltd',
+        'Apply Udyam registration if eligible',
+        'Confirm GST applicability and invoicing flow',
+        'Open current account and setup bookkeeping',
+        'Create compliance tracker for monthly/quarterly filings',
+      ],
+      roadmap30: [
+        'Week 1: Finalize positioning, offer design, and pricing ladders',
+        'Week 2: Launch landing page, WhatsApp profile, and lead form',
+        'Week 3: Acquire first 10 customers and gather testimonials',
+        'Week 4: Start paid + organic campaign and optimize conversion funnel',
+      ],
+      roadmap90: [
+        'Month 1: Validate offer-market fit and stabilize delivery quality',
+        'Month 2: Build repeat acquisition channels and referral engine',
+        'Month 3: Add premium tier, tighten unit economics, and prep scale playbook',
+      ],
+      branding: {
+        tagline: `${businessName} - Trusted solutions for modern customers`,
+        logoPrompt: `Design a modern, trustworthy logo for ${businessName} in ${category}, suitable for ${location} and global customers.`,
+        colorPalette: [business?.primaryColor || '#0f766e', business?.secondaryColor || '#10b981', '#0f172a', '#f8fafc'],
+      },
+      generatedAt: new Date().toISOString(),
+      provider: 'fallback',
+    };
+  }
+
+  normalize10xPlanShape(rawPlan = {}, fallbackPlan = {}) {
+    const toArray = (value, fallback = []) => {
+      if (Array.isArray(value)) return value.map((item) => asTrimmed(item)).filter(Boolean);
+      if (typeof value === 'string') {
+        return value
+          .split(/\n|,/)
+          .map((item) => asTrimmed(item))
+          .filter(Boolean);
+      }
+      return fallback;
+    };
+
+    const swotInput = rawPlan.swot && typeof rawPlan.swot === 'object' ? rawPlan.swot : {};
+    const brandingInput = rawPlan.branding && typeof rawPlan.branding === 'object' ? rawPlan.branding : {};
+
+    return {
+      summary: asTrimmed(rawPlan.summary || fallbackPlan.summary),
+      marketAnalysis: asTrimmed(rawPlan.marketAnalysis || fallbackPlan.marketAnalysis),
+      competitorAnalysis: asTrimmed(rawPlan.competitorAnalysis || fallbackPlan.competitorAnalysis),
+      revenueModel: asTrimmed(rawPlan.revenueModel || fallbackPlan.revenueModel),
+      costEstimation: asTrimmed(rawPlan.costEstimation || fallbackPlan.costEstimation),
+      profitProjection: asTrimmed(rawPlan.profitProjection || fallbackPlan.profitProjection),
+      swot: {
+        strengths: toArray(swotInput.strengths, fallbackPlan?.swot?.strengths || []),
+        weaknesses: toArray(swotInput.weaknesses, fallbackPlan?.swot?.weaknesses || []),
+        opportunities: toArray(swotInput.opportunities, fallbackPlan?.swot?.opportunities || []),
+        threats: toArray(swotInput.threats, fallbackPlan?.swot?.threats || []),
+      },
+      legalChecklist: toArray(rawPlan.legalChecklist, fallbackPlan.legalChecklist || []),
+      roadmap30: toArray(rawPlan.roadmap30, fallbackPlan.roadmap30 || []),
+      roadmap90: toArray(rawPlan.roadmap90, fallbackPlan.roadmap90 || []),
+      branding: {
+        tagline: asTrimmed(brandingInput.tagline || fallbackPlan?.branding?.tagline),
+        logoPrompt: asTrimmed(brandingInput.logoPrompt || fallbackPlan?.branding?.logoPrompt),
+        colorPalette: toArray(brandingInput.colorPalette, fallbackPlan?.branding?.colorPalette || []),
+      },
+      generatedAt: asTrimmed(rawPlan.generatedAt) || new Date().toISOString(),
+      provider: asTrimmed(rawPlan.provider || rawPlan.model) || 'openai',
+    };
+  }
+
+  async callOpenAiBusinessBuilderJson({ systemPrompt, userPrompt, fallback }) {
+    if (isFreeMode) {
+      return fallback();
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return fallback();
+    }
+
+    try {
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: DEFAULT_BUSINESS_BUILDER_MODEL,
+          temperature: 0.3,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 45000,
+        }
+      );
+
+      const content = response?.data?.choices?.[0]?.message?.content || '';
+      const parsed = parseJsonResponse(content);
+      if (!parsed || typeof parsed !== 'object') {
+        return fallback();
+      }
+      return parsed;
+    } catch (_error) {
+      return fallback();
+    }
+  }
+
+  async generateBusinessPlanAI(businessId, userId, payload = {}) {
+    const business = await this.getBusinessById(businessId, userId);
+    const fallbackPlan = this.buildFallback10xAiPlan(business, payload || {});
+
+    const systemPrompt = [
+      'You are an expert business strategist for Indian SMEs.',
+      'Return strictly valid JSON object only.',
+      'Required keys: summary, marketAnalysis, competitorAnalysis, revenueModel, costEstimation, profitProjection, swot, legalChecklist, roadmap30, roadmap90, branding, generatedAt, provider.',
+      'swot must be object with strengths, weaknesses, opportunities, threats as arrays.',
+      'legalChecklist, roadmap30, roadmap90 must be arrays of concise strings.',
+      'branding must be object with tagline, logoPrompt, colorPalette(array of 3-5 hex codes).',
+      'Keep recommendations practical, execution-oriented, and realistic.',
+    ].join(' ');
+
+    const userPrompt = JSON.stringify({
+      businessContext: {
+        businessId: business.businessId,
+        businessName: business.businessName,
+        businessType: business.businessType,
+        city: business?.address?.city || '',
+        state: business?.address?.state || '',
+        schemeProfile: business.schemeProfile || {},
+        costForm: business.costForm || {},
+        launchForm: business.launchForm || {},
+      },
+      blueprint: payload || {},
+      expectedLanguage: asTrimmed(payload.language || 'English'),
+      objective: 'Create a 10X practical business plan for launch and early growth.',
+    });
+
+    const aiRaw = await this.callOpenAiBusinessBuilderJson({
+      systemPrompt,
+      userPrompt,
+      fallback: () => fallbackPlan,
+    });
+
+    const normalizedPlan = this.normalize10xPlanShape(aiRaw, fallbackPlan);
+    business.businessPlan = {
+      summary: normalizedPlan.summary,
+      marketAnalysis: normalizedPlan.marketAnalysis,
+      competitorAnalysis: normalizedPlan.competitorAnalysis,
+      revenueModel: normalizedPlan.revenueModel,
+      costEstimation: normalizedPlan.costEstimation,
+      profitProjection: normalizedPlan.profitProjection,
+      swot: JSON.stringify(normalizedPlan.swot),
+      roadmap90: normalizedPlan.roadmap90.join('\n'),
+      roadmap180: normalizedPlan.roadmap30.join('\n'),
+      generatedAt: new Date(normalizedPlan.generatedAt || Date.now()),
+    };
+    await business.save();
+
+    return normalizedPlan;
+  }
+
+  async generateBusinessPlanPDF(businessId, userId, payload = {}) {
+    const business = await this.getBusinessById(businessId, userId);
+    const planInput = payload.plan && typeof payload.plan === 'object' ? payload.plan : {};
+    const fallbackPlan = this.buildFallback10xAiPlan(business, payload.blueprint || {});
+    const plan = this.normalize10xPlanShape(planInput, fallbackPlan);
+
+    const doc = new PDFDocument({ margin: 50 });
+    const buffers = [];
+    doc.on('data', buffers.push.bind(buffers));
+
+    const writeSection = (title, content) => {
+      doc.moveDown(0.8);
+      doc.fontSize(13).fillColor('#0f172a').text(title, { underline: true });
+      doc.moveDown(0.3);
+      doc.fontSize(10).fillColor('#334155');
+      if (Array.isArray(content)) {
+        content.forEach((item, index) => {
+          doc.text(`${index + 1}. ${asTrimmed(item)}`);
+        });
+      } else {
+        doc.text(asTrimmed(content || '-'));
+      }
+    };
+
+    doc.fontSize(20).fillColor('#0f172a').text('Business Plan (10X Builder)', { align: 'center' });
+    doc.moveDown(0.4);
+    doc.fontSize(11).fillColor('#475569').text(asTrimmed(business.businessName || payload.blueprint?.businessName || 'Business'), { align: 'center' });
+    doc.fontSize(9).fillColor('#64748b').text(`Generated: ${new Date(plan.generatedAt || Date.now()).toLocaleString('en-IN')}`, { align: 'center' });
+
+    writeSection('Summary', plan.summary);
+    writeSection('Market Analysis', plan.marketAnalysis);
+    writeSection('Competitor Analysis', plan.competitorAnalysis);
+    writeSection('Revenue Model', plan.revenueModel);
+    writeSection('Cost Estimation', plan.costEstimation);
+    writeSection('Profit Projection', plan.profitProjection);
+    writeSection('Legal Checklist', plan.legalChecklist);
+    writeSection('30-Day Roadmap', plan.roadmap30);
+    writeSection('90-Day Roadmap', plan.roadmap90);
+    writeSection('Branding Tagline', plan?.branding?.tagline || '');
+    writeSection('Logo Prompt', plan?.branding?.logoPrompt || '');
+    writeSection('SWOT - Strengths', plan?.swot?.strengths || []);
+    writeSection('SWOT - Weaknesses', plan?.swot?.weaknesses || []);
+    writeSection('SWOT - Opportunities', plan?.swot?.opportunities || []);
+    writeSection('SWOT - Threats', plan?.swot?.threats || []);
+
+    doc.end();
+
+    return new Promise((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+    });
   }
 
   // Government Schemes

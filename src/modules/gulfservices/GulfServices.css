@@ -673,6 +673,93 @@
   flex: 1;
 }
 
+.gulf-services-workflow-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.gulf-services-checklist {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.gulf-services-checklist label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f0fdfa;
+  color: #115e59;
+  border: 1px solid #ccfbf1;
+}
+
+.gulf-services-status-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.gulf-services-status-track span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f766e;
+  background: #ccfbf1;
+  border: 1px solid #99f6e4;
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
+.gulf-services-app-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.gulf-services-app-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+
+.gulf-services-app-item p,
+.gulf-services-app-item small {
+  margin: 2px 0;
+}
+
+.gulf-services-app-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #0f766e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+}
+
+.gulf-services-app-item-admin {
+  align-items: flex-start;
+}
+
+.gulf-services-admin-actions {
+  min-width: 240px;
+  display: grid;
+  gap: 8px;
+}
+
+.gulf-services-admin-actions input,
+.gulf-services-admin-actions select {
+  width: 100%;
+}
+
 @media (max-width: 900px) {
   .gulf-services-hero {
     grid-template-columns: 1fr;
@@ -706,6 +793,14 @@
   .gulf-services-form-grid select,
   .gulf-services-form-grid textarea {
     grid-column: 1 / -1;
+  }
+
+  .gulf-services-workflow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gulf-services-app-item {
+    flex-direction: column;
   }
 }
 

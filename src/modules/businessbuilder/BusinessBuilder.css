@@ -677,10 +677,244 @@
   text-transform: capitalize;
 }
 
+.card-shell {
+  border: 1px solid rgba(215, 227, 238, 0.95);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: var(--bb-shadow-card);
+}
+
+.bb10x-hero {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.6fr 0.8fr;
+  padding: 16px;
+  border-radius: 18px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(12, 79, 86, 0.22);
+  background: linear-gradient(135deg, rgba(12, 79, 86, 0.95) 0%, rgba(15, 118, 110, 0.93) 52%, rgba(207, 143, 45, 0.9) 100%);
+  color: #f4fffb;
+}
+
+.bb10x-tag {
+  margin: 0 0 4px;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bb10x-hero-copy h3 {
+  margin: 0 0 8px;
+}
+
+.bb10x-hero-copy p {
+  margin: 0;
+  color: rgba(244, 255, 251, 0.95);
+}
+
+.bb10x-readiness {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.bb10x-readiness span {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+}
+
+.bb10x-readiness strong {
+  display: block;
+  margin: 6px 0;
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+.bb10x-readiness p {
+  margin: 0;
+}
+
+.bb10x-layout {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 360px minmax(0, 1fr);
+}
+
+.bb10x-form {
+  height: fit-content;
+  position: sticky;
+  top: 74px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.bb10x-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.92rem;
+  color: #2f4358;
+  font-weight: 700;
+}
+
+.bb10x-form input,
+.bb10x-form select,
+.bb10x-form textarea {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--bb-border);
+  padding: 10px 12px;
+  background: #f9fcff;
+  font: inherit;
+}
+
+.bb10x-form textarea {
+  min-height: 94px;
+  resize: vertical;
+}
+
+.bb10x-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.bb10x-card {
+  padding: 16px;
+}
+
+.bb10x-card h3 {
+  margin-top: 0;
+}
+
+.bb10x-tagline {
+  color: var(--bb-primary-dark);
+  font-weight: 800;
+  margin: 6px 0 0;
+}
+
+.bb10x-mini-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bb10x-mini-grid div {
+  background: #f5fbff;
+  border: 1px solid #d8e7f5;
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.bb10x-mini-grid strong,
+.bb10x-mini-grid span {
+  display: block;
+}
+
+.bb10x-mini-grid strong {
+  font-size: 0.78rem;
+  color: #3b546f;
+}
+
+.bb10x-mini-grid span {
+  margin-top: 5px;
+  font-weight: 800;
+  color: #12253a;
+}
+
+.bb10x-checklist {
+  display: grid;
+  gap: 8px;
+}
+
+.bb10x-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #d8e7f5;
+  background: #f7fcff;
+}
+
+.bb10x-check input {
+  width: 17px;
+  height: 17px;
+}
+
+.bb10x-check span {
+  color: #334155;
+}
+
+.bb10x-action-row {
+  display: grid;
+  gap: 8px;
+}
+
+.bb10x-roadmap {
+  display: grid;
+  gap: 8px;
+}
+
+.bb10x-roadmap-item {
+  border: 1px solid #d8e7f5;
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  background: #f7fcff;
+}
+
+.bb10x-roadmap-item p {
+  margin: 4px 0 0;
+}
+
+.bb10x-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.bb10x-badge.ready {
+  background: #e8fbf2;
+  border-color: rgba(15, 138, 95, 0.35);
+  color: #0f6b4d;
+}
+
+.bb10x-badge.next {
+  background: #fff4e8;
+  border-color: rgba(207, 143, 45, 0.42);
+  color: #8a5a00;
+}
+
 @media (max-width: 1100px) {
   .kpi-grid,
   .insight-panels {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bb10x-layout,
+  .bb10x-mini-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -767,5 +1001,13 @@
 
   .action-ghost {
     width: 100%;
+  }
+
+  .bb10x-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .bb10x-form {
+    position: static;
   }
 }

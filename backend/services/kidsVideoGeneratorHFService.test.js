@@ -7,12 +7,19 @@ jest.mock('../services/videoStudioService', () => ({
     return `${userMessage} [translated to ${languageName}]`;
   }),
 }));
+jest.mock('sharp', () => () => ({
+  png: () => ({
+    toFile: jest.fn(async () => {}),
+  }),
+}));
 
 const {
   localizeStoryForLanguage,
   translateTextToLanguage,
   shouldUseHybridCogScene,
   summarizeHybridRenderMeta,
+  enforceKidsSafetyPolicy,
+  buildTimedSubtitleSegments,
 } = require('./kidsVideoGeneratorHFService');
 
 describe('kidsVideoGeneratorHFService localization', () => {
@@ -84,6 +91,36 @@ describe('kidsVideoGeneratorHFService localization', () => {
     ).toBe(false);
   });
 
+  it('uses structured scene contract fields for hybrid intent routing', () => {
+    expect(
+      shouldUseHybridCogScene({
+        sceneContract: {
+          cameraActions: 'camera pans with a sweeping arc over a river',
+          background: 'riverbank and forest clearing',
+          weather: 'light rain',
+          timeOfDay: 'dusk',
+        },
+        title: 'River Crossing',
+        description: 'The friends cross a river with a gentle current.',
+        dialogue: 'Careful, the water is slippery.',
+      })
+    ).toBe(true);
+
+    expect(
+      shouldUseHybridCogScene({
+        sceneContract: {
+          cameraActions: 'static shot',
+          background: 'bedroom reading nook',
+          weather: 'clear',
+          timeOfDay: 'morning',
+        },
+        title: 'Story Time',
+        description: 'A child reads a book quietly in bed.',
+        dialogue: 'This is my favorite story.',
+      })
+    ).toBe(false);
+  });
+
   it('summarizes hybrid scene render metadata accurately', () => {
     const summary = summarizeHybridRenderMeta([
       { renderEngine: 'animatediff_openpose_hybrid_scene', warning: '' },
@@ -96,5 +133,46 @@ describe('kidsVideoGeneratorHFService localization', () => {
     expect(summary.cogSceneCount).toBe(1);
     expect(summary.fallbackSceneCount).toBe(1);
     expect(summary.warnings.length).toBe(1);
+  });
+
+  it('enforces kids safety policy by rewriting unsafe phrases', () => {
+    const baseStory = {
+      title: 'Battle Story',
+      synopsis: 'A kid picks a gun and starts a violent fight.',
+      moral: 'Never hurt others.',
+      scenes: [
+        {
+          id: 1,
+          title: 'Fight scene',
+          description: 'They use a bomb and gore appears everywhere.',
+          dialogue: 'Hero: I will kill them with this gun.',
+        },
+      ],
+    };
+    const result = enforceKidsSafetyPolicy(baseStory, 'violent gun battle story');
+
+    expect(result.safetyReport.enforced).toBe(true);
+    expect(result.safetyReport.rewriteApplied).toBe(true);
+    expect(result.safetyReport.violations.length).toBeGreaterThan(0);
+    expect(result.sanitizedPrompt.toLowerCase()).not.toContain('gun');
+    expect(result.sanitizedStory.scenes[0].description.toLowerCase()).not.toContain('gore');
+    expect(result.sanitizedStory.scenes[0].dialogue.toLowerCase()).not.toContain('kill');
+  });
+
+  it('builds subtitle timing segments from spoken lines when provided', () => {
+    const segments = buildTimedSubtitleSegments({
+      text: 'Fallback narration text',
+      spokenLines: [
+        { speaker: 'Narrator', text: 'The rabbit runs quickly through the forest.' },
+        { speaker: 'Guide', text: 'The tortoise stays calm and keeps moving forward.' },
+      ],
+      duration: 8,
+    });
+
+    expect(Array.isArray(segments)).toBe(true);
+    expect(segments.length).toBeGreaterThan(0);
+    expect(segments[0].start).toBeGreaterThanOrEqual(0);
+    expect(segments[segments.length - 1].end).toBeLessThanOrEqual(8);
+    expect(segments.some((segment) => segment.lines.join(' ').toLowerCase().includes('rabbit'))).toBe(true);
   });
 });

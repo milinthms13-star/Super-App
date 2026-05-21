@@ -13,6 +13,8 @@ const parseNumericEnv = (value, fallback) => {
 const RENDER_TIMEOUT_MS = parseNumericEnv(process.env.REACT_APP_VIDEO_RENDER_TIMEOUT_MS, 900000);
 const DEFAULT_RENDER_POLL_ATTEMPTS = parseNumericEnv(process.env.REACT_APP_VIDEO_RENDER_POLL_ATTEMPTS, 48);
 const DEFAULT_RENDER_POLL_INTERVAL_MS = parseNumericEnv(process.env.REACT_APP_VIDEO_RENDER_POLL_INTERVAL_MS, 5000);
+const DEFAULT_KIDS_JOB_POLL_ATTEMPTS = parseNumericEnv(process.env.REACT_APP_KIDS_VIDEO_JOB_POLL_ATTEMPTS, 180);
+const DEFAULT_KIDS_JOB_POLL_INTERVAL_MS = parseNumericEnv(process.env.REACT_APP_KIDS_VIDEO_JOB_POLL_INTERVAL_MS, 4000);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -325,6 +327,133 @@ export const renderPromptVideoHf = (requestBody, options = {}) =>
     }
     return result;
   });
+
+export const startKidsVideoHfJob = (requestBody, options = {}) =>
+  requestVideoStudio('/kids-video-hf/jobs', {
+    method: 'POST',
+    body: requestBody || {},
+    retries: 1,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, 'kids-video-hf job create response');
+    if (!result.payload?.jobId) {
+      throw new VideoStudioApiError('Kids video job response is missing jobId.', {
+        status: 500,
+        code: 'INVALID_RESPONSE',
+        payload: result.payload,
+      });
+    }
+    return result;
+  });
+
+export const getKidsVideoHfJobStatus = (jobId, options = {}) =>
+  requestVideoStudio(`/kids-video-hf/jobs/${jobId}`, {
+    method: 'GET',
+    retries: 0,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    ...options,
+  }).then((result) => {
+    assertPayloadSuccess(result.payload, 'kids-video-hf job status response');
+    return result;
+  });
+
+export const waitForKidsVideoHfJob = async (
+  jobId,
+  {
+    signal,
+    maxAttempts = DEFAULT_KIDS_JOB_POLL_ATTEMPTS,
+    intervalMs = DEFAULT_KIDS_JOB_POLL_INTERVAL_MS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    onProgress,
+  } = {}
+) => {
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (signal?.aborted) {
+      throw new VideoStudioApiError('Render job status check cancelled.', {
+        status: 499,
+        code: 'REQUEST_ABORTED',
+      });
+    }
+
+    try {
+      const statusResult = await getKidsVideoHfJobStatus(jobId, {
+        signal,
+        retries: 0,
+        timeoutMs,
+      });
+      const status = String(statusResult?.payload?.status || '').toLowerCase();
+      const progress = Math.max(0, Math.min(100, Number(statusResult?.payload?.progress || 0)));
+      const message = String(statusResult?.payload?.message || '').trim();
+
+      if (typeof onProgress === 'function') {
+        onProgress({
+          status,
+          progress,
+          message,
+          payload: statusResult.payload,
+        });
+      }
+
+      if (status === 'completed') {
+        const resultPayload = statusResult?.payload?.result || {};
+        if (!resultPayload?.videoUrl) {
+          throw new VideoStudioApiError('Render job completed without video URL.', {
+            status: 500,
+            code: 'INVALID_RESPONSE',
+            payload: statusResult.payload,
+          });
+        }
+        return {
+          ...statusResult,
+          payload: {
+            ...resultPayload,
+            success: true,
+          },
+        };
+      }
+
+      if (status === 'failed') {
+        throw new VideoStudioApiError(
+          statusResult?.payload?.error || 'Kids video render job failed on server.',
+          {
+            status: 422,
+            code: 'RENDER_FAILED',
+            payload: statusResult?.payload,
+          }
+        );
+      }
+
+      await delay(intervalMs);
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.status || 0);
+      const code = String(error?.code || '');
+      const retryable =
+        status === 404 ||
+        status === 408 ||
+        status === 409 ||
+        status === 425 ||
+        status >= 500 ||
+        code === 'EMPTY_RESPONSE' ||
+        code === 'INVALID_JSON';
+      if (!retryable || attempt === maxAttempts - 1) {
+        throw error;
+      }
+      await delay(intervalMs);
+    }
+  }
+
+  throw (
+    lastError ||
+    new VideoStudioApiError('Render job is still processing. Please retry shortly.', {
+      status: 408,
+      code: 'REQUEST_TIMEOUT',
+    })
+  );
+};
 
 export const getKidsVideoHfCapabilities = (options = {}) =>
   requestVideoStudio('/kids-video-hf/capabilities', {

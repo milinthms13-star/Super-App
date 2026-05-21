@@ -286,6 +286,47 @@ router.post('/businesses/:businessId/generate-plan', async (req, res) => {
   }
 });
 
+router.post('/businesses/:businessId/generate-plan-ai', async (req, res) => {
+  try {
+    const businessPlan = await businessBuilderService.generateBusinessPlanAI(
+      req.params.businessId,
+      String(req.user?._id || req.user?.id),
+      req.body || {}
+    );
+    res.json({
+      success: true,
+      data: businessPlan,
+      message: 'AI business plan generated successfully',
+    });
+  } catch (error) {
+    const statusCode = error.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+router.post('/businesses/:businessId/ai-plan/pdf', async (req, res) => {
+  try {
+    const pdfBuffer = await businessBuilderService.generateBusinessPlanPDF(
+      req.params.businessId,
+      String(req.user?._id || req.user?.id),
+      req.body || {}
+    );
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=business-plan-${req.params.businessId}.pdf`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    const statusCode = error.message.includes('not found') ? 404 : 500;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 router.get('/businesses/:businessId/schemes', async (req, res) => {
   try {
     const schemes = await businessBuilderService.getEligibleSchemes(

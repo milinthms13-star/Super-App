@@ -1,8 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import useI18n from '../../hooks/useI18n';
-import { GulfToast, ModalOverlay } from './components';
-import GulfModalShell from './components/modals/GulfModalShell';
-import GulfPanelShell from './components/panels/GulfPanelShell';
 import { gulfservicesApi } from './gulfservicesApi';
 import './GulfServices.css';
 
@@ -153,6 +150,30 @@ const SAMPLE_RECRUITERS = [
   },
 ];
 
+const DOCUMENT_CHECKLIST = [
+  'Passport',
+  'Photo',
+  'Resume',
+  'Education Certificate',
+  'Experience Certificate',
+  'Police Clearance Certificate',
+  'Medical Test',
+  'Visa Copy',
+];
+
+const VISA_WORKFLOW_STATUSES = [
+  'Applied',
+  'Offer Letter Pending',
+  'Offer Letter Received',
+  'Medical Pending',
+  'Medical Completed',
+  'Visa Processing',
+  'Visa Approved',
+  'Visa Stamped',
+  'Travel Ready',
+  'Rejected',
+];
+
 const GulfServices = () => {
   const { t } = useI18n();
   const [activePane, setActivePane] = useState('overview');
@@ -164,6 +185,11 @@ const GulfServices = () => {
   const [dashboard, setDashboard] = useState(null);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkedDocs, setCheckedDocs] = useState([]);
+  const [myApplications, setMyApplications] = useState([]);
+  const [adminApplications, setAdminApplications] = useState([]);
+  const [adminFilters, setAdminFilters] = useState({ visaStatus: '', country: '', search: '' });
+  const [adminUpdateDrafts, setAdminUpdateDrafts] = useState({});
   
   // New state for enhanced features
   const [activeModal, setActiveModal] = useState(null);
@@ -183,6 +209,7 @@ const GulfServices = () => {
     fullName: '', 
     email: '', 
     phone: '', 
+    passportNo: '',
     experience: '', 
     currentCompany: '', 
     expectedSalary: '', 
@@ -220,6 +247,21 @@ const GulfServices = () => {
   const [trackRequest, setTrackRequest] = useState({ type: 'visa', requestId: '', email: '' });
   const [trackResult, setTrackResult] = useState(null);
   const [fraudForm, setFraudForm] = useState({ recruiterId: '', issueDescription: '', phone: '' });
+  const isAdminUser = useMemo(() => {
+    try {
+      const payload = localStorage.getItem('user');
+      if (!payload) return false;
+      const parsed = JSON.parse(payload);
+      const normalizedEmail = String(parsed?.email || '').trim().toLowerCase();
+      return Boolean(parsed?.isAdmin || parsed?.role === 'admin' || normalizedEmail === 'mgdhanyamohan@gmail.com');
+    } catch (_error) {
+      return false;
+    }
+  }, []);
+  const documentReadinessScore = useMemo(
+    () => Math.round((checkedDocs.length / DOCUMENT_CHECKLIST.length) * 100),
+    [checkedDocs.length]
+  );
   const sectionTabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'jobs', label: 'Jobs' },
@@ -227,6 +269,7 @@ const GulfServices = () => {
     { id: 'attestation', label: 'Attestation' },
     { id: 'tracking', label: 'Tracking' },
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'workflow', label: 'Workflow 10/10' },
     { id: 'emergency', label: 'Emergency' },
   ];
 
@@ -345,6 +388,12 @@ const GulfServices = () => {
     window.setTimeout(() => setMessage(''), 6000);
   };
 
+  const toggleChecklistDoc = (doc) => {
+    setCheckedDocs((prev) =>
+      prev.includes(doc) ? prev.filter((item) => item !== doc) : [...prev, doc]
+    );
+  };
+
   const closeModal = () => setActiveModal(null);
 
   useEffect(() => {
@@ -361,6 +410,25 @@ const GulfServices = () => {
   const getRecruiterDetails = (recruiterId) => {
     return recruiters.find((r) => r.id === recruiterId) || SAMPLE_RECRUITERS.find((r) => r.id === recruiterId);
   };
+
+  const loadMyApplications = useCallback(async () => {
+    try {
+      const response = await gulfservicesApi.getMyApplications();
+      setMyApplications(Array.isArray(response?.data) ? response.data : []);
+    } catch (_error) {
+      setMyApplications([]);
+    }
+  }, []);
+
+  const loadAdminApplications = useCallback(async () => {
+    if (!isAdminUser) return;
+    try {
+      const response = await gulfservicesApi.getAdminApplications(adminFilters);
+      setAdminApplications(Array.isArray(response?.data) ? response.data : []);
+    } catch (_error) {
+      setAdminApplications([]);
+    }
+  }, [adminFilters, isAdminUser]);
 
   const submitVisa = async (event) => {
     event.preventDefault();
@@ -416,6 +484,7 @@ const GulfServices = () => {
         }
         formData.append(key, value);
       });
+      formData.append('completedDocs', JSON.stringify(checkedDocs));
       formData.append('jobId', selectedJob.id);
       const response = await gulfservicesApi.applyJob(selectedJob.id, formData);
       showMessage(response.message || 'Application submitted successfully.');
@@ -423,6 +492,7 @@ const GulfServices = () => {
         ...prev,
         fullName: '',
         phone: '',
+        passportNo: '',
         experience: '',
         currentCompany: '',
         expectedSalary: '',
@@ -430,6 +500,7 @@ const GulfServices = () => {
         cvFile: null,
       }));
       setSelectedJob(null);
+      loadMyApplications();
     } catch (error) {
       showMessage(error?.response?.data?.message || 'Unable to submit application.');
     } finally {
@@ -466,6 +537,7 @@ const GulfServices = () => {
     try {
       const response = await gulfservicesApi.getDashboard();
       setDashboard(response.data.dashboard);
+      await loadMyApplications();
       setActivePane('dashboard');
     } catch (error) {
       const fallbackMessage =
@@ -522,6 +594,40 @@ const GulfServices = () => {
       setLoading(false);
     }
   };
+
+  const handleAdminStatusUpdate = async (applicationId) => {
+    const draft = adminUpdateDrafts[applicationId] || {};
+    if (!draft.visaStatus) {
+      showMessage('Select a visa status before updating.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await gulfservicesApi.updateApplicationStatus(applicationId, {
+        visaStatus: draft.visaStatus,
+        agentName: draft.agentName || '',
+        agentVerified: Boolean(draft.agentVerified),
+        adminNote: draft.adminNote || '',
+      });
+      showMessage(response?.message || 'Application status updated.');
+      loadAdminApplications();
+      loadMyApplications();
+    } catch (error) {
+      showMessage(error?.response?.data?.message || 'Unable to update application status.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if ((activePane === 'workflow' || activePane === 'dashboard') && currentUserEmail) {
+      loadMyApplications();
+    }
+    if (activePane === 'workflow' && isAdminUser) {
+      loadAdminApplications();
+    }
+  }, [activePane, currentUserEmail, isAdminUser, loadAdminApplications, loadMyApplications]);
 
   // Modal content renderer
   const renderModal = () => {
@@ -703,6 +809,7 @@ const GulfServices = () => {
                         <input name="fullName" placeholder="Full name" value={jobApplicationForm.fullName} onChange={handleInputChange(setJobApplicationForm)} required />
                         <input name="email" type="email" placeholder="Email" value={jobApplicationForm.email} onChange={handleInputChange(setJobApplicationForm)} required />
                         <input name="phone" placeholder="Phone" value={jobApplicationForm.phone} onChange={handleInputChange(setJobApplicationForm)} required />
+                        <input name="passportNo" placeholder="Passport number" value={jobApplicationForm.passportNo} onChange={handleInputChange(setJobApplicationForm)} required />
                         <input name="experience" type="number" placeholder="Experience (years)" value={jobApplicationForm.experience} onChange={handleInputChange(setJobApplicationForm)} min="0" />
                         <input name="currentCompany" placeholder="Current company" value={jobApplicationForm.currentCompany} onChange={handleInputChange(setJobApplicationForm)} />
                         <input name="expectedSalary" type="number" placeholder="Expected salary" value={jobApplicationForm.expectedSalary} onChange={handleInputChange(setJobApplicationForm)} />
@@ -921,6 +1028,10 @@ const GulfServices = () => {
                   <label>
                     Phone
                     <input name="phone" value={jobApplicationForm.phone} onChange={handleInputChange(setJobApplicationForm)} required />
+                  </label>
+                  <label>
+                    Passport number
+                    <input name="passportNo" value={jobApplicationForm.passportNo} onChange={handleInputChange(setJobApplicationForm)} required />
                   </label>
                   <label>
                     Experience (years)
@@ -1156,6 +1267,170 @@ const GulfServices = () => {
       );
     }
 
+    if (activePane === 'workflow') {
+      return (
+        <section className="gulf-services-panel gulf-services-action-panel">
+          <div className="gulf-services-card gulf-services-workflow">
+            <h2>Gulf Workflow 10/10</h2>
+            <p>Document checklist, visa stage pipeline, and application lifecycle from apply to travel ready.</p>
+            <div className="gulf-services-workflow-grid">
+              <article className="gulf-services-card">
+                <h3>Document Checklist</h3>
+                <p>Readiness score: <strong>{documentReadinessScore}%</strong></p>
+                <div className="gulf-services-checklist">
+                  {DOCUMENT_CHECKLIST.map((doc) => (
+                    <label key={doc}>
+                      <input
+                        type="checkbox"
+                        checked={checkedDocs.includes(doc)}
+                        onChange={() => toggleChecklistDoc(doc)}
+                      />
+                      <span>{doc}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="gulf-services-fraud-warning">
+                  Never pay money to unverified agents. Ask for license, offer letter, visa proof and receipt.
+                </div>
+              </article>
+
+              <article className="gulf-services-card">
+                <h3>Visa Tracker Stages</h3>
+                <div className="gulf-services-status-track">
+                  {VISA_WORKFLOW_STATUSES.map((status) => (
+                    <span key={status}>{status}</span>
+                  ))}
+                </div>
+              </article>
+            </div>
+
+            <article className="gulf-services-card" style={{ marginTop: '16px' }}>
+              <h3>My Applications</h3>
+              {myApplications.length === 0 ? (
+                <p>No tracked applications yet. Apply to a job to start your pipeline.</p>
+              ) : (
+                <div className="gulf-services-app-list">
+                  {myApplications.map((item) => (
+                    <div key={item._id} className="gulf-services-app-item">
+                      <div>
+                        <strong>{item.jobTitle || 'Gulf Application'}</strong>
+                        <p>{item.country} • {item.company || 'Company pending'}</p>
+                        <small>Passport: {item.passportNo || 'N/A'}</small>
+                      </div>
+                      <div>
+                        <span className="gulf-services-app-status">{item.visaStatus || 'Applied'}</span>
+                        <small>{new Date(item.updatedAt || item.createdAt).toLocaleString()}</small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+
+            {isAdminUser ? (
+              <article className="gulf-services-card" style={{ marginTop: '16px' }}>
+                <h3>Admin: Agent + Visa Status Updates</h3>
+                <div className="gulf-services-form-grid">
+                  <select
+                    name="visaStatus"
+                    value={adminFilters.visaStatus}
+                    onChange={(event) => setAdminFilters((prev) => ({ ...prev, visaStatus: event.target.value }))}
+                  >
+                    <option value="">All statuses</option>
+                    {VISA_WORKFLOW_STATUSES.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                  <select
+                    name="country"
+                    value={adminFilters.country}
+                    onChange={(event) => setAdminFilters((prev) => ({ ...prev, country: event.target.value }))}
+                  >
+                    <option value="">All countries</option>
+                    {availableCountries.map((country) => (
+                      <option key={country} value={country}>{country}</option>
+                    ))}
+                  </select>
+                  <input
+                    placeholder="Search name/phone/passport/job"
+                    value={adminFilters.search}
+                    onChange={(event) => setAdminFilters((prev) => ({ ...prev, search: event.target.value }))}
+                  />
+                  <button type="button" className="btn btn-secondary" onClick={loadAdminApplications}>Load</button>
+                </div>
+                <div className="gulf-services-app-list">
+                  {adminApplications.map((item) => {
+                    const draft = adminUpdateDrafts[item._id] || {};
+                    return (
+                      <div key={item._id} className="gulf-services-app-item gulf-services-app-item-admin">
+                        <div>
+                          <strong>{item.name}</strong>
+                          <p>{item.jobTitle} • {item.country} • {item.phone}</p>
+                          <small>Agent: {item.agentName || 'Unassigned'} {item.agentVerified ? '• Verified' : ''}</small>
+                        </div>
+                        <div className="gulf-services-admin-actions">
+                          <select
+                            value={draft.visaStatus || item.visaStatus || 'Applied'}
+                            onChange={(event) =>
+                              setAdminUpdateDrafts((prev) => ({
+                                ...prev,
+                                [item._id]: { ...draft, visaStatus: event.target.value },
+                              }))
+                            }
+                          >
+                            {VISA_WORKFLOW_STATUSES.map((status) => (
+                              <option key={status} value={status}>{status}</option>
+                            ))}
+                          </select>
+                          <input
+                            placeholder="Agent name"
+                            value={draft.agentName ?? item.agentName ?? ''}
+                            onChange={(event) =>
+                              setAdminUpdateDrafts((prev) => ({
+                                ...prev,
+                                [item._id]: { ...draft, agentName: event.target.value },
+                              }))
+                            }
+                          />
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(draft.agentVerified ?? item.agentVerified)}
+                              onChange={(event) =>
+                                setAdminUpdateDrafts((prev) => ({
+                                  ...prev,
+                                  [item._id]: { ...draft, agentVerified: event.target.checked },
+                                }))
+                              }
+                            />
+                            Verified
+                          </label>
+                          <input
+                            placeholder="Admin note"
+                            value={draft.adminNote ?? item.adminNote ?? ''}
+                            onChange={(event) =>
+                              setAdminUpdateDrafts((prev) => ({
+                                ...prev,
+                                [item._id]: { ...draft, adminNote: event.target.value },
+                              }))
+                            }
+                          />
+                          <button type="button" className="btn btn-primary" onClick={() => handleAdminStatusUpdate(item._id)}>
+                            Update
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!adminApplications.length ? <p>No admin application records found.</p> : null}
+                </div>
+              </article>
+            ) : null}
+          </div>
+        </section>
+      );
+    }
+
     if (activePane === 'emergency') {
       return (
         <section className="gulf-services-panel gulf-services-action-panel">
@@ -1212,6 +1487,7 @@ const GulfServices = () => {
           <div className="gulf-services-notice-actions">
             <button type="button" className="btn btn-primary" onClick={() => setActiveModal('visa')}>Start Visa Support</button>
             <button type="button" className="btn btn-secondary" onClick={() => setActiveModal('jobs')}>Explore Gulf Jobs</button>
+            <button type="button" className="btn btn-outline" onClick={() => setActivePane('workflow')}>Open 10/10 Workflow</button>
             <button type="button" className="btn btn-outline" onClick={() => setActiveModal('lead')}>Request Callback</button>
           </div>
         </div>
@@ -1315,6 +1591,10 @@ const GulfServices = () => {
           <div>
             <strong>Attestation Tracking</strong>
             <p>Monitor MEA, embassy and domestic verification status.</p>
+          </div>
+          <div>
+            <strong>Document Readiness</strong>
+            <p>{documentReadinessScore}% complete ({checkedDocs.length}/{DOCUMENT_CHECKLIST.length})</p>
           </div>
         </div>
       </header>

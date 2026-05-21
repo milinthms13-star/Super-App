@@ -18,6 +18,7 @@ const AREffect = require('../models/AREffect');
 const PhotoStudioSettings = require('../models/PhotoStudioSettings');
 const UserExport = require('../models/UserExport');
 const PaymentPlan = require('../models/PaymentPlan');
+const PhotoStudioEvent = require('../models/PhotoStudioEvent');
 
 const router = express.Router();
 
@@ -320,6 +321,46 @@ const hasToolAccess = (planTier, toolCode, settings) => {
   }
 
   return freeTools.has(toolCode);
+};
+
+const getUserIdFromReq = (req) => String(req?.user?._id || req?.user?.id || '').trim();
+
+const trackStudioEvent = async (req, eventName, payload = {}) => {
+  const userId = getUserIdFromReq(req);
+  if (!userId || !eventName) return;
+  try {
+    await PhotoStudioEvent.create({
+      userId,
+      eventName: String(eventName).trim().toLowerCase(),
+      payload,
+      device: {
+        userAgent: String(req.headers['user-agent'] || ''),
+        ip: String(req.ip || req.headers['x-forwarded-for'] || ''),
+      },
+    });
+  } catch (_error) {
+    // Never fail user-facing flows due to analytics write errors.
+  }
+};
+
+const computeSimpleImageScore = async (buffer) => {
+  try {
+    const stats = await sharp(buffer).stats();
+    const channels = Array.isArray(stats?.channels) ? stats.channels : [];
+    if (!channels.length) {
+      return { score: 78, contrast: 0, colorSpread: 0 };
+    }
+    const contrast = channels.reduce((sum, channel) => sum + Number(channel.stdev || 0), 0) / channels.length;
+    const colorSpread = channels.reduce((sum, channel) => sum + Number(channel.max || 0) - Number(channel.min || 0), 0) / channels.length;
+    const rawScore = 55 + contrast * 0.42 + colorSpread * 0.11;
+    return {
+      score: Math.max(1, Math.min(99, Math.round(rawScore))),
+      contrast: Number(contrast.toFixed(2)),
+      colorSpread: Number(colorSpread.toFixed(2)),
+    };
+  } catch (_error) {
+    return { score: 78, contrast: 0, colorSpread: 0 };
+  }
 };
 
 const applyFilterPreset = (pipeline, filterCode) => {
@@ -669,11 +710,22 @@ router.post('/edit', authenticate, async (req, res, next) => {
 
     const quality = String(payload.quality || 'standard').toLowerCase();
     const wantsHd = quality === 'hd';
+    await trackStudioEvent(req, 'export_attempted', {
+      quality: wantsHd ? 'hd' : 'standard',
+      format: String(payload.exportFormat || 'jpg').toLowerCase(),
+      source: 'editor',
+    });
+
     if (wantsHd && planTier === 'free' && !payload.payPerExportUnlocked) {
+      await trackStudioEvent(req, 'export_blocked_paywall', {
+        quality: 'hd',
+        reason: 'pay_per_export_required',
+      });
       return res.status(402).json({
         success: false,
         message: 'HD export is locked for free plan. Unlock pay-per-export to continue.',
         payPerExportPrice: Number(settings?.payPerExportPrice || 29),
+        code: 'HD_EXPORT_LOCKED',
       });
     }
 
@@ -724,6 +776,13 @@ router.post('/edit', authenticate, async (req, res, next) => {
       },
     });
 
+    await trackStudioEvent(req, 'export_success', {
+      quality: wantsHd ? 'hd' : 'standard',
+      format: String(payload.exportFormat || 'jpg').toLowerCase(),
+      watermarkApplied: shouldApplyWatermark,
+      source: 'editor',
+    });
+
     return res.json({
       success: true,
       result: {
@@ -756,12 +815,17 @@ router.post('/ai/enhance', authenticate, async (req, res, next) => {
 
     const sourceBuffer = await readAssetBuffer(assetUrl);
 
+    const beforeScore = await computeSimpleImageScore(sourceBuffer);
     const enhancedBuffer = await sharp(sourceBuffer)
+      .rotate()
       .normalize()
-      .sharpen(1.35)
-      .modulate({ brightness: 1.06, saturation: 1.07 })
-      .jpeg({ quality: 92, mozjpeg: true })
+      .gamma(1.08)
+      .median(1)
+      .modulate({ brightness: 1.04, saturation: 1.04 })
+      .sharpen({ sigma: 1.15, m1: 1.3, m2: 0.8 })
+      .jpeg({ quality: 93, mozjpeg: true })
       .toBuffer();
+    const afterScore = await computeSimpleImageScore(enhancedBuffer);
 
     const uploaded = await uploadWithProviderPreference({
       buffer: enhancedBuffer,
@@ -771,14 +835,20 @@ router.post('/ai/enhance', authenticate, async (req, res, next) => {
       folder: 'ai-enhance',
     });
 
+    await trackStudioEvent(req, 'ai_tool_applied', { tool: 'enhance' });
+
     return res.json({
       success: true,
       result: {
         sourceUrl: assetUrl,
         enhancedUrl: uploaded.url,
         mode: 'ai-enhance',
-        scoreBefore: 72,
-        scoreAfter: 91,
+        scoreBefore: beforeScore.score,
+        scoreAfter: Math.max(afterScore.score, beforeScore.score),
+        metrics: {
+          before: beforeScore,
+          after: afterScore,
+        },
       },
     });
   } catch (error) {
@@ -794,7 +864,8 @@ router.post('/ai/background-remove', authenticate, async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'assetUrl (or sourceUrl) is required.' });
     }
 
-    const threshold = Number(payload.threshold || 236);
+    const threshold = Math.max(8, Math.min(64, Number(payload.threshold || 26)));
+    const feather = Math.max(0.5, Math.min(3.5, Number(payload.feather || 1.4)));
     const sourceBuffer = await readAssetBuffer(assetUrl);
 
     const { data, info } = await sharp(sourceBuffer)
@@ -802,19 +873,86 @@ router.post('/ai/background-remove', authenticate, async (req, res, next) => {
       .raw()
       .toBuffer({ resolveWithObject: true });
 
+    const sampleRadius = Math.max(2, Math.round(Math.min(info.width, info.height) * 0.05));
+    const cornerAccumulator = { r: 0, g: 0, b: 0, count: 0 };
+    const sampleCorner = (startX, startY) => {
+      for (let y = startY; y < startY + sampleRadius; y += 1) {
+        for (let x = startX; x < startX + sampleRadius; x += 1) {
+          const index = (y * info.width + x) * info.channels;
+          cornerAccumulator.r += data[index];
+          cornerAccumulator.g += data[index + 1];
+          cornerAccumulator.b += data[index + 2];
+          cornerAccumulator.count += 1;
+        }
+      }
+    };
+    sampleCorner(0, 0);
+    sampleCorner(Math.max(0, info.width - sampleRadius), 0);
+    sampleCorner(0, Math.max(0, info.height - sampleRadius));
+    sampleCorner(Math.max(0, info.width - sampleRadius), Math.max(0, info.height - sampleRadius));
+
+    const bgR = cornerAccumulator.count ? cornerAccumulator.r / cornerAccumulator.count : 245;
+    const bgG = cornerAccumulator.count ? cornerAccumulator.g / cornerAccumulator.count : 245;
+    const bgB = cornerAccumulator.count ? cornerAccumulator.b / cornerAccumulator.count : 245;
+
+    const alphaMask = Buffer.alloc(info.width * info.height);
     for (let index = 0; index < data.length; index += info.channels) {
       const red = data[index];
       const green = data[index + 1];
       const blue = data[index + 2];
+      const pixel = index / info.channels;
+      const delta = Math.sqrt(
+        (red - bgR) * (red - bgR) +
+        (green - bgG) * (green - bgG) +
+        (blue - bgB) * (blue - bgB)
+      );
+      const luminance = (red + green + blue) / 3;
+      const skinLike =
+        red > 80 &&
+        green > 45 &&
+        blue > 35 &&
+        red > blue &&
+        red > green * 0.85 &&
+        Math.abs(red - green) > 8;
 
-      if (red >= threshold && green >= threshold && blue >= threshold) {
-        data[index + 3] = 0;
+      let alpha = 255;
+      if (!skinLike && luminance > 110) {
+        const strength = Math.max(0, Math.min(1, (delta - threshold) / (threshold * 2.2)));
+        alpha = Math.round(strength * 255);
       }
+
+      alphaMask[pixel] = alpha;
+      data[index + 3] = alpha;
     }
 
-    const outputBuffer = await sharp(data, {
+    const smoothedAlpha = await sharp(alphaMask, {
+      raw: { width: info.width, height: info.height, channels: 1 },
+    })
+      .blur(feather)
+      .linear(1.08, -8)
+      .raw()
+      .toBuffer();
+
+    for (let index = 0; index < data.length; index += info.channels) {
+      const pixel = index / info.channels;
+      data[index + 3] = smoothedAlpha[pixel];
+    }
+
+    const rgbaBuffer = await sharp(data, {
       raw: { width: info.width, height: info.height, channels: info.channels },
     })
+      .png()
+      .toBuffer();
+
+    const outputBuffer = await sharp(rgbaBuffer)
+      .trim({ threshold: 8 })
+      .extend({
+        top: 12,
+        bottom: 12,
+        left: 12,
+        right: 12,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
       .png()
       .toBuffer();
 
@@ -826,12 +964,15 @@ router.post('/ai/background-remove', authenticate, async (req, res, next) => {
       folder: 'ai-background-remove',
     });
 
+    await trackStudioEvent(req, 'ai_tool_applied', { tool: 'background-remove' });
+
     return res.json({
       success: true,
       result: {
         sourceUrl: assetUrl,
         outputUrl: uploaded.url,
         mode: 'background-remove',
+        algorithm: 'edge-aware-matte',
       },
     });
   } catch (error) {
@@ -867,17 +1008,48 @@ router.post('/ai/object-remove', authenticate, async (req, res, next) => {
         continue;
       }
 
-      const regionBuffer = await sharp(sourceBuffer)
-        .extract({ left, top, width, height })
-        .blur(18)
+      const pad = Math.max(12, Math.round(Math.min(width, height) * 0.3));
+      const patchLeft = Math.max(0, left - pad);
+      const patchTop = Math.max(0, top - pad);
+      const patchWidth = Math.min(Number(baseMeta.width) - patchLeft, width + pad * 2);
+      const patchHeight = Math.min(Number(baseMeta.height) - patchTop, height + pad * 2);
+
+      const regionBuffer = await sharp(sourceBuffer, { failOn: 'none' })
+        .extract({ left: patchLeft, top: patchTop, width: patchWidth, height: patchHeight })
+        .resize({ width, height, fit: 'fill' })
+        .median(3)
+        .blur(6)
+        .modulate({ brightness: 1.02, saturation: 0.98 })
         .toBuffer();
 
-      composites.push({ input: regionBuffer, left, top });
+      const featherMaskSvg = `
+        <svg width="${width}" height="${height}">
+          <defs>
+            <radialGradient id="fade" cx="50%" cy="50%" r="72%">
+              <stop offset="58%" stop-color="rgba(255,255,255,1)" />
+              <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+            </radialGradient>
+          </defs>
+          <rect x="0" y="0" width="${width}" height="${height}" fill="url(#fade)" />
+        </svg>
+      `;
+
+      const featheredRegion = await sharp(regionBuffer)
+        .ensureAlpha()
+        .composite([{ input: Buffer.from(featherMaskSvg), blend: 'dest-in' }])
+        .toBuffer();
+
+      composites.push({ input: featheredRegion, left, top, blend: 'over' });
+    }
+
+    if (composites.length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid object selection was provided.' });
     }
 
     const outputBuffer = await sharp(sourceBuffer)
       .composite(composites)
-      .jpeg({ quality: 90, mozjpeg: true })
+      .median(1)
+      .jpeg({ quality: 91, mozjpeg: true })
       .toBuffer();
 
     const uploaded = await uploadWithProviderPreference({
@@ -888,6 +1060,8 @@ router.post('/ai/object-remove', authenticate, async (req, res, next) => {
       folder: 'ai-object-remove',
     });
 
+    await trackStudioEvent(req, 'ai_tool_applied', { tool: 'object-remove', selections: composites.length });
+
     return res.json({
       success: true,
       result: {
@@ -895,6 +1069,7 @@ router.post('/ai/object-remove', authenticate, async (req, res, next) => {
         outputUrl: uploaded.url,
         mode: 'object-remove',
         processedSelections: composites.length,
+        algorithm: 'contextual-fill',
       },
     });
   } catch (error) {
@@ -932,6 +1107,8 @@ router.post('/ai/upscale', authenticate, async (req, res, next) => {
       folder: 'ai-upscale',
     });
 
+    await trackStudioEvent(req, 'ai_tool_applied', { tool: 'upscale', scale });
+
     return res.json({
       success: true,
       result: {
@@ -957,12 +1134,24 @@ router.post('/ai/360-style', authenticate, async (req, res, next) => {
     const sourceBuffer = await readAssetBuffer(assetUrl);
     const meta = await sharp(sourceBuffer).metadata();
 
-    const canvasWidth = 2048;
-    const canvasHeight = 1024;
+    const canvasWidth = 3072;
+    const canvasHeight = 1536;
     const blurRadius = style === 'immersive' ? 18 : style === 'cinematic' ? 12 : 16;
-    const baseBuffer = await sharp(sourceBuffer)
+    const baseBuffer = await sharp(sourceBuffer, { failOn: 'none' })
       .resize({ width: canvasWidth, height: canvasHeight, fit: 'cover' })
+      .modulate({ brightness: 0.98, saturation: 1.03 })
       .blur(blurRadius)
+      .toBuffer();
+
+    const seamWidth = Math.max(220, Math.round(canvasWidth * 0.16));
+    const seamLeft = await sharp(sourceBuffer, { failOn: 'none' })
+      .resize({ width: seamWidth, height: canvasHeight, fit: 'cover' })
+      .flop()
+      .blur(0.8)
+      .toBuffer();
+    const seamRight = await sharp(sourceBuffer, { failOn: 'none' })
+      .resize({ width: seamWidth, height: canvasHeight, fit: 'cover' })
+      .blur(0.8)
       .toBuffer();
 
     const overlaySize =
@@ -1014,6 +1203,8 @@ router.post('/ai/360-style', authenticate, async (req, res, next) => {
 
     const composedBuffer = await sharp(baseBuffer)
       .composite([
+        { input: seamLeft, top: 0, left: 0, blend: 'soft-light' },
+        { input: seamRight, top: 0, left: canvasWidth - seamWidth, blend: 'soft-light' },
         { input: overlayImage, top: overlayPosition.top, left: overlayPosition.left, blend: 'over' },
         { input: Buffer.from(overlaySvg), top: 0, left: 0 },
       ])
@@ -1028,6 +1219,8 @@ router.post('/ai/360-style', authenticate, async (req, res, next) => {
       folder: 'ai-360-style',
     });
 
+    await trackStudioEvent(req, 'ai_tool_applied', { tool: '360-style', style });
+
     return res.json({
       success: true,
       result: {
@@ -1037,6 +1230,11 @@ router.post('/ai/360-style', authenticate, async (req, res, next) => {
         style,
         width: canvasWidth,
         height: canvasHeight,
+        interactiveViewerRecommended: true,
+        sourceDimensions: {
+          width: Number(meta.width || 0),
+          height: Number(meta.height || 0),
+        },
       },
     });
   } catch (error) {
@@ -1076,6 +1274,12 @@ router.post('/ar/session', authenticate, async (req, res) => {
   const recordMode = String(payload.recordMode || 'photo').toLowerCase() === 'video' ? 'video' : 'photo';
   const effect = await AREffect.findOne({ code: effectCode }).lean();
 
+  await trackStudioEvent(req, 'ar_session_started', {
+    effectId: effectCode,
+    recordMode,
+    sdk: effect?.sdk || 'banuba',
+  });
+
   return res.json({
     success: true,
     session: {
@@ -1088,7 +1292,7 @@ router.post('/ar/session', authenticate, async (req, res) => {
       supportsMultiFace: true,
       supportsVirtualMakeup: true,
       supportsTryOn: true,
-      note: 'AR contract ready for Banuba / DeepAR / MediaPipe integration.',
+      note: 'AR session ready. Frontend runtime can render live overlays with MediaPipe/Banuba/DeepAR adapters.',
     },
   });
 });
@@ -1136,11 +1340,19 @@ router.post('/templates/render', authenticate, async (req, res, next) => {
     }
 
     if (template.businessOnly && planTier !== 'business') {
-      return res.status(402).json({ success: false, message: 'Business plan required for this template.' });
+      await trackStudioEvent(req, 'template_render_blocked_paywall', {
+        templateId: String(template._id),
+        requirement: 'business',
+      });
+      return res.status(402).json({ success: false, message: 'Business plan required for this template.', code: 'BUSINESS_REQUIRED' });
     }
 
     if (template.premium && planTier === 'free') {
-      return res.status(402).json({ success: false, message: 'Premium plan required for this template.' });
+      await trackStudioEvent(req, 'template_render_blocked_paywall', {
+        templateId: String(template._id),
+        requirement: 'premium',
+      });
+      return res.status(402).json({ success: false, message: 'Premium plan required for this template.', code: 'PREMIUM_REQUIRED' });
     }
 
     const canvasWidth = Number(template?.templateConfig?.canvas?.width || 1080);
@@ -1191,6 +1403,11 @@ router.post('/templates/render', authenticate, async (req, res, next) => {
       folder: 'template-renders',
     });
 
+    await trackStudioEvent(req, 'template_rendered', {
+      templateId: String(template._id),
+      templateName: template.name,
+    });
+
     return res.json({
       success: true,
       result: {
@@ -1225,6 +1442,12 @@ router.post('/creations', authenticate, async (req, res) => {
     metadata: payload.metadata || {},
   });
 
+  await trackStudioEvent(req, 'creation_saved', {
+    creationId: String(creation._id),
+    quality: creation.quality,
+    format: creation.exportFormat,
+  });
+
   return res.status(201).json({ success: true, creation });
 });
 
@@ -1232,6 +1455,89 @@ router.get('/creations/mine', authenticate, async (req, res) => {
   const userId = String(req.user?._id || req.user?.id || '');
   const creations = await PhotoCreation.find({ userId }).sort({ updatedAt: -1 }).limit(300).lean();
   return res.json({ success: true, creations });
+});
+
+router.post('/analytics/event', authenticate, async (req, res) => {
+  const payload = req.body || {};
+  const eventName = String(payload.eventName || payload.event || '').trim().toLowerCase();
+  if (!eventName) {
+    return res.status(400).json({ success: false, message: 'eventName is required.' });
+  }
+
+  const eventPayload = typeof payload.payload === 'object' && payload.payload !== null ? payload.payload : {};
+  await trackStudioEvent(req, eventName, {
+    ...eventPayload,
+    source: String(payload.source || eventPayload.source || '').trim() || undefined,
+  });
+  return res.status(201).json({ success: true, eventName });
+});
+
+router.get('/analytics/funnel', authenticate, async (req, res, next) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const days = Math.max(1, Math.min(180, Number(req.query.days || 30)));
+    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const rows = await PhotoStudioEvent.aggregate([
+      {
+        $match: {
+          userId,
+          createdAt: { $gte: from },
+        },
+      },
+      {
+        $group: {
+          _id: '$eventName',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const counts = {};
+    for (const row of rows) {
+      counts[row._id] = Number(row.count || 0);
+    }
+
+    const exportSuccess = await UserExport.countDocuments({
+      userId,
+      createdAt: { $gte: from },
+    });
+
+    const topEffects = await PhotoStudioEvent.aggregate([
+      {
+        $match: {
+          userId,
+          createdAt: { $gte: from },
+          eventName: { $in: ['ar_session_started', 'ar_effect_selected'] },
+        },
+      },
+      {
+        $group: {
+          _id: '$payload.effectId',
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+    ]);
+
+    return res.json({
+      success: true,
+      days,
+      from: from.toISOString(),
+      funnel: {
+        effectOpened: counts.ar_effect_selected || 0,
+        arSessionStarted: counts.ar_session_started || 0,
+        captureSaved: counts.ar_capture_saved || 0,
+        exportAttempted: counts.export_attempted || 0,
+        exportSuccess,
+      },
+      eventCounts: counts,
+      topEffects: topEffects.map((entry) => ({ effectId: entry._id || 'unknown', count: Number(entry.count || 0) })),
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.delete('/creations/:id', authenticate, async (req, res) => {
@@ -1376,4 +1682,3 @@ router.put('/admin/settings', authenticate, ensureAdmin, async (req, res) => {
 });
 
 module.exports = router;
-

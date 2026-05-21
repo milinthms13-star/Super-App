@@ -87,6 +87,28 @@ const QUICK_FILTER_PRESETS = {
 
 const QUICK_STICKERS = ["✨", "❤️", "🌸", "👑", "🕶️", "🎉", "🪔", "⭐"];
 
+const EXPORT_PRESETS = [
+  { id: "square", label: "Instagram Post 1080x1080", width: 1080, height: 1080 },
+  { id: "story", label: "Instagram/WhatsApp Story 1080x1920", width: 1080, height: 1920 },
+  { id: "reel", label: "Reels Cover 1080x1350", width: 1080, height: 1350 },
+  { id: "product", label: "Product Square 1200x1200", width: 1200, height: 1200 },
+  { id: "youtube", label: "YouTube Thumbnail 1280x720", width: 1280, height: 720 },
+];
+
+const STEP_LABELS = {
+  upload: "Uploading asset",
+  edit: "Applying studio edit",
+  "ai-enhance": "AI enhancing image",
+  "ai-background": "Removing background",
+  "ai-object": "Removing objects",
+  "ai-upscale": "Upscaling image",
+  caption: "Generating caption",
+  "ar-session": "Starting AR session",
+  "template-render": "Rendering template",
+  "save-creation": "Saving creation",
+  "ai-360": "Rendering 360 image",
+};
+
 const toTagList = (value = "") =>
   String(value || "")
     .split(/[,\n]+/)
@@ -109,6 +131,8 @@ const PhotoStudioAIAR = () => {
   const [exportUnlock, setExportUnlock] = useState(false);
   const [studio360Style, setStudio360Style] = useState("spherical");
   const [studio360Result, setStudio360Result] = useState(null);
+  const [viewerPan, setViewerPan] = useState(50);
+  const [viewerDragStart, setViewerDragStart] = useState(null);
   const [quickFilter, setQuickFilter] = useState("Normal");
   const [quickSticker, setQuickSticker] = useState("✨");
   const [quickCaption, setQuickCaption] = useState("");
@@ -116,12 +140,17 @@ const PhotoStudioAIAR = () => {
   const [quickContrast, setQuickContrast] = useState(100);
   const [quickBlur, setQuickBlur] = useState(0);
   const [quickRotation, setQuickRotation] = useState(0);
+  const [exportPreset, setExportPreset] = useState("square");
+  const [paywallState, setPaywallState] = useState({ open: false, message: "", code: "" });
 
   const [arConfig, setArConfig] = useState({
     effectId: "live-face-filter",
     recordMode: "photo",
   });
   const [arSession, setArSession] = useState(null);
+  const [arRuntimeOn, setArRuntimeOn] = useState(false);
+  const [arRuntimeStatus, setArRuntimeStatus] = useState("Camera not started");
+  const [arFacesDetected, setArFacesDetected] = useState(0);
 
   const [captionContext, setCaptionContext] = useState("");
   const [captionResult, setCaptionResult] = useState(null);
@@ -147,6 +176,13 @@ const PhotoStudioAIAR = () => {
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const quickCanvasRef = useRef(null);
+  const arVideoRef = useRef(null);
+  const arCanvasRef = useRef(null);
+  const arStreamRef = useRef(null);
+  const arRenderRafRef = useRef(null);
+  const arFaceDetectorRef = useRef(null);
+  const arAnchorRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const arFrameCounterRef = useRef(0);
 
   const token = getStoredAuthToken();
   const isAuthenticated = Boolean(token);
@@ -213,9 +249,24 @@ const PhotoStudioAIAR = () => {
     return `${baseFilter} brightness(${quickBrightness}%) contrast(${quickContrast}%) blur(${quickBlur}px)`;
   }, [quickBlur, quickBrightness, quickContrast, quickFilter]);
 
+  const currentStepLabel = useMemo(() => {
+    if (!busyKey) return "";
+    return STEP_LABELS[busyKey] || "Processing";
+  }, [busyKey]);
+
   useEffect(() => {
     setStudio360Result(null);
+    setViewerPan(50);
   }, [currentAssetUrl]);
+
+  useEffect(() => {
+    const preset = EXPORT_PRESETS.find((item) => item.id === exportPreset);
+    if (!preset) return;
+    setEditor((current) => ({
+      ...current,
+      resize: { width: preset.width, height: preset.height },
+    }));
+  }, [exportPreset]);
 
   const loadMeta = useCallback(async () => {
     if (!isAuthenticated) {
@@ -321,6 +372,265 @@ const PhotoStudioAIAR = () => {
       .filter(Boolean);
   }, [objectSelections]);
 
+  const trackEvent = useCallback(
+    async (eventName, payload = {}) => {
+      if (!eventName || !isAuthenticated) return;
+      try {
+        await request("post", "/photo-studio/analytics/event", {
+          eventName,
+          source: "photo-studio-module",
+          payload,
+        });
+      } catch (_error) {
+        // analytics must not block UX
+      }
+    },
+    [isAuthenticated, request]
+  );
+
+  const closePaywall = useCallback(() => {
+    setPaywallState({ open: false, message: "", code: "" });
+  }, []);
+
+  const openPaywall = useCallback((error) => {
+    const message = error?.response?.data?.message || "This feature is locked for your current plan.";
+    const code = error?.response?.data?.code || "FEATURE_LOCKED";
+    setPaywallState({ open: true, message, code });
+  }, []);
+
+  const paintArOverlay = useCallback((ctx, anchor, effectId) => {
+    const normalized = String(effectId || "").toLowerCase();
+    const centerX = anchor.x + anchor.width / 2;
+    const centerY = anchor.y + anchor.height / 2;
+
+    if (normalized.includes("background")) {
+      ctx.fillStyle = "rgba(15, 23, 42, 0.22)";
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+      ctx.fillRect(0, ctx.canvas.height * 0.62, ctx.canvas.width, ctx.canvas.height * 0.38);
+    }
+
+    if (normalized.includes("makeup")) {
+      ctx.fillStyle = "rgba(244, 114, 182, 0.20)";
+      ctx.beginPath();
+      ctx.ellipse(centerX - anchor.width * 0.2, centerY + anchor.height * 0.1, anchor.width * 0.14, anchor.height * 0.08, 0, 0, Math.PI * 2);
+      ctx.ellipse(centerX + anchor.width * 0.2, centerY + anchor.height * 0.1, anchor.width * 0.14, anchor.height * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(251, 113, 133, 0.26)";
+      ctx.fillRect(centerX - anchor.width * 0.16, centerY + anchor.height * 0.24, anchor.width * 0.32, anchor.height * 0.06);
+    }
+
+    if (normalized.includes("hair")) {
+      ctx.fillStyle = "rgba(168, 85, 247, 0.22)";
+      ctx.beginPath();
+      ctx.ellipse(centerX, anchor.y + anchor.height * 0.08, anchor.width * 0.56, anchor.height * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (normalized.includes("jewellery")) {
+      ctx.strokeStyle = "rgba(250, 204, 21, 0.95)";
+      ctx.lineWidth = Math.max(2, anchor.width * 0.02);
+      ctx.beginPath();
+      ctx.arc(centerX, centerY + anchor.height * 0.5, anchor.width * 0.18, 0.1 * Math.PI, 0.9 * Math.PI);
+      ctx.stroke();
+    }
+
+    if (
+      normalized.includes("glasses") ||
+      normalized.includes("live-face") ||
+      normalized.includes("sticker") ||
+      normalized.includes("multi-face")
+    ) {
+      const eyeY = centerY - anchor.height * 0.08;
+      const eyeW = anchor.width * 0.28;
+      const eyeH = anchor.height * 0.17;
+      ctx.fillStyle = "rgba(15, 23, 42, 0.34)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.82)";
+      ctx.lineWidth = Math.max(2, anchor.width * 0.015);
+      ctx.beginPath();
+      ctx.rect(centerX - eyeW * 2.1, eyeY - eyeH / 2, eyeW, eyeH);
+      ctx.rect(centerX + eyeW * 1.1, eyeY - eyeH / 2, eyeW, eyeH);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(centerX - eyeW * 1.1, eyeY);
+      ctx.lineTo(centerX + eyeW * 1.1, eyeY);
+      ctx.stroke();
+    }
+  }, []);
+
+  const stopArRuntime = useCallback(() => {
+    if (arRenderRafRef.current) {
+      cancelAnimationFrame(arRenderRafRef.current);
+      arRenderRafRef.current = null;
+    }
+    const stream = arStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    arStreamRef.current = null;
+    if (arVideoRef.current) {
+      arVideoRef.current.srcObject = null;
+    }
+    setArRuntimeOn(false);
+    setArFacesDetected(0);
+    setArRuntimeStatus("Camera stopped");
+  }, []);
+
+  const startArRuntime = useCallback(async () => {
+    const video = arVideoRef.current;
+    const canvas = arCanvasRef.current;
+    if (!video || !canvas) {
+      pushStatus("error", "AR camera surface is not ready.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      arStreamRef.current = stream;
+      video.srcObject = stream;
+      await video.play();
+
+      const FaceDetectorClass = window.FaceDetector;
+      if (FaceDetectorClass) {
+        arFaceDetectorRef.current = new FaceDetectorClass({ fastMode: true, maxDetectedFaces: 2 });
+        setArRuntimeStatus("AR running with face detection");
+      } else {
+        arFaceDetectorRef.current = null;
+        setArRuntimeStatus("AR running in compatibility mode");
+      }
+
+      setArRuntimeOn(true);
+
+      const render = async () => {
+        const context = canvas.getContext("2d");
+        if (!context || !video.videoWidth || !video.videoHeight) {
+          arRenderRafRef.current = requestAnimationFrame(render);
+          return;
+        }
+
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+        }
+
+        context.save();
+        context.scale(-1, 1);
+        context.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+        context.restore();
+
+        let anchor = {
+          x: canvas.width * 0.28,
+          y: canvas.height * 0.2,
+          width: canvas.width * 0.44,
+          height: canvas.height * 0.52,
+        };
+
+        let detectedFaces = 0;
+        const detector = arFaceDetectorRef.current;
+        if (detector && arFrameCounterRef.current % 2 === 0) {
+          try {
+            const faces = await detector.detect(video);
+            detectedFaces = Array.isArray(faces) ? faces.length : 0;
+            if (detectedFaces > 0) {
+              const box = faces[0].boundingBox || {};
+              const mirroredX = canvas.width - (Number(box.x || 0) + Number(box.width || 0));
+              anchor = {
+                x: mirroredX,
+                y: Number(box.y || 0),
+                width: Number(box.width || anchor.width),
+                height: Number(box.height || anchor.height),
+              };
+            }
+          } catch (_error) {
+            // continue in compatibility mode
+          }
+        }
+        arFrameCounterRef.current += 1;
+
+        setArFacesDetected(detectedFaces);
+        const previous = arAnchorRef.current;
+        const smooth = 0.25;
+        const smoothedAnchor = {
+          x: previous.width ? previous.x + (anchor.x - previous.x) * smooth : anchor.x,
+          y: previous.height ? previous.y + (anchor.y - previous.y) * smooth : anchor.y,
+          width: previous.width ? previous.width + (anchor.width - previous.width) * smooth : anchor.width,
+          height: previous.height ? previous.height + (anchor.height - previous.height) * smooth : anchor.height,
+        };
+        arAnchorRef.current = smoothedAnchor;
+        paintArOverlay(context, smoothedAnchor, arConfig.effectId);
+        arRenderRafRef.current = requestAnimationFrame(render);
+      };
+
+      arRenderRafRef.current = requestAnimationFrame(render);
+    } catch (error) {
+      const message = error?.message || "Camera permission denied.";
+      pushStatus("error", message);
+      setArRuntimeStatus("Camera permission denied");
+      stopArRuntime();
+    }
+  }, [arConfig.effectId, paintArOverlay, pushStatus, stopArRuntime]);
+
+  const handleCaptureArFrame = useCallback(() => {
+    const canvas = arCanvasRef.current;
+    if (!canvas) {
+      pushStatus("error", "AR canvas is not ready.");
+      return;
+    }
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) {
+          pushStatus("error", "Failed to capture AR frame.");
+          return;
+        }
+        await withBusy("upload", async () => {
+          try {
+            const formData = new FormData();
+            formData.append("file", blob, `ar-capture-${Date.now()}.jpg`);
+            formData.append("source", "ar-camera");
+            formData.append("storageProvider", "auto");
+            const result = await request(
+              "post",
+              "/photo-studio/upload",
+              formData,
+              null,
+              { "Content-Type": "multipart/form-data" }
+            );
+            const uploadData = result?.upload;
+            if (!uploadData?.url) {
+              pushStatus("error", "AR capture upload failed.");
+              return;
+            }
+            setUploadedAsset(uploadData);
+            setHistoryStack([uploadData.url]);
+            setHistoryIndex(0);
+            setBeforeAfterSplit(50);
+            trackEvent("ar_capture_saved", { effectId: arConfig.effectId });
+            pushStatus("success", "AR frame captured and loaded into editor.");
+          } catch (error) {
+            pushStatus("error", error?.response?.data?.message || "AR capture upload failed.");
+          }
+        });
+      },
+      "image/jpeg",
+      0.94
+    );
+  }, [arConfig.effectId, pushStatus, request, trackEvent, withBusy]);
+
+  useEffect(() => {
+    if (tab !== "ar" && arRuntimeOn) {
+      stopArRuntime();
+    }
+  }, [arRuntimeOn, stopArRuntime, tab]);
+
+  useEffect(() => {
+    return () => {
+      stopArRuntime();
+    };
+  }, [stopArRuntime]);
+
   const uploadFile = useCallback(
     async (file, source = "gallery") => {
       if (!file) return;
@@ -353,13 +663,14 @@ const PhotoStudioAIAR = () => {
           setHistoryStack([uploadData.url]);
           setHistoryIndex(0);
           setBeforeAfterSplit(50);
+          trackEvent("asset_uploaded", { source, provider: uploadData.provider || "unknown" });
           pushStatus("success", `Uploaded from ${source}. Provider: ${uploadData.provider}`);
         } catch (error) {
           pushStatus("error", error?.response?.data?.message || "Upload failed.");
         }
       });
     },
-    [pushStatus, request, withBusy]
+    [pushStatus, request, trackEvent, withBusy]
   );
 
   const pushHistoryUrl = useCallback((url) => {
@@ -379,6 +690,11 @@ const PhotoStudioAIAR = () => {
 
     await withBusy("edit", async () => {
       try {
+        trackEvent("export_attempted", {
+          quality: editor.quality,
+          format: editor.exportFormat,
+          source: "editor",
+        });
         const result = await request("post", "/photo-studio/edit", {
           assetUrl: currentAssetUrl,
           operations: editor.operations,
@@ -402,15 +718,23 @@ const PhotoStudioAIAR = () => {
           return;
         }
         pushHistoryUrl(afterUrl);
+        trackEvent("export_success", {
+          quality: editor.quality,
+          format: editor.exportFormat,
+          source: "editor",
+        });
         pushStatus("success", "Edit applied with history update.");
       } catch (error) {
         const paymentHint = error?.response?.status === 402
           ? ` Unlock HD at Rs.${planRules.payPerExportPrice || 29}.`
           : "";
+        if (error?.response?.status === 402) {
+          openPaywall(error);
+        }
         pushStatus("error", `${error?.response?.data?.message || "Failed to apply edit."}${paymentHint}`);
       }
     });
-  }, [currentAssetUrl, editor, exportUnlock, historyStack, planRules.payPerExportPrice, pushHistoryUrl, pushStatus, request, withBusy]);
+  }, [currentAssetUrl, editor, exportUnlock, historyStack, openPaywall, planRules.payPerExportPrice, pushHistoryUrl, pushStatus, request, trackEvent, withBusy]);
 
   const runAiTool = useCallback(async (toolKey) => {
     if (!currentAssetUrl) {
@@ -450,12 +774,16 @@ const PhotoStudioAIAR = () => {
           pushHistoryUrl(outputUrl);
         }
         setAiResult(result?.result || null);
+        trackEvent("ai_tool_applied", { tool: toolKey });
         pushStatus("success", `AI ${toolKey} completed.`);
       } catch (error) {
+        if (error?.response?.status === 402) {
+          openPaywall(error);
+        }
         pushStatus("error", error?.response?.data?.message || `AI ${toolKey} failed.`);
       }
     });
-  }, [currentAssetUrl, parseSelections, pushHistoryUrl, pushStatus, request, withBusy]);
+  }, [currentAssetUrl, openPaywall, parseSelections, pushHistoryUrl, pushStatus, request, trackEvent, withBusy]);
 
   const handleGenerateCaption = useCallback(async () => {
     await withBusy("caption", async () => {
@@ -477,12 +805,16 @@ const PhotoStudioAIAR = () => {
       try {
         const result = await request("post", "/photo-studio/ar/session", arConfig);
         setArSession(result?.session || null);
-        pushStatus("success", "AR session configured. Grant camera permission in app.");
+        trackEvent("ar_effect_selected", { effectId: arConfig.effectId, mode: arConfig.recordMode });
+        pushStatus("success", "AR session configured. Start live camera to preview overlays.");
       } catch (error) {
+        if (error?.response?.status === 402) {
+          openPaywall(error);
+        }
         pushStatus("error", error?.response?.data?.message || "Failed to configure AR session.");
       }
     });
-  }, [arConfig, pushStatus, request, withBusy]);
+  }, [arConfig, openPaywall, pushStatus, request, trackEvent, withBusy]);
 
   const handleGenerate360 = useCallback(async () => {
     if (!currentAssetUrl) {
@@ -502,15 +834,19 @@ const PhotoStudioAIAR = () => {
         if (outputUrl) {
           setStudio360Result(outputUrl);
           pushHistoryUrl(outputUrl);
+          trackEvent("ai_tool_applied", { tool: "360-style", style: studio360Style });
           pushStatus("success", "360° image created successfully.");
         } else {
           pushStatus("error", "360° render completed but no output was returned.");
         }
       } catch (error) {
+        if (error?.response?.status === 402) {
+          openPaywall(error);
+        }
         pushStatus("error", error?.response?.data?.message || "360° generation failed.");
       }
     });
-  }, [currentAssetUrl, pushHistoryUrl, pushStatus, request, studio360Style, withBusy]);
+  }, [currentAssetUrl, openPaywall, pushHistoryUrl, pushStatus, request, studio360Style, trackEvent, withBusy]);
 
   const handleRenderTemplate = useCallback(async () => {
     if (!selectedTemplateId) {
@@ -532,12 +868,16 @@ const PhotoStudioAIAR = () => {
         if (renderedUrl) {
           pushHistoryUrl(renderedUrl);
         }
+        trackEvent("template_rendered", { templateId: selectedTemplateId || "unknown" });
         pushStatus("success", "Template rendered successfully.");
       } catch (error) {
+        if (error?.response?.status === 402) {
+          openPaywall(error);
+        }
         pushStatus("error", error?.response?.data?.message || "Template render failed.");
       }
     });
-  }, [currentAssetUrl, pushHistoryUrl, pushStatus, request, selectedTemplateId, templateSubtitle, templateTitle, withBusy]);
+  }, [currentAssetUrl, openPaywall, pushHistoryUrl, pushStatus, request, selectedTemplateId, templateSubtitle, templateTitle, trackEvent, withBusy]);
 
   const handleSaveCreation = useCallback(async () => {
     if (!currentAssetUrl) {
@@ -567,13 +907,14 @@ const PhotoStudioAIAR = () => {
           },
         });
         setSaveTitle("");
+        trackEvent("creation_saved", { historyLength: historyStack.length });
         pushStatus("success", "Creation saved.");
         loadMyCreations();
       } catch (error) {
         pushStatus("error", error?.response?.data?.message || "Failed to save creation.");
       }
     });
-  }, [aiResult, arSession?.effectId, captionResult?.caption, captionResult?.hashtags, currentAssetUrl, editor.exportFormat, editor.filters, editor.operations, editor.quality, historyStack.length, initialAssetUrl, loadMyCreations, planTier, pushStatus, request, saveTitle, selectedTemplateId, withBusy]);
+  }, [aiResult, arSession?.effectId, captionResult?.caption, captionResult?.hashtags, currentAssetUrl, editor.exportFormat, editor.filters, editor.operations, editor.quality, historyStack.length, initialAssetUrl, loadMyCreations, planTier, pushStatus, request, saveTitle, selectedTemplateId, trackEvent, withBusy]);
 
   const handleDeleteCreation = useCallback(async (id) => {
     await withBusy(`delete-${id}`, async () => {
@@ -658,15 +999,24 @@ const PhotoStudioAIAR = () => {
     });
   }, [planRules, pushStatus, request, withBusy]);
 
-  const handleQuickBackgroundRemove = useCallback(() => {
-    pushStatus("success", "AI background removal placeholder active. Connect /photo-studio/ai/background-remove for production.");
-  }, [pushStatus]);
+  const handleQuickBackgroundRemove = useCallback(async () => {
+    if (!currentAssetUrl) {
+      pushStatus("error", "Upload an image first for quick background remove.");
+      return;
+    }
+    await runAiTool("background");
+  }, [currentAssetUrl, pushStatus, runAiTool]);
 
   const handleQuickExport = useCallback(() => {
     if (!currentAssetUrl) {
       pushStatus("error", "Upload an image first to export from Quick 10/10 Studio.");
       return;
     }
+    trackEvent("export_attempted", {
+      quality: editor.quality,
+      format: editor.exportFormat,
+      source: "quick-studio",
+    });
 
     const canvas = quickCanvasRef.current;
     if (!canvas) {
@@ -717,6 +1067,11 @@ const PhotoStudioAIAR = () => {
       anchor.href = canvas.toDataURL(`image/${format}`);
       anchor.click();
 
+      trackEvent("export_success", {
+        quality: editor.quality,
+        format: editor.exportFormat,
+        source: "quick-studio",
+      });
       pushStatus("success", "Quick 10/10 export completed.");
     };
 
@@ -726,6 +1081,7 @@ const PhotoStudioAIAR = () => {
   }, [
     currentAssetUrl,
     editor.exportFormat,
+    editor.quality,
     editor.resize?.height,
     editor.resize?.width,
     pushStatus,
@@ -733,6 +1089,7 @@ const PhotoStudioAIAR = () => {
     quickFilterStyle,
     quickRotation,
     quickSticker,
+    trackEvent,
   ]);
 
   return (
@@ -932,6 +1289,16 @@ const PhotoStudioAIAR = () => {
 
               <div className="photostudio-grid two">
                 <label>
+                  Export preset
+                  <select value={exportPreset} onChange={(event) => setExportPreset(event.target.value)}>
+                    {EXPORT_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
                   Resize Width
                   <input
                     type="number"
@@ -1082,6 +1449,7 @@ const PhotoStudioAIAR = () => {
               <p>History: {historyIndex + 1} / {historyStack.length || 0}</p>
               <p>Current URL: {currentAssetUrl || "N/A"}</p>
               <p>Available tools: {availableEditTools.join(", ")}</p>
+              {currentStepLabel ? <p className="photostudio-progress-line">Processing: {currentStepLabel}...</p> : null}
 
               <div className="photostudio-upgrade-panel">
                 <h3>Quick 10/10 Studio (Merged Upgrade)</h3>
@@ -1185,7 +1553,7 @@ const PhotoStudioAIAR = () => {
 
                 <div className="photostudio-inline-actions">
                   <button type="button" onClick={handleQuickBackgroundRemove}>
-                    AI Background Remove (Placeholder)
+                    AI Background Remove
                   </button>
                   <button type="button" onClick={handleQuickExport}>
                     Export Quick 10/10 Image
@@ -1200,14 +1568,18 @@ const PhotoStudioAIAR = () => {
 
       {tab === "ar" ? (
         <section className="photostudio-card">
-          <h2>AR Camera Contract</h2>
+          <h2>AR Camera Runtime</h2>
           <div className="photostudio-grid two">
             <div className="photostudio-form">
               <label>
                 AR Effect
                 <select
                   value={arConfig.effectId}
-                  onChange={(event) => setArConfig((current) => ({ ...current, effectId: event.target.value }))}
+                  onChange={(event) => {
+                    const nextEffect = event.target.value;
+                    setArConfig((current) => ({ ...current, effectId: nextEffect }));
+                    trackEvent("ar_effect_selected", { effectId: nextEffect });
+                  }}
                 >
                   {availableArEffects.map((effect) => (
                     <option key={effect.code || effect._id} value={effect.code}>
@@ -1229,8 +1601,30 @@ const PhotoStudioAIAR = () => {
               <button type="button" onClick={handleStartArSession} disabled={busyKey === "ar-session"}>
                 {busyKey === "ar-session" ? "Starting..." : "Start AR Session"}
               </button>
+              <div className="photostudio-inline-actions">
+                <button type="button" onClick={startArRuntime} disabled={arRuntimeOn}>
+                  {arRuntimeOn ? "AR Live" : "Start Live Camera"}
+                </button>
+                <button type="button" onClick={stopArRuntime} disabled={!arRuntimeOn}>
+                  Stop Camera
+                </button>
+                <button type="button" onClick={handleCaptureArFrame} disabled={!arRuntimeOn}>
+                  Capture AR Frame
+                </button>
+              </div>
+              <small>
+                Real-time AR uses built-in browser face detection when available; on older devices it runs in compatibility mode.
+              </small>
             </div>
             <div>
+              <h3>Live Preview</h3>
+              <div className="photostudio-ar-runtime">
+                <video ref={arVideoRef} className="photostudio-ar-video" playsInline muted />
+                <canvas ref={arCanvasRef} className="photostudio-ar-canvas" />
+                {!arRuntimeOn ? <div className="photostudio-ar-placeholder">Start Live Camera to preview AR effects</div> : null}
+              </div>
+              <p>Status: {arRuntimeStatus}</p>
+              <p>Faces detected: {arFacesDetected}</p>
               <h3>Session</h3>
               <p>Effect: {arSession?.effectName || "N/A"}</p>
               <p>SDK: {arSession?.sdk || "N/A"}</p>
@@ -1283,8 +1677,22 @@ const PhotoStudioAIAR = () => {
               <div className="photostudio-360-viewer">
                 {studio360Result ? (
                   <div
-                    className="viewer-360"
-                    style={{ backgroundImage: `url(${studio360Result})` }}
+                    className="viewer-360 interactive"
+                    style={{
+                      backgroundImage: `url(${studio360Result})`,
+                      backgroundPosition: `${viewerPan}% 50%`,
+                    }}
+                    onPointerDown={(event) => {
+                      setViewerDragStart({ x: event.clientX, pan: viewerPan });
+                    }}
+                    onPointerMove={(event) => {
+                      if (!viewerDragStart) return;
+                      const delta = event.clientX - viewerDragStart.x;
+                      const nextPan = Math.max(0, Math.min(100, viewerDragStart.pan + delta * 0.09));
+                      setViewerPan(nextPan);
+                    }}
+                    onPointerUp={() => setViewerDragStart(null)}
+                    onPointerLeave={() => setViewerDragStart(null)}
                   />
                 ) : currentAssetUrl ? (
                   <div
@@ -1649,6 +2057,30 @@ const PhotoStudioAIAR = () => {
               </article>
             ))}
           </div>
+        </section>
+      ) : null}
+
+      {paywallState.open ? (
+        <section className="photostudio-card photostudio-paywall">
+          <h2>Unlock Premium Output</h2>
+          <p>{paywallState.message}</p>
+          <p>Pay-per-HD unlock: Rs.{planRules.payPerExportPrice || 29}</p>
+          <div className="photostudio-inline-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setExportUnlock(true);
+                closePaywall();
+                pushStatus("success", "HD unlock enabled for this session. Retry your action.");
+              }}
+            >
+              Unlock HD For This Export
+            </button>
+            <button type="button" onClick={closePaywall}>
+              Continue With Free Mode
+            </button>
+          </div>
+          <small>Code: {paywallState.code}</small>
         </section>
       ) : null}
 

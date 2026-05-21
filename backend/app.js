@@ -316,6 +316,7 @@ app.use('/api/matrimonial', require('./routes/matrimonial-seo'));
 app.use('/api/jobportal', require('./routes/jobportal'));
 app.use('/api/hotelbooking', require('./routes/hotelbooking'));
 app.use('/api/hotelbookings', require('./routes/hotelbooking'));
+app.use('/api/gulfservices', require('./routes/gulfservices'));
 
 app.use(errorHandler);
 

@@ -91,19 +91,53 @@ export const buildSubtitlesFromScenes = (scenes = []) => {
   });
 };
 
-export const normalizeSceneForRender = (scene, index) => ({
-  id: index + 1,
-  title: sanitizeText(scene?.title || `Scene ${index + 1}`),
-  description: sanitizeText(scene?.description || scene?.summary || ""),
-  dialogue: sanitizeText(scene?.dialogue || "Narration continues."),
-  emotion: sanitizeText(scene?.emotion || "wonder"),
-  background: sanitizeText(scene?.background || ""),
-  weather: sanitizeText(scene?.weather || ""),
-  timeOfDay: sanitizeText(scene?.timeOfDay || ""),
-  cameraActions: sanitizeText(scene?.cameraActions || "soft pan"),
-  durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
-  characters: Array.isArray(scene?.characters) ? scene.characters : [],
-});
+export const normalizeSceneForRender = (scene, index) => {
+  const title = sanitizeText(scene?.title || `Scene ${index + 1}`);
+  const description = sanitizeText(scene?.description || scene?.summary || "");
+  const dialogue = sanitizeText(scene?.dialogue || "Narration continues.");
+  const contractInput = scene?.sceneContract && typeof scene.sceneContract === "object"
+    ? scene.sceneContract
+    : {};
+  const cameraActions = sanitizeText(contractInput.cameraActions || scene?.cameraActions || "soft pan");
+  const background = sanitizeText(contractInput.background || scene?.background || description || title);
+  const weather = sanitizeText(contractInput.weather || scene?.weather || "sunny");
+  const timeOfDay = sanitizeText(contractInput.timeOfDay || scene?.timeOfDay || "Morning");
+  const sceneContract = {
+    cameraActions,
+    background,
+    weather,
+    timeOfDay,
+  };
+  const environmentMotifs = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(scene?.environmentMotifs) ? scene.environmentMotifs : []),
+        background,
+        weather,
+        timeOfDay,
+      ]
+        .map((item) => sanitizeText(item).toLowerCase())
+        .filter(Boolean)
+    )
+  );
+
+  return {
+    id: Number(scene?.id) || index + 1,
+    title,
+    description,
+    dialogue,
+    emotion: sanitizeText(scene?.emotion || "wonder"),
+    background,
+    weather,
+    timeOfDay,
+    cameraActions,
+    sceneContract,
+    environmentMotifs,
+    durationSeconds: Math.max(2, Math.min(15, Number(scene?.durationSeconds) || 4)),
+    characters: Array.isArray(scene?.characters) ? scene.characters : [],
+    spokenLines: Array.isArray(scene?.spokenLines) ? scene.spokenLines : [],
+  };
+};
 
 export const normalizeScenesForRender = (scenes = []) =>
   (Array.isArray(scenes) ? scenes : []).map((scene, index) => normalizeSceneForRender(scene, index));
