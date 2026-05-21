@@ -86,7 +86,16 @@ const danceDuetJobSchema = new mongoose.Schema(
 
 danceDuetJobSchema.index({ userEmail: 1, createdAt: -1 });
 danceDuetJobSchema.index({ userEmail: 1, status: 1, createdAt: -1 });
-danceDuetJobSchema.index({ userEmail: 1, 'requestMetadata.idempotencyKey': 1, createdAt: -1 });
+danceDuetJobSchema.index(
+  { userEmail: 1, 'requestMetadata.idempotencyKey': 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      'requestMetadata.idempotencyKey': { $exists: true, $ne: '' },
+      status: { $in: ['queued', 'processing', 'completed'] },
+    },
+  }
+);
 danceDuetJobSchema.index({ status: 1, 'processing.nextRetryAt': 1, createdAt: 1 });
 
 module.exports =

@@ -14,8 +14,13 @@ const rateLimit = require('express-rate-limit');
 
 const logger = require('../utils/logger');
 const { authenticate, verifyAdmin, optionalToken } = require('../middleware/auth');
+const { sendEmergencyAlert } = require('../utils/notifications');
+const { scanFile } = require('../utils/virusScan');
 
 const router = express.Router();
+
+const StripeLib = require('stripe');
+const stripe = process.env.STRIPE_SECRET ? StripeLib(process.env.STRIPE_SECRET) : null;
 
 const {
   GulfVisaRequest,
@@ -391,17 +396,28 @@ router.post('/visa/enquire', applicationLimiter, async (req, res) => {
   }
 });
 
-router.get('/visa/track/:requestId', async (req, res) => {
+router.get('/visa/track/:requestId', optionalToken, async (req, res) => {
   try {
-    const requesterEmail = String(req.query.email || '').trim().toLowerCase();
-    if (!requesterEmail) {
+    const queryEmail = String(req.query.email || '').trim().toLowerCase();
+    const authEmail = resolveUserEmail(req);
+
+    if (!authEmail && !queryEmail) {
       return res.status(400).json({ success: false, message: 'Email is required to track this request.' });
     }
 
     const visaRequest = await GulfVisaRequest.findOne({ requestId: req.params.requestId });
     if (!visaRequest) return res.status(404).json({ success: false, message: 'Visa request not found.' });
-    if (String(visaRequest.email || '').trim().toLowerCase() !== requesterEmail) {
-      return res.status(403).json({ success: false, message: 'You are not authorized to access this request.' });
+
+    const ownerEmail = String(visaRequest.email || '').trim().toLowerCase();
+    // Allow if authenticated owner or admin, otherwise require matching email query param
+    if (authEmail) {
+      if (authEmail !== ownerEmail && !(req.user && req.user.isAdmin)) {
+        return res.status(403).json({ success: false, message: 'You are not authorized to access this request.' });
+      }
+    } else {
+      if (ownerEmail !== queryEmail) {
+        return res.status(403).json({ success: false, message: 'You are not authorized to access this request.' });
+      }
     }
 
     res.json({
@@ -515,6 +531,26 @@ router.post('/jobs/:jobId/apply', applicationLimiter, documentUploadLimiter, opt
       createdAt: new Date(),
     });
 
+    // Basic virus-scan placeholder for uploaded CV
+    if (req.file && req.file.path) {
+      try {
+        await scanFile(req.file.path);
+      } catch (scanErr) {
+        // cleanup: remove created records and uploaded file
+        try {
+          if (application && application._id) await GulfJobApplication.findByIdAndDelete(application._id);
+        } catch (e) {
+          logger.error('cleanup error after failed scan (application):', e);
+        }
+        try {
+          if (req.file && req.file.path) fs.unlinkSync(req.file.path);
+        } catch (e) {
+          logger.error('cleanup error after failed scan (file):', e);
+        }
+        return res.status(400).json({ success: false, message: 'Uploaded CV failed security checks.' });
+      }
+    }
+
     // Also persist into the unified Gulf application workflow tracker.
     await GulfApplication.create({
       userId: resolveUserId(req),
@@ -621,6 +657,36 @@ router.get('/admin/applications', authenticate, verifyAdmin, async (req, res) =>
   }
 });
 
+router.get('/admin/analytics', authenticate, verifyAdmin, async (req, res) => {
+  try {
+    const [applications, pendingRecruiters, activeRecruiters, attestations, emergencies, jobApplications] = await Promise.all([
+      GulfApplication.aggregate([
+        { $group: { _id: '$visaStatus', count: { $sum: 1 } } },
+      ]),
+      GulfRecruiter.countDocuments({ status: 'pending' }),
+      GulfRecruiter.countDocuments({ verified: true, status: 'active' }),
+      GulfAttestationRequest.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      GulfEmergencyCase.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      GulfJobApplication.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        applicationStatusCounts: applications.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {}),
+        pendingRecruiterCount: pendingRecruiters,
+        activeRecruiterCount: activeRecruiters,
+        attestationStatusCounts: attestations.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {}),
+        emergencyStatusCounts: emergencies.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {}),
+        jobApplicationStatusCounts: jobApplications.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {}),
+      },
+    });
+  } catch (error) {
+    logger.error('gulf admin analytics error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to fetch admin analytics.' });
+  }
+});
+
 router.put('/admin/applications/:id/status', authenticate, verifyAdmin, async (req, res) => {
   try {
     const payload = {
@@ -686,6 +752,24 @@ router.post('/attestation/request', applicationLimiter, documentUploadLimiter, d
       createdAt: new Date(),
     });
 
+    // Basic virus-scan placeholder for uploaded document
+    if (req.file && req.file.path) {
+      try {
+        await scanFile(req.file.path);
+      } catch (scanErr) {
+        try {
+          if (attestation && attestation._id) await GulfAttestationRequest.findByIdAndDelete(attestation._id);
+        } catch (e) {
+          logger.error('cleanup error after failed scan (attestation):', e);
+        }
+        try {
+          if (req.file && req.file.path) fs.unlinkSync(req.file.path);
+        } catch (e) {
+          logger.error('cleanup error after failed scan (file):', e);
+        }
+        return res.status(400).json({ success: false, message: 'Uploaded document failed security checks.' });
+      }
+    }
     logger.info('Attestation request created:', attestation.requestId);
 
     res.status(201).json({
@@ -781,7 +865,22 @@ router.post('/emergency/report', emergencyLimiter, async (req, res) => {
     });
 
     logger.info('Emergency case created:', emergency.caseId);
-    // TODO: Send SMS/WhatsApp alert to support team
+    // Send alert to configured emergency webhook (if present)
+    try {
+      const alertPayload = {
+        caseId: emergency.caseId,
+        issueType,
+        description,
+        phone,
+        country,
+        message,
+        createdAt: emergency.createdAt,
+      };
+      const alertResult = await sendEmergencyAlert(alertPayload);
+      logger.info('Emergency alert result:', alertResult);
+    } catch (alertErr) {
+      logger.error('Emergency alert failed:', alertErr);
+    }
 
     res.status(201).json({
       success: true,
@@ -823,6 +922,170 @@ router.get('/recruiters/verified', async (req, res) => {
   } catch (error) {
     logger.error('recruiters fetch error:', error);
     res.status(500).json({ success: false, message: 'Unable to fetch recruiters.' });
+  }
+});
+
+// ============ PAYMENTS (SCAFFOLD) ============
+router.post('/payments/create', optionalToken, async (req, res) => {
+  try {
+    const payload = req.body || {};
+    const amount = Number(payload.amount || 0);
+    const currency = String(payload.currency || 'usd').toLowerCase();
+    const description = String(payload.description || '').trim();
+    const metadata = payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {};
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ success: false, message: 'Amount must be a positive number.' });
+    }
+
+    if (!stripe) {
+      logger.warn('Stripe not configured for payments.create');
+      return res.status(501).json({ success: false, message: 'Payment provider not configured.' });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency,
+      description,
+      metadata: {
+        ...metadata,
+        service: metadata.service || String(payload.type || 'unknown'),
+        referenceId: String(payload.id || metadata.id || ''),
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        amount,
+        currency,
+        metadata: paymentIntent.metadata,
+      },
+    });
+  } catch (error) {
+    logger.error('payments.create error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to create payment.' });
+  }
+});
+
+router.post('/payments/webhook', async (req, res) => {
+  try {
+    const event = req.body || {};
+    logger.info('payments.webhook', { eventType: event.type || 'unknown' });
+
+    // Best-effort handling for Stripe-like payloads
+    const payload = event.data && event.data.object ? event.data.object : event;
+    const eventType = event.type || 'unknown';
+
+    if (eventType === 'payment_intent.succeeded' || payload.status === 'succeeded') {
+      const pi = payload;
+      const metadata = pi.metadata || {};
+      const refType = metadata.type;
+      const refId = metadata.id;
+      // Update attestation or application records
+      if (refType === 'attestation') {
+        await GulfAttestationRequest.findOneAndUpdate({ requestId: refId }, { $set: { paymentStatus: 'paid', paymentId: pi.id, amount: (pi.amount_received || pi.amount || 0) / 100 } });
+      } else if (refType === 'application') {
+        await GulfApplication.findOneAndUpdate({ _id: refId }, { $set: { paymentStatus: 'paid', paymentId: pi.id, amount: (pi.amount_received || pi.amount || 0) / 100 } });
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    logger.error('payments.webhook error:', error);
+    res.status(500).json({ success: false, message: 'Webhook handler failed.' });
+  }
+});
+
+// ============ RECRUITER APPLICATIONS & VERIFICATION ============
+router.post('/recruiters/apply', documentUploadLimiter, docUpload.single('kycDocument'), async (req, res) => {
+  try {
+    const {
+      fullName,
+      name,
+      companyName,
+      licenseNumber,
+      registrationNumber,
+      country,
+      experienceSummary,
+      website,
+    } = req.body || {};
+
+    const recruiterName = String(fullName || name || '').trim();
+    if (!recruiterName || !country) {
+      return res.status(400).json({ success: false, message: 'Recruiter name and country are required.' });
+    }
+
+    const kycFiles = req.file ? [req.file.filename] : [];
+
+    const recruiter = await GulfRecruiter.create({
+      name: recruiterName,
+      companyName: String(companyName || '').trim(),
+      licenseNumber: String(licenseNumber || '').trim(),
+      registrationNumber: String(registrationNumber || '').trim(),
+      country: String(country).trim(),
+      website: String(website || '').trim(),
+      experienceSummary: String(experienceSummary || '').trim(),
+      verified: false,
+      status: 'pending',
+      kycDocuments: kycFiles,
+      verificationRequestedAt: new Date(),
+    });
+
+    if (req.file && req.file.path) {
+      try {
+        await scanFile(req.file.path);
+      } catch (scanErr) {
+        logger.error('recruiter apply scan failed:', scanErr);
+        try {
+          if (recruiter && recruiter._id) await GulfRecruiter.findByIdAndDelete(recruiter._id);
+        } catch (e) {
+          logger.error('cleanup error removing recruiter after failed scan:', e);
+        }
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (e) {
+          logger.error('cleanup error removing recruiter file after failed scan:', e);
+        }
+        return res.status(400).json({ success: false, message: 'Uploaded KYC document failed security checks.' });
+      }
+    }
+
+    return res.status(201).json({ success: true, message: 'Recruiter application submitted.', data: { id: recruiter._id } });
+  } catch (error) {
+    logger.error('recruiter apply error:', error);
+    res.status(500).json({ success: false, message: 'Unable to submit recruiter application.' });
+  }
+});
+
+router.get('/admin/recruiters/pending', authenticate, verifyAdmin, async (req, res) => {
+  try {
+    const pending = await GulfRecruiter.find({ status: 'pending' }).sort({ createdAt: -1 }).limit(200).lean();
+    return res.json({ success: true, data: pending });
+  } catch (error) {
+    logger.error('admin recruiters pending error:', error);
+    res.status(500).json({ success: false, message: 'Unable to fetch pending recruiters.' });
+  }
+});
+
+router.put('/admin/recruiters/:id/verify', authenticate, verifyAdmin, async (req, res) => {
+  try {
+    const { verified, notes } = req.body || {};
+    const rec = await GulfRecruiter.findById(req.params.id);
+    if (!rec) return res.status(404).json({ success: false, message: 'Recruiter not found.' });
+
+    rec.verified = Boolean(verified);
+    rec.status = rec.verified ? 'active' : 'rejected';
+    rec.verificationNotes = String(notes || '').trim();
+    rec.verifiedAt = rec.verified ? new Date() : rec.verifiedAt;
+
+    await rec.save();
+    return res.json({ success: true, data: rec, message: rec.verified ? 'Recruiter verified.' : 'Recruiter marked as rejected.' });
+  } catch (error) {
+    logger.error('admin recruiter verify error:', error);
+    res.status(500).json({ success: false, message: 'Unable to update recruiter.' });
   }
 });
 

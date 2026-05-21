@@ -12,6 +12,8 @@ const FinanceAuditLog = require('../models/FinanceAuditLog');
 const FinanceEligibilityRecord = require('../models/FinanceEligibilityRecord');
 const authMiddleware = require('../middleware/auth');
 const logger = require('../utils/logger');
+const { postWorkflowEvent } = require('../utils/financeNotifications');
+const { scanFile } = require('../utils/virusScan');
 
 const router = express.Router();
 const { authenticate, hasAdminPrivileges } = authMiddleware;
@@ -62,6 +64,8 @@ const LEAD_STATUSES = [
   'rejected',
   'disbursed',
 ];
+
+const NAME_PATTERN = /^[A-Za-z .'-]+$/;
 
 const financeUploadDir = path.join(__dirname, '../private/finance-docs');
 if (!fs.existsSync(financeUploadDir)) {
@@ -128,6 +132,10 @@ const isFinanceConsultant = (user = {}) =>
 const isInstitutionViewer = (user = {}) =>
   isFinanceConsultant(user) || hasAnyRole(user, ['institution', 'institution_partner']);
 
+const getScopedConsultantId = (user = {}) =>
+  String(user?.consultantId || user?._id || user?.id || '')
+    .trim();
+
 const requireFinanceAdmin = (req, res, next) => {
   if (!isFinanceAdmin(req.user)) {
     return res.status(403).json({ success: false, message: 'Finance admin access required.' });
@@ -154,6 +162,90 @@ const normalizePhone = (value = '') =>
     .replace(/\D/g, '')
     .slice(-10);
 
+const SOURCE_CHANNELS = new Set(['web', 'expo', 'mobile', 'admin', 'api']);
+const IDEMPOTENCY_KEY_MAX_LENGTH = 120;
+
+const normalizeSourceChannel = (value = '') => {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
+  return SOURCE_CHANNELS.has(normalized) ? normalized : 'web';
+};
+
+const getSourceMetaFromRequest = (req) => ({
+  sourceChannel: normalizeSourceChannel(req.get('x-source-channel') || 'web'),
+  platform: String(req.get('x-client-platform') || '').trim().slice(0, 40),
+  appVersion: String(req.get('x-app-version') || '').trim().slice(0, 40),
+  buildNumber: String(req.get('x-build-number') || '').trim().slice(0, 40),
+});
+
+const sanitizeIdempotencyKey = (value = '') =>
+  String(value || '')
+    .trim()
+    .slice(0, IDEMPOTENCY_KEY_MAX_LENGTH);
+
+const getActorUserId = (user = {}) =>
+  String(user?._id || user?.id || '')
+    .trim();
+
+const SLA_HOURS_BY_STATUS = {
+  lead_received: 4,
+  documents_pending: 24,
+  consultant_assigned: 12,
+  in_review: 24,
+  submitted_to_institution: 48,
+  approved: 72,
+};
+
+const getNextActionDueAt = (status = '', fromDate = new Date()) => {
+  const hours = SLA_HOURS_BY_STATUS[String(status || '').trim()];
+  if (!hours) return null;
+  return new Date(fromDate.getTime() + hours * 60 * 60 * 1000);
+};
+
+const addLeadNotificationEvent = (lead, event = {}) => {
+  if (!lead || typeof lead !== 'object') return;
+  if (!Array.isArray(lead.notificationEvents)) {
+    lead.notificationEvents = [];
+  }
+  lead.notificationEvents.push({
+    eventType: String(event.eventType || 'workflow_event').slice(0, 80),
+    severity: ['info', 'warning', 'critical'].includes(event.severity) ? event.severity : 'info',
+    message: String(event.message || '').slice(0, 240),
+    metadata: event.metadata || {},
+    createdAt: new Date(),
+  });
+  if (lead.notificationEvents.length > 40) {
+    lead.notificationEvents = lead.notificationEvents.slice(-40);
+  }
+};
+
+const applySlaForLead = (lead, status) => {
+  if (!lead || typeof lead !== 'object') return;
+  if (!lead.workflowOps || typeof lead.workflowOps !== 'object') {
+    lead.workflowOps = {};
+  }
+  lead.workflowOps.nextActionDueAt = getNextActionDueAt(status, new Date());
+};
+
+const assertConsultantScopedLeadAccess = (user = {}, lead = null) => {
+  if (isFinanceAdmin(user)) {
+    return null;
+  }
+
+  const consultantId = getScopedConsultantId(user);
+  if (!consultantId) {
+    return 'Consultant profile is missing consultant ID.';
+  }
+
+  const leadConsultantId = String(lead?.consultant?.consultantId || '').trim();
+  if (!leadConsultantId || leadConsultantId !== consultantId) {
+    return 'You can only manage leads assigned to your consultant profile.';
+  }
+
+  return null;
+};
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, financeUploadDir),
@@ -177,10 +269,10 @@ const upload = multer({
 });
 
 const leadCreateSchema = Joi.object({
-  fullName: Joi.string().trim().min(2).max(80).pattern(/^[A-Za-z ]+$/).required(),
+  fullName: Joi.string().trim().min(2).max(80).pattern(NAME_PATTERN).required(),
   phone: Joi.string().trim().pattern(/^\d{10}$/).required(),
-  state: Joi.string().valid(...SOUTH_INDIA_STATES).allow('').default(''),
-  district: Joi.string().valid(...SOUTH_INDIA_DISTRICTS).required(),
+  state: Joi.string().trim().allow('').default(''),
+  district: Joi.string().trim().required(),
   loanCategory: Joi.string().valid(...LOAN_CATEGORIES).required(),
   amount: Joi.number().min(1).required(),
   institutionId: Joi.string().trim().allow(''),
@@ -196,10 +288,10 @@ const leadCreateSchema = Joi.object({
 });
 
 const eligibilitySchema = Joi.object({
-  fullName: Joi.string().trim().allow(''),
+  fullName: Joi.string().trim().pattern(NAME_PATTERN).allow(''),
   phone: Joi.string().trim().pattern(/^\d{10}$/).allow(''),
-  state: Joi.string().valid(...SOUTH_INDIA_STATES).allow('').default(''),
-  district: Joi.string().valid(...SOUTH_INDIA_DISTRICTS).required(),
+  state: Joi.string().trim().allow('').default(''),
+  district: Joi.string().trim().required(),
   loanCategory: Joi.string().valid(...LOAN_CATEGORIES).required(),
   age: Joi.number().integer().min(18).max(75).required(),
   monthlyIncome: Joi.number().min(1).required(),
@@ -216,7 +308,7 @@ const eligibilitySchema = Joi.object({
 
 const assignConsultantSchema = Joi.object({
   consultantId: Joi.string().trim().min(2).max(40).required(),
-  consultantName: Joi.string().trim().min(2).max(80).required(),
+  consultantName: Joi.string().trim().min(2).max(80).pattern(NAME_PATTERN).required(),
   consultantPhone: Joi.string().trim().pattern(/^\d{10}$/).allow(''),
 });
 
@@ -406,6 +498,52 @@ const createAuditLog = async (req, payload = {}) => {
   }
 };
 
+const publishWorkflowNotificationHook = async (lead, eventType, payload = {}) => {
+  try {
+    const workflowPayload = {
+      eventType,
+      leadId: String(lead?.leadId || ''),
+      phone: String(lead?.phone || ''),
+      loanCategory: String(lead?.loanCategory || ''),
+      status: String(lead?.status || ''),
+      sourceChannel: String(lead?.sourceMeta?.sourceChannel || ''),
+      consultantId: String(lead?.consultant?.consultantId || ''),
+      timestamp: new Date().toISOString(),
+      payload,
+    };
+
+    const delivery = await postWorkflowEvent(workflowPayload);
+    logger.info('finance notification hook', {
+      leadId: workflowPayload.leadId,
+      eventType,
+      delivered: delivery.delivered,
+      reason: delivery.reason || '',
+    });
+    return delivery;
+  } catch (error) {
+    logger.warn(`finance notification hook failed: ${error.message}`);
+    return { delivered: false, reason: 'error' };
+  }
+};
+
+const parseDateRange = (fromRaw, toRaw) => {
+  const fromDate = fromRaw ? new Date(fromRaw) : null;
+  const toDate = toRaw ? new Date(toRaw) : null;
+  const validFrom = fromDate && !Number.isNaN(fromDate.getTime()) ? fromDate : null;
+  const validTo = toDate && !Number.isNaN(toDate.getTime()) ? toDate : null;
+
+  if (validTo) {
+    validTo.setHours(23, 59, 59, 999);
+  }
+
+  if (!validFrom && !validTo) return null;
+
+  const range = {};
+  if (validFrom) range.$gte = validFrom;
+  if (validTo) range.$lte = validTo;
+  return range;
+};
+
 const getEligibilityInsights = (input = {}) => {
   const monthlyIncome = toNumber(input.monthlyIncome);
   const requiredAmount = toNumber(input.requiredAmount);
@@ -480,7 +618,27 @@ const getEligibilityInsights = (input = {}) => {
     rejectionReasons,
     improvementTips,
     bestMatchingLoanProducts,
+    matchedSchemes: getMatchedSchemes(input),
   };
+};
+
+const FINANCE_SCHEMES = [
+  { id: 'pmmy', title: 'Pradhan Mantri Mudra Yojana', categoryHint: ['business', 'msme'], states: ['Kerala', 'TamilNadu', 'Karnataka', 'AndhraPradesh', 'Telangana'], description: 'Collateral-free working capital or term loan support for micro businesses.' },
+  { id: 'pmegp', title: 'PMEGP', categoryHint: ['business', 'msme'], states: ['Kerala', 'TamilNadu', 'Karnataka', 'AndhraPradesh', 'Telangana'], description: 'Project cost subsidy for micro enterprises with special category support.' },
+  { id: 'standup-india', title: 'Stand-Up India', categoryHint: ['women'], states: ['Kerala', 'TamilNadu', 'Karnataka', 'AndhraPradesh', 'Telangana'], description: 'Loans for women and SC/ST entrepreneurs to start greenfield projects.' },
+  { id: 'cgtmse', title: 'CGTMSE Guarantee', categoryHint: ['business', 'msme'], states: ['Kerala', 'TamilNadu', 'Karnataka', 'AndhraPradesh', 'Telangana'], description: 'Credit guarantee support for collateral-free MSME lending.' },
+  { id: 'education-loan', title: 'Education Loan Support', categoryHint: ['education'], states: [], description: 'Subsidized education loans for domestic and overseas studies.' },
+];
+
+const getMatchedSchemes = (input = {}) => {
+  const category = String(input.loanCategory || '').toLowerCase();
+  const state = String(input.state || '').trim();
+  const isWomen = category === 'women';
+  return FINANCE_SCHEMES.filter((scheme) => {
+    const categoryMatch = scheme.categoryHint.some((hint) => hint === category || (isWomen && hint === 'women'));
+    const stateMatch = !scheme.states.length || scheme.states.includes(state) || state === '';
+    return categoryMatch && stateMatch;
+  }).map((scheme) => ({ id: scheme.id, title: scheme.title, description: scheme.description }));
 };
 
 const getCommissionAmount = (institution, amount) => {
@@ -513,7 +671,25 @@ const mapUploadedFiles = (filesObj = {}) => {
   return mapped;
 };
 
-const sanitizeLeadForUserView = (lead = {}, { includePhone = false, includeDocuments = false } = {}) => {
+const listUploadedFiles = (filesObj = {}) =>
+  Object.values(filesObj)
+    .flat()
+    .filter(Boolean);
+
+const deleteUploadedFiles = (files = []) => {
+  for (const file of files) {
+    if (!file?.path) continue;
+    try {
+      if (fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+    } catch (error) {
+      logger.warn(`finance upload cleanup failed: ${error.message}`);
+    }
+  }
+};
+
+const sanitizeLeadForUserView = (lead = {}, { includePhone = false, includeDocuments = false, includeInternal = false } = {}) => {
   const sanitized = {
     ...lead,
     phone: includePhone ? lead.phone : '',
@@ -529,7 +705,110 @@ const sanitizeLeadForUserView = (lead = {}, { includePhone = false, includeDocum
     })) : [];
   }
 
+  const sourceMeta = lead?.sourceMeta || {};
+  sanitized.sourceMeta = {
+    sourceChannel: sourceMeta.sourceChannel || 'web',
+    device: sourceMeta.device || {},
+  };
+  if (includeInternal) {
+    sanitized.sourceMeta.createdByUserId = sourceMeta.createdByUserId || '';
+    sanitized.sourceMeta.idempotencyKey = sourceMeta.idempotencyKey || '';
+    sanitized.sourceMeta.idempotencyReplayCount = toNumber(sourceMeta.idempotencyReplayCount, 0);
+  }
+
   return sanitized;
+};
+
+const buildSlaSummaryForLeads = (leads = [], dueSoonHours = 24) => {
+  const now = Date.now();
+  const dueSoonMs = Math.max(1, toNumber(dueSoonHours, 24)) * 60 * 60 * 1000;
+  const openStatuses = new Set([
+    'lead_received',
+    'documents_pending',
+    'consultant_assigned',
+    'in_review',
+    'submitted_to_institution',
+    'approved',
+  ]);
+
+  const overdue = [];
+  const dueSoon = [];
+  const withoutSla = [];
+
+  for (const lead of leads) {
+    if (!openStatuses.has(String(lead.status || ''))) continue;
+    const dueAt = lead?.workflowOps?.nextActionDueAt ? new Date(lead.workflowOps.nextActionDueAt).getTime() : NaN;
+    if (!Number.isFinite(dueAt)) {
+      withoutSla.push(lead);
+      continue;
+    }
+    if (dueAt < now) {
+      overdue.push(lead);
+      continue;
+    }
+    if (dueAt - now <= dueSoonMs) {
+      dueSoon.push(lead);
+    }
+  }
+
+  return {
+    overdue,
+    dueSoon,
+    withoutSla,
+  };
+};
+
+const buildLeadCreateResponse = (lead, options = {}) => ({
+  success: true,
+  data: {
+    lead: sanitizeLeadForUserView(lead, { includePhone: true, includeDocuments: false }),
+    idempotency: {
+      replayed: Boolean(options.replayed),
+      key: options.key || '',
+    },
+  },
+});
+
+const handleLeadCreateIdempotency = async (req, res, next) => {
+  try {
+    const userId = getActorUserId(req.user);
+    const idempotencyKey = sanitizeIdempotencyKey(
+      req.get('x-idempotency-key') || req.get('idempotency-key') || ''
+    );
+
+    req.financeRequestMeta = {
+      actorUserId: userId,
+      idempotencyKey,
+      sourceMeta: getSourceMetaFromRequest(req),
+    };
+
+    if (!userId || !idempotencyKey) {
+      return next();
+    }
+
+    const existingLead = await FinanceLead.findOne({
+      'sourceMeta.createdByUserId': userId,
+      'sourceMeta.idempotencyKey': idempotencyKey,
+    }).lean();
+
+    if (!existingLead) {
+      return next();
+    }
+
+    await FinanceLead.updateOne(
+      { _id: existingLead._id },
+      {
+        $set: { 'sourceMeta.lastIdempotencySeenAt': new Date() },
+        $inc: { 'sourceMeta.idempotencyReplayCount': 1 },
+      }
+    );
+
+    const refreshedLead = await FinanceLead.findById(existingLead._id).lean();
+    return res.status(200).json(buildLeadCreateResponse(refreshedLead || existingLead, { replayed: true, key: idempotencyKey }));
+  } catch (error) {
+    logger.error('finance lead idempotency check error:', error);
+    return next();
+  }
 };
 
 router.get('/institutions', publicReadLimiter, async (req, res) => {
@@ -540,8 +819,9 @@ router.get('/institutions', publicReadLimiter, async (req, res) => {
     const query = { isActive: true };
 
     const selectedState = String(state || '').trim();
-    if (selectedState && SOUTH_INDIA_REGIONS[selectedState]) {
-      query.serviceDistricts = { $in: SOUTH_INDIA_REGIONS[selectedState] };
+    if (selectedState) {
+      const regionDistricts = SOUTH_INDIA_REGIONS[selectedState];
+      query.serviceDistricts = regionDistricts ? { $in: regionDistricts } : selectedState;
     }
     if (district) {
       query.serviceDistricts = district;
@@ -660,6 +940,7 @@ router.post(
   '/leads',
   authenticate,
   leadCreateLimiter,
+  handleLeadCreateIdempotency,
   upload.fields([
     { name: 'aadhaar', maxCount: 3 },
     { name: 'pan', maxCount: 3 },
@@ -670,6 +951,7 @@ router.post(
   ]),
   async (req, res) => {
     try {
+      const requestMeta = req.financeRequestMeta || {};
       const normalizedBody = {
         ...req.body,
         fullName: String(req.body.fullName || req.user?.name || '').trim(),
@@ -737,6 +1019,11 @@ router.post(
           .lean();
       }
 
+      const rawUploadedFiles = listUploadedFiles(req.files || {});
+      for (const file of rawUploadedFiles) {
+        await scanFile(file.path);
+      }
+
       const uploadedDocs = mapUploadedFiles(req.files || {});
       const leadId = `FIN-${Date.now()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
@@ -778,6 +1065,18 @@ router.post(
             changedAt: new Date(),
           },
         ],
+        sourceMeta: {
+          sourceChannel: requestMeta.sourceMeta?.sourceChannel || 'web',
+          createdByUserId: requestMeta.actorUserId || getActorUserId(req.user),
+          device: {
+            platform: requestMeta.sourceMeta?.platform || '',
+            appVersion: requestMeta.sourceMeta?.appVersion || '',
+            buildNumber: requestMeta.sourceMeta?.buildNumber || '',
+          },
+          idempotencyKey: requestMeta.idempotencyKey || '',
+          idempotencyReplayCount: 0,
+          lastIdempotencySeenAt: requestMeta.idempotencyKey ? new Date() : null,
+        },
         commission: {
           model: selectedInstitution?.commissionModel?.type || 'percentage',
           value: toNumber(selectedInstitution?.commissionModel?.value, 0),
@@ -786,6 +1085,19 @@ router.post(
           status: 'pending',
         },
       });
+
+      applySlaForLead(lead, 'lead_received');
+      addLeadNotificationEvent(lead, {
+        eventType: 'lead_created',
+        severity: 'info',
+        message: 'Lead created and queued for consultant assignment.',
+        metadata: {
+          sourceChannel: lead.sourceMeta?.sourceChannel || 'web',
+          loanCategory: value.loanCategory,
+          amount: value.amount,
+        },
+      });
+      await lead.save();
 
       await createAuditLog(req, {
         actionType: 'lead_created',
@@ -797,19 +1109,38 @@ router.post(
           loanCategory: value.loanCategory,
           amount: value.amount,
           uploadedDocuments: uploadedDocs.length,
+          sourceChannel: requestMeta.sourceMeta?.sourceChannel || 'web',
+          idempotencyKeyUsed: Boolean(requestMeta.idempotencyKey),
         },
       });
 
-      return res.status(201).json({
-        success: true,
-        data: {
-          lead: sanitizeLeadForUserView(lead.toObject(), { includePhone: true, includeDocuments: false }),
-        },
+      await publishWorkflowNotificationHook(lead, 'lead_created', {
+        sourceChannel: requestMeta.sourceMeta?.sourceChannel || 'web',
+        loanCategory: value.loanCategory,
+        amount: value.amount,
       });
+
+      return res.status(201).json(buildLeadCreateResponse(lead.toObject(), { replayed: false, key: requestMeta.idempotencyKey || '' }));
     } catch (error) {
       logger.error('finance lead create error:', error);
+      deleteUploadedFiles(listUploadedFiles(req.files || {}));
+      if (error?.code === 11000 && String(error?.message || '').includes('sourceMeta.createdByUserId')) {
+        const requestMeta = req.financeRequestMeta || {};
+        if (requestMeta.actorUserId && requestMeta.idempotencyKey) {
+          const replayLead = await FinanceLead.findOne({
+            'sourceMeta.createdByUserId': requestMeta.actorUserId,
+            'sourceMeta.idempotencyKey': requestMeta.idempotencyKey,
+          }).lean();
+          if (replayLead) {
+            return res.status(200).json(buildLeadCreateResponse(replayLead, { replayed: true, key: requestMeta.idempotencyKey }));
+          }
+        }
+      }
       if (error instanceof SyntaxError) {
         return res.status(400).json({ success: false, message: 'Eligibility snapshot format is invalid.' });
+      }
+      if (String(error?.message || '').includes('empty-file') || String(error?.message || '').includes('file-not-found')) {
+        return res.status(400).json({ success: false, message: 'One or more uploaded files failed security checks.' });
       }
       return res.status(500).json({ success: false, message: 'Unable to create finance lead.' });
     }
@@ -818,26 +1149,63 @@ router.post(
 
 router.get('/leads', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
   try {
-    const { phone, leadId, consultantId, status, institutionId, limit = 20 } = req.query;
+    const { phone, leadId, consultantId, status, institutionId, limit = 20, page = 1 } = req.query;
     const query = {};
+    const isAdmin = isFinanceAdmin(req.user);
+    const actorConsultantId = getScopedConsultantId(req.user);
 
-    if (phone) query.phone = phone;
+    if (!isAdmin && !actorConsultantId) {
+      return res.status(400).json({ success: false, message: 'Consultant profile is missing consultant ID.' });
+    }
+
+    if (phone) query.phone = normalizePhone(phone);
     if (leadId) query.leadId = leadId;
-    if (consultantId) query['consultant.consultantId'] = consultantId;
+    if (consultantId) {
+      const requestedConsultantId = String(consultantId).trim();
+      if (!isAdmin && requestedConsultantId !== actorConsultantId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only access your own consultant leads.',
+        });
+      }
+      query['consultant.consultantId'] = requestedConsultantId;
+    } else if (!isAdmin) {
+      query['consultant.consultantId'] = actorConsultantId;
+    }
     if (status) query.status = status;
     if (institutionId) query['institution.institutionId'] = institutionId;
 
-    const leads = await FinanceLead.find(query)
+    const pageNumber = Math.max(1, Number(page) || 1);
+    const pageSize = Math.min(Math.max(1, Number(limit) || 20), 100);
+    const skip = (pageNumber - 1) * pageSize;
+
+    const [leads, totalCount] = await Promise.all([
+      FinanceLead.find(query)
       .sort({ createdAt: -1 })
-      .limit(Math.min(Number(limit) || 20, 100))
-      .lean();
+      .skip(skip)
+      .limit(pageSize)
+      .lean(),
+      FinanceLead.countDocuments(query),
+    ]);
 
     const includeDocuments = isFinanceAdmin(req.user);
     const leadsView = leads.map((lead) =>
       sanitizeLeadForUserView(lead, { includePhone: true, includeDocuments })
     );
 
-    return res.json({ success: true, data: { leads: leadsView } });
+    return res.json({
+      success: true,
+      data: {
+        leads: leadsView,
+        pagination: {
+          page: pageNumber,
+          limit: pageSize,
+          totalCount,
+          totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+          hasNextPage: skip + leads.length < totalCount,
+        },
+      },
+    });
   } catch (error) {
     logger.error('finance lead tracking fetch error:', error);
     return res.status(500).json({ success: false, message: 'Unable to fetch lead tracking data.' });
@@ -856,6 +1224,27 @@ router.patch('/leads/:leadId/assign', authenticate, secureActionLimiter, require
       return res.status(404).json({ success: false, message: 'Lead not found.' });
     }
 
+    const isAdmin = isFinanceAdmin(req.user);
+    const actorConsultantId = getScopedConsultantId(req.user);
+    if (!isAdmin && !actorConsultantId) {
+      return res.status(400).json({ success: false, message: 'Consultant profile is missing consultant ID.' });
+    }
+
+    if (!isAdmin && value.consultantId !== actorConsultantId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Consultants can only assign leads to their own consultant ID.',
+      });
+    }
+
+    const alreadyAssignedTo = String(lead.consultant?.consultantId || '').trim();
+    if (!isAdmin && alreadyAssignedTo && alreadyAssignedTo !== actorConsultantId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only manage leads assigned to your consultant profile.',
+      });
+    }
+
     lead.consultant = {
       consultantId: value.consultantId,
       name: value.consultantName,
@@ -863,6 +1252,15 @@ router.patch('/leads/:leadId/assign', authenticate, secureActionLimiter, require
       assignedAt: new Date(),
     };
     lead.status = 'consultant_assigned';
+    applySlaForLead(lead, 'consultant_assigned');
+    addLeadNotificationEvent(lead, {
+      eventType: 'consultant_assigned',
+      severity: 'info',
+      message: `Consultant ${value.consultantName} assigned to lead.`,
+      metadata: {
+        consultantId: value.consultantId,
+      },
+    });
     lead.statusTimeline.push({
       status: 'consultant_assigned',
       note: `Assigned to ${value.consultantName}`,
@@ -882,7 +1280,15 @@ router.patch('/leads/:leadId/assign', authenticate, secureActionLimiter, require
       },
     });
 
-    return res.json({ success: true, data: { lead } });
+    await publishWorkflowNotificationHook(lead, 'consultant_assigned', {
+      consultantId: value.consultantId,
+      consultantName: value.consultantName,
+    });
+
+    return res.json({
+      success: true,
+      data: { lead: sanitizeLeadForUserView(lead.toObject(), { includePhone: true, includeDocuments: isFinanceAdmin(req.user) }) },
+    });
   } catch (error) {
     logger.error('finance consultant assign error:', error);
     return res.status(500).json({ success: false, message: 'Unable to assign consultant.' });
@@ -901,7 +1307,22 @@ router.patch('/leads/:leadId/status', authenticate, secureActionLimiter, require
       return res.status(404).json({ success: false, message: 'Lead not found.' });
     }
 
+    const scopedAccessError = assertConsultantScopedLeadAccess(req.user, lead);
+    if (scopedAccessError) {
+      return res.status(403).json({ success: false, message: scopedAccessError });
+    }
+
     lead.status = value.status;
+    applySlaForLead(lead, value.status);
+    addLeadNotificationEvent(lead, {
+      eventType: 'lead_status_updated',
+      severity: value.status === 'rejected' ? 'warning' : value.status === 'approved' || value.status === 'disbursed' ? 'info' : 'warning',
+      message: `Lead status moved to ${value.status}.`,
+      metadata: {
+        status: value.status,
+        note: value.note || '',
+      },
+    });
     lead.statusTimeline.push({
       status: value.status,
       note: value.note,
@@ -925,7 +1346,15 @@ router.patch('/leads/:leadId/status', authenticate, secureActionLimiter, require
       },
     });
 
-    return res.json({ success: true, data: { lead } });
+    await publishWorkflowNotificationHook(lead, 'lead_status_updated', {
+      status: value.status,
+      note: value.note,
+    });
+
+    return res.json({
+      success: true,
+      data: { lead: sanitizeLeadForUserView(lead.toObject(), { includePhone: true, includeDocuments: isFinanceAdmin(req.user) }) },
+    });
   } catch (error) {
     logger.error('finance status update error:', error);
     return res.status(500).json({ success: false, message: 'Unable to update lead status.' });
@@ -949,6 +1378,14 @@ router.patch('/leads/:leadId/commission', authenticate, secureActionLimiter, req
     if (value.status === 'paid') {
       lead.commission.paidAt = new Date();
     }
+    addLeadNotificationEvent(lead, {
+      eventType: 'commission_updated',
+      severity: value.status === 'paid' ? 'info' : 'warning',
+      message: `Commission status updated to ${value.status}.`,
+      metadata: {
+        actualAmount: value.actualAmount,
+      },
+    });
     await lead.save();
 
     await createAuditLog(req, {
@@ -960,7 +1397,10 @@ router.patch('/leads/:leadId/commission', authenticate, secureActionLimiter, req
       },
     });
 
-    return res.json({ success: true, data: { lead } });
+    return res.json({
+      success: true,
+      data: { lead: sanitizeLeadForUserView(lead.toObject(), { includePhone: true, includeDocuments: true, includeInternal: true }) },
+    });
   } catch (error) {
     logger.error('finance commission update error:', error);
     return res.status(500).json({ success: false, message: 'Unable to update commission.' });
@@ -1028,43 +1468,158 @@ router.post('/data-deletion', authenticate, secureActionLimiter, async (req, res
   }
 });
 
+router.get('/data-deletion/requests', authenticate, secureActionLimiter, requireFinanceAdmin, async (req, res) => {
+  try {
+    const requests = await FinanceLead.find({ 'dataDeletionRequest.status': 'requested' })
+      .sort({ 'dataDeletionRequest.requestedAt': -1 })
+      .limit(100)
+      .lean();
+
+    return res.json({
+      success: true,
+      data: {
+        requests: requests.map((lead) => ({
+          leadId: lead.leadId,
+          fullName: lead.fullName,
+          phone: lead.phone,
+          state: lead.state,
+          district: lead.district,
+          loanCategory: lead.loanCategory,
+          requestedAt: lead.dataDeletionRequest.requestedAt,
+          reason: lead.dataDeletionRequest.reason,
+          status: lead.dataDeletionRequest.status,
+        })),
+      },
+    });
+  } catch (error) {
+    logger.error('finance data deletion requests fetch error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to fetch data deletion requests.' });
+  }
+});
+
+router.patch('/data-deletion/:leadId/process', authenticate, secureActionLimiter, requireFinanceAdmin, async (req, res) => {
+  try {
+    const lead = await FinanceLead.findOne({ leadId: req.params.leadId });
+    if (!lead) {
+      return res.status(404).json({ success: false, message: 'Lead not found.' });
+    }
+
+    if (!lead.dataDeletionRequest.requested || lead.dataDeletionRequest.status !== 'requested') {
+      return res.status(400).json({ success: false, message: 'No pending deletion request found for this lead.' });
+    }
+
+    lead.fullName = 'Data Removed';
+    lead.phone = `DELETED-${lead.leadId}`;
+    lead.documents = [];
+    lead.documentNotes = '';
+    lead.consents = {
+      privacy: false,
+      kyc: false,
+      disclaimer: false,
+      timestamp: null,
+    };
+    lead.whatsappOptIn = false;
+    lead.eligibilitySnapshot = null;
+    lead.status = 'rejected';
+    lead.statusTimeline.push({
+      status: 'data_deletion_processed',
+      note: 'Personal data anonymized and deletion request processed by admin.',
+      changedByRole: 'admin',
+      changedByName: String(req.user?.name || req.user?.email || 'Admin').slice(0, 80),
+      changedAt: new Date(),
+    });
+    lead.dataDeletionRequest = {
+      requested: true,
+      reason: lead.dataDeletionRequest.reason,
+      requestedAt: lead.dataDeletionRequest.requestedAt,
+      status: 'processed',
+      processedBy: String(req.user?.name || req.user?.email || 'Admin').slice(0, 80),
+      processedAt: new Date(),
+    };
+
+    await lead.save();
+
+    await createAuditLog(req, {
+      actionType: 'data_deletion_processed',
+      leadId: lead.leadId,
+      details: {
+        processedBy: lead.dataDeletionRequest.processedBy,
+        processedAt: lead.dataDeletionRequest.processedAt,
+      },
+    });
+
+    return res.json({ success: true, message: 'Deletion request processed and personal data anonymized.' });
+  } catch (error) {
+    logger.error('finance data deletion process error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to process data deletion request.' });
+  }
+});
+
 router.get('/dashboard/user', authenticate, secureActionLimiter, async (req, res) => {
   try {
     const requestedPhone = normalizePhone(req.query.phone || '');
     const accountPhone = normalizePhone(req.user?.phone || '');
-    const isPrivileged = isFinanceConsultant(req.user);
-    if (!isPrivileged && !accountPhone) {
+    const isAdmin = isFinanceAdmin(req.user);
+    const isConsultant = !isAdmin && isFinanceConsultant(req.user);
+    const actorConsultantId = getScopedConsultantId(req.user);
+    const pageNumber = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(Math.max(1, Number(req.query.limit) || 25), 100);
+    const skip = (pageNumber - 1) * pageSize;
+    if (!isAdmin && !isConsultant && !accountPhone) {
       return res.status(403).json({
         success: false,
         message: 'Please add your account phone number before using loan tracking.',
       });
     }
 
-    const phone = isPrivileged ? requestedPhone || accountPhone : accountPhone;
+    if (isConsultant && !actorConsultantId) {
+      return res.status(400).json({ success: false, message: 'Consultant profile is missing consultant ID.' });
+    }
+
+    const phone = isAdmin ? requestedPhone || accountPhone : requestedPhone || accountPhone;
 
     if (!phone) {
       return res.status(400).json({ success: false, message: 'Phone is required.' });
     }
 
-    if (!isPrivileged && requestedPhone && accountPhone && requestedPhone !== accountPhone) {
+    if (!isAdmin && !isConsultant && requestedPhone && accountPhone && requestedPhone !== accountPhone) {
       return res.status(403).json({
         success: false,
         message: 'You can only access your own loan dashboard.',
       });
     }
 
-    const leads = await FinanceLead.find({ phone }).sort({ createdAt: -1 }).lean();
+    const leadQuery = { phone };
+    if (isConsultant) {
+      leadQuery['consultant.consultantId'] = actorConsultantId;
+    }
 
-    const statusCounts = leads.reduce((acc, lead) => {
-      acc[lead.status] = (acc[lead.status] || 0) + 1;
+    const [leads, totalLeads, statusRows] = await Promise.all([
+      FinanceLead.find(leadQuery).sort({ createdAt: -1 }).skip(skip).limit(pageSize).lean(),
+      FinanceLead.countDocuments(leadQuery),
+      FinanceLead.aggregate([
+        { $match: leadQuery },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const statusCounts = statusRows.reduce((acc, row) => {
+      const key = String(row._id || 'unknown');
+      acc[key] = Number(row.count || 0);
       return acc;
     }, {});
 
     return res.json({
       success: true,
       data: {
-        totalLeads: leads.length,
+        totalLeads,
         statusCounts,
+        pagination: {
+          page: pageNumber,
+          limit: pageSize,
+          totalPages: Math.max(1, Math.ceil(totalLeads / pageSize)),
+          hasNextPage: skip + leads.length < totalLeads,
+        },
         leads: leads.map((lead) => sanitizeLeadForUserView(lead, { includePhone: false, includeDocuments: false })),
       },
     });
@@ -1092,17 +1647,42 @@ router.get('/dashboard/consultant', authenticate, secureActionLimiter, requireFi
       });
     }
 
-    const leads = await FinanceLead.find({ 'consultant.consultantId': consultantId }).sort({ updatedAt: -1 }).lean();
-    const statusCounts = leads.reduce((acc, lead) => {
-      acc[lead.status] = (acc[lead.status] || 0) + 1;
+    const pageNumber = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(Math.max(1, Number(req.query.limit) || 25), 100);
+    const skip = (pageNumber - 1) * pageSize;
+    const consultantQuery = { 'consultant.consultantId': consultantId };
+
+    const [leads, totalLeads, statusRows] = await Promise.all([
+      FinanceLead.find(consultantQuery).sort({ updatedAt: -1 }).skip(skip).limit(pageSize).lean(),
+      FinanceLead.countDocuments(consultantQuery),
+      FinanceLead.aggregate([
+        { $match: consultantQuery },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+    ]);
+    const statusCounts = statusRows.reduce((acc, row) => {
+      const key = String(row._id || 'unknown');
+      acc[key] = Number(row.count || 0);
       return acc;
     }, {});
+    const sla = buildSlaSummaryForLeads(leads, 24);
 
     return res.json({
       success: true,
       data: {
-        assignedLeads: leads.length,
+        assignedLeads: totalLeads,
         statusCounts,
+        slaCounts: {
+          overdue: sla.overdue.length,
+          dueSoon: sla.dueSoon.length,
+          withoutSla: sla.withoutSla.length,
+        },
+        pagination: {
+          page: pageNumber,
+          limit: pageSize,
+          totalPages: Math.max(1, Math.ceil(totalLeads / pageSize)),
+          hasNextPage: skip + leads.length < totalLeads,
+        },
         leads: leads.map((lead) => sanitizeLeadForUserView(lead, { includePhone: true, includeDocuments: false })),
       },
     });
@@ -1131,23 +1711,294 @@ router.get('/dashboard/institution', authenticate, secureActionLimiter, requireI
       });
     }
 
-    const leads = await FinanceLead.find({ 'institution.institutionId': institutionId }).sort({ createdAt: -1 }).lean();
+    const pageNumber = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(Math.max(1, Number(req.query.limit) || 25), 100);
+    const skip = (pageNumber - 1) * pageSize;
+    const institutionQuery = { 'institution.institutionId': institutionId };
 
-    const approvedCount = leads.filter((lead) => ['approved', 'disbursed'].includes(lead.status)).length;
-    const conversionRate = leads.length ? Number(((approvedCount / leads.length) * 100).toFixed(2)) : 0;
+    const [leads, totalLeads, approvedCount] = await Promise.all([
+      FinanceLead.find(institutionQuery).sort({ createdAt: -1 }).skip(skip).limit(pageSize).lean(),
+      FinanceLead.countDocuments(institutionQuery),
+      FinanceLead.countDocuments({
+        ...institutionQuery,
+        status: { $in: ['approved', 'disbursed'] },
+      }),
+    ]);
+
+    const conversionRate = totalLeads ? Number(((approvedCount / totalLeads) * 100).toFixed(2)) : 0;
 
     return res.json({
       success: true,
       data: {
-        totalLeads: leads.length,
+        totalLeads,
         approvedCount,
         conversionRate,
+        pagination: {
+          page: pageNumber,
+          limit: pageSize,
+          totalPages: Math.max(1, Math.ceil(totalLeads / pageSize)),
+          hasNextPage: skip + leads.length < totalLeads,
+        },
         leads: leads.map((lead) => sanitizeLeadForUserView(lead, { includePhone: true, includeDocuments: false })),
       },
     });
   } catch (error) {
     logger.error('finance institution dashboard error:', error);
     return res.status(500).json({ success: false, message: 'Unable to fetch institution dashboard.' });
+  }
+});
+
+router.get('/dashboard/sla', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const isAdmin = isFinanceAdmin(req.user);
+    const requestedConsultantId = String(req.query.consultantId || '').trim();
+    const actorConsultantId = getScopedConsultantId(req.user);
+    const dueSoonHours = Math.min(Math.max(Number(req.query.dueSoonHours) || 24, 1), 72);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+    const query = {
+      status: { $in: ['lead_received', 'documents_pending', 'consultant_assigned', 'in_review', 'submitted_to_institution', 'approved'] },
+    };
+
+    if (!isAdmin) {
+      if (!actorConsultantId) {
+        return res.status(400).json({ success: false, message: 'Consultant ID is required for SLA dashboard.' });
+      }
+      query['consultant.consultantId'] = actorConsultantId;
+    } else if (requestedConsultantId) {
+      query['consultant.consultantId'] = requestedConsultantId;
+    }
+
+    const leads = await FinanceLead.find(query)
+      .sort({ 'workflowOps.nextActionDueAt': 1, createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const sla = buildSlaSummaryForLeads(leads, dueSoonHours);
+
+    return res.json({
+      success: true,
+      data: {
+        dueSoonHours,
+        totalOpenLeads: leads.length,
+        counts: {
+          overdue: sla.overdue.length,
+          dueSoon: sla.dueSoon.length,
+          withoutSla: sla.withoutSla.length,
+        },
+        overdueLeads: sla.overdue.slice(0, 50).map((lead) => sanitizeLeadForUserView(lead, { includePhone: true, includeDocuments: false })),
+        dueSoonLeads: sla.dueSoon.slice(0, 50).map((lead) => sanitizeLeadForUserView(lead, { includePhone: true, includeDocuments: false })),
+        withoutSlaLeads: sla.withoutSla.slice(0, 50).map((lead) => sanitizeLeadForUserView(lead, { includePhone: true, includeDocuments: false })),
+      },
+    });
+  } catch (error) {
+    logger.error('finance sla dashboard error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to fetch SLA dashboard.' });
+  }
+});
+
+router.get('/mobile/bootstrap', authenticate, secureActionLimiter, async (req, res) => {
+  try {
+    await ensureInstitutionsSeeded();
+    const sourceMeta = getSourceMetaFromRequest(req);
+    const accountPhone = normalizePhone(req.user?.phone || '');
+    const roleTokens = Array.from(normalizeRoleTokens(req.user));
+    const isConsultant = isFinanceConsultant(req.user);
+    const isAdmin = isFinanceAdmin(req.user);
+    const payload = {
+      role: {
+        isAdmin,
+        isConsultant,
+        roleTokens,
+      },
+      profile: {
+        userId: getActorUserId(req.user),
+        name: String(req.user?.name || req.user?.email || '').slice(0, 80),
+        phone: accountPhone,
+        consultantId: getScopedConsultantId(req.user),
+      },
+      sourceMeta,
+    };
+
+    const [institutions, userLeads] = await Promise.all([
+      FinanceInstitution.find({ isActive: true })
+        .sort({ verifiedPartner: -1, 'ratings.average': -1 })
+        .limit(30)
+        .lean(),
+      accountPhone ? FinanceLead.find({ phone: accountPhone }).sort({ createdAt: -1 }).limit(20).lean() : [],
+    ]);
+
+    const statusCounts = userLeads.reduce((acc, lead) => {
+      const key = String(lead.status || 'unknown');
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    return res.json({
+      success: true,
+      data: {
+        ...payload,
+        institutions,
+        userDashboard: {
+          totalLeads: userLeads.length,
+          statusCounts,
+          leads: userLeads.map((lead) => sanitizeLeadForUserView(lead, { includePhone: false, includeDocuments: false })),
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('finance mobile bootstrap error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load finance bootstrap data.' });
+  }
+});
+
+router.get('/analytics/funnel', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const isAdmin = isFinanceAdmin(req.user);
+    const requestedConsultantId = String(req.query.consultantId || '').trim();
+    const actorConsultantId = getScopedConsultantId(req.user);
+    const dateRange = parseDateRange(req.query.from, req.query.to);
+    const leadQuery = {};
+
+    if (!isAdmin) {
+      if (!actorConsultantId) {
+        return res.status(400).json({ success: false, message: 'Consultant ID is required for funnel analytics.' });
+      }
+      leadQuery['consultant.consultantId'] = actorConsultantId;
+    } else if (requestedConsultantId) {
+      leadQuery['consultant.consultantId'] = requestedConsultantId;
+    }
+
+    if (dateRange) {
+      leadQuery.createdAt = dateRange;
+    }
+
+    const scopedPhones = await FinanceLead.distinct('phone', leadQuery);
+    const eligibilityQuery = {};
+    if (dateRange) {
+      eligibilityQuery.createdAt = dateRange;
+    }
+    if (!isAdmin || requestedConsultantId) {
+      eligibilityQuery.phone = { $in: scopedPhones };
+    }
+
+    const [statusRows, totalLeads, disbursedLeads, approvedLeads, eligibilityRecords] = await Promise.all([
+      FinanceLead.aggregate([
+        { $match: leadQuery },
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      FinanceLead.countDocuments(leadQuery),
+      FinanceLead.countDocuments({ ...leadQuery, status: 'disbursed' }),
+      FinanceLead.countDocuments({ ...leadQuery, status: 'approved' }),
+      FinanceEligibilityRecord.countDocuments(eligibilityQuery),
+    ]);
+
+    const statusCounts = statusRows.reduce((acc, row) => {
+      acc[String(row._id || 'unknown')] = Number(row.count || 0);
+      return acc;
+    }, {});
+
+    const conversionToApproved = totalLeads > 0 ? Number(((approvedLeads / totalLeads) * 100).toFixed(2)) : 0;
+    const conversionToDisbursed = totalLeads > 0 ? Number(((disbursedLeads / totalLeads) * 100).toFixed(2)) : 0;
+
+    return res.json({
+      success: true,
+      data: {
+        filters: {
+          from: req.query.from || '',
+          to: req.query.to || '',
+          consultantId: isAdmin ? requestedConsultantId : actorConsultantId,
+        },
+        metrics: {
+          eligibilityRecords,
+          totalLeads,
+          approvedLeads,
+          disbursedLeads,
+          conversionToApproved,
+          conversionToDisbursed,
+        },
+        statusCounts,
+      },
+    });
+  } catch (error) {
+    logger.error('finance funnel analytics error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to fetch funnel analytics.' });
+  }
+});
+
+router.get('/analytics/source-channels', authenticate, secureActionLimiter, requireFinanceConsultant, async (req, res) => {
+  try {
+    const isAdmin = isFinanceAdmin(req.user);
+    const requestedConsultantId = String(req.query.consultantId || '').trim();
+    const actorConsultantId = getScopedConsultantId(req.user);
+    const dateRange = parseDateRange(req.query.from, req.query.to);
+    const leadQuery = {};
+
+    if (!isAdmin) {
+      if (!actorConsultantId) {
+        return res.status(400).json({ success: false, message: 'Consultant ID is required for source analytics.' });
+      }
+      leadQuery['consultant.consultantId'] = actorConsultantId;
+    } else if (requestedConsultantId) {
+      leadQuery['consultant.consultantId'] = requestedConsultantId;
+    }
+
+    if (dateRange) {
+      leadQuery.createdAt = dateRange;
+    }
+
+    const rows = await FinanceLead.aggregate([
+      { $match: leadQuery },
+      {
+        $project: {
+          sourceChannel: {
+            $cond: [
+              { $or: [{ $eq: ['$sourceMeta.sourceChannel', null] }, { $eq: ['$sourceMeta.sourceChannel', ''] }] },
+              'unknown',
+              '$sourceMeta.sourceChannel',
+            ],
+          },
+          status: '$status',
+        },
+      },
+      {
+        $group: {
+          _id: '$sourceChannel',
+          totalLeads: { $sum: 1 },
+          approvedLeads: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] } },
+          disbursedLeads: { $sum: { $cond: [{ $eq: ['$status', 'disbursed'] }, 1, 0] } },
+        },
+      },
+      { $sort: { totalLeads: -1 } },
+    ]);
+
+    const channels = rows.map((row) => {
+      const totalLeads = Number(row.totalLeads || 0);
+      const approvedLeads = Number(row.approvedLeads || 0);
+      const disbursedLeads = Number(row.disbursedLeads || 0);
+      return {
+        sourceChannel: String(row._id || 'unknown'),
+        totalLeads,
+        approvedLeads,
+        disbursedLeads,
+        approvedConversion: totalLeads > 0 ? Number(((approvedLeads / totalLeads) * 100).toFixed(2)) : 0,
+        disbursedConversion: totalLeads > 0 ? Number(((disbursedLeads / totalLeads) * 100).toFixed(2)) : 0,
+      };
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        filters: {
+          from: req.query.from || '',
+          to: req.query.to || '',
+          consultantId: isAdmin ? requestedConsultantId : actorConsultantId,
+        },
+        channels,
+      },
+    });
+  } catch (error) {
+    logger.error('finance source analytics error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to fetch source analytics.' });
   }
 });
 
@@ -1195,37 +2046,63 @@ router.get('/dashboard/admin', authenticate, secureActionLimiter, requireFinance
 
 router.get('/dashboard/commission', authenticate, secureActionLimiter, requireFinanceAdmin, async (_req, res) => {
   try {
-    const leads = await FinanceLead.find().lean();
+    const [totalRows, institutionRows] = await Promise.all([
+      FinanceLead.aggregate([
+        {
+          $group: {
+            _id: null,
+            expected: { $sum: { $ifNull: ['$commission.expectedAmount', 0] } },
+            actual: { $sum: { $ifNull: ['$commission.actualAmount', 0] } },
+            paid: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$commission.status', 'paid'] },
+                  { $ifNull: ['$commission.actualAmount', 0] },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      FinanceLead.aggregate([
+        {
+          $project: {
+            institutionName: {
+              $cond: [
+                {
+                  $or: [
+                    { $eq: ['$institution.name', null] },
+                    { $eq: ['$institution.name', ''] },
+                  ],
+                },
+                'Unassigned',
+                '$institution.name',
+              ],
+            },
+            expectedAmount: { $ifNull: ['$commission.expectedAmount', 0] },
+            actualAmount: { $ifNull: ['$commission.actualAmount', 0] },
+            isPaid: { $eq: ['$commission.status', 'paid'] },
+          },
+        },
+        {
+          $group: {
+            _id: '$institutionName',
+            leadCount: { $sum: 1 },
+            expected: { $sum: '$expectedAmount' },
+            actual: { $sum: '$actualAmount' },
+            paid: {
+              $sum: {
+                $cond: ['$isPaid', '$actualAmount', 0],
+              },
+            },
+          },
+        },
+        { $sort: { expected: -1, leadCount: -1 } },
+      ]),
+    ]);
 
-    const totals = leads.reduce(
-      (acc, lead) => {
-        acc.expected += toNumber(lead.commission?.expectedAmount, 0);
-        acc.actual += toNumber(lead.commission?.actualAmount, 0);
-        if (lead.commission?.status === 'paid') acc.paid += toNumber(lead.commission?.actualAmount, 0);
-        return acc;
-      },
-      { expected: 0, actual: 0, paid: 0 }
-    );
-
-    const byInstitutionMap = {};
-    for (const lead of leads) {
-      const key = lead.institution?.name || 'Unassigned';
-      if (!byInstitutionMap[key]) {
-        byInstitutionMap[key] = {
-          institutionName: key,
-          leadCount: 0,
-          expected: 0,
-          actual: 0,
-          paid: 0,
-        };
-      }
-      byInstitutionMap[key].leadCount += 1;
-      byInstitutionMap[key].expected += toNumber(lead.commission?.expectedAmount, 0);
-      byInstitutionMap[key].actual += toNumber(lead.commission?.actualAmount, 0);
-      if (lead.commission?.status === 'paid') {
-        byInstitutionMap[key].paid += toNumber(lead.commission?.actualAmount, 0);
-      }
-    }
+    const totals = totalRows[0] || { expected: 0, actual: 0, paid: 0 };
 
     return res.json({
       success: true,
@@ -1235,11 +2112,12 @@ router.get('/dashboard/commission', authenticate, secureActionLimiter, requireFi
           actual: Number(totals.actual.toFixed(2)),
           paid: Number(totals.paid.toFixed(2)),
         },
-        byInstitution: Object.values(byInstitutionMap).map((entry) => ({
-          ...entry,
-          expected: Number(entry.expected.toFixed(2)),
-          actual: Number(entry.actual.toFixed(2)),
-          paid: Number(entry.paid.toFixed(2)),
+        byInstitution: institutionRows.map((entry) => ({
+          institutionName: entry._id || 'Unassigned',
+          leadCount: Number(entry.leadCount || 0),
+          expected: Number(toNumber(entry.expected, 0).toFixed(2)),
+          actual: Number(toNumber(entry.actual, 0).toFixed(2)),
+          paid: Number(toNumber(entry.paid, 0).toFixed(2)),
         })),
       },
     });

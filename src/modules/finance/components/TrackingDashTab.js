@@ -38,6 +38,12 @@ const TrackingDashTab = ({
   loadInstitutionDashboard,
   institutionDashboard,
   commissionDashboard,
+  slaDashboard,
+  slaLoading,
+  onRefreshSlaDashboard,
+  funnelAnalytics,
+  sourceChannelAnalytics,
+  analyticsLoading,
   dataDeletionReason,
   setDataDeletionReason,
   onDataDeletionRequest,
@@ -220,8 +226,35 @@ const TrackingDashTab = ({
                   <span key={status}>{getStatusLabel(status)}: {count}</span>
                 ))}
               </div>
+              <div className="finance-tag-row">
+                <span>SLA Overdue: {consultantDashboard?.slaCounts?.overdue || 0}</span>
+                <span>SLA Due Soon: {consultantDashboard?.slaCounts?.dueSoon || 0}</span>
+                <span>SLA Missing: {consultantDashboard?.slaCounts?.withoutSla || 0}</span>
+              </div>
             </div>
           ) : null}
+
+          <div className="finance-result">
+            <div className="finance-card-summary">
+              <strong>SLA Queue</strong>
+              <button type="button" onClick={onRefreshSlaDashboard} disabled={slaLoading}>
+                {slaLoading ? "Refreshing..." : "Refresh SLA"}
+              </button>
+            </div>
+            <p>Open Leads: {slaDashboard?.totalOpenLeads || 0}</p>
+            <div className="finance-tag-row">
+              <span>Overdue: {slaDashboard?.counts?.overdue || 0}</span>
+              <span>Due Soon: {slaDashboard?.counts?.dueSoon || 0}</span>
+              <span>Missing SLA: {slaDashboard?.counts?.withoutSla || 0}</span>
+            </div>
+            <ul className="finance-list">
+              {(slaDashboard?.overdueLeads || []).slice(0, 5).map((lead) => (
+                <li key={`sla-overdue-${lead.leadId || lead._id}`}>
+                  {lead.leadId || lead._id} | {lead.loanCategory} | {getStatusLabel(lead.status)}
+                </li>
+              ))}
+            </ul>
+          </div>
         </article>
       ) : null}
 
@@ -256,6 +289,28 @@ const TrackingDashTab = ({
           </form>
 
           <AuditLogsPanel logs={auditLogs} />
+
+          <div className="finance-result">
+            <h4>Conversion Funnel</h4>
+            {analyticsLoading ? <p>Loading analytics...</p> : null}
+            <p>Eligibility Records: {funnelAnalytics?.metrics?.eligibilityRecords || 0}</p>
+            <p>Total Leads: {funnelAnalytics?.metrics?.totalLeads || 0}</p>
+            <p>Approved Leads: {funnelAnalytics?.metrics?.approvedLeads || 0}</p>
+            <p>Disbursed Leads: {funnelAnalytics?.metrics?.disbursedLeads || 0}</p>
+            <p>Approved Conversion: {funnelAnalytics?.metrics?.conversionToApproved || 0}%</p>
+            <p>Disbursed Conversion: {funnelAnalytics?.metrics?.conversionToDisbursed || 0}%</p>
+          </div>
+
+          <div className="finance-result">
+            <h4>Source Channel Performance</h4>
+            <ul className="finance-list">
+              {(sourceChannelAnalytics || []).map((channel) => (
+                <li key={`source-${channel.sourceChannel}`}>
+                  {channel.sourceChannel}: Leads {channel.totalLeads}, Approved {channel.approvedLeads}, Disbursed {channel.disbursedLeads}
+                </li>
+              ))}
+            </ul>
+          </div>
         </article>
       ) : null}
 

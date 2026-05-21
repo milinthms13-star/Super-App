@@ -13,6 +13,14 @@ import FinanceOverviewTab from "./components/FinanceOverviewTab";
 import { calculateEmi, buildEmiSchedule, exportEmiScheduleCsv } from "./services/financeMath";
 import { getLeadFormErrors, getEligibilityFormErrors } from "./services/financeValidation";
 import { normalizeRoleTokens, hasAnyRole } from "./services/roleAccess";
+import {
+  createEmptyDocuments,
+  createLeadSubmissionKey,
+  formatCurrency,
+  getYearlyBreakdown,
+  pickInstitutions,
+  pickPayload,
+} from "./services/financeHubUtils";
 
 const SOUTH_INDIA_REGIONS = {
   Kerala: ["Kollam", "Thiruvananthapuram", "Trivandrum", "Alappuzha", "Kottayam", "Pathanamthitta", "Ernakulam", "Thrissur", "Kozhikode", "Kannur"],
@@ -343,40 +351,6 @@ const FINANCE_PULSE_INITIAL = {
   riskProfile: "medium",
 };
 
-const createEmptyDocuments = () => ({
-  aadhaar: [],
-  pan: [],
-  salarySlip: [],
-  bankStatement: [],
-  gstProof: [],
-  collateralDocuments: [],
-});
-
-const formatCurrency = (value) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(Number(value || 0));
-
-const getYearlyBreakdown = (schedule = []) => {
-  const yearlyMap = {};
-  schedule.forEach((row) => {
-    const year = Math.ceil(Number(row.month || 0) / 12);
-    if (!yearlyMap[year]) {
-      yearlyMap[year] = { year, interest: 0, principal: 0, prepayment: 0, total: 0 };
-    }
-    yearlyMap[year].interest += Number(row.interest || 0);
-    yearlyMap[year].principal += Number(row.principal || 0);
-    yearlyMap[year].prepayment += Number(row.prepayment || 0);
-    yearlyMap[year].total += Number(row.emi || 0) + Number(row.prepayment || 0);
-  });
-  return Object.values(yearlyMap);
-};
-
-const pickInstitutions = (response) => response?.data?.institutions || response?.institutions || [];
-const pickPayload = (response) => response?.data || response || null;
-
 const FinanceHub = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [searchTerm, setSearchTerm] = useState("");
@@ -397,6 +371,7 @@ const FinanceHub = () => {
   const [leadForm, setLeadForm] = useState(INITIAL_LEAD_FORM);
   const [documentsByCategory, setDocumentsByCategory] = useState(createEmptyDocuments());
   const [leadState, setLeadState] = useState({ loading: false, error: "", success: "", consentAt: "", leadId: "", supportPhone: "" });
+  const [leadSubmissionKey, setLeadSubmissionKey] = useState(createLeadSubmissionKey);
 
   const [trackPhone, setTrackPhone] = useState("");
   const [leadHistory, setLeadHistory] = useState([]);
@@ -426,6 +401,11 @@ const FinanceHub = () => {
   const [institutionDashboard, setInstitutionDashboard] = useState(null);
   const [commissionDashboard, setCommissionDashboard] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [slaDashboard, setSlaDashboard] = useState(null);
+  const [slaLoading, setSlaLoading] = useState(false);
+  const [funnelAnalytics, setFunnelAnalytics] = useState(null);
+  const [sourceChannelAnalytics, setSourceChannelAnalytics] = useState([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [quickJourney, setQuickJourney] = useState({
     loanCategory: "business",
     amount: "500000",
@@ -543,20 +523,51 @@ const FinanceHub = () => {
       setAdminDashboard(null);
       setCommissionDashboard(null);
       setAuditLogs([]);
+      setFunnelAnalytics(null);
+      setSourceChannelAnalytics([]);
       return;
     }
 
     try {
-      const [adminResponse, commissionResponse, auditResponse] = await Promise.all([
+      setAnalyticsLoading(true);
+      const [adminResponse, commissionResponse, auditResponse, funnelResponse, sourceResponse] = await Promise.all([
         financeApi.getAdminDashboard(),
         financeApi.getCommissionDashboard(),
         financeApi.getAuditLogs(15),
+        financeApi.getFunnelAnalytics(),
+        financeApi.getSourceChannelAnalytics(),
       ]);
       setAdminDashboard(pickPayload(adminResponse));
       setCommissionDashboard(pickPayload(commissionResponse));
       setAuditLogs(auditResponse?.data?.logs || auditResponse?.logs || []);
+      setFunnelAnalytics(pickPayload(funnelResponse));
+      setSourceChannelAnalytics(pickPayload(sourceResponse)?.channels || []);
     } catch (_error) {
       setWorkflowMessage("Some admin dashboard data could not be loaded.");
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const loadSlaDashboard = async (consultantScopeId = consultantId) => {
+    const shouldLoad = roleCapabilities.isConsultant || roleCapabilities.isAdmin;
+    if (!shouldLoad) {
+      setSlaDashboard(null);
+      return;
+    }
+
+    try {
+      setSlaLoading(true);
+      const params = {};
+      if (roleCapabilities.isAdmin && consultantScopeId) {
+        params.consultantId = consultantScopeId;
+      }
+      const response = await financeApi.getSlaDashboard(params);
+      setSlaDashboard(pickPayload(response));
+    } catch (_error) {
+      setSlaDashboard(null);
+    } finally {
+      setSlaLoading(false);
     }
   };
 
@@ -589,10 +600,10 @@ const FinanceHub = () => {
         setAssignmentForm((current) => ({ ...current, consultantId: derivedConsultantId }));
       }
 
-      if (isConsultant) {
-        setWorkflowRole("consultant");
-      } else if (isAdmin) {
+      if (isAdmin) {
         setWorkflowRole("admin");
+      } else if (isConsultant) {
+        setWorkflowRole("consultant");
       } else if (isInstitutionUser) {
         setWorkflowRole("institution");
       } else {
@@ -600,6 +611,9 @@ const FinanceHub = () => {
       }
 
       await loadAdminAndCommissionDashboards(isAdmin);
+      if (isConsultant || isAdmin) {
+        await loadSlaDashboard(derivedConsultantId);
+      }
     } catch (_error) {
       setRoleCapabilities((current) => ({ ...current, loaded: true }));
     }
@@ -653,6 +667,13 @@ const FinanceHub = () => {
     void loadInstitutions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateFilter, districtFilter, institutionTypeFilter, selectedCategory]);
+
+  useEffect(() => {
+    if (!roleCapabilities.loaded) return;
+    if (!roleCapabilities.isConsultant && !roleCapabilities.isAdmin) return;
+    void loadSlaDashboard(consultantId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [consultantId, roleCapabilities.isConsultant, roleCapabilities.isAdmin, roleCapabilities.loaded]);
 
   const handleEligibilitySubmit = async (event) => {
     event.preventDefault();
@@ -776,17 +797,26 @@ const FinanceHub = () => {
         });
       });
 
-      const response = await financeApi.createLead(formData);
+      const response = await financeApi.createLead(formData, {
+        idempotencyKey: leadSubmissionKey,
+        sourceChannel: "web",
+        device: {
+          platform: typeof navigator !== "undefined" ? navigator.userAgent : "web",
+          appVersion: "finance-hub-v1",
+          buildNumber: "web",
+        },
+      });
       const createdLead = response?.data?.lead || response?.lead;
 
       setLeadState({
         loading: false,
         error: "",
-        success: `${createdLead?.leadId || "Lead"} submitted successfully.`,
+        success: `${createdLead?.leadId || "Lead"} submitted successfully.${response?.data?.idempotency?.replayed ? " (Recovered from retry)" : ""}`,
         consentAt: new Date().toLocaleString(),
         leadId: createdLead?.leadId || "",
         supportPhone: String(createdLead?.phone || leadForm.phone || "").replace(/\D/g, "").slice(-10),
       });
+      setLeadSubmissionKey(createLeadSubmissionKey());
       setLeadForm(INITIAL_LEAD_FORM);
       setDocumentsByCategory(createEmptyDocuments());
 
@@ -843,6 +873,7 @@ const FinanceHub = () => {
         const consultantData = await financeApi.getConsultantDashboard(consultantId);
         setConsultantDashboard(pickPayload(consultantData));
       }
+      await loadSlaDashboard(consultantId);
       if (roleCapabilities.isAdmin) {
         await loadAdminAndCommissionDashboards(true);
       }
@@ -865,6 +896,7 @@ const FinanceHub = () => {
         const consultantData = await financeApi.getConsultantDashboard(consultantId);
         setConsultantDashboard(pickPayload(consultantData));
       }
+      await loadSlaDashboard(consultantId);
       if (trackPhone) {
         await handleTrackFetch();
       }
@@ -898,6 +930,7 @@ const FinanceHub = () => {
     try {
       const response = await financeApi.getConsultantDashboard(consultantId);
       setConsultantDashboard(pickPayload(response));
+      await loadSlaDashboard(consultantId);
     } catch (error) {
       setWorkflowMessage(error?.response?.data?.message || "Unable to fetch consultant dashboard.");
     }
@@ -1001,9 +1034,9 @@ const FinanceHub = () => {
       preferredTenureMonths: quickJourney.tenureMonths,
       state: quickJourney.state,
       district: quickAssist.city || quickJourney.district,
-      consentPrivacy: true,
-      consentKyc: true,
-      consentDisclaimer: true,
+      consentPrivacy: current.consentPrivacy,
+      consentKyc: current.consentKyc,
+      consentDisclaimer: current.consentDisclaimer,
       documentNotes:
         `${current.documentNotes || ""}${current.documentNotes ? "\n" : ""}` +
         `Quick Assist Score: ${quickEligibilityScore}/100 | Employment: ${quickAssist.employmentType} | Monthly Income: INR ${quickAssist.monthlyIncome || 0}`,
@@ -1025,7 +1058,7 @@ const FinanceHub = () => {
     }));
 
     setTrackPhone(normalizedPhone);
-    setWorkflowMessage("Quick assist data moved to full apply form. Review documents and submit.");
+    setWorkflowMessage("Quick assist data moved to full apply form. Review and accept consent checkboxes before submitting.");
     setActiveTab("apply");
   };
 
@@ -1345,6 +1378,12 @@ const FinanceHub = () => {
           loadInstitutionDashboard={loadInstitutionDashboard}
           institutionDashboard={institutionDashboard}
           commissionDashboard={commissionDashboard}
+          slaDashboard={slaDashboard}
+          slaLoading={slaLoading}
+          onRefreshSlaDashboard={() => loadSlaDashboard(consultantId)}
+          funnelAnalytics={funnelAnalytics}
+          sourceChannelAnalytics={sourceChannelAnalytics}
+          analyticsLoading={analyticsLoading}
           dataDeletionReason={dataDeletionReason}
           setDataDeletionReason={setDataDeletionReason}
           onDataDeletionRequest={handleDataDeletionRequest}

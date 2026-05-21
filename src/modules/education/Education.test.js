@@ -31,8 +31,8 @@ describe("Education module", () => {
     const searchInput = screen.getByLabelText(/search courses/i);
     fireEvent.change(searchInput, { target: { value: "digital" } });
 
-    expect(screen.getByText("Digital Marketing")).toBeInTheDocument();
-    expect(screen.queryByText("Spoken English")).not.toBeInTheDocument();
+    expect(screen.getByText("Kerala Digital Marketing Launchpad")).toBeInTheDocument();
+    expect(screen.queryByText("IT Cloud Support Engineer")).not.toBeInTheDocument();
   });
 
   test("enrolls course and shows it in my learning", () => {
@@ -43,7 +43,7 @@ describe("Education module", () => {
 
     clickNavItem("My Learning");
 
-    expect(screen.getByText("Spoken English")).toBeInTheDocument();
+    expect(screen.getByText("Gulf Hotel Operations Pro")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /continue learning/i })).toBeInTheDocument();
   });
 
@@ -54,5 +54,15 @@ describe("Education module", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /^apply now$/i })[0]);
 
     expect(screen.getByRole("button", { name: /^applied$/i })).toBeInTheDocument();
+  });
+
+  test("shows 360 dashboard and canva studio sections", () => {
+    render(<Education />);
+
+    clickNavItem("360 Dashboard");
+    expect(screen.getByText(/education 360 dashboard/i)).toBeInTheDocument();
+
+    clickNavItem("Canva Studio");
+    expect(screen.getByText(/canva studio for education/i)).toBeInTheDocument();
   });
 });

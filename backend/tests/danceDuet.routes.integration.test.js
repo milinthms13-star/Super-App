@@ -240,6 +240,53 @@ describe('DanceDuet routes integration', () => {
     expect(response.body.success).toBe(false);
   });
 
+  test('GET /jobs/:jobId/download rejects output path outside trusted output root', async () => {
+    const job = await DanceDuetJob.create({
+      userEmail: 'dancer1@example.com',
+      userName: 'Dancer 1',
+      status: 'completed',
+      output: { outputUrl: '/uploads/dance-duet/outputs-malicious/escape.mp4' },
+    });
+
+    const response = await request(app)
+      .get(`/api/dance-duet/jobs/${job._id}/download`)
+      .set('Authorization', `Bearer ${userToken}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain('Invalid output path');
+  });
+
+  test('POST /merge with same idempotency key in parallel creates only one active job', async () => {
+    const idempotencyKey = 'idem-parallel-merge-1';
+    const [first, second] = await Promise.all([
+      request(app)
+        .post('/api/dance-duet/merge')
+        .set('Authorization', `Bearer ${userToken}`)
+        .set('x-idempotency-key', idempotencyKey)
+        .field('mode', 'auto')
+        .attach('video1', createVideoBuffer(), { filename: 'video1.mp4', contentType: 'video/mp4' })
+        .attach('video2', createVideoBuffer(), { filename: 'video2.mp4', contentType: 'video/mp4' }),
+      request(app)
+        .post('/api/dance-duet/merge')
+        .set('Authorization', `Bearer ${userToken}`)
+        .set('x-idempotency-key', idempotencyKey)
+        .field('mode', 'auto')
+        .attach('video1', createVideoBuffer(), { filename: 'video1.mp4', contentType: 'video/mp4' })
+        .attach('video2', createVideoBuffer(), { filename: 'video2.mp4', contentType: 'video/mp4' }),
+    ]);
+
+    expect([200, 202]).toContain(first.status);
+    expect([200, 202]).toContain(second.status);
+
+    const jobs = await DanceDuetJob.find({
+      userEmail: 'dancer1@example.com',
+      'requestMetadata.idempotencyKey': idempotencyKey,
+      status: { $in: ['queued', 'processing', 'completed'] },
+    }).lean();
+    expect(jobs).toHaveLength(1);
+  });
+
   test('GET /analytics/me returns summary with dead-letter counters', async () => {
     await DanceDuetJob.create({
       userEmail: 'dancer1@example.com',

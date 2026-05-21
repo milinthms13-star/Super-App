@@ -1,6 +1,8 @@
 import React from "react";
 import AstrologyQuickStartPanel from "./AstrologyQuickStartPanel";
 import { useAstrologyHomeController } from "./hooks/useAstrologyHomeController";
+import { astrologyService } from "../../services/astrologyService";
+import { DEFAULT_BIRTH_TIME_ZONE } from "./data/astrologyConstants";
 import TodayView from "./views/TodayView";
 import KundliView from "./views/KundliView";
 import ConsultView from "./views/ConsultView";
@@ -383,10 +385,3 @@ const AstrologyHome = () => {
 };
 
 export default AstrologyHome;
-
-
-
-
-
-
-

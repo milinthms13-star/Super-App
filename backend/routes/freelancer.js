@@ -15,6 +15,8 @@ const FreelancerPlanPurchase = require('../models/FreelancerPlanPurchase');
 const FreelancerCommissionConfig = require('../models/FreelancerCommissionConfig');
 const FreelancerReport = require('../models/FreelancerReport');
 const logger = require('../utils/logger');
+const auth = require('../middleware/auth');
+const { authenticate, verifyAdmin } = auth;
 
 const router = express.Router();
 
@@ -45,6 +47,8 @@ const generalLimiter = rateLimit({
   max: 100, // 100 requests per minute
   message: 'Too many requests. Please try again later.',
 });
+
+router.use(generalLimiter);
 
 const DISTRICTS = ['Kollam', 'Trivandrum', 'Alappuzha', 'Kottayam', 'Pathanamthitta'];
 const LANGUAGES = ['English', 'Malayalam', 'Tamil'];
@@ -746,7 +750,7 @@ router.post('/providers/:providerId/sponsored', async (req, res) => {
   }
 });
 
-router.post('/jobs', attachmentUpload.array('attachments', 8), async (req, res) => {
+router.post('/jobs', authenticate, attachmentUpload.array('attachments', 8), async (req, res) => {
   try {
     const normalized = {
       ...req.body,
@@ -817,7 +821,7 @@ router.get('/jobs', async (req, res) => {
   }
 });
 
-router.post('/jobs/:jobId/bids', async (req, res) => {
+router.post('/jobs/:jobId/bids', authenticate, async (req, res) => {
   try {
     const { error, value } = bidCreateSchema.validate(req.body, { stripUnknown: true });
     if (error) {
@@ -867,7 +871,7 @@ router.get('/jobs/:jobId/bids', async (req, res) => {
   }
 });
 
-router.post('/jobs/:jobId/lead-purchase', async (req, res) => {
+router.post('/jobs/:jobId/lead-purchase', authenticate, async (req, res) => {
   try {
     const { error, value } = leadPurchaseSchema.validate(req.body, { stripUnknown: true });
     if (error) {
@@ -908,7 +912,7 @@ router.post('/jobs/:jobId/lead-purchase', async (req, res) => {
   }
 });
 
-router.post('/bookings', bookingLimiter, async (req, res) => {
+router.post('/bookings', authenticate, bookingLimiter, async (req, res) => {
   try {
     const { error, value } = bookingCreateSchema.validate(req.body, { stripUnknown: true });
     if (error) {
@@ -966,7 +970,7 @@ router.post('/bookings', bookingLimiter, async (req, res) => {
   }
 });
 
-router.get('/bookings', async (req, res) => {
+router.get('/bookings', authenticate, async (req, res) => {
   try {
     const { phone, providerId, status } = req.query;
     const query = {};
@@ -982,7 +986,7 @@ router.get('/bookings', async (req, res) => {
   }
 });
 
-router.patch('/bookings/:bookingCode/assign', async (req, res) => {
+router.patch('/bookings/:bookingCode/assign', authenticate, verifyAdmin, async (req, res) => {
   try {
     const booking = await FreelancerBooking.findOne({ bookingCode: req.params.bookingCode });
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
@@ -1005,7 +1009,7 @@ router.patch('/bookings/:bookingCode/assign', async (req, res) => {
   }
 });
 
-router.patch('/bookings/:bookingCode/status', async (req, res) => {
+router.patch('/bookings/:bookingCode/status', authenticate, async (req, res) => {
   try {
     const { error, value } = bookingStatusSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1028,7 +1032,7 @@ router.patch('/bookings/:bookingCode/status', async (req, res) => {
   }
 });
 
-router.post('/bookings/:bookingCode/otp/send', otpLimiter, async (req, res) => {
+router.post('/bookings/:bookingCode/otp/send', authenticate, otpLimiter, async (req, res) => {
   try {
     const booking = await FreelancerBooking.findOne({ bookingCode: req.params.bookingCode });
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
@@ -1062,7 +1066,7 @@ router.post('/bookings/:bookingCode/otp/send', otpLimiter, async (req, res) => {
   }
 });
 
-router.post('/bookings/:bookingCode/otp/verify', otpLimiter, async (req, res) => {
+router.post('/bookings/:bookingCode/otp/verify', authenticate, otpLimiter, async (req, res) => {
   try {
     const otp = String(req.body.otp || '').trim();
     if (!/^\d{6}$/.test(otp)) {
@@ -1097,7 +1101,7 @@ router.post('/bookings/:bookingCode/otp/verify', otpLimiter, async (req, res) =>
   }
 });
 
-router.post('/bookings/:bookingCode/payments/initialize', paymentLimiter, async (req, res) => {
+router.post('/bookings/:bookingCode/payments/initialize', authenticate, paymentLimiter, async (req, res) => {
   try {
     const { error, value } = paymentInitSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1139,7 +1143,7 @@ router.post('/bookings/:bookingCode/payments/initialize', paymentLimiter, async 
   }
 });
 
-router.post('/bookings/:bookingCode/payments/milestones/:index/release', paymentLimiter, async (req, res) => {
+router.post('/bookings/:bookingCode/payments/milestones/:index/release', authenticate, paymentLimiter, async (req, res) => {
   try {
     const index = Number(req.params.index);
     if (!Number.isInteger(index) || index < 0) {
@@ -1178,7 +1182,7 @@ router.post('/bookings/:bookingCode/payments/milestones/:index/release', payment
   }
 });
 
-router.post('/bookings/:bookingCode/payments/refund-request', paymentLimiter, async (req, res) => {
+router.post('/bookings/:bookingCode/payments/refund-request', authenticate, paymentLimiter, async (req, res) => {
   try {
     const { error, value } = refundSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1204,7 +1208,7 @@ router.post('/bookings/:bookingCode/payments/refund-request', paymentLimiter, as
   }
 });
 
-router.patch('/bookings/:bookingCode/cancel', async (req, res) => {
+router.patch('/bookings/:bookingCode/cancel', authenticate, async (req, res) => {
   try {
     const { error, value } = cancellationSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1236,7 +1240,7 @@ router.patch('/bookings/:bookingCode/cancel', async (req, res) => {
   }
 });
 
-router.post('/bookings/:bookingCode/disputes', disputeProofUpload.array('proofs', 8), async (req, res) => {
+router.post('/bookings/:bookingCode/disputes', authenticate, disputeProofUpload.array('proofs', 8), async (req, res) => {
   try {
     const { error, value } = disputeCreateSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1278,7 +1282,7 @@ router.post('/bookings/:bookingCode/disputes', disputeProofUpload.array('proofs'
   }
 });
 
-router.get('/disputes', async (req, res) => {
+router.get('/disputes', authenticate, async (req, res) => {
   try {
     const { status = 'open' } = req.query;
     const query = status === 'all' ? {} : { status };
@@ -1290,7 +1294,7 @@ router.get('/disputes', async (req, res) => {
   }
 });
 
-router.patch('/disputes/:disputeCode/resolve', async (req, res) => {
+router.patch('/disputes/:disputeCode/resolve', authenticate, verifyAdmin, async (req, res) => {
   try {
     const { error, value } = disputeResolveSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1327,7 +1331,7 @@ router.get('/plans', async (_req, res) => {
   return res.json({ success: true, data: { plans: SUBSCRIPTION_PLANS } });
 });
 
-router.post('/plans/purchase', async (req, res) => {
+router.post('/plans/purchase', authenticate, async (req, res) => {
   try {
     const { error, value } = planPurchaseSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1368,7 +1372,7 @@ router.post('/plans/purchase', async (req, res) => {
   }
 });
 
-router.get('/plans/purchases', async (req, res) => {
+router.get('/plans/purchases', authenticate, async (req, res) => {
   try {
     const query = req.query.providerId ? { providerId: req.query.providerId } : {};
     const purchases = await FreelancerPlanPurchase.find(query).sort({ createdAt: -1 }).lean();
@@ -1379,7 +1383,7 @@ router.get('/plans/purchases', async (req, res) => {
   }
 });
 
-router.post('/reports', async (req, res) => {
+router.post('/reports', authenticate, async (req, res) => {
   try {
     const { error, value } = reportSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1463,7 +1467,7 @@ router.post('/ai/quote', async (req, res) => {
   }
 });
 
-router.get('/admin/commission-settings', async (_req, res) => {
+router.get('/admin/commission-settings', authenticate, verifyAdmin, async (_req, res) => {
   try {
     await ensureSeedData();
     const config = await FreelancerCommissionConfig.findOne({ configKey: 'default' }).lean();
@@ -1474,7 +1478,7 @@ router.get('/admin/commission-settings', async (_req, res) => {
   }
 });
 
-router.put('/admin/commission-settings', async (req, res) => {
+router.put('/admin/commission-settings', authenticate, verifyAdmin, async (req, res) => {
   try {
     const { error, value } = commissionSchema.validate(req.body, { stripUnknown: true });
     if (error) return res.status(400).json({ success: false, message: error.details[0].message });
@@ -1492,7 +1496,7 @@ router.put('/admin/commission-settings', async (req, res) => {
   }
 });
 
-router.get('/admin/dashboard', async (_req, res) => {
+router.get('/admin/dashboard', authenticate, verifyAdmin, async (_req, res) => {
   try {
     await ensureSeedData();
     const [providers, jobs, bookings, disputes, reports, planPurchases] = await Promise.all([

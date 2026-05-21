@@ -78,6 +78,9 @@ const GulfAttestationRequestSchema = new Schema(
     country: { type: String, required: true, trim: true },
     urgency: { type: String, trim: true, default: 'standard' },
     documentFile: { type: String, trim: true, default: '' },
+    paymentStatus: { type: String, trim: true, default: 'unpaid', index: true },
+    paymentId: { type: String, trim: true, default: '' },
+    amount: { type: Number, default: 0 },
     status: { type: String, trim: true, default: 'document_received', index: true },
     timeline: { type: [timelineEntrySchema], default: [] },
   },
@@ -170,6 +173,10 @@ const GulfRecruiterSchema = new Schema(
     successCases: { type: Number, default: 0 },
     rating: { type: Number, default: 4.5 },
     reviews: { type: Number, default: 0 },
+    verificationRequestedAt: { type: Date },
+    verifiedAt: { type: Date },
+    verificationNotes: { type: String, trim: true, default: '' },
+    kycDocuments: { type: [String], default: [] },
   },
   { timestamps: true }
 );

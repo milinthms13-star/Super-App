@@ -74,6 +74,7 @@ const HyperlocalAICommerce = React.lazy(() => import("./modules/hyperlocalaicomm
 const NilaAIStudio = React.lazy(() => import("./modules/nilaaistudio/NilaAIStudio"));
 const TrustLayer = React.lazy(() => import("./modules/trustlayer/TrustLayer"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
+const ModuleRatings = React.lazy(() => import("./modules/moduleratings/ModuleRatings"));
 const JobPortal = React.lazy(() => import("./modules/jobportal/JobPortal"));
 const Education = React.lazy(() => import("./modules/education/Education"));
 const TourismMarketplace = React.lazy(() => import("./modules/tourism/TourismMarketplace"));
@@ -809,6 +810,52 @@ function AppShell() {
     navigate("/", { replace: true });
   };
 
+  useEffect(() => {
+    const interceptorId = axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error?.config;
+        const requestUrl = String(originalRequest?.url || '');
+        if (
+          !originalRequest ||
+          originalRequest.__isRetryRequest ||
+          error?.response?.status !== 401 ||
+          requestUrl.includes('/auth/refresh-token')
+        ) {
+          return Promise.reject(error);
+        }
+
+        originalRequest.__isRetryRequest = true;
+
+        try {
+          const refreshResponse = await axios.post(
+            `${API_BASE_URL}/auth/refresh-token`,
+            {},
+            { withCredentials: true }
+          );
+          const nextToken = refreshResponse?.data?.data?.accessToken;
+          if (nextToken) {
+            storeAuthToken(nextToken);
+            setAuthToken(nextToken);
+            axios.defaults.headers.common.Authorization = `Bearer ${nextToken}`;
+            originalRequest.headers = {
+              ...originalRequest.headers,
+              Authorization: `Bearer ${nextToken}`,
+            };
+            return axios(originalRequest);
+          }
+        } catch (_refreshError) {
+          // Refresh failed, fall through to logout.
+        }
+
+        await handleLogout();
+        return Promise.reject(error);
+      }
+    );
+
+    return () => axios.interceptors.response.eject(interceptorId);
+  }, [handleLogout]);
+
   const handleOpenEmergencyModule = useCallback((nextModule) => {
     if (nextModule === "messaging" && incomingSosAlert) {
       const pendingEmergencyCall = buildPendingEmergencyCall(incomingSosAlert);
@@ -1297,7 +1344,9 @@ function AppShell() {
               <Route path="astrology" element={<AstrologyHome />} />
               <Route path="astrology-consultant-admin" element={<ConsultantAdminPanel />} />
               <Route path="astrology-analytics" element={<AstrologyAnalyticsDashboard />} />
+              <Route path="module-ratings" element={<ModuleRatings />} />
               <Route path="support" element={<Support />} />
+
               <Route 
                 path="profile" 
                 element={

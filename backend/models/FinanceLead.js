@@ -79,6 +79,36 @@ const financeLeadSchema = new mongoose.Schema(
       phone: { type: String, default: '', trim: true },
       assignedAt: { type: Date, default: null },
     },
+    sourceMeta: {
+      sourceChannel: {
+        type: String,
+        enum: ['web', 'expo', 'mobile', 'admin', 'api'],
+        default: 'web',
+        trim: true,
+      },
+      createdByUserId: { type: String, default: '', trim: true, index: true },
+      device: {
+        platform: { type: String, default: '', trim: true },
+        appVersion: { type: String, default: '', trim: true },
+        buildNumber: { type: String, default: '', trim: true },
+      },
+      idempotencyKey: { type: String, default: '', trim: true, index: true },
+      idempotencyReplayCount: { type: Number, default: 0, min: 0 },
+      lastIdempotencySeenAt: { type: Date, default: null },
+    },
+    workflowOps: {
+      nextActionDueAt: { type: Date, default: null, index: true },
+      lastReminderAt: { type: Date, default: null },
+    },
+    notificationEvents: [
+      {
+        eventType: { type: String, required: true, trim: true },
+        severity: { type: String, enum: ['info', 'warning', 'critical'], default: 'info' },
+        message: { type: String, default: '', trim: true },
+        metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+        createdAt: { type: Date, default: () => new Date() },
+      },
+    ],
     commission: {
       model: { type: String, enum: ['percentage', 'flat'], default: 'percentage' },
       value: { type: Number, min: 0, default: 0 },
@@ -100,6 +130,8 @@ const financeLeadSchema = new mongoose.Schema(
         enum: ['none', 'requested', 'processed'],
         default: 'none',
       },
+      processedBy: { type: String, default: '', trim: true },
+      processedAt: { type: Date, default: null },
     },
   },
   { timestamps: true }
@@ -108,5 +140,9 @@ const financeLeadSchema = new mongoose.Schema(
 financeLeadSchema.index({ leadId: 1, phone: 1 });
 financeLeadSchema.index({ district: 1, loanCategory: 1 });
 financeLeadSchema.index({ 'institution.institutionId': 1, status: 1 });
+financeLeadSchema.index(
+  { 'sourceMeta.createdByUserId': 1, 'sourceMeta.idempotencyKey': 1 },
+  { unique: true, sparse: true, partialFilterExpression: { 'sourceMeta.idempotencyKey': { $type: 'string', $ne: '' } } }
+);
 
 module.exports = mongoose.model('FinanceLead', financeLeadSchema);

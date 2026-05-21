@@ -11,6 +11,7 @@ const financeAuditLogSchema = new mongoose.Schema(
         'lead_status_updated',
         'commission_updated',
         'data_deletion_requested',
+        'data_deletion_processed',
       ],
       required: true,
       index: true,

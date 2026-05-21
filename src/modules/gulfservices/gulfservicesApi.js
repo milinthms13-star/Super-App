@@ -38,6 +38,36 @@ export const gulfservicesApi = {
         headers: buildAuthHeaders(),
       })
     ),
+  createPaymentIntent: async (data) =>
+    handleResponse(
+      await axios.post(`${BASE}/payments/create`, data, {
+        headers: buildAuthHeaders(),
+      })
+    ),
+  getAdminAnalytics: async () =>
+    handleResponse(
+      await axios.get(`${BASE}/admin/analytics`, {
+        headers: buildAuthHeaders(),
+      })
+    ),
+  applyRecruiter: async (formData) =>
+    handleResponse(
+      await axios.post(`${BASE}/recruiters/apply`, formData, {
+        headers: buildAuthHeaders(),
+      })
+    ),
+  getPendingRecruiters: async () =>
+    handleResponse(
+      await axios.get(`${BASE}/admin/recruiters/pending`, {
+        headers: buildAuthHeaders(),
+      })
+    ),
+  verifyRecruiter: async (id, data) =>
+    handleResponse(
+      await axios.put(`${BASE}/admin/recruiters/${encodeURIComponent(id)}/verify`, data, {
+        headers: buildAuthHeaders(),
+      })
+    ),
   getMyApplications: async () =>
     handleResponse(
       await axios.get(`${BASE}/applications/my`, {

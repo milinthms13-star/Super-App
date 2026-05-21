@@ -46,6 +46,7 @@ const educationEnrollmentSchema = new mongoose.Schema(
       type: String,
       default: 'payment_pending',
       trim: true,
+      enum: ['payment_pending', 'payment_verification_pending', 'payment_failed', 'enrolled', 'cancelled'],
       index: true,
     },
     orderId: {
@@ -76,5 +77,14 @@ const educationEnrollmentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-module.exports = mongoose.model('EducationEnrollment', educationEnrollmentSchema);
+educationEnrollmentSchema.index(
+  { userEmail: 1, courseId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ['payment_pending', 'payment_verification_pending', 'enrolled'] },
+    },
+  }
+);
 
+module.exports = mongoose.model('EducationEnrollment', educationEnrollmentSchema);

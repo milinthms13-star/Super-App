@@ -4,6 +4,16 @@ import { BACKEND_BASE_URL } from "../../utils/api";
 const FINANCE_API_BASE = `${BACKEND_BASE_URL}/api/finance`;
 const AUTH_API_BASE = `${BACKEND_BASE_URL}/api/auth`;
 
+const createIdempotencyKey = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `fin-${Date.now()}-${token}`;
+  }
+  return `fin-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+};
+
 const buildQueryString = (params = {}) => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -36,9 +46,19 @@ export const financeApi = {
     return response.data;
   },
 
-  createLead: async (formData) => {
+  createLead: async (formData, options = {}) => {
+    const idempotencyKey = String(options.idempotencyKey || createIdempotencyKey()).trim();
+    const sourceChannel = String(options.sourceChannel || "web").trim().toLowerCase() || "web";
+    const device = options.device || {};
     const response = await axios.post(`${FINANCE_API_BASE}/leads`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+      headers: {
+        "Content-Type": "multipart/form-data",
+        "x-idempotency-key": idempotencyKey,
+        "x-source-channel": sourceChannel,
+        "x-client-platform": String(device.platform || "web"),
+        "x-app-version": String(device.appVersion || ""),
+        "x-build-number": String(device.buildNumber || ""),
+      },
     });
     return response.data;
   },
@@ -65,6 +85,16 @@ export const financeApi = {
 
   requestDataDeletion: async (payload) => {
     const response = await axios.post(`${FINANCE_API_BASE}/data-deletion`, payload);
+    return response.data;
+  },
+
+  getDataDeletionRequests: async () => {
+    const response = await axios.get(`${FINANCE_API_BASE}/data-deletion/requests`);
+    return response.data;
+  },
+
+  processDataDeletionRequest: async (leadId) => {
+    const response = await axios.patch(`${FINANCE_API_BASE}/data-deletion/${encodeURIComponent(leadId)}/process`);
     return response.data;
   },
 
@@ -99,6 +129,31 @@ export const financeApi = {
 
   getAuditLogs: async (limit = 20) => {
     const response = await axios.get(`${FINANCE_API_BASE}/admin/audit${buildQueryString({ limit })}`);
+    return response.data;
+  },
+
+  getSlaDashboard: async (params = {}) => {
+    const response = await axios.get(`${FINANCE_API_BASE}/dashboard/sla${buildQueryString(params)}`);
+    return response.data;
+  },
+
+  getFunnelAnalytics: async (params = {}) => {
+    const response = await axios.get(`${FINANCE_API_BASE}/analytics/funnel${buildQueryString(params)}`);
+    return response.data;
+  },
+
+  getSourceChannelAnalytics: async (params = {}) => {
+    const response = await axios.get(`${FINANCE_API_BASE}/analytics/source-channels${buildQueryString(params)}`);
+    return response.data;
+  },
+
+  getMobileBootstrap: async () => {
+    const response = await axios.get(`${FINANCE_API_BASE}/mobile/bootstrap`, {
+      headers: {
+        "x-source-channel": "expo",
+        "x-client-platform": "expo",
+      },
+    });
     return response.data;
   },
 };

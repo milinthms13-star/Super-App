@@ -1,9 +1,11 @@
 const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
+const fsPromises = require('fs/promises');
 const path = require('path');
 const Joi = require('joi');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const { authenticate, hasAdminPrivileges } = require('../middleware/auth');
 const {
   createListingLimiter,
@@ -43,11 +45,13 @@ const {
 const { listRestaurants } = require('../utils/restaurantStore');
 const User = require('../models/User');
 const Order = require('../models/Order');
+const Payment = require('../models/Payment');
 const EducationState = require('../models/EducationState');
 const EducationEnrollment = require('../models/EducationEnrollment');
 const EducationScholarshipApplication = require('../models/EducationScholarshipApplication');
 const EducationCommunityMembership = require('../models/EducationCommunityMembership');
 const EducationTuitionRequest = require('../models/EducationTuitionRequest');
+const EducationLearningEvent = require('../models/EducationLearningEvent');
 const PlatformSetting = require('../models/PlatformSetting');
 const CheckoutService = require('../services/CheckoutService');
 const devAuthStore = require('../utils/devAuthStore');
@@ -68,6 +72,12 @@ const {
   GOVT_PORTALS,
 } = require('../data/skillLearningData');
 const {
+  EDUCATION_SCHOLARSHIPS,
+  EDUCATION_GOVERNMENT_SCHEMES,
+  EDUCATION_CANVA_TEMPLATES,
+  EDUCATION_CANVA_CAMPAIGN_SIZES,
+} = require('../data/educationData');
+const {
   validateCertificateUploadPayload,
   buildSkillWalletShareText,
 } = require('../utils/skillDevelopmentBackendHelpers');
@@ -84,6 +94,135 @@ const upload = multer({
     fileSize: 5 * 1024 * 1024,
   },
 });
+
+const isTestEnv = process.env.NODE_ENV === 'test';
+const EDUCATION_COLD_CACHE_SECONDS = Math.max(
+  30,
+  Number(process.env.EDUCATION_COLD_CACHE_SECONDS || 300)
+);
+const EDUCATION_PRIVATE_CACHE_SECONDS = Math.max(
+  15,
+  Number(process.env.EDUCATION_PRIVATE_CACHE_SECONDS || 60)
+);
+const EDUCATION_IDEMPOTENCY_TTL_MS = Math.max(
+  30000,
+  Number(process.env.EDUCATION_IDEMPOTENCY_TTL_MS || 10 * 60 * 1000)
+);
+const EDUCATION_OVERVIEW_CACHE_TTL_MS = Math.max(
+  10000,
+  Number(process.env.EDUCATION_OVERVIEW_CACHE_TTL_MS || 45 * 1000)
+);
+const ENABLE_EDUCATION_360 =
+  String(process.env.EDUCATION_360_ENABLED || 'true').trim().toLowerCase() !== 'false';
+const educationIdempotencyLocks = new Map();
+const educationIdempotencyResponses = new Map();
+const educationOverviewCache = new Map();
+
+const educationWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isTestEnv ? 1000 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many education write requests. Please retry shortly.',
+  },
+});
+
+const setEducationCacheHeaders = (res, policy = 'hot_private') => {
+  if (!res || typeof res.setHeader !== 'function') {
+    return;
+  }
+  if (policy === 'cold_public') {
+    res.setHeader(
+      'Cache-Control',
+      `public, max-age=${EDUCATION_COLD_CACHE_SECONDS}, s-maxage=${EDUCATION_COLD_CACHE_SECONDS}, stale-while-revalidate=60`
+    );
+    return;
+  }
+  if (policy === 'cold_private') {
+    res.setHeader(
+      'Cache-Control',
+      `private, max-age=${EDUCATION_PRIVATE_CACHE_SECONDS}, stale-while-revalidate=30`
+    );
+    return;
+  }
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+};
+
+const withEducationTelemetry = (routeId, handler) => async (req, res, next) => {
+  const startedAtMs = Date.now();
+  if (res && typeof res.setHeader === 'function') {
+    res.setHeader('x-edu-route', routeId);
+  }
+  try {
+    await handler(req, res, next);
+  } finally {
+    const durationMs = Date.now() - startedAtMs;
+    logger.info('education route telemetry', {
+      routeId,
+      method: req.method,
+      statusCode: res.statusCode,
+      durationMs,
+      user: normalizeEmailAddress(req.user?.email || req.user?.id || req.user?._id),
+    });
+  }
+};
+
+const getEducationIdempotencyKey = (req, scope = '') => {
+  const rawKey = String(
+    req.headers['x-idempotency-key'] || req.headers['idempotency-key'] || req.body?.idempotencyKey || ''
+  )
+    .trim()
+    .slice(0, 180);
+  if (!rawKey) {
+    return '';
+  }
+  const user = normalizeEmailAddress(req.user?.email || req.user?.id || req.user?._id || 'guest');
+  return `${scope}:${user}:${rawKey}`;
+};
+
+const purgeExpiredEducationIdempotencyEntries = () => {
+  const now = Date.now();
+  for (const [key, entry] of educationIdempotencyResponses.entries()) {
+    if (!entry || entry.expiresAt <= now) {
+      educationIdempotencyResponses.delete(key);
+    }
+  }
+};
+
+const withEducationIdempotency = async (req, scope, execute) => {
+  purgeExpiredEducationIdempotencyEntries();
+  const lockKey = getEducationIdempotencyKey(req, scope);
+  if (!lockKey) {
+    return execute({ replay: null });
+  }
+
+  const replay = educationIdempotencyResponses.get(lockKey);
+  if (replay && replay.expiresAt > Date.now()) {
+    return execute({ replay: replay.response, replayed: true });
+  }
+
+  if (educationIdempotencyLocks.has(lockKey)) {
+    return {
+      idempotencyConflict: true,
+    };
+  }
+
+  educationIdempotencyLocks.set(lockKey, Date.now());
+  try {
+    const result = await execute({ replay: null, replayed: false });
+    if (result && !result.idempotencyConflict && !result.skipCache) {
+      educationIdempotencyResponses.set(lockKey, {
+        response: result,
+        expiresAt: Date.now() + EDUCATION_IDEMPOTENCY_TTL_MS,
+      });
+    }
+    return result;
+  } finally {
+    educationIdempotencyLocks.delete(lockKey);
+  }
+};
 
 const ensureUploadsFolder = (subfolder) => {
   const folderPath = path.join(__dirname, '../uploads', subfolder);
@@ -556,6 +695,18 @@ const educationStateSchema = Joi.object({
   enrolledCourseIds: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
   appliedScholarships: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
   joinedGroups: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
+  courseProgress: Joi.object()
+    .pattern(Joi.string().trim().min(1).max(120), Joi.number().min(0).max(100))
+    .default({}),
+  roleProfile: Joi.object({
+    primaryRole: Joi.string().valid('student', 'parent', 'tutor', 'institute_admin').default('student'),
+    studentName: Joi.string().trim().allow('').max(120).default(''),
+    classLevel: Joi.string().trim().allow('').max(80).default(''),
+    targetExam: Joi.string().trim().allow('').max(120).default(''),
+    preferredLanguage: Joi.string().trim().allow('').max(60).default('English'),
+    careerGoal: Joi.string().trim().allow('').max(200).default(''),
+  }).default(),
+  interventionsDismissed: Joi.array().items(Joi.string().trim().min(1)).max(200).default([]),
 });
 
 const educationEnrollmentSchema = Joi.object({
@@ -608,12 +759,480 @@ const buildEducationTuitionPriority = ({
   return 'normal';
 };
 
+const buildEducationTutorMatches = ({
+  subject = '',
+  classLevel = '',
+  preferredMode = 'online',
+}) => {
+  const base = [
+    {
+      tutorId: 'tutor-anita-mathews',
+      name: 'Anita Mathews',
+      subjects: ['Mathematics', 'Science'],
+      classLevels: ['Class 8', 'Class 9', 'Class 10'],
+      modes: ['online', 'hybrid'],
+      hourlyFee: 450,
+      rating: 4.7,
+    },
+    {
+      tutorId: 'tutor-faisal-rahman',
+      name: 'Faisal Rahman',
+      subjects: ['Physics', 'Chemistry', 'Biology'],
+      classLevels: ['Plus One', 'Plus Two'],
+      modes: ['online', 'offline'],
+      hourlyFee: 600,
+      rating: 4.8,
+    },
+    {
+      tutorId: 'tutor-reshma-k',
+      name: 'Reshma K',
+      subjects: ['English', 'Hindi', 'Malayalam', 'Social Studies'],
+      classLevels: ['Class 8', 'Class 9', 'Class 10', 'Plus One'],
+      modes: ['online', 'offline', 'hybrid'],
+      hourlyFee: 400,
+      rating: 4.6,
+    },
+  ];
+
+  const requestedSubject = String(subject || '').trim();
+  const requestedClass = String(classLevel || '').trim();
+  const requestedMode = String(preferredMode || '').trim().toLowerCase();
+
+  const scored = base.map((tutor) => {
+    let score = tutor.rating * 10;
+    if (requestedSubject && tutor.subjects.includes(requestedSubject)) score += 25;
+    if (requestedClass && tutor.classLevels.includes(requestedClass)) score += 20;
+    if (requestedMode && tutor.modes.includes(requestedMode)) score += 15;
+    return { ...tutor, matchScore: Math.min(100, Math.round(score)) };
+  });
+
+  return scored
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, 3)
+    .map((tutor) => ({
+      tutorId: tutor.tutorId,
+      name: tutor.name,
+      subjects: tutor.subjects,
+      classLevels: tutor.classLevels,
+      modes: tutor.modes,
+      hourlyFee: tutor.hourlyFee,
+      rating: tutor.rating,
+      matchScore: tutor.matchScore,
+    }));
+};
+
+const computeEducationProgressDelta = ({
+  eventType = 'progress_adjustment',
+  explicitDelta = null,
+  quizScore = null,
+  watchMinutes = 0,
+}) => {
+  if (explicitDelta !== null && explicitDelta !== undefined && explicitDelta !== '' && Number.isFinite(Number(explicitDelta))) {
+    return Number(explicitDelta);
+  }
+
+  if (eventType === 'lesson_complete') {
+    return 8;
+  }
+  if (eventType === 'quiz_complete') {
+    const score = Number(quizScore);
+    if (Number.isFinite(score) && score >= 85) return 12;
+    if (Number.isFinite(score) && score >= 60) return 8;
+    return 4;
+  }
+  if (eventType === 'watch_time') {
+    const minutes = Math.max(0, Number(watchMinutes || 0));
+    return Math.min(6, Math.floor(minutes / 10));
+  }
+  return 3;
+};
+
+const buildSkillAssessmentMetrics = ({
+  questions = [],
+  answers = [],
+}) => {
+  const normalizedQuestions = Array.isArray(questions) ? questions : [];
+  const normalizedAnswers = Array.isArray(answers) ? answers : [];
+  const answerLookup = normalizedAnswers.reduce((accumulator, answer) => {
+    const questionId = String(answer?.id || '').trim();
+    if (questionId) {
+      accumulator[questionId] = answer;
+    }
+    return accumulator;
+  }, {});
+
+  const totalQuestions = normalizedQuestions.length;
+  let correct = 0;
+  let wrong = 0;
+  let attempted = 0;
+  const weakAreaTopics = [];
+
+  normalizedQuestions.forEach((question) => {
+    const answer = answerLookup[question.id];
+    if (typeof answer?.selectedIndex !== 'number') {
+      return;
+    }
+
+    attempted += 1;
+    if (question.answer === answer.selectedIndex) {
+      correct += 1;
+      return;
+    }
+
+    wrong += 1;
+    weakAreaTopics.push(question?.topic || 'general');
+  });
+
+  const negativeMarks = wrong * 0.25;
+  const scoreBase = totalQuestions > 0 ? ((correct - negativeMarks) / totalQuestions) * 100 : 0;
+  const score = Math.max(0, Number(scoreBase.toFixed(0)));
+
+  return {
+    totalQuestions,
+    correct,
+    wrong,
+    attempted,
+    negativeMarks,
+    score,
+    weakAreaTopics: [...new Set(weakAreaTopics)],
+  };
+};
+
+const EDUCATION_TUITION_STATUS_TRANSITIONS = {
+  submitted: ['matched', 'cancelled'],
+  matched: ['trial_scheduled', 'cancelled'],
+  trial_scheduled: ['trial_completed', 'cancelled'],
+  trial_completed: ['booked', 'cancelled'],
+  booked: ['in_progress', 'cancelled'],
+  in_progress: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: [],
+};
+
+const canTransitionEducationTuitionStatus = ({
+  currentStatus = '',
+  nextStatus = '',
+}) => {
+  const from = String(currentStatus || '').trim().toLowerCase();
+  const to = String(nextStatus || '').trim().toLowerCase();
+  if (!from || !to) return false;
+  if (from === to) return true;
+  const allowedTransitions = EDUCATION_TUITION_STATUS_TRANSITIONS[from] || [];
+  return allowedTransitions.includes(to);
+};
+
+const buildEducationOutcomeMetrics = ({
+  state = {},
+  latestTest = null,
+  tuitionRequests = [],
+  certificates = [],
+  learningEvents = [],
+}) => {
+  const progressValues = Object.values(state?.courseProgress || {}).map((value) => Number(value || 0));
+  const avgCourseProgress = progressValues.length
+    ? Math.round(progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length)
+    : 0;
+  const appliedScholarshipsCount = Array.isArray(state?.appliedScholarships)
+    ? state.appliedScholarships.length
+    : 0;
+  const scholarshipConversionRate = EDUCATION_SCHOLARSHIPS.length
+    ? Math.round((appliedScholarshipsCount / EDUCATION_SCHOLARSHIPS.length) * 100)
+    : 0;
+  const requestList = Array.isArray(tuitionRequests) ? tuitionRequests : [];
+  const completedTuition = requestList.filter((item) => item?.status === 'completed').length;
+  const tuitionCompletionRate = requestList.length
+    ? Math.round((completedTuition / requestList.length) * 100)
+    : 0;
+  const certificateList = Array.isArray(certificates) ? certificates : [];
+  const verifiedCertificates = certificateList.filter(
+    (item) => String(item?.verificationStatus || 'uploaded') === 'verified'
+  ).length;
+  const certificationVerificationRate = certificateList.length
+    ? Math.round((verifiedCertificates / certificateList.length) * 100)
+    : 0;
+  const recentEvents = (Array.isArray(learningEvents) ? learningEvents : [])
+    .filter((event) => new Date(event?.createdAt || 0).getTime() >= Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const learningConsistencyScore = Math.max(0, Math.min(100, recentEvents.length * 8));
+  const latestTestScore = Number(latestTest?.score || 0);
+
+  const readinessScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        avgCourseProgress * 0.4 +
+          latestTestScore * 0.2 +
+          tuitionCompletionRate * 0.15 +
+          certificationVerificationRate * 0.15 +
+          learningConsistencyScore * 0.1
+      )
+    )
+  );
+
+  return {
+    readinessScore,
+    avgCourseProgress,
+    latestTestScore,
+    tuitionCompletionRate,
+    scholarshipConversionRate,
+    certificationVerificationRate,
+    learningConsistencyScore,
+    appliedScholarshipsCount,
+    verifiedCertificates,
+  };
+};
+
+const buildEducationInterventions = ({
+  state = {},
+  latestTest = null,
+  tuitionRequests = [],
+  outcomeMetrics = {},
+}) => {
+  const interventions = [];
+  const weakAreas = Array.isArray(latestTest?.weakAreas) ? latestTest.weakAreas : [];
+  const dismissed = new Set(
+    (Array.isArray(state?.interventionsDismissed) ? state.interventionsDismissed : [])
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+  );
+
+  if (Number(outcomeMetrics?.avgCourseProgress || 0) < 45) {
+    interventions.push({
+      id: 'low-progress',
+      severity: 'high',
+      title: 'Course progress is below target',
+      description: 'Focus on one enrolled course daily to cross 45% progress.',
+      action: 'Resume top-priority course',
+    });
+  }
+
+  if (weakAreas.length) {
+    interventions.push({
+      id: 'weak-areas',
+      severity: 'medium',
+      title: 'Weak topics detected from assessments',
+      description: `Review topics: ${weakAreas.join(', ')}.`,
+      action: 'Start weak-area revision plan',
+    });
+  }
+
+  const staleTuition = (Array.isArray(tuitionRequests) ? tuitionRequests : []).find((request) => {
+    const status = String(request?.status || 'submitted');
+    if (status === 'completed' || status === 'cancelled') return false;
+    const createdAt = new Date(request?.createdAt || 0).getTime();
+    return Number.isFinite(createdAt) && createdAt <= Date.now() - 7 * 24 * 60 * 60 * 1000;
+  });
+  if (staleTuition) {
+    interventions.push({
+      id: 'tuition-stagnation',
+      severity: 'medium',
+      title: 'Tuition request is stagnant',
+      description: `Request ${staleTuition.requestId} has not progressed recently.`,
+      action: 'Schedule next tuition session',
+    });
+  }
+
+  if (Number(outcomeMetrics?.certificationVerificationRate || 0) < 60) {
+    interventions.push({
+      id: 'certificate-verification',
+      severity: 'low',
+      title: 'Certificate verification backlog',
+      description: 'Get your uploaded certificates verified to improve trust score.',
+      action: 'Submit certificate verification details',
+    });
+  }
+
+  return interventions.filter((item) => !dismissed.has(item.id));
+};
+
+const buildEducationCanvaToolkit = ({
+  roleProfile = {},
+  interventions = [],
+}) => {
+  const primaryRole = String(roleProfile?.primaryRole || 'student');
+  const language = String(roleProfile?.preferredLanguage || 'English');
+  const interventionCampaigns = interventions.slice(0, 3).map((item) => ({
+    campaignId: `campaign-${item.id}`,
+    title: `${item.title} Campaign`,
+    message: item.description,
+    targetAudience: primaryRole === 'parent' ? 'Parents' : 'Learners',
+  }));
+
+  return {
+    preferredLanguage: language,
+    templates: EDUCATION_CANVA_TEMPLATES,
+    campaignSizes: EDUCATION_CANVA_CAMPAIGN_SIZES,
+    translationTargets: ['English', 'Malayalam', 'Hindi'],
+    suggestedCampaigns: interventionCampaigns,
+  };
+};
+
+const buildEducationOverview360Payload = async ({
+  userIdentifier,
+  userEmail,
+}) => {
+  const [state, latestTest, tuitionRequests, certificates, learningEvents] = await Promise.all([
+    getUserEducationStateFromDB(userIdentifier),
+    SkillTestResult.findOne({ userEmail }).sort({ createdAt: -1 }).lean(),
+    EducationTuitionRequest.find({ userEmail }).sort({ createdAt: -1 }).lean(),
+    SkillCertificate.find({ userEmail }).sort({ uploadedAt: -1 }).lean(),
+    EducationLearningEvent.find({ userEmail }).sort({ createdAt: -1 }).limit(40).lean(),
+  ]);
+
+  const outcomeMetrics = buildEducationOutcomeMetrics({
+    state,
+    latestTest,
+    tuitionRequests,
+    certificates,
+    learningEvents,
+  });
+  const interventions = buildEducationInterventions({
+    state,
+    latestTest,
+    tuitionRequests,
+    outcomeMetrics,
+  });
+  const canvaToolkit = buildEducationCanvaToolkit({
+    roleProfile: state.roleProfile,
+    interventions,
+  });
+
+  return {
+    state,
+    latestTest,
+    outcomeMetrics,
+    interventions,
+    canvaToolkit,
+  };
+};
+
+const getCachedEducationOverview360 = async ({
+  userIdentifier,
+  userEmail,
+}) => {
+  const cacheKey = normalizeEmailAddress(userEmail || userIdentifier);
+  const current = educationOverviewCache.get(cacheKey);
+  const now = Date.now();
+  if (current && current.payload && current.expiresAt > now) {
+    return {
+      payload: current.payload,
+      cacheState: 'hit',
+    };
+  }
+
+  if (current && current.payload) {
+    if (!current.refreshing) {
+      const refreshPromise = buildEducationOverview360Payload({
+        userIdentifier,
+        userEmail,
+      })
+        .then((payload) => {
+          educationOverviewCache.set(cacheKey, {
+            payload,
+            expiresAt: Date.now() + EDUCATION_OVERVIEW_CACHE_TTL_MS,
+            refreshing: null,
+          });
+        })
+        .catch((refreshError) => {
+          logger.warn('education overview refresh failed', {
+            cacheKey,
+            error: refreshError?.message || 'unknown',
+          });
+          const fallback = educationOverviewCache.get(cacheKey) || {};
+          educationOverviewCache.set(cacheKey, {
+            ...fallback,
+            refreshing: null,
+            expiresAt: Date.now() + 10 * 1000,
+          });
+        });
+
+      educationOverviewCache.set(cacheKey, {
+        ...current,
+        refreshing: refreshPromise,
+      });
+    }
+
+    return {
+      payload: current.payload,
+      cacheState: 'stale',
+    };
+  }
+
+  const payload = await buildEducationOverview360Payload({
+    userIdentifier,
+    userEmail,
+  });
+  educationOverviewCache.set(cacheKey, {
+    payload,
+    expiresAt: now + EDUCATION_OVERVIEW_CACHE_TTL_MS,
+    refreshing: null,
+  });
+  return {
+    payload,
+    cacheState: 'miss',
+  };
+};
+
 const educationPaymentConfirmSchema = Joi.object({
   paymentId: Joi.string().trim().required(),
   razorpay_order_id: Joi.string().trim().allow('').default(''),
   razorpay_payment_id: Joi.string().trim().allow('').default(''),
   razorpay_signature: Joi.string().trim().allow('').default(''),
   stripePaymentIntentId: Joi.string().trim().allow('').default(''),
+});
+
+const educationProgressEventSchema = Joi.object({
+  courseId: Joi.string().trim().required(),
+  lessonId: Joi.string().trim().allow('').max(140).default(''),
+  eventType: Joi.string()
+    .trim()
+    .valid('lesson_complete', 'quiz_complete', 'watch_time', 'progress_adjustment')
+    .default('progress_adjustment'),
+  progressDelta: Joi.number().min(-100).max(100).optional(),
+  progressValue: Joi.number().min(0).max(100).optional(),
+  quizScore: Joi.number().min(0).max(100).optional(),
+  watchMinutes: Joi.number().integer().min(0).max(1000).optional(),
+  metadata: Joi.object().unknown(true).default({}),
+});
+
+const educationTuitionStatusUpdateSchema = Joi.object({
+  status: Joi.string()
+    .trim()
+    .valid('submitted', 'matched', 'trial_scheduled', 'trial_completed', 'booked', 'in_progress', 'completed', 'cancelled')
+    .required(),
+  note: Joi.string().trim().allow('').max(400).default(''),
+  tutorName: Joi.string().trim().allow('').max(120).default(''),
+  tutorPhone: Joi.string().trim().allow('').max(20).default(''),
+  tutorMode: Joi.string().trim().allow('').max(40).default(''),
+  tutorHourlyFee: Joi.number().min(0).max(50000).default(0),
+  trialSessionAt: Joi.date().iso().allow(null).default(null),
+});
+
+const educationRoleProfileSchema = Joi.object({
+  primaryRole: Joi.string().valid('student', 'parent', 'tutor', 'institute_admin').required(),
+  studentName: Joi.string().trim().allow('').max(120).default(''),
+  classLevel: Joi.string().trim().allow('').max(80).default(''),
+  targetExam: Joi.string().trim().allow('').max(120).default(''),
+  preferredLanguage: Joi.string().trim().allow('').max(60).default('English'),
+  careerGoal: Joi.string().trim().allow('').max(200).default(''),
+});
+
+const educationTuitionSessionCreateSchema = Joi.object({
+  scheduledAt: Joi.date().iso().required(),
+  durationMinutes: Joi.number().integer().min(15).max(240).default(60),
+  agenda: Joi.string().trim().allow('').max(400).default(''),
+});
+
+const educationTuitionSessionUpdateSchema = Joi.object({
+  attendanceStatus: Joi.string().valid('pending', 'attended', 'missed', 'rescheduled').optional(),
+  homework: Joi.string().trim().allow('').max(800).optional(),
+  mentorNotes: Joi.string().trim().allow('').max(800).optional(),
+  agenda: Joi.string().trim().allow('').max(400).optional(),
+}).min(1);
+
+const certificateVerificationSchema = Joi.object({
+  verificationStatus: Joi.string().valid('uploaded', 'verified', 'rejected').required(),
+  verificationNote: Joi.string().trim().allow('').max(500).default(''),
 });
 
 const slugifyCategoryName = (value = '') =>
@@ -996,11 +1615,45 @@ const normalizeEducationState = (state = {}) => {
     [...new Set((Array.isArray(values) ? values : [])
       .map((value) => String(value || '').trim())
       .filter(Boolean))];
+  const normalizeProgress = (progressInput = {}) => {
+    const entries =
+      progressInput && typeof progressInput === 'object'
+        ? Object.entries(progressInput)
+        : [];
+    const normalized = {};
+    for (const [rawCourseId, rawProgress] of entries) {
+      const courseId = String(rawCourseId || '').trim();
+      const progress = Number(rawProgress);
+      if (!courseId || !Number.isFinite(progress)) {
+        continue;
+      }
+      normalized[courseId] = Math.max(0, Math.min(100, Math.round(progress)));
+    }
+    return normalized;
+  };
+  const roleProfileInput =
+    state && typeof state.roleProfile === 'object' && state.roleProfile
+      ? state.roleProfile
+      : {};
+  const primaryRole = String(roleProfileInput.primaryRole || 'student').trim().toLowerCase();
+  const normalizedRoleProfile = {
+    primaryRole: ['student', 'parent', 'tutor', 'institute_admin'].includes(primaryRole)
+      ? primaryRole
+      : 'student',
+    studentName: String(roleProfileInput.studentName || '').trim(),
+    classLevel: String(roleProfileInput.classLevel || '').trim(),
+    targetExam: String(roleProfileInput.targetExam || '').trim(),
+    preferredLanguage: String(roleProfileInput.preferredLanguage || 'English').trim() || 'English',
+    careerGoal: String(roleProfileInput.careerGoal || '').trim(),
+  };
 
   return {
     enrolledCourseIds: normalizeList(state.enrolledCourseIds),
     appliedScholarships: normalizeList(state.appliedScholarships),
     joinedGroups: normalizeList(state.joinedGroups),
+    courseProgress: normalizeProgress(state.courseProgress),
+    roleProfile: normalizedRoleProfile,
+    interventionsDismissed: normalizeList(state.interventionsDismissed),
   };
 };
 
@@ -1013,17 +1666,28 @@ const getOrCreateEducationState = async (userEmail) => {
     return null;
   }
 
-  let stateDoc = await EducationState.findOne({ userEmail: normalizedEmail });
-  if (!stateDoc) {
-    stateDoc = await EducationState.create({
-      userEmail: normalizedEmail,
-      enrolledCourseIds: [],
-      appliedScholarships: [],
-      joinedGroups: [],
-    });
-  }
-
-  return stateDoc;
+  return EducationState.findOneAndUpdate(
+    { userEmail: normalizedEmail },
+    {
+      $setOnInsert: {
+        userEmail: normalizedEmail,
+        enrolledCourseIds: [],
+        appliedScholarships: [],
+        joinedGroups: [],
+        courseProgress: {},
+        roleProfile: {
+          primaryRole: 'student',
+          studentName: '',
+          classLevel: '',
+          targetExam: '',
+          preferredLanguage: 'English',
+          careerGoal: '',
+        },
+        interventionsDismissed: [],
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
 };
 
 const getUserEducationStateFromDB = async (userEmail) => {
@@ -1042,6 +1706,9 @@ const updateUserEducationState = async (userEmail, updater) => {
   stateDoc.enrolledCourseIds = nextState.enrolledCourseIds;
   stateDoc.appliedScholarships = nextState.appliedScholarships;
   stateDoc.joinedGroups = nextState.joinedGroups;
+  stateDoc.courseProgress = nextState.courseProgress;
+  stateDoc.roleProfile = nextState.roleProfile;
+  stateDoc.interventionsDismissed = nextState.interventionsDismissed;
   await stateDoc.save();
   return normalizeEducationState(stateDoc);
 };
@@ -1842,7 +2509,8 @@ router.get('/skilllearning/courses', authenticate, async (req, res) => {
     const courses = getSkillLearningCourses(filters);
     return res.json({ success: true, data: { courses, categories: COURSE_CATEGORIES } });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to load skill learning courses.', error: error.message });
+    logger.error('skilllearning courses error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load skill learning courses.' });
   }
 });
 
@@ -1864,7 +2532,8 @@ router.get('/skilllearning/recommendations', authenticate, async (req, res) => {
     });
     return res.json({ success: true, data: { recommendations } });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to generate recommendations.', error: error.message });
+    logger.error('skilllearning recommendations error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to generate recommendations.' });
   }
 });
 
@@ -1879,7 +2548,8 @@ router.get('/skilllearning/questions', authenticate, async (req, res) => {
     }));
     return res.json({ success: true, data: { questions } });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to load question bank.', error: error.message });
+    logger.error('skilllearning questions error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load question bank.' });
   }
 });
 
@@ -1887,32 +2557,24 @@ router.post('/skilllearning/tests/submit', authenticate, async (req, res) => {
   const answers = Array.isArray(req.body.answers) ? req.body.answers : [];
   const category = req.body.category || 'Gulf Ready';
   const questions = getQuestionBank(category);
-  const totalQuestions = Math.min(answers.length, questions.length);
-  let correct = 0;
-  let wrong = 0;
-  let attempted = 0;
-  answers.forEach((answer) => {
-    const question = questions.find((item) => item.id === answer.id);
-    if (!question) return;
-    if (typeof answer.selectedIndex === 'number') {
-      attempted += 1;
-      if (question.answer === answer.selectedIndex) {
-        correct += 1;
-      } else {
-        wrong += 1;
-      }
-    }
-  });
-  const negativeMarks = wrong * 0.25;
-  const score = Math.max(0, Number(((correct - negativeMarks) / totalQuestions) * 100).toFixed(0));
-  let weakAreaTopics = [];
-  for (const answer of answers) {
-    const question = questions.find((item) => item.id === answer.id);
-    if (question && typeof answer.selectedIndex === 'number' && question.answer !== answer.selectedIndex) {
-      weakAreaTopics.push(question?.topic || 'general');
-    }
+  if (!questions.length) {
+    return res.status(400).json({
+      success: false,
+      message: 'No questions are available for this category.',
+    });
   }
-  weakAreaTopics = [...new Set(weakAreaTopics)];
+  const {
+    totalQuestions,
+    correct,
+    wrong,
+    attempted,
+    negativeMarks,
+    score,
+    weakAreaTopics,
+  } = buildSkillAssessmentMetrics({
+    questions,
+    answers,
+  });
 
   try {
     const result = await SkillTestResult.create({
@@ -1926,7 +2588,7 @@ router.post('/skilllearning/tests/submit', authenticate, async (req, res) => {
       attempted,
       negativeMarks,
       weakAreas: weakAreaTopics,
-      questions: questions.slice(0, totalQuestions).map((question) => ({
+      questions: questions.map((question) => ({
         id: question.id,
         question: question.question,
         options: question.options,
@@ -1944,7 +2606,8 @@ router.post('/skilllearning/tests/submit', authenticate, async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to submit test.', error: error.message });
+    logger.error('skilllearning test submit error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to submit test.' });
   }
 });
 
@@ -1954,7 +2617,8 @@ router.get('/skilllearning/certificates', authenticate, async (req, res) => {
     const certificates = await SkillCertificate.find({ userEmail }).sort({ uploadedAt: -1 }).lean();
     return res.json({ success: true, data: { certificates, govtPortals: GOVT_PORTALS } });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to load certificates.', error: error.message });
+    logger.error('skilllearning certificates list error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load certificates.' });
   }
 });
 
@@ -1974,7 +2638,7 @@ router.post('/skilllearning/certificates/upload', authenticate, upload.single('c
     if (req.file) {
       fileName = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
       const filePath = path.join(uploadFolder, fileName);
-      fs.writeFileSync(filePath, req.file.buffer);
+      await fsPromises.writeFile(filePath, req.file.buffer);
       fileUrl = `/uploads/skilllearning/${fileName}`;
     }
 
@@ -1993,9 +2657,69 @@ router.post('/skilllearning/certificates/upload', authenticate, upload.single('c
 
     return res.json({ success: true, data: { certificate } });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to save certificate.', error: error.message });
+    logger.error('skilllearning certificate upload error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to save certificate.' });
   }
 });
+
+router.patch(
+  '/skilllearning/certificates/:certificateId/verification',
+  authenticate,
+  educationWriteLimiter,
+  withEducationTelemetry('skilllearning.certificates.verification.patch', async (req, res) => {
+  const { error, value } = certificateVerificationSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
+  }
+
+  try {
+    setEducationCacheHeaders(res, 'hot_private');
+    const result = await withEducationIdempotency(
+      req,
+      `education-certificate-verification-${String(req.params.certificateId || '').trim()}`,
+      async ({ replay }) => {
+        if (replay) return replay;
+        const userEmail = normalizeEmailAddress(req.user?.email || req.user?.id || req.user?._id);
+        const certificateId = String(req.params.certificateId || '').trim();
+        const certificate = await SkillCertificate.findOne({ certificateId, userEmail });
+        if (!certificate) {
+          return {
+            skipCache: true,
+            statusCode: 404,
+            body: { success: false, message: 'Certificate not found.' },
+          };
+        }
+
+        certificate.verificationStatus = value.verificationStatus;
+        certificate.verificationNote = value.verificationNote || '';
+        certificate.verifiedAt = value.verificationStatus === 'verified' ? new Date() : null;
+        await certificate.save();
+
+        return {
+          success: true,
+          data: {
+            certificate,
+          },
+        };
+      }
+    );
+    if (result?.idempotencyConflict) {
+      return res.status(409).json({
+        success: false,
+        message: 'A similar certificate verification request is already in progress.',
+      });
+    }
+    if (result?.statusCode) {
+      return res.status(result.statusCode).json(result.body);
+    }
+    return res.json(result);
+  } catch (verificationError) {
+    logger.error('skilllearning certificate verification update error:', verificationError);
+    return res.status(500).json({ success: false, message: 'Failed to update verification status.' });
+  }
+}));
 
 router.get('/skilllearning/wallet', authenticate, async (req, res) => {
   try {
@@ -2005,7 +2729,8 @@ router.get('/skilllearning/wallet', authenticate, async (req, res) => {
     const shareText = buildSkillWalletShareText(certificates);
     return res.json({ success: true, data: { courses, certificates, shareText } });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to load wallet data.', error: error.message });
+    logger.error('skilllearning wallet error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load wallet data.' });
   }
 });
 
@@ -2033,7 +2758,8 @@ router.post('/skilllearning/course-enroll', authenticate, async (req, res) => {
     const state = await getUserEducationStateFromDB(userIdentifier);
     return res.json({ success: true, data: { state, alreadyEnrolled: false } });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to enroll in course.', error: error.message });
+    logger.error('skilllearning course enroll error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to enroll in course.' });
   }
 });
 
@@ -2058,12 +2784,352 @@ router.get('/skilllearning/dashboard', authenticate, async (req, res) => {
     };
     return res.json({ success: true, data: { dashboardStats, recent, enrolled } });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Failed to load dashboard.', error: error.message });
+    logger.error('skilllearning dashboard error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load dashboard.' });
   }
 });
 
 router.get('/skilllearning/govt-portals', async (req, res) => {
   return res.json({ success: true, data: { govtPortals: GOVT_PORTALS } });
+});
+
+router.get(
+  '/education/discovery',
+  withEducationTelemetry('education.discovery', async (req, res) => {
+    setEducationCacheHeaders(res, 'cold_public');
+    return res.json({
+      success: true,
+      data: {
+        scholarships: EDUCATION_SCHOLARSHIPS,
+        governmentSchemes: EDUCATION_GOVERNMENT_SCHEMES,
+      },
+    });
+  })
+);
+
+router.get('/education/learning-path', authenticate, withEducationTelemetry('education.learning-path', async (req, res) => {
+  try {
+    if (!ENABLE_EDUCATION_360) {
+      return res.status(404).json({
+        success: false,
+        message: 'Education 360 is disabled.',
+      });
+    }
+    setEducationCacheHeaders(res, 'cold_private');
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(userIdentifier);
+    const state = await getUserEducationStateFromDB(userIdentifier);
+    const latestTest = await SkillTestResult.findOne({ userEmail }).sort({ createdAt: -1 }).lean();
+    const recommendations = getSkillRecommendations({
+      education: req.user?.education || req.query.education,
+      interests: req.query.interests || '',
+      salaryTarget: req.query.salaryTarget || '',
+      destination: req.query.destination || '',
+    });
+
+    const weakAreas = Array.isArray(latestTest?.weakAreas) ? latestTest.weakAreas : [];
+    const roleProfile = state?.roleProfile || {};
+    const primaryRole = String(roleProfile.primaryRole || 'student');
+    const targetExam = String(roleProfile.targetExam || '').trim();
+    const classLevel = String(roleProfile.classLevel || '').trim();
+    const avgProgress = (() => {
+      const values = Object.values(state?.courseProgress || {}).map((value) => Number(value || 0));
+      if (!values.length) return 0;
+      return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+    })();
+    const path = [
+      classLevel ? `Complete one focused lesson mapped to ${classLevel}.` : 'Complete one focused lesson from your enrolled course.',
+      weakAreas.length
+        ? `Review weak topics: ${weakAreas.join(', ')}.`
+        : 'Take one timed mock test to identify weak topics.',
+      avgProgress < 50
+        ? 'Increase consistency: complete two 30-minute focused study blocks today.'
+        : 'Summarize key notes in your own words and revise before sleep.',
+    ];
+    if (targetExam) {
+      path.unshift(`Prioritize preparation tasks for ${targetExam}.`);
+    }
+    if (primaryRole === 'parent') {
+      path.push('Review attendance and homework updates with your learner this evening.');
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        recommendations,
+        weakAreas,
+        path,
+        enrolledCourseIds: state.enrolledCourseIds || [],
+      },
+    });
+  } catch (error) {
+    logger.error('education learning path error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to build learning path.',
+    });
+  }
+}));
+
+router.get('/education/overview360', authenticate, withEducationTelemetry('education.overview360', async (req, res) => {
+  try {
+    if (!ENABLE_EDUCATION_360) {
+      return res.status(404).json({
+        success: false,
+        message: 'Education 360 is disabled.',
+      });
+    }
+    setEducationCacheHeaders(res, 'cold_private');
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(userIdentifier);
+    const { payload, cacheState } = await getCachedEducationOverview360({
+      userIdentifier,
+      userEmail,
+    });
+    res.setHeader('x-education-cache', cacheState);
+
+    return res.json({
+      success: true,
+      data: payload,
+    });
+  } catch (error) {
+    logger.error('education overview360 error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load education overview.',
+    });
+  }
+}));
+
+router.patch('/education/profile', authenticate, educationWriteLimiter, withEducationTelemetry('education.profile.patch', async (req, res) => {
+  const { error, value } = educationRoleProfileSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    if (!ENABLE_EDUCATION_360) {
+      return res.status(404).json({
+        success: false,
+        message: 'Education 360 is disabled.',
+      });
+    }
+    setEducationCacheHeaders(res, 'hot_private');
+    const idempotentResult = await withEducationIdempotency(req, 'education-profile-patch', async ({ replay }) => {
+      if (replay) {
+        return replay;
+      }
+      const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+      const state = await updateUserEducationState(userIdentifier, (currentState) => ({
+        ...currentState,
+        roleProfile: value,
+      }));
+      return {
+        success: true,
+        data: {
+          state,
+        },
+      };
+    });
+    if (idempotentResult?.idempotencyConflict) {
+      return res.status(409).json({
+        success: false,
+        message: 'A similar profile update is already in progress.',
+      });
+    }
+
+    return res.json(idempotentResult);
+  } catch (saveError) {
+    logger.error('education profile update error:', saveError);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update education profile.',
+    });
+  }
+}));
+
+router.get('/education/canva-kit', authenticate, withEducationTelemetry('education.canva-kit', async (req, res) => {
+  try {
+    if (!ENABLE_EDUCATION_360) {
+      return res.status(404).json({
+        success: false,
+        message: 'Education 360 is disabled.',
+      });
+    }
+    setEducationCacheHeaders(res, 'cold_private');
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(userIdentifier);
+    const { payload, cacheState } = await getCachedEducationOverview360({
+      userIdentifier,
+      userEmail,
+    });
+    res.setHeader('x-education-cache', cacheState);
+
+    return res.json({
+      success: true,
+      data: {
+        canvaToolkit: payload?.canvaToolkit || buildEducationCanvaToolkit({}),
+      },
+    });
+  } catch (error) {
+    logger.error('education canva kit error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load Canva toolkit.',
+    });
+  }
+}));
+
+router.get('/education/kpis', authenticate, withEducationTelemetry('education.kpis', async (req, res) => {
+  try {
+    if (!ENABLE_EDUCATION_360) {
+      return res.status(404).json({
+        success: false,
+        message: 'Education 360 is disabled.',
+      });
+    }
+    setEducationCacheHeaders(res, 'cold_private');
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(userIdentifier);
+    const { payload, cacheState } = await getCachedEducationOverview360({
+      userIdentifier,
+      userEmail,
+    });
+    const metrics = payload?.outcomeMetrics || {};
+    const kpiHealth = {
+      readiness: Number(metrics.readinessScore || 0) >= 60 ? 'healthy' : 'attention',
+      progress: Number(metrics.avgCourseProgress || 0) >= 50 ? 'healthy' : 'attention',
+      tuition: Number(metrics.tuitionCompletionRate || 0) >= 50 ? 'healthy' : 'attention',
+      certificates: Number(metrics.certificationVerificationRate || 0) >= 60 ? 'healthy' : 'attention',
+    };
+    res.setHeader('x-education-cache', cacheState);
+    return res.json({
+      success: true,
+      data: {
+        metrics,
+        kpiHealth,
+      },
+    });
+  } catch (error) {
+    logger.error('education kpis error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load education KPIs.',
+    });
+  }
+}));
+
+router.post('/education/progress/event', authenticate, async (req, res) => {
+  const { error, value } = educationProgressEventSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(userIdentifier);
+    const course = getCourseById(value.courseId);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found.',
+      });
+    }
+
+    const effectiveDelta = computeEducationProgressDelta({
+      eventType: value.eventType,
+      explicitDelta: value.progressDelta,
+      quizScore: value.quizScore,
+      watchMinutes: value.watchMinutes,
+    });
+
+    const updatedState = await updateUserEducationState(userIdentifier, (currentState) => {
+      const currentProgress = Number(currentState?.courseProgress?.[value.courseId] || 0);
+      const nextProgress = Number.isFinite(Number(value.progressValue))
+        ? Number(value.progressValue)
+        : currentProgress + effectiveDelta;
+      const boundedProgress = Math.max(0, Math.min(100, Math.round(nextProgress)));
+
+      return {
+        ...currentState,
+        enrolledCourseIds: [...new Set([...(currentState.enrolledCourseIds || []), value.courseId])],
+        courseProgress: {
+          ...(currentState.courseProgress || {}),
+          [value.courseId]: boundedProgress,
+        },
+      };
+    });
+
+    const currentProgress = Number(updatedState?.courseProgress?.[value.courseId] || 0);
+    const event = await EducationLearningEvent.create({
+      eventId: buildEducationRecordId('education-progress'),
+      userEmail,
+      courseId: value.courseId,
+      lessonId: value.lessonId,
+      eventType: value.eventType,
+      progressDelta: effectiveDelta,
+      progressAfter: currentProgress,
+      quizScore: Number.isFinite(Number(value.quizScore)) ? Number(value.quizScore) : null,
+      metadata: {
+        ...(value.metadata || {}),
+        watchMinutes: Number(value.watchMinutes || 0),
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        state: updatedState,
+        event,
+      },
+    });
+  } catch (progressError) {
+    logger.error('education progress event error:', progressError);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to record learning progress.',
+    });
+  }
+});
+
+router.get('/education/progress/history', authenticate, async (req, res) => {
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(userIdentifier);
+    const courseId = String(req.query.courseId || '').trim();
+    const query = { userEmail };
+    if (courseId) {
+      query.courseId = courseId;
+    }
+
+    const history = await EducationLearningEvent.find(query)
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    return res.json({
+      success: true,
+      data: {
+        history,
+      },
+    });
+  } catch (historyError) {
+    logger.error('education progress history error:', historyError);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load progress history.',
+    });
+  }
 });
 
 router.get('/education/state', authenticate, async (req, res) => {
@@ -2078,10 +3144,10 @@ router.get('/education/state', authenticate, async (req, res) => {
       },
     });
   } catch (error) {
+    logger.error('education state fetch error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to load education state.',
-      error: error.message,
     });
   }
 });
@@ -2110,10 +3176,10 @@ router.patch('/education/state', authenticate, async (req, res) => {
       },
     });
   } catch (saveError) {
+    logger.error('education state save error:', saveError);
     return res.status(500).json({
       success: false,
       message: 'Failed to save education state.',
-      error: saveError.message,
     });
   }
 });
@@ -2133,7 +3199,15 @@ router.post('/education/enroll', authenticate, async (req, res) => {
   try {
     const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
     const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
-    const amount = Number(value.amount || 0);
+    const matchedCourse = getCourseById(value.courseId);
+    if (!matchedCourse) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found.',
+      });
+    }
+    const amount = Math.max(0, Number(matchedCourse.price || 0));
+    const canonicalCourseTitle = String(matchedCourse.title || value.courseTitle || 'Course Enrollment').trim();
     const paymentGateway = value.paymentGateway || 'razorpay';
     const paymentMethod = value.paymentMethod || 'upi';
     const now = new Date();
@@ -2167,17 +3241,52 @@ router.post('/education/enroll', authenticate, async (req, res) => {
       }
     }
 
-    const enrollment = await EducationEnrollment.create({
-      enrollmentId: buildEducationRecordId('education-enroll'),
-      userEmail,
-      courseId: value.courseId,
-      courseTitle: value.courseTitle || 'Course Enrollment',
-      amount,
-      paymentMethod,
-      paymentGateway,
-      status: amount > 0 ? 'payment_pending' : 'enrolled',
-      enrolledAt: amount > 0 ? null : now,
-    });
+    let enrollment = null;
+    try {
+      enrollment = await EducationEnrollment.create({
+        enrollmentId: buildEducationRecordId('education-enroll'),
+        userEmail,
+        courseId: value.courseId,
+        courseTitle: canonicalCourseTitle,
+        amount,
+        paymentMethod,
+        paymentGateway,
+        status: amount > 0 ? 'payment_pending' : 'enrolled',
+        enrolledAt: amount > 0 ? null : now,
+      });
+    } catch (createError) {
+      if (Number(createError?.code) === 11000) {
+        const duplicate = await EducationEnrollment.findOne({
+          userEmail,
+          courseId: value.courseId,
+          status: { $in: ['payment_pending', 'payment_verification_pending', 'enrolled'] },
+        })
+          .sort({ createdAt: -1 })
+          .lean();
+        if (duplicate) {
+          if (duplicate.status === 'enrolled') {
+            const state = await updateUserEducationState(userIdentifier, (stateInput) => ({
+              ...stateInput,
+              enrolledCourseIds: [...new Set([...(stateInput.enrolledCourseIds || []), value.courseId])],
+            }));
+            return res.json({
+              success: true,
+              data: {
+                state,
+                enrollment: duplicate,
+                alreadyEnrolled: true,
+              },
+            });
+          }
+          return res.status(409).json({
+            success: false,
+            message: 'Payment is already pending for this course. Complete or retry payment.',
+            data: { enrollment: duplicate, state: currentState },
+          });
+        }
+      }
+      throw createError;
+    }
 
     if (amount <= 0) {
       const state = await updateUserEducationState(userIdentifier, (stateInput) => ({
@@ -2209,7 +3318,7 @@ router.post('/education/enroll', authenticate, async (req, res) => {
       items: [
         {
           courseId: value.courseId,
-          title: value.courseTitle || 'Course Enrollment',
+          title: canonicalCourseTitle,
           price: amount,
           module: 'education',
           enrollmentId: enrollment.enrollmentId,
@@ -2244,7 +3353,6 @@ router.post('/education/enroll', authenticate, async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to enroll in education course.',
-      error: saveError.message,
     });
   }
 });
@@ -2293,11 +3401,26 @@ router.post('/education/enroll/:enrollmentId/confirm-payment', authenticate, asy
       });
     }
 
-    const paymentRecordId = value.paymentId || enrollment.paymentRecordId;
+    const expectedPaymentRecordId = String(enrollment.paymentRecordId || '').trim();
+    const providedPaymentRecordId = String(value.paymentId || '').trim();
+    if (expectedPaymentRecordId && providedPaymentRecordId && expectedPaymentRecordId !== providedPaymentRecordId) {
+      return res.status(409).json({
+        success: false,
+        message: 'Provided payment id does not match this enrollment payment session.',
+      });
+    }
+
+    const paymentRecordId = expectedPaymentRecordId || providedPaymentRecordId;
     if (!paymentRecordId) {
       return res.status(400).json({
         success: false,
         message: 'Payment record id is required for confirmation.',
+      });
+    }
+    if (!enrollment.orderId && Number(enrollment.amount || 0) > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Enrollment is missing payment order linkage. Please retry enrollment.',
       });
     }
 
@@ -2307,6 +3430,29 @@ router.post('/education/enroll/:enrollmentId/confirm-payment', authenticate, asy
       razorpay_signature: value.razorpay_signature,
       stripePaymentIntentId: value.stripePaymentIntentId,
     });
+    const paymentRecord = await Payment.findById(paymentRecordId).lean();
+    if (!paymentRecord) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment record was not found after verification.',
+      });
+    }
+    if (
+      String(paymentRecord.orderId || '').trim() !== String(enrollment.orderId || '').trim() ||
+      Number(paymentRecord.amount || 0) !== Number(enrollment.amount || 0)
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: 'Payment record does not match this enrollment order.',
+      });
+    }
+    const verifiedStatuses = new Set(['verified', 'captured', 'refunded', 'partial_refund']);
+    if (!verifiedStatuses.has(String(paymentRecord.status || '').toLowerCase())) {
+      return res.status(409).json({
+        success: false,
+        message: 'Payment is not yet in a verified state.',
+      });
+    }
 
     const state = await updateUserEducationState(userIdentifier, (currentState) => ({
       ...currentState,
@@ -2332,7 +3478,7 @@ router.post('/education/enroll/:enrollmentId/confirm-payment', authenticate, asy
     logger.error('education payment confirmation error:', confirmError);
     return res.status(400).json({
       success: false,
-      message: confirmError.message || 'Payment confirmation failed.',
+      message: 'Payment confirmation failed.',
     });
   }
 });
@@ -2349,11 +3495,13 @@ router.post('/education/scholarship', authenticate, async (req, res) => {
     });
   }
 
+  const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+  const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+  const scholarshipName = String(value.scholarshipName || '').trim();
+
   try {
-    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
-    const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
     const stateBefore = await getUserEducationStateFromDB(userIdentifier);
-    if ((stateBefore.appliedScholarships || []).includes(value.scholarshipName)) {
+    if ((stateBefore.appliedScholarships || []).includes(scholarshipName)) {
       return res.json({
         success: true,
         data: {
@@ -2365,13 +3513,13 @@ router.post('/education/scholarship', authenticate, async (req, res) => {
 
     const state = await updateUserEducationState(userIdentifier, (currentState) => ({
       ...currentState,
-      appliedScholarships: [...new Set([...(currentState.appliedScholarships || []), value.scholarshipName])],
+      appliedScholarships: [...new Set([...(currentState.appliedScholarships || []), scholarshipName])],
     }));
 
     const scholarshipRecord = await EducationScholarshipApplication.create({
       applicationId: buildEducationRecordId('education-scholarship'),
       userEmail,
-      scholarshipName: value.scholarshipName,
+      scholarshipName,
       status: 'submitted',
     });
 
@@ -2383,10 +3531,23 @@ router.post('/education/scholarship', authenticate, async (req, res) => {
       },
     });
   } catch (saveError) {
+    if (Number(saveError?.code) === 11000) {
+      const state = await updateUserEducationState(userIdentifier, (currentState) => ({
+        ...currentState,
+        appliedScholarships: [...new Set([...(currentState.appliedScholarships || []), scholarshipName])],
+      }));
+      return res.json({
+        success: true,
+        data: {
+          state,
+          alreadyApplied: true,
+        },
+      });
+    }
+    logger.error('education scholarship save error:', saveError);
     return res.status(500).json({
       success: false,
       message: 'Failed to save scholarship application.',
-      error: saveError.message,
     });
   }
 });
@@ -2403,11 +3564,13 @@ router.post('/education/group', authenticate, async (req, res) => {
     });
   }
 
+  const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+  const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
+  const groupTitle = String(value.groupTitle || '').trim();
+
   try {
-    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
-    const userEmail = normalizeEmailAddress(req.user?.email || userIdentifier);
     const stateBefore = await getUserEducationStateFromDB(userIdentifier);
-    if ((stateBefore.joinedGroups || []).includes(value.groupTitle)) {
+    if ((stateBefore.joinedGroups || []).includes(groupTitle)) {
       return res.json({
         success: true,
         data: {
@@ -2419,13 +3582,13 @@ router.post('/education/group', authenticate, async (req, res) => {
 
     const state = await updateUserEducationState(userIdentifier, (currentState) => ({
       ...currentState,
-      joinedGroups: [...new Set([...(currentState.joinedGroups || []), value.groupTitle])],
+      joinedGroups: [...new Set([...(currentState.joinedGroups || []), groupTitle])],
     }));
 
     const groupRecord = await EducationCommunityMembership.create({
       membershipId: buildEducationRecordId('education-group'),
       userEmail,
-      groupTitle: value.groupTitle,
+      groupTitle,
       status: 'joined',
     });
 
@@ -2437,10 +3600,23 @@ router.post('/education/group', authenticate, async (req, res) => {
       },
     });
   } catch (saveError) {
+    if (Number(saveError?.code) === 11000) {
+      const state = await updateUserEducationState(userIdentifier, (currentState) => ({
+        ...currentState,
+        joinedGroups: [...new Set([...(currentState.joinedGroups || []), groupTitle])],
+      }));
+      return res.json({
+        success: true,
+        data: {
+          state,
+          alreadyJoined: true,
+        },
+      });
+    }
+    logger.error('education group join error:', saveError);
     return res.status(500).json({
       success: false,
       message: 'Failed to join community group.',
-      error: saveError.message,
     });
   }
 });
@@ -2473,6 +3649,11 @@ router.post('/education/tuition', authenticate, async (req, res) => {
       preferredTime: value.preferredTime,
       contactPhone: normalizedContactPhone,
     });
+    const tutorMatches = buildEducationTutorMatches({
+      subject: value.subject,
+      classLevel: value.classLevel,
+      preferredMode: value.preferredMode,
+    });
 
     const tuitionRecord = await EducationTuitionRequest.create({
       requestId: buildEducationRecordId('education-tuition'),
@@ -2485,22 +3666,331 @@ router.post('/education/tuition', authenticate, async (req, res) => {
       details: value.details,
       priority,
       status: 'submitted',
+      timeline: [
+        {
+          at: new Date(),
+          status: 'submitted',
+          note: 'Request submitted by learner.',
+          actor: 'student',
+        },
+      ],
     });
 
     return res.json({
       success: true,
       data: {
         tuitionRequest: tuitionRecord,
+        tutorMatches,
       },
     });
   } catch (saveError) {
+    logger.error('education tuition request error:', saveError);
     return res.status(500).json({
       success: false,
       message: 'Failed to submit tuition request.',
-      error: saveError.message,
     });
   }
 });
+
+router.get('/education/tuition/requests', authenticate, async (req, res) => {
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(userIdentifier);
+    const requests = await EducationTuitionRequest.find({ userEmail })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    return res.json({
+      success: true,
+      data: {
+        requests,
+      },
+    });
+  } catch (error) {
+    logger.error('education tuition list error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to load tuition requests.',
+    });
+  }
+});
+
+router.patch('/education/tuition/:requestId/status', authenticate, async (req, res) => {
+  const { error, value } = educationTuitionStatusUpdateSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+    const userEmail = normalizeEmailAddress(userIdentifier);
+    const requestId = String(req.params.requestId || '').trim();
+    const tuitionRequest = await EducationTuitionRequest.findOne({ requestId, userEmail });
+
+    if (!tuitionRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tuition request not found.',
+      });
+    }
+
+    const currentStatus = String(tuitionRequest.status || 'submitted').trim();
+    if (!canTransitionEducationTuitionStatus({ currentStatus, nextStatus: value.status })) {
+      return res.status(409).json({
+        success: false,
+        message: `Invalid tuition status transition from ${currentStatus} to ${value.status}.`,
+      });
+    }
+
+    tuitionRequest.status = value.status;
+    if (value.tutorName) {
+      tuitionRequest.assignedTutor = {
+        ...((tuitionRequest.assignedTutor && tuitionRequest.assignedTutor.toObject)
+          ? tuitionRequest.assignedTutor.toObject()
+          : tuitionRequest.assignedTutor || {}),
+        tutorId:
+          (tuitionRequest.assignedTutor && tuitionRequest.assignedTutor.tutorId) ||
+          `tutor-${value.tutorName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        name: value.tutorName,
+        phone: value.tutorPhone || '',
+        mode: value.tutorMode || '',
+        hourlyFee: Number(value.tutorHourlyFee || 0),
+      };
+    }
+
+    if (value.trialSessionAt) {
+      tuitionRequest.trialSessionAt = new Date(value.trialSessionAt);
+    }
+    if (value.status === 'booked') {
+      tuitionRequest.bookedAt = new Date();
+    }
+    if (value.status === 'completed') {
+      tuitionRequest.completedAt = new Date();
+    }
+    tuitionRequest.timeline = [
+      ...(Array.isArray(tuitionRequest.timeline) ? tuitionRequest.timeline : []),
+      {
+        at: new Date(),
+        status: value.status,
+        note: value.note || '',
+        actor: 'student',
+      },
+    ];
+
+    await tuitionRequest.save();
+
+    return res.json({
+      success: true,
+      data: {
+        tuitionRequest,
+      },
+    });
+  } catch (statusError) {
+    logger.error('education tuition status update error:', statusError);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update tuition request.',
+    });
+  }
+});
+
+router.post(
+  '/education/tuition/:requestId/sessions',
+  authenticate,
+  educationWriteLimiter,
+  withEducationTelemetry('education.tuition.sessions.create', async (req, res) => {
+  const { error, value } = educationTuitionSessionCreateSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    setEducationCacheHeaders(res, 'hot_private');
+    const requestId = String(req.params.requestId || '').trim();
+    const responsePayload = await withEducationIdempotency(
+      req,
+      `education-tuition-session-create-${requestId}`,
+      async ({ replay }) => {
+        if (replay) return replay;
+        const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+        const userEmail = normalizeEmailAddress(userIdentifier);
+        const tuitionRequest = await EducationTuitionRequest.findOne({ requestId, userEmail });
+        if (!tuitionRequest) {
+          return {
+            skipCache: true,
+            statusCode: 404,
+            body: {
+              success: false,
+              message: 'Tuition request not found.',
+            },
+          };
+        }
+
+        const sessionRecord = {
+          sessionId: buildEducationRecordId('tuition-session'),
+          scheduledAt: new Date(value.scheduledAt),
+          durationMinutes: value.durationMinutes,
+          agenda: value.agenda || '',
+          attendanceStatus: 'pending',
+          homework: '',
+          mentorNotes: '',
+          updatedAt: new Date(),
+        };
+
+        tuitionRequest.sessions = [
+          ...(Array.isArray(tuitionRequest.sessions) ? tuitionRequest.sessions : []),
+          sessionRecord,
+        ];
+        tuitionRequest.timeline = [
+          ...(Array.isArray(tuitionRequest.timeline) ? tuitionRequest.timeline : []),
+          {
+            at: new Date(),
+            status: tuitionRequest.status,
+            note: `Tuition session scheduled for ${new Date(value.scheduledAt).toISOString()}.`,
+            actor: 'student',
+          },
+        ];
+        await tuitionRequest.save();
+
+        return {
+          success: true,
+          data: {
+            tuitionRequest,
+            session: sessionRecord,
+          },
+        };
+      }
+    );
+    if (responsePayload?.idempotencyConflict) {
+      return res.status(409).json({
+        success: false,
+        message: 'A similar tuition session request is already in progress.',
+      });
+    }
+    if (responsePayload?.statusCode) {
+      return res.status(responsePayload.statusCode).json(responsePayload.body);
+    }
+    return res.json(responsePayload);
+  } catch (sessionError) {
+    logger.error('education tuition session create error:', sessionError);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create tuition session.',
+    });
+  }
+}));
+
+router.patch(
+  '/education/tuition/:requestId/sessions/:sessionId',
+  authenticate,
+  educationWriteLimiter,
+  withEducationTelemetry('education.tuition.sessions.patch', async (req, res) => {
+  const { error, value } = educationTuitionSessionUpdateSchema.validate(req.body, {
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  try {
+    setEducationCacheHeaders(res, 'hot_private');
+    const requestId = String(req.params.requestId || '').trim();
+    const sessionId = String(req.params.sessionId || '').trim();
+    const responsePayload = await withEducationIdempotency(
+      req,
+      `education-tuition-session-update-${requestId}-${sessionId}`,
+      async ({ replay }) => {
+        if (replay) return replay;
+        const userIdentifier = req.user?.email || req.user?.id || req.user?._id;
+        const userEmail = normalizeEmailAddress(userIdentifier);
+        const tuitionRequest = await EducationTuitionRequest.findOne({ requestId, userEmail });
+        if (!tuitionRequest) {
+          return {
+            skipCache: true,
+            statusCode: 404,
+            body: {
+              success: false,
+              message: 'Tuition request not found.',
+            },
+          };
+        }
+
+        const sessions = Array.isArray(tuitionRequest.sessions) ? tuitionRequest.sessions : [];
+        const session = sessions.find((item) => String(item?.sessionId || '').trim() === sessionId);
+        if (!session) {
+          return {
+            skipCache: true,
+            statusCode: 404,
+            body: {
+              success: false,
+              message: 'Tuition session not found.',
+            },
+          };
+        }
+
+        if (value.attendanceStatus !== undefined) session.attendanceStatus = value.attendanceStatus;
+        if (value.homework !== undefined) session.homework = value.homework;
+        if (value.mentorNotes !== undefined) session.mentorNotes = value.mentorNotes;
+        if (value.agenda !== undefined) session.agenda = value.agenda;
+        session.updatedAt = new Date();
+
+        if (value.attendanceStatus === 'attended' && tuitionRequest.status === 'booked') {
+          tuitionRequest.status = 'in_progress';
+        }
+
+        tuitionRequest.timeline = [
+          ...(Array.isArray(tuitionRequest.timeline) ? tuitionRequest.timeline : []),
+          {
+            at: new Date(),
+            status: tuitionRequest.status,
+            note: `Session ${sessionId} updated (${value.attendanceStatus || 'notes'}).`,
+            actor: 'student',
+          },
+        ];
+
+        await tuitionRequest.save();
+
+        return {
+          success: true,
+          data: {
+            tuitionRequest,
+            session,
+          },
+        };
+      }
+    );
+    if (responsePayload?.idempotencyConflict) {
+      return res.status(409).json({
+        success: false,
+        message: 'A similar tuition session update is already in progress.',
+      });
+    }
+    if (responsePayload?.statusCode) {
+      return res.status(responsePayload.statusCode).json(responsePayload.body);
+    }
+    return res.json(responsePayload);
+  } catch (sessionUpdateError) {
+    logger.error('education tuition session update error:', sessionUpdateError);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update tuition session.',
+    });
+  }
+}));
 
 router.get('/classifieds/user/:sellerEmail/rating', async (req, res) => {
   try {
@@ -5485,6 +6975,13 @@ module.exports.__testables = {
   normalizeClassifiedsListingRecord,
   normalizeClassifiedsModule,
   normalizeEducationState,
+  buildEducationTutorMatches,
+  computeEducationProgressDelta,
+  buildSkillAssessmentMetrics,
+  canTransitionEducationTuitionStatus,
+  buildEducationOutcomeMetrics,
+  buildEducationInterventions,
+  buildEducationCanvaToolkit,
   buildClassifiedPlanLabel,
   buildClassifiedLifecycleFields,
   buildClassifiedRenewalFields,

@@ -26,10 +26,19 @@ const educationCommunityMembershipSchema = new mongoose.Schema(
       type: String,
       default: 'joined',
       trim: true,
+      enum: ['joined', 'left', 'blocked'],
+      index: true,
     },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model('EducationCommunityMembership', educationCommunityMembershipSchema);
+educationCommunityMembershipSchema.index(
+  { userEmail: 1, groupTitle: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ['joined', 'blocked'] } },
+  }
+);
 
+module.exports = mongoose.model('EducationCommunityMembership', educationCommunityMembershipSchema);

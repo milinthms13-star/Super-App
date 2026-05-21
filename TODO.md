@@ -1,9 +1,20 @@
-# TODO
+# TODO - Project valuation & module ratings
 
-- [x] Locate VoiceFriend UI module and related backend route.
-- [x] Identify why image upload wasn’t working (multipart header misuse).
-- [x] Fix avatar upload request in `src/modules/voicefriend/VoiceFriend.js` so axios sets multipart boundary correctly.
-- [ ] Redesign VoiceFriend UI (premium rich look, friendly & simple) via CSS updates in `src/modules/voicefriend/VoiceFriend.css`.
-- [ ] Quick smoke test: avatar upload endpoint returns `success:true` and renders uploaded URL.
+## Plan (high level)
+1. Update investor valuation HTML to include a module ratings snapshot section (static placeholders if live data endpoints aren’t defined).
+2. Add a dynamic module ratings page in the frontend that calls a backend aggregation endpoint.
+3. Implement backend endpoint(s) that aggregate module-level ratings from existing module/domain rating data.
+4. Wire routing + UI, and ensure it renders without breaking existing pages.
+5. Validate with a local build/run.
 
+## Current progress
+- [x] Located existing investor valuation report HTML: INVESTOR_VALUATION_REPORT_FINAL_PRINT.html
+- [x] Located existing investor appendix HTML: INVESTOR_SCREENSHOT_APPENDIX_PRINT.html
+- [x] Confirmed no `docs/investor-screenshots/` directory in repo (only template placeholders)
+- [x] Identify module rating primitives (avg rating + review counts + some score-style analytics live in domain data)
+- [ ] Decide canonical “module rating” definition and mapping for modules (implementation choices + endpoint shape)
+- [ ] Implement backend aggregation endpoint
+- [ ] Implement frontend module ratings page + route
+- [ ] Update investor valuation report HTML with snapshot
+- [ ] Test/build
 

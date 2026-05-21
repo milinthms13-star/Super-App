@@ -329,12 +329,6 @@ class BusinessBuilderService {
         'Week 3: Acquire first 10 customers and gather testimonials',
         'Week 4: Start paid + organic campaign and optimize conversion funnel',
       ],
-      roadmap30: [
-        'Week 1: Finalize positioning, offer design, and pricing ladders',
-        'Week 2: Launch landing page, WhatsApp profile, and lead form',
-        'Week 3: Acquire first 10 customers and gather testimonials',
-        'Week 4: Start paid + organic campaign and optimize conversion funnel',
-      ],
       roadmap90: [
         'Month 1: Validate offer-market fit and stabilize delivery quality',
         'Month 2: Build repeat acquisition channels and referral engine',
@@ -345,6 +339,49 @@ class BusinessBuilderService {
         'Months 7-9: Expand product/service bundles and launch retention campaigns',
         'Months 10-12: Build a repeatable sales playbook and prepare for next expansion phase',
       ],
+      kpis: {
+        revenueTarget: monthlyTarget,
+        monthlyExpense,
+        monthlyProfit,
+        breakEvenMonths,
+      },
+      risks: [
+        'Price wars and discount pressure',
+        'Variable footfall or online traffic patterns',
+        'Quality drift as volume rises',
+      ],
+      mitigations: [
+        'Track customer acquisition cost weekly and optimize channels',
+        'Use referral incentives and repeat customer offers',
+        'Standardize service delivery and operational checklists',
+      ],
+      milestones: [
+        {
+          title: 'Launch first campaign and convert early customers',
+          phase: '30-day',
+          owner: 'Founder',
+          dueDate: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
+          status: 'pending',
+          description: 'Complete initial launch and gather customer feedback.',
+        },
+        {
+          title: 'Stabilize customer acquisition and retention',
+          phase: '90-day',
+          owner: 'Founder',
+          dueDate: new Date(Date.now() + 75 * 24 * 60 * 60 * 1000),
+          status: 'pending',
+          description: 'Track repeat conversions and tighten campaign efficiency.',
+        },
+      ],
+      tasks: [
+        { id: 'fallback-task-1', title: 'Finalize core offer', category: 'Strategy', status: 'pending', owner: 'Founder', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+        { id: 'fallback-task-2', title: 'Setup lead capture and follow-up sequence', category: 'Marketing', status: 'pending', owner: 'Founder', dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) },
+      ],
+      progress: {
+        totalTasks: 2,
+        completedTasks: 0,
+        completionRate: 0,
+      },
       branding: {
         tagline: `${businessName} - Trusted solutions for modern customers`,
         logoPrompt: `Design a modern, trustworthy logo for ${businessName} in ${category}, suitable for ${location} and global customers.`,
@@ -622,6 +659,20 @@ class BusinessBuilderService {
     writeSection('30-Day Roadmap', plan.roadmap30);
     writeSection('90-Day Roadmap', plan.roadmap90);
     writeSection('180-Day Roadmap', plan.roadmap180);
+    writeSection('KPIs', Object.entries(plan.kpis || {}).map(([key, value]) => `${key}: ${value}`));
+    writeSection('Risks', plan.risks);
+    writeSection('Mitigations', plan.mitigations);
+    if (Array.isArray(plan.milestones) && plan.milestones.length) {
+      plan.milestones.forEach((milestone, index) => {
+        writeSection(`Milestone ${index + 1}`, `${milestone.title} (${milestone.phase || 'phase'}) - ${milestone.status}
+${milestone.description || ''}`);
+      });
+    }
+    if (Array.isArray(plan.tasks) && plan.tasks.length) {
+      plan.tasks.forEach((task, index) => {
+        writeSection(`Task ${index + 1}`, `${task.title} [${task.category || 'Task'}] - ${task.status}`);
+      });
+    }
     writeSection('Branding Tagline', plan?.branding?.tagline || '');
     writeSection('Logo Prompt', plan?.branding?.logoPrompt || '');
     writeSection('SWOT - Strengths', plan?.swot?.strengths || []);
@@ -1662,6 +1713,12 @@ class BusinessBuilderService {
       stats: asset.attributionStats || {},
     }));
 
+    const planTasks = Array.isArray(business.businessPlan?.tasks) && business.businessPlan.tasks.length
+      ? business.businessPlan.tasks
+      : Array.isArray(business.checklist)
+        ? business.checklist.map((item) => ({ status: item.completed ? 'completed' : 'pending' }))
+        : [];
+
     return {
       businessId: business.businessId,
       periodDays: days,
@@ -1675,6 +1732,7 @@ class BusinessBuilderService {
         orderConversionRate: leadsCount > 0 ? Number(((ordersCount / leadsCount) * 100).toFixed(2)) : 0,
         paymentSuccessRate: ordersCount > 0 ? Number(((paidOrders / ordersCount) * 100).toFixed(2)) : 0,
       },
+      planProgress: this.calculatePlanProgress(planTasks),
       attributionBySource: Object.values(attributionBySource).sort((left, right) => right.revenue - left.revenue),
       assetAttribution,
       miniApps: Object.values(miniAppMap).sort((left, right) => right.revenue - left.revenue),
@@ -1852,11 +1910,95 @@ class BusinessBuilderService {
   }
 
   generateRoadmap90(business) {
-    return 'Month 1-2: Business setup and registration, Month 3-4: Initial marketing and customer acquisition, Month 5-6: Service delivery optimization, Month 7-8: Customer feedback integration, Month 9-10: Revenue stabilization, Month 11-12: Expansion planning.';
+    return [
+      'Month 1-3: Complete registration, refine offers, and launch initial marketing campaigns.',
+      'Month 4-6: Optimize delivery, build a repeat customer loop, and begin referral incentives.',
+      'Month 7-9: Expand product/service bundles, improve unit economics, and systemize fulfillment.',
+    ];
   }
 
   generateRoadmap180(business) {
-    return 'Year 1: Establish strong local presence and customer base, Year 2: Digital transformation, expand services, and consider additional locations. Focus on building brand reputation and sustainable growth.';
+    return [
+      'Months 10-12: Strengthen brand reputation, scale marketing, and secure recurring revenue.',
+      'Months 13-18: Expand to adjacent neighborhoods or service categories and put scalable processes in place.',
+      'Months 19-24: Evaluate partnerships, retention programs, and the next growth phase.',
+    ];
+  }
+
+  generateLegalChecklist(business) {
+    return [
+      'Register the business and complete necessary local licenses',
+      'Assess GST registration requirements and invoicing compliance',
+      'Open a current account and establish bookkeeping workflows',
+      'Set up digital communication channels and customer contact points',
+      'Create a compliance tracker for monthly and quarterly filings',
+    ];
+  }
+
+  generatePlanKPIs(business, costSummary) {
+    return {
+      revenueTarget: costSummary.revenue,
+      monthlyExpense: costSummary.monthlyExpenses,
+      monthlyProfit: costSummary.monthlyProfit,
+      breakEvenMonths: costSummary.monthlyProfit > 0 ? Math.ceil(costSummary.oneTimeInvestment / costSummary.monthlyProfit) : null,
+      customerAcquisitionGoal: 30,
+    };
+  }
+
+  generateRisks(business) {
+    return [
+      'Demand variability due to seasonality or local competition',
+      'Customer acquisition costs that exceed initial projections',
+      'Service delivery inconsistency as volume grows',
+    ];
+  }
+
+  generateMitigations(business) {
+    return [
+      'Track campaign ROI weekly and reallocate budget based on performance',
+      'Build a referral program to lower acquisition costs',
+      'Standardize delivery checklists and quality controls',
+    ];
+  }
+
+  generateMilestones(business) {
+    return [
+      {
+        title: 'Launch first customer acquisition campaign',
+        phase: '30-day',
+        owner: 'Founder',
+        dueDate: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
+        status: 'pending',
+        description: 'Define the initial customer offer, build the funnel, and go live.',
+      },
+      {
+        title: 'Achieve first 10 paid customers',
+        phase: '60-day',
+        owner: 'Founder',
+        dueDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000),
+        status: 'pending',
+        description: 'Convert early interest into paid orders and collect testimonials.',
+      },
+    ];
+  }
+
+  generatePlanTasks(business) {
+    return [
+      { id: 'plan-task-1', title: 'Finalize offer messaging', category: 'Strategy', status: 'pending', owner: 'Founder', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+      { id: 'plan-task-2', title: 'Build lead capture funnel', category: 'Marketing', status: 'pending', owner: 'Founder', dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) },
+      { id: 'plan-task-3', title: 'Set up bookkeeping and monthly reports', category: 'Operations', status: 'pending', owner: 'Founder', dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000) },
+    ];
+  }
+
+  calculatePlanProgress(tasks) {
+    const list = Array.isArray(tasks) ? tasks : [];
+    const completedTasks = list.filter((item) => ['done', 'completed', 'closed'].includes(String(item?.status || '').toLowerCase())).length;
+    const totalTasks = list.length;
+    return {
+      totalTasks,
+      completedTasks,
+      completionRate: totalTasks ? Number(((completedTasks / totalTasks) * 100).toFixed(2)) : 0,
+    };
   }
 }
 

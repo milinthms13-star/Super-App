@@ -133,7 +133,7 @@
 
 .education-nav {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
   margin: 1.25rem 0;
 }
@@ -237,6 +237,35 @@
   flex-wrap: wrap;
   gap: 0.65rem;
   margin-top: 1rem;
+}
+
+.education-progress-block {
+  margin-top: 0.9rem;
+}
+
+.education-progress-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--education-brand-muted, var(--education-muted));
+}
+
+.education-progress-track {
+  margin-top: 0.45rem;
+  width: 100%;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(19, 41, 75, 0.12);
+  overflow: hidden;
+}
+
+.education-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1e6fff, #0e9f7a);
 }
 
 .education-empty-state {

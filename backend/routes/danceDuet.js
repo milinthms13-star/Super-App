@@ -22,6 +22,7 @@ const RETRY_BACKOFF_MS = 15000;
 const QUEUE_CONCURRENCY = isTestEnv ? 1 : 2;
 const DEFAULT_POLL_SECONDS = 3;
 const ENABLE_QUEUE_WORKER = process.env.DANCE_DUET_DISABLE_QUEUE_WORKER !== 'true';
+const MULTIPART_SAFETY_BUFFER_BYTES = 2 * 1024 * 1024;
 const queueInputRoot = path.resolve(path.join(__dirname, '..', 'uploads', 'dance-duet', 'queue-inputs'));
 const outputsBaseDir = path.resolve(path.join(__dirname, '..', 'uploads', 'dance-duet', 'outputs'));
 
@@ -38,7 +39,15 @@ const mergeLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_SINGLE_VIDEO_BYTES } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_SINGLE_VIDEO_BYTES,
+    files: 4,
+    fields: 40,
+    parts: 50,
+  },
+});
 const supportedVideoMime = /^(video\/(mp4|webm|mov|quicktime|x-matroska)|application\/octet-stream)$/i;
 const supportedImageMime = /^(image\/(png|jpeg|jpg))$/i;
 const supportedAudioMime = /^(audio\/(mpeg|mp3|wav|x-wav|aac|mp4|ogg)|application\/octet-stream)$/i;
@@ -77,6 +86,7 @@ const queueState = {
   running: 0,
   pending: [],
 };
+const idempotencyLocks = new Map();
 
 const validateFileType = (file, regex, label) => {
   if (!file || !regex.test(String(file.mimetype || ''))) {
@@ -111,17 +121,24 @@ const getOutputAbsolutePath = (outputUrl = '') => {
   return path.join(__dirname, '..', normalized);
 };
 
+const isPathInsideRoot = (absolutePath = '', rootPath = '') => {
+  if (!absolutePath || !rootPath) return false;
+  const relative = path.relative(rootPath, absolutePath);
+  if (!relative) return true;
+  return !relative.startsWith('..') && !path.isAbsolute(relative);
+};
+
 const resolveSafeOutputPath = (outputUrl = '') => {
   const absolute = path.resolve(getOutputAbsolutePath(outputUrl));
   if (!absolute) return '';
-  if (!absolute.startsWith(outputsBaseDir)) return '';
+  if (!isPathInsideRoot(absolute, outputsBaseDir)) return '';
   return absolute;
 };
 
 const resolveSafeQueueInputPath = (inputPath = '') => {
   if (!inputPath) return '';
   const absolute = path.resolve(inputPath);
-  if (!absolute.startsWith(queueInputRoot)) return '';
+  if (!isPathInsideRoot(absolute, queueInputRoot)) return '';
   return absolute;
 };
 
@@ -210,6 +227,31 @@ const isRetryableFailure = (error = null) => {
   return true;
 };
 
+const withIdempotencyLock = async (lockKey, task) => {
+  if (!lockKey) {
+    return task();
+  }
+
+  const previous = idempotencyLocks.get(lockKey) || Promise.resolve();
+  let releaseCurrent = null;
+  const current = new Promise((resolve) => {
+    releaseCurrent = resolve;
+  });
+  idempotencyLocks.set(lockKey, current);
+
+  await previous;
+  try {
+    return await task();
+  } finally {
+    if (typeof releaseCurrent === 'function') {
+      releaseCurrent();
+    }
+    if (idempotencyLocks.get(lockKey) === current) {
+      idempotencyLocks.delete(lockKey);
+    }
+  }
+};
+
 const enqueueJob = (jobId, delayMs = 0) => {
   if (!jobId) return;
   if (delayMs > 0) {
@@ -254,30 +296,46 @@ const bootstrapQueuedJobs = async () => {
 };
 
 const processQueuedJob = async (jobId) => {
-  const job = await DanceDuetJob.findById(jobId);
-  if (!job || job.status === 'deleted') return;
-  if (!['queued', 'processing'].includes(job.status)) return;
-
   const now = new Date();
-  const nextRetryAt = job?.processing?.nextRetryAt;
-  if (nextRetryAt && new Date(nextRetryAt).getTime() > now.getTime()) {
-    const waitMs = Math.max(0, new Date(nextRetryAt).getTime() - now.getTime());
-    enqueueJob(String(job._id), waitMs);
+  const scheduled = await DanceDuetJob.findById(jobId).select('status processing.nextRetryAt').lean();
+  if (!scheduled || scheduled.status === 'deleted') return;
+  if (!['queued', 'processing'].includes(scheduled.status)) return;
+  if (scheduled.status === 'processing' && !scheduled?.processing?.nextRetryAt) return;
+  const pendingRetryAt = scheduled?.processing?.nextRetryAt;
+  if (pendingRetryAt && new Date(pendingRetryAt).getTime() > now.getTime()) {
+    const waitMs = Math.max(0, new Date(pendingRetryAt).getTime() - now.getTime());
+    enqueueJob(String(jobId), waitMs);
     return;
   }
 
-  job.status = 'processing';
+  const job = await DanceDuetJob.findOneAndUpdate(
+    {
+      _id: jobId,
+      $or: [
+        { status: 'queued' },
+        {
+          status: 'processing',
+          'processing.nextRetryAt': { $ne: null, $lte: now },
+        },
+      ],
+    },
+    {
+      $set: {
+        status: 'processing',
+        'processing.lastAttemptAt': now,
+        'processing.worker': `pid-${process.pid}`,
+        'processing.nextRetryAt': null,
+      },
+      $inc: { 'processing.attempts': 1 },
+    },
+    { new: true }
+  );
+  if (!job) return;
+
   if (!job.startedAt) {
     job.startedAt = now;
+    await job.save();
   }
-  if (!job.processing) {
-    job.processing = {};
-  }
-  job.processing.attempts = Number(job.processing.attempts || 0) + 1;
-  job.processing.lastAttemptAt = now;
-  job.processing.worker = `pid-${process.pid}`;
-  job.processing.nextRetryAt = null;
-  await job.save();
 
   try {
     const result = await mergeDanceDuetFromSources({
@@ -368,6 +426,22 @@ const saveQueueInputFile = async (jobId, file, tag, fallbackExt) => {
   return targetPath;
 };
 
+const enforceMultipartUploadBudget = (req, res, next) => {
+  const contentLength = Number(req.headers['content-length'] || 0);
+  if (!Number.isFinite(contentLength) || contentLength <= 0) {
+    return next();
+  }
+  const upperBound = MAX_TOTAL_UPLOAD_BYTES + MULTIPART_SAFETY_BUFFER_BYTES;
+  if (contentLength > upperBound) {
+    return res.status(413).json({
+      success: false,
+      message: 'Uploaded files are too large. Reduce video/music/background sizes and try again.',
+      requestId: res.locals?.requestId || '',
+    });
+  }
+  return next();
+};
+
 router.use((req, res, next) => {
   const requestId = normalizeText(req.headers['x-request-id'], 120) || buildRequestId();
   res.locals.requestId = requestId;
@@ -433,6 +507,17 @@ const mergeHandler = async (req, res) => {
   let duetJob = null;
   const userEmail = String(req.user?.email || '').toLowerCase();
   const idempotencyKey = getIdempotencyKey(req);
+  if (idempotencyKey && !req._danceDuetIdempotencyLockAcquired) {
+    const lockKey = `${userEmail}:${idempotencyKey}`;
+    return withIdempotencyLock(lockKey, async () => {
+      req._danceDuetIdempotencyLockAcquired = true;
+      try {
+        return await mergeHandler(req, res);
+      } finally {
+        req._danceDuetIdempotencyLockAcquired = false;
+      }
+    });
+  }
   try {
     if (idempotencyKey) {
       const existingJob = await DanceDuetJob.findOne({
@@ -615,6 +700,46 @@ const mergeHandler = async (req, res) => {
       },
     });
   } catch (error) {
+    const isDuplicateIdempotency = Number(error?.code) === 11000 && Boolean(idempotencyKey);
+    if (isDuplicateIdempotency) {
+      try {
+        const existingJob = await DanceDuetJob.findOne({
+          userEmail,
+          'requestMetadata.idempotencyKey': idempotencyKey,
+          status: { $in: ['queued', 'processing', 'completed'] },
+        })
+          .sort({ createdAt: -1 })
+          .lean();
+
+        if (existingJob?.status === 'completed') {
+          return res.status(200).json({
+            success: true,
+            reused: true,
+            message: 'Reused existing dance duet result for this idempotency key.',
+            requestId: res.locals?.requestId || '',
+            outputUrl: existingJob?.output?.outputUrl || '',
+            warning: existingJob?.output?.warning || '',
+            jobId: existingJob._id,
+            data: { job: statusSummary(existingJob), outputUrl: existingJob?.output?.outputUrl || '' },
+          });
+        }
+
+        if (existingJob?.status === 'queued' || existingJob?.status === 'processing') {
+          return res.status(202).json({
+            success: true,
+            reused: true,
+            message: 'This idempotency key is already being processed.',
+            requestId: res.locals?.requestId || '',
+            jobId: existingJob._id,
+            pollAfterSeconds: DEFAULT_POLL_SECONDS,
+            data: { job: statusSummary(existingJob) },
+          });
+        }
+      } catch (_lookupError) {
+        // Fall through to generic error response below.
+      }
+    }
+
     if (duetJob) {
       duetJob.status = 'failed';
       duetJob.finishedAt = new Date();
@@ -636,16 +761,15 @@ const mergeHandler = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Dance duet queueing failed. Please retry.',
-      error: error.message,
       requestId: res.locals?.requestId || '',
       jobId: duetJob?._id || '',
     });
   }
 };
 
-router.post('/merge', authenticate, mergeLimiter, uploadFieldsWithErrorHandling, mergeHandler);
+router.post('/merge', authenticate, mergeLimiter, enforceMultipartUploadBudget, uploadFieldsWithErrorHandling, mergeHandler);
 
-router.post('/export', authenticate, mergeLimiter, uploadFieldsWithErrorHandling, async (req, res) => {
+router.post('/export', authenticate, mergeLimiter, enforceMultipartUploadBudget, uploadFieldsWithErrorHandling, async (req, res) => {
   req.body.mode =
     req.body.mode ||
     (req.body.layout === 'vertical'

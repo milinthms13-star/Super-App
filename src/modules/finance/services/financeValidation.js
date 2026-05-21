@@ -2,6 +2,8 @@
 
 export function getLeadFormErrors(form = {}) {
   const issues = [];
+  const preferredTenureRaw = String(form.preferredTenureMonths ?? "").trim();
+  const preferredInterestRaw = String(form.preferredInterestRate ?? "").trim();
 
   if (!/^[A-Za-z .'-]{2,80}$/.test(String(form.fullName || "").trim())) {
     issues.push("Enter a valid name using letters, spaces, dot, apostrophe or hyphen.");
@@ -15,12 +17,12 @@ export function getLeadFormErrors(form = {}) {
     issues.push("Loan amount must be greater than zero.");
   }
 
-  if (Number(form.preferredTenureMonths || 0) <= 0) {
+  if (preferredTenureRaw !== "" && Number(preferredTenureRaw) <= 0) {
     issues.push("Tenure must be a positive number of months.");
   }
 
-  const interest = Number(form.preferredInterestRate || 0);
-  if (interest < 6 || interest > 36) {
+  const interest = Number(preferredInterestRaw || 0);
+  if (preferredInterestRaw !== "" && (interest < 6 || interest > 36)) {
     issues.push("Preferred interest rate must be between 6% and 36%.");
   }
 
@@ -33,12 +35,14 @@ export function getLeadFormErrors(form = {}) {
 
 export function getEligibilityFormErrors(form = {}) {
   const issues = [];
+  const fullName = String(form.fullName || "").trim();
+  const phone = String(form.phone || "").trim();
 
-  if (!/^[A-Za-z .'-]{2,80}$/.test(String(form.fullName || "").trim())) {
+  if (fullName && !/^[A-Za-z .'-]{2,80}$/.test(fullName)) {
     issues.push("Enter a valid name using letters, spaces, dot, apostrophe or hyphen.");
   }
 
-  if (!/^\d{10}$/.test(String(form.phone || "").trim())) {
+  if (phone && !/^\d{10}$/.test(phone)) {
     issues.push("Phone must be exactly 10 digits.");
   }
 

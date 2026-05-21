@@ -363,8 +363,12 @@ class CheckoutService {
         throw new Error('Payment verification failed');
       }
 
-      // Payment verified, update status
-      payment.status = 'verified';
+      if (payment.paymentGateway === 'razorpay') {
+        payment.gatewayTransactionId = String(verificationData?.razorpay_payment_id || payment.gatewayTransactionId || '');
+      }
+
+      // Payment verified/captured, update status
+      payment.status = 'captured';
       payment.verifiedAt = new Date();
       await payment.save();
 
@@ -394,6 +398,14 @@ class CheckoutService {
   verifyRazorpayPayment(payment, verificationData) {
     try {
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = verificationData;
+      if (
+        !razorpay_order_id ||
+        !razorpay_payment_id ||
+        !razorpay_signature ||
+        String(payment.gatewayOrderId || '') !== String(razorpay_order_id)
+      ) {
+        return false;
+      }
 
       const body = razorpay_order_id + '|' + razorpay_payment_id;
       const expectedSignature = crypto
@@ -415,6 +427,9 @@ class CheckoutService {
     try {
       const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
       const { stripePaymentIntentId } = verificationData;
+      if (!stripePaymentIntentId || String(payment.gatewayTransactionId || '') !== String(stripePaymentIntentId)) {
+        return false;
+      }
 
       const paymentIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
 

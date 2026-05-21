@@ -186,6 +186,85 @@ const toClientObject = (value) => {
   return objectValue;
 };
 
+const createDoctorFromPartnerApplication = async (application) => {
+  if (!application || String(application.entityType || '').toLowerCase() !== 'doctor') {
+    return null;
+  }
+
+  const doctorName = String(application.contactName || application.vendorName || '').trim();
+  if (!doctorName) {
+    return null;
+  }
+
+  if (isMongoReady()) {
+    const existing = await HealthcareDoctor.findOne({
+      userId: application.userId,
+      name: doctorName,
+      isPartnerProvided: true,
+    });
+    if (existing) {
+      return existing;
+    }
+
+    return HealthcareDoctor.create({
+      userId: application.userId,
+      name: doctorName,
+      specialty: String(application.specialtyOrService || 'General Physician').trim(),
+      qualifications: String(application.licenseNumber || '').trim(),
+      clinicAddress: String(application.address || application.vendorName || '').trim(),
+      consultationFee: 0,
+      rating: 4.5,
+      reviewsCount: 0,
+      languages: ['English'],
+      availableModes: ['clinic', 'video'],
+      availableSlots: [],
+      biography: `Partner provider onboarded from ${application.entityType} application.`,
+      profilePhotoUrl: '',
+      isPartnerProvided: true,
+      approvalStatus: 'approved',
+      reviewNotes: String(application.reviewNotes || '').trim(),
+      reviewedBy: application.reviewedBy || undefined,
+      reviewedAt: application.reviewedAt || new Date(),
+      isActive: true,
+    });
+  }
+
+  const existing = inMemoryStore.doctors.find(
+    (doctor) => doctor.userId === String(application.userId) && doctor.name === doctorName && doctor.isPartnerProvided === true
+  );
+  if (existing) {
+    return existing;
+  }
+
+  const created = {
+    id: `doc-memory-${Date.now()}-${crypto.randomUUID()}`,
+    userId: String(application.userId),
+    name: doctorName,
+    specialty: String(application.specialtyOrService || 'General Physician').trim(),
+    qualifications: String(application.licenseNumber || '').trim(),
+    experienceYears: 0,
+    consultationFee: 0,
+    rating: 4.5,
+    reviewsCount: 0,
+    languages: ['English'],
+    clinicAddress: String(application.address || application.vendorName || '').trim(),
+    availableModes: ['clinic', 'video'],
+    availableSlots: [],
+    biography: `Partner provider onboarded from ${application.entityType} application.`,
+    profilePhotoUrl: '',
+    isPartnerProvided: true,
+    approvalStatus: 'approved',
+    reviewNotes: String(application.reviewNotes || '').trim(),
+    reviewedBy: String(application.reviewedBy || ''),
+    reviewedAt: application.reviewedAt ? new Date(application.reviewedAt) : new Date(),
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  inMemoryStore.doctors.unshift(created);
+  return created;
+};
+
 const sanitizeFileName = (fileName = '') => {
   return String(fileName || '')
     .replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -195,6 +274,66 @@ const sanitizeFileName = (fileName = '') => {
 const parseNumber = (value, fallbackValue = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallbackValue;
+};
+
+const ALLOWED_PARTNER_DOCUMENT_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+]);
+
+const ALLOWED_PRESCRIPTION_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+]);
+
+const SUPPORTED_PAYMENT_PROVIDERS = new Set(['simulated', 'razorpay', 'stripe']);
+
+const normalizePaymentProvider = (provider) => {
+  const value = String(provider || 'simulated').trim().toLowerCase();
+  return SUPPORTED_PAYMENT_PROVIDERS.has(value) ? value : 'simulated';
+};
+
+const createPaymentReference = (prefix = 'HC') => {
+  return `${prefix}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+};
+
+const isAllowedUploadMimeType = (mimetype = '', allowedTypes = ALLOWED_PARTNER_DOCUMENT_TYPES) => {
+  return allowedTypes.has(String(mimetype || '').toLowerCase());
+};
+
+const validateAppointmentPayload = (payload = {}) => {
+  if (!payload.doctorName || !payload.appointmentDate || !payload.appointmentTime || !payload.patientName) {
+    return 'doctorName, appointmentDate, appointmentTime, and patientName are required';
+  }
+  const allowedCategories = ['doctor', 'lab', 'scan', 'package', 'other'];
+  if (payload.category && !allowedCategories.includes(String(payload.category).trim())) {
+    return `category must be one of: ${allowedCategories.join(', ')}`;
+  }
+  return null;
+};
+
+const validatePharmacyItems = (items) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    return 'At least one cart item is required';
+  }
+  for (const item of items) {
+    if (!item || !String(item.name || '').trim()) {
+      return 'Each cart item must include a valid name';
+    }
+    const unitPrice = parseNumber(item.unitPrice ?? item.price, -1);
+    if (unitPrice < 0) {
+      return 'Each cart item must include a valid unitPrice';
+    }
+    const quantity = parseNumber(item.quantity, 0);
+    if (quantity < 1) {
+      return 'Each cart item must include a valid positive quantity';
+    }
+  }
+  return null;
 };
 
 const userIdString = (req) => String(req?.user?._id || '');
@@ -987,6 +1126,10 @@ router.post('/appointments', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'doctorName, appointmentDate, appointmentTime, and patientName are required' });
     }
     const amountDue = parseNumber(payload.amountDue, 0) || parseNumber(payload.consultationFee, 0) || 0;
+    const paymentProvider = normalizePaymentProvider(payload.paymentProvider || 'simulated');
+    const paymentReference = amountDue > 0 ? createPaymentReference('HC-APT') : '';
+    const paymentStatus = amountDue > 0 ? 'pending' : 'paid';
+    const paymentCompletedAt = amountDue > 0 ? null : new Date();
 
     if (isMongoReady()) {
       const created = await HealthcareAppointment.create({
@@ -1005,7 +1148,10 @@ router.post('/appointments', authenticate, async (req, res) => {
         collectionAddress: payload.collectionAddress || '',
         notes: payload.notes || '',
         status: payload.status || 'booked',
-        paymentStatus: amountDue > 0 ? 'pending' : 'paid',
+        paymentStatus,
+        paymentProvider,
+        paymentReference,
+        paymentCompletedAt,
         amountDue,
       });
       await addNotification({
@@ -1035,10 +1181,11 @@ router.post('/appointments', authenticate, async (req, res) => {
       collectionAddress: payload.collectionAddress || '',
       notes: payload.notes || '',
       status: payload.status || 'booked',
-      paymentStatus: amountDue > 0 ? 'pending' : 'paid',
+      paymentStatus,
+      paymentProvider,
+      paymentReference,
+      paymentCompletedAt: paymentCompletedAt ? paymentCompletedAt.toISOString() : null,
       amountDue,
-      paymentReference: '',
-      paymentProvider: '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1102,7 +1249,7 @@ router.post('/appointments/:appointmentId/payment/initiate', authenticate, async
   try {
     const { appointmentId } = req.params;
     const userId = userIdString(req);
-    const paymentProvider = String(req.body?.paymentProvider || 'simulated').trim();
+    const paymentProvider = normalizePaymentProvider(req.body?.paymentProvider);
     if (isMongoReady()) {
       const appointment = await HealthcareAppointment.findOne({ _id: appointmentId, userId });
       if (!appointment) {
@@ -1115,13 +1262,17 @@ router.post('/appointments/:appointmentId/payment/initiate', authenticate, async
             paymentReference: appointment.paymentReference,
             amountDue: appointment.amountDue,
             paymentStatus: appointment.paymentStatus,
+            paymentProvider: appointment.paymentProvider || paymentProvider,
           },
         });
       }
-      const paymentReference = `HC-APT-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+      const paymentReference = appointment.paymentReference || createPaymentReference('HC-APT');
       appointment.paymentProvider = paymentProvider;
       appointment.paymentReference = paymentReference;
-      appointment.paymentStatus = 'pending';
+      appointment.paymentStatus = appointment.amountDue > 0 ? 'pending' : 'paid';
+      if (appointment.amountDue <= 0) {
+        appointment.paymentCompletedAt = new Date();
+      }
       await appointment.save();
       return res.status(200).json({
         success: true,
@@ -1139,12 +1290,15 @@ router.post('/appointments/:appointmentId/payment/initiate', authenticate, async
     if (index === -1) {
       return res.status(404).json({ success: false, message: 'Appointment not found' });
     }
-    const paymentReference = `HC-APT-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    const paymentReference = inMemoryStore.appointments[index].paymentReference || createPaymentReference('HC-APT');
+    const amountDue = parseNumber(inMemoryStore.appointments[index].amountDue, 0);
+    const paymentStatus = amountDue > 0 ? 'pending' : 'paid';
     inMemoryStore.appointments[index] = {
       ...inMemoryStore.appointments[index],
       paymentProvider,
       paymentReference,
-      paymentStatus: 'pending',
+      paymentStatus,
+      paymentCompletedAt: paymentStatus === 'paid' ? new Date().toISOString() : null,
       updatedAt: new Date().toISOString(),
     };
     return res.status(200).json({
@@ -1153,8 +1307,8 @@ router.post('/appointments/:appointmentId/payment/initiate', authenticate, async
         appointmentId,
         paymentReference,
         paymentProvider,
-        amountDue: inMemoryStore.appointments[index].amountDue || 0,
-        paymentStatus: 'pending',
+        amountDue,
+        paymentStatus,
       },
     });
   } catch (error) {
@@ -1167,6 +1321,7 @@ router.post('/appointments/:appointmentId/payment/verify', authenticate, async (
     const { appointmentId } = req.params;
     const userId = userIdString(req);
     const paymentReference = String(req.body?.paymentReference || '').trim();
+    const paymentProvider = normalizePaymentProvider(req.body?.paymentProvider || 'simulated');
     const paymentStatus = String(req.body?.paymentStatus || 'success').trim().toLowerCase();
     const normalizedStatus = paymentStatus === 'success' ? 'paid' : 'failed';
     if (isMongoReady()) {
@@ -1175,6 +1330,7 @@ router.post('/appointments/:appointmentId/payment/verify', authenticate, async (
         return res.status(404).json({ success: false, message: 'Appointment not found' });
       }
       appointment.paymentReference = paymentReference || appointment.paymentReference;
+      appointment.paymentProvider = paymentProvider || appointment.paymentProvider;
       appointment.paymentStatus = normalizedStatus;
       if (normalizedStatus === 'paid') {
         appointment.paymentCompletedAt = new Date();
@@ -1199,6 +1355,7 @@ router.post('/appointments/:appointmentId/payment/verify', authenticate, async (
     inMemoryStore.appointments[index] = {
       ...inMemoryStore.appointments[index],
       paymentReference: paymentReference || inMemoryStore.appointments[index].paymentReference,
+      paymentProvider: normalizePaymentProvider(req.body?.paymentProvider || inMemoryStore.appointments[index].paymentProvider),
       paymentStatus: normalizedStatus,
       paymentCompletedAt: normalizedStatus === 'paid' ? new Date().toISOString() : null,
       updatedAt: new Date().toISOString(),
@@ -1354,17 +1511,24 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
         items = [];
       }
     }
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ success: false, message: 'At least one cart item is required' });
-    }
     const normalizedItems = items.map((item) => ({
       medicineId: String(item.medicineId || item.id || ''),
       name: String(item.name || ''),
       category: String(item.category || ''),
-      unitPrice: parseNumber(item.unitPrice ?? item.price, 0),
-      quantity: parseNumber(item.quantity, 1),
+      unitPrice: parseNumber(item.unitPrice ?? item.price, -1),
+      quantity: parseNumber(item.quantity, 0),
       requiresPrescription: Boolean(item.requiresPrescription),
     }));
+    const validationMessage = validatePharmacyItems(normalizedItems);
+    if (validationMessage) {
+      return res.status(400).json({ success: false, message: validationMessage });
+    }
+    if (!payload.deliveryAddress || !payload.phone || !payload.customerName) {
+      return res.status(400).json({
+        success: false,
+        message: 'deliveryAddress, phone, and customerName are required to place a pharmacy order',
+      });
+    }
     const requiresPrescription = normalizedItems.some((item) => item.requiresPrescription);
     let prescriptionFileUrl = '';
     let prescriptionStorageKey = '';
@@ -1372,6 +1536,9 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
       return res.status(400).json({ success: false, message: 'Prescription upload is required for restricted medicines' });
     }
     if (req.file?.buffer) {
+      if (!isAllowedUploadMimeType(req.file.mimetype, ALLOWED_PRESCRIPTION_MIME_TYPES)) {
+        return res.status(400).json({ success: false, message: 'Unsupported prescription file type' });
+      }
       const safeFileName = sanitizeFileName(req.file.originalname || `prescription-${Date.now()}`);
       const storageKey = `healthcare/prescriptions/${userId}/${Date.now()}-${safeFileName}`;
       const uploadResult = await uploadToS3(req.file.buffer, storageKey, { contentType: req.file.mimetype || 'application/octet-stream' });
@@ -1379,6 +1546,9 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
       prescriptionFileUrl = uploadResult.s3Url || uploadResult.publicUrlPath || generateSignedUrl(prescriptionStorageKey);
     }
     const totalAmount = normalizedItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+    const paymentProvider = normalizePaymentProvider(payload.paymentProvider || 'simulated');
+    const paymentReference = totalAmount > 0 ? createPaymentReference('HC-PHARM') : '';
+    const paymentStatus = totalAmount > 0 ? 'pending' : 'paid';
     if (isMongoReady()) {
       const initialStatus = requiresPrescription ? 'verified' : 'placed';
       const created = await HealthcarePharmacyOrder.create({
@@ -1394,7 +1564,9 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
         prescriptionFileUrl,
         prescriptionStorageKey,
         paymentMethod: payload.paymentMethod || 'upi',
-        paymentStatus: 'pending',
+        paymentProvider,
+        paymentReference,
+        paymentStatus,
         orderStatus: initialStatus,
         orderTimeline: [{ status: initialStatus, at: new Date() }],
       });
@@ -1407,6 +1579,9 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
       });
       return res.status(201).json({ success: true, data: toClientObject(created) });
     }
+    const paymentProvider = normalizePaymentProvider(payload.paymentProvider || 'simulated');
+    const paymentReference = totalAmount > 0 ? createPaymentReference('HC-PHARM') : '';
+    const paymentStatus = totalAmount > 0 ? 'pending' : 'paid';
     const initialStatus = requiresPrescription ? 'verified' : 'placed';
     const created = {
       id: `pharm-order-${Date.now()}-${crypto.randomUUID()}`,
@@ -1422,7 +1597,9 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
       prescriptionFileUrl,
       prescriptionStorageKey,
       paymentMethod: payload.paymentMethod || 'upi',
-      paymentStatus: 'pending',
+      paymentProvider,
+      paymentReference,
+      paymentStatus,
       orderStatus: initialStatus,
       orderTimeline: [{ status: initialStatus, at: new Date().toISOString() }],
       createdAt: new Date().toISOString(),
@@ -1532,10 +1709,11 @@ router.post('/pharmacy/orders/:orderId/payment/verify', authenticate, async (req
     const paymentStatus = String(req.body?.paymentStatus || 'success').trim().toLowerCase();
     const normalizedStatus = paymentStatus === 'success' ? 'paid' : 'failed';
     if (isMongoReady()) {
-      const order = await HealthcarePharmacyOrder.findOne({ _id: orderId, userId });
+        const order = await HealthcarePharmacyOrder.findOne({ _id: orderId, userId });
       if (!order) {
         return res.status(404).json({ success: false, message: 'Order not found' });
       }
+      order.paymentProvider = normalizePaymentProvider(req.body?.paymentProvider || order.paymentProvider);
       order.paymentStatus = normalizedStatus;
       order.paymentReference = paymentReference || order.paymentReference;
       if (normalizedStatus === 'paid' && order.orderStatus !== 'delivered') {
@@ -1561,6 +1739,7 @@ router.post('/pharmacy/orders/:orderId/payment/verify', authenticate, async (req
     }
     inMemoryStore.pharmacyOrders[index] = {
       ...inMemoryStore.pharmacyOrders[index],
+      paymentProvider: normalizePaymentProvider(req.body?.paymentProvider || inMemoryStore.pharmacyOrders[index].paymentProvider),
       paymentStatus: normalizedStatus,
       paymentReference: paymentReference || inMemoryStore.pharmacyOrders[index].paymentReference,
       updatedAt: new Date().toISOString(),
@@ -1984,6 +2163,9 @@ router.patch('/partner/applications/:applicationId/review', authenticate, verify
       application.reviewedBy = req.user._id;
       application.reviewedAt = new Date();
       await application.save();
+      if (status === 'approved' && application.entityType === 'doctor') {
+        await createDoctorFromPartnerApplication(application);
+      }
       await addNotification({
         userId: application.userId,
         title: 'Partner application reviewed',
@@ -2005,6 +2187,9 @@ router.patch('/partner/applications/:applicationId/review', authenticate, verify
       reviewedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    if (status === 'approved' && inMemoryStore.partnerApplications[index].entityType === 'doctor') {
+      await createDoctorFromPartnerApplication(inMemoryStore.partnerApplications[index]);
+    }
     await addNotification({
       userId: inMemoryStore.partnerApplications[index].userId,
       title: 'Partner application reviewed',
@@ -2073,11 +2258,15 @@ router.get('/partner/dashboard', authenticate, async (req, res) => {
   try {
     const userId = userIdString(req);
     if (isMongoReady()) {
-      const [applications, appointments, orders] = await Promise.all([
-        HealthcarePartnerApplication.find({ userId }).sort({ createdAt: -1 }).lean(),
-        HealthcareAppointment.find({ doctorId: { $exists: true }, category: { $in: ['doctor', 'lab', 'scan', 'package'] } }).lean(),
-        HealthcarePharmacyOrder.find({}).lean(),
-      ]);
+      const applications = await HealthcarePartnerApplication.find({ userId }).sort({ createdAt: -1 }).lean();
+      const partnerDoctors = await HealthcareDoctor.find({ userId }).select('_id').lean();
+      const partnerDoctorIds = partnerDoctors.map((item) => String(item._id));
+      const appointments = partnerDoctorIds.length > 0
+        ? await HealthcareAppointment.find({ doctorId: { $in: partnerDoctorIds } }).lean()
+        : [];
+        const orders = await HealthcarePharmacyOrder.find({ userId }).lean();
+      const paidAppointmentsRevenue = appointments.reduce((sum, apt) => sum + (String(apt.paymentStatus) === 'paid' ? parseNumber(apt.amountDue, 0) : 0), 0);
+      const paidPharmacyOrdersRevenue = orders.reduce((sum, order) => sum + (String(order.paymentStatus) === 'paid' ? parseNumber(order.totalAmount, 0) : 0), 0);
       const pendingApplications = applications.filter((application) => application.status === 'pending').length;
       const approvedApplications = applications.filter((application) => application.status === 'approved').length;
       return res.status(200).json({
@@ -2089,11 +2278,23 @@ router.get('/partner/dashboard', authenticate, async (req, res) => {
             approvedApplications,
             totalAppointments: appointments.length,
             totalPharmacyOrders: orders.length,
+            paidAppointmentsRevenue,
+            paidPharmacyOrdersRevenue,
+            totalRevenue: paidAppointmentsRevenue + paidPharmacyOrdersRevenue,
           },
         },
       });
     }
-    const applications = inMemoryStore.partnerApplications.filter((application) => application.userId === userId);
+    const applications = inMemoryStore.partnerApplications.filter((application) => String(application.userId) === userId);
+    const partnerDoctorIds = inMemoryStore.doctors
+      .filter((doctor) => String(doctor.userId) === userId)
+      .map((doctor) => String(doctor.id));
+    const appointments = inMemoryStore.appointments.filter((appointment) =>
+      partnerDoctorIds.length > 0 && partnerDoctorIds.includes(String(appointment.doctorId))
+    );
+    const orders = inMemoryStore.pharmacyOrders.filter((order) => String(order.userId) === userId);
+    const paidAppointmentsRevenue = appointments.reduce((sum, apt) => sum + (String(apt.paymentStatus) === 'paid' ? parseNumber(apt.amountDue, 0) : 0), 0);
+    const paidPharmacyOrdersRevenue = orders.reduce((sum, order) => sum + (String(order.paymentStatus) === 'paid' ? parseNumber(order.totalAmount, 0) : 0), 0);
     return res.status(200).json({
       success: true,
       data: {
@@ -2101,8 +2302,11 @@ router.get('/partner/dashboard', authenticate, async (req, res) => {
         stats: {
           pendingApplications: applications.filter((application) => application.status === 'pending').length,
           approvedApplications: applications.filter((application) => application.status === 'approved').length,
-          totalAppointments: inMemoryStore.appointments.length,
-          totalPharmacyOrders: inMemoryStore.pharmacyOrders.length,
+          totalAppointments: appointments.length,
+          totalPharmacyOrders: orders.length,
+          paidAppointmentsRevenue,
+          paidPharmacyOrdersRevenue,
+          totalRevenue: paidAppointmentsRevenue + paidPharmacyOrdersRevenue,
         },
       },
     });

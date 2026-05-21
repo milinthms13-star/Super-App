@@ -125,6 +125,12 @@ const corsOptions = {
     'Content-Type',
     'Authorization',
     'X-Requested-With',
+    'x-idempotency-key',
+    'idempotency-key',
+    'x-source-channel',
+    'x-client-platform',
+    'x-app-version',
+    'x-build-number',
     'x-voicefriend-session-token',
     'X-VoiceFriend-Session-Token',
   ],
@@ -208,9 +214,11 @@ const createLazyRouteMiddleware = (modulePath) => {
 };
 
 const authRoutes = require('./routes/auth');
+const sessionManagementRoutes = require('./routes/sessionManagementRoutes');
 const appDataRoutes = require('./routes/appData');
 
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', sessionManagementRoutes);
 app.use('/api/appdata', appDataRoutes);
 app.use('/api/app-data', appDataRoutes);
 app.use('/api/realestate', require('./routes/realestate'));
@@ -228,6 +236,7 @@ app.use('/api/karaoke-duet', require('./routes/karaokeDuet'));
 app.use('/api/karaokeduet', require('./routes/karaokeDuet'));
 app.use('/api/kitchen', require('./routes/kitchen'));
 app.use('/api/beauty-ai', require('./routes/beautyAI'));
+app.use('/api/finance', require('./routes/finance'));
 app.use('/api/strategic-modules', require('./routes/strategicModules'));
 
 app.use('/api/messaging/v4/reactions', require('./routes/messageReactionsRoutes'));

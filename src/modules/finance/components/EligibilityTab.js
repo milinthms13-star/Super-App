@@ -112,6 +112,7 @@ const EligibilityTab = ({ form, onChange, onSubmit, state, categories, states, d
         <p><strong>Estimated New EMI:</strong> {formatCurrency(state.result.result.estimatedNewEmi)}</p>
         <p><strong>Recommended Amount:</strong> {formatCurrency(Math.min(Number(form.requiredAmount || 0), Math.max(0, Number(form.monthlyIncome || 0) * 12)))}</p>
         <p><strong>Best Matching Products:</strong> {(state.result.result.bestMatchingLoanProducts || []).join(", ")}</p>
+        <p><strong>Matched Schemes:</strong> {(state.result.result.matchedSchemes || []).map(scheme => scheme.title).join(", ") || "None"}</p>
         <p><strong>Improvement Guide:</strong> {(state.result.result.improvementTips || []).join(" | ")}</p>
         <p><strong>Potential Rejection Reasons:</strong> {(state.result.result.rejectionReasons || []).join(" | ") || "None"}</p>
         <p><strong>Matching Institutions:</strong> {(state.result.matchingInstitutions || []).map(item => item.name).join(", ")}</p>

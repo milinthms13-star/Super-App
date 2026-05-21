@@ -188,8 +188,11 @@ const GulfServices = () => {
   const [checkedDocs, setCheckedDocs] = useState([]);
   const [myApplications, setMyApplications] = useState([]);
   const [adminApplications, setAdminApplications] = useState([]);
+  const [adminAnalytics, setAdminAnalytics] = useState(null);
   const [adminFilters, setAdminFilters] = useState({ visaStatus: '', country: '', search: '' });
   const [adminUpdateDrafts, setAdminUpdateDrafts] = useState({});
+  const [pendingRecruiters, setPendingRecruiters] = useState([]);
+  const [pendingRecruiterDrafts, setPendingRecruiterDrafts] = useState({});
   
   // New state for enhanced features
   const [activeModal, setActiveModal] = useState(null);
@@ -247,6 +250,18 @@ const GulfServices = () => {
   const [trackRequest, setTrackRequest] = useState({ type: 'visa', requestId: '', email: '' });
   const [trackResult, setTrackResult] = useState(null);
   const [fraudForm, setFraudForm] = useState({ recruiterId: '', issueDescription: '', phone: '' });
+  const [recruiterForm, setRecruiterForm] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    companyName: '',
+    licenseNumber: '',
+    country: selectedCountry,
+    experienceSummary: '',
+    website: '',
+    kycDocument: null,
+  });
+  const [paymentIntentInfo, setPaymentIntentInfo] = useState(null);
   const isAdminUser = useMemo(() => {
     try {
       const payload = localStorage.getItem('user');
@@ -286,6 +301,7 @@ const GulfServices = () => {
     setAttestationForm((prev) => ({ ...prev, email: prev.email || email }));
     setLeadForm((prev) => ({ ...prev, email: prev.email || email }));
     setTrackRequest((prev) => ({ ...prev, email: prev.email || email }));
+    setRecruiterForm((prev) => ({ ...prev, email: prev.email || email }));
   }, []);
 
   useEffect(() => {
@@ -332,6 +348,7 @@ const GulfServices = () => {
     setVisaForm((prev) => ({ ...prev, country: selectedCountry }));
     setAttestationForm((prev) => ({ ...prev, country: selectedCountry }));
     setLeadForm((prev) => ({ ...prev, country: selectedCountry }));
+    setRecruiterForm((prev) => ({ ...prev, country: selectedCountry }));
   }, [selectedCountry]);
 
   const filteredJobs = useMemo(() => {
@@ -430,6 +447,49 @@ const GulfServices = () => {
     }
   }, [adminFilters, isAdminUser]);
 
+  const loadAdminAnalytics = useCallback(async () => {
+    if (!isAdminUser) return;
+    try {
+      const response = await gulfservicesApi.getAdminAnalytics();
+      setAdminAnalytics(response?.data || null);
+    } catch (_error) {
+      setAdminAnalytics(null);
+    }
+  }, [isAdminUser]);
+
+  const loadPendingRecruiters = useCallback(async () => {
+    if (!isAdminUser) return;
+    try {
+      const response = await gulfservicesApi.getPendingRecruiters();
+      setPendingRecruiters(Array.isArray(response?.data) ? response.data : []);
+    } catch (_error) {
+      setPendingRecruiters([]);
+    }
+  }, [isAdminUser]);
+
+  const handleRecruiterVerification = async (recruiterId, verified) => {
+    const draft = pendingRecruiterDrafts[recruiterId] || {};
+    setLoading(true);
+    try {
+      const response = await gulfservicesApi.verifyRecruiter(recruiterId, {
+        verified,
+        notes: draft.adminNote || '',
+      });
+      showMessage(response?.message || `Recruiter ${verified ? 'verified' : 'rejected'} successfully.`);
+      setPendingRecruiterDrafts((prev) => {
+        const next = { ...prev };
+        delete next[recruiterId];
+        return next;
+      });
+      await loadPendingRecruiters();
+      await loadAdminAnalytics();
+    } catch (error) {
+      showMessage(error?.response?.data?.message || 'Unable to update recruiter status.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submitVisa = async (event) => {
     event.preventDefault();
     setLoading(true);
@@ -460,9 +520,73 @@ const GulfServices = () => {
       const response = await gulfservicesApi.submitAttestation(formData);
       showMessage(response.message || 'Attestation request submitted successfully.');
       setAttestationForm((prev) => ({ ...prev, phone: '', fullName: '', documentName: '' }));
+      setPaymentIntentInfo(null);
       closeModal();
     } catch (error) {
       showMessage(error?.response?.data?.message || 'Unable to submit attestation request.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestAttestationPayment = async () => {
+    if (!attestationForm.urgency || !attestationForm.email) {
+      showMessage('Complete the attestation form before requesting payment.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await gulfservicesApi.createPaymentIntent({
+        amount: 49.99,
+        currency: 'usd',
+        description: `Attestation service fee for ${attestationForm.email}`,
+        metadata: {
+          service: 'attestation',
+          urgency: attestationForm.urgency,
+          email: attestationForm.email,
+        },
+      });
+      const payload = response?.data || response;
+      setPaymentIntentInfo(payload?.data || payload);
+      showMessage('Payment intent created. Complete the checkout with your provider if required.');
+    } catch (error) {
+      showMessage(error?.response?.data?.message || 'Unable to create payment intent.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitRecruiterApplication = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      Object.entries(recruiterForm).forEach(([key, value]) => {
+        if (key === 'kycDocument') {
+          if (value) {
+            formData.append('kycDocument', value);
+          }
+          return;
+        }
+        formData.append(key, value);
+      });
+      const response = await gulfservicesApi.applyRecruiter(formData);
+      showMessage(response.message || 'Recruiter application submitted successfully.');
+      setRecruiterForm({
+        fullName: '',
+        email: '',
+        phone: '',
+        companyName: '',
+        licenseNumber: '',
+        country: selectedCountry,
+        experienceSummary: '',
+        website: '',
+        kycDocument: null,
+      });
+      closeModal();
+    } catch (error) {
+      showMessage(error?.response?.data?.message || 'Unable to submit recruiter application.');
     } finally {
       setLoading(false);
     }
@@ -538,6 +662,9 @@ const GulfServices = () => {
       const response = await gulfservicesApi.getDashboard();
       setDashboard(response.data.dashboard);
       await loadMyApplications();
+      if (isAdminUser) {
+        await loadAdminAnalytics();
+      }
       setActivePane('dashboard');
     } catch (error) {
       const fallbackMessage =
@@ -627,7 +754,10 @@ const GulfServices = () => {
     if (activePane === 'workflow' && isAdminUser) {
       loadAdminApplications();
     }
-  }, [activePane, currentUserEmail, isAdminUser, loadAdminApplications, loadMyApplications]);
+    if (activePane === 'dashboard' && isAdminUser) {
+      loadPendingRecruiters();
+    }
+  }, [activePane, currentUserEmail, isAdminUser, loadAdminApplications, loadMyApplications, loadPendingRecruiters]);
 
   // Modal content renderer
   const renderModal = () => {
@@ -864,8 +994,57 @@ const GulfServices = () => {
                   <input name="documentFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => handleFileChange(e, setAttestationForm)} />
                 </label>
               </div>
+              {attestationForm.urgency !== 'standard' && (
+                <div className="gulf-services-payment-card">
+                  <p>Expedited processing incurs an additional fee.</p>
+                  <button type="button" className="btn btn-secondary" onClick={requestAttestationPayment} disabled={loading}>
+                    Create payment intent
+                  </button>
+                  {paymentIntentInfo && (
+                    <div className="gulf-services-payment-info">
+                      <strong>Payment intent created.</strong>
+                      <pre>{JSON.stringify(paymentIntentInfo, null, 2)}</pre>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="gulf-services-form-actions">
                 <button type="submit" className="btn btn-primary" disabled={loading}>Submit request</button>
+                <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeModal === 'recruiter') {
+      return (
+        <div className={modalClasses}>
+          <div className="gulf-services-modal-content">
+            <button type="button" className="gulf-services-modal-close" aria-label="Close recruiter application" onClick={closeModal}>✕</button>
+            <h2>Recruiter Onboarding Application</h2>
+            <form className="gulf-services-form" onSubmit={submitRecruiterApplication}>
+              <div className="gulf-services-form-grid">
+                <input name="fullName" placeholder="Your full name" value={recruiterForm.fullName} onChange={handleInputChange(setRecruiterForm)} required />
+                <input name="email" type="email" placeholder="Email" value={recruiterForm.email} onChange={handleInputChange(setRecruiterForm)} required />
+                <input name="phone" placeholder="Phone" value={recruiterForm.phone} onChange={handleInputChange(setRecruiterForm)} required />
+                <input name="companyName" placeholder="Agency / company name" value={recruiterForm.companyName} onChange={handleInputChange(setRecruiterForm)} required />
+                <input name="licenseNumber" placeholder="Recruiter license number" value={recruiterForm.licenseNumber} onChange={handleInputChange(setRecruiterForm)} required />
+                <select name="country" value={recruiterForm.country} onChange={handleInputChange(setRecruiterForm)}>
+                  {availableCountries.map((country) => (
+                    <option key={country} value={country}>{country}</option>
+                  ))}
+                </select>
+                <input name="website" placeholder="Website or agency page" value={recruiterForm.website} onChange={handleInputChange(setRecruiterForm)} />
+                <textarea name="experienceSummary" placeholder="Experience summary" value={recruiterForm.experienceSummary} onChange={handleInputChange(setRecruiterForm)} rows="3" />
+                <label className="full-width">
+                  Upload KYC document
+                  <input name="kycDocument" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => handleFileChange(e, setRecruiterForm)} />
+                </label>
+              </div>
+              <div className="gulf-services-form-actions">
+                <button type="submit" className="btn btn-primary" disabled={loading}>Submit application</button>
                 <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
               </div>
             </form>
@@ -1193,24 +1372,46 @@ const GulfServices = () => {
             <h2>My Gulf Services Dashboard</h2>
             <p>Track all open visa enquiries, applications, attestations, and service requests from one place.</p>
             {dashboard ? (
-              <div className="gulf-services-dashboard-summary">
-                <div>
-                  <strong>Pending actions</strong>
-                  <p>{dashboard.pendingActions}</p>
+              <>
+                <div className="gulf-services-dashboard-summary">
+                  <div>
+                    <strong>Pending actions</strong>
+                    <p>{dashboard.pendingActions}</p>
+                  </div>
+                  <div>
+                    <strong>Visa requests</strong>
+                    <p>{dashboard.visaRequests.length}</p>
+                  </div>
+                  <div>
+                    <strong>Job applications</strong>
+                    <p>{dashboard.jobApplications.length}</p>
+                  </div>
+                  <div>
+                    <strong>Attestations</strong>
+                    <p>{dashboard.attestations.length}</p>
+                  </div>
                 </div>
-                <div>
-                  <strong>Visa requests</strong>
-                  <p>{dashboard.visaRequests.length}</p>
-                </div>
-                <div>
-                  <strong>Job applications</strong>
-                  <p>{dashboard.jobApplications.length}</p>
-                </div>
-                <div>
-                  <strong>Attestations</strong>
-                  <p>{dashboard.attestations.length}</p>
-                </div>
-              </div>
+                {isAdminUser && adminAnalytics ? (
+                  <div className="gulf-services-dashboard-summary gulf-services-dashboard-analytics">
+                    <div>
+                      <strong>Pending recruiters</strong>
+                      <p>{adminAnalytics.pendingRecruiterCount}</p>
+                    </div>
+                    <div>
+                      <strong>Active recruiters</strong>
+                      <p>{adminAnalytics.activeRecruiterCount}</p>
+                    </div>
+                    <div>
+                      <strong>Open applications</strong>
+                      <p>{adminAnalytics.applicationStatusCounts?.Applied || 0}</p>
+                    </div>
+                    <div>
+                      <strong>Pending attestations</strong>
+                      <p>{adminAnalytics.attestationStatusCounts?.document_received || 0}</p>
+                    </div>
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div>
                 <button type="button" className="btn btn-primary" onClick={loadDashboard} disabled={loading}>
@@ -1424,6 +1625,48 @@ const GulfServices = () => {
                   })}
                   {!adminApplications.length ? <p>No admin application records found.</p> : null}
                 </div>
+                <hr />
+                <div className="gulf-services-admin-recruiter-section">
+                  <div className="gulf-services-admin-toolbar">
+                    <button type="button" className="btn btn-secondary" onClick={loadPendingRecruiters} disabled={loading}>
+                      Load pending recruiters
+                    </button>
+                  </div>
+                  {pendingRecruiters.length ? (
+                    pendingRecruiters.map((recruiter) => {
+                      const draft = pendingRecruiterDrafts[recruiter._id] || {};
+                      return (
+                        <div key={recruiter._id} className="gulf-services-app-item gulf-services-app-item-admin">
+                          <div>
+                            <strong>{recruiter.name}</strong>
+                            <p>{recruiter.companyName || 'Recruiter application'} • {recruiter.country}</p>
+                            <small>License: {recruiter.licenseNumber || 'N/A'} • Status: {recruiter.status}</small>
+                          </div>
+                          <div className="gulf-services-admin-actions">
+                            <input
+                              placeholder="Review note"
+                              value={draft.adminNote || ''}
+                              onChange={(event) =>
+                                setPendingRecruiterDrafts((prev) => ({
+                                  ...prev,
+                                  [recruiter._id]: { ...draft, adminNote: event.target.value },
+                                }))
+                              }
+                            />
+                            <button type="button" className="btn btn-primary" onClick={() => handleRecruiterVerification(recruiter._id, true)}>
+                              Approve
+                            </button>
+                            <button type="button" className="btn btn-outline" onClick={() => handleRecruiterVerification(recruiter._id, false)}>
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p>No pending recruiter applications found. Click load to refresh.</p>
+                  )}
+                </div>
               </article>
             ) : null}
           </div>
@@ -1487,6 +1730,7 @@ const GulfServices = () => {
           <div className="gulf-services-notice-actions">
             <button type="button" className="btn btn-primary" onClick={() => setActiveModal('visa')}>Start Visa Support</button>
             <button type="button" className="btn btn-secondary" onClick={() => setActiveModal('jobs')}>Explore Gulf Jobs</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setActiveModal('recruiter')}>Apply as Recruiter</button>
             <button type="button" className="btn btn-outline" onClick={() => setActivePane('workflow')}>Open 10/10 Workflow</button>
             <button type="button" className="btn btn-outline" onClick={() => setActiveModal('lead')}>Request Callback</button>
           </div>
@@ -1547,7 +1791,10 @@ const GulfServices = () => {
         </div>
 
         <div className="gulf-services-recruiter-panel">
-          <h2>Verified Recruiters on Our Platform</h2>
+          <div className="gulf-services-recruiter-panel-header">
+            <h2>Verified Recruiters on Our Platform</h2>
+            <button type="button" className="btn btn-secondary" onClick={() => setActiveModal('recruiter')}>Recruiter Onboarding</button>
+          </div>
           <div className="gulf-services-job-list">
             {(recruiters.length ? recruiters : SAMPLE_RECRUITERS).map((recruiter) => (
               <article key={recruiter.id} className="gulf-services-card gulf-services-recruiter-card">
