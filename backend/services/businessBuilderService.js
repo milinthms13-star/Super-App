@@ -268,9 +268,16 @@ class BusinessBuilderService {
         costEstimation: this.generateCostEstimation(costSummary),
         profitProjection: this.generateProfitProjection(costSummary),
         swot: this.generateSWOT(business),
-roadmap30: this.generateRoadmap30(business),
-      roadmap90: this.generateRoadmap90(business),
+        legalChecklist: this.generateLegalChecklist(business),
+        roadmap30: this.generateRoadmap30(business),
+        roadmap90: this.generateRoadmap90(business),
         roadmap180: this.generateRoadmap180(business),
+        kpis: this.generatePlanKPIs(business, costSummary),
+        risks: this.generateRisks(business),
+        mitigations: this.generateMitigations(business),
+        milestones: this.generateMilestones(business),
+        tasks: this.generatePlanTasks(business),
+        progress: this.calculatePlanProgress(this.generatePlanTasks(business)),
         generatedAt: new Date(),
       };
 
@@ -360,6 +367,48 @@ roadmap30: this.generateRoadmap30(business),
       return fallback;
     };
 
+    const toObjectList = (value, fallback = []) => {
+      if (Array.isArray(value)) {
+        return value
+          .map((item) => {
+            if (item && typeof item === 'object') {
+              return {
+                id: asTrimmed(item.id || item.taskId || item.title || ''),
+                title: asTrimmed(item.title || item.name || item.task || ''),
+                phase: asTrimmed(item.phase || item.stage || ''),
+                owner: asTrimmed(item.owner || item.assignee || ''),
+                dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+                status: asTrimmed(item.status || item.state || 'pending'),
+                description: asTrimmed(item.description || item.details || ''),
+              };
+            }
+            const title = asTrimmed(String(item || ''));
+            return title ? { title, phase: '', owner: '', status: 'pending', description: '' } : null;
+          })
+          .filter(Boolean);
+      }
+      if (typeof value === 'string') {
+        return value
+          .split(/\r?\n|,/) 
+          .map((item) => asTrimmed(item))
+          .filter(Boolean)
+          .map((title) => ({ title, phase: '', owner: '', status: 'pending', description: '' }));
+      }
+      return fallback;
+    };
+
+    const toKeyedObject = (value, fallback = {}) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return Object.entries(value).reduce((acc, [key, item]) => {
+          if (item !== undefined && item !== null) {
+            acc[key] = typeof item === 'string' ? asTrimmed(item) : item;
+          }
+          return acc;
+        }, {});
+      }
+      return fallback;
+    };
+
     const mergeRoadmap = (...values) => {
       for (const value of values) {
         if (Array.isArray(value)) {
@@ -419,6 +468,11 @@ roadmap30: this.generateRoadmap30(business),
         rawPlan.roadmap30,
         fallbackPlan.roadmap30
       ),
+      kpis: toKeyedObject(rawPlan.kpis, fallbackPlan.kpis || {}),
+      risks: toArray(rawPlan.risks, fallbackPlan.risks || []),
+      mitigations: toArray(rawPlan.mitigations, fallbackPlan.mitigations || []),
+      milestones: toObjectList(rawPlan.milestones, fallbackPlan.milestones || []),
+      tasks: toObjectList(rawPlan.tasks, fallbackPlan.tasks || []),
       branding: {
         tagline: asTrimmed(brandingInput.tagline || fallbackPlan?.branding?.tagline),
         logoPrompt: asTrimmed(brandingInput.logoPrompt || fallbackPlan?.branding?.logoPrompt),
@@ -473,9 +527,9 @@ roadmap30: this.generateRoadmap30(business),
     const systemPrompt = [
       'You are an expert business strategist for Indian SMEs.',
       'Return strictly valid JSON object only.',
-      'Required keys: summary, marketAnalysis, competitorAnalysis, revenueModel, costEstimation, profitProjection, swot, legalChecklist, roadmap30, roadmap90, branding, generatedAt, provider.',
+      'Required keys: summary, marketAnalysis, competitorAnalysis, revenueModel, costEstimation, profitProjection, swot, legalChecklist, roadmap30, roadmap90, roadmap180, kpis, risks, mitigations, milestones, tasks, branding, generatedAt, provider.',
       'swot must be object with strengths, weaknesses, opportunities, threats as arrays.',
-      'legalChecklist, roadmap30, roadmap90 must be arrays of concise strings.',
+      'legalChecklist, roadmap30, roadmap90, roadmap180 must be arrays of concise strings.',
       'branding must be object with tagline, logoPrompt, colorPalette(array of 3-5 hex codes).',
       'Keep recommendations practical, execution-oriented, and realistic.',
     ].join(' ');
@@ -512,9 +566,16 @@ roadmap30: this.generateRoadmap30(business),
       costEstimation: normalizedPlan.costEstimation,
       profitProjection: normalizedPlan.profitProjection,
       swot: normalizedPlan.swot,
+      legalChecklist: normalizedPlan.legalChecklist,
       roadmap30: normalizedPlan.roadmap30,
       roadmap90: normalizedPlan.roadmap90,
       roadmap180: normalizedPlan.roadmap180,
+      kpis: normalizedPlan.kpis,
+      risks: normalizedPlan.risks,
+      mitigations: normalizedPlan.mitigations,
+      milestones: normalizedPlan.milestones,
+      tasks: normalizedPlan.tasks,
+      progress: this.calculatePlanProgress(normalizedPlan.tasks),
       generatedAt: new Date(normalizedPlan.generatedAt || Date.now()),
     };
 

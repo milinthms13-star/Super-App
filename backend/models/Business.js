@@ -113,9 +113,48 @@ const BusinessSchema = new mongoose.Schema(
         opportunities: { type: [String], default: [] },
         threats: { type: [String], default: [] },
       },
+      legalChecklist: { type: [String], default: [] },
       roadmap30: { type: [String], default: [] },
       roadmap90: { type: [String], default: [] },
       roadmap180: { type: [String], default: [] },
+      kpis: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {},
+      },
+      risks: { type: [String], default: [] },
+      mitigations: { type: [String], default: [] },
+      milestones: {
+        type: [
+          {
+            title: { type: String, trim: true },
+            phase: { type: String, trim: true },
+            owner: { type: String, trim: true },
+            dueDate: Date,
+            status: { type: String, trim: true, default: 'pending' },
+            description: { type: String, trim: true },
+          },
+        ],
+        default: [],
+      },
+      tasks: {
+        type: [
+          {
+            id: { type: String, trim: true },
+            title: { type: String, trim: true },
+            category: { type: String, trim: true },
+            status: { type: String, trim: true, default: 'pending' },
+            owner: { type: String, trim: true },
+            dueDate: Date,
+            completedAt: Date,
+          },
+        ],
+        default: [],
+      },
+      progress: {
+        completionRate: { type: Number, default: 0, min: 0, max: 100 },
+        completedTasks: { type: Number, default: 0, min: 0 },
+        totalTasks: { type: Number, default: 0, min: 0 },
+      },
       generatedAt: Date,
     },
     costForm: {
