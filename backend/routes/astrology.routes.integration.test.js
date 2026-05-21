@@ -44,6 +44,7 @@ const astrologyRouter = require('./astrology');
 
 describe('astrology routes integration', () => {
   let app;
+  const futurePreferredDate = () => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   beforeAll(() => {
     app = express();
@@ -135,13 +136,54 @@ describe('astrology routes integration', () => {
     );
   });
 
+  test('PUT + GET /api/astrology/profile persists and returns normalized profile data', async () => {
+    const updateResponse = await request(app)
+      .put('/api/astrology/profile')
+      .set('x-user-id', 'astro-profile-user')
+      .send({
+        sign: 'virgo',
+        birthDate: '1993-05-12',
+        birthTime: '09:30 AM',
+        birthPlace: 'Kochi',
+        preferences: {
+          favoriteTopics: ['career', 'finance'],
+          receiveDailyHoroscope: true,
+        },
+      })
+      .expect(200);
+
+    expect(updateResponse.body.success).toBe(true);
+    expect(updateResponse.body.data).toEqual(
+      expect.objectContaining({
+        sign: 'virgo',
+        birthPlace: 'Kochi',
+      })
+    );
+
+    const readResponse = await request(app)
+      .get('/api/astrology/profile')
+      .set('x-user-id', 'astro-profile-user')
+      .expect(200);
+
+    expect(readResponse.body.success).toBe(true);
+    expect(readResponse.body.data).toEqual(
+      expect.objectContaining({
+        sign: 'virgo',
+        birthPlace: 'Kochi',
+      })
+    );
+    expect(readResponse.body.data.preferences.favoriteTopics).toEqual(
+      expect.arrayContaining(['career', 'finance'])
+    );
+  });
+
   test('POST /api/astrology/consultations/book creates a pending_payment booking for a valid slot', async () => {
     const response = await request(app)
       .post('/api/astrology/consultations/book')
       .send({
         consultantId: 'acharya-madhav',
         slotId: 'today-1600',
-        preferredDate: '2026-05-18T10:00:00.000Z',
+        preferredDate: futurePreferredDate(),
         notes: 'Need guidance on career decisions.',
       })
       .expect(201);
@@ -179,6 +221,66 @@ describe('astrology routes integration', () => {
     expect(response.body.message).toContain('Invalid consultation slot selection');
   });
 
+  test('POST /api/astrology/consultations/book validates required fields', async () => {
+    const response = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        slotId: 'today-1600',
+      })
+      .expect(400);
+
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain('Invalid request payload');
+    expect(Array.isArray(response.body.errors)).toBe(true);
+  });
+
+  test('POST /api/astrology/consultations/book returns existing booking for duplicate user slot request', async () => {
+    const payload = {
+      consultantId: 'acharya-madhav',
+      slotId: 'today-1600',
+      preferredDate: futurePreferredDate(),
+    };
+
+    const first = await request(app)
+      .post('/api/astrology/consultations/book')
+      .set('x-user-id', 'astro-dup-user')
+      .send(payload)
+      .expect(201);
+
+    const second = await request(app)
+      .post('/api/astrology/consultations/book')
+      .set('x-user-id', 'astro-dup-user')
+      .send(payload)
+      .expect(200);
+
+    expect(second.body.success).toBe(true);
+    expect(second.body.message).toContain('Existing active booking');
+    expect(second.body.data.id || second.body.data._id).toBe(first.body.data.id || first.body.data._id);
+  });
+
+  test('POST /api/astrology/consultations/book blocks slot conflicts across users', async () => {
+    const payload = {
+      consultantId: 'acharya-madhav',
+      slotId: 'today-1730',
+      preferredDate: futurePreferredDate(),
+    };
+
+    await request(app)
+      .post('/api/astrology/consultations/book')
+      .set('x-user-id', 'astro-slot-owner')
+      .send(payload)
+      .expect(201);
+
+    const conflict = await request(app)
+      .post('/api/astrology/consultations/book')
+      .set('x-user-id', 'astro-slot-contender')
+      .send(payload)
+      .expect(409);
+
+    expect(conflict.body.success).toBe(false);
+    expect(conflict.body.message).toContain('no longer available');
+  });
+
   test('GET /api/astrology/consultations returns bookings for the authenticated user', async () => {
     await request(app)
       .post('/api/astrology/consultations/book')
@@ -210,6 +312,36 @@ describe('astrology routes integration', () => {
           status: 'pending_payment',
         })
       );
+    });
+  });
+
+  test('GET /api/astrology/consultations/consultant-bookings enforces consultant scope', async () => {
+    await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'nambiar-priya',
+        slotId: 'tomorrow-1000',
+      })
+      .expect(201);
+
+    const consultantResponse = await request(app)
+      .get('/api/astrology/consultations/consultant-bookings')
+      .set('x-user-role', 'consultant')
+      .set('x-user-id', 'acharya-madhav')
+      .expect(200);
+
+    expect(consultantResponse.body.success).toBe(true);
+    expect(consultantResponse.body.data.length).toBeGreaterThan(0);
+    consultantResponse.body.data.forEach((booking) => {
+      expect(booking.consultantId).toBe('acharya-madhav');
     });
   });
 
@@ -291,6 +423,56 @@ describe('astrology routes integration', () => {
       .expect(400);
   });
 
+  test('POST /api/astrology/consultations/:bookingId/payment/verify rejects conflicting second paymentId', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'nambiar-priya',
+        slotId: 'tomorrow-1000',
+      })
+      .expect(201);
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+
+    const orderResponse = await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/create-order`)
+      .send({})
+      .expect(200);
+    const orderId = orderResponse.body.data.orderId;
+
+    const firstPaymentId = 'pay_test_first';
+    const firstSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret')
+      .update(`${orderId}|${firstPaymentId}`)
+      .digest('hex');
+
+    await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/verify`)
+      .send({
+        orderId,
+        paymentId: firstPaymentId,
+        signature: firstSignature,
+      })
+      .expect(200);
+
+    const conflictingPaymentId = 'pay_test_second';
+    const conflictingSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret')
+      .update(`${orderId}|${conflictingPaymentId}`)
+      .digest('hex');
+
+    const secondAttempt = await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/verify`)
+      .send({
+        orderId,
+        paymentId: conflictingPaymentId,
+        signature: conflictingSignature,
+      })
+      .expect(409);
+
+    expect(secondAttempt.body.success).toBe(false);
+    expect(secondAttempt.body.message).toContain('already completed');
+  });
+
   test('GET /api/astrology/analytics/dashboard returns aggregate metrics', async () => {
     await request(app)
       .post('/api/astrology/consultations/book')
@@ -309,6 +491,34 @@ describe('astrology routes integration', () => {
       expect.objectContaining({
         totalBookings: expect.any(Number),
         totalRevenue: expect.any(Number),
+      })
+    );
+  });
+
+  test('GET /api/astrology/analytics/alerts returns structured ops signals for admin', async () => {
+    const response = await request(app)
+      .get('/api/astrology/analytics/alerts?lookbackHours=24')
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual(
+      expect.objectContaining({
+        windowHours: expect.any(Number),
+        generatedAt: expect.any(String),
+        signals: expect.objectContaining({
+          paymentVerificationFailures: expect.objectContaining({
+            count: expect.any(Number),
+            severity: expect.any(String),
+          }),
+          slotConflictSpikes: expect.objectContaining({
+            count: expect.any(Number),
+            severity: expect.any(String),
+          }),
+          webhookErrors: expect.objectContaining({
+            count: expect.any(Number),
+            severity: expect.any(String),
+          }),
+        }),
       })
     );
   });
@@ -478,6 +688,62 @@ describe('astrology routes integration', () => {
     );
   });
 
+  test('POST /api/astrology/payment/webhook/razorpay ignores duplicate replay by event id', async () => {
+    const bookingResponse = await request(app)
+      .post('/api/astrology/consultations/book')
+      .send({
+        consultantId: 'acharya-madhav',
+        slotId: 'today-1600',
+      })
+      .expect(201);
+
+    const bookingId = bookingResponse.body.data.id || bookingResponse.body.data._id;
+    const createOrderResponse = await request(app)
+      .post(`/api/astrology/consultations/${bookingId}/payment/create-order`)
+      .send({})
+      .expect(200);
+
+    const orderId = createOrderResponse.body.data.orderId;
+    const webhookPayload = {
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: 'pay_webhook_dup_001',
+            order_id: orderId,
+            notes: {
+              bookingId,
+            },
+          },
+        },
+      },
+    };
+    const rawBody = JSON.stringify(webhookPayload);
+    const signature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret')
+      .update(rawBody)
+      .digest('hex');
+
+    await request(app)
+      .post('/api/astrology/payment/webhook/razorpay')
+      .set('Content-Type', 'application/json')
+      .set('x-razorpay-signature', signature)
+      .set('x-razorpay-event-id', 'evt_test_duplicate_1')
+      .send(rawBody)
+      .expect(200);
+
+    const replayResponse = await request(app)
+      .post('/api/astrology/payment/webhook/razorpay')
+      .set('Content-Type', 'application/json')
+      .set('x-razorpay-signature', signature)
+      .set('x-razorpay-event-id', 'evt_test_duplicate_1')
+      .send(rawBody)
+      .expect(200);
+
+    expect(replayResponse.body.success).toBe(true);
+    expect(replayResponse.body.message).toContain('Duplicate webhook ignored');
+  });
+
   test('POST /api/astrology/payment/webhook/razorpay rejects invalid signature', async () => {
     const response = await request(app)
       .post('/api/astrology/payment/webhook/razorpay')
@@ -487,6 +753,33 @@ describe('astrology routes integration', () => {
       .expect(400);
 
     expect(response.body.success).toBe(false);
+  });
+
+  test('POST /api/astrology/payment/webhook/razorpay rejects payload without event', async () => {
+    const payload = {
+      payload: {
+        payment: {
+          entity: {
+            id: 'pay_webhook_no_event',
+          },
+        },
+      },
+    };
+    const rawBody = JSON.stringify(payload);
+    const signature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret')
+      .update(rawBody)
+      .digest('hex');
+
+    const response = await request(app)
+      .post('/api/astrology/payment/webhook/razorpay')
+      .set('Content-Type', 'application/json')
+      .set('x-razorpay-signature', signature)
+      .send(rawBody)
+      .expect(400);
+
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain('event');
   });
 
   test('POST /api/astrology/consultants/add-slot adds a new consultant slot', async () => {

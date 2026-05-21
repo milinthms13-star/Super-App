@@ -9,6 +9,9 @@ const { hasAdminPrivileges } = authMiddleware;
 
 const AstrologyUserProfile = require('../models/AstrologyUserProfile');
 const AstrologyConsultationBooking = require('../models/AstrologyConsultationBooking');
+const AstrologyConsultant = require('../models/AstrologyConsultant');
+const AstrologyWebhookAudit = require('../models/AstrologyWebhookAudit');
+const AstrologyOperationalEvent = require('../models/AstrologyOperationalEvent');
 const devAstrologyStore = require('../utils/devAstrologyStore');
 const {
   getDailyHoroscope,
@@ -21,6 +24,7 @@ const {
 
 const shouldUseDevStore = () =>
   process.env.NODE_ENV !== 'production' && mongoose.connection.readyState !== 1;
+const isTestEnv = process.env.NODE_ENV === 'test';
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || 'test_key',
@@ -29,7 +33,7 @@ const razorpay = new Razorpay({
 
 const assistantLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 12,
+  max: isTestEnv ? 500 : 12,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -40,7 +44,7 @@ const assistantLimiter = rateLimit({
 
 const compatibilityLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 20,
+  max: isTestEnv ? 500 : 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -51,7 +55,7 @@ const compatibilityLimiter = rateLimit({
 
 const bookingLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 25,
+  max: isTestEnv ? 500 : 25,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -62,7 +66,7 @@ const bookingLimiter = rateLimit({
 
 const paymentLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 20,
+  max: isTestEnv ? 500 : 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -502,6 +506,7 @@ const CONSULTANTS = [
 ];
 
 const cloneValue = (value) => JSON.parse(JSON.stringify(value));
+const devWebhookAuditStore = new Map();
 const consultantState = CONSULTANTS.reduce((acc, consultant) => {
   acc[consultant.id] = cloneValue(consultant);
   return acc;
@@ -705,6 +710,680 @@ const findConsultationBookingByPaymentOrderId = async (paymentOrderId) => {
   }
 
   return AstrologyConsultationBooking.findOne({ paymentOrderId: normalizedOrderId }).lean();
+};
+
+let consultantsSeededInDb = false;
+let consultantSeedPromise = null;
+const ACTIVE_SLOT_LOCK_STATUSES = new Set(['pending', 'pending_payment', 'confirmed', 'completed']);
+
+const toUtcStartOfDay = (value) => {
+  const source = parseOptionalDate(value) || new Date();
+  return new Date(Date.UTC(source.getUTCFullYear(), source.getUTCMonth(), source.getUTCDate()));
+};
+
+const isTransactionUnsupportedError = (error) => {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('transaction numbers are only allowed') ||
+    message.includes('replica set') ||
+    message.includes('not supported')
+  );
+};
+
+const isDuplicateKeyError = (error) => Number(error?.code) === 11000;
+
+const deriveActiveSlotLock = (status = '') =>
+  ACTIVE_SLOT_LOCK_STATUSES.has(String(status || '').toLowerCase());
+
+const toConsultantDoc = (consultant = {}) => ({
+  consultantId: sanitizeText(consultant.id || consultant.consultantId, 80),
+  name: sanitizeText(consultant.name, 120),
+  specialty: sanitizeText(consultant.specialty, 240),
+  rate: sanitizeText(consultant.rate, 60),
+  amountInr: Number(consultant.amountInr || 0),
+  availability: sanitizeText(consultant.availability, 120),
+  availableSlots: (Array.isArray(consultant.availableSlots) ? consultant.availableSlots : [])
+    .map((slot) => ({
+      id: sanitizeText(slot?.id, 80),
+      label: sanitizeText(slot?.label, 80),
+      date: sanitizeText(slot?.date, 40) || 'custom',
+      isActive: slot?.isActive !== false,
+    }))
+    .filter((slot) => slot.id && slot.label),
+  email: sanitizeText(consultant.email, 200),
+  phone: sanitizeText(consultant.phone, 40),
+  languages: (Array.isArray(consultant.languages) ? consultant.languages : [])
+    .map((entry) => sanitizeText(entry, 40))
+    .filter(Boolean),
+  rating: Number(consultant.rating || 4.5),
+  bio: sanitizeText(consultant.bio, 500),
+  isActive: consultant.isActive !== false,
+  source: sanitizeText(consultant.source || 'seeded', 24) || 'seeded',
+});
+
+const fromConsultantDoc = (consultant = {}) => ({
+  id: sanitizeText(consultant.consultantId || consultant.id, 80),
+  name: sanitizeText(consultant.name, 120),
+  specialty: sanitizeText(consultant.specialty, 240),
+  rate: sanitizeText(consultant.rate, 60),
+  amountInr: Number(consultant.amountInr || 0),
+  availability: sanitizeText(consultant.availability, 120),
+  availableSlots: (Array.isArray(consultant.availableSlots) ? consultant.availableSlots : [])
+    .filter((slot) => slot?.isActive !== false)
+    .map((slot) => ({
+      id: sanitizeText(slot.id, 80),
+      label: sanitizeText(slot.label, 80),
+      date: sanitizeText(slot.date, 40) || 'custom',
+    })),
+  email: sanitizeText(consultant.email, 200),
+  phone: sanitizeText(consultant.phone, 40),
+  languages: (Array.isArray(consultant.languages) ? consultant.languages : [])
+    .map((entry) => sanitizeText(entry, 40))
+    .filter(Boolean),
+  rating: Number(consultant.rating || 4.5),
+  bio: sanitizeText(consultant.bio, 500),
+});
+
+const seedAstrologyConsultantsIfNeeded = async () => {
+  if (shouldUseDevStore()) {
+    return;
+  }
+  if (consultantsSeededInDb) {
+    return;
+  }
+  if (consultantSeedPromise) {
+    await consultantSeedPromise;
+    return;
+  }
+
+  consultantSeedPromise = (async () => {
+    const count = await AstrologyConsultant.countDocuments({});
+    if (count > 0) {
+      consultantsSeededInDb = true;
+      return;
+    }
+
+    if (!Array.isArray(CONSULTANTS) || CONSULTANTS.length === 0) {
+      consultantsSeededInDb = true;
+      return;
+    }
+
+    const seedOps = CONSULTANTS.map((consultant) => ({
+      updateOne: {
+        filter: { consultantId: sanitizeText(consultant.id, 80) },
+        update: { $setOnInsert: toConsultantDoc(consultant) },
+        upsert: true,
+      },
+    }));
+    await AstrologyConsultant.bulkWrite(seedOps, { ordered: false });
+    consultantsSeededInDb = true;
+  })();
+
+  try {
+    await consultantSeedPromise;
+  } finally {
+    consultantSeedPromise = null;
+  }
+};
+
+const listConsultantsPersistent = async () => {
+  if (shouldUseDevStore()) {
+    return listConsultants();
+  }
+  await seedAstrologyConsultantsIfNeeded();
+  const consultants = await AstrologyConsultant.find({ isActive: true }).sort({ rating: -1, name: 1 }).lean();
+  return consultants.map(fromConsultantDoc);
+};
+
+const getConsultantByIdPersistent = async (consultantId) => {
+  const normalizedId = sanitizeText(consultantId, 80);
+  if (!normalizedId) {
+    return null;
+  }
+  if (shouldUseDevStore()) {
+    return getConsultantById(normalizedId);
+  }
+  await seedAstrologyConsultantsIfNeeded();
+  const consultant = await AstrologyConsultant.findOne({ consultantId: normalizedId, isActive: true }).lean();
+  return consultant ? fromConsultantDoc(consultant) : null;
+};
+
+const updateConsultantByIdPersistent = async (consultantId, updates = {}) => {
+  const normalizedId = sanitizeText(consultantId, 80);
+  if (!normalizedId) {
+    return null;
+  }
+  if (shouldUseDevStore()) {
+    return updateConsultantById(normalizedId, updates);
+  }
+  await seedAstrologyConsultantsIfNeeded();
+  const updateSet = {};
+  if (updates.bio !== undefined) {
+    updateSet.bio = sanitizeText(updates.bio, 500);
+  }
+  if (updates.specialty !== undefined) {
+    updateSet.specialty = sanitizeText(updates.specialty, 240);
+  }
+  if (updates.languages !== undefined) {
+    updateSet.languages = (Array.isArray(updates.languages) ? updates.languages : [])
+      .map((entry) => sanitizeText(entry, 40))
+      .filter(Boolean);
+  }
+  if (updates.rate !== undefined) {
+    updateSet.rate = sanitizeText(updates.rate, 60);
+  }
+  if (updates.amountInr !== undefined && Number.isFinite(Number(updates.amountInr))) {
+    updateSet.amountInr = Math.max(0, Number(updates.amountInr));
+  }
+  if (Object.keys(updateSet).length === 0) {
+    const existing = await AstrologyConsultant.findOne({ consultantId: normalizedId, isActive: true }).lean();
+    return existing ? fromConsultantDoc(existing) : null;
+  }
+  const consultant = await AstrologyConsultant.findOneAndUpdate(
+    { consultantId: normalizedId, isActive: true },
+    { $set: updateSet },
+    { new: true }
+  ).lean();
+  return consultant ? fromConsultantDoc(consultant) : null;
+};
+
+const addConsultantSlotPersistent = async (consultantId, slotLabel) => {
+  const normalizedId = sanitizeText(consultantId, 80);
+  if (!normalizedId) {
+    return null;
+  }
+  if (shouldUseDevStore()) {
+    return addConsultantSlot(normalizedId, slotLabel);
+  }
+  await seedAstrologyConsultantsIfNeeded();
+
+  const normalizedLabel = sanitizeText(slotLabel, 80);
+  if (!normalizedLabel) {
+    return getConsultantByIdPersistent(normalizedId);
+  }
+  const slotKey =
+    normalizedLabel
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .slice(0, 30) || `slot-${Date.now()}`;
+  const generatedId = `${slotKey}-${Date.now().toString(36).slice(-4)}`;
+
+  await AstrologyConsultant.findOneAndUpdate(
+    {
+      consultantId: normalizedId,
+      isActive: true,
+      availableSlots: { $not: { $elemMatch: { label: normalizedLabel, isActive: true } } },
+    },
+    {
+      $push: {
+        availableSlots: {
+          id: generatedId,
+          label: normalizedLabel,
+          date: 'custom',
+          isActive: true,
+        },
+      },
+    },
+    { new: true }
+  ).lean();
+
+  return getConsultantByIdPersistent(normalizedId);
+};
+
+const removeConsultantSlotPersistent = async (consultantId, slotLabel) => {
+  const normalizedId = sanitizeText(consultantId, 80);
+  if (!normalizedId) {
+    return null;
+  }
+  if (shouldUseDevStore()) {
+    return removeConsultantSlot(normalizedId, slotLabel);
+  }
+  await seedAstrologyConsultantsIfNeeded();
+  const normalizedLabel = sanitizeText(slotLabel, 80);
+  await AstrologyConsultant.findOneAndUpdate(
+    { consultantId: normalizedId, isActive: true },
+    {
+      $set: {
+        'availableSlots.$[matching].isActive': false,
+      },
+    },
+    {
+      new: true,
+      arrayFilters: [
+        {
+          $or: [{ 'matching.id': normalizedLabel }, { 'matching.label': normalizedLabel }],
+        },
+      ],
+    }
+  ).lean();
+  return getConsultantByIdPersistent(normalizedId);
+};
+
+const normalizeBookingPayloadForLock = (booking = {}) => {
+  const preferredDate = parseOptionalDate(booking.preferredDate) || new Date();
+  const status = sanitizeText(booking.status, 40).toLowerCase() || 'pending_payment';
+  return {
+    ...booking,
+    userId: sanitizeText(booking.userId, 120),
+    consultantId: sanitizeText(booking.consultantId, 120),
+    consultantName: sanitizeText(booking.consultantName, 120),
+    slotId: sanitizeText(booking.slotId, 80),
+    slot: sanitizeText(booking.slot, 80),
+    notes: sanitizeText(booking.notes, 280),
+    preferredDate,
+    preferredDateDay: toUtcStartOfDay(preferredDate),
+    status,
+    activeSlotLock: deriveActiveSlotLock(status),
+    confirmationCode: sanitizeText(booking.confirmationCode, 80),
+    amountInr: Number(booking.amountInr || 0),
+    currency: sanitizeText(booking.currency || 'INR', 16) || 'INR',
+    paymentStatus: sanitizeText(booking.paymentStatus || 'pending', 24) || 'pending',
+  };
+};
+
+const buildBookingIdempotencyKey = ({
+  userId = '',
+  consultantId = '',
+  slot = '',
+  preferredDateDay = '',
+} = {}) =>
+  sanitizeText(
+    `${String(userId)}:${String(consultantId)}:${String(slot)}:${String(preferredDateDay)}`.toLowerCase(),
+    240
+  );
+
+const findBookingBySlotLock = async ({ consultantId = '', slot = '', preferredDate = null } = {}) => {
+  const normalizedConsultantId = sanitizeText(consultantId, 120);
+  const normalizedSlot = sanitizeText(slot, 80);
+  const day = toUtcStartOfDay(preferredDate || new Date());
+  if (!normalizedConsultantId || !normalizedSlot) {
+    return null;
+  }
+  if (shouldUseDevStore()) {
+    const allBookings = await devAstrologyStore.listAllBookings();
+    return (
+      allBookings.find((booking) => {
+        if (String(booking.consultantId || '') !== normalizedConsultantId) {
+          return false;
+        }
+        if (String(booking.slot || '') !== normalizedSlot) {
+          return false;
+        }
+        if (!deriveActiveSlotLock(booking.status)) {
+          return false;
+        }
+        return toUtcStartOfDay(booking.preferredDate || booking.createdAt).getTime() === day.getTime();
+      }) || null
+    );
+  }
+  return AstrologyConsultationBooking.findOne({
+    consultantId: normalizedConsultantId,
+    slot: normalizedSlot,
+    preferredDateDay: day,
+    activeSlotLock: true,
+  }).lean();
+};
+
+const saveConsultationBookingWithLock = async (booking = {}, { idempotencyKey = '' } = {}) => {
+  const normalizedBooking = normalizeBookingPayloadForLock(booking);
+  const normalizedIdempotencyKey = sanitizeText(
+    idempotencyKey ||
+      buildBookingIdempotencyKey({
+        userId: normalizedBooking.userId,
+        consultantId: normalizedBooking.consultantId,
+        slot: normalizedBooking.slot,
+        preferredDateDay: normalizedBooking.preferredDateDay.toISOString().slice(0, 10),
+      }),
+    240
+  );
+
+  if (shouldUseDevStore()) {
+    const existingByUser = await devAstrologyStore.listBookings(normalizedBooking.userId);
+    const existingMatch =
+      existingByUser.find((entry) => {
+        if (!deriveActiveSlotLock(entry.status)) {
+          return false;
+        }
+        return (
+          String(entry.consultantId || '') === normalizedBooking.consultantId &&
+          String(entry.slot || '') === normalizedBooking.slot &&
+          toUtcStartOfDay(entry.preferredDate || entry.createdAt).getTime() ===
+            normalizedBooking.preferredDateDay.getTime()
+        );
+      }) || null;
+    if (existingMatch) {
+      return { booking: existingMatch, reused: true, conflict: false };
+    }
+
+    const activeSlotBooking = await findBookingBySlotLock(normalizedBooking);
+    if (activeSlotBooking) {
+      return { booking: activeSlotBooking, reused: false, conflict: true };
+    }
+
+    const created = await devAstrologyStore.createBooking({
+      ...normalizedBooking,
+      bookingIdempotencyKey: normalizedIdempotencyKey,
+    });
+    return { booking: created, reused: false, conflict: false };
+  }
+
+  const createBooking = async (session = null) => {
+    const createPayload = {
+      ...normalizedBooking,
+      bookingIdempotencyKey: normalizedIdempotencyKey,
+    };
+    if (session) {
+      const [created] = await AstrologyConsultationBooking.create([createPayload], { session });
+      return created.toObject();
+    }
+    const created = await AstrologyConsultationBooking.create(createPayload);
+    return created.toObject();
+  };
+
+  try {
+    let createdBooking = null;
+    let session = null;
+    try {
+      session = await mongoose.startSession();
+      await session.withTransaction(async () => {
+        createdBooking = await createBooking(session);
+      });
+    } catch (error) {
+      if (!isTransactionUnsupportedError(error)) {
+        throw error;
+      }
+      createdBooking = await createBooking(null);
+    } finally {
+      if (session) {
+        session.endSession();
+      }
+    }
+
+    return { booking: createdBooking, reused: false, conflict: false };
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) {
+      throw error;
+    }
+
+    const existingByIdempotency = await AstrologyConsultationBooking.findOne({
+      bookingIdempotencyKey: normalizedIdempotencyKey,
+    }).lean();
+    if (existingByIdempotency) {
+      return { booking: existingByIdempotency, reused: true, conflict: false };
+    }
+
+    const activeSlotBooking = await findBookingBySlotLock(normalizedBooking);
+    if (activeSlotBooking) {
+      return { booking: activeSlotBooking, reused: false, conflict: true };
+    }
+
+    throw error;
+  }
+};
+
+const updateConsultationBookingByIdWithLocks = async (bookingId, updates = {}) => {
+  if (!bookingId) {
+    return null;
+  }
+  const nextUpdates = { ...updates };
+  if (nextUpdates.preferredDate !== undefined) {
+    nextUpdates.preferredDateDay = toUtcStartOfDay(nextUpdates.preferredDate);
+  }
+  if (nextUpdates.status !== undefined) {
+    nextUpdates.activeSlotLock = deriveActiveSlotLock(nextUpdates.status);
+  }
+  if (shouldUseDevStore()) {
+    return devAstrologyStore.updateBookingById(String(bookingId), nextUpdates);
+  }
+  if (!mongoose.Types.ObjectId.isValid(String(bookingId))) {
+    return null;
+  }
+  return AstrologyConsultationBooking.findByIdAndUpdate(
+    bookingId,
+    { $set: nextUpdates },
+    { new: true }
+  ).lean();
+};
+
+const hashPayloadText = (payloadText = '') =>
+  crypto.createHash('sha256').update(String(payloadText || ''), 'utf8').digest('hex');
+
+const recordAstrologyOperationalEvent = async ({
+  category = 'system',
+  eventType = 'unknown',
+  severity = 'warn',
+  message = '',
+  consultantId = '',
+  bookingId = '',
+  userId = '',
+  metadata = {},
+} = {}) => {
+  const payload = {
+    category: sanitizeText(category, 24),
+    eventType: sanitizeText(eventType, 80),
+    severity: sanitizeText(severity, 12),
+    message: sanitizeText(message, 280) || 'Operational event',
+    consultantId: sanitizeText(consultantId, 120),
+    bookingId: sanitizeText(bookingId, 120),
+    userId: sanitizeText(userId, 120),
+    metadata: metadata && typeof metadata === 'object' ? metadata : {},
+  };
+
+  if (shouldUseDevStore()) {
+    logger.warn(`Astrology operational event: ${payload.eventType} ${payload.message}`);
+    return payload;
+  }
+
+  const created = await AstrologyOperationalEvent.create(payload);
+  return created.toObject();
+};
+
+const createWebhookAuditEvent = async ({
+  provider = 'razorpay',
+  eventId = '',
+  eventName = '',
+  signature = '',
+  signatureValid = false,
+  status = 'received',
+  requestPath = '',
+  orderId = '',
+  paymentId = '',
+  bookingId = '',
+  payloadText = '',
+  headersSnapshot = {},
+  sourceIp = '',
+  failureReason = '',
+  metadata = {},
+} = {}) => {
+  const normalizedProvider = sanitizeText(provider, 32) || 'razorpay';
+  const normalizedPayloadText = String(payloadText || '');
+  const normalizedEventId =
+    sanitizeText(eventId, 160) ||
+    `fallback-${hashPayloadText(`${normalizedProvider}:${eventName}:${signature}:${normalizedPayloadText}`)}`;
+  const auditPayload = {
+    provider: normalizedProvider,
+    eventId: normalizedEventId,
+    eventName: sanitizeText(eventName, 80),
+    signature: sanitizeText(signature, 256),
+    signatureValid: Boolean(signatureValid),
+    status: sanitizeText(status, 40) || 'received',
+    requestPath: sanitizeText(requestPath, 240),
+    orderId: sanitizeText(orderId, 120),
+    paymentId: sanitizeText(paymentId, 120),
+    bookingId: sanitizeText(bookingId, 120),
+    payloadHash: hashPayloadText(normalizedPayloadText),
+    payloadSize: Buffer.byteLength(normalizedPayloadText, 'utf8'),
+    sourceIp: sanitizeText(sourceIp, 80),
+    headersSnapshot: headersSnapshot && typeof headersSnapshot === 'object' ? headersSnapshot : {},
+    metadata: metadata && typeof metadata === 'object' ? metadata : {},
+    failureReason: sanitizeText(failureReason, 280),
+    processedAt: status === 'processed' ? new Date() : undefined,
+  };
+
+  if (shouldUseDevStore()) {
+    const mapKey = `${normalizedProvider}:${normalizedEventId}`;
+    const existing = devWebhookAuditStore.get(mapKey);
+    if (existing) {
+      const replayed = {
+        ...cloneValue(existing),
+        replayCount: Number(existing.replayCount || 0) + 1,
+        status: 'duplicate',
+      };
+      devWebhookAuditStore.set(mapKey, replayed);
+      return cloneValue(replayed);
+    }
+    const created = {
+      ...auditPayload,
+      _id: `audit-${Date.now()}`,
+      id: `audit-${Date.now()}`,
+      replayCount: 0,
+    };
+    devWebhookAuditStore.set(mapKey, created);
+    return cloneValue(created);
+  }
+
+  try {
+    const created = await AstrologyWebhookAudit.create(auditPayload);
+    return created.toObject();
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) {
+      throw error;
+    }
+    const existing = await AstrologyWebhookAudit.findOne({
+      provider: normalizedProvider,
+      eventId: normalizedEventId,
+    });
+    if (!existing) {
+      throw error;
+    }
+    existing.replayCount = Number(existing.replayCount || 0) + 1;
+    existing.status = 'duplicate';
+    existing.failureReason = existing.failureReason || 'Duplicate webhook event replay blocked.';
+    await existing.save();
+    return existing.toObject();
+  }
+};
+
+const updateWebhookAuditEvent = async (auditId, updates = {}) => {
+  if (!auditId) {
+    return null;
+  }
+  const updateSet = { ...updates };
+  if (updateSet.status === 'processed') {
+    updateSet.processedAt = new Date();
+  }
+  if (shouldUseDevStore()) {
+    for (const [key, audit] of devWebhookAuditStore.entries()) {
+      if (String(audit._id || audit.id) !== String(auditId)) {
+        continue;
+      }
+      const updated = { ...audit, ...updateSet };
+      devWebhookAuditStore.set(key, updated);
+      return cloneValue(updated);
+    }
+    return { id: auditId, ...updateSet };
+  }
+  if (!mongoose.Types.ObjectId.isValid(String(auditId))) {
+    return null;
+  }
+  return AstrologyWebhookAudit.findByIdAndUpdate(
+    String(auditId),
+    { $set: updateSet },
+    { new: true }
+  ).lean();
+};
+
+const getAstrologyOperationalAlerts = async ({ lookbackHours = 24 } = {}) => {
+  const safeHours = Math.max(1, Math.min(240, Number(lookbackHours || 24)));
+  const since = new Date(Date.now() - safeHours * 60 * 60 * 1000);
+
+  if (shouldUseDevStore()) {
+    return {
+      windowHours: safeHours,
+      generatedAt: new Date().toISOString(),
+      signals: {
+        paymentVerificationFailures: { count: 0, severity: 'info' },
+        slotConflictSpikes: { count: 0, severity: 'info' },
+        webhookErrors: { count: 0, severity: 'info' },
+      },
+      thresholds: {
+        paymentVerificationFailuresWarn: 5,
+        slotConflictSpikesWarn: 8,
+        webhookErrorsWarn: 5,
+      },
+    };
+  }
+
+  const [opsCounts, webhookCounts] = await Promise.all([
+    AstrologyOperationalEvent.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      {
+        $group: {
+          _id: '$eventType',
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    AstrologyWebhookAudit.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+
+  const eventMap = opsCounts.reduce((acc, row) => {
+    acc[String(row._id || '')] = Number(row.count || 0);
+    return acc;
+  }, {});
+  const webhookMap = webhookCounts.reduce((acc, row) => {
+    acc[String(row._id || '')] = Number(row.count || 0);
+    return acc;
+  }, {});
+
+  const paymentVerificationFailures = Number(eventMap.payment_verification_failed || 0);
+  const slotConflictSpikes = Number(eventMap.slot_conflict_detected || 0);
+  const webhookErrors =
+    Number(eventMap.webhook_processing_error || 0) +
+    Number(webhookMap.error || 0) +
+    Number(webhookMap.invalid_signature || 0) +
+    Number(webhookMap.invalid_payload || 0);
+
+  const warnThresholds = {
+    paymentVerificationFailuresWarn: 5,
+    slotConflictSpikesWarn: 8,
+    webhookErrorsWarn: 5,
+  };
+
+  const toSeverity = (count, warnThreshold, criticalThreshold) => {
+    if (count >= criticalThreshold) return 'critical';
+    if (count >= warnThreshold) return 'warn';
+    return 'info';
+  };
+
+  return {
+    windowHours: safeHours,
+    generatedAt: new Date().toISOString(),
+    signals: {
+      paymentVerificationFailures: {
+        count: paymentVerificationFailures,
+        severity: toSeverity(paymentVerificationFailures, warnThresholds.paymentVerificationFailuresWarn, 12),
+      },
+      slotConflictSpikes: {
+        count: slotConflictSpikes,
+        severity: toSeverity(slotConflictSpikes, warnThresholds.slotConflictSpikesWarn, 20),
+      },
+      webhookErrors: {
+        count: webhookErrors,
+        severity: toSeverity(webhookErrors, warnThresholds.webhookErrorsWarn, 12),
+      },
+    },
+    thresholds: warnThresholds,
+  };
 };
 
 const formatPeriodStart = (period) => {
@@ -1477,16 +2156,30 @@ module.exports = {
   updateConsultantById,
   addConsultantSlot,
   removeConsultantSlot,
+  listConsultantsPersistent,
+  getConsultantByIdPersistent,
+  updateConsultantByIdPersistent,
+  addConsultantSlotPersistent,
+  removeConsultantSlotPersistent,
+  seedAstrologyConsultantsIfNeeded,
   getPanchangamData,
   getFestivalData,
   findProfileByUserId,
   saveProfileByUserId,
   saveConsultationBooking,
+  saveConsultationBookingWithLock,
   listConsultationBookings,
   listAllConsultationBookings,
   findConsultationBookingById,
   updateConsultationBookingById,
+  updateConsultationBookingByIdWithLocks,
+  findBookingBySlotLock,
+  buildBookingIdempotencyKey,
   findConsultationBookingByPaymentOrderId,
+  createWebhookAuditEvent,
+  updateWebhookAuditEvent,
+  recordAstrologyOperationalEvent,
+  getAstrologyOperationalAlerts,
   formatPeriodStart,
   normalizeReportLanguage,
   buildMonthwisePredictions,

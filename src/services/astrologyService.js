@@ -294,6 +294,7 @@ const buildServiceError = (error, fallbackData, defaultMessage) => {
     error?.response?.data?.message || error?.message || defaultMessage || "Astrology request failed."
   );
   nextError.fallbackData = fallbackData;
+  nextError.status = Number(error?.response?.status || 0) || undefined;
   nextError.cause = error;
   return nextError;
 };
@@ -875,6 +876,71 @@ export const astrologyService = {
       };
     } catch (error) {
       throw buildServiceError(error, null, "Unable to load consultation payment status.");
+    }
+  },
+
+  async getAnalyticsDashboard(period = "month") {
+    const normalizedPeriod = String(period || "month").trim().toLowerCase();
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/analytics/dashboard`, {
+        params: { period: normalizedPeriod },
+      });
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to load astrology analytics dashboard.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to load astrology analytics dashboard.");
+    }
+  },
+
+  async getAnalyticsAlerts(lookbackHours = 24) {
+    const normalizedLookbackHours = Math.max(1, Math.min(240, Number(lookbackHours || 24)));
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/analytics/alerts`, {
+        params: {
+          lookbackHours: normalizedLookbackHours,
+        },
+      });
+
+      if (!response.data?.success || !response.data?.data) {
+        throw new Error("Unable to load astrology operational alerts.");
+      }
+
+      return response.data.data;
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to load astrology operational alerts.");
+    }
+  },
+
+  async downloadAnalyticsReport(period = "month", format = "pdf") {
+    const normalizedPeriod = String(period || "month").trim().toLowerCase();
+    const normalizedFormat = String(format || "pdf").trim().toLowerCase();
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/astrology/analytics/report`, {
+        params: {
+          period: normalizedPeriod,
+          format: normalizedFormat,
+        },
+        responseType: "blob",
+      });
+
+      const fallbackName = `astrology-report-${normalizedPeriod}.${normalizedFormat}`;
+      const fileName =
+        extractFileNameFromContentDisposition(response.headers?.["content-disposition"]) ||
+        fallbackName;
+
+      return {
+        blob: response.data,
+        fileName,
+      };
+    } catch (error) {
+      throw buildServiceError(error, null, "Unable to download astrology analytics report.");
     }
   },
 };

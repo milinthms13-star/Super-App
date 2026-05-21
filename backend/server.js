@@ -17,6 +17,63 @@ const disableBackgroundServices = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.DISABLE_BACKGROUND_SERVICES || '').toLowerCase()
 );
 
+const parseDateIfValid = (value) => {
+  const text = String(value || '').trim();
+  if (!text) {
+    return null;
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const validateRazorpaySecretsAtStartup = () => {
+  const keyId = String(process.env.RAZORPAY_KEY_ID || '').trim();
+  const keySecret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
+  const webhookSecret = String(process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  const missing = [];
+  if (!keyId) missing.push('RAZORPAY_KEY_ID');
+  if (!keySecret) missing.push('RAZORPAY_KEY_SECRET');
+  if (!webhookSecret) missing.push('RAZORPAY_WEBHOOK_SECRET');
+
+  if (missing.length > 0) {
+    const message = `Razorpay configuration check failed. Missing: ${missing.join(', ')}`;
+    if (isProduction) {
+      throw new Error(message);
+    }
+    logger.warn(`${message}. Continuing in non-production mode.`);
+  }
+
+  const weakDefaults = new Set(['test_key', 'test_secret']);
+  const usingDefaults =
+    weakDefaults.has(keyId) || weakDefaults.has(keySecret) || weakDefaults.has(webhookSecret);
+  if (usingDefaults && isProduction) {
+    throw new Error('Razorpay secrets are using test defaults in production.');
+  }
+  if (usingDefaults) {
+    logger.warn('Razorpay startup check: test credentials detected for non-production runtime.');
+  }
+
+  if (keyId && keySecret && keyId === keySecret) {
+    logger.warn('Razorpay startup check: key id and secret should not be identical.');
+  }
+
+  const rotatedAt = parseDateIfValid(process.env.RAZORPAY_KEYS_ROTATED_AT);
+  if (!rotatedAt) {
+    logger.warn('Razorpay startup check: RAZORPAY_KEYS_ROTATED_AT not set or invalid.');
+  } else {
+    const ageDays = Math.floor((Date.now() - rotatedAt.getTime()) / (24 * 60 * 60 * 1000));
+    if (ageDays >= 90) {
+      logger.warn(`Razorpay startup check: credentials are ${ageDays} days old. Rotate soon.`);
+    } else {
+      logger.info(`Razorpay startup check: credentials rotated ${ageDays} day(s) ago.`);
+    }
+  }
+
+  logger.info('Razorpay startup health check completed.');
+};
+
 const startBackgroundServices = () => {
   if (backgroundServicesStarted) {
     return;
@@ -140,6 +197,7 @@ const bootstrap = async () => {
     await connectDB();
     await connectRedis();
     await initializeClassifiedsIndexes();
+    validateRazorpaySecretsAtStartup();
 
     initializeWebSocket(server);
     setupClassifiedsWebSocket(require('./config/websocket').io());

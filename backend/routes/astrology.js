@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
+const { body, param, query, validationResult } = require('express-validator');
 const logger = require('../utils/logger');
 
 const authMiddleware = require('../middleware/auth');
@@ -36,21 +37,28 @@ const {
   buildKundliPdfBuffer,
   hashText,
   buildCompatibility,
-  listConsultants,
-  getConsultantById,
-  updateConsultantById,
-  addConsultantSlot,
-  removeConsultantSlot,
+  listConsultantsPersistent,
+  getConsultantByIdPersistent,
+  updateConsultantByIdPersistent,
+  addConsultantSlotPersistent,
+  removeConsultantSlotPersistent,
+  seedAstrologyConsultantsIfNeeded,
   getPanchangamData,
   getFestivalData,
   findProfileByUserId,
   saveProfileByUserId,
-  saveConsultationBooking,
+  saveConsultationBookingWithLock,
   listConsultationBookings,
   listAllConsultationBookings,
+  findBookingBySlotLock,
+  buildBookingIdempotencyKey,
   findConsultationBookingById,
-  updateConsultationBookingById,
+  updateConsultationBookingByIdWithLocks,
   findConsultationBookingByPaymentOrderId,
+  createWebhookAuditEvent,
+  updateWebhookAuditEvent,
+  recordAstrologyOperationalEvent,
+  getAstrologyOperationalAlerts,
   formatPeriodStart,
   normalizeReportLanguage,
   buildMonthwisePredictions,
@@ -76,6 +84,143 @@ const {
 
 const router = express.Router();
 const { authenticate, hasAdminPrivileges } = authMiddleware;
+const ACTIVE_BOOKING_STATUSES = new Set(['pending', 'pending_payment', 'confirmed', 'completed']);
+const MIN_BOOKING_LEAD_TIME_MS = 5 * 60 * 1000;
+
+const normalizeHexDigest = (value = '', maxLength = 256) =>
+  sanitizeText(value, maxLength)
+    .toLowerCase()
+    .replace(/[^a-f0-9]/g, '');
+
+const isValidHexDigest = (value = '') =>
+  typeof value === 'string' && value.length > 0 && value.length % 2 === 0 && /^[a-f0-9]+$/i.test(value);
+
+const secureDigestEquals = (leftDigest = '', rightDigest = '') => {
+  const normalizedLeft = normalizeHexDigest(leftDigest);
+  const normalizedRight = normalizeHexDigest(rightDigest);
+
+  if (!isValidHexDigest(normalizedLeft) || !isValidHexDigest(normalizedRight)) {
+    return false;
+  }
+
+  if (normalizedLeft.length !== normalizedRight.length) {
+    return false;
+  }
+
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(normalizedLeft, 'hex'),
+      Buffer.from(normalizedRight, 'hex')
+    );
+  } catch (_error) {
+    return false;
+  }
+};
+
+const resolveRazorpaySecret = ({ allowTestFallback = false } = {}) => {
+  const configured = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
+  if (configured) {
+    return configured;
+  }
+
+  if (allowTestFallback) {
+    return 'test_secret';
+  }
+
+  return '';
+};
+
+const getWebhookRawBodyBuffer = (req) => {
+  if (Buffer.isBuffer(req.body)) {
+    return req.body;
+  }
+  if (Buffer.isBuffer(req.rawBody)) {
+    return req.rawBody;
+  }
+  if (typeof req.body === 'string') {
+    return Buffer.from(req.body, 'utf8');
+  }
+  return Buffer.from(JSON.stringify(req.body || {}), 'utf8');
+};
+
+const toBookingDayKey = (value) => {
+  const dateValue = parseOptionalDate(value);
+  if (!dateValue) {
+    return '';
+  }
+  return dateValue.toISOString().slice(0, 10);
+};
+
+const isActiveBookingStatus = (status = '') =>
+  ACTIVE_BOOKING_STATUSES.has(String(status || '').toLowerCase());
+
+const validateRequest = (req, res, next) => {
+  const errors = validationResult(req);
+  if (errors.isEmpty()) {
+    return next();
+  }
+  return res.status(400).json({
+    success: false,
+    message: 'Invalid request payload.',
+    errors: errors.array().map((entry) => ({
+      field: entry.path,
+      message: entry.msg,
+    })),
+  });
+};
+
+const profileValidators = [
+  body('sign').optional().isString().isLength({ min: 3, max: 20 }),
+  body('birthDate').optional().isISO8601(),
+  body('birthTime').optional().matches(/^\d{1,2}:\d{2}(\s?(AM|PM))?$/i),
+  body('birthPlace').optional().isString().isLength({ min: 2, max: 120 }),
+  body('birthTimezone').optional().isString().isLength({ min: 2, max: 64 }),
+  body('preferences.favoriteTopics').optional().isArray({ max: 20 }),
+  body('preferences.favoriteTopics.*').optional().isString().isLength({ min: 1, max: 40 }),
+  body('notifications').optional().isObject(),
+  body('familyProfiles').optional().isArray({ max: 20 }),
+  validateRequest,
+];
+
+const consultationBookingValidators = [
+  body('consultantId').exists().isString().isLength({ min: 3, max: 80 }),
+  body('slotId').exists().isString().isLength({ min: 2, max: 80 }),
+  body('preferredDate').optional().isISO8601(),
+  body('notes').optional().isString().isLength({ max: 280 }),
+  validateRequest,
+];
+
+const consultationStatusValidators = [
+  param('bookingId').isString().isLength({ min: 8, max: 80 }),
+  body('status').exists().isIn(['confirmed', 'pending', 'pending_payment', 'completed', 'cancelled']),
+  validateRequest,
+];
+
+const paymentCreateOrderValidators = [
+  param('bookingId').isString().isLength({ min: 8, max: 80 }),
+  validateRequest,
+];
+
+const paymentVerifyValidators = [
+  param('bookingId').isString().isLength({ min: 8, max: 80 }),
+  body('orderId').optional().isString().isLength({ min: 5, max: 120 }),
+  body('paymentId').exists().isString().isLength({ min: 5, max: 120 }),
+  body('signature').exists().isString().isLength({ min: 16, max: 256 }),
+  validateRequest,
+];
+
+const consultantScopeValidators = [
+  body('consultantId').optional().isString().isLength({ min: 3, max: 80 }),
+  body('slotTime').optional().isString().isLength({ min: 2, max: 80 }),
+  body('slotLabel').optional().isString().isLength({ min: 2, max: 80 }),
+  body('slotId').optional().isString().isLength({ min: 2, max: 80 }),
+  validateRequest,
+];
+
+const consultantQueryValidators = [
+  query('consultantId').optional().isString().isLength({ min: 3, max: 80 }),
+  validateRequest,
+];
 
 router.get('/signs', (req, res) => {
   res.json({
@@ -117,7 +262,7 @@ router.get('/profile', authenticate, async (req, res) => {
   }
 });
 
-router.put('/profile', authenticate, async (req, res) => {
+router.put('/profile', authenticate, profileValidators, async (req, res) => {
   try {
     const userId = String(req.user._id || req.user.id);
     const existingProfile = await findProfileByUserId(userId);
@@ -415,11 +560,20 @@ router.post('/assistant', assistantLimiter, async (req, res) => {
   });
 });
 
-router.get('/consultants', (req, res) => {
-  return res.json({
-    success: true,
-    data: listConsultants(),
-  });
+router.get('/consultants', async (req, res) => {
+  try {
+    await seedAstrologyConsultantsIfNeeded();
+    const consultants = await listConsultantsPersistent();
+    return res.json({
+      success: true,
+      data: consultants,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Unable to load consultants.',
+    });
+  }
 });
 
 router.get('/consultants/:consultantId', authenticate, async (req, res) => {
@@ -427,7 +581,7 @@ router.get('/consultants/:consultantId', authenticate, async (req, res) => {
   if (!ensureConsultantScopeAccess(req, res, consultantId)) {
     return;
   }
-  const consultant = getConsultantById(consultantId);
+  const consultant = await getConsultantByIdPersistent(consultantId);
 
   if (!consultant) {
     return res.status(404).json({
@@ -470,7 +624,7 @@ router.put('/consultants/:consultantId', authenticate, async (req, res) => {
     consultantUpdates.amountInr = Number(payload.rate);
   }
 
-  const consultant = updateConsultantById(consultantId, {
+  const consultant = await updateConsultantByIdPersistent(consultantId, {
     ...consultantUpdates,
   });
 
@@ -487,13 +641,13 @@ router.put('/consultants/:consultantId', authenticate, async (req, res) => {
   });
 });
 
-router.post('/consultants/add-slot', authenticate, async (req, res) => {
+router.post('/consultants/add-slot', authenticate, consultantScopeValidators, async (req, res) => {
   const consultantId = sanitizeText(req.body?.consultantId || req.user?.consultantId || req.user?.id || '', 80);
   if (!ensureConsultantScopeAccess(req, res, consultantId)) {
     return;
   }
   const slotLabel = sanitizeText(req.body?.slotTime || req.body?.slotLabel, 80);
-  const consultant = addConsultantSlot(consultantId, slotLabel);
+  const consultant = await addConsultantSlotPersistent(consultantId, slotLabel);
 
   if (!consultant) {
     return res.status(404).json({
@@ -508,13 +662,13 @@ router.post('/consultants/add-slot', authenticate, async (req, res) => {
   });
 });
 
-router.delete('/consultants/remove-slot', authenticate, async (req, res) => {
+router.delete('/consultants/remove-slot', authenticate, consultantScopeValidators, async (req, res) => {
   const consultantId = sanitizeText(req.body?.consultantId || req.user?.consultantId || req.user?.id || '', 80);
   if (!ensureConsultantScopeAccess(req, res, consultantId)) {
     return;
   }
   const slotLabel = sanitizeText(req.body?.slotTime || req.body?.slotId || '', 80);
-  const consultant = removeConsultantSlot(consultantId, slotLabel);
+  const consultant = await removeConsultantSlotPersistent(consultantId, slotLabel);
 
   if (!consultant) {
     return res.status(404).json({
@@ -529,10 +683,10 @@ router.delete('/consultants/remove-slot', authenticate, async (req, res) => {
   });
 });
 
-router.post('/consultations/book', authenticate, bookingLimiter, async (req, res) => {
+router.post('/consultations/book', authenticate, bookingLimiter, consultationBookingValidators, async (req, res) => {
   try {
     const userId = String(req.user._id || req.user.id);
-    const consultant = getConsultantById(req.body?.consultantId);
+    const consultant = await getConsultantByIdPersistent(req.body?.consultantId);
 
     if (!consultant) {
       return res.status(400).json({
@@ -551,8 +705,50 @@ router.post('/consultations/book', authenticate, bookingLimiter, async (req, res
       });
     }
 
-    const preferredDate = parseOptionalDate(req.body?.preferredDate || new Date());
+    const preferredDateInput = req.body?.preferredDate;
+    const preferredDate =
+      preferredDateInput !== undefined ? parseOptionalDate(preferredDateInput) : new Date();
+    if (preferredDateInput !== undefined && !preferredDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid preferredDate value.',
+      });
+    }
+    const scheduledDate = preferredDate || new Date();
+    if (scheduledDate.getTime() < Date.now() - MIN_BOOKING_LEAD_TIME_MS) {
+      return res.status(400).json({
+        success: false,
+        message: 'preferredDate cannot be in the past.',
+      });
+    }
     const notes = sanitizeText(req.body?.notes, 280);
+    const bookingDayKey = toBookingDayKey(scheduledDate);
+    const slotLockPreview = await findBookingBySlotLock({
+      consultantId: consultant.id,
+      slot: chosenSlot.label,
+      preferredDate: scheduledDate,
+    });
+    if (slotLockPreview && String(slotLockPreview.userId || '') !== userId) {
+      await recordAstrologyOperationalEvent({
+        category: 'booking',
+        eventType: 'slot_conflict_detected',
+        severity: 'warn',
+        message: 'Slot booking conflict detected before booking create.',
+        consultantId: consultant.id,
+        bookingId: String(slotLockPreview.id || slotLockPreview._id || ''),
+        userId,
+        metadata: {
+          slotId: requestedSlotId,
+          slotLabel: chosenSlot.label,
+          bookingDayKey,
+        },
+      });
+      return res.status(409).json({
+        success: false,
+        message: 'Selected consultation slot is no longer available.',
+      });
+    }
+
     const confirmationCode = `ASTRO-${Date.now().toString(36).toUpperCase()}-${Math.floor(
       100 + Math.random() * 900
     )}`;
@@ -561,8 +757,9 @@ router.post('/consultations/book', authenticate, bookingLimiter, async (req, res
       userId,
       consultantId: consultant.id,
       consultantName: consultant.name,
+      slotId: chosenSlot.id,
       slot: chosenSlot.label,
-      preferredDate: preferredDate || new Date(),
+      preferredDate: scheduledDate,
       notes,
       status: consultant.amountInr > 0 ? 'pending_payment' : 'confirmed',
       confirmationCode,
@@ -571,14 +768,52 @@ router.post('/consultations/book', authenticate, bookingLimiter, async (req, res
       paymentStatus: 'pending',
     };
 
-    const booking = await saveConsultationBooking(bookingPayload);
+    const idempotencyKey = sanitizeText(
+      req.headers['x-idempotency-key'] ||
+        buildBookingIdempotencyKey({
+          userId,
+          consultantId: consultant.id,
+          slot: chosenSlot.label,
+          preferredDateDay: bookingDayKey,
+        }),
+      240
+    );
+    const bookingResult = await saveConsultationBookingWithLock(bookingPayload, { idempotencyKey });
+    const booking = bookingResult.booking;
+    if (bookingResult.conflict && String(booking?.userId || '') !== userId) {
+      await recordAstrologyOperationalEvent({
+        category: 'booking',
+        eventType: 'slot_conflict_detected',
+        severity: 'warn',
+        message: 'Slot lock conflict blocked at DB layer.',
+        consultantId: consultant.id,
+        bookingId: String(booking?.id || booking?._id || ''),
+        userId,
+        metadata: {
+          slotId: chosenSlot.id,
+          slotLabel: chosenSlot.label,
+          bookingDayKey,
+        },
+      });
+      return res.status(409).json({
+        success: false,
+        message: 'Selected consultation slot is no longer available.',
+      });
+    }
+    if (bookingResult.reused && String(booking?.userId || '') === userId) {
+      return res.status(200).json({
+        success: true,
+        data: booking,
+        message: 'Existing active booking found for this slot.',
+      });
+    }
 
     // 30-min reminder integration with the existing Reminder schedulers
     // (EmailReminderScheduler / In-app reminder delivery via reminders pipeline)
     try {
       const Reminder = require('../models/Reminder');
 
-      const reminderDueDate = preferredDate || new Date();
+      const reminderDueDate = scheduledDate;
 
       const reminder = await Reminder.create({
         userId,
@@ -645,7 +880,7 @@ router.post('/consultations/book', authenticate, bookingLimiter, async (req, res
   }
 });
 
-router.get('/consultations/consultant-bookings', authenticate, async (req, res) => {
+router.get('/consultations/consultant-bookings', authenticate, consultantQueryValidators, async (req, res) => {
   try {
     const requestedConsultantId = sanitizeText(req.query?.consultantId || '', 80);
     const consultantId = hasAdminPrivileges(req.user)
@@ -671,7 +906,7 @@ router.get('/consultations/consultant-bookings', authenticate, async (req, res) 
   }
 });
 
-router.get('/consultations/consultant-earnings', authenticate, async (req, res) => {
+router.get('/consultations/consultant-earnings', authenticate, consultantQueryValidators, async (req, res) => {
   try {
     const requestedConsultantId = sanitizeText(req.query?.consultantId || '', 80);
     const consultantId = hasAdminPrivileges(req.user)
@@ -712,7 +947,12 @@ router.get('/consultations/consultant-earnings', authenticate, async (req, res) 
   }
 });
 
-router.patch('/consultations/:bookingId/status', authenticate, bookingLimiter, async (req, res) => {
+router.patch(
+  '/consultations/:bookingId/status',
+  authenticate,
+  bookingLimiter,
+  consultationStatusValidators,
+  async (req, res) => {
   try {
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const nextStatus = sanitizeText(req.body?.status, 20);
@@ -749,7 +989,7 @@ router.patch('/consultations/:bookingId/status', authenticate, bookingLimiter, a
       });
     }
 
-    const booking = await updateConsultationBookingById(bookingId, { status: nextStatus });
+    const booking = await updateConsultationBookingByIdWithLocks(bookingId, { status: nextStatus });
     if (!booking) {
       return res.status(404).json({
         success: false,
@@ -786,7 +1026,12 @@ router.get('/consultations', authenticate, async (req, res) => {
   }
 });
 
-router.post('/consultations/:bookingId/payment/create-order', authenticate, paymentLimiter, async (req, res) => {
+router.post(
+  '/consultations/:bookingId/payment/create-order',
+  authenticate,
+  paymentLimiter,
+  paymentCreateOrderValidators,
+  async (req, res) => {
   try {
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const booking = await findConsultationBookingById(bookingId);
@@ -815,6 +1060,22 @@ router.post('/consultations/:bookingId/payment/create-order', authenticate, paym
         message: 'Invalid booking amount for payment.',
       });
     }
+    if (
+      sanitizeText(booking.paymentOrderId, 120) &&
+      String(booking.paymentStatus || '').toLowerCase() === 'pending'
+    ) {
+      return res.json({
+        success: true,
+        data: {
+          bookingId: booking.id || booking._id || bookingId,
+          orderId: booking.paymentOrderId,
+          amountInr,
+          currency: 'INR',
+          keyId: process.env.RAZORPAY_KEY_ID || 'test_key',
+          reused: true,
+        },
+      });
+    }
 
     const order = await razorpay.orders.create({
       amount: Math.round(amountInr * 100),
@@ -827,7 +1088,7 @@ router.post('/consultations/:bookingId/payment/create-order', authenticate, paym
       },
     });
 
-    await updateConsultationBookingById(booking.id || booking._id || bookingId, {
+    await updateConsultationBookingByIdWithLocks(booking.id || booking._id || bookingId, {
       paymentOrderId: order.id,
       paymentStatus: 'pending',
       status: 'pending_payment',
@@ -851,7 +1112,12 @@ router.post('/consultations/:bookingId/payment/create-order', authenticate, paym
   }
 });
 
-router.post('/consultations/:bookingId/payment/verify', authenticate, paymentLimiter, async (req, res) => {
+router.post(
+  '/consultations/:bookingId/payment/verify',
+  authenticate,
+  paymentLimiter,
+  paymentVerifyValidators,
+  async (req, res) => {
   try {
     const bookingId = sanitizeText(req.params.bookingId, 80);
     const { orderId, paymentId, signature } = req.body || {};
@@ -861,7 +1127,7 @@ router.post('/consultations/:bookingId/payment/verify', authenticate, paymentLim
       return;
     }
     const normalizedPaymentId = sanitizeText(paymentId, 120);
-    const normalizedSignature = sanitizeText(signature, 200);
+    const normalizedSignature = normalizeHexDigest(signature, 200);
     if (!normalizedPaymentId || !normalizedSignature) {
       return res.status(400).json({
         success: false,
@@ -879,6 +1145,16 @@ router.post('/consultations/:bookingId/payment/verify', authenticate, paymentLim
         data: booking,
       });
     }
+    if (
+      String(booking.paymentStatus || '').toLowerCase() === 'completed' &&
+      booking.paymentId &&
+      String(booking.paymentId) !== normalizedPaymentId
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: 'Booking payment is already completed with a different payment reference.',
+      });
+    }
 
     const expectedOrderId = sanitizeText(orderId || booking.paymentOrderId, 120);
     if (!expectedOrderId) {
@@ -893,18 +1169,41 @@ router.post('/consultations/:bookingId/payment/verify', authenticate, paymentLim
         message: 'Provided orderId does not match booking payment order.',
       });
     }
-    const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || 'test_secret');
+    const razorpaySecret = resolveRazorpaySecret({
+      allowTestFallback: process.env.NODE_ENV !== 'production',
+    });
+    if (!razorpaySecret) {
+      logger.error('Astrology payment verification blocked: RAZORPAY_KEY_SECRET is not configured.');
+      return res.status(503).json({
+        success: false,
+        message: 'Payment verification is temporarily unavailable.',
+      });
+    }
+    const shasum = crypto.createHmac('sha256', razorpaySecret);
     shasum.update(`${expectedOrderId}|${normalizedPaymentId}`);
     const digest = shasum.digest('hex');
 
-    if (digest !== normalizedSignature) {
+    if (!secureDigestEquals(digest, normalizedSignature)) {
+      await recordAstrologyOperationalEvent({
+        category: 'payment',
+        eventType: 'payment_verification_failed',
+        severity: 'warn',
+        message: 'Payment signature verification failed.',
+        consultantId: sanitizeText(booking.consultantId, 120),
+        bookingId: String(booking.id || booking._id || bookingId),
+        userId: String(req.user?._id || req.user?.id || ''),
+        metadata: {
+          orderId: expectedOrderId,
+          paymentId: normalizedPaymentId,
+        },
+      });
       return res.status(400).json({
         success: false,
         message: 'Payment verification failed.',
       });
     }
 
-    const updatedBooking = await updateConsultationBookingById(booking.id || booking._id || bookingId, {
+    const updatedBooking = await updateConsultationBookingByIdWithLocks(booking.id || booking._id || bookingId, {
       paymentStatus: 'completed',
       paymentOrderId: expectedOrderId,
       paymentId: normalizedPaymentId,
@@ -954,67 +1253,171 @@ router.get('/consultations/:bookingId/payment', authenticate, paymentLimiter, as
 });
 
 router.post('/payment/webhook/razorpay', async (req, res) => {
+  let webhookAudit = null;
+  let normalizedEventName = '';
+  let normalizedEventId = '';
+  let normalizedOrderId = '';
+  let normalizedPaymentId = '';
+  let normalizedBookingId = '';
+  let payloadText = '';
   try {
-    const signatureHeader = sanitizeText(
+    const signatureHeader = normalizeHexDigest(
       req.headers['x-razorpay-signature'] || req.headers['X-Razorpay-Signature'],
       256
     );
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET || 'test_secret';
+    const webhookSecret =
+      String(process.env.RAZORPAY_WEBHOOK_SECRET || '').trim() ||
+      resolveRazorpaySecret({ allowTestFallback: process.env.NODE_ENV !== 'production' });
+    if (!webhookSecret) {
+      logger.error('Astrology webhook blocked: Razorpay webhook secret is not configured.');
+      return res.status(503).json({
+        success: false,
+        message: 'Webhook processing is temporarily unavailable.',
+      });
+    }
 
-    const rawBodyBuffer =
-      Buffer.isBuffer(req.body)
-        ? req.body
-        : Buffer.from(
-            typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}),
-            'utf8'
-          );
+    const rawBodyBuffer = getWebhookRawBodyBuffer(req);
+    payloadText = rawBodyBuffer.toString('utf8');
     const computedSignature = crypto
       .createHmac('sha256', webhookSecret)
       .update(rawBodyBuffer)
       .digest('hex');
+    let eventPayload = {};
+    try {
+      eventPayload = payloadText ? JSON.parse(payloadText) : {};
+    } catch (_error) {
+      eventPayload = {};
+    }
+    const paymentEntity = eventPayload?.payload?.payment?.entity || {};
+    const orderEntity = eventPayload?.payload?.order?.entity || {};
+    normalizedEventName = sanitizeText(eventPayload?.event, 80).toLowerCase();
+    normalizedOrderId = sanitizeText(
+      paymentEntity?.order_id || paymentEntity?.orderId || orderEntity?.id || '',
+      120
+    );
+    normalizedPaymentId = sanitizeText(paymentEntity?.id || paymentEntity?.payment_id || '', 120);
+    const notesBookingId = sanitizeText(
+      (paymentEntity?.notes && paymentEntity?.notes?.bookingId) ||
+        (paymentEntity?.notes && paymentEntity?.notes?.booking_id) ||
+        '',
+      80
+    );
+    normalizedBookingId = notesBookingId;
+    normalizedEventId = sanitizeText(
+      req.headers['x-razorpay-event-id'] ||
+        eventPayload?.payload?.payment?.entity?.id ||
+        `${normalizedEventName || 'unknown'}:${normalizedOrderId || 'no-order'}:${normalizedPaymentId || 'no-payment'}`,
+      160
+    );
 
-    if (!signatureHeader || computedSignature !== signatureHeader) {
+    webhookAudit = await createWebhookAuditEvent({
+      provider: 'razorpay',
+      eventId: normalizedEventId,
+      eventName: normalizedEventName || 'unknown',
+      signature: signatureHeader,
+      signatureValid: secureDigestEquals(computedSignature, signatureHeader),
+      status: 'received',
+      requestPath: req.originalUrl || req.path || '',
+      orderId: normalizedOrderId,
+      paymentId: normalizedPaymentId,
+      bookingId: normalizedBookingId,
+      payloadText,
+      headersSnapshot: {
+        'x-razorpay-signature': sanitizeText(req.headers['x-razorpay-signature'], 256),
+        'x-razorpay-event-id': sanitizeText(req.headers['x-razorpay-event-id'], 160),
+        'content-type': sanitizeText(req.headers['content-type'], 80),
+      },
+      sourceIp: sanitizeText(req.ip || req.socket?.remoteAddress || '', 80),
+    });
+
+    if (webhookAudit?.status === 'duplicate') {
+      return res.status(200).json({
+        success: true,
+        message: 'Duplicate webhook ignored.',
+      });
+    }
+
+    if (!signatureHeader || !secureDigestEquals(computedSignature, signatureHeader)) {
+      await updateWebhookAuditEvent(webhookAudit?._id || webhookAudit?.id, {
+        status: 'invalid_signature',
+        signatureValid: false,
+        failureReason: 'Invalid Razorpay webhook signature.',
+      });
+      await recordAstrologyOperationalEvent({
+        category: 'webhook',
+        eventType: 'webhook_signature_invalid',
+        severity: 'critical',
+        message: 'Rejected webhook due to signature mismatch.',
+        bookingId: normalizedBookingId,
+        metadata: {
+          eventId: normalizedEventId,
+          eventName: normalizedEventName || 'unknown',
+          orderId: normalizedOrderId,
+          paymentId: normalizedPaymentId,
+        },
+      });
       return res.status(400).json({
         success: false,
         message: 'Invalid Razorpay webhook signature.',
       });
     }
 
-    const payloadText = rawBodyBuffer.toString('utf8');
-    const eventPayload = payloadText ? JSON.parse(payloadText) : {};
-    const eventName = sanitizeText(eventPayload?.event, 80).toLowerCase();
-    const paymentEntity = eventPayload?.payload?.payment?.entity || {};
-    const orderEntity = eventPayload?.payload?.order?.entity || {};
-
-    const webhookOrderId = sanitizeText(
-      paymentEntity?.order_id || paymentEntity?.orderId || orderEntity?.id || '',
-      120
-    );
-    const webhookPaymentId = sanitizeText(paymentEntity?.id || paymentEntity?.payment_id || '', 120);
-    const webhookNotes = paymentEntity?.notes && typeof paymentEntity.notes === 'object' ? paymentEntity.notes : {};
-    const notesBookingId = sanitizeText(webhookNotes?.bookingId || webhookNotes?.booking_id || '', 80);
+    if (!normalizedEventName) {
+      await updateWebhookAuditEvent(webhookAudit?._id || webhookAudit?.id, {
+        status: 'invalid_payload',
+        signatureValid: true,
+        failureReason: 'Webhook event name is required.',
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Webhook event name is required.',
+      });
+    }
 
     let booking = notesBookingId ? await findConsultationBookingById(notesBookingId) : null;
-    if (!booking && webhookOrderId) {
-      booking = await findConsultationBookingByPaymentOrderId(webhookOrderId);
+    if (!booking && normalizedOrderId) {
+      booking = await findConsultationBookingByPaymentOrderId(normalizedOrderId);
     }
 
     if (!booking) {
-      logger.warn(`Astrology webhook ignored: no booking mapped for event=${eventName} orderId=${webhookOrderId}`);
+      await updateWebhookAuditEvent(webhookAudit?._id || webhookAudit?.id, {
+        status: 'ignored',
+        signatureValid: true,
+        failureReason: 'Webhook received without booking mapping.',
+      });
+      logger.warn(
+        `Astrology webhook ignored: no booking mapped for event=${normalizedEventName} orderId=${normalizedOrderId}`
+      );
       return res.status(202).json({
         success: true,
         message: 'Webhook received. No matching booking found.',
       });
     }
+    normalizedBookingId = String(booking.id || booking._id || '');
+    if (
+      String(booking.paymentStatus || '').toLowerCase() === 'completed' &&
+      normalizedPaymentId &&
+      String(booking.paymentId || '') === normalizedPaymentId
+    ) {
+      await updateWebhookAuditEvent(webhookAudit?._id || webhookAudit?.id, {
+        status: 'processed',
+        signatureValid: true,
+        bookingId: normalizedBookingId,
+      });
+      return res.json({
+        success: true,
+        data: booking,
+      });
+    }
 
-    const normalizedEvent = eventName || 'unknown';
+    const normalizedEvent = normalizedEventName || 'unknown';
     const bookingId = booking.id || booking._id;
     const updates = {};
-    if (webhookOrderId) {
-      updates.paymentOrderId = webhookOrderId;
+    if (normalizedOrderId) {
+      updates.paymentOrderId = normalizedOrderId;
     }
-    if (webhookPaymentId) {
-      updates.paymentId = webhookPaymentId;
+    if (normalizedPaymentId) {
+      updates.paymentId = normalizedPaymentId;
     }
 
     if (normalizedEvent === 'payment.captured' || normalizedEvent === 'payment.authorized') {
@@ -1035,7 +1438,18 @@ router.post('/payment/webhook/razorpay', async (req, res) => {
       updates.status = booking.status || 'pending_payment';
     }
 
-    const updatedBooking = await updateConsultationBookingById(bookingId, updates);
+    const updatedBooking = await updateConsultationBookingByIdWithLocks(bookingId, updates);
+    await updateWebhookAuditEvent(webhookAudit?._id || webhookAudit?.id, {
+      status: 'processed',
+      signatureValid: true,
+      bookingId: String(bookingId),
+      orderId: normalizedOrderId,
+      paymentId: normalizedPaymentId,
+      metadata: {
+        reconciledStatus: updates.status,
+        reconciledPaymentStatus: updates.paymentStatus,
+      },
+    });
     logger.info(
       `Astrology webhook reconciled booking=${bookingId} event=${normalizedEvent} paymentStatus=${updates.paymentStatus}`
     );
@@ -1045,6 +1459,37 @@ router.post('/payment/webhook/razorpay', async (req, res) => {
       data: updatedBooking || booking,
     });
   } catch (error) {
+    if (webhookAudit?._id || webhookAudit?.id) {
+      try {
+        await updateWebhookAuditEvent(webhookAudit._id || webhookAudit.id, {
+          status: 'error',
+          signatureValid: true,
+          failureReason: sanitizeText(error.message, 280),
+          bookingId: normalizedBookingId,
+          orderId: normalizedOrderId,
+          paymentId: normalizedPaymentId,
+          metadata: {
+            eventId: normalizedEventId,
+            eventName: normalizedEventName || 'unknown',
+          },
+        });
+      } catch (_auditError) {
+        logger.error(`Astrology webhook audit update failed: ${_auditError.message}`);
+      }
+    }
+    await recordAstrologyOperationalEvent({
+      category: 'webhook',
+      eventType: 'webhook_processing_error',
+      severity: 'critical',
+      message: sanitizeText(error.message, 280) || 'Webhook reconciliation error.',
+      bookingId: normalizedBookingId,
+      metadata: {
+        eventId: normalizedEventId,
+        eventName: normalizedEventName || 'unknown',
+        orderId: normalizedOrderId,
+        paymentId: normalizedPaymentId,
+      },
+    });
     logger.error(`Astrology webhook reconciliation failed: ${error.message}`);
     return res.status(500).json({
       success: false,
@@ -1077,6 +1522,29 @@ router.get('/analytics/dashboard', authenticate, async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Unable to load analytics dashboard.',
+    });
+  }
+});
+
+router.get('/analytics/alerts', authenticate, async (req, res) => {
+  try {
+    if (!hasAdminPrivileges(req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required.',
+      });
+    }
+
+    const lookbackHours = Math.max(1, Math.min(240, Number(req.query?.lookbackHours || 24)));
+    const alerts = await getAstrologyOperationalAlerts({ lookbackHours });
+    return res.json({
+      success: true,
+      data: alerts,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Unable to load alerts dashboard.',
     });
   }
 });

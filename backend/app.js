@@ -128,6 +128,7 @@ app.use(compression());
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(morgan('combined'));
+app.use('/api/astrology/payment/webhook/razorpay', express.raw({ type: 'application/json', limit: '20mb' }));
 app.use('/api/astrology/payment/webhook', express.raw({ type: 'application/json', limit: '20mb' }));
 app.use('/webhooks/payment', express.raw({ type: 'application/json', limit: '20mb' }));
 app.use(express.json({ limit: '20mb', inflate: true }));
@@ -245,7 +246,10 @@ app.use('/api/bulkorders', require('./routes/bulkorders'));
 app.use('/api/diary', require('./routes/diary'));
 app.use('/api/diary', require('./routes/diary-phase7'));
 app.use('/api/astrology', require('./routes/astrology'));
-app.use('/api/astrology', require('./routes/payments'));
+// NOTE: Astrology payments/webhooks are implemented inside backend/routes/astrology.js.
+// Mounting backend/routes/payments.js here creates duplicate/competing endpoints and webhook handlers.
+// Keeping it disabled for production safety.
+// app.use('/api/astrology', require('./routes/payments'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/giftcards', require('./routes/giftcards'));
 app.use('/api/health', require('./routes/health'));

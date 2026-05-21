@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import axios from 'axios';
 import { useApp } from '../../contexts/AppContext';
+import { astrologyService } from '../../services/astrologyService';
 import './AnalyticsDashboard.css';
 
 const AnalyticsDashboard = () => {
@@ -16,20 +16,52 @@ const AnalyticsDashboard = () => {
     userRetention: 0,
   });
   const [period, setPeriod] = useState('month');
+  const [alerts, setAlerts] = useState({
+    windowHours: 24,
+    generatedAt: '',
+    signals: {
+      paymentVerificationFailures: { count: 0, severity: 'info' },
+      slotConflictSpikes: { count: 0, severity: 'info' },
+      webhookErrors: { count: 0, severity: 'info' },
+    },
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const isAdmin = String(currentUser?.role || currentUser?.registrationType || '').toLowerCase() === 'admin';
+
+  const getSeverityClassName = (severity = '') => {
+    const normalized = String(severity || '').toLowerCase();
+    if (normalized === 'critical') return 'severity-critical';
+    if (normalized === 'warn') return 'severity-warn';
+    return 'severity-info';
+  };
 
   const loadAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
-      const response = await axios.get('/api/astrology/analytics/dashboard', {
-        params: { period },
-      });
-      setMetrics(response?.data?.data || {});
+      const [dashboardMetrics, dashboardAlerts] = await Promise.all([
+        astrologyService.getAnalyticsDashboard(period),
+        astrologyService.getAnalyticsAlerts(24),
+      ]);
+      setMetrics(dashboardMetrics || {});
+      setAlerts(
+        dashboardAlerts || {
+          windowHours: 24,
+          generatedAt: '',
+          signals: {
+            paymentVerificationFailures: { count: 0, severity: 'info' },
+            slotConflictSpikes: { count: 0, severity: 'info' },
+            webhookErrors: { count: 0, severity: 'info' },
+          },
+        }
+      );
     } catch (requestError) {
-      setError('Failed to load analytics dashboard.');
+      if (requestError?.status === 403) {
+        setError('Admin access required to view analytics dashboard.');
+      } else {
+        setError(requestError?.message || 'Failed to load analytics dashboard.');
+      }
     } finally {
       setLoading(false);
     }
@@ -48,21 +80,22 @@ const AnalyticsDashboard = () => {
 
   const downloadReport = async (format = 'pdf') => {
     try {
-      const response = await axios.get('/api/astrology/analytics/report', {
-        params: { period, format },
-        responseType: 'blob',
-      });
+      const report = await astrologyService.downloadAnalyticsReport(period, format);
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(new Blob([report.blob]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `astrology-report-${period}.${format}`);
+      link.setAttribute('download', report.fileName || `astrology-report-${period}.${format}`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (requestError) {
-      setError('Failed to download analytics report.');
+      if (requestError?.status === 403) {
+        setError('Admin access required to download analytics report.');
+      } else {
+        setError(requestError?.message || 'Failed to download analytics report.');
+      }
     }
   };
 
@@ -118,6 +151,34 @@ const AnalyticsDashboard = () => {
       </div>
 
       <div className="analytics-sections">
+        <section className="alerts-card">
+          <h2>Operational alerts</h2>
+          <p className="alerts-subtitle">
+            Last {alerts.windowHours || 24}h
+            {alerts.generatedAt ? ` • Updated ${new Date(alerts.generatedAt).toLocaleString('en-IN')}` : ''}
+          </p>
+          <ul className="alerts-list">
+            <li>
+              <span>Payment verification failures</span>
+              <strong className={`severity-badge ${getSeverityClassName(alerts?.signals?.paymentVerificationFailures?.severity)}`}>
+                {alerts?.signals?.paymentVerificationFailures?.count || 0} • {alerts?.signals?.paymentVerificationFailures?.severity || 'info'}
+              </strong>
+            </li>
+            <li>
+              <span>Slot conflict spikes</span>
+              <strong className={`severity-badge ${getSeverityClassName(alerts?.signals?.slotConflictSpikes?.severity)}`}>
+                {alerts?.signals?.slotConflictSpikes?.count || 0} • {alerts?.signals?.slotConflictSpikes?.severity || 'info'}
+              </strong>
+            </li>
+            <li>
+              <span>Webhook errors</span>
+              <strong className={`severity-badge ${getSeverityClassName(alerts?.signals?.webhookErrors?.severity)}`}>
+                {alerts?.signals?.webhookErrors?.count || 0} • {alerts?.signals?.webhookErrors?.severity || 'info'}
+              </strong>
+            </li>
+          </ul>
+        </section>
+
         <section>
           <h2>Top consultants</h2>
           {Array.isArray(metrics.topConsultants) && metrics.topConsultants.length > 0 ? (

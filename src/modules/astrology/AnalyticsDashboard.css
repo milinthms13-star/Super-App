@@ -36,9 +36,62 @@
 
 .analytics-sections {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
   margin-top: 16px;
+}
+
+.alerts-card {
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fafafa;
+}
+
+.alerts-subtitle {
+  color: #667085;
+  font-size: 0.9rem;
+  margin-top: 4px;
+}
+
+.alerts-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.alerts-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.severity-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.severity-info {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.severity-warn {
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.severity-critical {
+  background: #fef3f2;
+  color: #b42318;
 }
 
 .analytics-sections table {
