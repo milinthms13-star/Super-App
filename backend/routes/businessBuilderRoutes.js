@@ -14,6 +14,29 @@ const getRequestMeta = (req) => ({
   sessionId: String(req.headers['x-session-id'] || req.query?.sessionId || '').slice(0, 100),
 });
 
+const requireObject = (value, name) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${name} must be a valid object.`);
+  }
+  return value;
+};
+
+const requireSlug = (slug) => {
+  const normalized = String(slug || '').trim();
+  if (!normalized) {
+    throw new Error('Mini app slug is required.');
+  }
+  return normalized;
+};
+
+const requireAtLeastOne = (payload, fields, name) => {
+  const hasAny = fields.some((field) => payload[field] !== undefined && payload[field] !== null && String(payload[field] || '').trim() !== '');
+  if (!hasAny) {
+    throw new Error(`${name} must include at least one of: ${fields.join(', ')}.`);
+  }
+  return payload;
+};
+
 const canAcceptWebhook = (req) => {
   const configuredSecret = String(process.env.BUSINESS_BUILDER_WEBHOOK_SECRET || '').trim();
   if (!configuredSecret) {
@@ -45,11 +68,9 @@ publicRouter.get('/directory', async (req, res) => {
 
 publicRouter.post('/mini-apps/:slug/events', async (req, res) => {
   try {
-    const event = await businessBuilderService.recordMiniAppEventBySlug(
-      req.params.slug,
-      req.body || {},
-      getRequestMeta(req)
-    );
+    const slug = requireSlug(req.params.slug);
+    const payload = requireObject(req.body || {}, 'Event payload');
+    const event = await businessBuilderService.recordMiniAppEventBySlug(slug, payload, getRequestMeta(req));
     res.status(201).json({ success: true, data: event, message: 'Event recorded' });
   } catch (error) {
     const statusCode = error.message.includes('not found') ? 404 : 400;
@@ -59,7 +80,10 @@ publicRouter.post('/mini-apps/:slug/events', async (req, res) => {
 
 publicRouter.post('/mini-apps/:slug/leads', async (req, res) => {
   try {
-    const lead = await businessBuilderService.createLeadBySlug(req.params.slug, req.body || {});
+    const slug = requireSlug(req.params.slug);
+    const payload = requireObject(req.body || {}, 'Lead payload');
+    requireAtLeastOne(payload, ['customer', 'name', 'phone', 'email'], 'Lead payload');
+    const lead = await businessBuilderService.createLeadBySlug(slug, payload);
     res.status(201).json({ success: true, data: lead, message: 'Lead captured' });
   } catch (error) {
     const statusCode = error.message.includes('not found') ? 404 : 400;
@@ -69,7 +93,10 @@ publicRouter.post('/mini-apps/:slug/leads', async (req, res) => {
 
 publicRouter.post('/mini-apps/:slug/orders', async (req, res) => {
   try {
-    const order = await businessBuilderService.createOrderBySlug(req.params.slug, req.body || {});
+    const slug = requireSlug(req.params.slug);
+    const payload = requireObject(req.body || {}, 'Order payload');
+    requireAtLeastOne(payload, ['items'], 'Order payload');
+    const order = await businessBuilderService.createOrderBySlug(slug, payload);
     res.status(201).json({ success: true, data: order, message: 'Order created' });
   } catch (error) {
     const statusCode = error.message.includes('not found') ? 404 : 400;
@@ -96,7 +123,9 @@ publicRouter.post('/payments/webhook', async (req, res) => {
   }
 
   try {
-    const order = await businessBuilderService.processPaymentWebhook(req.body || {});
+    const payload = requireObject(req.body || {}, 'Webhook payload');
+    requireAtLeastOne(payload, ['orderId', 'orderReference', 'gatewayOrderId', 'paymentReference'], 'Webhook payload');
+    const order = await businessBuilderService.processPaymentWebhook(payload);
     return res.json({
       success: true,
       data: order,
@@ -164,7 +193,7 @@ router.get('/businesses/me', async (req, res) => {
 
 router.get('/businesses/:businessId', async (req, res) => {
   try {
-    console.log('[businessBuilderRoutes] getBusinessById', {
+    console.debug('[businessBuilderRoutes] getBusinessById', {
       businessId: req.params.businessId,
       reqUser: {
         _id: req.user?._id,

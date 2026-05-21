@@ -1,4 +1,4 @@
-export const BEAUTY_LANGUAGES = [
+﻿export const BEAUTY_LANGUAGES = [
   { value: "ml", label: "Malayalam" },
   { value: "en", label: "English" },
   { value: "hi", label: "Hindi" },
@@ -44,6 +44,7 @@ export const buildBeautyRequest = (form, selfieMeta = {}, selfieSignals = {}) =>
   hairType: form.hairType,
   notes: String(form.notes || "").trim(),
   preference: "balanced",
+  consent: Boolean(form.consent),
   safety: {
     sensitiveSkin: Boolean(form.sensitiveSkin),
     knownAllergy: String(form.knownAllergy || "").trim(),

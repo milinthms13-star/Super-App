@@ -228,7 +228,6 @@ app.use('/api/karaoke-duet', require('./routes/karaokeDuet'));
 app.use('/api/karaokeduet', require('./routes/karaokeDuet'));
 app.use('/api/kitchen', require('./routes/kitchen'));
 app.use('/api/beauty-ai', require('./routes/beautyAI'));
-app.use('/api/beautyai', require('./routes/beautyAI'));
 app.use('/api/strategic-modules', require('./routes/strategicModules'));
 
 app.use('/api/messaging/v4/reactions', require('./routes/messageReactionsRoutes'));

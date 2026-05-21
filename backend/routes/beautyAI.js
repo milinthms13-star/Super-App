@@ -1,9 +1,28 @@
 const express = require('express');
 const fs = require('fs/promises');
 const path = require('path');
+const crypto = require('crypto');
+const mongoose = require('mongoose');
+const Joi = require('joi');
+const multer = require('multer');
+const sharp = require('sharp');
+const rateLimit = require('express-rate-limit');
 
 const auth = require('../middleware/auth');
+const logger = require('../utils/logger');
 const BeautyPlan = require('../models/BeautyPlan');
+const BeautyTip = require('../models/BeautyTip');
+const BeautyProgressLog = require('../models/BeautyProgressLog');
+const BeautySubscriptionRule = require('../models/BeautySubscriptionRule');
+const BeautyUsageQuota = require('../models/BeautyUsageQuota');
+const BeautyConsentAudit = require('../models/BeautyConsentAudit');
+const BeautyOpsEvent = require('../models/BeautyOpsEvent');
+const s3Storage = require('../utils/s3Storage');
+const {
+  normalizeStorageKey,
+  extractStorageKeyFromPhotoUrl,
+  normalizeSafePhotoUrl,
+} = require('../services/beautyAiStorageService');
 const {
   buildBeautyPrompt,
   validateBeautyPayload,
@@ -11,14 +30,18 @@ const {
 
 const router = express.Router();
 const authenticate = auth.authenticate || auth;
-const verifyAdmin = auth.verifyAdmin || ((req, _res, next) => next());
+const verifyAdmin = auth.verifyAdmin;
+if (typeof verifyAdmin !== 'function') {
+  throw new Error('Beauty AI route requires auth.verifyAdmin middleware.');
+}
+const isTestEnv = process.env.NODE_ENV === 'test';
+const isProduction = process.env.NODE_ENV === 'production';
 
 const dataDir = path.join(__dirname, '..', 'data');
 const dataPath = path.join(dataDir, 'beauty-ai-data.json');
 
 const DEFAULT_TIPS = [
   {
-    id: 'tip-sunscreen',
     title: 'Daily Sunscreen Matters',
     text: 'Apply broad-spectrum sunscreen 15 minutes before sun exposure, and reapply every 2-3 hours.',
     category: 'skin-care',
@@ -26,7 +49,6 @@ const DEFAULT_TIPS = [
     status: 'published',
   },
   {
-    id: 'tip-patch-test',
     title: 'Patch Test First',
     text: 'Always patch-test a new product or home remedy on a small skin area for 24 hours.',
     category: 'safety',
@@ -34,7 +56,6 @@ const DEFAULT_TIPS = [
     status: 'published',
   },
   {
-    id: 'tip-hydration',
     title: 'Hydrate for Glow',
     text: 'Hydration supports skin barrier health. Drink water and use a simple moisturizer regularly.',
     category: 'skin-care',
@@ -76,65 +97,506 @@ const DEFAULT_PRODUCTS = {
   ],
 };
 
-const normalizeText = (value = '') => String(value || '').trim();
-const normalizeLower = (value = '') => normalizeText(value).toLowerCase();
-const normalizeArray = (value = []) =>
-  Array.isArray(value)
-    ? value.map((item) => normalizeText(item)).filter(Boolean)
+const limiterConfig = (max) => ({
+  windowMs: 60 * 1000,
+  max: isTestEnv ? 500 : max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many requests. Please try again shortly.',
+  },
+});
+
+const analysisLimiter = rateLimit(limiterConfig(12));
+const planGenerationLimiter = rateLimit(limiterConfig(16));
+const planStorageLimiter = rateLimit(limiterConfig(20));
+const progressLimiter = rateLimit(limiterConfig(30));
+const adminLimiter = rateLimit(limiterConfig(15));
+const selfieUploadLimiter = rateLimit(limiterConfig(12));
+
+const ALLOWED_SELFIE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+]);
+const MAX_SELFIE_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+const normalizeText = (value = '', maxLength = 400) => String(value || '').trim().slice(0, maxLength);
+const normalizeLower = (value = '', maxLength = 120) => normalizeText(value, maxLength).toLowerCase();
+const normalizeArray = (value = [], maxLength = 80, maxItems = 20) => {
+  const list = Array.isArray(value)
+    ? value
     : String(value || '')
         .split(',')
-        .map((item) => normalizeText(item))
-        .filter(Boolean);
+        .map((entry) => entry.trim());
 
-const resolveUserId = (req) => {
-  const raw = req.user?._id || req.user?.id || req.auth?.sub || '';
-  return normalizeText(raw);
+  const unique = [];
+  for (const item of list) {
+    const normalized = normalizeText(item, maxLength);
+    if (normalized && !unique.includes(normalized)) {
+      unique.push(normalized);
+    }
+    if (unique.length >= maxItems) {
+      break;
+    }
+  }
+  return unique;
 };
 
-const getUserKey = (req) =>
-  normalizeLower(req.user?.email || req.user?.id || req.user?._id || req.auth?.sub || 'guest');
+const parseBoolean = (value, defaultValue = false) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const text = normalizeLower(value, 12);
+  if (['true', '1', 'yes', 'on'].includes(text)) return true;
+  if (['false', '0', 'no', 'off'].includes(text)) return false;
+  return defaultValue;
+};
 
-const ensureDataFile = async () => {
-  await fs.mkdir(dataDir, { recursive: true });
+const toNumber = (value, fallback = 0, min = 0, max = 100) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, numeric));
+};
+
+const resolveUserId = (req) =>
+  normalizeText(req.user?._id || req.user?.id || req.auth?.sub || req.auth?.userId || '', 120);
+
+const resolveUserTier = (req) => {
+  const explicitTier = normalizeLower(
+    req.user?.subscriptionTier ||
+      req.user?.planTier ||
+      req.user?.plan ||
+      req.user?.membershipType,
+    24
+  );
+  if (explicitTier === 'premium' || explicitTier === 'gold' || explicitTier === 'platinum' || explicitTier === 'vip' || explicitTier === 'pro') {
+    return 'premium';
+  }
+  if (req.user?.isPremium === true) {
+    return 'premium';
+  }
+  return 'free';
+};
+
+const getClientIp = (req) => {
+  const forwarded = normalizeText(req.headers['x-forwarded-for'], 200);
+  if (forwarded) {
+    return normalizeText(forwarded.split(',')[0], 80);
+  }
+  return normalizeText(req.ip || req.socket?.remoteAddress || '', 80);
+};
+
+const getUserAgent = (req) => normalizeText(req.headers['user-agent'], 300);
+
+const createStorageKey = (userId, extension = 'webp') => {
+  const safeUserId = normalizeText(userId, 80).replace(/[^a-zA-Z0-9_-]/g, '_') || 'anonymous';
+  const suffix = crypto.randomBytes(6).toString('hex');
+  return `beauty-ai/selfies/${safeUserId}/${Date.now()}-${suffix}.${extension}`;
+};
+
+const buildPublicUploadUrl = (req, uploadResult = {}) => {
+  const publicUrlPath = normalizeText(uploadResult.publicUrlPath, 2000);
+  if (publicUrlPath) {
+    const forwardedProto = normalizeLower(req.headers['x-forwarded-proto'], 12);
+    const protocol = forwardedProto === 'https' ? 'https' : req.protocol || 'http';
+    const host = normalizeText(req.get('host'), 255);
+    if (host) {
+      return `${protocol}://${host}${publicUrlPath}`;
+    }
+    return publicUrlPath;
+  }
+  return normalizeText(uploadResult.s3Url, 2000);
+};
+
+const severityFromCount = (count, amberThreshold, redThreshold) => {
+  if (count >= redThreshold) return 'red';
+  if (count >= amberThreshold) return 'amber';
+  return 'green';
+};
+
+const toOpsCounterMap = (rows = []) => {
+  const map = new Map();
+  for (const row of rows) {
+    const eventType = normalizeLower(row?._id?.eventType || '', 80);
+    const severity = normalizeLower(row?._id?.severity || '', 20);
+    if (!eventType || !severity) {
+      continue;
+    }
+    map.set(`${eventType}:${severity}`, Number(row.count || 0));
+  }
+  return map;
+};
+
+const getOpsCount = (counterMap, eventType, severity) =>
+  Number(counterMap.get(`${normalizeLower(eventType, 80)}:${normalizeLower(severity, 20)}`) || 0);
+
+const recordOpsEvent = async ({
+  userId = '',
+  requestId = '',
+  eventType = '',
+  severity = 'info',
+  endpoint = '',
+  message = '',
+  metadata = {},
+}) => {
+  if (dbUnavailable()) {
+    return;
+  }
   try {
-    await fs.access(dataPath);
-  } catch (_error) {
-    const seed = {
-      tips: DEFAULT_TIPS,
-      progressLogs: [],
-      subscriptionRules: DEFAULT_SUBSCRIPTION_RULES,
-    };
-    await fs.writeFile(dataPath, JSON.stringify(seed, null, 2), 'utf8');
+    await BeautyOpsEvent.create({
+      userId: normalizeText(userId, 120),
+      requestId: normalizeText(requestId, 120),
+      eventType: normalizeLower(eventType, 80),
+      severity: ['info', 'warning', 'critical'].includes(severity) ? severity : 'info',
+      endpoint: normalizeText(endpoint, 180),
+      message: normalizeText(message, 320),
+      metadata: metadata && typeof metadata === 'object' ? metadata : {},
+    });
+  } catch (error) {
+    logger.warn(`Beauty AI ops event logging failed: ${error.message}`);
   }
 };
 
-const readData = async () => {
-  await ensureDataFile();
+const recordConsentAudit = async ({
+  userId = '',
+  requestId = '',
+  action = '',
+  consentGiven = false,
+  endpoint = '',
+  reason = '',
+  req = null,
+  metadata = {},
+}) => {
+  if (dbUnavailable()) {
+    return;
+  }
+
   try {
-    const raw = await fs.readFile(dataPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      tips: Array.isArray(parsed.tips) ? parsed.tips : DEFAULT_TIPS,
-      progressLogs: Array.isArray(parsed.progressLogs) ? parsed.progressLogs : [],
-      subscriptionRules: parsed.subscriptionRules || DEFAULT_SUBSCRIPTION_RULES,
-    };
-  } catch (_error) {
-    return {
-      tips: DEFAULT_TIPS,
-      progressLogs: [],
-      subscriptionRules: DEFAULT_SUBSCRIPTION_RULES,
-    };
+    await BeautyConsentAudit.create({
+      userId: normalizeText(userId, 120),
+      requestId: normalizeText(requestId, 120),
+      action: normalizeLower(action, 40),
+      consentGiven: Boolean(consentGiven),
+      endpoint: normalizeText(endpoint, 160),
+      reason: normalizeText(reason, 220),
+      ipAddress: req ? getClientIp(req) : '',
+      userAgent: req ? getUserAgent(req) : '',
+      metadata: metadata && typeof metadata === 'object' ? metadata : {},
+    });
+  } catch (error) {
+    logger.warn(`Beauty AI consent audit logging failed: ${error.message}`);
   }
 };
 
-const writeData = async (nextData) => {
-  await ensureDataFile();
-  await fs.writeFile(dataPath, JSON.stringify(nextData, null, 2), 'utf8');
+const deleteStoredSelfie = async ({
+  storageKey = '',
+  photoUrl = '',
+  userId = '',
+  requestId = '',
+  endpoint = '',
+}) => {
+  const key = normalizeStorageKey(storageKey) || extractStorageKeyFromPhotoUrl(photoUrl);
+  if (!key) {
+    return false;
+  }
+
+  try {
+    await s3Storage.deleteFromS3(key);
+    await recordOpsEvent({
+      userId,
+      requestId,
+      eventType: 'upload_deleted',
+      severity: 'info',
+      endpoint,
+      message: 'Stored selfie deleted successfully.',
+      metadata: { storageKey: key },
+    });
+    return true;
+  } catch (error) {
+    await recordOpsEvent({
+      userId,
+      requestId,
+      eventType: 'upload_delete_failed',
+      severity: 'warning',
+      endpoint,
+      message: error.message || 'Failed to delete stored selfie.',
+      metadata: { storageKey: key },
+    });
+    return false;
+  }
+};
+
+const selfieUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_SELFIE_UPLOAD_BYTES,
+    files: 1,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_SELFIE_MIME_TYPES.has(normalizeLower(file?.mimetype || '', 40))) {
+      cb(new Error('Only JPEG, PNG, WEBP, and HEIC selfie images are allowed.'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+const runSelfieUpload = (req, res) =>
+  new Promise((resolve, reject) => {
+    selfieUpload.single('selfie')(req, res, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
+const sanitizeSelfieBuffer = async (fileBuffer = Buffer.alloc(0)) => {
+  const image = sharp(fileBuffer, { failOn: 'error' });
+  const metadata = await image.metadata();
+  if (!metadata || !metadata.format) {
+    throw new Error('Unsupported selfie image payload.');
+  }
+
+  const sanitized = await image
+    .rotate()
+    .resize({
+      width: 1800,
+      height: 1800,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 84 })
+    .toBuffer();
+
+  return {
+    buffer: sanitized,
+    outputMimeType: 'image/webp',
+    outputExtension: 'webp',
+    originalWidth: Number(metadata.width || 0),
+    originalHeight: Number(metadata.height || 0),
+  };
+};
+
+const QUOTA_TIMEZONE = normalizeText(process.env.BEAUTY_QUOTA_TIMEZONE || process.env.APP_TIMEZONE || 'Asia/Kolkata', 80);
+
+const getTodayDateKey = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: QUOTA_TIMEZONE || 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch (_error) {
+    return new Date().toISOString().slice(0, 10);
+  }
+};
+
+const resolveQuotaRuleByTier = (rules, tier) => (tier === 'premium' ? rules.premium : rules.free);
+
+const enforceDailyQuota = async ({ userId, tier, quotaField, limit }) => {
+  if (!Number.isFinite(Number(limit)) || Number(limit) <= 0) {
+    return { allowed: true, currentCount: 0, remaining: 0 };
+  }
+
+  const dateKey = getTodayDateKey();
+  const path = `counts.${quotaField}`;
+  const query = {
+    userId,
+    dateKey,
+    $or: [{ [path]: { $exists: false } }, { [path]: { $lt: Number(limit) } }],
+  };
+
+  let updated = null;
+  try {
+    updated = await BeautyUsageQuota.findOneAndUpdate(
+      query,
+      {
+        $setOnInsert: { userId, dateKey },
+        $set: { tier },
+        $inc: { [path]: 1 },
+      },
+      { new: true, upsert: true }
+    ).lean();
+  } catch (error) {
+    if (!(error && error.code === 11000)) {
+      throw error;
+    }
+  }
+
+  if (updated) {
+    const used = Number(updated.counts?.[quotaField] || 0);
+    return {
+      allowed: true,
+      currentCount: used,
+      remaining: Math.max(0, Number(limit) - used),
+      limit: Number(limit),
+      dateKey,
+    };
+  }
+
+  const existing = await BeautyUsageQuota.findOne({ userId, dateKey }).lean();
+  const currentCount = Number(existing?.counts?.[quotaField] || 0);
+  return {
+    allowed: false,
+    currentCount,
+    remaining: 0,
+    limit: Number(limit),
+    dateKey,
+  };
+};
+
+const dbUnavailable = () => mongoose.connection.readyState !== 1;
+
+const ensureDbReady = (res) => {
+  if (!dbUnavailable()) {
+    return true;
+  }
+
+  res.status(503).json({
+    success: false,
+    message: 'Beauty AI service is temporarily unavailable. Please try again shortly.',
+  });
+  return false;
+};
+
+const JoiSchemas = {
+  tipQuery: Joi.object({
+    language: Joi.string().trim().lowercase().max(8).default('en'),
+    category: Joi.string().trim().lowercase().max(40).allow('').default(''),
+  }),
+  analyzeSelfie: Joi.object({
+    knownSkinType: Joi.string().trim().max(40).allow('').default('Not sure'),
+    concern: Joi.string().trim().max(120).required(),
+    eventMode: Joi.string().trim().max(60).allow('').default(''),
+    ageRange: Joi.string().trim().max(40).allow('').default(''),
+    selfieConsent: Joi.boolean().truthy('true', '1').required(),
+    budget: Joi.string().trim().valid('low', 'medium', 'high').default('medium'),
+  }),
+  plan: Joi.object({
+    language: Joi.string().trim().lowercase().valid('ml', 'en', 'hi').required(),
+    concern: Joi.string().trim().max(120).required(),
+    selectedConcerns: Joi.array().items(Joi.string().trim().max(80)).max(20).default([]),
+    gender: Joi.string().trim().max(24).allow('').default(''),
+    age: Joi.number().integer().min(0).max(120).allow(null).default(null),
+    budget: Joi.string().trim().valid('low', 'medium', 'high').required(),
+    eventType: Joi.string().trim().max(40).required(),
+    skinType: Joi.string().trim().max(40).required(),
+    hairType: Joi.string().trim().max(40).allow('').default('normal'),
+    notes: Joi.string().trim().max(800).allow('').default(''),
+    preference: Joi.string().trim().max(40).allow('').default('balanced'),
+    consent: Joi.boolean().truthy('true', '1').required(),
+    safety: Joi.object({
+      sensitiveSkin: Joi.boolean().truthy('true', '1').default(false),
+      knownAllergy: Joi.string().trim().max(120).allow('').default(''),
+      pregnantOrBreastfeeding: Joi.boolean().truthy('true', '1').default(false),
+      usingSkinMedicine: Joi.boolean().truthy('true', '1').default(false),
+    }).default({}),
+    selfieMeta: Joi.object({
+      fileName: Joi.string().trim().max(180).allow('').default(''),
+      fileSize: Joi.number().min(0).max(20 * 1024 * 1024).allow(null).default(null),
+      mimeType: Joi.string().trim().max(120).allow('').default(''),
+    }).default({}),
+    selfieSignals: Joi.object({
+      rednessScore: Joi.number().min(0).max(1).default(0.3),
+      textureScore: Joi.number().min(0).max(1).default(0.3),
+      brightnessScore: Joi.number().min(0).max(1).default(0.5),
+      confidence: Joi.number().min(0).max(1).default(0.5),
+    }).default({}),
+  }),
+  createPlan: Joi.object({
+    gender: Joi.string().trim().max(24).allow('').default(''),
+    age: Joi.number().integer().min(0).max(120).allow(null).default(null),
+    skinType: Joi.string().trim().max(40).required(),
+    hairType: Joi.string().trim().max(40).allow('').default('normal'),
+    budget: Joi.string().trim().valid('low', 'medium', 'high').required(),
+    language: Joi.string().trim().lowercase().valid('ml', 'en', 'hi').required(),
+    selectedConcerns: Joi.array().items(Joi.string().trim().max(80)).max(20).default([]),
+    photoUrl: Joi.string().trim().max(2000).allow('').default(''),
+    photoStorageKey: Joi.string().trim().max(500).allow('').default(''),
+    photoStorageProvider: Joi.string().trim().max(32).allow('').default(''),
+    photoName: Joi.string().trim().max(180).allow('').default(''),
+    eventType: Joi.string().trim().max(40).required(),
+    safety: Joi.object({
+      sensitiveSkin: Joi.boolean().truthy('true', '1').default(false),
+      knownAllergy: Joi.string().trim().max(120).allow('').default(''),
+      pregnantOrBreastfeeding: Joi.boolean().truthy('true', '1').default(false),
+      usingSkinMedicine: Joi.boolean().truthy('true', '1').default(false),
+    }).default({}),
+    selfieSignals: Joi.object({
+      rednessScore: Joi.number().min(0).max(1).default(0.3),
+      textureScore: Joi.number().min(0).max(1).default(0.3),
+      brightnessScore: Joi.number().min(0).max(1).default(0.5),
+      confidence: Joi.number().min(0).max(1).default(0.5),
+    }).default({}),
+    plan: Joi.object({
+      title: Joi.string().trim().max(120).allow('').default(''),
+      score: Joi.number().min(0).max(100).default(0),
+      morning: Joi.array().items(Joi.string().trim().max(180)).max(30).default([]),
+      night: Joi.array().items(Joi.string().trim().max(180)).max(30).default([]),
+      hair: Joi.array().items(Joi.string().trim().max(180)).max(30).default([]),
+      products: Joi.array().items(Joi.string().trim().max(180)).max(40).default([]),
+      avoid: Joi.array().items(Joi.string().trim().max(180)).max(40).default([]),
+      eventPlan: Joi.array().items(Joi.string().trim().max(180)).max(40).default([]),
+    }).allow(null).default(null),
+  }),
+  progress: Joi.object({
+    day: Joi.number().integer().min(1).max(30).required(),
+    done: Joi.alternatives().try(Joi.boolean(), Joi.string(), Joi.number()).required(),
+    note: Joi.string().trim().max(600).allow('').default(''),
+    skinScore: Joi.number().min(0).max(100).default(0),
+    selfieSnapshotLabel: Joi.string().trim().max(120).allow('').default(''),
+  }),
+  addTip: Joi.object({
+    title: Joi.string().trim().max(140).required(),
+    text: Joi.string().trim().max(1000).required(),
+    category: Joi.string().trim().max(64).default('general'),
+    language: Joi.string().trim().lowercase().max(8).default('en'),
+  }),
+  subscriptionRules: Joi.object({
+    free: Joi.object({
+      dailyAnalysisLimit: Joi.number().integer().min(0).max(500).required(),
+      weeklyPlanLengthDays: Joi.number().integer().min(1).max(90).required(),
+      allowPremiumReport: Joi.boolean().required(),
+      allowDermatologistReferral: Joi.boolean().required(),
+    }).required(),
+    premium: Joi.object({
+      dailyAnalysisLimit: Joi.number().integer().min(0).max(500).required(),
+      weeklyPlanLengthDays: Joi.number().integer().min(1).max(90).required(),
+      allowPremiumReport: Joi.boolean().required(),
+      allowDermatologistReferral: Joi.boolean().required(),
+    }).required(),
+  }),
+};
+
+const validate = (schema, payload) => {
+  const result = schema.validate(payload, { abortEarly: false, stripUnknown: true, convert: true });
+  if (result.error) {
+    return {
+      ok: false,
+      errors: result.error.details.map((detail) => detail.message),
+    };
+  }
+
+  return {
+    ok: true,
+    value: result.value,
+  };
 };
 
 const detectSkinType = (knownSkinType = 'Not sure', concern = '') => {
-  if (knownSkinType && knownSkinType !== 'Not sure') {
-    return knownSkinType;
+  const explicitSkinType = normalizeText(knownSkinType, 40);
+  if (explicitSkinType && explicitSkinType.toLowerCase() !== 'not sure') {
+    return explicitSkinType;
   }
 
   const normalizedConcern = normalizeLower(concern);
@@ -145,8 +607,8 @@ const detectSkinType = (knownSkinType = 'Not sure', concern = '') => {
 };
 
 const concernList = (primaryConcern = '', eventMode = '') => {
-  const seed = [normalizeText(primaryConcern)].filter(Boolean);
-  const event = normalizeLower(eventMode);
+  const seed = [normalizeText(primaryConcern, 80)].filter(Boolean);
+  const event = normalizeLower(eventMode, 40);
 
   if (event.includes('bridal') || event.includes('festival')) {
     seed.push('Tanning');
@@ -155,18 +617,19 @@ const concernList = (primaryConcern = '', eventMode = '') => {
     seed.push('Acne');
   }
 
-  return [...new Set(seed)].slice(0, 4);
+  return normalizeArray(seed, 80, 4);
 };
 
 const pickProducts = (budget = 'medium') => {
-  if (budget === 'low') return DEFAULT_PRODUCTS.low;
-  if (budget === 'high') return DEFAULT_PRODUCTS.high;
+  const normalized = normalizeLower(budget, 20);
+  if (normalized === 'low') return DEFAULT_PRODUCTS.low;
+  if (normalized === 'high') return DEFAULT_PRODUCTS.high;
   return DEFAULT_PRODUCTS.medium;
 };
 
 const buildRoutines = (analysisInput = {}) => {
-  const concern = normalizeLower(analysisInput.concern);
-  const preference = normalizeLower(analysisInput.preference || 'balanced');
+  const concern = normalizeLower(analysisInput.concern, 80);
+  const preference = normalizeLower(analysisInput.preference || 'balanced', 30);
 
   const morningRoutine = [
     'Gentle cleanse',
@@ -216,23 +679,18 @@ const buildSafetyWarnings = (safety = {}) => {
   if (safety.usingSkinMedicine) {
     warnings.push('Do not mix acne or skin medicine with new active products without dermatologist advice.');
   }
-  if (normalizeText(safety.knownAllergy)) {
-    warnings.push(`Avoid ingredients related to: ${normalizeText(safety.knownAllergy)}.`);
+  if (normalizeText(safety.knownAllergy, 120)) {
+    warnings.push(`Avoid ingredients related to: ${normalizeText(safety.knownAllergy, 120)}.`);
   }
 
   return warnings;
 };
 
-const toNumber = (value, fallback = 0) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
-};
-
 const normalizeSelfieSignals = (signals = {}) => {
-  const rednessScore = Math.min(1, Math.max(0, toNumber(signals.rednessScore, 0.3)));
-  const textureScore = Math.min(1, Math.max(0, toNumber(signals.textureScore, 0.3)));
-  const brightnessScore = Math.min(1, Math.max(0, toNumber(signals.brightnessScore, 0.5)));
-  const confidence = Math.min(1, Math.max(0, toNumber(signals.confidence, 0.5)));
+  const rednessScore = toNumber(signals.rednessScore, 0.3, 0, 1);
+  const textureScore = toNumber(signals.textureScore, 0.3, 0, 1);
+  const brightnessScore = toNumber(signals.brightnessScore, 0.5, 0, 1);
+  const confidence = toNumber(signals.confidence, 0.5, 0, 1);
 
   return {
     rednessScore,
@@ -252,7 +710,7 @@ const scoreFromSignals = (signals = {}) => {
 };
 
 const eventPlanAddons = (eventType = '') => {
-  const normalized = normalizeLower(eventType);
+  const normalized = normalizeLower(eventType, 40);
   if (normalized.includes('bridal')) {
     return ['Start 4-week glow prep', 'Schedule 2 trial makeup sessions', 'Hydration + sleep tracker daily'];
   }
@@ -271,6 +729,49 @@ const eventPlanAddons = (eventType = '') => {
   return ['Keep routine consistent for 7 days', 'Take weekly progress selfie'];
 };
 
+const severityFromConcernText = (concerns = []) => {
+  const normalized = (Array.isArray(concerns) ? concerns : [concerns])
+    .map((c) => normalizeLower(c, 80))
+    .filter(Boolean);
+
+  // Simple heuristic severity classifier
+  const severeHits = normalized.some((c) =>
+    ['infection', 'burn', 'burns', 'allergy', 'allergic', 'eczema', 'severe', 'open wound', 'blood'].some((k) => c.includes(k))
+  );
+  if (severeHits) return 'severe';
+
+  const moderateHits = normalized.some((c) => ['acne', 'pigmentation', 'wrinkle', 'dandruff', 'irritation'].some((k) => c.includes(k)));
+  if (moderateHits) return 'moderate';
+
+  return 'mild';
+};
+
+const buildDisclaimers = ({ safety = {}, concernSeverity = 'mild' } = {}) => {
+  const disclaimers = [];
+
+  if (safety?.sensitiveSkin) {
+    disclaimers.push('Patch test new products first (especially if you have sensitive skin).');
+  }
+  if (safety?.pregnantOrBreastfeeding) {
+    disclaimers.push('If you are pregnant or breastfeeding, confirm ingredient suitability with a healthcare professional.');
+  }
+  if (safety?.usingSkinMedicine) {
+    disclaimers.push('If you are using skin medicines, avoid introducing new actives without professional guidance.');
+  }
+
+  if (concernSeverity === 'severe') {
+    disclaimers.push('For severe symptoms (infection/allergy/burns), consult a dermatologist urgently.');
+  } else if (concernSeverity === 'moderate') {
+    disclaimers.push('If irritation worsens or symptoms persist, consult a dermatologist.');
+  }
+
+  if (!disclaimers.length) {
+    disclaimers.push('This plan is for general guidance and is not medical advice.');
+  }
+
+  return disclaimers;
+};
+
 const generateStructuredBeautyPlan = ({
   skinType = 'normal',
   hairType = 'normal',
@@ -281,21 +782,26 @@ const generateStructuredBeautyPlan = ({
   safety = {},
   signals = {},
 }) => {
-  const concerns = normalizeArray(selectedConcerns).map((item) => normalizeLower(item));
-  const lowerSkinType = normalizeLower(skinType || 'normal');
-  const lowerHairType = normalizeLower(hairType || 'normal');
+  const concerns = normalizeArray(selectedConcerns, 80, 20).map((item) => normalizeLower(item, 80));
+  const lowerSkinType = normalizeLower(skinType || 'normal', 30);
+  const lowerHairType = normalizeLower(hairType || 'normal', 30);
   const score = scoreFromSignals(signals);
+
+  const severity = severityFromConcernText(selectedConcerns);
+  const disclaimers = buildDisclaimers({ safety, concernSeverity: severity });
 
   const morning = [
     'Gentle cleanser',
     lowerSkinType === 'dry' ? 'Hydrating moisturizer' : 'Light moisturizer',
     'Sunscreen SPF 30+',
   ];
+
   const night = [
     'Cleanse face',
     concerns.includes('acne') ? 'Use acne-safe treatment only if suitable' : 'Apply serum if suitable',
     'Moisturizer',
   ];
+
   const hair = [
     lowerHairType === 'dry' ? 'Oil massage once or twice weekly' : 'Mild shampoo routine',
     concerns.includes('dandruff') ? 'Use anti-dandruff shampoo twice weekly' : 'Use gentle shampoo',
@@ -305,67 +811,481 @@ const generateStructuredBeautyPlan = ({
   ];
 
   return {
-    title: language === 'ml' ? 'സ്വകാര്യ ബ്യൂട്ടി റൂട്ടീൻ പ്ലാൻ' : 'Personal Beauty Routine Plan',
+    title: language === 'ml' ? 'സുരക്ഷിത ബ്യൂട്ടി പ്ലാൻ' : 'Personal Beauty Routine Plan',
     score,
     morning,
     night,
     hair,
-    products: pickProducts(normalizeLower(budget || 'medium')),
+    products: pickProducts(normalizeLower(budget || 'medium', 20)),
     avoid: [
-      'Avoid steroid creams without dermatologist advice.',
       'Avoid bleaching creams and unknown fairness products.',
       ...buildSafetyWarnings(safety).map((warning) => `Safety: ${warning}`),
     ],
     eventPlan: eventPlanAddons(eventType),
+    concernSeverity: severity,
+    disclaimer: disclaimers,
+    apiVersion: 'beauty-ai-v1',
+    modelVersion: 'heuristic-v1',
   };
 };
 
+let migrationAttempted = false;
+const migrateLegacyJsonIfNeeded = async () => {
+  if (migrationAttempted || dbUnavailable()) {
+    return;
+  }
+  migrationAttempted = true;
+
+  try {
+    await fs.access(dataPath);
+  } catch (_error) {
+    return;
+  }
+
+  try {
+    const raw = await fs.readFile(dataPath, 'utf8');
+    const parsed = JSON.parse(raw || '{}');
+
+    const tipCount = await BeautyTip.countDocuments();
+    if (tipCount === 0 && Array.isArray(parsed.tips) && parsed.tips.length) {
+      const docs = parsed.tips
+        .map((tip) => ({
+          title: normalizeText(tip.title, 140),
+          text: normalizeText(tip.text, 1000),
+          category: normalizeLower(tip.category || 'general', 64),
+          language: normalizeLower(tip.language || 'en', 8),
+          status: normalizeLower(tip.status || 'published', 16) || 'published',
+          createdBy: normalizeLower(tip.createdBy || 'legacy-migration', 120),
+          createdAt: tip.createdAt ? new Date(tip.createdAt) : undefined,
+          updatedAt: tip.updatedAt ? new Date(tip.updatedAt) : undefined,
+        }))
+        .filter((tip) => tip.title && tip.text);
+
+      if (docs.length) {
+        await BeautyTip.insertMany(docs, { ordered: false });
+      }
+    }
+
+    if (Array.isArray(parsed.progressLogs) && parsed.progressLogs.length) {
+      for (const entry of parsed.progressLogs) {
+        const userId = normalizeText(entry.userId || entry.userKey, 120);
+        const day = toNumber(entry.day, 0, 0, 30);
+        if (!userId || !day) {
+          continue;
+        }
+
+        await BeautyProgressLog.findOneAndUpdate(
+          { userId, day },
+          {
+            $set: {
+              done: parseBoolean(entry.done, false),
+              note: normalizeText(entry.note, 600),
+              skinScore: toNumber(entry.skinScore, 0, 0, 100),
+              selfieSnapshotLabel: normalizeText(entry.selfieSnapshotLabel, 120),
+              updatedAt: entry.updatedAt ? new Date(entry.updatedAt) : new Date(),
+            },
+            $setOnInsert: {
+              createdAt: entry.createdAt ? new Date(entry.createdAt) : new Date(),
+            },
+          },
+          { upsert: true, new: true }
+        );
+      }
+    }
+
+    const existingRule = await BeautySubscriptionRule.findOne({ key: 'default' });
+    if (!existingRule && parsed.subscriptionRules && typeof parsed.subscriptionRules === 'object') {
+      await BeautySubscriptionRule.create({
+        key: 'default',
+        free: {
+          dailyAnalysisLimit: toNumber(parsed.subscriptionRules?.free?.dailyAnalysisLimit, 1, 0, 500),
+          weeklyPlanLengthDays: toNumber(parsed.subscriptionRules?.free?.weeklyPlanLengthDays, 7, 1, 90),
+          allowPremiumReport: parseBoolean(parsed.subscriptionRules?.free?.allowPremiumReport, false),
+          allowDermatologistReferral: parseBoolean(
+            parsed.subscriptionRules?.free?.allowDermatologistReferral,
+            false
+          ),
+        },
+        premium: {
+          dailyAnalysisLimit: toNumber(parsed.subscriptionRules?.premium?.dailyAnalysisLimit, 10, 0, 500),
+          weeklyPlanLengthDays: toNumber(parsed.subscriptionRules?.premium?.weeklyPlanLengthDays, 30, 1, 90),
+          allowPremiumReport: parseBoolean(parsed.subscriptionRules?.premium?.allowPremiumReport, true),
+          allowDermatologistReferral: parseBoolean(
+            parsed.subscriptionRules?.premium?.allowDermatologistReferral,
+            true
+          ),
+        },
+        updatedBy: 'legacy-migration',
+      });
+    }
+  } catch (error) {
+    logger.warn(`Beauty AI legacy data migration skipped: ${error.message}`);
+  }
+};
+
+const seedTipsIfMissing = async () => {
+  if (dbUnavailable()) {
+    return;
+  }
+
+  const tipCount = await BeautyTip.countDocuments();
+  if (tipCount > 0) {
+    return;
+  }
+
+  await BeautyTip.insertMany(
+    DEFAULT_TIPS.map((tip) => ({
+      ...tip,
+      createdBy: 'system-seed',
+    }))
+  );
+};
+
+const getSubscriptionRules = async () => {
+  if (dbUnavailable()) {
+    return DEFAULT_SUBSCRIPTION_RULES;
+  }
+
+  let rulesDoc = await BeautySubscriptionRule.findOne({ key: 'default' }).lean();
+  if (!rulesDoc) {
+    rulesDoc = (
+      await BeautySubscriptionRule.create({
+        key: 'default',
+        ...DEFAULT_SUBSCRIPTION_RULES,
+        updatedBy: 'system-seed',
+      })
+    ).toObject();
+  }
+
+  return {
+    free: {
+      dailyAnalysisLimit: Number(rulesDoc.free?.dailyAnalysisLimit || 0),
+      weeklyPlanLengthDays: Number(rulesDoc.free?.weeklyPlanLengthDays || 0),
+      allowPremiumReport: Boolean(rulesDoc.free?.allowPremiumReport),
+      allowDermatologistReferral: Boolean(rulesDoc.free?.allowDermatologistReferral),
+    },
+    premium: {
+      dailyAnalysisLimit: Number(rulesDoc.premium?.dailyAnalysisLimit || 0),
+      weeklyPlanLengthDays: Number(rulesDoc.premium?.weeklyPlanLengthDays || 0),
+      allowPremiumReport: Boolean(rulesDoc.premium?.allowPremiumReport),
+      allowDermatologistReferral: Boolean(rulesDoc.premium?.allowDermatologistReferral),
+    },
+  };
+};
+
+const handleRouteError = (res, error, message, statusCode = 500) => {
+  logger.error(`Beauty AI route failed: ${message} :: ${error.message}`);
+  return res.status(statusCode).json({
+    success: false,
+    message,
+    requestId: res.locals?.requestId || '',
+  });
+};
+
+const ensureValidPlanId = (res, rawId = '') => {
+  if (!mongoose.Types.ObjectId.isValid(rawId)) {
+    res.status(400).json({
+      success: false,
+      message: 'Invalid plan id.',
+      requestId: res.locals?.requestId || '',
+    });
+    return false;
+  }
+  return true;
+};
+
+router.use((req, res, next) => {
+  const requestId = normalizeText(req.headers['x-request-id'], 100) || `beauty-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  res.locals.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+  next();
+});
+
 router.get('/tips/today', authenticate, async (req, res) => {
   try {
-    const language = normalizeLower(req.query.language || 'en');
-    const category = normalizeLower(req.query.category || '');
-    const data = await readData();
+    if (!ensureDbReady(res)) {
+      return;
+    }
 
-    const filtered = data.tips.filter((tip) => {
-      if (tip.status && tip.status !== 'published') return false;
-      if (category && normalizeLower(tip.category) !== category) return false;
-      return normalizeLower(tip.language || 'en') === language || normalizeLower(tip.language || 'en') === 'en';
-    });
+    await seedTipsIfMissing();
 
-    const source = filtered.length ? filtered : data.tips.filter((tip) => tip.status === 'published');
-    const todayTip = source[new Date().getDate() % Math.max(1, source.length)] || null;
+    const queryValidation = validate(JoiSchemas.tipQuery, req.query || {});
+    if (!queryValidation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: queryValidation.errors,
+      });
+    }
+
+    const language = queryValidation.value.language;
+    const category = queryValidation.value.category;
+
+    const filter = { status: 'published' };
+    if (category) {
+      filter.category = category;
+    }
+
+    const tips = await BeautyTip.find(filter).sort({ createdAt: -1 }).lean();
+
+    if (tips.length > 0) {
+      const preferred = tips.filter((tip) => normalizeLower(tip.language, 8) === language);
+      const fallbackEnglish = tips.filter((tip) => normalizeLower(tip.language, 8) === 'en');
+      const selected = preferred.length ? preferred : fallbackEnglish.length ? fallbackEnglish : tips;
+      const todayTip = selected[new Date().getDate() % Math.max(1, selected.length)] || null;
+
+      return res.json({
+        success: true,
+        language,
+        category: category || 'all',
+        todayTip,
+        tips: selected.slice(0, 20),
+      });
+    }
 
     return res.json({
       success: true,
       language,
       category: category || 'all',
-      todayTip,
-      tips: source.slice(0, 20),
+      todayTip: null,
+      tips: [],
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch beauty tips.',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Failed to fetch beauty tips.');
   }
 });
 
-router.post('/analyze-selfie', authenticate, async (req, res) => {
+router.post('/selfies/upload', authenticate, selfieUploadLimiter, async (req, res) => {
   try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    try {
+      await runSelfieUpload(req, res);
+    } catch (error) {
+      const isMulterError = error instanceof multer.MulterError;
+      const statusCode = isMulterError ? 400 : 415;
+      const message =
+        error.code === 'LIMIT_FILE_SIZE'
+          ? 'Selfie image must be under 8MB.'
+          : error.message || 'Invalid selfie upload payload.';
+
+      await recordOpsEvent({
+        userId,
+        requestId: res.locals?.requestId || '',
+        eventType: 'upload_failure',
+        severity: 'warning',
+        endpoint: req.originalUrl,
+        message,
+        metadata: { isMulterError: Boolean(isMulterError), code: error.code || '' },
+      });
+
+      return res.status(statusCode).json({
+        success: false,
+        message,
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selfie image file is required (form field name: selfie).',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const sanitizedImage = await sanitizeSelfieBuffer(req.file.buffer);
+    const storageKey = createStorageKey(userId, sanitizedImage.outputExtension);
+    const uploadResult = await s3Storage.uploadToS3(sanitizedImage.buffer, storageKey, {
+      contentType: sanitizedImage.outputMimeType,
+      metadata: {
+        module: 'beauty-ai',
+        kind: 'selfie',
+        userId,
+      },
+    });
+
+    const publicUrl = buildPublicUploadUrl(req, uploadResult);
+    if (!publicUrl) {
+      await recordOpsEvent({
+        userId,
+        requestId: res.locals?.requestId || '',
+        eventType: 'upload_failure',
+        severity: 'critical',
+        endpoint: req.originalUrl,
+        message: 'Upload succeeded but no public URL was generated.',
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: 'Selfie upload failed to produce a public URL.',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    await recordOpsEvent({
+      userId,
+      requestId: res.locals?.requestId || '',
+      eventType: 'upload_success',
+      severity: 'info',
+      endpoint: req.originalUrl,
+      message: 'Selfie uploaded successfully.',
+      metadata: {
+        mimeType: sanitizedImage.outputMimeType,
+        originalMimeType: normalizeLower(req.file.mimetype, 40),
+        originalSizeBytes: Number(req.file.size || 0),
+        storedSizeBytes: Number(sanitizedImage.buffer.length || 0),
+        originalWidth: sanitizedImage.originalWidth,
+        originalHeight: sanitizedImage.originalHeight,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        photoUrl: publicUrl,
+        photoStorageKey: normalizeStorageKey(uploadResult.s3Key || ''),
+        photoStorageProvider: normalizeText(uploadResult.storage || 's3', 32) || 's3',
+        contentType: sanitizedImage.outputMimeType,
+        sizeBytes: Number(sanitizedImage.buffer.length || 0),
+      },
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    await recordOpsEvent({
+      userId: resolveUserId(req),
+      requestId: res.locals?.requestId || '',
+      eventType: 'upload_failure',
+      severity: 'critical',
+      endpoint: req.originalUrl,
+      message: error.message || 'Selfie upload failed unexpectedly.',
+    });
+    return handleRouteError(res, error, 'Failed to upload selfie.');
+  }
+});
+
+router.post('/analyze-selfie', authenticate, analysisLimiter, async (req, res) => {
+  // Operational note: this endpoint currently performs signal-based guidance.
+  // If the client expects image-based analysis, extend this route to accept selfie upload.
+
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const validation = validate(JoiSchemas.analyzeSelfie, req.body || {});
+    if (!validation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: validation.errors,
+      });
+    }
+
     const {
       knownSkinType,
       concern,
       eventMode,
       ageRange,
       selfieConsent,
-      budget = 'medium',
-    } = req.body || {};
+      budget,
+    } = validation.value;
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
 
     if (!selfieConsent) {
+      await recordConsentAudit({
+        userId,
+        requestId: res.locals?.requestId || '',
+        action: 'selfie_analysis',
+        consentGiven: false,
+        endpoint: req.originalUrl,
+        reason: 'Consent checkbox is required before selfie analysis.',
+        req,
+      });
+      await recordOpsEvent({
+        userId,
+        requestId: res.locals?.requestId || '',
+        eventType: 'consent_rejected',
+        severity: 'warning',
+        endpoint: req.originalUrl,
+        message: 'Selfie analysis blocked due to missing consent.',
+      });
       return res.status(400).json({
         success: false,
         message: 'Consent is required before selfie analysis.',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    await recordConsentAudit({
+      userId,
+      requestId: res.locals?.requestId || '',
+      action: 'selfie_analysis',
+      consentGiven: true,
+      endpoint: req.originalUrl,
+      reason: 'Selfie analysis consent accepted.',
+      req,
+      metadata: {
+        concern: normalizeText(concern, 60),
+        eventMode: normalizeText(eventMode, 40),
+      },
+    });
+
+    const rules = await getSubscriptionRules();
+    const tier = resolveUserTier(req);
+    const quotaRule = resolveQuotaRuleByTier(rules, tier);
+    const quota = await enforceDailyQuota({
+      userId,
+      tier,
+      quotaField: 'analyzeSelfie',
+      limit: Number(quotaRule.dailyAnalysisLimit || 0),
+    });
+    if (!quota.allowed) {
+      logger.warn(
+        `Beauty AI quota blocked analyze-selfie user=${userId} tier=${tier} used=${quota.currentCount} limit=${quota.limit} requestId=${res.locals?.requestId || ''}`
+      );
+      await recordOpsEvent({
+        userId,
+        requestId: res.locals?.requestId || '',
+        eventType: 'quota_block',
+        severity: 'warning',
+        endpoint: req.originalUrl,
+        message: 'Selfie analysis quota limit reached.',
+        metadata: {
+          tier,
+          used: quota.currentCount,
+          limit: quota.limit,
+          dateKey: quota.dateKey,
+        },
+      });
+      return res.status(429).json({
+        success: false,
+        message: 'Daily analysis limit reached for your plan. Please try again tomorrow or upgrade.',
+        quota: {
+          tier,
+          used: quota.currentCount,
+          limit: quota.limit,
+          remaining: quota.remaining,
+          dateKey: quota.dateKey,
+        },
+        requestId: res.locals?.requestId || '',
       });
     }
 
@@ -378,7 +1298,7 @@ router.post('/analyze-selfie', authenticate, async (req, res) => {
     const skinScore = Math.max(45, baseScore - concernPenalty - agePenalty);
 
     const severeConcern = detectedConcerns.some((item) =>
-      ['infection', 'burns', 'allergy'].includes(normalizeLower(item))
+      ['infection', 'burns', 'allergy'].includes(normalizeLower(item, 30))
     );
 
     return res.json({
@@ -397,64 +1317,132 @@ router.post('/analyze-selfie', authenticate, async (req, res) => {
           note: 'Selfie image is processed for guidance and not stored by this endpoint.',
         },
       },
+      quota: {
+        tier,
+        used: quota.currentCount,
+        limit: quota.limit,
+        remaining: quota.remaining,
+        dateKey: quota.dateKey,
+      },
+      requestId: res.locals?.requestId || '',
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to analyze selfie.',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Failed to analyze selfie.');
   }
 });
 
-router.post('/generate-plan', authenticate, async (req, res) => {
-  try {
-    const input = req.body || {};
-    const routines = buildRoutines(input);
-    const products = pickProducts(input.budget);
-    const concernDetected = concernList(input.concern, input.eventMode);
+// Legacy preview route removed. Use POST /plan for authenticated beauty plan creation with consent, validation, and quota enforcement.
 
-    return res.json({
-      success: true,
-      plan: {
-        skinType: detectSkinType(input.knownSkinType, input.concern),
-        skinScore: Number(input.skinScore || 74),
-        concernsDetected: concernDetected,
-        ...routines,
-        dos: [
-          'Patch-test all new products.',
-          'Use sunscreen daily, even on cloudy days.',
-          'Keep pillow covers and makeup tools clean.',
-        ],
-        donts: [
-          'Avoid steroid creams without doctor advice.',
-          'Avoid over-layering active ingredients in one routine.',
-          'Avoid unsafe bleaching routines.',
-        ],
-        products,
-      },
-      safety: {
-        medicalDisclaimer:
-          'This module does not provide medical diagnosis. Consult a dermatologist for severe or persistent issues.',
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to generate beauty plan.',
-      error: error.message,
-    });
-  }
-});
-
-router.post('/plan', authenticate, async (req, res) => {
+router.post('/plan', authenticate, planGenerationLimiter, async (req, res) => {
   try {
-    const payload = req.body || {};
-    const validation = validateBeautyPayload(payload);
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const validation = validate(JoiSchemas.plan, req.body || {});
     if (!validation.ok) {
       return res.status(400).json({
         success: false,
         errors: validation.errors,
+      });
+    }
+
+    const payload = validation.value;
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    if (!payload.consent) {
+      await recordConsentAudit({
+        userId,
+        requestId: res.locals?.requestId || '',
+        action: 'plan_generation',
+        consentGiven: false,
+        endpoint: req.originalUrl,
+        reason: 'Plan generation consent was not provided.',
+        req,
+      });
+      await recordOpsEvent({
+        userId,
+        requestId: res.locals?.requestId || '',
+        eventType: 'consent_rejected',
+        severity: 'warning',
+        endpoint: req.originalUrl,
+        message: 'Beauty plan generation blocked due to missing consent.',
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Consent is required before plan generation.',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const helperValidation = validateBeautyPayload(payload);
+    if (!helperValidation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: helperValidation.errors,
+      });
+    }
+
+    await recordConsentAudit({
+      userId,
+      requestId: res.locals?.requestId || '',
+      action: 'plan_generation',
+      consentGiven: true,
+      endpoint: req.originalUrl,
+      reason: 'Plan generation consent accepted.',
+      req,
+      metadata: {
+        concern: normalizeText(payload.concern, 60),
+        eventType: normalizeText(payload.eventType, 40),
+        language: normalizeText(payload.language, 8),
+      },
+    });
+
+    const rules = await getSubscriptionRules();
+    const tier = resolveUserTier(req);
+    const quotaRule = resolveQuotaRuleByTier(rules, tier);
+    const quota = await enforceDailyQuota({
+      userId,
+      tier,
+      quotaField: 'plan',
+      limit: Number(quotaRule.dailyAnalysisLimit || 0),
+    });
+    if (!quota.allowed) {
+      logger.warn(
+        `Beauty AI quota blocked plan user=${userId} tier=${tier} used=${quota.currentCount} limit=${quota.limit} requestId=${res.locals?.requestId || ''}`
+      );
+      await recordOpsEvent({
+        userId,
+        requestId: res.locals?.requestId || '',
+        eventType: 'quota_block',
+        severity: 'warning',
+        endpoint: req.originalUrl,
+        message: 'Beauty plan quota limit reached.',
+        metadata: {
+          tier,
+          used: quota.currentCount,
+          limit: quota.limit,
+          dateKey: quota.dateKey,
+        },
+      });
+      return res.status(429).json({
+        success: false,
+        message: 'Daily plan generation limit reached for your plan. Please try again tomorrow or upgrade.',
+        quota: {
+          tier,
+          used: quota.currentCount,
+          limit: quota.limit,
+          remaining: quota.remaining,
+          dateKey: quota.dateKey,
+        },
+        requestId: res.locals?.requestId || '',
       });
     }
 
@@ -463,16 +1451,16 @@ router.post('/plan', authenticate, async (req, res) => {
     const signals = normalizeSelfieSignals(payload.selfieSignals || {});
     const score = scoreFromSignals(signals);
 
-    const selectedConcerns = normalizeArray(payload.selectedConcerns || []);
-    const concern = normalizeText(payload.concern || selectedConcerns[0] || 'General care');
-    const eventType = normalizeText(payload.eventType || 'daily-glow');
+    const selectedConcerns = normalizeArray(payload.selectedConcerns || [], 80, 20);
+    const concern = normalizeText(payload.concern || selectedConcerns[0] || 'General care', 120);
+    const eventType = normalizeText(payload.eventType || 'daily-glow', 40);
     const skinType = detectSkinType(payload.skinType, concern);
-    const hairType = normalizeText(payload.hairType || 'normal');
+    const hairType = normalizeText(payload.hairType || 'normal', 40);
     const routines = buildRoutines({
       concern,
       preference: payload.preference || 'balanced',
     });
-    const products = pickProducts(normalizeLower(payload.budget || 'medium'));
+    const products = pickProducts(normalizeLower(payload.budget || 'medium', 20));
     const structuredPlan = generateStructuredBeautyPlan({
       skinType,
       hairType,
@@ -520,19 +1508,23 @@ router.post('/plan', authenticate, async (req, res) => {
         salonModule: 'localservices',
         productModule: 'localmarket',
       },
+      quota: {
+        tier,
+        used: quota.currentCount,
+        limit: quota.limit,
+        remaining: quota.remaining,
+        dateKey: quota.dateKey,
+      },
+      requestId: res.locals?.requestId || '',
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to generate safety-first beauty plan.',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Failed to generate safety-first beauty plan.');
   }
 });
 
 router.get('/products/recommendations', authenticate, async (req, res) => {
-  const budget = normalizeLower(req.query.budget || 'medium');
-  const concern = normalizeText(req.query.concern || 'General care');
+  const budget = normalizeLower(req.query.budget || 'medium', 20);
+  const concern = normalizeText(req.query.concern || 'General care', 120);
   const tier = budget === 'low' || budget === 'high' ? budget : 'medium';
 
   return res.json({
@@ -543,86 +1535,129 @@ router.get('/products/recommendations', authenticate, async (req, res) => {
   });
 });
 
-router.post('/plans', authenticate, async (req, res) => {
+router.post('/plans', authenticate, planStorageLimiter, async (req, res) => {
   try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
     const userId = resolveUserId(req);
     if (!userId) {
       return res.status(401).json({
         success: false,
         message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
       });
     }
 
-    const {
-      gender = '',
-      age = null,
-      skinType = '',
-      hairType = '',
-      budget = 'medium',
-      language = 'en',
-      selectedConcerns = [],
-      photoUrl = '',
-      photoName = '',
-      plan = null,
-      eventType = 'daily-glow',
-      safety = {},
-      selfieSignals = {},
-    } = req.body || {};
+    const validation = validate(JoiSchemas.createPlan, req.body || {});
+    if (!validation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: validation.errors,
+      });
+    }
+
+    const payload = validation.value;
+
+    let photoUrl = '';
+    let photoStorageKey = '';
+    let photoStorageProvider = '';
+    if (payload.photoUrl) {
+      try {
+        photoUrl = normalizeSafePhotoUrl(req, payload.photoUrl, { isProduction });
+        photoStorageKey = normalizeStorageKey(payload.photoStorageKey) || extractStorageKeyFromPhotoUrl(photoUrl);
+        photoStorageProvider = normalizeText(payload.photoStorageProvider || (photoStorageKey ? 's3' : ''), 32);
+      } catch (error) {
+        await recordOpsEvent({
+          userId,
+          requestId: res.locals?.requestId || '',
+          eventType: 'validation_error',
+          severity: 'warning',
+          endpoint: req.originalUrl,
+          message: error.message,
+          metadata: { field: 'photoUrl' },
+        });
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+          requestId: res.locals?.requestId || '',
+        });
+      }
+    }
 
     const generatedPlan =
-      plan && typeof plan === 'object'
+      payload.plan && typeof payload.plan === 'object'
         ? {
-            title: normalizeText(plan.title || ''),
-            score: Number(plan.score || 0),
-            morning: normalizeArray(plan.morning || []),
-            night: normalizeArray(plan.night || []),
-            hair: normalizeArray(plan.hair || []),
-            products: normalizeArray(plan.products || []),
-            avoid: normalizeArray(plan.avoid || []),
-            eventPlan: normalizeArray(plan.eventPlan || []),
+            title: normalizeText(payload.plan.title, 120),
+            score: toNumber(payload.plan.score, 0, 0, 100),
+            morning: normalizeArray(payload.plan.morning || [], 180, 30),
+            night: normalizeArray(payload.plan.night || [], 180, 30),
+            hair: normalizeArray(payload.plan.hair || [], 180, 30),
+            products: normalizeArray(payload.plan.products || [], 180, 40),
+            avoid: normalizeArray(payload.plan.avoid || [], 180, 40),
+            eventPlan: normalizeArray(payload.plan.eventPlan || [], 180, 40),
           }
         : generateStructuredBeautyPlan({
-            skinType,
-            hairType,
-            selectedConcerns,
-            budget,
-            language,
-            eventType,
-            safety,
-            signals: selfieSignals,
+            skinType: payload.skinType,
+            hairType: payload.hairType,
+            selectedConcerns: payload.selectedConcerns,
+            budget: payload.budget,
+            language: payload.language,
+            eventType: payload.eventType,
+            safety: payload.safety,
+            signals: payload.selfieSignals,
           });
 
     const savedPlan = await BeautyPlan.create({
       userId,
-      gender: normalizeText(gender),
-      age: Number.isFinite(Number(age)) ? Number(age) : undefined,
-      skinType: normalizeText(skinType),
-      hairType: normalizeText(hairType),
-      budget: normalizeText(budget),
-      language: normalizeLower(language || 'en'),
-      selectedConcerns: normalizeArray(selectedConcerns),
-      photoUrl: normalizeText(photoUrl),
-      photoName: normalizeText(photoName),
+      gender: normalizeText(payload.gender, 24),
+      age: Number.isFinite(Number(payload.age)) ? Number(payload.age) : undefined,
+      skinType: normalizeText(payload.skinType, 40),
+      hairType: normalizeText(payload.hairType, 40),
+      budget: normalizeText(payload.budget, 20),
+      language: normalizeLower(payload.language || 'en', 8),
+      selectedConcerns: normalizeArray(payload.selectedConcerns, 80, 20),
+      photoUrl,
+      photoStorageKey,
+      photoStorageProvider,
+      photoName: normalizeText(payload.photoName, 180),
       plan: generatedPlan,
       status: 'Active',
+    });
+
+    await recordOpsEvent({
+      userId,
+      requestId: res.locals?.requestId || '',
+      eventType: 'plan_saved',
+      severity: 'info',
+      endpoint: req.originalUrl,
+      message: 'Beauty plan saved successfully.',
+      metadata: {
+        planId: String(savedPlan._id || ''),
+        hasPhotoUrl: Boolean(photoUrl),
+        hasPhotoStorageKey: Boolean(photoStorageKey),
+        selectedConcernCount: Array.isArray(savedPlan.selectedConcerns) ? savedPlan.selectedConcerns.length : 0,
+      },
     });
 
     return res.status(201).json({
       success: true,
       data: savedPlan,
       message: 'Beauty plan created',
+      requestId: res.locals?.requestId || '',
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Unable to create beauty plan',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Unable to create beauty plan');
   }
 });
 
 router.get('/plans/my', authenticate, async (req, res) => {
   try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
     const userId = resolveUserId(req);
     if (!userId) {
       return res.status(401).json({
@@ -637,16 +1672,19 @@ router.get('/plans/my', authenticate, async (req, res) => {
       data: plans,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Unable to load beauty plans',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Unable to load beauty plans');
   }
 });
 
-router.put('/plans/:id/archive', authenticate, async (req, res) => {
+router.put('/plans/:id/archive', authenticate, planStorageLimiter, async (req, res) => {
   try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+    if (!ensureValidPlanId(res, req.params.id)) {
+      return;
+    }
+
     const userId = resolveUserId(req);
     if (!userId) {
       return res.status(401).json({
@@ -674,74 +1712,149 @@ router.put('/plans/:id/archive', authenticate, async (req, res) => {
       message: 'Beauty plan archived',
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Unable to archive beauty plan',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Unable to archive beauty plan');
   }
 });
 
-router.post('/progress-log', authenticate, async (req, res) => {
+router.delete('/plans/:id/photo', authenticate, planStorageLimiter, async (req, res) => {
   try {
-    const userKey = getUserKey(req);
-    const day = Number(req.body.day || 0);
-    const done = Boolean(req.body.done);
-    const note = normalizeText(req.body.note || '');
-    const skinScore = Number(req.body.skinScore || 0);
-    const selfieSnapshotLabel = normalizeText(req.body.selfieSnapshotLabel || '');
+    if (!ensureDbReady(res)) {
+      return;
+    }
+    if (!ensureValidPlanId(res, req.params.id)) {
+      return;
+    }
 
-    if (!day || day < 1 || day > 30) {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const existing = await BeautyPlan.findOne({ _id: req.params.id, userId }).lean();
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Plan not found' });
+    }
+
+    await deleteStoredSelfie({
+      storageKey: existing.photoStorageKey,
+      photoUrl: existing.photoUrl,
+      userId,
+      requestId: res.locals?.requestId || '',
+      endpoint: req.originalUrl,
+    });
+
+    const updated = await BeautyPlan.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      { photoUrl: '', photoName: '', photoStorageKey: '', photoStorageProvider: '' },
+      { new: true }
+    ).lean();
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Plan not found' });
+    }
+
+    return res.json({
+      success: true,
+      data: updated,
+      message: 'Saved selfie was removed from this plan.',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Unable to remove plan selfie');
+  }
+});
+
+router.delete('/plans/:id', authenticate, planStorageLimiter, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+    if (!ensureValidPlanId(res, req.params.id)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const deleted = await BeautyPlan.findOneAndDelete({ _id: req.params.id, userId }).lean();
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'Plan not found' });
+    }
+
+    await deleteStoredSelfie({
+      storageKey: deleted.photoStorageKey,
+      photoUrl: deleted.photoUrl,
+      userId,
+      requestId: res.locals?.requestId || '',
+      endpoint: req.originalUrl,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Beauty plan deleted permanently.',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Unable to delete beauty plan');
+  }
+});
+
+router.post('/progress-log', authenticate, progressLimiter, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const validation = validate(JoiSchemas.progress, req.body || {});
+    if (!validation.ok) {
       return res.status(400).json({
         success: false,
-        message: 'day must be between 1 and 30.',
+        errors: validation.errors,
       });
     }
 
-    const data = await readData();
-    const existingIndex = data.progressLogs.findIndex(
-      (item) => item.userKey === userKey && Number(item.day) === day
-    );
-
-    const entry = {
-      userKey,
-      day,
-      done,
-      note,
-      skinScore: Number.isFinite(skinScore) ? skinScore : 0,
-      selfieSnapshotLabel,
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (existingIndex >= 0) {
-      data.progressLogs[existingIndex] = entry;
-    } else {
-      data.progressLogs.push(entry);
-    }
-
-    await writeData(data);
+    const payload = validation.value;
+    const entry = await BeautyProgressLog.findOneAndUpdate(
+      { userId, day: payload.day },
+      {
+        done: parseBoolean(payload.done, false),
+        note: normalizeText(payload.note, 600),
+        skinScore: toNumber(payload.skinScore, 0, 0, 100),
+        selfieSnapshotLabel: normalizeText(payload.selfieSnapshotLabel, 120),
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    ).lean();
 
     return res.status(201).json({
       success: true,
       entry,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to save progress log.',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Failed to save progress log.');
   }
 });
 
 router.get('/progress-log/mine', authenticate, async (req, res) => {
   try {
-    const userKey = getUserKey(req);
-    const data = await readData();
-    const logs = data.progressLogs
-      .filter((item) => item.userKey === userKey)
-      .sort((a, b) => Number(a.day) - Number(b.day));
+    if (!ensureDbReady(res)) {
+      return;
+    }
 
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const logs = await BeautyProgressLog.find({ userId }).sort({ day: 1 }).lean();
     const completedCount = logs.filter((item) => item.done).length;
 
     return res.json({
@@ -753,121 +1866,240 @@ router.get('/progress-log/mine', authenticate, async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch progress logs.',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Failed to fetch progress logs.');
   }
 });
 
-router.post('/admin/tip-library', authenticate, verifyAdmin, async (req, res) => {
+router.delete('/progress-log/mine', authenticate, progressLimiter, async (req, res) => {
   try {
-    const title = normalizeText(req.body.title);
-    const text = normalizeText(req.body.text);
-    const category = normalizeText(req.body.category || 'general');
-    const language = normalizeLower(req.body.language || 'en');
+    if (!ensureDbReady(res)) {
+      return;
+    }
 
-    if (!title || !text) {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    await BeautyProgressLog.deleteMany({ userId });
+    return res.json({
+      success: true,
+      message: 'Progress history removed successfully.',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Failed to clear progress logs.');
+  }
+});
+
+router.post('/admin/tip-library', authenticate, verifyAdmin, adminLimiter, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const validation = validate(JoiSchemas.addTip, req.body || {});
+    if (!validation.ok) {
       return res.status(400).json({
         success: false,
-        message: 'title and text are required.',
+        errors: validation.errors,
       });
     }
 
-    const data = await readData();
-    const tip = {
-      id: `tip-${Date.now()}`,
-      title,
-      text,
-      category,
-      language,
-      status: 'published',
-      createdAt: new Date().toISOString(),
-      createdBy: normalizeLower(req.user?.email || req.user?.id || 'admin'),
-    };
+    const payload = validation.value;
 
-    data.tips.unshift(tip);
-    await writeData(data);
+    const tip = await BeautyTip.create({
+      title: normalizeText(payload.title, 140),
+      text: normalizeText(payload.text, 1000),
+      category: normalizeLower(payload.category || 'general', 64),
+      language: normalizeLower(payload.language || 'en', 8),
+      status: 'published',
+      createdBy: normalizeLower(req.user?.email || req.user?.id || 'admin', 120),
+    });
 
     return res.status(201).json({
       success: true,
       tip,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to add tip.',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Failed to add tip.');
   }
 });
 
-router.put('/admin/subscription-rules', authenticate, verifyAdmin, async (req, res) => {
+router.get('/admin/alerts', authenticate, verifyAdmin, adminLimiter, async (_req, res) => {
   try {
-    const free = req.body?.free || {};
-    const premium = req.body?.premium || {};
+    if (!ensureDbReady(res)) {
+      return;
+    }
 
-    const nextRules = {
-      free: {
-        dailyAnalysisLimit: Number(free.dailyAnalysisLimit || DEFAULT_SUBSCRIPTION_RULES.free.dailyAnalysisLimit),
-        weeklyPlanLengthDays: Number(
-          free.weeklyPlanLengthDays || DEFAULT_SUBSCRIPTION_RULES.free.weeklyPlanLengthDays
-        ),
-        allowPremiumReport: Boolean(free.allowPremiumReport),
-        allowDermatologistReferral: Boolean(free.allowDermatologistReferral),
-      },
-      premium: {
-        dailyAnalysisLimit: Number(
-          premium.dailyAnalysisLimit || DEFAULT_SUBSCRIPTION_RULES.premium.dailyAnalysisLimit
-        ),
-        weeklyPlanLengthDays: Number(
-          premium.weeklyPlanLengthDays || DEFAULT_SUBSCRIPTION_RULES.premium.weeklyPlanLengthDays
-        ),
-        allowPremiumReport: Boolean(
-          premium.allowPremiumReport !== undefined
-            ? premium.allowPremiumReport
-            : DEFAULT_SUBSCRIPTION_RULES.premium.allowPremiumReport
-        ),
-        allowDermatologistReferral: Boolean(
-          premium.allowDermatologistReferral !== undefined
-            ? premium.allowDermatologistReferral
-            : DEFAULT_SUBSCRIPTION_RULES.premium.allowDermatologistReferral
-        ),
-      },
-    };
+    const now = new Date();
+    const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const data = await readData();
-    data.subscriptionRules = nextRules;
-    await writeData(data);
+    const [ops24hRows, ops7dRows, consent24h, consent7d] = await Promise.all([
+      BeautyOpsEvent.aggregate([
+        { $match: { createdAt: { $gte: since24h } } },
+        { $group: { _id: { eventType: '$eventType', severity: '$severity' }, count: { $sum: 1 } } },
+      ]),
+      BeautyOpsEvent.aggregate([
+        { $match: { createdAt: { $gte: since7d } } },
+        { $group: { _id: { eventType: '$eventType', severity: '$severity' }, count: { $sum: 1 } } },
+      ]),
+      BeautyConsentAudit.aggregate([
+        { $match: { createdAt: { $gte: since24h } } },
+        { $group: { _id: '$consentGiven', count: { $sum: 1 } } },
+      ]),
+      BeautyConsentAudit.aggregate([
+        { $match: { createdAt: { $gte: since7d } } },
+        { $group: { _id: '$consentGiven', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const ops24h = toOpsCounterMap(ops24hRows);
+    const ops7d = toOpsCounterMap(ops7dRows);
+    const consent24hMap = new Map(consent24h.map((row) => [String(Boolean(row._id)), Number(row.count || 0)]));
+    const consent7dMap = new Map(consent7d.map((row) => [String(Boolean(row._id)), Number(row.count || 0)]));
+
+    const uploadFailures24h =
+      getOpsCount(ops24h, 'upload_failure', 'warning') +
+      getOpsCount(ops24h, 'upload_failure', 'critical');
+    const quotaBlocks24h = getOpsCount(ops24h, 'quota_block', 'warning');
+    const consentRejected24h = Number(consent24hMap.get('false') || 0);
+    const consentAccepted24h = Number(consent24hMap.get('true') || 0);
+
+    const uploadFailures7d =
+      getOpsCount(ops7d, 'upload_failure', 'warning') +
+      getOpsCount(ops7d, 'upload_failure', 'critical');
+    const quotaBlocks7d = getOpsCount(ops7d, 'quota_block', 'warning');
+    const consentRejected7d = Number(consent7dMap.get('false') || 0);
+    const consentAccepted7d = Number(consent7dMap.get('true') || 0);
 
     return res.json({
       success: true,
-      subscriptionRules: nextRules,
+      generatedAt: now.toISOString(),
+      range: {
+        last24Hours: since24h.toISOString(),
+        last7Days: since7d.toISOString(),
+      },
+      alerts: [
+        {
+          key: 'upload_failures',
+          label: 'Selfie upload failures',
+          count24h: uploadFailures24h,
+          count7d: uploadFailures7d,
+          severity24h: severityFromCount(uploadFailures24h, 2, 6),
+        },
+        {
+          key: 'quota_blocks',
+          label: 'Quota block spikes',
+          count24h: quotaBlocks24h,
+          count7d: quotaBlocks7d,
+          severity24h: severityFromCount(quotaBlocks24h, 4, 12),
+        },
+        {
+          key: 'consent_rejections',
+          label: 'Consent rejections',
+          count24h: consentRejected24h,
+          count7d: consentRejected7d,
+          severity24h: severityFromCount(consentRejected24h, 5, 20),
+        },
+      ],
+      consent: {
+        accepted24h: consentAccepted24h,
+        rejected24h: consentRejected24h,
+        accepted7d: consentAccepted7d,
+        rejected7d: consentRejected7d,
+      },
+      requestId: res.locals?.requestId || '',
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to update subscription rules.',
-      error: error.message,
+    return handleRouteError(res, error, 'Failed to load Beauty AI alerts.');
+  }
+});
+
+router.put('/admin/subscription-rules', authenticate, verifyAdmin, adminLimiter, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const validation = validate(JoiSchemas.subscriptionRules, req.body || {});
+    if (!validation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: validation.errors,
+      });
+    }
+
+    const payload = validation.value;
+    const updated = await BeautySubscriptionRule.findOneAndUpdate(
+      { key: 'default' },
+      {
+        free: payload.free,
+        premium: payload.premium,
+        updatedBy: normalizeLower(req.user?.email || req.user?.id || 'admin', 120),
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    ).lean();
+
+    return res.json({
+      success: true,
+      subscriptionRules: {
+        free: updated.free,
+        premium: updated.premium,
+      },
     });
+  } catch (error) {
+    return handleRouteError(res, error, 'Failed to update subscription rules.');
   }
 });
 
 router.get('/admin/subscription-rules', authenticate, verifyAdmin, async (_req, res) => {
   try {
-    const data = await readData();
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const rules = await getSubscriptionRules();
+
     return res.json({
       success: true,
-      subscriptionRules: data.subscriptionRules || DEFAULT_SUBSCRIPTION_RULES,
+      subscriptionRules: rules,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to load subscription rules.',
-      error: error.message,
-    });
+    return handleRouteError(res, error, 'Failed to load subscription rules.');
   }
 });
+
+// Best-effort, idempotent persistence initializer.
+// Uses MongoDB upserts inside migrate/seed functions, so it can safely run on multiple instances.
+// This module-level guard only prevents duplicate work within the same process.
+let initializerAttached = false;
+const initializeBeautyAiPersistence = async () => {
+  if (dbUnavailable()) {
+    return;
+  }
+  try {
+    await migrateLegacyJsonIfNeeded();
+    await seedTipsIfMissing();
+    await getSubscriptionRules();
+  } catch (error) {
+    logger.warn(`Beauty AI persistence initializer failed: ${error.message}`);
+  }
+};
+
+if (!initializerAttached) {
+  initializerAttached = true;
+  if (!dbUnavailable()) {
+    void initializeBeautyAiPersistence();
+  } else {
+    mongoose.connection.once('connected', () => {
+      void initializeBeautyAiPersistence();
+    });
+  }
+}
 
 module.exports = router;

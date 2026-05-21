@@ -57,8 +57,12 @@ const BeautyAIQuickStart = ({
 }) => {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [loading, setLoading] = useState(false);
+  const [uploadingSelfie, setUploadingSelfie] = useState(false);
   const [selfieFile, setSelfieFile] = useState(null);
   const [selfiePreview, setSelfiePreview] = useState("");
+  const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState("");
+  const [uploadedPhotoStorageKey, setUploadedPhotoStorageKey] = useState("");
+  const [uploadedPhotoStorageProvider, setUploadedPhotoStorageProvider] = useState("");
   const [plan, setPlan] = useState(DEFAULT_PLAN);
   const [routineChecks, setRoutineChecks] = useState({});
 
@@ -74,6 +78,17 @@ const BeautyAIQuickStart = ({
         : [...prev.selectedConcerns, concern],
     }));
 
+  const uploadSelfieToBackend = async (file) => {
+    const formData = new FormData();
+    formData.append("selfie", file);
+    const response = await request.post(buildApiUrl("/beauty-ai/selfies/upload"), formData);
+    return {
+      photoUrl: String(response?.data?.data?.photoUrl || "").trim(),
+      photoStorageKey: String(response?.data?.data?.photoStorageKey || "").trim(),
+      photoStorageProvider: String(response?.data?.data?.photoStorageProvider || "").trim(),
+    };
+  };
+
   const handleSelfie = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -87,10 +102,35 @@ const BeautyAIQuickStart = ({
     }
 
     setSelfieFile(file);
+    setUploadedPhotoUrl("");
+    setUploadedPhotoStorageKey("");
+    setUploadedPhotoStorageProvider("");
     const reader = new FileReader();
     reader.onload = () => setSelfiePreview(String(reader.result || ""));
     reader.readAsDataURL(file);
-    pushStatus?.("success", "Photo uploaded. Continue to generate your plan.");
+
+    setUploadingSelfie(true);
+    uploadSelfieToBackend(file)
+      .then((uploadInfo) => {
+        if (uploadInfo?.photoUrl) {
+          setUploadedPhotoUrl(uploadInfo.photoUrl);
+          setUploadedPhotoStorageKey(uploadInfo.photoStorageKey || "");
+          setUploadedPhotoStorageProvider(uploadInfo.photoStorageProvider || "");
+          pushStatus?.("success", "Photo uploaded securely. Continue to generate your plan.");
+          return;
+        }
+        pushStatus?.("error", "Photo preview is ready, but secure upload URL was not returned.");
+      })
+      .catch((error) => {
+        pushStatus?.(
+          "error",
+          error?.response?.data?.message ||
+            "Secure selfie upload failed. You can still generate a plan, but photo will not be saved."
+        );
+      })
+      .finally(() => {
+        setUploadingSelfie(false);
+      });
   };
 
   const generatePlan = async () => {
@@ -148,6 +188,9 @@ const BeautyAIQuickStart = ({
         selfiePreview,
         selfieMeta: buildSelfieMeta(selfieFile),
         selfieSignals,
+        uploadedPhotoUrl,
+        uploadedPhotoStorageKey,
+        uploadedPhotoStorageProvider,
         profile: {
           gender: form.gender,
           age: form.age,
@@ -157,6 +200,11 @@ const BeautyAIQuickStart = ({
           language: form.language,
           eventType: form.eventType,
           selectedConcerns: form.selectedConcerns,
+          sensitiveSkin: form.sensitiveSkin,
+          knownAllergy: form.knownAllergy,
+          pregnantOrBreastfeeding: form.pregnantOrBreastfeeding,
+          usingSkinMedicine: form.usingSkinMedicine,
+          consent: form.consent,
         },
       });
       pushStatus?.("success", "Beauty plan generated. Review routine, avoid list, and event plan.");
@@ -354,9 +402,15 @@ const BeautyAIQuickStart = ({
         </div>
       ) : null}
 
-      <button type="button" className="beauty-ai-primary-btn" onClick={generatePlan} disabled={loading}>
-        {loading ? "Preparing plan..." : "Get My Beauty Plan"}
+      <button
+        type="button"
+        className="beauty-ai-primary-btn"
+        onClick={generatePlan}
+        disabled={loading || uploadingSelfie}
+      >
+        {loading ? "Preparing plan..." : uploadingSelfie ? "Uploading selfie..." : "Get My Beauty Plan"}
       </button>
+      {uploadingSelfie ? <p className="beauty-ai-disclaimer">Uploading selfie securely...</p> : null}
 
       {selfiePreview ? (
         <div className="beauty-ai-selfie-preview">

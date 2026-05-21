@@ -7,9 +7,26 @@ import BeautyAIQuickStart from "./BeautyAIQuickStart";
 import BeautyProgressTracker from "./BeautyProgressTracker";
 import "./NilaBeautyAI.css";
 
+const decodeJwtSubject = (rawToken = "") => {
+  const token = String(rawToken || "").trim();
+  if (!token || !token.includes(".")) {
+    return "";
+  }
+  try {
+    const encodedPayload = token.split(".")[1] || "";
+    const padded = encodedPayload.padEnd(Math.ceil(encodedPayload.length / 4) * 4, "=");
+    const normalized = padded.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(window.atob(normalized));
+    return String(payload.sub || payload.userId || payload.id || payload._id || "").trim();
+  } catch (_error) {
+    return "";
+  }
+};
+
 const NilaBeautyAI = () => {
   const token = getStoredAuthToken();
   const navigate = useNavigate();
+  const snapshotScopeKey = useMemo(() => decodeJwtSubject(token) || "anonymous", [token]);
 
   const [status, setStatus] = useState({ type: "", text: "" });
   const [tips, setTips] = useState([]);
@@ -19,6 +36,7 @@ const NilaBeautyAI = () => {
   const [savedPlans, setSavedPlans] = useState([]);
   const [isAdminControlsVisible, setIsAdminControlsVisible] = useState(false);
   const [subscriptionRules, setSubscriptionRules] = useState(null);
+  const [adminAlerts, setAdminAlerts] = useState([]);
   const [adminTipForm, setAdminTipForm] = useState({
     title: "",
     text: "",
@@ -89,11 +107,16 @@ const NilaBeautyAI = () => {
   const loadAdminSettings = useCallback(async () => {
     await withBusy("admin-settings", async () => {
       try {
-        const response = await request.get(buildApiUrl("/beauty-ai/admin/subscription-rules"));
-        setSubscriptionRules(response.data?.subscriptionRules || null);
+        const [rulesResponse, alertsResponse] = await Promise.all([
+          request.get(buildApiUrl("/beauty-ai/admin/subscription-rules")),
+          request.get(buildApiUrl("/beauty-ai/admin/alerts")),
+        ]);
+        setSubscriptionRules(rulesResponse.data?.subscriptionRules || null);
+        setAdminAlerts(Array.isArray(alertsResponse.data?.alerts) ? alertsResponse.data.alerts : []);
         setIsAdminControlsVisible(true);
       } catch (_error) {
         setIsAdminControlsVisible(false);
+        setAdminAlerts([]);
       }
     });
   }, [request, withBusy]);
@@ -131,7 +154,10 @@ const NilaBeautyAI = () => {
             budget: profile.budget || "",
             language: profile.language || "en",
             selectedConcerns: profile.selectedConcerns || [],
-            photoUrl: source.selfiePreview || "",
+            // Store only secure uploaded URLs; avoid persisting inline base64 data.
+            photoUrl: source.uploadedPhotoUrl || "",
+            photoStorageKey: source.uploadedPhotoStorageKey || "",
+            photoStorageProvider: source.uploadedPhotoStorageProvider || "",
             photoName: source.selfieMeta?.fileName || source.selfieFile?.name || "",
             plan: source.plan,
             eventType: profile.eventType || "daily-glow",
@@ -244,6 +270,7 @@ const NilaBeautyAI = () => {
         logs={progressLogs}
         latestScore={Number(planBundle?.plan?.score || 0)}
         selfiePreview={planBundle?.selfiePreview || ""}
+        snapshotScopeKey={snapshotScopeKey}
         pushStatus={pushStatus}
         onEntriesUpdate={() => {}}
       />
@@ -313,6 +340,36 @@ const NilaBeautyAI = () => {
         <h2>Admin Controls</h2>
         {isAdminControlsVisible ? (
           <div className="beauty-grid two">
+            <div className="beauty-admin-panel">
+              <h3>Operational alerts</h3>
+              {!adminAlerts.length ? <p>No alert signals detected in the current window.</p> : null}
+              {adminAlerts.map((alert) => (
+                <article key={alert.key} className="beauty-tip">
+                  <p>
+                    <strong>{alert.label}</strong>
+                  </p>
+                  <p>
+                    Last 24h: {Number(alert.count24h || 0)} | Last 7d: {Number(alert.count7d || 0)}
+                  </p>
+                  <p>
+                    Severity:{" "}
+                    <strong
+                      style={{
+                        color:
+                          alert.severity24h === "red"
+                            ? "#b42318"
+                            : alert.severity24h === "amber"
+                              ? "#b54708"
+                              : "#027a48",
+                      }}
+                    >
+                      {String(alert.severity24h || "green").toUpperCase()}
+                    </strong>
+                  </p>
+                </article>
+              ))}
+            </div>
+
             <div className="beauty-admin-panel">
               <h3>Add tip to library</h3>
               <label>

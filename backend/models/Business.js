@@ -107,9 +107,15 @@ const BusinessSchema = new mongoose.Schema(
       revenueModel: String,
       costEstimation: String,
       profitProjection: String,
-      swot: String,
-      roadmap90: String,
-      roadmap180: String,
+      swot: {
+        strengths: { type: [String], default: [] },
+        weaknesses: { type: [String], default: [] },
+        opportunities: { type: [String], default: [] },
+        threats: { type: [String], default: [] },
+      },
+      roadmap30: { type: [String], default: [] },
+      roadmap90: { type: [String], default: [] },
+      roadmap180: { type: [String], default: [] },
       generatedAt: Date,
     },
     costForm: {

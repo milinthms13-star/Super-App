@@ -43,6 +43,7 @@ const validateBeautyPayload = (payload = {}) => {
   if (!normalizeText(payload.budget)) errors.push("Budget is required.");
   if (!normalizeText(payload.eventType)) errors.push("Event type is required.");
   if (!normalizeText(payload.language)) errors.push("Language is required.");
+  if (payload.consent !== true) errors.push("Consent is required.");
 
   if (payload.notes && String(payload.notes).length > 800) {
     errors.push("Notes too long.");
@@ -51,6 +52,11 @@ const validateBeautyPayload = (payload = {}) => {
   const allergy = normalizeText(payload?.safety?.knownAllergy);
   if (allergy.length > 120) {
     errors.push("Allergy details too long.");
+  }
+
+  const selectedConcerns = Array.isArray(payload.selectedConcerns) ? payload.selectedConcerns : [];
+  if (selectedConcerns.length > 20) {
+    errors.push("Too many selected concerns.");
   }
 
   return { ok: errors.length === 0, errors };

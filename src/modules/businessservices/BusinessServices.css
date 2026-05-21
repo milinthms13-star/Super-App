@@ -1335,3 +1335,36 @@
     grid-template-columns: 1fr;
   }
 }
+
+.interaction-thread-preview {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+  display: grid;
+  gap: 6px;
+}
+
+.interaction-thread-message {
+  font-size: 0.9rem;
+  color: #1f2937;
+}
+
+.interaction-call-meta {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.interaction-call-scheduler {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #d1d5db;
+}
+
+.interaction-call-scheduler h5 {
+  margin: 0 0 8px;
+  color: #111827;
+}

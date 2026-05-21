@@ -38,4 +38,19 @@
 .dance-duet-preview-grid article { background: #fff; border-radius: 20px; padding: 14px; box-shadow: 0 14px 34px rgba(15, 23, 42, .08); }
 .dance-duet-preview-grid h3 { margin: 0 0 8px; }
 .dance-duet-preview-grid video { width: 100%; max-height: 320px; border-radius: 14px; background: #000; }
+.dance-duet-analytics-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 14px; }
+.dance-duet-analytics-row span { background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 8px 12px; font-weight: 700; }
+.dance-duet-history-list { display: grid; gap: 12px; }
+.dance-duet-history-item { border: 1px solid #e2e8f0; border-radius: 16px; padding: 12px; display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.dance-duet-history-item p { margin: 4px 0; color: #334155; }
+.dance-duet-history-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.dance-duet-history-actions a, .dance-duet-history-actions button { border: 0; border-radius: 999px; padding: 10px 14px; background: #4338ca; color: #fff; font-weight: 800; cursor: pointer; text-decoration: none; }
+.dance-duet-history-actions span { color: #64748b; font-weight: 700; }
+.dance-duet-history-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 12px; }
+.dance-duet-history-toolbar label { display: grid; gap: 6px; font-weight: 700; color: #1f2937; }
+.dance-duet-history-toolbar select { min-height: 40px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 6px 10px; }
+.dance-duet-history-toolbar button { border: 0; border-radius: 999px; padding: 10px 16px; background: #0f766e; color: #fff; font-weight: 800; cursor: pointer; }
+.dance-duet-pagination { margin-top: 12px; display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+.dance-duet-pagination button { border: 0; border-radius: 999px; padding: 8px 14px; background: #1e293b; color: #fff; font-weight: 700; cursor: pointer; }
+.dance-duet-pagination span { color: #334155; font-weight: 700; }
 @media (max-width: 760px) { .dance-duet-studio { padding: 12px; } .dance-duet-hero { flex-direction: column; border-radius: 22px; } .dance-duet-upload-grid, .dance-duet-options-grid { grid-template-columns: 1fr; } .dance-duet-action-row button { width: 100%; } }

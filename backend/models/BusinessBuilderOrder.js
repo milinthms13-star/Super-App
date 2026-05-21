@@ -108,6 +108,10 @@ const BusinessBuilderOrderSchema = new mongoose.Schema(
       method: { type: String, trim: true, maxlength: 80 },
       paidAt: Date,
       webhookPayload: mongoose.Schema.Types.Mixed,
+      processedWebhookIds: {
+        type: [String],
+        default: [],
+      },
     },
     attribution: {
       source: {

@@ -3,6 +3,8 @@ const businessServicesRouter = require('../routes/businessServices');
 const {
   parseMultipartJsonField,
   normalizeCreateOrderBody,
+  paymentInitiateSchema,
+  paymentVerifySchema,
   createOrderSchema,
   statusUpdateSchema,
 } = businessServicesRouter.__private__;
@@ -62,7 +64,25 @@ describe('businessServices route helpers', () => {
 
   test('statusUpdateSchema only allows supported status values', () => {
     const good = statusUpdateSchema.validate({ status: 'processing' });
+    const pendingDocs = statusUpdateSchema.validate({ status: 'pending-docs' });
     const bad = statusUpdateSchema.validate({ status: 'documents-pending' });
+
+    expect(good.error).toBeUndefined();
+    expect(pendingDocs.error).toBeUndefined();
+    expect(bad.error).toBeDefined();
+  });
+
+  test('paymentInitiateSchema validates gateway and method', () => {
+    const good = paymentInitiateSchema.validate({ gateway: 'razorpay', paymentMethod: 'upi' });
+    const bad = paymentInitiateSchema.validate({ gateway: 'paypal' });
+
+    expect(good.error).toBeUndefined();
+    expect(bad.error).toBeDefined();
+  });
+
+  test('paymentVerifySchema requires paymentId', () => {
+    const good = paymentVerifySchema.validate({ paymentId: 'pay_123' });
+    const bad = paymentVerifySchema.validate({ razorpay_order_id: 'order_123' });
 
     expect(good.error).toBeUndefined();
     expect(bad.error).toBeDefined();

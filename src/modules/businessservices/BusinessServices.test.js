@@ -7,7 +7,7 @@ describe("BusinessServices helpers", () => {
   });
 
   test("normalizeOrderStatus maps legacy statuses to supported timeline", () => {
-    expect(__private__.normalizeOrderStatus("documents-pending")).toBe("submitted");
+    expect(__private__.normalizeOrderStatus("documents-pending")).toBe("pending-docs");
     expect(__private__.normalizeOrderStatus("assigned-to-expert")).toBe("under-review");
     expect(__private__.normalizeOrderStatus("work-in-progress")).toBe("processing");
     expect(__private__.normalizeOrderStatus("invoice-generated")).toBe("completed");

@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 
+const ORDER_STATUSES = ['submitted', 'under-review', 'processing', 'pending-docs', 'completed', 'rejected'];
+const PAYMENT_STATUSES = ['pending', 'paid', 'failed', 'refunded'];
+const DELIVERABLE_STATUSES = ['pending-review', 'approved', 'rejected'];
+
 const businessServiceOrderSchema = new mongoose.Schema(
   {
     customerEmail: { type: String, required: true, trim: true, lowercase: true, index: true },
@@ -23,6 +27,7 @@ const businessServiceOrderSchema = new mongoose.Schema(
       type: String,
       required: true,
       default: 'submitted',
+      enum: ORDER_STATUSES,
       index: true,
       trim: true,
     },
@@ -63,12 +68,23 @@ const businessServiceOrderSchema = new mongoose.Schema(
         url: { type: String, default: '', trim: true },
         uploadedBy: { type: String, default: '', trim: true }, // consultant email
         uploadedAt: { type: Date, default: () => new Date() },
-        status: { type: String, default: 'pending-review', trim: true }, // 'pending-review', 'approved', 'rejected'
+        status: { type: String, default: 'pending-review', enum: DELIVERABLE_STATUSES, trim: true },
       },
     ],
 
+    approvalStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected', 'customer-review'],
+      default: 'pending',
+      trim: true,
+      index: true,
+    },
+    approvalNotes: { type: String, default: '', trim: true },
+    approvedBy: { type: String, default: '', trim: true, lowercase: true },
+    approvalDate: { type: Date, default: null },
+
     adminNotes: { type: String, default: '', trim: true },
-    paymentStatus: { type: String, default: 'pending', trim: true, index: true },
+    paymentStatus: { type: String, default: 'pending', enum: PAYMENT_STATUSES, trim: true, index: true },
     paymentGateway: { type: String, default: '', trim: true },
     paymentMethod: { type: String, default: '', trim: true },
     paymentRecordId: { type: String, default: '', trim: true },
@@ -85,6 +101,16 @@ const businessServiceOrderSchema = new mongoose.Schema(
     ],
   },
   { timestamps: true }
+);
+
+businessServiceOrderSchema.index({ customerEmail: 1, createdAt: -1 });
+businessServiceOrderSchema.index({ 'consultant.assignedEmail': 1, status: 1, createdAt: -1 });
+businessServiceOrderSchema.index(
+  { paymentRecordId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { paymentRecordId: { $exists: true, $type: 'string', $ne: '' } },
+  }
 );
 
 module.exports = mongoose.model('BusinessServiceOrder', businessServiceOrderSchema);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import axios from "axios";
 import { useApp } from "../../contexts/AppContext";
 import "./BusinessServices.css";
@@ -7,16 +7,50 @@ import { BACKEND_BASE_URL } from "../../utils/api";
 const ORDER_STATUSES = [
   { id: "submitted", label: "Request submitted", color: "#f59e0b", icon: "📝" },
   { id: "under-review", label: "Under review", color: "#3b82f6", icon: "🔍" },
+  { id: "pending-docs", label: "Pending documents", color: "#f97316", icon: "📎" },
   { id: "processing", label: "Processing", color: "#0ea5e9", icon: "⚙️" },
   { id: "completed", label: "Completed", color: "#10b981", icon: "✅" },
+  { id: "rejected", label: "Rejected", color: "#ef4444", icon: "⛔" },
 ];
 
 const ORDER_STATUS_ALIASES = {
-  "documents-pending": "submitted",
+  "documents-pending": "pending-docs",
   "assigned-to-expert": "under-review",
   "work-in-progress": "processing",
   "approval-pending": "processing",
   "invoice-generated": "completed",
+};
+
+const MAX_ORDER_DOCUMENTS = 10;
+const MAX_ORDER_DOCUMENT_SIZE_BYTES = 8 * 1024 * 1024;
+const ALLOWED_ORDER_DOCUMENT_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+];
+
+const DEFAULT_ORDER_FORM = {
+  name: "",
+  email: "",
+  phone: "",
+  businessName: "",
+  businessType: "",
+  packageTier: "Standard",
+  documents: [],
+  requirements: "",
+  preferredDate: "",
+  budget: "",
+  address: "",
+  gstin: "",
+};
+
+const revokeDocumentUrls = (documents = []) => {
+  for (const doc of documents) {
+    if (doc?.url && typeof doc.url === "string") {
+      URL.revokeObjectURL(doc.url);
+    }
+  }
 };
 
 const parseINRToNumber = (priceText = "") => {
@@ -25,9 +59,14 @@ const parseINRToNumber = (priceText = "") => {
 };
 
 const normalizeOrderStatus = (status) => {
-  const normalized = String(status || "").trim();
+  const normalized = String(status || "").trim().toLowerCase();
   if (ORDER_STATUSES.some((item) => item.id === normalized)) return normalized;
   return ORDER_STATUS_ALIASES[normalized] || "submitted";
+};
+
+const getStatusLabel = (status) => {
+  const normalized = normalizeOrderStatus(status);
+  return ORDER_STATUSES.find((item) => item.id === normalized)?.label || normalized;
 };
 
 const getMissingRequiredFields = (formValues = {}) => {
@@ -58,37 +97,35 @@ const BusinessServices = () => {
   const [catalog, setCatalog] = useState(null);
   const [catalogLoading, setCatalogLoading] = useState(true);
 
-  const [orderForm, setOrderForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    businessName: "",
-    businessType: "",
-    packageTier: "Standard",
-    documents: [],
-    requirements: "",
-    preferredDate: "",
-    budget: "",
-    // extra fields for invoice generator
-    address: "",
-    gstin: "",
-  });
+  const [orderForm, setOrderForm] = useState(DEFAULT_ORDER_FORM);
   const { currentUser } = useApp();
+  const userRole = currentUser?.role;
   const [selectedPaymentGateway, setSelectedPaymentGateway] = useState("razorpay");
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentError, setPaymentError] = useState("");
-
-  const navigationSections = useMemo(
-    () => [
-      { id: "overview", label: "Overview", icon: "🏠" },
-      { id: "services", label: "All Services", icon: "📋" },
-      { id: "business-starter", label: "Business Starter", icon: "🚀" },
-      { id: "orders", label: "My Orders", icon: "📦" },
-      { id: "consultation", label: "Consultation", icon: "💬" },
-    ],
-    []
-  );
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedOrderInteractions, setSelectedOrderInteractions] = useState([]);
+  const [selectedOrderLoading, setSelectedOrderLoading] = useState(false);
+  const [orderNotifications, setOrderNotifications] = useState([]);
+  const [orderMessageDraft, setOrderMessageDraft] = useState("");
+  const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
+  const [deliverableUploadLoading, setDeliverableUploadLoading] = useState(false);
+  const [deliverableActionError, setDeliverableActionError] = useState("");
+  const [completionApproveLoading, setCompletionApproveLoading] = useState(false);
+  const [callScheduleLoading, setCallScheduleLoading] = useState(false);
+  const [callScheduleForm, setCallScheduleForm] = useState({
+    interactionId: "",
+    scheduledFor: "",
+    callProvider: "manual",
+    callLink: "",
+    callDuration: 30,
+  });
+  const [consultantQueue, setConsultantQueue] = useState([]);
+  const [adminAlerts, setAdminAlerts] = useState([]);
+  const [adminAlertsLoading, setAdminAlertsLoading] = useState(false);
+  const orderDocumentsRef = useRef([]);
+  const orderSnapshotRef = useRef({});
 
   const launchJourney = [
     {
@@ -116,8 +153,8 @@ const BusinessServices = () => {
   ];
 
   const serviceCategories = catalog?.categories || [];
-  const serviceDetailsMap = catalog?.serviceDetails || {};
-  const defaultServiceDetails = catalog?.defaultServiceDetails || {};
+  const serviceDetailsMap = useMemo(() => catalog?.serviceDetails || {}, [catalog]);
+  const defaultServiceDetails = useMemo(() => catalog?.defaultServiceDetails || {}, [catalog]);
   const starterPackage = catalog?.starterPackage || null;
   const consultationOptions = catalog?.consultationOptions || [];
 
@@ -125,20 +162,380 @@ const BusinessServices = () => {
     try {
       const response = await axios.get(`${BACKEND_BASE_URL}/api/business-services/orders/me`);
       if (response.data?.success && response.data.data?.orders) {
-        setServiceOrders(response.data.data.orders);
+        const nextOrders = response.data.data.orders;
+        const previousSnapshot = orderSnapshotRef.current || {};
+        const nextSnapshot = {};
+
+        nextOrders.forEach((order) => {
+          const orderId = String(order._id || order.id || "");
+          if (!orderId) return;
+          const nextStatus = normalizeOrderStatus(order.status);
+          const nextPayment = String(order.paymentStatus || "pending").toLowerCase();
+          const prev = previousSnapshot[orderId];
+
+          if (prev && prev.status !== nextStatus) {
+            addNotification(`Order #${orderId.slice(-6)} is now ${getStatusLabel(nextStatus)}.`);
+          }
+          if (prev && prev.paymentStatus !== nextPayment && nextPayment === "paid") {
+            addNotification(`Payment confirmed for order #${orderId.slice(-6)}.`);
+          }
+          if (
+            prev &&
+            (prev.status !== nextStatus || prev.paymentStatus !== nextPayment) &&
+            nextStatus === "completed" &&
+            nextPayment === "paid"
+          ) {
+            addNotification(`Invoice is now ready for order #${orderId.slice(-6)}.`);
+          }
+
+          nextSnapshot[orderId] = { status: nextStatus, paymentStatus: nextPayment };
+        });
+
+        orderSnapshotRef.current = nextSnapshot;
+        setServiceOrders(nextOrders);
       } else {
         setServiceOrders([]);
+        orderSnapshotRef.current = {};
       }
     } catch (err) {
       // keep UI stable; show empty list
       setServiceOrders([]);
+      orderSnapshotRef.current = {};
     }
   };
 
+  const addNotification = (message) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setOrderNotifications((prev) => [...prev, { id, message }]);
+    setTimeout(() => {
+      setOrderNotifications((prev) => prev.filter((item) => item.id !== id));
+    }, 6500);
+  };
+
+  const fetchOrderDetails = async (orderId) => {
+    setSelectedOrderLoading(true);
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}`);
+      if (response.data?.success) {
+        setSelectedOrder(response.data.data.order);
+        setSelectedOrderInteractions(response.data.data.interactions || []);
+      }
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Unable to fetch order details.");
+    } finally {
+      setSelectedOrderLoading(false);
+    }
+  };
+
+  const openOrderDetail = async (order) => {
+    setSelectedOrder(order);
+    await fetchOrderDetails(order._id || order.id);
+    setActiveSection("orders");
+  };
+
+  const fetchConsultantQueue = useCallback(async () => {
+    if (!currentUser?.email) return;
+    try {
+      const response = await axios.get(
+        `${BACKEND_BASE_URL}/api/business-services/orders/consultant/${encodeURIComponent(currentUser.email)}/queue`
+      );
+      if (response.data?.success) {
+        setConsultantQueue(response.data.data.orders || []);
+      }
+    } catch (_err) {
+      // ignore silently
+    }
+  }, [currentUser?.email]);
+
+  const fetchAdminAlerts = useCallback(async () => {
+    if (userRole !== "admin") {
+      return;
+    }
+    setAdminAlertsLoading(true);
+    try {
+      const response = await axios.get(`${BACKEND_BASE_URL}/api/business-services/analytics/alerts`);
+      if (response.data?.success) {
+        setAdminAlerts(response.data.data?.alerts || []);
+      }
+    } catch (_error) {
+      setAdminAlerts([]);
+    } finally {
+      setAdminAlertsLoading(false);
+    }
+  }, [userRole]);
+
+  const updateOrderStatus = async (orderId, nextStatus, note = "") => {
+    setStatusUpdateLoading(true);
+    try {
+      const response = await axios.patch(
+        `${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}/status`,
+        { status: nextStatus, note }
+      );
+      if (response.data?.success) {
+        addNotification(`Order status updated to ${nextStatus}.`);
+        await refreshOrders();
+        if (selectedOrder && String(selectedOrder._id || selectedOrder.id) === String(orderId)) {
+          await fetchOrderDetails(orderId);
+        }
+      }
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Unable to update order status.");
+    } finally {
+      setStatusUpdateLoading(false);
+    }
+  };
+
+  const submitOrderInteraction = async (orderId, type, notes) => {
+    const trimmedNotes = String(notes || "").trim();
+    if (!trimmedNotes) {
+      setSubmitError("Please type a message before sending.");
+      return;
+    }
+
+    try {
+      const normalizedType = String(type || "").toLowerCase();
+      const existingThread = (selectedOrderInteractions || []).find((interaction) => {
+        const threadType = String(interaction?.interactionType || "").toLowerCase();
+        if (normalizedType === "chat-request") {
+          return threadType === "chat-request" || threadType === "chat";
+        }
+        if (normalizedType === "call-request") {
+          return threadType === "call-request" || threadType === "call";
+        }
+        return false;
+      });
+
+      if (existingThread?._id || existingThread?.id) {
+        await axios.post(
+          `${BACKEND_BASE_URL}/api/business-services/interactions/${encodeURIComponent(
+            existingThread._id || existingThread.id
+          )}/messages`,
+          { text: trimmedNotes }
+        );
+      } else {
+        await axios.post(`${BACKEND_BASE_URL}/api/business-services/interactions`, {
+          interactionType: type,
+          orderId,
+          categoryId: selectedOrder?.categoryId || "",
+          serviceId: selectedOrder?.serviceId || "",
+          notes: trimmedNotes,
+        });
+      }
+
+      addNotification("Message sent to your consultant.");
+      setOrderMessageDraft("");
+      await fetchOrderDetails(orderId);
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Unable to send message.");
+    }
+  };
+
+  const uploadDeliverablesForOrder = async (orderId, files) => {
+    if (!files || files.length === 0) return;
+    setDeliverableUploadLoading(true);
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach((file) => formData.append("deliverables", file));
+      const response = await axios.patch(
+        `${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}/deliverables/upload`,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      if (response.data?.success) {
+        addNotification("Deliverables uploaded successfully.");
+        await refreshOrders();
+        await fetchOrderDetails(orderId);
+      }
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Unable to upload deliverables.");
+    } finally {
+      setDeliverableUploadLoading(false);
+    }
+  };
+
+  const setDeliverableStatus = async (orderId, deliverableId, status) => {
+    setDeliverableActionError("");
+    try {
+      const response = await axios.patch(
+        `${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}/deliverables/${encodeURIComponent(
+          deliverableId
+        )}/status`,
+        { status }
+      );
+      if (response.data?.success) {
+        addNotification(`Deliverable marked ${status}.`);
+        await refreshOrders();
+        await fetchOrderDetails(orderId);
+      }
+    } catch (err) {
+      setDeliverableActionError(err?.response?.data?.message || err?.message || "Unable to update deliverable.");
+    }
+  };
+
+  const approveOrderCompletion = async (orderId, note = "") => {
+    setCompletionApproveLoading(true);
+    try {
+      const response = await axios.post(
+        `${BACKEND_BASE_URL}/api/business-services/orders/${encodeURIComponent(orderId)}/completion-approve`,
+        { note }
+      );
+      if (response.data?.success) {
+        addNotification("Order marked as completed and approved.");
+        await refreshOrders();
+        await fetchOrderDetails(orderId);
+      }
+    } catch (err) {
+      setDeliverableActionError(err?.response?.data?.message || err?.message || "Unable to approve completion.");
+    } finally {
+      setCompletionApproveLoading(false);
+    }
+  };
+
+  const scheduleInteractionCall = async (orderId) => {
+    const interactionId = String(callScheduleForm.interactionId || "").trim();
+    const scheduledFor = String(callScheduleForm.scheduledFor || "").trim();
+    if (!interactionId || !scheduledFor) {
+      setSubmitError("Choose an interaction and call date/time.");
+      return;
+    }
+
+    setCallScheduleLoading(true);
+    setSubmitError("");
+    try {
+      const response = await axios.post(
+        `${BACKEND_BASE_URL}/api/business-services/interactions/${encodeURIComponent(interactionId)}/schedule-call`,
+        {
+          scheduledFor: new Date(scheduledFor).toISOString(),
+          callProvider: callScheduleForm.callProvider,
+          callLink: callScheduleForm.callLink,
+          callDuration: Number(callScheduleForm.callDuration || 30),
+        }
+      );
+      if (response.data?.success) {
+        addNotification("Call scheduled successfully.");
+        await fetchOrderDetails(orderId);
+      }
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || err?.message || "Unable to schedule call.");
+    } finally {
+      setCallScheduleLoading(false);
+    }
+  };
+
+  const getOrderStatusOptions = (order) => {
+    const normalized = normalizeOrderStatus(order?.status);
+    if (!currentUser) return [];
+    const role = String(currentUser.role || "").toLowerCase();
+    const allowed = [];
+    if (role === "admin") {
+      if (normalized === "submitted") allowed.push("under-review", "rejected");
+      if (normalized === "under-review") allowed.push("processing", "rejected", "pending-docs");
+      if (normalized === "processing") allowed.push("completed", "rejected", "pending-docs");
+      if (normalized === "pending-docs") allowed.push("under-review", "rejected");
+    } else if (role === "consultant") {
+      if (normalized === "under-review") allowed.push("processing", "pending-docs");
+      if (normalized === "processing") allowed.push("completed", "pending-docs");
+    }
+    return allowed;
+  };
+
+  const renderOrderHistory = (order) => {
+    return (order?.history || []).map((entry, index) => (
+      <div key={`${entry.changedAt || index}-${entry.status}`} className="timeline-entry">
+        <div className="timeline-entry-top">
+          <span className="timeline-status-label">{entry.status}</span>
+          <span>{entry.changedBy || "System"}</span>
+          <span>{entry.changedAt ? new Date(entry.changedAt).toLocaleString() : ""}</span>
+        </div>
+        {entry.note ? <div className="timeline-note">{entry.note}</div> : null}
+      </div>
+    ));
+  };
+
+  const callCapableInteractions = useMemo(
+    () =>
+      (selectedOrderInteractions || []).filter((interaction) => {
+        const type = String(interaction?.interactionType || "").toLowerCase();
+        return type.includes("call") || type.includes("consultation") || type.includes("chat");
+      }),
+    [selectedOrderInteractions]
+  );
+
+  const orderHasPendingPayment = (order) => order?.paymentStatus !== "paid";
+
   useEffect(() => {
-    void refreshOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (userRole === "admin" || userRole === "consultant") {
+      void fetchConsultantQueue();
+    }
+  }, [fetchConsultantQueue, userRole]);
+
+  useEffect(() => {
+    if (userRole === "admin") {
+      void fetchAdminAlerts();
+    }
+  }, [fetchAdminAlerts, userRole]);
+
+  useEffect(() => {
+    const intervalMs = selectedOrder ? 20000 : 45000;
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+      void refreshOrders();
+      if (selectedOrder) {
+        void fetchOrderDetails(selectedOrder._id || selectedOrder.id);
+      }
+      if (userRole === "admin") {
+        void fetchAdminAlerts();
+      }
+    }, intervalMs);
+
+    return () => clearInterval(interval);
+  }, [fetchAdminAlerts, selectedOrder, userRole]);
+
+  useEffect(() => {
+    orderDocumentsRef.current = orderForm.documents;
+  }, [orderForm.documents]);
+
+  useEffect(() => {
+    if (!callCapableInteractions.length) {
+      setCallScheduleForm((prev) => ({ ...prev, interactionId: "" }));
+      return;
+    }
+    const selectedExists = callCapableInteractions.some(
+      (interaction) => String(interaction._id || interaction.id) === String(callScheduleForm.interactionId || "")
+    );
+    if (!selectedExists) {
+      const firstInteraction = callCapableInteractions[0];
+      setCallScheduleForm((prev) => ({
+        ...prev,
+        interactionId: String(firstInteraction?._id || firstInteraction?.id || ""),
+      }));
+    }
+  }, [callCapableInteractions, callScheduleForm.interactionId]);
+
+  useEffect(() => {
+    return () => {
+      revokeDocumentUrls(orderDocumentsRef.current);
+    };
   }, []);
+
+  const navSections = useMemo(
+    () => {
+      const baseSections = [
+        { id: "overview", label: "Overview", icon: "🏠" },
+        { id: "services", label: "All Services", icon: "📋" },
+        { id: "business-starter", label: "Business Starter", icon: "🚀" },
+        { id: "orders", label: "My Orders", icon: "📦" },
+        { id: "consultation", label: "Consultation", icon: "💬" },
+      ];
+      if (userRole === "admin" || userRole === "consultant") {
+        return [...baseSections, { id: "consultant-queue", label: "My Assignments", icon: "🧑‍💼" }];
+      }
+      return baseSections;
+    },
+    [userRole]
+  );
 
   useEffect(() => {
     const fetchCatalog = async () => {
@@ -198,22 +595,60 @@ const BusinessServices = () => {
     const consultationService = {
       id: "company-law-consultation",
       name: `${typeLabel} Consultation`,
-      price: "â‚¹500",
+      price: "₹500",
       duration: "1 hour",
     };
     handleServiceSelect(consultationCategory, consultationService);
   };
 
   const handleFileUpload = (files) => {
-    const fileList = Array.from(files).map((file) => ({
-      file,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      url: URL.createObjectURL(file),
-    }));
+    const incomingFiles = Array.from(files || []);
+    if (!incomingFiles.length) {
+      return;
+    }
 
-    setOrderForm((prev) => ({ ...prev, documents: [...prev.documents, ...fileList] }));
+    const unsupported = incomingFiles.find((file) => !ALLOWED_ORDER_DOCUMENT_TYPES.includes((file.type || "").toLowerCase()));
+    if (unsupported) {
+      setSubmitError("Only PDF, JPG, and PNG documents are supported.");
+      return;
+    }
+
+    const oversized = incomingFiles.find((file) => Number(file.size || 0) > MAX_ORDER_DOCUMENT_SIZE_BYTES);
+    if (oversized) {
+      setSubmitError("Each document must be 8MB or smaller.");
+      return;
+    }
+
+    setSubmitError("");
+    setOrderForm((prev) => {
+      const remainingSlots = Math.max(0, MAX_ORDER_DOCUMENTS - prev.documents.length);
+      const acceptedFiles = incomingFiles.slice(0, remainingSlots);
+      const fileList = acceptedFiles.map((file) => ({
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: URL.createObjectURL(file),
+      }));
+
+      if (!fileList.length) {
+        setSubmitError(`You can upload up to ${MAX_ORDER_DOCUMENTS} documents.`);
+        return prev;
+      }
+
+      return { ...prev, documents: [...prev.documents, ...fileList] };
+    });
+  };
+
+  const removeUploadedDocument = (index) => {
+    setOrderForm((prev) => {
+      const nextDocuments = [...prev.documents];
+      const [removed] = nextDocuments.splice(index, 1);
+      if (removed?.url) {
+        URL.revokeObjectURL(removed.url);
+      }
+      return { ...prev, documents: nextDocuments };
+    });
   };
 
   const loadRazorpayScript = () =>
@@ -353,6 +788,10 @@ const BusinessServices = () => {
   );
 
   const serviceVendor = selectedServiceDetails?.vendor || {};
+  const isSelectedOrderOwner =
+    String(selectedOrder?.customerEmail || "").toLowerCase() === String(currentUser?.email || "").toLowerCase();
+  const canReviewDeliverables = currentUser?.role === "admin" || isSelectedOrderOwner;
+  const canUploadDeliverables = currentUser?.role === "admin" || currentUser?.role === "consultant";
 
   const createInteractionRequest = async ({
     interactionType,
@@ -447,20 +886,8 @@ const BusinessServices = () => {
       setCurrentOrder(order);
       setShowOrderForm(false);
 
-      setOrderForm({
-        name: "",
-        email: "",
-        phone: "",
-        businessName: "",
-        businessType: "",
-        packageTier: "Standard",
-        documents: [],
-        requirements: "",
-        preferredDate: "",
-        budget: "",
-        address: "",
-        gstin: "",
-      });
+      revokeDocumentUrls(orderForm.documents);
+      setOrderForm(DEFAULT_ORDER_FORM);
 
       await refreshOrders();
     } catch (err) {
@@ -480,6 +907,17 @@ const BusinessServices = () => {
     const normalizedStatus = normalizeOrderStatus(status);
     const statusObj = ORDER_STATUSES.find((s) => s.id === normalizedStatus);
     return statusObj ? statusObj.icon : "❓";
+  };
+
+  const getAlertTone = (severity = "") => {
+    const normalized = String(severity || "").toLowerCase();
+    if (normalized === "critical") {
+      return { backgroundColor: "#fee2e2", color: "#991b1b" };
+    }
+    if (normalized === "warning") {
+      return { backgroundColor: "#fef3c7", color: "#92400e" };
+    }
+    return { backgroundColor: "#dcfce7", color: "#166534" };
   };
 
   const downloadInvoice = async (orderId) => {
@@ -570,8 +1008,18 @@ const BusinessServices = () => {
         </div>
       </div>
 
+      {orderNotifications.length > 0 && (
+        <div className="business-services-notifications">
+          {orderNotifications.map((notification) => (
+            <div key={notification.id} className="business-services-notification-item">
+              {notification.message}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="business-services-nav">
-        {navigationSections.map((section) => (
+        {navSections.map((section) => (
           <button
             key={section.id}
             className={`business-services-nav-item ${activeSection === section.id ? "active" : ""}`}
@@ -681,6 +1129,33 @@ const BusinessServices = () => {
                 </div>
               ))}
             </div>
+
+            {userRole === "admin" && (
+              <div className="section-header" style={{ marginTop: "1.25rem" }}>
+                <h3>Operations Alerts</h3>
+                <p>Recent payment reliability indicators for BusinessServices.</p>
+                {adminAlertsLoading ? (
+                  <p>Loading alerts...</p>
+                ) : (
+                  <div className="service-highlights">
+                    {(adminAlerts || []).map((alert) => (
+                      <span
+                        key={alert.key}
+                        style={{
+                          ...getAlertTone(alert.severity),
+                          borderRadius: "999px",
+                          padding: "0.4rem 0.75rem",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {alert.key}: {alert.count}
+                      </span>
+                    ))}
+                    {(!adminAlerts || adminAlerts.length === 0) && <span>No alert data available.</span>}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -819,7 +1294,7 @@ const BusinessServices = () => {
                       </div>
                       <div className="order-status">
                         <span className="status-badge" style={{ backgroundColor: getStatusColor(order.status) }}>
-                          {getStatusIcon(order.status)} {ORDER_STATUSES.find((s) => s.id === normalizeOrderStatus(order.status))?.label || normalizeOrderStatus(order.status)}
+                          {getStatusIcon(order.status)} {getStatusLabel(order.status)}
                         </span>
                       </div>
                     </div>
@@ -874,6 +1349,13 @@ const BusinessServices = () => {
                       </div>
 
                       <div className="order-actions">
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => openOrderDetail(order)}
+                        >
+                          📄 View details
+                        </button>
                         <button
                           className="chat-btn"
                           type="button"
@@ -934,6 +1416,305 @@ const BusinessServices = () => {
                 ))}
               </div>
             )}
+            {selectedOrder && (
+              <div className="order-detail-panel">
+                <div className="detail-panel-header">
+                  <div>
+                    <h3>Order #{String(selectedOrder._id || selectedOrder.id || "").slice(-6)}</h3>
+                    <p>{selectedOrder.serviceName || selectedOrder.service?.name || "Business Service"}</p>
+                  </div>
+                  <div className="detail-panel-actions">
+                    <button className="secondary-button" type="button" onClick={() => setSelectedOrder(null)}>
+                      Close details
+                    </button>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => fetchOrderDetails(selectedOrder._id || selectedOrder.id)}
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+                {selectedOrderLoading && (
+                  <div className="order-loading">
+                    Loading order details...
+                  </div>
+                )}
+
+                <div className="order-detail-summary">
+                  <div>
+                    <strong>Status:</strong> {getStatusLabel(selectedOrder.status)}
+                  </div>
+                  <div>
+                    <strong>Payment:</strong> {selectedOrder.paymentStatus === "paid" ? "Paid" : "Pending"}
+                  </div>
+                  <div>
+                    <strong>Approval:</strong> {selectedOrder.approvalStatus || "pending"}
+                  </div>
+                  <div>
+                    <strong>Estimated completion:</strong>{" "}
+                    {selectedOrder.estimatedCompletion ? new Date(selectedOrder.estimatedCompletion).toLocaleDateString() : "—"}
+                  </div>
+                  <div>
+                    <strong>Consultant:</strong> {selectedOrder.consultant?.assignedName || "Not assigned"}
+                  </div>
+                  {(currentUser?.role === "admin" || currentUser?.role === "consultant") && (
+                    <div className="order-status-action">
+                      <label htmlFor="order-status-select">Change status</label>
+                      <select
+                        id="order-status-select"
+                        defaultValue={normalizeOrderStatus(selectedOrder.status)}
+                        onChange={(e) => updateOrderStatus(selectedOrder._id || selectedOrder.id, e.target.value)}
+                        disabled={statusUpdateLoading}
+                      >
+                        <option value={normalizeOrderStatus(selectedOrder.status)}>{getStatusLabel(selectedOrder.status)}</option>
+                        {getOrderStatusOptions(selectedOrder).map((statusOption) => (
+                          <option key={statusOption} value={statusOption}>
+                            {getStatusLabel(statusOption)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="order-history-panel">
+                  <h4>Order history</h4>
+                  {renderOrderHistory(selectedOrder)}
+                </div>
+
+                <div className="order-interactions-panel">
+                  <h4>Interaction thread</h4>
+                  {(selectedOrderInteractions || []).length === 0 ? (
+                    <p>No messages yet. Use the form below to message your consultant.</p>
+                  ) : (
+                    <div className="interaction-list">
+                      {selectedOrderInteractions.map((interaction) => (
+                        <div key={interaction._id || interaction.id} className="interaction-item">
+                          <div className="interaction-meta">
+                            <span>{interaction.interactionType}</span>
+                            <span>{interaction.createdAt ? new Date(interaction.createdAt).toLocaleString() : ""}</span>
+                          </div>
+                          <div className="interaction-notes">{interaction.notes}</div>
+                          {(interaction.messages || []).length > 0 && (
+                            <div className="interaction-thread-preview">
+                              {interaction.messages.slice(-3).map((message) => (
+                                <div
+                                  key={`${interaction._id || interaction.id}-${message._id || message.sentAt}-${message.text}`}
+                                  className="interaction-thread-message"
+                                >
+                                  <strong>{message.senderRole || "member"}:</strong> {message.text}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {interaction.scheduledFor && (
+                            <div className="interaction-call-meta">
+                              Call scheduled: {new Date(interaction.scheduledFor).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="interaction-form">
+                    <textarea
+                      value={orderMessageDraft}
+                      onChange={(e) => setOrderMessageDraft(e.target.value)}
+                      placeholder="Type a message to your consultant"
+                    />
+                    <div className="interaction-form-actions">
+                      <button
+                        className="primary-button"
+                        type="button"
+                        onClick={() => submitOrderInteraction(selectedOrder._id || selectedOrder.id, "chat-request", orderMessageDraft)}
+                      >
+                        Send message
+                      </button>
+                    </div>
+                  </div>
+
+                  {callCapableInteractions.length > 0 && (
+                    <div className="interaction-call-scheduler">
+                      <h5>Schedule a call</h5>
+                      <div className="interaction-form-actions">
+                        <select
+                          value={callScheduleForm.interactionId}
+                          onChange={(e) =>
+                            setCallScheduleForm((prev) => ({
+                              ...prev,
+                              interactionId: e.target.value,
+                            }))
+                          }
+                        >
+                          {callCapableInteractions.map((interaction) => (
+                            <option key={interaction._id || interaction.id} value={interaction._id || interaction.id}>
+                              {interaction.interactionType} • {new Date(interaction.createdAt || Date.now()).toLocaleDateString()}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="datetime-local"
+                          value={callScheduleForm.scheduledFor}
+                          onChange={(e) =>
+                            setCallScheduleForm((prev) => ({
+                              ...prev,
+                              scheduledFor: e.target.value,
+                            }))
+                          }
+                        />
+                        <select
+                          value={callScheduleForm.callProvider}
+                          onChange={(e) =>
+                            setCallScheduleForm((prev) => ({
+                              ...prev,
+                              callProvider: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="manual">Manual</option>
+                          <option value="zoom">Zoom</option>
+                          <option value="google-meet">Google Meet</option>
+                          <option value="twilio">Twilio</option>
+                        </select>
+                        <input
+                          type="url"
+                          placeholder="Call link (optional)"
+                          value={callScheduleForm.callLink}
+                          onChange={(e) =>
+                            setCallScheduleForm((prev) => ({
+                              ...prev,
+                              callLink: e.target.value,
+                            }))
+                          }
+                        />
+                        <input
+                          type="number"
+                          min={5}
+                          max={240}
+                          value={callScheduleForm.callDuration}
+                          onChange={(e) =>
+                            setCallScheduleForm((prev) => ({
+                              ...prev,
+                              callDuration: e.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={callScheduleLoading}
+                          onClick={() => scheduleInteractionCall(selectedOrder._id || selectedOrder.id)}
+                        >
+                          {callScheduleLoading ? "Scheduling..." : "Schedule Call"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="deliverables-panel">
+                  <h4>Deliverables</h4>
+                  {selectedOrder.deliverables?.length ? (
+                    <div className="deliverable-list">
+                          {selectedOrder.deliverables.map((deliverable) => (
+                        <div key={deliverable._id || deliverable.id} className="deliverable-item">
+                          <div>
+                            <strong>{deliverable.name || "Deliverable"}</strong>
+                            <p>{deliverable.description || "Uploaded file or document"}</p>
+                          </div>
+                          <div className="deliverable-status-row">
+                            <span>Status: {deliverable.status || "pending"}</span>
+                            {canReviewDeliverables && (
+                              <div className="deliverable-status-actions">
+                                {deliverable.status !== "approved" && (
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    onClick={() =>
+                                      setDeliverableStatus(
+                                        selectedOrder._id || selectedOrder.id,
+                                        deliverable.fileId || deliverable._id || deliverable.id,
+                                        "approved"
+                                      )
+                                    }
+                                  >
+                                    Approve
+                                  </button>
+                                )}
+                                {deliverable.status !== "rejected" && (
+                                  <button
+                                    className="secondary-button"
+                                    type="button"
+                                    onClick={() =>
+                                      setDeliverableStatus(
+                                        selectedOrder._id || selectedOrder.id,
+                                        deliverable.fileId || deliverable._id || deliverable.id,
+                                        "rejected"
+                                      )
+                                    }
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>No deliverables uploaded yet.</p>
+                  )}
+
+                  {canUploadDeliverables && (
+                    <div className="deliverable-upload-form">
+                      <label htmlFor="deliverableUpload">Upload deliverables</label>
+                      <input
+                        id="deliverableUpload"
+                        type="file"
+                        multiple
+                        onChange={(e) => uploadDeliverablesForOrder(selectedOrder._id || selectedOrder.id, e.target.files)}
+                      />
+                      {deliverableUploadLoading && <p>Uploading files...</p>}
+                      {deliverableActionError && <p className="error-text">{deliverableActionError}</p>}
+                    </div>
+                  )}
+
+                  {canReviewDeliverables &&
+                    selectedOrder.paymentStatus === "paid" &&
+                    selectedOrder.approvalStatus !== "approved" && (
+                      <div className="deliverable-upload-form">
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={completionApproveLoading}
+                          onClick={() => approveOrderCompletion(selectedOrder._id || selectedOrder.id)}
+                        >
+                          {completionApproveLoading ? "Approving..." : "Approve Completion"}
+                        </button>
+                        <p className="doc-vault-note">
+                          Use this when consultant deliverables are satisfactory. This closes the order and unlocks invoice.
+                        </p>
+                      </div>
+                    )}
+                </div>
+
+                {orderHasPendingPayment(selectedOrder) && (
+                  <div className="order-payment-panel">
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => initializeOrderPayment(selectedOrder._id || selectedOrder.id)}
+                    >
+                      Retry payment
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -969,6 +1750,49 @@ const BusinessServices = () => {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {activeSection === "consultant-queue" && (
+          <div className="business-services-section">
+            <div className="section-header">
+              <h2>🧑‍💼 My Assignments</h2>
+              <p>View orders assigned to you for review and delivery.</p>
+            </div>
+            {consultantQueue.length === 0 ? (
+              <div className="empty-orders">
+                <span className="empty-icon">🧾</span>
+                <h3>No assignments yet</h3>
+                <p>Assigned orders from the operations team will appear here.</p>
+              </div>
+            ) : (
+              <div className="orders-list">
+                {consultantQueue.map((order) => (
+                  <div key={order._id || order.id} className="order-card">
+                    <div className="order-header">
+                      <div className="order-info">
+                        <h4>{order.serviceName || order.service?.name || "Business Service"}</h4>
+                        <p>Order #{String(order._id || order.id || "").slice(-6)}</p>
+                      </div>
+                      <div className="order-status">
+                        <span className="status-badge" style={{ backgroundColor: getStatusColor(order.status) }}>
+                          {getStatusIcon(order.status)} {getStatusLabel(order.status)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="order-details">
+                      <div className="order-meta">
+                        <span>Payment: {order.paymentStatus === "paid" ? "Paid" : "Pending"}</span>
+                        <span>Client: {order.customerName || order.name || "-"}</span>
+                      </div>
+                      <button className="secondary-button" type="button" onClick={() => openOrderDetail(order)}>
+                        View order
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1262,6 +2086,13 @@ const BusinessServices = () => {
                       <div key={i} className="file-item">
                         <span>{file.name}</span>
                         <span>{(file.size / 1024).toFixed(1)} KB</span>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => removeUploadedDocument(i)}
+                        >
+                          Remove
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1334,7 +2165,7 @@ const BusinessServices = () => {
                 <strong>Service:</strong> {currentOrder.serviceName || selectedService?.name || "Business Service"}
               </p>
               <p>
-                <strong>Status:</strong> {normalizeOrderStatus(currentOrder.status || "submitted")}
+                <strong>Status:</strong> {getStatusLabel(currentOrder.status || "submitted")}
               </p>
               <p>
                 <strong>Estimated Completion:</strong>{" "}

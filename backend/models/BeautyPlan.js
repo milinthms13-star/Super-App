@@ -3,9 +3,10 @@ const mongoose = require('mongoose');
 const beautyPlanSchema = new mongoose.Schema(
   {
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      type: String,
       required: true,
+      trim: true,
+      maxlength: 120,
       index: true,
     },
     gender: {
@@ -48,6 +49,19 @@ const beautyPlanSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: '',
+      maxlength: 2000,
+    },
+    photoStorageKey: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 500,
+    },
+    photoStorageProvider: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 32,
     },
     photoName: {
       type: String,
@@ -63,6 +77,30 @@ const beautyPlanSchema = new mongoose.Schema(
       products: [String],
       avoid: [String],
       eventPlan: [String],
+
+      // Safety escalation fields
+      concernSeverity: {
+        type: String,
+        trim: true,
+        default: 'mild',
+        enum: ['mild', 'moderate', 'severe'],
+      },
+      disclaimer: {
+        type: [String],
+        default: [],
+      },
+
+      // Client/versioning
+      apiVersion: {
+        type: String,
+        trim: true,
+        default: 'beauty-ai-v1',
+      },
+      modelVersion: {
+        type: String,
+        trim: true,
+        default: 'heuristic-v1',
+      },
     },
     status: {
       type: String,

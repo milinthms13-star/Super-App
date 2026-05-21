@@ -71,6 +71,7 @@
     "cypress": "^15.15.0",
     "electron": "^26.4.0",
     "electron-builder": "^24.6.2",
+    "jest-junit": "^17.0.0",
     "wait-on": "^7.0.1"
   },
   "build": {

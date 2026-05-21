@@ -40,6 +40,35 @@ const normalizeSource = (value) => {
   return allowed.has(normalized) ? normalized : 'other';
 };
 
+const normalizeEventType = (value) => {
+  const normalized = String(value || 'view').trim().toLowerCase();
+  const mapping = {
+    page_view: 'view',
+    visit: 'view',
+    click: 'contact_click',
+    whatsapp: 'whatsapp_click',
+    phone_call: 'call_click',
+    contact: 'contact_click',
+    lead: 'lead_submit',
+    order: 'order_start',
+    payment: 'order_paid',
+    paid: 'order_paid',
+  };
+  const mapped = mapping[normalized] || normalized;
+  const allowed = new Set(['view', 'share', 'contact_click', 'whatsapp_click', 'call_click', 'lead_submit', 'order_start', 'order_paid']);
+  return allowed.has(mapped) ? mapped : 'view';
+};
+
+const normalizeAssetType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  const allowed = new Set(['poster', 'caption', 'website']);
+  return allowed.has(normalized) ? normalized : 'other';
+};
+
+const normalizeWebhookEventId = (payload = {}) => {
+  return String(payload.webhookEventId || payload.eventId || payload.id || payload.transactionId || payload.paymentReference || '').trim();
+};
+
 const sanitizeUtm = (utm = {}) => ({
   source: String(utm.source || '').trim().slice(0, 100),
   medium: String(utm.medium || '').trim().slice(0, 100),
@@ -47,6 +76,13 @@ const sanitizeUtm = (utm = {}) => ({
   term: String(utm.term || '').trim().slice(0, 120),
   content: String(utm.content || '').trim().slice(0, 120),
 });
+
+const toText = (value, fallback = '') => {
+  if (Array.isArray(value)) {
+    return value.map((item) => asTrimmed(item)).filter(Boolean).join('\n');
+  }
+  return typeof value === 'string' ? asTrimmed(value) : fallback;
+};
 
 const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_MODE || '').toLowerCase());
 const DEFAULT_BUSINESS_BUILDER_MODEL = String(process.env.OPENAI_BUSINESS_BUILDER_MODEL || 'gpt-4.1-mini').trim();
@@ -232,7 +268,8 @@ class BusinessBuilderService {
         costEstimation: this.generateCostEstimation(costSummary),
         profitProjection: this.generateProfitProjection(costSummary),
         swot: this.generateSWOT(business),
-        roadmap90: this.generateRoadmap90(business),
+roadmap30: this.generateRoadmap30(business),
+      roadmap90: this.generateRoadmap90(business),
         roadmap180: this.generateRoadmap180(business),
         generatedAt: new Date(),
       };
@@ -285,10 +322,21 @@ class BusinessBuilderService {
         'Week 3: Acquire first 10 customers and gather testimonials',
         'Week 4: Start paid + organic campaign and optimize conversion funnel',
       ],
+      roadmap30: [
+        'Week 1: Finalize positioning, offer design, and pricing ladders',
+        'Week 2: Launch landing page, WhatsApp profile, and lead form',
+        'Week 3: Acquire first 10 customers and gather testimonials',
+        'Week 4: Start paid + organic campaign and optimize conversion funnel',
+      ],
       roadmap90: [
         'Month 1: Validate offer-market fit and stabilize delivery quality',
         'Month 2: Build repeat acquisition channels and referral engine',
         'Month 3: Add premium tier, tighten unit economics, and prep scale playbook',
+      ],
+      roadmap180: [
+        'Months 4-6: Scale customer acquisition and refine repeat purchase systems',
+        'Months 7-9: Expand product/service bundles and launch retention campaigns',
+        'Months 10-12: Build a repeatable sales playbook and prepare for next expansion phase',
       ],
       branding: {
         tagline: `${businessName} - Trusted solutions for modern customers`,
@@ -305,11 +353,29 @@ class BusinessBuilderService {
       if (Array.isArray(value)) return value.map((item) => asTrimmed(item)).filter(Boolean);
       if (typeof value === 'string') {
         return value
-          .split(/\n|,/)
+          .split(/\r?\n|,/) 
           .map((item) => asTrimmed(item))
           .filter(Boolean);
       }
       return fallback;
+    };
+
+    const mergeRoadmap = (...values) => {
+      for (const value of values) {
+        if (Array.isArray(value)) {
+          const items = value.map((item) => asTrimmed(item)).filter(Boolean);
+          if (items.length) {
+            return items;
+          }
+        }
+        if (typeof value === 'string') {
+          const parsed = toArray(value, []);
+          if (parsed.length) {
+            return parsed;
+          }
+        }
+      }
+      return [];
     };
 
     const swotInput = rawPlan.swot && typeof rawPlan.swot === 'object' ? rawPlan.swot : {};
@@ -328,9 +394,31 @@ class BusinessBuilderService {
         opportunities: toArray(swotInput.opportunities, fallbackPlan?.swot?.opportunities || []),
         threats: toArray(swotInput.threats, fallbackPlan?.swot?.threats || []),
       },
-      legalChecklist: toArray(rawPlan.legalChecklist, fallbackPlan.legalChecklist || []),
-      roadmap30: toArray(rawPlan.roadmap30, fallbackPlan.roadmap30 || []),
-      roadmap90: toArray(rawPlan.roadmap90, fallbackPlan.roadmap90 || []),
+      legalChecklist: mergeRoadmap(rawPlan.legalChecklist, fallbackPlan.legalChecklist),
+      roadmap30: mergeRoadmap(
+        rawPlan.roadmap30,
+        fallbackPlan.roadmap30,
+        rawPlan.roadmap90,
+        fallbackPlan.roadmap90,
+        rawPlan.roadmap180,
+        fallbackPlan.roadmap180
+      ),
+      roadmap90: mergeRoadmap(
+        rawPlan.roadmap90,
+        fallbackPlan.roadmap90,
+        rawPlan.roadmap180,
+        fallbackPlan.roadmap180,
+        rawPlan.roadmap30,
+        fallbackPlan.roadmap30
+      ),
+      roadmap180: mergeRoadmap(
+        rawPlan.roadmap180,
+        fallbackPlan.roadmap180,
+        rawPlan.roadmap90,
+        fallbackPlan.roadmap90,
+        rawPlan.roadmap30,
+        fallbackPlan.roadmap30
+      ),
       branding: {
         tagline: asTrimmed(brandingInput.tagline || fallbackPlan?.branding?.tagline),
         logoPrompt: asTrimmed(brandingInput.logoPrompt || fallbackPlan?.branding?.logoPrompt),
@@ -342,11 +430,6 @@ class BusinessBuilderService {
   }
 
   async callOpenAiBusinessBuilderJson({ systemPrompt, userPrompt, fallback }) {
-    if (isFreeMode) {
-      return fallback();
-    }
-
-    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return fallback();
     }
@@ -420,6 +503,7 @@ class BusinessBuilderService {
     });
 
     const normalizedPlan = this.normalize10xPlanShape(aiRaw, fallbackPlan);
+
     business.businessPlan = {
       summary: normalizedPlan.summary,
       marketAnalysis: normalizedPlan.marketAnalysis,
@@ -427,13 +511,14 @@ class BusinessBuilderService {
       revenueModel: normalizedPlan.revenueModel,
       costEstimation: normalizedPlan.costEstimation,
       profitProjection: normalizedPlan.profitProjection,
-      swot: JSON.stringify(normalizedPlan.swot),
-      roadmap90: normalizedPlan.roadmap90.join('\n'),
-      roadmap180: normalizedPlan.roadmap30.join('\n'),
+      swot: normalizedPlan.swot,
+      roadmap30: normalizedPlan.roadmap30,
+      roadmap90: normalizedPlan.roadmap90,
+      roadmap180: normalizedPlan.roadmap180,
       generatedAt: new Date(normalizedPlan.generatedAt || Date.now()),
     };
-    await business.save();
 
+    await business.save();
     return normalizedPlan;
   }
 
@@ -475,6 +560,7 @@ class BusinessBuilderService {
     writeSection('Legal Checklist', plan.legalChecklist);
     writeSection('30-Day Roadmap', plan.roadmap30);
     writeSection('90-Day Roadmap', plan.roadmap90);
+    writeSection('180-Day Roadmap', plan.roadmap180);
     writeSection('Branding Tagline', plan?.branding?.tagline || '');
     writeSection('Logo Prompt', plan?.branding?.logoPrompt || '');
     writeSection('SWOT - Strengths', plan?.swot?.strengths || []);
@@ -684,7 +770,6 @@ class BusinessBuilderService {
       doc.moveDown();
 
       // Items table
-      const tableTop = doc.y;
       doc.text('Items:', { underline: true });
       doc.moveDown(0.5);
 
@@ -728,10 +813,7 @@ class BusinessBuilderService {
       doc.end();
 
       return new Promise((resolve, reject) => {
-        doc.on('end', () => {
-          const pdfBuffer = Buffer.concat(buffers);
-          resolve(pdfBuffer);
-        });
+        doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', reject);
       });
     } catch (error) {
@@ -989,7 +1071,7 @@ class BusinessBuilderService {
     const runtime = await this.getPublicMiniAppBySlug(slug, { incrementView: false });
     const miniApp = runtime.miniApp;
     const business = runtime.business;
-    const eventType = String(payload.eventType || 'view').trim();
+    const eventType = normalizeEventType(payload.eventType || 'view');
     const sourceAssetId = String(payload.sourceAssetId || '').trim();
     const source = normalizeSource(payload.source || (sourceAssetId ? 'social' : 'direct'));
 
@@ -1014,16 +1096,21 @@ class BusinessBuilderService {
     }
 
     if (sourceAssetId) {
-      const statsUpdate = {};
-      if (eventType === 'view') {
-        statsUpdate['attributionStats.views'] = 1;
-      } else if (['contact_click', 'whatsapp_click', 'call_click', 'share'].includes(eventType)) {
-        statsUpdate['attributionStats.clicks'] = 1;
-      }
-      if (Object.keys(statsUpdate).length > 0) {
+      const assetEventStatMap = {
+        view: 'views',
+        contact_click: 'clicks',
+        whatsapp_click: 'clicks',
+        call_click: 'clicks',
+        share: 'clicks',
+        lead_submit: 'leads',
+        order_start: 'orders',
+        order_paid: 'paidOrders',
+      };
+      const statKey = assetEventStatMap[eventType];
+      if (statKey) {
         await BusinessBuilderAsset.updateOne(
           { assetId: sourceAssetId, businessId: business?._id || miniApp.businessId },
-          { $inc: statsUpdate }
+          { $inc: { [`attributionStats.${statKey}`]: 1 } }
         );
       }
     }
@@ -1205,47 +1292,50 @@ class BusinessBuilderService {
       throw new Error('Order not found');
     }
 
+    const webhookEventId = normalizeWebhookEventId(payload);
     const normalizedStatus = String(payload.status || '').trim().toLowerCase();
     const isPaid = ['paid', 'captured', 'success', 'completed'].includes(normalizedStatus);
     const isFailed = ['failed', 'failure', 'cancelled'].includes(normalizedStatus);
 
     const nextPaymentReference = String(payload.paymentReference || payload.paymentId || '').trim().slice(0, 140);
     const nextMethod = String(payload.method || payload.paymentMethod || '').trim().slice(0, 80);
+    const previousStatus = String(order?.payment?.status || '').toLowerCase();
+    const previousPaymentReference = String(order?.payment?.paymentReference || '').trim();
+    const previousProcessedIds = Array.isArray(order?.payment?.processedWebhookIds)
+      ? order.payment.processedWebhookIds
+      : [];
 
-    // Idempotency: if we already processed this order/payment reference, do nothing further
-    const alreadyPaid =
-      String(order?.payment?.status || '').toLowerCase() === 'paid' &&
-      nextPaymentReference &&
-      String(order?.payment?.paymentReference || '').trim() === nextPaymentReference;
-
-    if (alreadyPaid) {
+    if (webhookEventId && previousProcessedIds.includes(webhookEventId)) {
       return order;
     }
 
-    // Update payment fields
+    if (!webhookEventId && previousPaymentReference && previousPaymentReference === nextPaymentReference && previousStatus === (isPaid ? 'paid' : isFailed ? 'failed' : 'pending')) {
+      return order;
+    }
+
     order.payment = {
       ...(order.payment || {}),
       status: isPaid ? 'paid' : isFailed ? 'failed' : 'pending',
-      paymentReference: nextPaymentReference,
-      method: nextMethod,
-      paidAt: isPaid ? new Date() : order?.payment?.paidAt || null,
+      paymentReference: nextPaymentReference || order.payment?.paymentReference,
+      method: nextMethod || order.payment?.method,
+      paidAt: isPaid ? new Date() : order.payment?.paidAt || null,
       webhookPayload: payload,
+      processedWebhookIds: Array.from(new Set([...(Array.isArray(order.payment?.processedWebhookIds) ? order.payment.processedWebhookIds : []), ...(webhookEventId ? [webhookEventId] : [])])),
     };
 
     if (isPaid) {
-      // Avoid duplicate status pushes
-      if (String(order?.status || '').toLowerCase() !== 'paid') {
+      if (previousStatus !== 'paid') {
         order.pushStatus('paid', 'Payment confirmed via webhook');
       }
     } else if (isFailed) {
-      if (String(order?.status || '').toLowerCase() !== 'failed') {
+      if (previousStatus !== 'failed') {
         order.pushStatus('failed', 'Payment failed/cancelled');
       }
     }
 
     await order.save();
 
-    if (isPaid && !alreadyPaid) {
+    if (isPaid && previousStatus !== 'paid') {
       await BusinessBuilderEvent.create({
         miniAppId: order.miniAppId,
         businessId: order.businessId,
@@ -1342,21 +1432,22 @@ class BusinessBuilderService {
     const days = Math.max(1, Math.min(365, toNumber(options.days, 30)));
     const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const [events, leadsCount, orders, paidOrders] = await Promise.all([
-      BusinessBuilderEvent.find({ miniAppId: miniApp._id, createdAt: { $gte: fromDate } }),
+    const [eventGroups, leadsCount, orderCount, paidSummary] = await Promise.all([
+      BusinessBuilderEvent.aggregate([
+        { $match: { miniAppId: miniApp._id, createdAt: { $gte: fromDate } } },
+        { $group: { _id: '$eventType', count: { $sum: 1 } } },
+      ]),
       BusinessBuilderLead.countDocuments({ miniAppId: miniApp._id, createdAt: { $gte: fromDate } }),
-      BusinessBuilderOrder.find({ miniAppId: miniApp._id, createdAt: { $gte: fromDate } }),
-      BusinessBuilderOrder.find({
-        miniAppId: miniApp._id,
-        createdAt: { $gte: fromDate },
-        status: { $in: ['paid', 'completed', 'confirmed'] },
-      }),
+      BusinessBuilderOrder.countDocuments({ miniAppId: miniApp._id, createdAt: { $gte: fromDate } }),
+      BusinessBuilderOrder.aggregate([
+        { $match: { miniAppId: miniApp._id, createdAt: { $gte: fromDate }, status: { $in: ['paid', 'completed', 'confirmed'] } } },
+        { $group: { _id: null, paidCount: { $sum: 1 }, paidRevenue: { $sum: '$totalAmount' } } },
+      ]),
     ]);
 
-    const views = events.filter((item) => item.eventType === 'view').length;
-    const orderCount = orders.length;
-    const paidCount = paidOrders.length;
-    const paidRevenue = paidOrders.reduce((sum, item) => sum + Number(item.totalAmount || 0), 0);
+    const views = eventGroups.reduce((sum, group) => group._id === 'view' ? sum + group.count : sum, 0);
+    const paidCount = (paidSummary[0]?.paidCount) || 0;
+    const paidRevenue = Number((paidSummary[0]?.paidRevenue) || 0);
 
     return {
       miniAppId: miniApp.miniAppId,
@@ -1379,47 +1470,98 @@ class BusinessBuilderService {
     const days = Math.max(1, Math.min(365, toNumber(options.days, 30)));
     const fromDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const [events, leads, orders, paidOrders, assets, miniApps] = await Promise.all([
-      BusinessBuilderEvent.find({ businessId: business._id, createdAt: { $gte: fromDate } }),
-      BusinessBuilderLead.find({ businessId: business._id, createdAt: { $gte: fromDate } }),
-      BusinessBuilderOrder.find({ businessId: business._id, createdAt: { $gte: fromDate } }),
-      BusinessBuilderOrder.find({
-        businessId: business._id,
-        createdAt: { $gte: fromDate },
-        status: { $in: ['paid', 'completed', 'confirmed'] },
-      }),
+    const [viewsCount, leadsCount, ordersCount, paidSummary, leadGroups, orderGroups, assetDocs, miniApps] = await Promise.all([
+      BusinessBuilderEvent.countDocuments({ businessId: business._id, createdAt: { $gte: fromDate }, eventType: 'view' }),
+      BusinessBuilderLead.countDocuments({ businessId: business._id, createdAt: { $gte: fromDate } }),
+      BusinessBuilderOrder.countDocuments({ businessId: business._id, createdAt: { $gte: fromDate } }),
+      BusinessBuilderOrder.aggregate([
+        { $match: { businessId: business._id, createdAt: { $gte: fromDate }, status: { $in: ['paid', 'completed', 'confirmed'] } } },
+        { $group: { _id: null, paidOrders: { $sum: 1 }, revenue: { $sum: '$totalAmount' } } },
+      ]),
+      BusinessBuilderLead.aggregate([
+        { $match: { businessId: business._id, createdAt: { $gte: fromDate } } },
+        { $group: { _id: '$source', leads: { $sum: 1 } } },
+      ]),
+      BusinessBuilderOrder.aggregate([
+        { $match: { businessId: business._id, createdAt: { $gte: fromDate } } },
+        {
+          $group: {
+            _id: '$attribution.source',
+            orders: { $sum: 1 },
+            paidOrders: {
+              $sum: {
+                $cond: [
+                  { $in: [{ $toLower: '$status' }, ['paid', 'confirmed', 'completed']] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            revenue: {
+              $sum: {
+                $cond: [
+                  { $in: [{ $toLower: { $ifNull: ['$status', ''] } }, ['paid', 'confirmed', 'completed']] },
+                  '$totalAmount',
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
       BusinessBuilderAsset.find({ businessId: business._id }).sort({ createdAt: -1 }),
       MiniApp.find({ businessId: business._id }).select('miniAppId appName slug analytics status').lean(),
     ]);
 
-    const views = events.filter((item) => item.eventType === 'view').length;
-    const revenue = paidOrders.reduce((sum, item) => sum + Number(item.totalAmount || 0), 0);
+    const revenue = Number((paidSummary[0]?.revenue) || 0);
+    const paidOrders = Number((paidSummary[0]?.paidOrders) || 0);
 
-    const attributionBySource = [...leads, ...orders].reduce((acc, item) => {
-      const source = normalizeSource(item?.source || item?.attribution?.source || 'direct');
-      if (!acc[source]) {
-        acc[source] = { source, leads: 0, orders: 0, paidOrders: 0, revenue: 0 };
-      }
-      if (item.leadId || item.customer) {
-        if (item.totalAmount !== undefined) {
-          acc[source].orders += 1;
-          if (['paid', 'confirmed', 'completed'].includes(String(item.status || '').toLowerCase())) {
-            acc[source].paidOrders += 1;
-            acc[source].revenue += Number(item.totalAmount || 0);
-          }
-        } else {
-          acc[source].leads += 1;
-        }
-      }
-      return acc;
-    }, {});
+    const attributionBySource = {};
+    leadGroups.forEach((group) => {
+      const source = normalizeSource(group._id || 'direct');
+      attributionBySource[source] = attributionBySource[source] || { source, leads: 0, orders: 0, paidOrders: 0, revenue: 0 };
+      attributionBySource[source].leads = group.leads;
+    });
 
-    const assetAttribution = assets.map((asset) => ({
-      assetId: asset.assetId,
-      assetType: asset.assetType,
-      createdAt: asset.createdAt,
-      stats: asset.attributionStats || {},
-    }));
+    orderGroups.forEach((group) => {
+      const source = normalizeSource(group._id || 'direct');
+      attributionBySource[source] = attributionBySource[source] || { source, leads: 0, orders: 0, paidOrders: 0, revenue: 0 };
+      attributionBySource[source].orders = group.orders;
+      attributionBySource[source].paidOrders = group.paidOrders;
+      attributionBySource[source].revenue = Number(group.revenue || 0);
+    });
+
+    const miniAppLeads = await BusinessBuilderLead.aggregate([
+      { $match: { businessId: business._id, createdAt: { $gte: fromDate } } },
+      { $group: { _id: '$miniAppId', leads: { $sum: 1 } } },
+    ]);
+    const miniAppOrders = await BusinessBuilderOrder.aggregate([
+      { $match: { businessId: business._id, createdAt: { $gte: fromDate } } },
+      {
+        $group: {
+          _id: '$miniAppId',
+          orders: { $sum: 1 },
+          paidOrders: {
+            $sum: {
+              $cond: [
+                { $in: [{ $toLower: { $ifNull: ['$status', ''] } }, ['paid', 'confirmed', 'completed']] },
+                1,
+                0,
+              ],
+            },
+          },
+          revenue: {
+            $sum: {
+              $cond: [
+                { $in: [{ $toLower: { $ifNull: ['$status', ''] } }, ['paid', 'confirmed', 'completed']] },
+                '$totalAmount',
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
 
     const miniAppMap = miniApps.reduce((acc, app) => {
       acc[String(app._id)] = {
@@ -1436,35 +1578,41 @@ class BusinessBuilderService {
       return acc;
     }, {});
 
-    leads.forEach((lead) => {
-      const key = String(lead.miniAppId || '');
+    miniAppLeads.forEach((group) => {
+      const key = String(group._id || '');
       if (miniAppMap[key]) {
-        miniAppMap[key].leads += 1;
+        miniAppMap[key].leads = group.leads;
       }
     });
-    orders.forEach((order) => {
-      const key = String(order.miniAppId || '');
+
+    miniAppOrders.forEach((group) => {
+      const key = String(group._id || '');
       if (miniAppMap[key]) {
-        miniAppMap[key].orders += 1;
-      }
-      if (miniAppMap[key] && ['paid', 'confirmed', 'completed'].includes(String(order.status || '').toLowerCase())) {
-        miniAppMap[key].paidOrders += 1;
-        miniAppMap[key].revenue += Number(order.totalAmount || 0);
+        miniAppMap[key].orders = group.orders;
+        miniAppMap[key].paidOrders = group.paidOrders;
+        miniAppMap[key].revenue = Number(group.revenue || 0);
       }
     });
+
+    const assetAttribution = assetDocs.map((asset) => ({
+      assetId: asset.assetId,
+      assetType: asset.assetType,
+      createdAt: asset.createdAt,
+      stats: asset.attributionStats || {},
+    }));
 
     return {
       businessId: business.businessId,
       periodDays: days,
       summary: {
-        views,
-        leads: leads.length,
-        orders: orders.length,
-        paidOrders: paidOrders.length,
+        views: viewsCount,
+        leads: leadsCount,
+        orders: ordersCount,
+        paidOrders,
         revenue,
-        leadConversionRate: views > 0 ? Number(((leads.length / views) * 100).toFixed(2)) : 0,
-        orderConversionRate: leads.length > 0 ? Number(((orders.length / leads.length) * 100).toFixed(2)) : 0,
-        paymentSuccessRate: orders.length > 0 ? Number(((paidOrders.length / orders.length) * 100).toFixed(2)) : 0,
+        leadConversionRate: viewsCount > 0 ? Number(((leadsCount / viewsCount) * 100).toFixed(2)) : 0,
+        orderConversionRate: leadsCount > 0 ? Number(((ordersCount / leadsCount) * 100).toFixed(2)) : 0,
+        paymentSuccessRate: ordersCount > 0 ? Number(((paidOrders / ordersCount) * 100).toFixed(2)) : 0,
       },
       attributionBySource: Object.values(attributionBySource).sort((left, right) => right.revenue - left.revenue),
       assetAttribution,
@@ -1529,7 +1677,7 @@ class BusinessBuilderService {
       throw new Error(`AI asset monthly limit reached for ${plan} plan.`);
     }
 
-    const assetType = String(payload.assetType || '').trim().toLowerCase();
+    const assetType = normalizeAssetType(payload.assetType);
     if (!['poster', 'caption', 'website'].includes(assetType)) {
       throw new Error('assetType must be poster, caption, or website.');
     }
@@ -1625,13 +1773,21 @@ class BusinessBuilderService {
   }
 
   generateSWOT(business) {
-    const swot = {
+    return {
       strengths: ['Local market knowledge', 'Personalized service', 'Cost-effective operations'],
       weaknesses: ['Limited initial capital', 'Single location dependency', 'Market competition'],
       opportunities: ['Growing local economy', 'Digital marketing potential', 'Service expansion'],
       threats: ['Economic fluctuations', 'New market entrants', 'Changing customer preferences'],
     };
-    return `Strengths: ${swot.strengths.join(', ')}. Weaknesses: ${swot.weaknesses.join(', ')}. Opportunities: ${swot.opportunities.join(', ')}. Threats: ${swot.threats.join(', ')}.`;
+  }
+
+  generateRoadmap30(business) {
+    return [
+      'Week 1: Finalize positioning, offer design, and pricing ladders',
+      'Week 2: Launch landing page, WhatsApp profile, and lead form',
+      'Week 3: Acquire first 10 customers and gather testimonials',
+      'Week 4: Start paid + organic campaign and optimize conversion funnel',
+    ];
   }
 
   generateRoadmap90(business) {
@@ -1644,3 +1800,4 @@ class BusinessBuilderService {
 }
 
 module.exports = new BusinessBuilderService();
+
