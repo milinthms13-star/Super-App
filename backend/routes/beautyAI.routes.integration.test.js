@@ -36,6 +36,7 @@ const BeautySubscriptionRule = require('../models/BeautySubscriptionRule');
 const BeautyUsageQuota = require('../models/BeautyUsageQuota');
 const BeautyConsentAudit = require('../models/BeautyConsentAudit');
 const BeautyOpsEvent = require('../models/BeautyOpsEvent');
+const BeautySelfie = require('../models/BeautySelfie');
 const s3Storage = require('../utils/s3Storage');
 const beautyRouter = require('./beautyAI');
 
@@ -70,6 +71,7 @@ describe('beautyAI routes integration', () => {
       BeautyUsageQuota.deleteMany({}),
       BeautyConsentAudit.deleteMany({}),
       BeautyOpsEvent.deleteMany({}),
+      BeautySelfie.deleteMany({}),
     ]);
   });
 
@@ -85,6 +87,26 @@ describe('beautyAI routes integration', () => {
     expect(response.body.success).toBe(true);
     expect(Array.isArray(response.body.tips)).toBe(true);
     expect(response.body.tips.length).toBeGreaterThan(0);
+  });
+
+  test('GET /api/beauty-ai/tips/today is stable for same user/date/timezone', async () => {
+    const first = await request(app)
+      .get('/api/beauty-ai/tips/today')
+      .query({ language: 'en', timezone: 'Asia/Kolkata' })
+      .set('x-user-id', '507f1f77bcf86cd799439011')
+      .expect(200);
+
+    const second = await request(app)
+      .get('/api/beauty-ai/tips/today')
+      .query({ language: 'en', timezone: 'Asia/Kolkata' })
+      .set('x-user-id', '507f1f77bcf86cd799439011')
+      .expect(200);
+
+    expect(first.body.success).toBe(true);
+    expect(first.body.todayTip).toBeTruthy();
+    expect(first.body.dateKey).toBeTruthy();
+    expect(second.body.todayTip?._id).toBe(first.body.todayTip?._id);
+    expect(second.body.dateKey).toBe(first.body.dateKey);
   });
 
   test('POST /api/beauty-ai/plan requires consent', async () => {
@@ -131,6 +153,9 @@ describe('beautyAI routes integration', () => {
         title: expect.any(String),
         morning: expect.any(Array),
         night: expect.any(Array),
+        concernSeverity: expect.any(String),
+        apiVersion: expect.any(String),
+        modelVersion: expect.any(String),
       })
     );
     expect(response.body.quota).toEqual(
@@ -138,8 +163,17 @@ describe('beautyAI routes integration', () => {
         tier: expect.any(String),
         used: expect.any(Number),
         limit: expect.any(Number),
+        nextAllowedAt: expect.any(String),
       })
     );
+    expect(response.body.featureFlags).toEqual(
+      expect.objectContaining({
+        canUseRealSelfieAnalysis: true,
+        canGeneratePlan: true,
+      })
+    );
+    expect(response.body.apiVersion).toBeTruthy();
+    expect(response.body.modelVersion).toBeTruthy();
   });
 
   test('POST /api/beauty-ai/plan enforces daily quota for free tier users', async () => {
@@ -166,6 +200,104 @@ describe('beautyAI routes integration', () => {
 
     expect(second.body.success).toBe(false);
     expect(second.body.message).toContain('limit');
+    expect(second.body.quota.nextAllowedAt).toBeTruthy();
+    expect(second.body.featureFlags.canGeneratePlan).toBe(true);
+  });
+
+  test('POST /api/beauty-ai/analyze-selfie accepts selfie upload and derives signals', async () => {
+    const tinyPngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/7d8AAAAASUVORK5CYII=';
+    const tinyPngBuffer = Buffer.from(tinyPngBase64, 'base64');
+
+    const response = await request(app)
+      .post('/api/beauty-ai/analyze-selfie')
+      .field('knownSkinType', '')
+      .field('concern', 'acne')
+      .field('eventType', 'daily-glow')
+      .field('language', 'en')
+      .field('budget', 'low')
+      .field('selfieConsent', 'true')
+      .attach('selfie', tinyPngBuffer, { filename: 'selfie.png', contentType: 'image/png' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.analysis.selfieSignals).toEqual(
+      expect.objectContaining({
+        rednessScore: expect.any(Number),
+        textureScore: expect.any(Number),
+        brightnessScore: expect.any(Number),
+        confidence: expect.any(Number),
+      })
+    );
+    expect(response.body.meta).toEqual(
+      expect.objectContaining({
+        derivedFromSelfie: true,
+      })
+    );
+    expect(response.body.plan).toEqual(
+      expect.objectContaining({
+        title: expect.any(String),
+        concernSeverity: expect.any(String),
+      })
+    );
+    expect(response.body.featureFlags.canUseRealSelfieAnalysis).toBe(true);
+    expect(response.body.apiVersion).toBeTruthy();
+    expect(response.body.modelVersion).toBeTruthy();
+  });
+
+  test('POST /api/beauty-ai/analyze-selfie accepts client-provided selfieSignals without selfie upload', async () => {
+    const response = await request(app)
+      .post('/api/beauty-ai/analyze-selfie')
+      .send({
+        concern: 'acne',
+        eventType: 'daily-glow',
+        language: 'en',
+        budget: 'low',
+        selfieConsent: true,
+        selfieSignals: {
+          rednessScore: 0.42,
+          textureScore: 0.38,
+          brightnessScore: 0.61,
+          confidence: 0.73,
+        },
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.analysis.selfieSignals).toEqual(
+      expect.objectContaining({
+        rednessScore: 0.42,
+        textureScore: 0.38,
+        brightnessScore: 0.61,
+        confidence: 0.73,
+      })
+    );
+    expect(response.body.meta).toEqual(
+      expect.objectContaining({
+        derivedFromSelfie: false,
+      })
+    );
+  });
+
+  test('POST /api/beauty-ai/analyze-selfie rejects mixed selfie upload and selfieSignals in one request', async () => {
+    const tinyPngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/7d8AAAAASUVORK5CYII=';
+    const tinyPngBuffer = Buffer.from(tinyPngBase64, 'base64');
+
+    const response = await request(app)
+      .post('/api/beauty-ai/analyze-selfie')
+      .field('concern', 'acne')
+      .field('eventType', 'daily-glow')
+      .field('language', 'en')
+      .field('budget', 'low')
+      .field('selfieConsent', 'true')
+      .field('selfieSignals[rednessScore]', '0.4')
+      .field('selfieSignals[textureScore]', '0.3')
+      .attach('selfie', tinyPngBuffer, { filename: 'selfie.png', contentType: 'image/png' })
+      .expect(400);
+
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toContain('either a selfie upload or selfieSignals');
   });
 
   test('POST /api/beauty-ai/plans rejects base64 data URL photo payload', async () => {
@@ -248,9 +380,41 @@ describe('beautyAI routes integration', () => {
     expect(photoUrl.startsWith('http://') || photoUrl.startsWith('https://') || photoUrl.startsWith('/uploads/')).toBe(true);
     expect(String(response.body.data.photoStorageKey || '').length).toBeGreaterThan(0);
     expect(String(response.body.data.photoStorageProvider || '').length).toBeGreaterThan(0);
+    expect(String(response.body.data.selfieId || '').length).toBeGreaterThan(0);
+    expect(response.body.apiVersion).toBeTruthy();
+    expect(response.body.modelVersion).toBeTruthy();
+
+    const selfieDoc = await BeautySelfie.findById(response.body.data.selfieId).lean();
+    expect(selfieDoc).toBeTruthy();
 
     const uploadEvents = await BeautyOpsEvent.find({ eventType: 'upload_success' }).lean();
     expect(uploadEvents.length).toBeGreaterThan(0);
+  });
+
+  test('POST /api/beauty-ai/selfies/delete deletes selfie record and returns deletion status', async () => {
+    const selfie = await BeautySelfie.create({
+      userId: '507f1f77bcf86cd799439011',
+      photoUrl: 'http://localhost/uploads/beauty-ai/selfies/test/selfie-delete.webp',
+      photoStorageKey: 'beauty-ai/selfies/test/selfie-delete.webp',
+      photoStorageProvider: 'local',
+      photoName: 'selfie-delete.webp',
+      status: 'active',
+    });
+
+    const response = await request(app)
+      .post('/api/beauty-ai/selfies/delete')
+      .send({ selfieId: String(selfie._id) })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.deletion).toEqual(
+      expect.objectContaining({
+        dbUpdated: true,
+      })
+    );
+
+    const deleted = await BeautySelfie.findById(selfie._id).lean();
+    expect(deleted.status).toBe('deleted');
   });
 
   test('DELETE /api/beauty-ai/plans/:id/photo clears persisted photo storage fields', async () => {
@@ -272,6 +436,11 @@ describe('beautyAI routes integration', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data.photoUrl).toBe('');
     expect(response.body.data.photoStorageKey).toBe('');
+    expect(response.body.deletion).toEqual(
+      expect.objectContaining({
+        previousPhotoDeleteSuccess: expect.any(Boolean),
+      })
+    );
   });
 
   test('DELETE /api/beauty-ai/plans/:id/photo still succeeds when storage delete fails and logs event', async () => {
@@ -323,6 +492,107 @@ describe('beautyAI routes integration', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].userId).toBe('507f1f77bcf86cd799439011');
+    expect(response.body.apiVersion).toBeTruthy();
+    expect(response.body.modelVersion).toBeTruthy();
+  });
+
+  test('GET /api/beauty-ai/plans/:id enforces ownership', async () => {
+    const plan = await BeautyPlan.create({
+      userId: '507f1f77bcf86cd799439011',
+      skinType: 'oily',
+      budget: 'low',
+      language: 'en',
+      plan: { title: 'Owned plan', score: 70 },
+    });
+
+    const ok = await request(app).get(`/api/beauty-ai/plans/${plan._id}`).expect(200);
+    expect(ok.body.success).toBe(true);
+    expect(ok.body.data._id).toBe(String(plan._id));
+
+    const blocked = await request(app)
+      .get(`/api/beauty-ai/plans/${plan._id}`)
+      .set('x-user-id', '507f1f77bcf86cd799439012')
+      .expect(404);
+    expect(blocked.body.success).toBe(false);
+  });
+
+  test('PUT /api/beauty-ai/plans/:id updates notes and concerns safely', async () => {
+    const plan = await BeautyPlan.create({
+      userId: '507f1f77bcf86cd799439011',
+      skinType: 'oily',
+      budget: 'low',
+      language: 'en',
+      selectedConcerns: ['acne'],
+      plan: { title: 'Editable plan', score: 65 },
+    });
+
+    const response = await request(app)
+      .put(`/api/beauty-ai/plans/${plan._id}`)
+      .send({
+        notes: 'Updated note',
+        selectedConcerns: ['acne', 'pigmentation'],
+        primaryConcern: 'pigmentation',
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.notes).toBe('Updated note');
+    expect(response.body.data.primaryConcern).toBe('pigmentation');
+    expect(response.body.data.selectedConcerns).toEqual(expect.arrayContaining(['acne', 'pigmentation']));
+  });
+
+  test('POST /api/beauty-ai/plans/:id/duplicate creates a new active copy', async () => {
+    const original = await BeautyPlan.create({
+      userId: '507f1f77bcf86cd799439011',
+      skinType: 'oily',
+      budget: 'low',
+      language: 'en',
+      selectedConcerns: ['acne'],
+      notes: 'Original note',
+      plan: { title: 'Original plan', score: 66 },
+      status: 'Archived',
+    });
+
+    const response = await request(app)
+      .post(`/api/beauty-ai/plans/${original._id}/duplicate`)
+      .expect(201);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data._id).not.toBe(String(original._id));
+    expect(response.body.data.status).toBe('Active');
+    expect(response.body.data.notes).toBe('Original note');
+  });
+
+  test('PUT /api/beauty-ai/plans/:id/photo replaces selfie and reports deletion status', async () => {
+    const plan = await BeautyPlan.create({
+      userId: '507f1f77bcf86cd799439011',
+      skinType: 'oily',
+      budget: 'low',
+      language: 'en',
+      photoUrl: 'http://localhost/uploads/beauty-ai/selfies/test/selfie-old.webp',
+      photoStorageKey: 'beauty-ai/selfies/test/selfie-old.webp',
+      photoStorageProvider: 'local',
+      photoName: 'old.webp',
+      plan: { title: 'Photo replace plan', score: 71 },
+    });
+
+    const tinyPngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/7d8AAAAASUVORK5CYII=';
+    const tinyPngBuffer = Buffer.from(tinyPngBase64, 'base64');
+
+    const response = await request(app)
+      .put(`/api/beauty-ai/plans/${plan._id}/photo`)
+      .attach('selfie', tinyPngBuffer, { filename: 'new-selfie.png', contentType: 'image/png' })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(String(response.body.data.photoUrl || '').length).toBeGreaterThan(0);
+    expect(String(response.body.data.photoStorageKey || '').length).toBeGreaterThan(0);
+    expect(response.body.deletion).toEqual(
+      expect.objectContaining({
+        previousPhotoDeleteSuccess: expect.any(Boolean),
+      })
+    );
   });
 
   test('PUT /api/beauty-ai/plans/:id/archive rejects malformed id', async () => {

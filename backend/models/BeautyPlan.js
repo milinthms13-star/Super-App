@@ -45,6 +45,24 @@ const beautyPlanSchema = new mongoose.Schema(
         trim: true,
       },
     ],
+    primaryConcern: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 120,
+    },
+    eventType: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 40,
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: '',
+      maxlength: 800,
+    },
     photoUrl: {
       type: String,
       trim: true,

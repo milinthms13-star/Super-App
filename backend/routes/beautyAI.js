@@ -17,6 +17,7 @@ const BeautySubscriptionRule = require('../models/BeautySubscriptionRule');
 const BeautyUsageQuota = require('../models/BeautyUsageQuota');
 const BeautyConsentAudit = require('../models/BeautyConsentAudit');
 const BeautyOpsEvent = require('../models/BeautyOpsEvent');
+const BeautySelfie = require('../models/BeautySelfie');
 const s3Storage = require('../utils/s3Storage');
 const {
   normalizeStorageKey,
@@ -36,6 +37,11 @@ if (typeof verifyAdmin !== 'function') {
 }
 const isTestEnv = process.env.NODE_ENV === 'test';
 const isProduction = process.env.NODE_ENV === 'production';
+const BEAUTY_API_VERSION =
+  String(process.env.BEAUTY_AI_API_VERSION || 'beauty-ai-v1.1').trim().slice(0, 40) || 'beauty-ai-v1.1';
+const BEAUTY_MODEL_VERSION =
+  String(process.env.BEAUTY_AI_MODEL_VERSION || 'heuristic-selfie-v2').trim().slice(0, 60) ||
+  'heuristic-selfie-v2';
 
 const dataDir = path.join(__dirname, '..', 'data');
 const dataPath = path.join(dataDir, 'beauty-ai-data.json');
@@ -386,12 +392,33 @@ const sanitizeSelfieBuffer = async (fileBuffer = Buffer.alloc(0)) => {
   };
 };
 
+const deriveSelfieSignalsFromBuffer = async (sanitizedBuffer = Buffer.alloc(0)) => {
+  const imageStats = await sharp(sanitizedBuffer, { failOn: 'error' }).stats();
+  const channels = Array.isArray(imageStats?.channels) ? imageStats.channels : [];
+  const red = Number(channels?.[0]?.mean || 0);
+  const green = Number(channels?.[1]?.mean || 0);
+  const blue = Number(channels?.[2]?.mean || 0);
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+  const rednessRaw = (red - (green + blue) / 2 + 80) / 180;
+  const textureRaw =
+    (Number(channels?.[0]?.stdev || 0) + Number(channels?.[1]?.stdev || 0) + Number(channels?.[2]?.stdev || 0)) /
+    (3 * 64);
+  const confidenceRaw = Math.min(1, Math.max(0, Number(imageStats?.entropy || 0) / 7));
+
+  return normalizeSelfieSignals({
+    rednessScore: Math.max(0, Math.min(1, rednessRaw)),
+    textureScore: Math.max(0, Math.min(1, textureRaw)),
+    brightnessScore: Math.max(0, Math.min(1, luminance)),
+    confidence: Math.max(0.35, Math.min(1, confidenceRaw)),
+  });
+};
+
 const QUOTA_TIMEZONE = normalizeText(process.env.BEAUTY_QUOTA_TIMEZONE || process.env.APP_TIMEZONE || 'Asia/Kolkata', 80);
 
-const getTodayDateKey = () => {
+const getDateKeyForTimezone = (timeZone = QUOTA_TIMEZONE) => {
   try {
     return new Intl.DateTimeFormat('en-CA', {
-      timeZone: QUOTA_TIMEZONE || 'Asia/Kolkata',
+      timeZone: normalizeText(timeZone, 80) || QUOTA_TIMEZONE || 'Asia/Kolkata',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -400,6 +427,57 @@ const getTodayDateKey = () => {
     return new Date().toISOString().slice(0, 10);
   }
 };
+
+const getTodayDateKey = () => getDateKeyForTimezone(QUOTA_TIMEZONE);
+
+const buildStableTipIndex = ({ total = 0, dateKey = '', language = 'en', userId = '' } = {}) => {
+  const size = Number(total || 0);
+  if (size <= 0) {
+    return 0;
+  }
+
+  const seed = `${normalizeText(dateKey, 16)}:${normalizeLower(language, 8)}:${normalizeText(userId, 120)}`;
+  const hash = crypto.createHash('sha256').update(seed).digest('hex');
+  const bucket = parseInt(hash.slice(0, 12), 16);
+  if (!Number.isFinite(bucket)) {
+    return 0;
+  }
+  return Math.abs(bucket) % size;
+};
+
+const buildNextDateKey = (dateKey = '') => {
+  const [year, month, day] = String(dateKey || '')
+    .split('-')
+    .map((part) => Number(part));
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    return tomorrow.toISOString().slice(0, 10);
+  }
+  const nextUtc = new Date(Date.UTC(year, Math.max(0, month - 1), day + 1));
+  return nextUtc.toISOString().slice(0, 10);
+};
+
+const buildQuotaWindow = (dateKey = '') => {
+  const nextDateKey = buildNextDateKey(dateKey || getTodayDateKey());
+  return {
+    dateKey: normalizeText(dateKey || getTodayDateKey(), 16),
+    timezone: QUOTA_TIMEZONE,
+    nextDateKey,
+    nextAllowedAt: `${nextDateKey}T00:00:00`,
+  };
+};
+
+const buildFeatureFlags = ({ tier = 'free', quotaRule = {} } = {}) => ({
+  tier: tier === 'premium' ? 'premium' : 'free',
+  canUseRealSelfieAnalysis: true,
+  canGeneratePlan: true,
+  canSavePlan: true,
+  canDuplicatePlan: true,
+  canUploadSelfie: true,
+  allowPremiumReport: Boolean(quotaRule?.allowPremiumReport),
+  allowDermatologistReferral: Boolean(quotaRule?.allowDermatologistReferral),
+  weeklyPlanLengthDays: Number(quotaRule?.weeklyPlanLengthDays || 0),
+});
 
 const resolveQuotaRuleByTier = (rules, tier) => (tier === 'premium' ? rules.premium : rules.free);
 
@@ -435,23 +513,31 @@ const enforceDailyQuota = async ({ userId, tier, quotaField, limit }) => {
 
   if (updated) {
     const used = Number(updated.counts?.[quotaField] || 0);
+    const quotaWindow = buildQuotaWindow(dateKey);
     return {
       allowed: true,
       currentCount: used,
       remaining: Math.max(0, Number(limit) - used),
       limit: Number(limit),
-      dateKey,
+      dateKey: quotaWindow.dateKey,
+      nextAllowedAt: quotaWindow.nextAllowedAt,
+      timezone: quotaWindow.timezone,
+      nextDateKey: quotaWindow.nextDateKey,
     };
   }
 
   const existing = await BeautyUsageQuota.findOne({ userId, dateKey }).lean();
   const currentCount = Number(existing?.counts?.[quotaField] || 0);
+  const quotaWindow = buildQuotaWindow(dateKey);
   return {
     allowed: false,
     currentCount,
     remaining: 0,
     limit: Number(limit),
-    dateKey,
+    dateKey: quotaWindow.dateKey,
+    nextAllowedAt: quotaWindow.nextAllowedAt,
+    timezone: quotaWindow.timezone,
+    nextDateKey: quotaWindow.nextDateKey,
   };
 };
 
@@ -473,14 +559,33 @@ const JoiSchemas = {
   tipQuery: Joi.object({
     language: Joi.string().trim().lowercase().max(8).default('en'),
     category: Joi.string().trim().lowercase().max(40).allow('').default(''),
+    timezone: Joi.string().trim().max(80).allow('').default(''),
   }),
   analyzeSelfie: Joi.object({
     knownSkinType: Joi.string().trim().max(40).allow('').default('Not sure'),
     concern: Joi.string().trim().max(120).required(),
     eventMode: Joi.string().trim().max(60).allow('').default(''),
+    eventType: Joi.string().trim().max(40).allow('').default('daily-glow'),
+    language: Joi.string().trim().lowercase().valid('ml', 'en', 'hi').default('en'),
+    hairType: Joi.string().trim().max(40).allow('').default('normal'),
+    preference: Joi.string().trim().max(40).allow('').default('balanced'),
     ageRange: Joi.string().trim().max(40).allow('').default(''),
     selfieConsent: Joi.boolean().truthy('true', '1').required(),
     budget: Joi.string().trim().valid('low', 'medium', 'high').default('medium'),
+    safety: Joi.object({
+      sensitiveSkin: Joi.boolean().truthy('true', '1').default(false),
+      knownAllergy: Joi.string().trim().max(120).allow('').default(''),
+      pregnantOrBreastfeeding: Joi.boolean().truthy('true', '1').default(false),
+      usingSkinMedicine: Joi.boolean().truthy('true', '1').default(false),
+    }).default({}),
+    selfieSignals: Joi.object({
+      rednessScore: Joi.number().min(0).max(1),
+      textureScore: Joi.number().min(0).max(1),
+      brightnessScore: Joi.number().min(0).max(1),
+      confidence: Joi.number().min(0).max(1),
+    })
+      .optional()
+      .default(null),
   }),
   plan: Joi.object({
     language: Joi.string().trim().lowercase().valid('ml', 'en', 'hi').required(),
@@ -516,11 +621,13 @@ const JoiSchemas = {
   createPlan: Joi.object({
     gender: Joi.string().trim().max(24).allow('').default(''),
     age: Joi.number().integer().min(0).max(120).allow(null).default(null),
+    primaryConcern: Joi.string().trim().max(120).allow('').default(''),
     skinType: Joi.string().trim().max(40).required(),
     hairType: Joi.string().trim().max(40).allow('').default('normal'),
     budget: Joi.string().trim().valid('low', 'medium', 'high').required(),
     language: Joi.string().trim().lowercase().valid('ml', 'en', 'hi').required(),
     selectedConcerns: Joi.array().items(Joi.string().trim().max(80)).max(20).default([]),
+    notes: Joi.string().trim().max(800).allow('').default(''),
     photoUrl: Joi.string().trim().max(2000).allow('').default(''),
     photoStorageKey: Joi.string().trim().max(500).allow('').default(''),
     photoStorageProvider: Joi.string().trim().max(32).allow('').default(''),
@@ -547,7 +654,24 @@ const JoiSchemas = {
       products: Joi.array().items(Joi.string().trim().max(180)).max(40).default([]),
       avoid: Joi.array().items(Joi.string().trim().max(180)).max(40).default([]),
       eventPlan: Joi.array().items(Joi.string().trim().max(180)).max(40).default([]),
+      concernSeverity: Joi.string().trim().valid('mild', 'moderate', 'severe').default('mild'),
+      disclaimer: Joi.array().items(Joi.string().trim().max(260)).max(20).default([]),
+      apiVersion: Joi.string().trim().max(40).allow('').default(BEAUTY_API_VERSION),
+      modelVersion: Joi.string().trim().max(60).allow('').default(BEAUTY_MODEL_VERSION),
     }).allow(null).default(null),
+  }),
+  updatePlan: Joi.object({
+    selectedConcerns: Joi.array().items(Joi.string().trim().max(80)).max(20),
+    primaryConcern: Joi.string().trim().max(120).allow(''),
+    notes: Joi.string().trim().max(800).allow(''),
+    status: Joi.string().trim().valid('Active', 'Archived'),
+  })
+    .min(1)
+    .required(),
+  deleteSelfie: Joi.object({
+    selfieId: Joi.string().trim().max(80).allow('').default(''),
+    photoStorageKey: Joi.string().trim().max(500).allow('').default(''),
+    photoUrl: Joi.string().trim().max(2000).allow('').default(''),
   }),
   progress: Joi.object({
     day: Joi.number().integer().min(1).max(30).required(),
@@ -619,6 +743,9 @@ const concernList = (primaryConcern = '', eventMode = '') => {
 
   return normalizeArray(seed, 80, 4);
 };
+
+const resolveEffectiveEventType = (eventType = '', eventMode = '') =>
+  normalizeText(eventType || eventMode || 'daily-glow', 40);
 
 const pickProducts = (budget = 'medium') => {
   const normalized = normalizeLower(budget, 20);
@@ -772,6 +899,39 @@ const buildDisclaimers = ({ safety = {}, concernSeverity = 'mild' } = {}) => {
   return disclaimers;
 };
 
+const buildDisclaimerBundle = ({ safety = {}, concernSeverity = 'mild' } = {}) => {
+  const general = ['This plan is for informational guidance and is not medical advice.'];
+  const caution = [];
+  const escalation = [];
+
+  if (safety?.sensitiveSkin) {
+    caution.push('Sensitive skin detected: patch test before applying new products.');
+  }
+  if (safety?.pregnantOrBreastfeeding) {
+    caution.push('Pregnancy/breastfeeding flag: verify ingredient suitability with your clinician.');
+  }
+  if (safety?.usingSkinMedicine) {
+    caution.push('Current skin medicine use: avoid combining with strong actives without professional review.');
+  }
+  if (normalizeText(safety?.knownAllergy, 120)) {
+    caution.push(`Known allergy noted: ${normalizeText(safety.knownAllergy, 120)}.`);
+  }
+
+  if (concernSeverity === 'severe') {
+    escalation.push('Severe concern detected. Seek dermatologist support urgently.');
+  } else if (concernSeverity === 'moderate') {
+    escalation.push('Moderate concern detected. Consult a dermatologist if no improvement in 7-14 days.');
+  }
+
+  return {
+    severity: concernSeverity,
+    general,
+    caution,
+    escalation,
+    combined: [...general, ...caution, ...escalation],
+  };
+};
+
 const generateStructuredBeautyPlan = ({
   skinType = 'normal',
   hairType = 'normal',
@@ -789,6 +949,7 @@ const generateStructuredBeautyPlan = ({
 
   const severity = severityFromConcernText(selectedConcerns);
   const disclaimers = buildDisclaimers({ safety, concernSeverity: severity });
+  const disclaimerBundle = buildDisclaimerBundle({ safety, concernSeverity: severity });
 
   const morning = [
     'Gentle cleanser',
@@ -824,8 +985,9 @@ const generateStructuredBeautyPlan = ({
     eventPlan: eventPlanAddons(eventType),
     concernSeverity: severity,
     disclaimer: disclaimers,
-    apiVersion: 'beauty-ai-v1',
-    modelVersion: 'heuristic-v1',
+    disclaimerBundle,
+    apiVersion: BEAUTY_API_VERSION,
+    modelVersion: BEAUTY_MODEL_VERSION,
   };
 };
 
@@ -1019,6 +1181,9 @@ router.get('/tips/today', authenticate, async (req, res) => {
 
     const language = queryValidation.value.language;
     const category = queryValidation.value.category;
+    const timezone = normalizeText(queryValidation.value.timezone || QUOTA_TIMEZONE, 80) || QUOTA_TIMEZONE;
+    const dateKey = getDateKeyForTimezone(timezone);
+    const userId = resolveUserId(req) || 'anonymous';
 
     const filter = { status: 'published' };
     if (category) {
@@ -1031,12 +1196,20 @@ router.get('/tips/today', authenticate, async (req, res) => {
       const preferred = tips.filter((tip) => normalizeLower(tip.language, 8) === language);
       const fallbackEnglish = tips.filter((tip) => normalizeLower(tip.language, 8) === 'en');
       const selected = preferred.length ? preferred : fallbackEnglish.length ? fallbackEnglish : tips;
-      const todayTip = selected[new Date().getDate() % Math.max(1, selected.length)] || null;
+      const stableIndex = buildStableTipIndex({
+        total: selected.length,
+        dateKey,
+        language,
+        userId,
+      });
+      const todayTip = selected[stableIndex] || null;
 
       return res.json({
         success: true,
         language,
         category: category || 'all',
+        timezone,
+        dateKey,
         todayTip,
         tips: selected.slice(0, 20),
       });
@@ -1046,6 +1219,8 @@ router.get('/tips/today', authenticate, async (req, res) => {
       success: true,
       language,
       category: category || 'all',
+      timezone,
+      dateKey,
       todayTip: null,
       tips: [],
     });
@@ -1150,15 +1325,27 @@ router.post('/selfies/upload', authenticate, selfieUploadLimiter, async (req, re
       },
     });
 
+    const selfieRecord = await BeautySelfie.create({
+      userId,
+      photoUrl: publicUrl,
+      photoStorageKey: normalizeStorageKey(uploadResult.s3Key || ''),
+      photoStorageProvider: normalizeText(uploadResult.storage || 's3', 32) || 's3',
+      photoName: normalizeText(req.file?.originalname || '', 180),
+      status: 'active',
+    });
+
     return res.status(201).json({
       success: true,
       data: {
+        selfieId: String(selfieRecord._id || ''),
         photoUrl: publicUrl,
         photoStorageKey: normalizeStorageKey(uploadResult.s3Key || ''),
         photoStorageProvider: normalizeText(uploadResult.storage || 's3', 32) || 's3',
         contentType: sanitizedImage.outputMimeType,
         sizeBytes: Number(sanitizedImage.buffer.length || 0),
       },
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
       requestId: res.locals?.requestId || '',
     });
   } catch (error) {
@@ -1174,30 +1361,159 @@ router.post('/selfies/upload', authenticate, selfieUploadLimiter, async (req, re
   }
 });
 
-router.post('/analyze-selfie', authenticate, analysisLimiter, async (req, res) => {
-  // Operational note: this endpoint currently performs signal-based guidance.
-  // If the client expects image-based analysis, extend this route to accept selfie upload.
-
+router.post('/selfies/delete', authenticate, planStorageLimiter, async (req, res) => {
   try {
     if (!ensureDbReady(res)) {
       return;
     }
 
-    const validation = validate(JoiSchemas.analyzeSelfie, req.body || {});
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const validation = validate(JoiSchemas.deleteSelfie, req.body || {});
     if (!validation.ok) {
       return res.status(400).json({
         success: false,
         errors: validation.errors,
+        requestId: res.locals?.requestId || '',
       });
+    }
+
+    const payload = validation.value;
+    if (!payload.selfieId && !payload.photoStorageKey && !payload.photoUrl) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provide selfieId or photoStorageKey or photoUrl to delete.',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    let selfieDoc = null;
+    if (payload.selfieId && mongoose.Types.ObjectId.isValid(payload.selfieId)) {
+      selfieDoc = await BeautySelfie.findOne({ _id: payload.selfieId, userId, status: 'active' });
+    }
+
+    const storageKey =
+      normalizeStorageKey(payload.photoStorageKey) ||
+      normalizeStorageKey(selfieDoc?.photoStorageKey || '') ||
+      extractStorageKeyFromPhotoUrl(payload.photoUrl) ||
+      extractStorageKeyFromPhotoUrl(selfieDoc?.photoUrl || '');
+
+    let storageDeleted = false;
+    if (storageKey || payload.photoUrl || selfieDoc?.photoUrl) {
+      storageDeleted = await deleteStoredSelfie({
+        storageKey,
+        photoUrl: payload.photoUrl || selfieDoc?.photoUrl || '',
+        userId,
+        requestId: res.locals?.requestId || '',
+        endpoint: req.originalUrl,
+      });
+    }
+
+    let dbUpdated = false;
+    if (selfieDoc) {
+      selfieDoc.status = 'deleted';
+      selfieDoc.deletedAt = new Date();
+      await selfieDoc.save();
+      dbUpdated = true;
+    } else if (payload.selfieId) {
+      const updated = await BeautySelfie.findOneAndUpdate(
+        { _id: payload.selfieId, userId },
+        { status: 'deleted', deletedAt: new Date() },
+        { new: true }
+      ).lean();
+      dbUpdated = Boolean(updated);
+    }
+
+    return res.json({
+      success: true,
+      deletion: {
+        storageDeleted,
+        dbUpdated,
+        storageKey: normalizeText(storageKey, 500),
+      },
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Failed to delete selfie.');
+  }
+});
+
+router.post('/analyze-selfie', authenticate, analysisLimiter, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+
+    const isMultipart = Boolean(req.is('multipart/form-data'));
+    const declaredContentLength = Number(req.headers['content-length'] || 0);
+    const multipartSafetyBudget = MAX_SELFIE_UPLOAD_BYTES + 1024 * 1024;
+    if (isMultipart && Number.isFinite(declaredContentLength) && declaredContentLength > multipartSafetyBudget) {
+      return res.status(413).json({
+        success: false,
+        message: 'Selfie payload is too large.',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    let validation = null;
+    if (!isMultipart) {
+      validation = validate(JoiSchemas.analyzeSelfie, req.body || {});
+      if (!validation.ok) {
+        return res.status(400).json({
+          success: false,
+          errors: validation.errors,
+        });
+      }
+    }
+
+    if (isMultipart) {
+      try {
+        await runSelfieUpload(req, res);
+      } catch (error) {
+        const isMulterError = error instanceof multer.MulterError;
+        const statusCode = isMulterError ? 400 : 415;
+        const message =
+          error.code === 'LIMIT_FILE_SIZE'
+            ? 'Selfie image must be under 8MB.'
+            : error.message || 'Invalid selfie payload.';
+        return res.status(statusCode).json({
+          success: false,
+          message,
+          requestId: res.locals?.requestId || '',
+        });
+      }
+
+      validation = validate(JoiSchemas.analyzeSelfie, req.body || {});
+      if (!validation.ok) {
+        return res.status(400).json({
+          success: false,
+          errors: validation.errors,
+        });
+      }
     }
 
     const {
       knownSkinType,
       concern,
       eventMode,
+      eventType,
+      language,
+      hairType,
+      preference,
+      safety,
       ageRange,
       selfieConsent,
       budget,
+      selfieSignals: inputSelfieSignals,
     } = validation.value;
 
     const userId = resolveUserId(req);
@@ -1251,6 +1567,7 @@ router.post('/analyze-selfie', authenticate, analysisLimiter, async (req, res) =
     const rules = await getSubscriptionRules();
     const tier = resolveUserTier(req);
     const quotaRule = resolveQuotaRuleByTier(rules, tier);
+    const featureFlags = buildFeatureFlags({ tier, quotaRule });
     const quota = await enforceDailyQuota({
       userId,
       tier,
@@ -1284,22 +1601,61 @@ router.post('/analyze-selfie', authenticate, analysisLimiter, async (req, res) =
           limit: quota.limit,
           remaining: quota.remaining,
           dateKey: quota.dateKey,
+          nextAllowedAt: quota.nextAllowedAt,
+          timezone: quota.timezone,
+          nextDateKey: quota.nextDateKey,
         },
+        featureFlags,
+        apiVersion: BEAUTY_API_VERSION,
+        modelVersion: BEAUTY_MODEL_VERSION,
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const hasUploadedSelfie = Boolean(req.file?.buffer);
+    const hasProvidedSignals = Boolean(inputSelfieSignals && typeof inputSelfieSignals === 'object');
+    if (hasUploadedSelfie && hasProvidedSignals) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provide either a selfie upload or selfieSignals, not both.',
         requestId: res.locals?.requestId || '',
       });
     }
 
     const detectedSkinType = detectSkinType(knownSkinType, concern);
-    const detectedConcerns = concernList(concern, eventMode);
+    const effectiveEventType = resolveEffectiveEventType(eventType, eventMode);
+    const detectedConcerns = concernList(concern, effectiveEventType);
+    const selectedSafety = safety || {};
 
-    const baseScore = 72;
+    let selfieSignals = normalizeSelfieSignals({});
+    let derivedFromSelfie = false;
+    if (hasUploadedSelfie) {
+      const sanitizedImage = await sanitizeSelfieBuffer(req.file.buffer);
+      selfieSignals = await deriveSelfieSignalsFromBuffer(sanitizedImage.buffer);
+      derivedFromSelfie = true;
+    } else if (hasProvidedSignals) {
+      selfieSignals = normalizeSelfieSignals(inputSelfieSignals);
+    }
+
+    const signalScore = scoreFromSignals(selfieSignals);
     const concernPenalty = Math.min(20, detectedConcerns.length * 4);
     const agePenalty = String(ageRange || '').includes('41') ? 4 : 0;
-    const skinScore = Math.max(45, baseScore - concernPenalty - agePenalty);
+    const skinScore = Math.max(45, Math.round((signalScore + (72 - concernPenalty - agePenalty)) / 2));
 
-    const severeConcern = detectedConcerns.some((item) =>
-      ['infection', 'burns', 'allergy'].includes(normalizeLower(item, 30))
-    );
+    const severity = severityFromConcernText([concern, ...detectedConcerns]);
+    const disclaimerBundle = buildDisclaimerBundle({ safety: selectedSafety, concernSeverity: severity });
+    const generatedPlan = generateStructuredBeautyPlan({
+      skinType: detectedSkinType,
+      hairType: normalizeText(hairType || 'normal', 40),
+      selectedConcerns: detectedConcerns,
+      budget,
+      language,
+      eventType: effectiveEventType,
+      safety: selectedSafety,
+      signals: selfieSignals,
+    });
+
+    const severeConcern = severity === 'severe';
 
     return res.json({
       success: true,
@@ -1309,6 +1665,9 @@ router.post('/analyze-selfie', authenticate, analysisLimiter, async (req, res) =
         concernsDetected: detectedConcerns,
         productsPreview: pickProducts(budget),
         severeConcernDetected: severeConcern,
+        concernSeverity: severity,
+        disclaimerBundle,
+        selfieSignals,
         warning: severeConcern
           ? 'Possible severe concern detected. Please consult a dermatologist.'
           : '',
@@ -1317,13 +1676,31 @@ router.post('/analyze-selfie', authenticate, analysisLimiter, async (req, res) =
           note: 'Selfie image is processed for guidance and not stored by this endpoint.',
         },
       },
+      plan: {
+        ...generatedPlan,
+        summary:
+          generatedPlan.summary ||
+          (language === 'ml'
+            ? 'à´‡à´¤àµ à´ªàµŠà´¤àµà´µà´¾à´¯ guidance à´†à´£àµ.'
+            : 'Guidance generated from selfie signals and concern profile.'),
+      },
+      featureFlags,
       quota: {
         tier,
         used: quota.currentCount,
         limit: quota.limit,
         remaining: quota.remaining,
         dateKey: quota.dateKey,
+        nextAllowedAt: quota.nextAllowedAt,
+        timezone: quota.timezone,
+        nextDateKey: quota.nextDateKey,
       },
+      meta: {
+        source: derivedFromSelfie ? 'selfie-upload' : 'guided-input',
+        derivedFromSelfie,
+      },
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
       requestId: res.locals?.requestId || '',
     });
   } catch (error) {
@@ -1408,6 +1785,7 @@ router.post('/plan', authenticate, planGenerationLimiter, async (req, res) => {
     const rules = await getSubscriptionRules();
     const tier = resolveUserTier(req);
     const quotaRule = resolveQuotaRuleByTier(rules, tier);
+    const featureFlags = buildFeatureFlags({ tier, quotaRule });
     const quota = await enforceDailyQuota({
       userId,
       tier,
@@ -1441,7 +1819,13 @@ router.post('/plan', authenticate, planGenerationLimiter, async (req, res) => {
           limit: quota.limit,
           remaining: quota.remaining,
           dateKey: quota.dateKey,
+          nextAllowedAt: quota.nextAllowedAt,
+          timezone: quota.timezone,
+          nextDateKey: quota.nextDateKey,
         },
+        featureFlags,
+        apiVersion: BEAUTY_API_VERSION,
+        modelVersion: BEAUTY_MODEL_VERSION,
         requestId: res.locals?.requestId || '',
       });
     }
@@ -1471,6 +1855,8 @@ router.post('/plan', authenticate, planGenerationLimiter, async (req, res) => {
       safety,
       signals,
     });
+    const concernSeverity = structuredPlan.concernSeverity || severityFromConcernText([concern, ...selectedConcerns]);
+    const disclaimerBundle = buildDisclaimerBundle({ safety, concernSeverity });
 
     return res.json({
       success: true,
@@ -1484,6 +1870,8 @@ router.post('/plan', authenticate, planGenerationLimiter, async (req, res) => {
           concern.toLowerCase().includes('infection') ||
           concern.toLowerCase().includes('burn') ||
           concern.toLowerCase().includes('allergy'),
+        concernSeverity,
+        disclaimerBundle,
       },
       plan: {
         title: payload.language === 'ml' ? 'സുരക്ഷിത ബ്യൂട്ടി പ്ലാൻ' : 'Safe Beauty Plan',
@@ -1502,19 +1890,30 @@ router.post('/plan', authenticate, planGenerationLimiter, async (req, res) => {
         ],
         products: structuredPlan.products.length ? structuredPlan.products : products,
         eventPlan: structuredPlan.eventPlan.length ? structuredPlan.eventPlan : eventPlanAddons(eventType),
+        concernSeverity,
+        disclaimer: structuredPlan.disclaimer || disclaimerBundle.combined,
+        disclaimerBundle,
+        apiVersion: BEAUTY_API_VERSION,
+        modelVersion: BEAUTY_MODEL_VERSION,
       },
       warnings,
       bookingHooks: {
         salonModule: 'localservices',
         productModule: 'localmarket',
       },
+      featureFlags,
       quota: {
         tier,
         used: quota.currentCount,
         limit: quota.limit,
         remaining: quota.remaining,
         dateKey: quota.dateKey,
+        nextAllowedAt: quota.nextAllowedAt,
+        timezone: quota.timezone,
+        nextDateKey: quota.nextDateKey,
       },
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
       requestId: res.locals?.requestId || '',
     });
   } catch (error) {
@@ -1597,6 +1996,10 @@ router.post('/plans', authenticate, planStorageLimiter, async (req, res) => {
             products: normalizeArray(payload.plan.products || [], 180, 40),
             avoid: normalizeArray(payload.plan.avoid || [], 180, 40),
             eventPlan: normalizeArray(payload.plan.eventPlan || [], 180, 40),
+            concernSeverity: normalizeLower(payload.plan.concernSeverity || 'mild', 20),
+            disclaimer: normalizeArray(payload.plan.disclaimer || [], 260, 20),
+            apiVersion: normalizeText(payload.plan.apiVersion || BEAUTY_API_VERSION, 40),
+            modelVersion: normalizeText(payload.plan.modelVersion || BEAUTY_MODEL_VERSION, 60),
           }
         : generateStructuredBeautyPlan({
             skinType: payload.skinType,
@@ -1618,6 +2021,9 @@ router.post('/plans', authenticate, planStorageLimiter, async (req, res) => {
       budget: normalizeText(payload.budget, 20),
       language: normalizeLower(payload.language || 'en', 8),
       selectedConcerns: normalizeArray(payload.selectedConcerns, 80, 20),
+      primaryConcern: normalizeText(payload.primaryConcern || payload.selectedConcerns?.[0] || '', 120),
+      eventType: normalizeText(payload.eventType, 40),
+      notes: normalizeText(payload.notes, 800),
       photoUrl,
       photoStorageKey,
       photoStorageProvider,
@@ -1645,6 +2051,8 @@ router.post('/plans', authenticate, planStorageLimiter, async (req, res) => {
       success: true,
       data: savedPlan,
       message: 'Beauty plan created',
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
       requestId: res.locals?.requestId || '',
     });
   } catch (error) {
@@ -1670,9 +2078,307 @@ router.get('/plans/my', authenticate, async (req, res) => {
     return res.json({
       success: true,
       data: plans,
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
     });
   } catch (error) {
     return handleRouteError(res, error, 'Unable to load beauty plans');
+  }
+});
+
+router.get('/plans/:id', authenticate, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+    if (!ensureValidPlanId(res, req.params.id)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const plan = await BeautyPlan.findOne({ _id: req.params.id, userId }).lean();
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plan not found',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: plan,
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Unable to load beauty plan');
+  }
+});
+
+router.put('/plans/:id', authenticate, planStorageLimiter, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+    if (!ensureValidPlanId(res, req.params.id)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const validation = validate(JoiSchemas.updatePlan, req.body || {});
+    if (!validation.ok) {
+      return res.status(400).json({
+        success: false,
+        errors: validation.errors,
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const payload = validation.value;
+    const updates = {};
+    if (payload.selectedConcerns !== undefined) {
+      updates.selectedConcerns = normalizeArray(payload.selectedConcerns, 80, 20);
+    }
+    if (payload.primaryConcern !== undefined) {
+      updates.primaryConcern = normalizeText(payload.primaryConcern, 120);
+    }
+    if (payload.notes !== undefined) {
+      updates.notes = normalizeText(payload.notes, 800);
+    }
+    if (payload.status !== undefined) {
+      updates.status = payload.status;
+    }
+
+    const updated = await BeautyPlan.findOneAndUpdate({ _id: req.params.id, userId }, updates, {
+      new: true,
+    }).lean();
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plan not found',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: updated,
+      message: 'Beauty plan updated',
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Unable to update beauty plan');
+  }
+});
+
+router.post('/plans/:id/duplicate', authenticate, planStorageLimiter, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+    if (!ensureValidPlanId(res, req.params.id)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const existing = await BeautyPlan.findOne({ _id: req.params.id, userId }).lean();
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plan not found',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const duplicated = await BeautyPlan.create({
+      userId,
+      gender: normalizeText(existing.gender, 24),
+      age: Number.isFinite(Number(existing.age)) ? Number(existing.age) : undefined,
+      skinType: normalizeText(existing.skinType, 40),
+      hairType: normalizeText(existing.hairType, 40),
+      budget: normalizeText(existing.budget, 20),
+      language: normalizeLower(existing.language || 'en', 8),
+      selectedConcerns: normalizeArray(existing.selectedConcerns, 80, 20),
+      primaryConcern: normalizeText(existing.primaryConcern || existing.selectedConcerns?.[0] || '', 120),
+      eventType: normalizeText(existing.eventType, 40),
+      notes: normalizeText(existing.notes, 800),
+      photoUrl: normalizeText(existing.photoUrl, 2000),
+      photoStorageKey: normalizeText(existing.photoStorageKey, 500),
+      photoStorageProvider: normalizeText(existing.photoStorageProvider, 32),
+      photoName: normalizeText(existing.photoName, 180),
+      plan: {
+        ...(existing.plan || {}),
+        title: normalizeText(existing?.plan?.title || 'Duplicated Beauty Plan', 120),
+        apiVersion: normalizeText(existing?.plan?.apiVersion || BEAUTY_API_VERSION, 40),
+        modelVersion: normalizeText(existing?.plan?.modelVersion || BEAUTY_MODEL_VERSION, 60),
+      },
+      status: 'Active',
+    });
+
+    await recordOpsEvent({
+      userId,
+      requestId: res.locals?.requestId || '',
+      eventType: 'plan_saved',
+      severity: 'info',
+      endpoint: req.originalUrl,
+      message: 'Beauty plan duplicated successfully.',
+      metadata: {
+        sourcePlanId: String(existing._id || ''),
+        duplicatedPlanId: String(duplicated._id || ''),
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: duplicated,
+      message: 'Beauty plan duplicated',
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Unable to duplicate beauty plan');
+  }
+});
+
+router.put('/plans/:id/photo', authenticate, planStorageLimiter, async (req, res) => {
+  try {
+    if (!ensureDbReady(res)) {
+      return;
+    }
+    if (!ensureValidPlanId(res, req.params.id)) {
+      return;
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const existingPlan = await BeautyPlan.findOne({ _id: req.params.id, userId }).lean();
+    if (!existingPlan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plan not found',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    try {
+      await runSelfieUpload(req, res);
+    } catch (error) {
+      const isMulterError = error instanceof multer.MulterError;
+      const statusCode = isMulterError ? 400 : 415;
+      const message =
+        error.code === 'LIMIT_FILE_SIZE'
+          ? 'Selfie image must be under 8MB.'
+          : error.message || 'Invalid selfie upload payload.';
+      return res.status(statusCode).json({
+        success: false,
+        message,
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selfie image file is required (form field name: selfie).',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const sanitizedImage = await sanitizeSelfieBuffer(req.file.buffer);
+    const storageKey = createStorageKey(userId, sanitizedImage.outputExtension);
+    const uploadResult = await s3Storage.uploadToS3(sanitizedImage.buffer, storageKey, {
+      contentType: sanitizedImage.outputMimeType,
+      metadata: {
+        module: 'beauty-ai',
+        kind: 'plan-selfie',
+        userId,
+      },
+    });
+    const publicUrl = buildPublicUploadUrl(req, uploadResult);
+    if (!publicUrl) {
+      return res.status(500).json({
+        success: false,
+        message: 'Updated selfie upload did not produce a public URL.',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    const storageDeleteStatus = await deleteStoredSelfie({
+      storageKey: existingPlan.photoStorageKey,
+      photoUrl: existingPlan.photoUrl,
+      userId,
+      requestId: res.locals?.requestId || '',
+      endpoint: req.originalUrl,
+    });
+
+    const updatedPlan = await BeautyPlan.findOneAndUpdate(
+      { _id: req.params.id, userId },
+      {
+        photoUrl: publicUrl,
+        photoStorageKey: normalizeStorageKey(uploadResult.s3Key || ''),
+        photoStorageProvider: normalizeText(uploadResult.storage || 's3', 32) || 's3',
+        photoName: normalizeText(req.file?.originalname || '', 180),
+      },
+      { new: true }
+    ).lean();
+
+    if (!updatedPlan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plan not found',
+        requestId: res.locals?.requestId || '',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: updatedPlan,
+      deletion: {
+        previousPhotoDeleteSuccess: storageDeleteStatus,
+      },
+      message: 'Plan selfie replaced successfully.',
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
+    });
+  } catch (error) {
+    return handleRouteError(res, error, 'Unable to replace plan selfie');
   }
 });
 
@@ -1710,6 +2416,9 @@ router.put('/plans/:id/archive', authenticate, planStorageLimiter, async (req, r
       success: true,
       data: plan,
       message: 'Beauty plan archived',
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
     });
   } catch (error) {
     return handleRouteError(res, error, 'Unable to archive beauty plan');
@@ -1735,7 +2444,7 @@ router.delete('/plans/:id/photo', authenticate, planStorageLimiter, async (req, 
       return res.status(404).json({ success: false, message: 'Plan not found' });
     }
 
-    await deleteStoredSelfie({
+    const storageDeleteStatus = await deleteStoredSelfie({
       storageKey: existing.photoStorageKey,
       photoUrl: existing.photoUrl,
       userId,
@@ -1756,7 +2465,13 @@ router.delete('/plans/:id/photo', authenticate, planStorageLimiter, async (req, 
     return res.json({
       success: true,
       data: updated,
+      deletion: {
+        previousPhotoDeleteSuccess: storageDeleteStatus,
+      },
       message: 'Saved selfie was removed from this plan.',
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
     });
   } catch (error) {
     return handleRouteError(res, error, 'Unable to remove plan selfie');
@@ -1782,7 +2497,7 @@ router.delete('/plans/:id', authenticate, planStorageLimiter, async (req, res) =
       return res.status(404).json({ success: false, message: 'Plan not found' });
     }
 
-    await deleteStoredSelfie({
+    const storageDeleteStatus = await deleteStoredSelfie({
       storageKey: deleted.photoStorageKey,
       photoUrl: deleted.photoUrl,
       userId,
@@ -1792,7 +2507,13 @@ router.delete('/plans/:id', authenticate, planStorageLimiter, async (req, res) =
 
     return res.json({
       success: true,
+      deletion: {
+        selfieDeleteSuccess: storageDeleteStatus,
+      },
       message: 'Beauty plan deleted permanently.',
+      apiVersion: BEAUTY_API_VERSION,
+      modelVersion: BEAUTY_MODEL_VERSION,
+      requestId: res.locals?.requestId || '',
     });
   } catch (error) {
     return handleRouteError(res, error, 'Unable to delete beauty plan');
