@@ -16,6 +16,7 @@ const freelancerBookingSchema = new mongoose.Schema(
     providerId: { type: mongoose.Schema.Types.ObjectId, ref: 'FreelancerProvider', required: true, index: true },
     providerName: { type: String, required: true, trim: true },
     customer: {
+      userId: { type: String, trim: true, default: '', index: true },
       name: { type: String, trim: true, required: true },
       phone: { type: String, trim: true, required: true, index: true },
       maskedPhone: { type: String, trim: true, default: '' },
@@ -57,6 +58,8 @@ const freelancerBookingSchema = new mongoose.Schema(
       otpCode: { type: String, trim: true, default: '' },
       generatedAt: { type: Date, default: null },
       expiresAt: { type: Date, default: null },
+      attempts: { type: Number, min: 0, default: 0 },
+      lockedUntil: { type: Date, default: null },
       verifiedAt: { type: Date, default: null },
       verified: { type: Boolean, default: false },
     },

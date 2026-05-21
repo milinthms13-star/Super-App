@@ -1,6 +1,6 @@
-// VisaPanel.js - Visa panel for GulfServices
 import React from 'react';
-const VisaPanel = ({ visaRequests, onVisaSelect }) => (
-  <div>VisaPanel (render visaRequests, handle visa selection)</div>
-);
+import GulfPanelShell from './GulfPanelShell';
+
+const VisaPanel = (props) => <GulfPanelShell {...props} activePane="visa" />;
+
 export default VisaPanel;

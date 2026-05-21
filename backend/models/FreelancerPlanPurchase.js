@@ -12,6 +12,7 @@ const freelancerPlanPurchaseSchema = new mongoose.Schema(
     status: { type: String, enum: ['pending', 'active', 'expired', 'cancelled'], default: 'pending', index: true },
     paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
     paymentReference: { type: String, trim: true, default: '' },
+    creditGranted: { type: Boolean, default: false, index: true },
     startsAt: { type: Date, default: null },
     endsAt: { type: Date, default: null },
   },

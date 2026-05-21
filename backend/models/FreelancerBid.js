@@ -17,5 +17,6 @@ const freelancerBidSchema = new mongoose.Schema(
 
 freelancerBidSchema.index({ jobId: 1, status: 1 });
 freelancerBidSchema.index({ providerId: 1, status: 1 });
+freelancerBidSchema.index({ jobId: 1, providerId: 1 }, { unique: true });
 
 module.exports = mongoose.model('FreelancerBid', freelancerBidSchema);

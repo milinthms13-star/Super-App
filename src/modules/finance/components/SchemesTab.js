@@ -1,6 +1,6 @@
 import React from "react";
 
-const SchemesTab = ({ schemes = [], onApplyWithScheme }) => (
+const SchemesTab = ({ schemes = [], loading = false, error = "", onApplyWithScheme }) => (
   <section className="finance-section">
     <div className="finance-section-header">
       <h2>Government Scheme Hub</h2>
@@ -9,6 +9,9 @@ const SchemesTab = ({ schemes = [], onApplyWithScheme }) => (
         Scheme details, limits and eligibility can change. Verify on official Government, bank, or NBFC portals before applying.
       </div>
     </div>
+
+    {loading ? <p className="finance-muted">Loading government schemes...</p> : null}
+    {error ? <p className="finance-error">{error}</p> : null}
 
     <div className="finance-card-grid">
       {schemes.map((scheme) => (

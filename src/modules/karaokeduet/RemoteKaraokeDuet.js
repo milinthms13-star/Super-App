@@ -78,6 +78,11 @@ const RemoteKaraokeDuet = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [finalOutputs, setFinalOutputs] = useState([]);
 
+  const [analyticsOverview, setAnalyticsOverview] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState('');
+  const [userRooms, setUserRooms] = useState([]);
+
   const [peerConnected, setPeerConnected] = useState(false);
   const [liveMonitorEnabled, setLiveMonitorEnabled] = useState(true);
 
@@ -120,6 +125,35 @@ const RemoteKaraokeDuet = () => {
     },
     [api]
   );
+
+  const loadAnalyticsOverview = useCallback(async () => {
+    setAnalyticsLoading(true);
+    setAnalyticsError('');
+
+    try {
+      const response = await api.get(buildApiUrl('/karaoke-duet/analytics/overview'));
+      if (response.data?.success) {
+        setAnalyticsOverview(response.data.overview);
+      } else {
+        throw new Error(response.data?.message || 'Unable to load duet analytics.');
+      }
+    } catch (error) {
+      setAnalyticsError(error?.response?.data?.message || error?.message || 'Failed to load analytics.');
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [api]);
+
+  const loadUserRooms = useCallback(async () => {
+    try {
+      const response = await api.get(buildApiUrl('/karaoke-duet/rooms/mine'));
+      if (response.data?.success) {
+        setUserRooms(response.data.rooms || []);
+      }
+    } catch (_error) {
+      // ignore silently; analytics remains best-effort
+    }
+  }, [api]);
 
   const teardownPeer = useCallback(() => {
     if (peerConnectionRef.current) {
@@ -282,11 +316,13 @@ const RemoteKaraokeDuet = () => {
         setFinalOutputs([]);
         setBanner("success", "Room created. Share invite code and link.");
         startSocket();
+        void loadAnalyticsOverview();
+        void loadUserRooms();
       } catch (error) {
         setBanner("error", error?.response?.data?.message || "Failed to create room.");
       }
     });
-  }, [api, lyricsSource, setBanner, startSocket, title, trackBpm, trackUrl, withBusy]);
+  }, [api, lyricsSource, setBanner, startSocket, title, trackBpm, trackUrl, withBusy, loadAnalyticsOverview, loadUserRooms]);
 
   const joinRoom = useCallback(async () => {
     const normalizedCode = String(roomCodeInput || "").trim().toUpperCase();
@@ -305,11 +341,13 @@ const RemoteKaraokeDuet = () => {
         setFinalOutputs(response.data.room?.finalOutputs || []);
         setBanner("success", "Joined duet room.");
         startSocket();
+        void loadAnalyticsOverview();
+        void loadUserRooms();
       } catch (error) {
         setBanner("error", error?.response?.data?.message || "Failed to join room.");
       }
     });
-  }, [api, inviteTokenInput, roomCodeInput, setBanner, startSocket, withBusy]);
+  }, [api, inviteTokenInput, roomCodeInput, setBanner, startSocket, withBusy, loadAnalyticsOverview, loadUserRooms]);
 
   const startDuet = useCallback(async () => {
     if (!room?.roomCode) return;
@@ -427,11 +465,13 @@ const RemoteKaraokeDuet = () => {
 
         await loadRoom(room.roomCode);
         setBanner("success", "Take uploaded. Wait for both singers, then finalize mix.");
+        void loadAnalyticsOverview();
+        void loadUserRooms();
       } catch (error) {
         setBanner("error", error?.response?.data?.message || "Failed to upload take.");
       }
     });
-  }, [api, loadRoom, localTakeBlob, localTakeSeconds, room?.roomCode, setBanner, withBusy]);
+  }, [api, loadRoom, localTakeBlob, localTakeSeconds, room?.roomCode, setBanner, withBusy, loadAnalyticsOverview, loadUserRooms]);
 
   const finalizeMix = useCallback(async () => {
     if (!room?.roomCode) return;
@@ -441,11 +481,13 @@ const RemoteKaraokeDuet = () => {
         setFinalOutputs(response.data.outputs || []);
         await loadRoom(room.roomCode);
         setBanner("success", "Final duet mix generated.");
+        void loadAnalyticsOverview();
+        void loadUserRooms();
       } catch (error) {
         setBanner("error", error?.response?.data?.message || "Mix generation failed.");
       }
     });
-  }, [api, loadRoom, room?.roomCode, setBanner, withBusy]);
+  }, [api, loadAnalyticsOverview, loadRoom, loadUserRooms, room?.roomCode, setBanner, withBusy]);
 
   useEffect(() => {
     const subject = decodeJwtSubject(token);
@@ -453,6 +495,11 @@ const RemoteKaraokeDuet = () => {
       currentUserIdRef.current = subject;
     }
   }, [token]);
+
+  useEffect(() => {
+    void loadAnalyticsOverview();
+    void loadUserRooms();
+  }, [loadAnalyticsOverview, loadUserRooms]);
 
   useEffect(() => {
     startSocket();
@@ -546,6 +593,53 @@ const RemoteKaraokeDuet = () => {
     return { hostTake, guestTake };
   }, [room?.takes]);
 
+  const roomSummary = useMemo(() => {
+    if (!room) return null;
+
+    const participants = Array.isArray(room.participants) ? room.participants : [];
+    const participantCount = participants.length;
+    const hasGuest = participants.some((participant) => participant.role === 'guest');
+    const hasHostTake = Boolean(takesByRole.hostTake);
+    const hasGuestTake = Boolean(takesByRole.guestTake);
+    const progressSteps = [participantCount >= 1, participantCount >= 2, hasHostTake && hasGuestTake, room.status === 'completed'];
+    const progress = Math.round((progressSteps.filter(Boolean).length / progressSteps.length) * 100);
+    const isReadyToMix = hasHostTake && hasGuestTake && room.status !== 'mixing';
+    const activeTimeSec = room.startedAtMs ? Math.max(0, Math.round((Date.now() - room.startedAtMs) / 1000)) : 0;
+    const nextActions = [];
+
+    if (!hasGuest) {
+      nextActions.push('Invite a duet partner so the session can begin.');
+    }
+    if (room.status === 'waiting' && hasGuest) {
+      nextActions.push('Start the duet clock to sync both singers.');
+    }
+    if (!hasHostTake || !hasGuestTake) {
+      nextActions.push('Upload or record both singer takes for the final mix.');
+    }
+    if (isReadyToMix) {
+      nextActions.push('Finalize the mix to generate your duet export.');
+    }
+    if (room.status === 'mixing') {
+      nextActions.push('Mix is processing. Wait for the final export to appear.');
+    }
+    if (room.status === 'completed') {
+      nextActions.push('Download your final duet mix and share it with your partner.');
+    }
+
+    return {
+      participantCount,
+      hasGuest,
+      hasHostTake,
+      hasGuestTake,
+      isReadyToMix,
+      progress,
+      nextActions,
+      activeTimeSec,
+      lyricLine: activeLyricsLine || 'Waiting for singers...',
+      roomHealthScore: Math.min(100, 50 + participantCount * 10 + (hasHostTake ? 15 : 0) + (hasGuestTake ? 15 : 0) + (room.status === 'completed' ? 10 : 0)),
+    };
+  }, [activeLyricsLine, room, takesByRole]);
+
   return (
     <section className="karaoke-shell">
       <header className="karaoke-hero">
@@ -558,6 +652,54 @@ const RemoteKaraokeDuet = () => {
 
       {status.text ? <div className={`karaoke-status ${status.type}`}>{status.text}</div> : null}
       <KaraokeDuetStudio10 />
+
+      {(analyticsOverview || analyticsLoading) && (
+        <section className="karaoke-analytics-panel">
+          <div className="karaoke-analytics-head">
+            <h2>Duet 360 Insights</h2>
+            <p>Track your room performance, completed mixes, and recent duet sessions.</p>
+          </div>
+          <div className="karaoke-analytics-grid">
+            <article>
+              <h3>{analyticsOverview ? analyticsOverview.totalRooms : '–'}</h3>
+              <p>Rooms created</p>
+            </article>
+            <article>
+              <h3>{analyticsOverview ? analyticsOverview.activeRooms : '–'}</h3>
+              <p>Active rooms</p>
+            </article>
+            <article>
+              <h3>{analyticsOverview ? analyticsOverview.completedRooms : '–'}</h3>
+              <p>Completed duets</p>
+            </article>
+            <article>
+              <h3>{analyticsOverview ? analyticsOverview.totalMixExports : '–'}</h3>
+              <p>Final exports</p>
+            </article>
+            <article>
+              <h3>{analyticsOverview ? `${analyticsOverview.averageBpm} BPM` : '–'}</h3>
+              <p>Average track tempo</p>
+            </article>
+          </div>
+
+          {analyticsError ? <p className="karaoke-error-text">{analyticsError}</p> : null}
+
+          {userRooms.length > 0 ? (
+            <div className="karaoke-recent-rooms">
+              <h3>Recent duet sessions</h3>
+              <div className="karaoke-recent-grid">
+                {userRooms.map((roomSummaryItem) => (
+                  <article key={roomSummaryItem.roomCode}>
+                    <p className="karaoke-room-label">{roomSummaryItem.title}</p>
+                    <p>{roomSummaryItem.roomCode} · {roomSummaryItem.status}</p>
+                    <p>{roomSummaryItem.takeUploadCount} takes · {roomSummaryItem.finalOutputCount} exports</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      )}
 
       <div className="karaoke-grid">
         <article className="karaoke-card">
@@ -631,6 +773,38 @@ const RemoteKaraokeDuet = () => {
             <span>Role: {userRole}</span>
             <span>Peer link: {peerConnected ? "Connected" : "Not connected"}</span>
           </div>
+
+          {roomSummary ? (
+            <div className="karaoke-room-summary">
+              <div>
+                <h4>Session score</h4>
+                <p>{roomSummary.roomHealthScore}% healthy</p>
+              </div>
+              <div>
+                <h4>Duet readiness</h4>
+                <p>{roomSummary.isReadyToMix ? 'Ready to finalize' : 'Waiting on takes or partner'}</p>
+              </div>
+              <div>
+                <h4>Progress</h4>
+                <p>{roomSummary.progress}% complete</p>
+              </div>
+              <div>
+                <h4>Live time</h4>
+                <p>{Math.floor(roomSummary.activeTimeSec / 60)}m {roomSummary.activeTimeSec % 60}s</p>
+              </div>
+            </div>
+          ) : null}
+
+          {roomSummary?.nextActions?.length ? (
+            <div className="karaoke-actions-panel">
+              <h4>Recommended next steps</h4>
+              <ul>
+                {roomSummary.nextActions.map((action, index) => (
+                  <li key={`action-${index}`}>{action}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="karaoke-actions">
             <button onClick={joinSocketRoom}>Join Realtime Channel</button>

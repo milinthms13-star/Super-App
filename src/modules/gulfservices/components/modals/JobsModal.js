@@ -1,6 +1,12 @@
-// JobsModal.js - Jobs modal for GulfServices
 import React from 'react';
-const JobsModal = ({ isOpen, onClose, onSubmit, jobData }) => (
-  <div>JobsModal (render job form, handle submit/close)</div>
+import GulfModalShell from './GulfModalShell';
+
+const JobsModal = ({ isOpen, onClose, ...props }) => (
+  <GulfModalShell
+    {...props}
+    activeModal={isOpen ? 'jobs' : null}
+    closeModal={onClose || props.closeModal}
+  />
 );
+
 export default JobsModal;

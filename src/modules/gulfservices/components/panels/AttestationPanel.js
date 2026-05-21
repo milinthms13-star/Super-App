@@ -1,6 +1,6 @@
-// AttestationPanel.js - Attestation panel for GulfServices
 import React from 'react';
-const AttestationPanel = ({ attestationRequests, onAttestationSelect }) => (
-  <div>AttestationPanel (render attestationRequests, handle attestation selection)</div>
-);
+import GulfPanelShell from './GulfPanelShell';
+
+const AttestationPanel = (props) => <GulfPanelShell {...props} activePane="attestation" />;
+
 export default AttestationPanel;

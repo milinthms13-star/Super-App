@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import BookingsTab from "./components/BookingsTab";
 import HireTab from "./components/HireTab";
 import { freelancerApi } from "./freelancerApi";
+import useDebouncedValue from "./hooks/useDebouncedValue";
+import useNetworkStatus from "./hooks/useNetworkStatus";
+import { getFreelancerAuthRole } from "./services/freelancerAuth";
 import "./FreelancerMarketplace.css";
 
 const TABS = [
@@ -170,9 +173,17 @@ const maskPhone = (phone = "") => {
   return `******${normalized.slice(-4)}`;
 };
 
+const buildRolePermissions = (role = "customer") => ({
+  canBook: role === "customer" || role === "admin",
+  canBid: role === "provider" || role === "admin",
+  canLeadPurchase: role === "provider" || role === "admin",
+  canSubmitReview: role === "customer" || role === "admin",
+  canResolveDisputes: role === "admin",
+});
+
 const FreelancerMarketplace = () => {
   const [activeTab, setActiveTab] = useState("hire");
-  const [actingRole, setActingRole] = useState("customer");
+  const [actingRole, setActingRole] = useState(() => getFreelancerAuthRole());
   const [bootstrap, setBootstrap] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
 
@@ -249,6 +260,17 @@ const FreelancerMarketplace = () => {
   const [reporterPhone, setReporterPhone] = useState("");
   const [reportReason, setReportReason] = useState("");
   const [reportDetails, setReportDetails] = useState("");
+  const [capabilities, setCapabilities] = useState(null);
+  const { isOnline } = useNetworkStatus();
+  const allowRoleOverride = String(process.env.REACT_APP_FREELANCER_ROLE_OVERRIDE || "").toLowerCase() === "true";
+  const debouncedSearch = useDebouncedValue(filters.search, 300);
+  const providerFilters = useMemo(
+    () => ({
+      ...filters,
+      search: debouncedSearch,
+    }),
+    [filters, debouncedSearch]
+  );
 
   const categoryOptions = useMemo(() => {
     const digital = bootstrap?.constants?.digitalCategories || [];
@@ -265,18 +287,18 @@ const FreelancerMarketplace = () => {
     setProvidersError("");
     try {
       const response = await freelancerApi.getProviders({
-        search: filters.search,
-        category: filters.category,
-        location: filters.location,
-        rating: filters.rating,
-        experience: filters.experience,
-        language: filters.language,
-        budget: filters.budget,
-        availability: filters.availability,
-        serviceType: filters.serviceType,
-        verifiedOnly: filters.verifiedOnly,
-        responseSpeed: filters.responseSpeed,
-        sortBy: filters.sortBy,
+        search: providerFilters.search,
+        category: providerFilters.category,
+        location: providerFilters.location,
+        rating: providerFilters.rating,
+        experience: providerFilters.experience,
+        language: providerFilters.language,
+        budget: providerFilters.budget,
+        availability: providerFilters.availability,
+        serviceType: providerFilters.serviceType,
+        verifiedOnly: providerFilters.verifiedOnly,
+        responseSpeed: providerFilters.responseSpeed,
+        sortBy: providerFilters.sortBy,
       });
       setProviders(response?.data?.providers || []);
     } catch (error) {
@@ -309,16 +331,24 @@ const FreelancerMarketplace = () => {
 
   const loadAdminPayload = async () => {
     try {
-      const [commissionResponse, adminResponse, plansResponse] = await Promise.all([
+      const plansResponse = await freelancerApi.getPlans();
+      setPlans(plansResponse?.data?.plans || []);
+    } catch (_error) {
+      // Plans are also loaded via bootstrap; ignore admin payload failures here.
+    }
+
+    try {
+      const [commissionResponse, adminResponse] = await Promise.all([
         freelancerApi.getCommissionSettings(),
         freelancerApi.getAdminDashboard(),
-        freelancerApi.getPlans(),
       ]);
       setCommissionConfig(commissionResponse?.data?.config || null);
       setAdminDashboard(adminResponse?.data || null);
-      setPlans(plansResponse?.data?.plans || []);
-    } catch (_error) {
-      setStatusMessage("Admin panel data could not be loaded.");
+    } catch (error) {
+      const status = Number(error?.response?.status || 0);
+      if (status !== 401 && status !== 403) {
+        setStatusMessage("Admin panel data could not be loaded.");
+      }
     }
   };
 
@@ -354,18 +384,36 @@ const FreelancerMarketplace = () => {
     }
   };
 
+  const loadCapabilities = async () => {
+    if (allowRoleOverride) {
+      setCapabilities(null);
+      return;
+    }
+    try {
+      const response = await freelancerApi.getCapabilities();
+      setCapabilities(response?.data?.capabilities || null);
+      const nextRole = String(response?.data?.capabilities?.role || "").trim().toLowerCase();
+      if (nextRole && nextRole !== actingRole) {
+        setActingRole(nextRole);
+      }
+    } catch (_error) {
+      setCapabilities(null);
+    }
+  };
+
   useEffect(() => {
     void loadBootstrap();
     void loadProviders();
     void loadJobs();
     void loadAdminPayload();
+    void loadCapabilities();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     void loadProviders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [providerFilters]);
 
   useEffect(() => {
     void loadDisputes();
@@ -921,16 +969,18 @@ const FreelancerMarketplace = () => {
   const providerListState =
     providersLoading ? "loading" : providersError ? "error" : providers.length === 0 ? "empty" : "ready";
 
-  const rolePermissions = useMemo(
-    () => ({
-      canBook: actingRole === "customer" || actingRole === "admin",
-      canBid: actingRole === "provider" || actingRole === "admin",
-      canLeadPurchase: actingRole === "provider" || actingRole === "admin",
-      canSubmitReview: actingRole === "customer" || actingRole === "admin",
-      canResolveDisputes: actingRole === "admin",
-    }),
-    [actingRole]
-  );
+  const rolePermissions = useMemo(() => {
+    if (capabilities && !allowRoleOverride) {
+      return {
+        canBook: Boolean(capabilities.canBook),
+        canBid: Boolean(capabilities.canBid),
+        canLeadPurchase: Boolean(capabilities.canLeadPurchase),
+        canSubmitReview: Boolean(capabilities.canSubmitReview),
+        canResolveDisputes: Boolean(capabilities.canResolveDisputes),
+      };
+    }
+    return buildRolePermissions(actingRole);
+  }, [capabilities, allowRoleOverride, actingRole]);
 
   return (
     <div className="freelancer-marketplace-page">
@@ -961,7 +1011,16 @@ const FreelancerMarketplace = () => {
             </div>
             <label className="freelancer-role-select">
               Acting Role
-              <select value={actingRole} onChange={(event) => setActingRole(event.target.value)}>
+              <select
+                value={actingRole}
+                onChange={(event) => setActingRole(event.target.value)}
+                disabled={!allowRoleOverride}
+                title={
+                  allowRoleOverride
+                    ? "Role override enabled for local testing."
+                    : "Role is derived from authenticated token claims."
+                }
+              >
                 {ROLE_OPTIONS.map((role) => (
                   <option key={role.id} value={role.id}>
                     {role.label}
@@ -1128,6 +1187,7 @@ const FreelancerMarketplace = () => {
         </section>
       ) : null}
 
+      {!isOnline ? <p className="freelancer-status">You are offline. New actions will retry when network is restored.</p> : null}
       {statusMessage ? <p className="freelancer-status">{statusMessage}</p> : null}
 
       {activeTab === "hire" ? (

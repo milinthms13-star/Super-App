@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const multer = require('multer');
 
 const authenticate = require('../middleware/auth');
@@ -122,6 +123,31 @@ const requireParticipant = (room, userId) =>
   room.participants.some((participant) => String(participant.userId) === String(userId));
 
 // Module metadata
+const summarizeRoomForAnalytics = (room) => {
+  const takes = Array.isArray(room?.takes) ? room.takes : [];
+  const outputs = Array.isArray(room?.finalOutputs) ? room.finalOutputs : [];
+  const hostTake = takes.find((take) => take.singerRole === 'host');
+  const guestTake = takes.find((take) => take.singerRole === 'guest');
+  const durationSeconds = takes.reduce((sum, take) => sum + Number(take.durationMs || 0), 0) / 1000;
+
+  return {
+    roomCode: room.roomCode,
+    title: room.title,
+    status: room.status,
+    participantCount: Array.isArray(room.participants) ? room.participants.length : 0,
+    hasGuest: Array.isArray(room.participants) && room.participants.some((participant) => participant.role === 'guest'),
+    hasHostTake: Boolean(hostTake),
+    hasGuestTake: Boolean(guestTake),
+    takeUploadCount: takes.length,
+    finalOutputCount: outputs.length,
+    karaokeTrackBpm: Number(room.karaokeTrackBpm || 0),
+    startedAtMs: room.startedAtMs,
+    updatedAt: room.updatedAt,
+    createdAt: room.createdAt,
+    durationSeconds: Math.round(durationSeconds),
+  };
+};
+
 router.get('/meta', authenticate, async (_req, res) => {
   res.json({
     success: true,
@@ -137,6 +163,58 @@ router.get('/meta', authenticate, async (_req, res) => {
       'Lyrics sync payload',
     ],
   });
+});
+
+router.get('/analytics/overview', authenticate, async (req, res) => {
+  try {
+    const userId = currentUserId(req);
+    const [totalRooms, activeRooms, completedRooms, bpmResult, latestRooms] = await Promise.all([
+      KaraokeDuetRoom.countDocuments({ createdBy: userId }),
+      KaraokeDuetRoom.countDocuments({
+        createdBy: userId,
+        status: { $in: [ROOM_STATUS.waiting, ROOM_STATUS.live, ROOM_STATUS.recording, ROOM_STATUS.mixing] },
+      }),
+      KaraokeDuetRoom.countDocuments({ createdBy: userId, status: ROOM_STATUS.completed }),
+      KaraokeDuetRoom.aggregate([
+        { $match: { createdBy: mongoose.Types.ObjectId(userId), karaokeTrackBpm: { $gt: 0 } } },
+        { $group: { _id: null, avgBpm: { $avg: '$karaokeTrackBpm' } } },
+      ]),
+      KaraokeDuetRoom.find({ createdBy: userId }).sort({ updatedAt: -1 }).limit(5).lean(),
+    ]);
+
+    const totalMixExports = await KaraokeDuetRoom.aggregate([
+      { $match: { createdBy: mongoose.Types.ObjectId(userId) } },
+      { $project: { outputCount: { $size: { $ifNull: ['$finalOutputs', []] } } } },
+      { $group: { _id: null, totalMixExports: { $sum: '$outputCount' } } },
+    ]);
+
+    const averageBpm = bpmResult?.[0]?.avgBpm ? Math.round(bpmResult[0].avgBpm) : 0;
+    const mixExports = totalMixExports?.[0]?.totalMixExports || 0;
+
+    return res.json({
+      success: true,
+      overview: {
+        totalRooms,
+        activeRooms,
+        completedRooms,
+        totalMixExports: mixExports,
+        averageBpm,
+        recentRooms: latestRooms.map(summarizeRoomForAnalytics),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load karaoke duet analytics overview.', error: error.message });
+  }
+});
+
+router.get('/rooms/mine', authenticate, async (req, res) => {
+  try {
+    const userId = currentUserId(req);
+    const rooms = await KaraokeDuetRoom.find({ createdBy: userId }).sort({ updatedAt: -1 }).limit(10).lean();
+    return res.json({ success: true, rooms: rooms.map(summarizeRoomForAnalytics) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load your karaoke duet rooms.', error: error.message });
+  }
 });
 
 // Create room

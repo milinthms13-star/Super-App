@@ -146,7 +146,18 @@ app.use(morgan('combined'));
 app.use('/api/astrology/payment/webhook/razorpay', express.raw({ type: 'application/json', limit: '20mb' }));
 app.use('/api/astrology/payment/webhook', express.raw({ type: 'application/json', limit: '20mb' }));
 app.use('/webhooks/payment', express.raw({ type: 'application/json', limit: '20mb' }));
-app.use(express.json({ limit: '20mb', inflate: true }));
+app.use('/api/gulfservices/payments/webhook', express.raw({ type: 'application/json', limit: '2mb' }));
+app.use(
+  express.json({
+    limit: '20mb',
+    inflate: true,
+    verify: (req, _res, buf) => {
+      if (buf && buf.length > 0) {
+        req.rawBody = buf.toString('utf8');
+      }
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '20mb', inflate: true }));
 app.use(
   '/uploads',
@@ -236,7 +247,17 @@ app.use('/api/karaoke-duet', require('./routes/karaokeDuet'));
 app.use('/api/karaokeduet', require('./routes/karaokeDuet'));
 app.use('/api/kitchen', require('./routes/kitchen'));
 app.use('/api/beauty-ai', require('./routes/beautyAI'));
-app.use('/api/finance', require('./routes/finance'));
+app.use('/api/hyperlocal', createLazyRouteMiddleware('./routes/hyperlocal'));
+const financeRoutes = require('./routes/finance');
+if (typeof financeRoutes.bootstrap === 'function') {
+  void financeRoutes.bootstrap();
+}
+app.use('/api/finance', financeRoutes);
+const freelancerRoutes = require('./routes/freelancer');
+if (typeof freelancerRoutes.bootstrap === 'function') {
+  void freelancerRoutes.bootstrap();
+}
+app.use('/api/freelancer', freelancerRoutes);
 app.use('/api/strategic-modules', require('./routes/strategicModules'));
 
 app.use('/api/messaging/v4/reactions', require('./routes/messageReactionsRoutes'));

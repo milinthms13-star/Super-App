@@ -1,6 +1,12 @@
-// VisaModal.js - Visa request modal for GulfServices
 import React from 'react';
-const VisaModal = ({ isOpen, onClose, onSubmit, visaData }) => (
-  <div>VisaModal (render visa form, handle submit/close)</div>
+import GulfModalShell from './GulfModalShell';
+
+const VisaModal = ({ isOpen, onClose, ...props }) => (
+  <GulfModalShell
+    {...props}
+    activeModal={isOpen ? 'visa' : null}
+    closeModal={onClose || props.closeModal}
+  />
 );
+
 export default VisaModal;

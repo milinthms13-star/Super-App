@@ -463,8 +463,6 @@ const AdminDashboard = ({
               "beautyai",
               "kitchen",
               "womensafetyfamily",
-              "hyperlocalaicommerce",
-              "nilaaistudio",
               "trustlayer",
               "kidsstoryvideomaker",
               "quicklinks",

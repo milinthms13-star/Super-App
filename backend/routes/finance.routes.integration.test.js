@@ -324,6 +324,11 @@ describe('finance routes integration', () => {
     expect(Array.isArray(response.body.data?.channels)).toBe(true);
   });
 
+  test('GET /api/finance/institutions sets request correlation header', async () => {
+    const response = await request(app).get('/api/finance/institutions').expect(200);
+    expect(response.headers['x-request-id']).toBeTruthy();
+  });
+
   test('GET /api/finance/dashboard/user keeps consultants scoped to their assigned leads', async () => {
     const response = await request(app)
       .get('/api/finance/dashboard/user')
@@ -348,5 +353,27 @@ describe('finance routes integration', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data?.metrics?.totalLeads).toBe(1);
     expect(response.body.data?.metrics?.eligibilityRecords).toBe(1);
+  });
+
+  test('POST /api/finance/leads rejects invalid eligibility snapshot payload', async () => {
+    const response = await request(app)
+      .post('/api/finance/leads')
+      .set('x-user-role', 'user')
+      .set('x-user-id', '507f1f77bcf86cd799439099')
+      .field('fullName', 'Snapshot User')
+      .field('phone', '9999999999')
+      .field('state', 'Kerala')
+      .field('district', 'Kollam')
+      .field('loanCategory', 'business')
+      .field('amount', '250000')
+      .field('callbackWindow', 'today-evening')
+      .field('eligibilitySnapshot', '"invalid"')
+      .field('consentPrivacy', 'true')
+      .field('consentKyc', 'true')
+      .field('consentDisclaimer', 'true')
+      .expect(400);
+
+    expect(response.body.success).toBe(false);
+    expect(String(response.body.message || '')).toContain('Eligibility snapshot payload is invalid');
   });
 });

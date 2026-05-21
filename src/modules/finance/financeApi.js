@@ -1,8 +1,7 @@
-import axios from "axios";
-import { BACKEND_BASE_URL } from "../../utils/api";
+import { financeHttpClient } from "./services/financeHttpClient";
 
-const FINANCE_API_BASE = `${BACKEND_BASE_URL}/api/finance`;
-const AUTH_API_BASE = `${BACKEND_BASE_URL}/api/auth`;
+const FINANCE_API_BASE = `/api/finance`;
+const AUTH_API_BASE = `/api/auth`;
 
 const createIdempotencyKey = () => {
   if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
@@ -27,22 +26,22 @@ const buildQueryString = (params = {}) => {
 
 export const financeApi = {
   getAuthProfile: async () => {
-    const response = await axios.get(`${AUTH_API_BASE}/me`);
+    const response = await financeHttpClient.get(`${AUTH_API_BASE}/me`);
     return response.data;
   },
 
   getInstitutions: async (params = {}) => {
-    const response = await axios.get(`${FINANCE_API_BASE}/institutions${buildQueryString(params)}`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/institutions${buildQueryString(params)}`);
     return response.data;
   },
 
   saveEligibility: async (payload) => {
-    const response = await axios.post(`${FINANCE_API_BASE}/eligibility`, payload);
+    const response = await financeHttpClient.post(`${FINANCE_API_BASE}/eligibility`, payload);
     return response.data;
   },
 
   getEmiQuote: async (params = {}) => {
-    const response = await axios.get(`${FINANCE_API_BASE}/emi${buildQueryString(params)}`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/emi${buildQueryString(params)}`);
     return response.data;
   },
 
@@ -50,7 +49,7 @@ export const financeApi = {
     const idempotencyKey = String(options.idempotencyKey || createIdempotencyKey()).trim();
     const sourceChannel = String(options.sourceChannel || "web").trim().toLowerCase() || "web";
     const device = options.device || {};
-    const response = await axios.post(`${FINANCE_API_BASE}/leads`, formData, {
+    const response = await financeHttpClient.post(`${FINANCE_API_BASE}/leads`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
         "x-idempotency-key": idempotencyKey,
@@ -64,91 +63,91 @@ export const financeApi = {
   },
 
   getLeads: async (params = {}) => {
-    const response = await axios.get(`${FINANCE_API_BASE}/leads${buildQueryString(params)}`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/leads${buildQueryString(params)}`);
     return response.data;
   },
 
   assignConsultant: async (leadId, payload) => {
-    const response = await axios.patch(`${FINANCE_API_BASE}/leads/${encodeURIComponent(leadId)}/assign`, payload);
+    const response = await financeHttpClient.patch(`${FINANCE_API_BASE}/leads/${encodeURIComponent(leadId)}/assign`, payload);
     return response.data;
   },
 
   updateLeadStatus: async (leadId, payload) => {
-    const response = await axios.patch(`${FINANCE_API_BASE}/leads/${encodeURIComponent(leadId)}/status`, payload);
+    const response = await financeHttpClient.patch(`${FINANCE_API_BASE}/leads/${encodeURIComponent(leadId)}/status`, payload);
     return response.data;
   },
 
   updateCommission: async (leadId, payload) => {
-    const response = await axios.patch(`${FINANCE_API_BASE}/leads/${encodeURIComponent(leadId)}/commission`, payload);
+    const response = await financeHttpClient.patch(`${FINANCE_API_BASE}/leads/${encodeURIComponent(leadId)}/commission`, payload);
     return response.data;
   },
 
   requestDataDeletion: async (payload) => {
-    const response = await axios.post(`${FINANCE_API_BASE}/data-deletion`, payload);
+    const response = await financeHttpClient.post(`${FINANCE_API_BASE}/data-deletion`, payload);
     return response.data;
   },
 
   getDataDeletionRequests: async () => {
-    const response = await axios.get(`${FINANCE_API_BASE}/data-deletion/requests`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/data-deletion/requests`);
     return response.data;
   },
 
   processDataDeletionRequest: async (leadId) => {
-    const response = await axios.patch(`${FINANCE_API_BASE}/data-deletion/${encodeURIComponent(leadId)}/process`);
+    const response = await financeHttpClient.patch(`${FINANCE_API_BASE}/data-deletion/${encodeURIComponent(leadId)}/process`);
     return response.data;
   },
 
   getUserDashboard: async (phone) => {
-    const response = await axios.get(`${FINANCE_API_BASE}/dashboard/user${buildQueryString({ phone })}`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/dashboard/user${buildQueryString({ phone })}`);
     return response.data;
   },
 
   getConsultantDashboard: async (consultantId) => {
-    const response = await axios.get(
+    const response = await financeHttpClient.get(
       `${FINANCE_API_BASE}/dashboard/consultant${buildQueryString({ consultantId })}`
     );
     return response.data;
   },
 
   getInstitutionDashboard: async (institutionId) => {
-    const response = await axios.get(
+    const response = await financeHttpClient.get(
       `${FINANCE_API_BASE}/dashboard/institution${buildQueryString({ institutionId })}`
     );
     return response.data;
   },
 
   getAdminDashboard: async () => {
-    const response = await axios.get(`${FINANCE_API_BASE}/dashboard/admin`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/dashboard/admin`);
     return response.data;
   },
 
   getCommissionDashboard: async () => {
-    const response = await axios.get(`${FINANCE_API_BASE}/dashboard/commission`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/dashboard/commission`);
     return response.data;
   },
 
   getAuditLogs: async (limit = 20) => {
-    const response = await axios.get(`${FINANCE_API_BASE}/admin/audit${buildQueryString({ limit })}`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/admin/audit${buildQueryString({ limit })}`);
     return response.data;
   },
 
   getSlaDashboard: async (params = {}) => {
-    const response = await axios.get(`${FINANCE_API_BASE}/dashboard/sla${buildQueryString(params)}`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/dashboard/sla${buildQueryString(params)}`);
     return response.data;
   },
 
   getFunnelAnalytics: async (params = {}) => {
-    const response = await axios.get(`${FINANCE_API_BASE}/analytics/funnel${buildQueryString(params)}`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/analytics/funnel${buildQueryString(params)}`);
     return response.data;
   },
 
   getSourceChannelAnalytics: async (params = {}) => {
-    const response = await axios.get(`${FINANCE_API_BASE}/analytics/source-channels${buildQueryString(params)}`);
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/analytics/source-channels${buildQueryString(params)}`);
     return response.data;
   },
 
   getMobileBootstrap: async () => {
-    const response = await axios.get(`${FINANCE_API_BASE}/mobile/bootstrap`, {
+    const response = await financeHttpClient.get(`${FINANCE_API_BASE}/mobile/bootstrap`, {
       headers: {
         "x-source-channel": "expo",
         "x-client-platform": "expo",

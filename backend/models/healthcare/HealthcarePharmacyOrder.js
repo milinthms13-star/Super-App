@@ -18,6 +18,10 @@ const healthcarePharmacyOrderSchema = new mongoose.Schema(
     items: { type: [pharmacyOrderItemSchema], default: [] },
     totalAmount: { type: Number, default: 0, min: 0 },
     deliveryAddress: { type: String, required: true, trim: true },
+    pharmacyId: { type: String, default: '', trim: true },
+    pharmacyName: { type: String, default: '', trim: true },
+    pharmacyArea: { type: String, default: '', trim: true },
+    pharmacyVendorId: { type: String, default: '', trim: true },
     phone: { type: String, required: true, trim: true },
     customerName: { type: String, required: true, trim: true },
     notes: { type: String, default: '', trim: true },
@@ -26,6 +30,7 @@ const healthcarePharmacyOrderSchema = new mongoose.Schema(
     prescriptionFileUrl: { type: String, default: '', trim: true },
     prescriptionStorageKey: { type: String, default: '', trim: true },
     paymentMethod: { type: String, default: 'upi', trim: true },
+    paymentProvider: { type: String, default: 'simulated', trim: true },
     paymentStatus: {
       type: String,
       enum: ['pending', 'paid', 'failed', 'refunded'],

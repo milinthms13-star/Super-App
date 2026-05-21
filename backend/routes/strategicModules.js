@@ -21,16 +21,6 @@ const MODULE_META = {
     priority: 'high',
     monetization: ['Family plans', 'Institution safety plans', 'Partner services'],
   },
-  hyperlocalaicommerce: {
-    title: 'Hyperlocal AI Commerce',
-    priority: 'highest',
-    monetization: ['Seller AI subscription', 'Promotion placements', 'Automation fees'],
-  },
-  nilaaistudio: {
-    title: 'Nila AI Studio',
-    priority: 'highest',
-    monetization: ['Creator plans', 'Render credits', 'Template marketplace'],
-  },
   trustlayer: {
     title: 'Trust Layer',
     priority: 'highest',

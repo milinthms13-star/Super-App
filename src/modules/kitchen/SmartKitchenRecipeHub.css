@@ -261,6 +261,51 @@
   color: #166534;
 }
 
+.kitchen-insights-card {
+  background: linear-gradient(135deg, #f5faf7 0%, #ffffff 100%);
+}
+
+.kitchen-insights-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-top: 1rem;
+}
+
+.kitchen-insight-card {
+  border: 1px solid #d5e8d4;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 1rem;
+  min-height: 110px;
+}
+
+.kitchen-insight-card h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1rem;
+}
+
+.kitchen-insight-card p {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #14532d;
+}
+
+.kitchen-insight-summary-grid {
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+}
+
+.kitchen-insights-actions {
+  margin-top: 1rem;
+}
+
+.kitchen-insights-actions ul {
+  margin: 0.75rem 0 0 1.1rem;
+  padding: 0;
+  list-style: disc;
+}
+
 .kitchen-list-item {
   border: 1px solid #dfebe1;
   border-radius: 12px;

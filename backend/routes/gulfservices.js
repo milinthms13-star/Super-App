@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 
 const logger = require('../utils/logger');
-const { authenticate, verifyAdmin, optionalToken } = require('../middleware/auth');
+const { authenticate, verifyAdmin, optionalToken, hasAdminPrivileges } = require('../middleware/auth');
 const { sendEmergencyAlert } = require('../utils/notifications');
 const { scanFile } = require('../utils/virusScan');
 
@@ -35,6 +35,7 @@ const {
   GulfUser,
   GulfRecruiter,
   GulfApplication,
+  GulfFraudReport,
 } = require('../models/gulfservices');
 
 const SAMPLE_JOBS = [
@@ -124,11 +125,18 @@ const VISA_WORKFLOW_STATUSES = [
   'Medical Pending',
   'Medical Completed',
   'Visa Processing',
+  'Requires Human Review',
+  'Escalated',
   'Visa Approved',
   'Visa Stamped',
   'Travel Ready',
   'Rejected',
 ];
+const ALLOWED_PAYMENT_CURRENCIES = ['usd', 'inr', 'aed'];
+const PAYMENT_MIN_AMOUNT = 1;
+const PAYMENT_MAX_AMOUNT = 10000;
+const PAYMENT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
+const paymentIntentCache = new Map();
 
 const toObjectIdString = (value) => {
   if (!value) return '';
@@ -199,6 +207,37 @@ const normalizeVisaType = (value = '') => {
 const isMongoObjectId = (value = '') => /^[a-f\d]{24}$/i.test(String(value || ''));
 const resolveUserId = (req) => String(req?.user?._id || req?.user?.id || '').trim();
 const resolveUserEmail = (req) => String(req?.user?.email || '').trim().toLowerCase();
+const averageHours = (records = [], startField, endField) => {
+  const durations = records
+    .map((item) => {
+      const start = item?.[startField] ? new Date(item[startField]) : null;
+      const end = item?.[endField] ? new Date(item[endField]) : null;
+      if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+      const diffMs = end.getTime() - start.getTime();
+      return diffMs >= 0 ? diffMs / (1000 * 60 * 60) : null;
+    })
+    .filter((value) => Number.isFinite(value));
+
+  if (!durations.length) return null;
+  const total = durations.reduce((sum, value) => sum + value, 0);
+  return Number((total / durations.length).toFixed(2));
+};
+const buildPaymentCacheKey = (req, payload, idempotencyKey) => {
+  const caller = resolveUserId(req) || resolveUserEmail(req) || String(req.ip || 'anonymous');
+  return `${caller}:${idempotencyKey}:${payload.currency}:${payload.amount}:${payload.type || ''}:${payload.id || ''}`;
+};
+const readPaymentCache = (key) => {
+  const cached = paymentIntentCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.createdAt > PAYMENT_IDEMPOTENCY_TTL_MS) {
+    paymentIntentCache.delete(key);
+    return null;
+  }
+  return cached.data;
+};
+const writePaymentCache = (key, data) => {
+  paymentIntentCache.set(key, { data, createdAt: Date.now() });
+};
 
 // ============ RATE LIMITING ============
 const applicationLimiter = rateLimit({
@@ -223,6 +262,12 @@ const fraudReportLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 8,
   message: 'Too many fraud reports from this source. Please try again later.',
+});
+
+const paymentsCreateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: 'Too many payment initiation requests. Please try again later.',
 });
 
 // ============ FILE UPLOADS ============
@@ -283,7 +328,7 @@ const jobApplicationSchema = Joi.object({
   fullName: Joi.string().required(),
   email: Joi.string().email().required(),
   phone: Joi.string().pattern(/^\+?[0-9]{8,15}$/).required(),
-  passportNo: Joi.string().trim().min(6).max(20).allow(''),
+  passportNo: Joi.string().trim().min(6).max(20).required(),
   experience: Joi.number().min(0).max(50),
   currentCompany: Joi.string(),
   expectedSalary: Joi.number().min(0),
@@ -314,6 +359,48 @@ const fraudReportSchema = Joi.object({
   issueDescription: Joi.string().trim().min(12).max(4000).required(),
   phone: Joi.string().pattern(/^\+?[0-9]{8,15}$/).required(),
 });
+
+const genericServiceRequestSchema = Joi.object({
+  fullName: Joi.string().trim().required(),
+  email: Joi.string().email().required(),
+  phone: Joi.string().pattern(/^\+?[0-9]{8,15}$/).required(),
+  country: Joi.string().valid(...VALID_COUNTRIES).required(),
+  details: Joi.string().trim().max(3000).allow(''),
+});
+
+const travelSupportSchema = genericServiceRequestSchema.keys({
+  serviceType: Joi.string().trim().valid('flight', 'accommodation', 'relocation', 'insurance', 'forex').required(),
+});
+
+const medicalBookingSchema = genericServiceRequestSchema.keys({
+  appointmentDate: Joi.date().iso().optional(),
+});
+
+const returneeServiceSchema = genericServiceRequestSchema.keys({
+  serviceCategory: Joi.string().trim().valid('job-support', 'business-setup', 'legal-help', 'financial-planning').required(),
+});
+
+const nriServiceSchema = genericServiceRequestSchema.keys({
+  serviceType: Joi.string().trim().valid('banking', 'property', 'legal', 'investment').required(),
+});
+
+const fraudAdminStatusSchema = Joi.object({
+  status: Joi.string().trim().valid('open', 'in_review', 'resolved', 'rejected').required(),
+  adminNote: Joi.string().trim().allow('').max(1000),
+});
+
+const recruiterApplicationSchema = Joi.object({
+  fullName: Joi.string().trim().allow(''),
+  name: Joi.string().trim().allow(''),
+  companyName: Joi.string().trim().allow(''),
+  licenseNumber: Joi.string().trim().required(),
+  registrationNumber: Joi.string().trim().allow(''),
+  country: Joi.string().valid(...VALID_COUNTRIES).required(),
+  phone: Joi.string().pattern(/^\+?[0-9]{8,15}$/).required(),
+  email: Joi.string().email().required(),
+  website: Joi.string().trim().uri({ scheme: [/https?/] }).allow(''),
+  experienceSummary: Joi.string().trim().max(3000).allow(''),
+}).or('fullName', 'name');
 
 const gulfApplicationSchema = Joi.object({
   name: Joi.string().trim().required(),
@@ -355,6 +442,10 @@ router.get('/bootstrap', async (_, res) => {
       urgencyLevels: ['Normal (7-14 days)', 'Urgent (3-7 days)', 'Emergency (24 hours)'],
       trustIndicators: ['Verified Agency License', 'Govt. Registration', '100+ Successful Cases', 'Customer Reviews', '24/7 Support'],
       trustedRecruiters: SAMPLE_RECRUITERS,
+      support: {
+        phone: String(process.env.GULF_SUPPORT_PHONE || '+919999999999').trim(),
+        whatsapp: String(process.env.GULF_SUPPORT_WHATSAPP || '919999999999').trim(),
+      },
     };
 
     res.json({ success: true, data: { constants } });
@@ -409,9 +500,10 @@ router.get('/visa/track/:requestId', optionalToken, async (req, res) => {
     if (!visaRequest) return res.status(404).json({ success: false, message: 'Visa request not found.' });
 
     const ownerEmail = String(visaRequest.email || '').trim().toLowerCase();
+    const isAdmin = hasAdminPrivileges(req.user || {});
     // Allow if authenticated owner or admin, otherwise require matching email query param
     if (authEmail) {
-      if (authEmail !== ownerEmail && !(req.user && req.user.isAdmin)) {
+      if (authEmail !== ownerEmail && !isAdmin) {
         return res.status(403).json({ success: false, message: 'You are not authorized to access this request.' });
       }
     } else {
@@ -557,7 +649,7 @@ router.post('/jobs/:jobId/apply', applicationLimiter, documentUploadLimiter, opt
       name: value.fullName,
       email: value.email,
       phone: value.phone,
-      passportNo: normalizePassportNo(req.body?.passportNo),
+      passportNo: value.passportNo,
       jobTitle: job.title || '',
       country: job.country || '',
       company: job.company || '',
@@ -659,7 +751,7 @@ router.get('/admin/applications', authenticate, verifyAdmin, async (req, res) =>
 
 router.get('/admin/analytics', authenticate, verifyAdmin, async (req, res) => {
   try {
-    const [applications, pendingRecruiters, activeRecruiters, attestations, emergencies, jobApplications] = await Promise.all([
+    const [applications, pendingRecruiters, activeRecruiters, attestations, emergencies, jobApplications, fraudReports, recruiterSlaRecords, fraudSlaRecords, emergencySlaRecords] = await Promise.all([
       GulfApplication.aggregate([
         { $group: { _id: '$visaStatus', count: { $sum: 1 } } },
       ]),
@@ -668,17 +760,53 @@ router.get('/admin/analytics', authenticate, verifyAdmin, async (req, res) => {
       GulfAttestationRequest.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
       GulfEmergencyCase.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
       GulfJobApplication.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      GulfFraudReport.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+      GulfRecruiter.find({
+        verifiedAt: { $exists: true, $ne: null },
+        verificationRequestedAt: { $exists: true, $ne: null },
+      })
+        .select('verificationRequestedAt verifiedAt')
+        .lean(),
+      GulfFraudReport.find({ status: { $in: ['resolved', 'rejected'] } })
+        .select('createdAt updatedAt')
+        .lean(),
+      GulfEmergencyCase.find({ status: { $ne: 'received' } })
+        .select('createdAt updatedAt')
+        .lean(),
     ]);
+
+    const applicationStatusCounts = applications.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {});
+    const attestationStatusCounts = attestations.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {});
+    const emergencyStatusCounts = emergencies.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {});
+    const jobApplicationStatusCounts = jobApplications.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {});
+    const fraudStatusCounts = fraudReports.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {});
+    const totalApplications = Object.values(applicationStatusCounts).reduce((sum, value) => sum + Number(value || 0), 0);
+    const travelReadyApplications = Number(applicationStatusCounts['Travel Ready'] || 0);
+    const travelReadyConversionRate = totalApplications > 0
+      ? Number(((travelReadyApplications / totalApplications) * 100).toFixed(2))
+      : 0;
 
     return res.json({
       success: true,
       data: {
-        applicationStatusCounts: applications.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {}),
+        applicationStatusCounts,
         pendingRecruiterCount: pendingRecruiters,
         activeRecruiterCount: activeRecruiters,
-        attestationStatusCounts: attestations.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {}),
-        emergencyStatusCounts: emergencies.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {}),
-        jobApplicationStatusCounts: jobApplications.reduce((acc, item) => ({ ...acc, [item._id]: item.count }), {}),
+        attestationStatusCounts,
+        emergencyStatusCounts,
+        jobApplicationStatusCounts,
+        fraudStatusCounts,
+        funnelMetrics: {
+          totalApplications,
+          travelReadyApplications,
+          travelReadyConversionRate,
+          dropoffByStatus: applicationStatusCounts,
+        },
+        slaMetrics: {
+          recruiterVerificationAvgHours: averageHours(recruiterSlaRecords, 'verificationRequestedAt', 'verifiedAt'),
+          fraudResolutionAvgHours: averageHours(fraudSlaRecords, 'createdAt', 'updatedAt'),
+          emergencyResponseAvgHours: averageHours(emergencySlaRecords, 'createdAt', 'updatedAt'),
+        },
       },
     });
   } catch (error) {
@@ -783,16 +911,20 @@ router.post('/attestation/request', applicationLimiter, documentUploadLimiter, d
   }
 });
 
-router.get('/attestation/track/:requestId', async (req, res) => {
+router.get('/attestation/track/:requestId', optionalToken, async (req, res) => {
   try {
-    const requesterEmail = String(req.query.email || '').trim().toLowerCase();
+    const queryEmail = String(req.query.email || '').trim().toLowerCase();
+    const authEmail = resolveUserEmail(req);
+    const requesterEmail = authEmail || queryEmail;
     if (!requesterEmail) {
       return res.status(400).json({ success: false, message: 'Email is required to track this request.' });
     }
 
     const attestation = await GulfAttestationRequest.findOne({ requestId: req.params.requestId });
     if (!attestation) return res.status(404).json({ success: false, message: 'Attestation request not found.' });
-    if (String(attestation.email || '').trim().toLowerCase() !== requesterEmail) {
+    const ownerEmail = String(attestation.email || '').trim().toLowerCase();
+    const isAdmin = hasAdminPrivileges(req.user || {});
+    if (!isAdmin && ownerEmail !== requesterEmail) {
       return res.status(403).json({ success: false, message: 'You are not authorized to access this request.' });
     }
 
@@ -811,19 +943,200 @@ router.get('/attestation/track/:requestId', async (req, res) => {
   }
 });
 
+// ============ TRAVEL / MEDICAL / RETURN / NRI SERVICES ============
+router.post('/travel/request', applicationLimiter, async (req, res) => {
+  try {
+    const normalizedPayload = {
+      ...req.body,
+      phone: normalizePhone(req.body?.phone),
+      email: String(req.body?.email || '').trim().toLowerCase(),
+    };
+    const { error, value } = travelSupportSchema.validate(normalizedPayload);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+
+    const support = await GulfTravelSupport.create({
+      supportId: `TRV-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      fullName: value.fullName,
+      email: value.email,
+      phone: value.phone,
+      serviceType: value.serviceType,
+      details: value.details || '',
+      status: 'requested',
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Travel support request submitted.',
+      data: { supportId: support.supportId },
+    });
+  } catch (error) {
+    logger.error('travel support request error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to submit travel support request.' });
+  }
+});
+
+router.post('/medical/request', applicationLimiter, async (req, res) => {
+  try {
+    const normalizedPayload = {
+      ...req.body,
+      phone: normalizePhone(req.body?.phone),
+      email: String(req.body?.email || '').trim().toLowerCase(),
+    };
+    const { error, value } = medicalBookingSchema.validate(normalizedPayload);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+
+    const booking = await GulfMedicalBooking.create({
+      bookingId: `MED-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      fullName: value.fullName,
+      email: value.email,
+      phone: value.phone,
+      country: value.country,
+      appointmentDate: value.appointmentDate ? new Date(value.appointmentDate) : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      status: 'scheduled',
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Medical booking request submitted.',
+      data: { bookingId: booking.bookingId },
+    });
+  } catch (error) {
+    logger.error('medical support request error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to submit medical booking request.' });
+  }
+});
+
+router.post('/returnee/request', applicationLimiter, async (req, res) => {
+  try {
+    const normalizedPayload = {
+      ...req.body,
+      phone: normalizePhone(req.body?.phone),
+      email: String(req.body?.email || '').trim().toLowerCase(),
+    };
+    const { error, value } = returneeServiceSchema.validate(normalizedPayload);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+
+    const service = await GulfReturneeService.create({
+      serviceId: `RET-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      email: value.email,
+      fullName: value.fullName,
+      serviceCategory: value.serviceCategory,
+      details: value.details || '',
+      status: 'pending',
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Returnee support request submitted.',
+      data: { serviceId: service.serviceId },
+    });
+  } catch (error) {
+    logger.error('returnee support request error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to submit returnee support request.' });
+  }
+});
+
+router.post('/nri/request', applicationLimiter, async (req, res) => {
+  try {
+    const normalizedPayload = {
+      ...req.body,
+      phone: normalizePhone(req.body?.phone),
+      email: String(req.body?.email || '').trim().toLowerCase(),
+    };
+    const { error, value } = nriServiceSchema.validate(normalizedPayload);
+    if (error) return res.status(400).json({ success: false, message: error.details[0].message });
+
+    const service = await GulfNRIService.create({
+      serviceId: `NRI-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      email: value.email,
+      fullName: value.fullName,
+      serviceType: value.serviceType,
+      details: value.details || '',
+      status: 'open',
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'NRI support request submitted.',
+      data: { serviceId: service.serviceId },
+    });
+  } catch (error) {
+    logger.error('nri support request error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to submit NRI support request.' });
+  }
+});
+
+router.get('/services/track/:serviceType/:requestId', optionalToken, async (req, res) => {
+  try {
+    const serviceType = String(req.params.serviceType || '').trim().toLowerCase();
+    const requestId = String(req.params.requestId || '').trim();
+    const queryEmail = String(req.query.email || '').trim().toLowerCase();
+    const authEmail = resolveUserEmail(req);
+    if (!queryEmail && !authEmail) {
+      return res.status(400).json({ success: false, message: 'Email is required to track this request.' });
+    }
+
+    let record = null;
+    if (serviceType === 'travel') {
+      record = await GulfTravelSupport.findOne({ supportId: requestId }).lean();
+    } else if (serviceType === 'medical') {
+      record = await GulfMedicalBooking.findOne({ bookingId: requestId }).lean();
+    } else if (serviceType === 'returnee') {
+      record = await GulfReturneeService.findOne({ serviceId: requestId }).lean();
+    } else if (serviceType === 'nri') {
+      record = await GulfNRIService.findOne({ serviceId: requestId }).lean();
+    } else {
+      return res.status(400).json({ success: false, message: 'Unsupported service type for tracking.' });
+    }
+
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Request not found.' });
+    }
+
+    const ownerEmail = String(record.email || '').trim().toLowerCase();
+    const isAdmin = hasAdminPrivileges(req.user || {});
+    const requesterEmail = authEmail || queryEmail;
+    if (!isAdmin) {
+      if (!ownerEmail) {
+        return res.status(403).json({
+          success: false,
+          message: 'Unable to verify request ownership. Please contact support.',
+        });
+      }
+      if (requesterEmail !== ownerEmail) {
+        return res.status(403).json({ success: false, message: 'You are not authorized to access this request.' });
+      }
+    }
+
+    return res.json({ success: true, data: { serviceType, record } });
+  } catch (error) {
+    logger.error('generic service track error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to track service request.' });
+  }
+});
+
 // ============ USER DASHBOARD ============
 router.get('/user/dashboard', authenticate, async (req, res) => {
   try {
     const email = String(req.user?.email || '').trim().toLowerCase();
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Authenticated user email is required for dashboard.' });
+    const userId = resolveUserId(req);
+    if (!email && !userId) {
+      return res.status(400).json({ success: false, message: 'Authenticated identity is required for dashboard.' });
     }
 
-    const [visaRequests, jobApplications, attestations, medicalBookings] = await Promise.all([
-      GulfVisaRequest.find({ email }).sort({ createdAt: -1 }).limit(10),
-      GulfJobApplication.find({ email }).sort({ createdAt: -1 }).limit(10),
-      GulfAttestationRequest.find({ email }).sort({ createdAt: -1 }).limit(10),
-      GulfMedicalBooking.find({ email }).sort({ createdAt: -1 }).limit(5),
+    const lookupByIdentity = userId && email ? { $or: [{ userId }, { email }] } : userId ? { userId } : { email };
+
+    const emailQuery = email ? { email } : { _id: null };
+
+    const [visaRequests, jobApplications, attestations, medicalBookings, travelRequests, returneeRequests, nriRequests, applications] = await Promise.all([
+      GulfVisaRequest.find(emailQuery).sort({ createdAt: -1 }).limit(10),
+      GulfJobApplication.find(emailQuery).sort({ createdAt: -1 }).limit(10),
+      GulfAttestationRequest.find(emailQuery).sort({ createdAt: -1 }).limit(10),
+      GulfMedicalBooking.find(emailQuery).sort({ createdAt: -1 }).limit(5),
+      GulfTravelSupport.find(emailQuery).sort({ createdAt: -1 }).limit(10),
+      GulfReturneeService.find(emailQuery).sort({ createdAt: -1 }).limit(10),
+      GulfNRIService.find(emailQuery).sort({ createdAt: -1 }).limit(10),
+      GulfApplication.find(lookupByIdentity).sort({ createdAt: -1 }).limit(25),
     ]);
 
     const dashboard = {
@@ -831,8 +1144,20 @@ router.get('/user/dashboard', authenticate, async (req, res) => {
       jobApplications: jobApplications.map((a) => ({ applicationId: a.applicationId, status: a.status, createdAt: a.createdAt })),
       attestations: attestations.map((a) => ({ requestId: a.requestId, documentType: a.documentType, status: a.status, createdAt: a.createdAt })),
       medicalBookings: medicalBookings.map((m) => ({ bookingId: m.bookingId, status: m.status, date: m.appointmentDate })),
+      travelRequests: travelRequests.map((t) => ({ supportId: t.supportId, serviceType: t.serviceType, status: t.status, createdAt: t.createdAt })),
+      returneeRequests: returneeRequests.map((r) => ({ serviceId: r.serviceId, serviceCategory: r.serviceCategory, status: r.status, createdAt: r.createdAt })),
+      nriRequests: nriRequests.map((n) => ({ serviceId: n.serviceId, serviceType: n.serviceType, status: n.status, createdAt: n.createdAt })),
+      applications: applications.map((item) => ({
+        id: toObjectIdString(item._id),
+        visaStatus: item.visaStatus,
+        jobTitle: item.jobTitle,
+        country: item.country,
+        createdAt: item.createdAt,
+      })),
       pendingActions: visaRequests.filter((v) => v.status === 'submitted').length +
-        jobApplications.filter((a) => a.status === 'submitted').length,
+        jobApplications.filter((a) => a.status === 'submitted').length +
+        attestations.filter((a) => a.status === 'document_received').length +
+        applications.filter((item) => item.visaStatus === 'Applied').length,
     };
 
     res.json({ success: true, data: { dashboard } });
@@ -926,21 +1251,44 @@ router.get('/recruiters/verified', async (req, res) => {
 });
 
 // ============ PAYMENTS (SCAFFOLD) ============
-router.post('/payments/create', optionalToken, async (req, res) => {
+router.post('/payments/create', paymentsCreateLimiter, optionalToken, async (req, res) => {
   try {
     const payload = req.body || {};
     const amount = Number(payload.amount || 0);
     const currency = String(payload.currency || 'usd').toLowerCase();
     const description = String(payload.description || '').trim();
     const metadata = payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {};
+    const idempotencyKey = String(req.get('x-idempotency-key') || req.get('idempotency-key') || '').trim();
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ success: false, message: 'Amount must be a positive number.' });
+    if (!Number.isFinite(amount) || amount < PAYMENT_MIN_AMOUNT || amount > PAYMENT_MAX_AMOUNT) {
+      return res.status(400).json({
+        success: false,
+        message: `Amount must be between ${PAYMENT_MIN_AMOUNT} and ${PAYMENT_MAX_AMOUNT}.`,
+      });
+    }
+
+    if (!ALLOWED_PAYMENT_CURRENCIES.includes(currency)) {
+      return res.status(400).json({
+        success: false,
+        message: `Currency must be one of: ${ALLOWED_PAYMENT_CURRENCIES.join(', ')}.`,
+      });
     }
 
     if (!stripe) {
       logger.warn('Stripe not configured for payments.create');
       return res.status(501).json({ success: false, message: 'Payment provider not configured.' });
+    }
+
+    if (idempotencyKey) {
+      const cacheKey = buildPaymentCacheKey(req, payload, idempotencyKey);
+      const cached = readPaymentCache(cacheKey);
+      if (cached) {
+        return res.json({
+          success: true,
+          data: cached,
+          message: 'Reused existing payment intent for idempotent request.',
+        });
+      }
     }
 
     const paymentIntent = await stripe.paymentIntents.create({
@@ -950,19 +1298,28 @@ router.post('/payments/create', optionalToken, async (req, res) => {
       metadata: {
         ...metadata,
         service: metadata.service || String(payload.type || 'unknown'),
+        type: String(payload.type || metadata.type || ''),
+        id: String(payload.id || metadata.id || ''),
         referenceId: String(payload.id || metadata.id || ''),
       },
-    });
+    }, idempotencyKey ? { idempotencyKey } : undefined);
+
+    const responsePayload = {
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+      amount,
+      currency,
+      metadata: paymentIntent.metadata,
+    };
+
+    if (idempotencyKey) {
+      const cacheKey = buildPaymentCacheKey(req, payload, idempotencyKey);
+      writePaymentCache(cacheKey, responsePayload);
+    }
 
     return res.json({
       success: true,
-      data: {
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
-        amount,
-        currency,
-        metadata: paymentIntent.metadata,
-      },
+      data: responsePayload,
     });
   } catch (error) {
     logger.error('payments.create error:', error);
@@ -972,49 +1329,76 @@ router.post('/payments/create', optionalToken, async (req, res) => {
 
 router.post('/payments/webhook', async (req, res) => {
   try {
-    const event = req.body || {};
-    logger.info('payments.webhook', { eventType: event.type || 'unknown' });
+    const webhookSecret = String(process.env.GULF_STRIPE_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+    const signature = String(req.get('stripe-signature') || '').trim();
 
-    // Best-effort handling for Stripe-like payloads
-    const payload = event.data && event.data.object ? event.data.object : event;
-    const eventType = event.type || 'unknown';
+    if (!stripe || !webhookSecret) {
+      logger.error('payments.webhook configuration error: Stripe is not configured.');
+      return res.status(503).json({ success: false, message: 'Payment webhook is not configured.' });
+    }
+    if (!signature) {
+      return res.status(400).json({ success: false, message: 'Missing Stripe signature.' });
+    }
+    if (!Buffer.isBuffer(req.body)) {
+      return res.status(400).json({ success: false, message: 'Invalid webhook payload format.' });
+    }
 
-    if (eventType === 'payment_intent.succeeded' || payload.status === 'succeeded') {
+    const event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret);
+
+    logger.info('payments.webhook', { eventType: event?.type || 'unknown' });
+
+    const payload = event?.data?.object;
+    const eventType = String(event?.type || 'unknown');
+
+    if (eventType === 'payment_intent.succeeded' && payload) {
       const pi = payload;
       const metadata = pi.metadata || {};
       const refType = metadata.type;
       const refId = metadata.id;
-      // Update attestation or application records
+
       if (refType === 'attestation') {
-        await GulfAttestationRequest.findOneAndUpdate({ requestId: refId }, { $set: { paymentStatus: 'paid', paymentId: pi.id, amount: (pi.amount_received || pi.amount || 0) / 100 } });
+        await GulfAttestationRequest.findOneAndUpdate(
+          { requestId: refId },
+          { $set: { paymentStatus: 'paid', paymentId: pi.id, amount: (pi.amount_received || pi.amount || 0) / 100 } }
+        );
       } else if (refType === 'application') {
-        await GulfApplication.findOneAndUpdate({ _id: refId }, { $set: { paymentStatus: 'paid', paymentId: pi.id, amount: (pi.amount_received || pi.amount || 0) / 100 } });
+        if (!isMongoObjectId(refId)) {
+          logger.warn('payments.webhook invalid application reference id', { refId });
+        } else {
+          await GulfApplication.findOneAndUpdate(
+            { _id: refId },
+            { $set: { paymentStatus: 'paid', paymentId: pi.id, amount: (pi.amount_received || pi.amount || 0) / 100 } }
+          );
+        }
       }
     }
 
     res.json({ received: true });
   } catch (error) {
+    const signatureError = String(error?.message || '').toLowerCase().includes('signature');
     logger.error('payments.webhook error:', error);
-    res.status(500).json({ success: false, message: 'Webhook handler failed.' });
+    res.status(signatureError ? 400 : 500).json({
+      success: false,
+      message: signatureError ? 'Invalid Stripe signature.' : 'Webhook handler failed.',
+    });
   }
 });
 
 // ============ RECRUITER APPLICATIONS & VERIFICATION ============
 router.post('/recruiters/apply', documentUploadLimiter, docUpload.single('kycDocument'), async (req, res) => {
   try {
-    const {
-      fullName,
-      name,
-      companyName,
-      licenseNumber,
-      registrationNumber,
-      country,
-      experienceSummary,
-      website,
-    } = req.body || {};
+    const normalizedPayload = {
+      ...req.body,
+      phone: normalizePhone(req.body?.phone),
+      email: String(req.body?.email || '').trim().toLowerCase(),
+    };
+    const { error, value } = recruiterApplicationSchema.validate(normalizedPayload);
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
 
-    const recruiterName = String(fullName || name || '').trim();
-    if (!recruiterName || !country) {
+    const recruiterName = String(value.fullName || value.name || '').trim();
+    if (!recruiterName) {
       return res.status(400).json({ success: false, message: 'Recruiter name and country are required.' });
     }
 
@@ -1022,12 +1406,14 @@ router.post('/recruiters/apply', documentUploadLimiter, docUpload.single('kycDoc
 
     const recruiter = await GulfRecruiter.create({
       name: recruiterName,
-      companyName: String(companyName || '').trim(),
-      licenseNumber: String(licenseNumber || '').trim(),
-      registrationNumber: String(registrationNumber || '').trim(),
-      country: String(country).trim(),
-      website: String(website || '').trim(),
-      experienceSummary: String(experienceSummary || '').trim(),
+      companyName: String(value.companyName || '').trim(),
+      licenseNumber: String(value.licenseNumber || '').trim(),
+      registrationNumber: String(value.registrationNumber || '').trim(),
+      country: String(value.country || '').trim(),
+      phone: String(value.phone || '').trim(),
+      email: String(value.email || '').trim().toLowerCase(),
+      website: String(value.website || '').trim(),
+      experienceSummary: String(value.experienceSummary || '').trim(),
       verified: false,
       status: 'pending',
       kycDocuments: kycFiles,
@@ -1101,16 +1487,70 @@ router.post('/fraud/report', fraudReportLimiter, async (req, res) => {
 
     const { recruiterId, issueDescription, phone } = value;
 
-    logger.warn('Fraud report submitted:', { recruiterId, issueDescription, phone });
+    const report = await GulfFraudReport.create({
+      reportId: `FRD-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
+      recruiterId: recruiterId || '',
+      issueDescription,
+      phone,
+      status: 'open',
+      source: 'gulf-services',
+    });
+
+    logger.warn('Fraud report submitted:', {
+      reportId: report.reportId,
+      recruiterId,
+      phoneHash: crypto.createHash('sha256').update(phone).digest('hex').slice(0, 12),
+    });
 
     res.json({
       success: true,
       message: 'Fraud report submitted. Our team will investigate.',
-      data: { reportId: `FRD-${Date.now()}` },
+      data: { reportId: report.reportId },
     });
   } catch (error) {
     logger.error('fraud report error:', error);
     res.status(500).json({ success: false, message: 'Unable to submit fraud report.' });
+  }
+});
+
+router.get('/admin/fraud-reports', authenticate, verifyAdmin, async (req, res) => {
+  try {
+    const status = String(req.query.status || '').trim();
+    const filter = status ? { status } : {};
+    const reports = await GulfFraudReport.find(filter).sort({ createdAt: -1 }).limit(500).lean();
+    return res.json({ success: true, data: reports });
+  } catch (error) {
+    logger.error('admin fraud reports fetch error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to fetch fraud reports.' });
+  }
+});
+
+router.put('/admin/fraud-reports/:reportId/status', authenticate, verifyAdmin, async (req, res) => {
+  try {
+    const { error, value } = fraudAdminStatusSchema.validate(req.body || {});
+    if (error) {
+      return res.status(400).json({ success: false, message: error.details[0].message });
+    }
+
+    const report = await GulfFraudReport.findOneAndUpdate(
+      { reportId: String(req.params.reportId || '').trim() },
+      {
+        $set: {
+          status: value.status,
+          adminNote: String(value.adminNote || '').trim(),
+        },
+      },
+      { new: true }
+    );
+
+    if (!report) {
+      return res.status(404).json({ success: false, message: 'Fraud report not found.' });
+    }
+
+    return res.json({ success: true, data: report, message: 'Fraud report updated.' });
+  } catch (error) {
+    logger.error('admin fraud report status update error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to update fraud report.' });
   }
 });
 

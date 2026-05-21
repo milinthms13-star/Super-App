@@ -4,6 +4,7 @@ import "./HotelBooking.css";
 import HotelSearchFilters from "./components/HotelSearchFilters";
 import HotelCard from "./components/HotelCard";
 import BookingModal from "./components/BookingModal";
+import HotelDetailsModal from "./components/HotelDetailsModal";
 import MyBookings from "./components/MyBookings";
 import PartnerDashboard from "./components/PartnerDashboard";
 import AdminHotelPanel from "./components/AdminHotelPanel";
@@ -78,7 +79,10 @@ const HotelBooking = () => {
   const [selectedAmenities, setSelectedAmenities] = useState([]);
   const [sortBy, setSortBy] = useState("rating");
   const [selectedHotel, setSelectedHotel] = useState(null);
+  const [selectedHotelDetails, setSelectedHotelDetails] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(null);
   const [hotels, setHotels] = useState([]);
   const [hotelsLoading, setHotelsLoading] = useState(false);
@@ -253,9 +257,35 @@ const HotelBooking = () => {
     window.location.href = `tel:${hotel.contact.phone}`;
   };
 
-  // Handle view details (future: open details page)
-  const handleViewDetails = (hotel) => {
-    alert(`Hotel Details:\n\n${hotel.name}\n${hotel.location}\n\nFull details page coming soon!`);
+  // Handle view details
+  const handleViewDetails = async (hotel) => {
+    setSelectedHotel(hotel);
+    setSelectedHotelDetails(null);
+    setDetailsLoading(true);
+    setShowDetailsModal(true);
+
+    if (!hotel?.id) {
+      setSelectedHotelDetails(hotel);
+      setDetailsLoading(false);
+      return;
+    }
+
+    try {
+      const response = await apiCall(`/hotelbooking/hotels/${hotel.id}`, "GET");
+      setSelectedHotelDetails(response?.data || hotel);
+    } catch (error) {
+      console.warn("Hotel details API failed, using list data:", error);
+      setSelectedHotelDetails(hotel);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const handleCloseDetails = () => {
+    setShowDetailsModal(false);
+    setSelectedHotel(null);
+    setSelectedHotelDetails(null);
+    setDetailsLoading(false);
   };
 
   // Determine if user should see admin panel (role check)
@@ -408,6 +438,24 @@ const HotelBooking = () => {
             setSelectedHotel(null);
           }}
           onSubmit={handleBookingSubmit}
+        />
+      )}
+
+      {showDetailsModal && (selectedHotelDetails || selectedHotel) && (
+        <HotelDetailsModal
+          hotel={selectedHotelDetails || selectedHotel}
+          checkIn={checkIn}
+          checkOut={checkOut}
+          guests={guests}
+          onClose={handleCloseDetails}
+          onBook={(hotel) => {
+            setShowDetailsModal(false);
+            setShowBookingModal(true);
+            setSelectedHotel(hotel);
+          }}
+          onWhatsApp={handleWhatsAppBooking}
+          onCall={handleCall}
+          loading={detailsLoading}
         />
       )}
     </div>

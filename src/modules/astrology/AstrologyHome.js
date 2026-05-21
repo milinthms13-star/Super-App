@@ -102,7 +102,7 @@ const AstrologyHome = () => {
           </form>
           <div className="astro-top-actions">
             <button type="button" className="astrology-secondary-button" onClick={() => setLanguage((prev) => (prev === "en" ? "ml" : "en"))}>
-              {language === "en" ? "à´®à´²à´¯à´¾à´³à´‚" : "English"}
+              {language === "en" ? "മലയാളം" : "English"}
             </button>
             <button type="button" className="astrology-secondary-button" onClick={() => setActiveSection("profile")}>
               Profile

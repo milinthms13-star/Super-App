@@ -147,6 +147,31 @@ const mapBookingForClient = (booking = {}) => ({
   createdAt: booking.createdAt,
 });
 
+const updateHotelRoomAvailability = (hotel, roomType, requestedRooms) => {
+  const selectedRoom = (hotel.rooms || []).find((room) => String(room.type || '').trim().toLowerCase() === String(roomType || '').trim().toLowerCase());
+  if (!selectedRoom) {
+    return { error: 'Selected room type is not available for this hotel.' };
+  }
+
+  const availableRooms = Number.isFinite(selectedRoom.availableRooms)
+    ? Number(selectedRoom.availableRooms)
+    : Number(selectedRoom.totalInventory || 0);
+
+  if (requestedRooms > availableRooms) {
+    return { error: 'Requested rooms are not available.' };
+  }
+
+  selectedRoom.availableRooms = Math.max(0, availableRooms - requestedRooms);
+  hotel.availableRooms = (hotel.rooms || []).reduce((sum, room) => {
+    const roomAvailable = Number.isFinite(room.availableRooms)
+      ? Number(room.availableRooms)
+      : Number(room.totalInventory || 0);
+    return sum + Math.max(0, roomAvailable);
+  }, 0);
+
+  return { hotel, selectedRoom };
+};
+
 const updatePartnerBookingStatus = async (req, res, bookingStatus, partnerNote = '') => {
   try {
     const booking = await HotelBooking.findById(req.params.id);
@@ -198,6 +223,19 @@ router.get('/hotels', async (req, res) => {
     return res.json({ success: true, data: hotels.map(mapHotelForClient) });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Unable to load hotels.' });
+  }
+});
+
+router.get('/hotels/:id', async (req, res) => {
+  try {
+    const hotel = await HotelProperty.findById(req.params.id).lean();
+    if (!hotel) {
+      return res.status(404).json({ success: false, message: 'Hotel not found.' });
+    }
+
+    return res.json({ success: true, data: mapHotelForClient(hotel) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Unable to load hotel details.' });
   }
 });
 
@@ -306,12 +344,23 @@ router.post('/bookings', authenticate, async (req, res) => {
       return res.status(409).json({ success: false, message: 'Requested rooms are not available.' });
     }
 
-    const selectedRoom = (property.rooms || []).find((room) => room.type === value.roomType);
+    const selectedRoom = (property.rooms || []).find((room) => String(room.type || '').trim().toLowerCase() === String(value.roomType || '').trim().toLowerCase());
+    if (!selectedRoom) {
+      return res.status(400).json({ success: false, message: 'Selected room type is invalid for this hotel.' });
+    }
+
+    const availabilityResult = updateHotelRoomAvailability(property, value.roomType, requestedRooms);
+    if (availabilityResult?.error) {
+      return res.status(409).json({ success: false, message: availabilityResult.error });
+    }
+
     const pricePerNight = selectedRoom?.basePrice || Number(value.pricePerNight || property.pricePerNight || 0);
     const numberOfNights = calculateNights(checkInDate, checkOutDate);
     const totalPrice = Math.round(pricePerNight * numberOfNights * requestedRooms);
     const gst = Math.round(totalPrice * 0.05);
     const finalTotal = totalPrice + gst;
+
+    await property.save();
 
     const created = await HotelBooking.create({
       userId: normalizeUserId(req),
@@ -478,8 +527,25 @@ router.get('/admin/hotels/pending', authenticate, verifyAdmin, async (_req, res)
 
 router.get('/admin/hotels/verified', authenticate, verifyAdmin, async (_req, res) => {
   try {
+    const bookingsByProperty = await HotelBooking.aggregate([
+      { $match: { bookingStatus: { $in: ['Confirmed', 'Checked In', 'Completed'] } } },
+      { $group: { _id: '$propertyId', bookings: { $sum: 1 }, revenue: { $sum: '$finalTotal' } } },
+    ]);
+
+    const metricsMap = bookingsByProperty.reduce((map, item) => {
+      map[String(item._id)] = item;
+      return map;
+    }, {});
+
     const hotels = await HotelProperty.find({ status: 'Approved' }).sort({ createdAt: -1 }).lean();
-    return res.json({ success: true, data: hotels.map((item) => ({ ...mapHotelForClient(item), bookings: 0, revenue: 0 })) });
+    return res.json({
+      success: true,
+      data: hotels.map((item) => ({
+        ...mapHotelForClient(item),
+        bookings: metricsMap[String(item._id)]?.bookings || 0,
+        revenue: Math.round(metricsMap[String(item._id)]?.revenue || 0),
+      })),
+    });
   } catch (_error) {
     return res.status(500).json({ success: false, message: 'Unable to load verified hotels.' });
   }

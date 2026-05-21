@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useI18n from '../../hooks/useI18n';
 import { gulfservicesApi } from './gulfservicesApi';
 import './GulfServices.css';
@@ -28,16 +28,23 @@ const getCurrentUserEmail = () => {
   return '';
 };
 
+const hasAdminRole = (user = {}) => {
+  const role = String(user?.role || user?.registrationType || '').trim().toLowerCase();
+  const scopedRole = String(user?.scope || '').trim().toLowerCase();
+  const roles = Array.isArray(user?.roles) ? user.roles.map((item) => String(item || '').trim().toLowerCase()) : [];
+  return Boolean(user?.isAdmin || role.includes('admin') || scopedRole.includes('admin') || roles.includes('admin'));
+};
+
 const SERVICE_CATEGORIES = [
-  { id: 'visa', title: 'Visa Assistance', icon: '📋', desc: 'Visit, employment, family visas and renewals.' },
-  { id: 'jobs', title: 'Gulf Jobs', icon: '💼', desc: 'Verified recruiters and fraud protection.' },
-  { id: 'attestation', title: 'Document Attestation', icon: '📄', desc: 'MEA, embassy, HRD and delivery tracking.' },
-  { id: 'travel', title: 'Travel Support', icon: '✈️', desc: 'Flight booking, accommodation and relocation.' },
-  { id: 'medical', title: 'GAMCA Medical', icon: '⚕️', desc: 'Medical booking, pre-qualification and results.' },
-  { id: 'pcc', title: 'PCC & Police Clearance', icon: '🛡️', desc: 'Police clearance, character certificate and tracking.' },
-  { id: 'returnee', title: 'Returnee Help', icon: '🏠', desc: 'Returnee jobs, business setup and NRI assistance.' },
-  { id: 'nri', title: 'NRI Services', icon: '🌍', desc: 'Investment, property and banking for NRIs.' },
-  { id: 'emergency', title: 'Emergency Gulf Help', icon: '🚨', desc: 'Passport lost, visa expired, legal help and embassy contact.' },
+  { id: 'visa', title: 'Visa Assistance', icon: 'V', desc: 'Visit, employment, family visas and renewals.' },
+  { id: 'jobs', title: 'Gulf Jobs', icon: 'J', desc: 'Verified recruiters and fraud protection.' },
+  { id: 'attestation', title: 'Document Attestation', icon: 'D', desc: 'MEA, embassy, HRD and delivery tracking.' },
+  { id: 'travel', title: 'Travel Support', icon: 'T', desc: 'Flight booking, accommodation and relocation.' },
+  { id: 'medical', title: 'GAMCA Medical', icon: 'M', desc: 'Medical booking, pre-qualification and results.' },
+  { id: 'pcc', title: 'PCC & Police Clearance', icon: 'P', desc: 'Police clearance, character certificate and tracking.' },
+  { id: 'returnee', title: 'Returnee Help', icon: 'R', desc: 'Returnee jobs, business setup and NRI assistance.' },
+  { id: 'nri', title: 'NRI Services', icon: 'N', desc: 'Investment, property and banking for NRIs.' },
+  { id: 'emergency', title: 'Emergency Gulf Help', icon: 'E', desc: 'Passport lost, visa expired, legal help and embassy contact.' },
 ];
 
 const SAMPLE_JOBS = [
@@ -168,6 +175,8 @@ const VISA_WORKFLOW_STATUSES = [
   'Medical Pending',
   'Medical Completed',
   'Visa Processing',
+  'Requires Human Review',
+  'Escalated',
   'Visa Approved',
   'Visa Stamped',
   'Travel Ready',
@@ -191,6 +200,9 @@ const GulfServices = () => {
   const [adminAnalytics, setAdminAnalytics] = useState(null);
   const [adminFilters, setAdminFilters] = useState({ visaStatus: '', country: '', search: '' });
   const [adminUpdateDrafts, setAdminUpdateDrafts] = useState({});
+  const [adminFraudReports, setAdminFraudReports] = useState([]);
+  const [adminFraudFilter, setAdminFraudFilter] = useState('');
+  const [adminFraudDrafts, setAdminFraudDrafts] = useState({});
   const [pendingRecruiters, setPendingRecruiters] = useState([]);
   const [pendingRecruiterDrafts, setPendingRecruiterDrafts] = useState({});
   
@@ -262,17 +274,11 @@ const GulfServices = () => {
     kycDocument: null,
   });
   const [paymentIntentInfo, setPaymentIntentInfo] = useState(null);
-  const isAdminUser = useMemo(() => {
-    try {
-      const payload = localStorage.getItem('user');
-      if (!payload) return false;
-      const parsed = JSON.parse(payload);
-      const normalizedEmail = String(parsed?.email || '').trim().toLowerCase();
-      return Boolean(parsed?.isAdmin || parsed?.role === 'admin' || normalizedEmail === 'mgdhanyamohan@gmail.com');
-    } catch (_error) {
-      return false;
-    }
-  }, []);
+  const [isAdminUser, setIsAdminUser] = useState(false);
+  const modalContainerRef = useRef(null);
+  const lastFocusedElementRef = useRef(null);
+  const supportPhone = bootstrapData?.support?.phone || DEFAULT_SUPPORT_PHONE;
+  const supportWhatsapp = bootstrapData?.support?.whatsapp || DEFAULT_SUPPORT_WHATSAPP;
   const documentReadinessScore = useMemo(
     () => Math.round((checkedDocs.length / DOCUMENT_CHECKLIST.length) * 100),
     [checkedDocs.length]
@@ -292,16 +298,37 @@ const GulfServices = () => {
   const availableJobCategories = bootstrapData?.jobCategories?.length ? bootstrapData.jobCategories : JOB_CATEGORIES;
 
   useEffect(() => {
-    const email = getCurrentUserEmail();
-    setCurrentUserEmail(email);
-    if (!email) return;
+    let mounted = true;
+    const prefillEmail = (emailValue) => {
+      const email = String(emailValue || '').trim().toLowerCase();
+      if (!email || !mounted) return;
+      setCurrentUserEmail(email);
+      setJobApplicationForm((prev) => ({ ...prev, email: prev.email || email }));
+      setVisaForm((prev) => ({ ...prev, email: prev.email || email }));
+      setAttestationForm((prev) => ({ ...prev, email: prev.email || email }));
+      setLeadForm((prev) => ({ ...prev, email: prev.email || email }));
+      setTrackRequest((prev) => ({ ...prev, email: prev.email || email }));
+      setRecruiterForm((prev) => ({ ...prev, email: prev.email || email }));
+    };
 
-    setJobApplicationForm((prev) => ({ ...prev, email: prev.email || email }));
-    setVisaForm((prev) => ({ ...prev, email: prev.email || email }));
-    setAttestationForm((prev) => ({ ...prev, email: prev.email || email }));
-    setLeadForm((prev) => ({ ...prev, email: prev.email || email }));
-    setTrackRequest((prev) => ({ ...prev, email: prev.email || email }));
-    setRecruiterForm((prev) => ({ ...prev, email: prev.email || email }));
+    const initializeUserContext = async () => {
+      prefillEmail(getCurrentUserEmail());
+      try {
+        const response = await gulfservicesApi.getCurrentUser();
+        const user = response?.user || response?.data?.user || {};
+        if (!mounted) return;
+        setIsAdminUser(hasAdminRole(user));
+        prefillEmail(user?.email);
+      } catch (_error) {
+        if (!mounted) return;
+        setIsAdminUser(false);
+      }
+    };
+
+    initializeUserContext();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -415,13 +442,51 @@ const GulfServices = () => {
 
   useEffect(() => {
     if (!activeModal) return undefined;
+    lastFocusedElementRef.current = document.activeElement;
+
+    const getFocusable = () => {
+      if (!modalContainerRef.current) return [];
+      return Array.from(
+        modalContainerRef.current.querySelectorAll(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+    };
+
+    const focusable = getFocusable();
+    if (focusable.length) {
+      focusable[0].focus();
+    } else if (modalContainerRef.current) {
+      modalContainerRef.current.focus();
+    }
+
     const handleEscape = (event) => {
       if (event.key === 'Escape') {
         closeModal();
+        return;
+      }
+      if (event.key === 'Tab') {
+        const nodes = getFocusable();
+        if (!nodes.length) return;
+        const firstNode = nodes[0];
+        const lastNode = nodes[nodes.length - 1];
+        const activeNode = document.activeElement;
+        if (event.shiftKey && activeNode === firstNode) {
+          event.preventDefault();
+          lastNode.focus();
+        } else if (!event.shiftKey && activeNode === lastNode) {
+          event.preventDefault();
+          firstNode.focus();
+        }
       }
     };
     window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+      if (lastFocusedElementRef.current && typeof lastFocusedElementRef.current.focus === 'function') {
+        lastFocusedElementRef.current.focus();
+      }
+    };
   }, [activeModal]);
 
   const getRecruiterDetails = (recruiterId) => {
@@ -466,6 +531,16 @@ const GulfServices = () => {
       setPendingRecruiters([]);
     }
   }, [isAdminUser]);
+
+  const loadAdminFraudReports = useCallback(async () => {
+    if (!isAdminUser) return;
+    try {
+      const response = await gulfservicesApi.getAdminFraudReports(adminFraudFilter);
+      setAdminFraudReports(Array.isArray(response?.data) ? response.data : []);
+    } catch (_error) {
+      setAdminFraudReports([]);
+    }
+  }, [adminFraudFilter, isAdminUser]);
 
   const handleRecruiterVerification = async (recruiterId, verified) => {
     const draft = pendingRecruiterDrafts[recruiterId] || {};
@@ -537,6 +612,7 @@ const GulfServices = () => {
 
     setLoading(true);
     try {
+      const idempotencyKey = `attestation-${String(attestationForm.email || '').toLowerCase()}-${String(attestationForm.documentName || '').toLowerCase()}-${String(attestationForm.urgency || '').toLowerCase()}`;
       const response = await gulfservicesApi.createPaymentIntent({
         amount: 49.99,
         currency: 'usd',
@@ -546,7 +622,7 @@ const GulfServices = () => {
           urgency: attestationForm.urgency,
           email: attestationForm.email,
         },
-      });
+      }, { idempotencyKey });
       const payload = response?.data || response;
       setPaymentIntentInfo(payload?.data || payload);
       showMessage('Payment intent created. Complete the checkout with your provider if required.');
@@ -636,16 +712,44 @@ const GulfServices = () => {
     event.preventDefault();
     setLoading(true);
     try {
-      const response = await gulfservicesApi.submitVisaEnquiry({
+      const sharedPayload = {
         fullName: leadForm.fullName,
         email: leadForm.email || currentUserEmail || jobApplicationForm.email || visaForm.email,
         phone: leadForm.phone,
         country: leadForm.country,
-        visaType: 'Visit',
-        urgency: leadForm.serviceType === 'emergency' ? 'emergency' : 'normal',
-        currentLocation: 'India',
-        message: `[${leadForm.serviceType}] ${leadForm.message || 'Callback requested.'}`,
-      });
+        details: leadForm.message || 'Callback requested.',
+      };
+
+      let response;
+      if (leadForm.serviceType === 'travel') {
+        response = await gulfservicesApi.submitTravelSupport({
+          ...sharedPayload,
+          serviceType: 'relocation',
+        });
+      } else if (leadForm.serviceType === 'medical') {
+        response = await gulfservicesApi.submitMedicalSupport(sharedPayload);
+      } else if (leadForm.serviceType === 'returnee') {
+        response = await gulfservicesApi.submitReturneeSupport({
+          ...sharedPayload,
+          serviceCategory: 'job-support',
+        });
+      } else if (leadForm.serviceType === 'nri') {
+        response = await gulfservicesApi.submitNriSupport({
+          ...sharedPayload,
+          serviceType: 'banking',
+        });
+      } else {
+        response = await gulfservicesApi.submitVisaEnquiry({
+          fullName: sharedPayload.fullName,
+          email: sharedPayload.email,
+          phone: sharedPayload.phone,
+          country: sharedPayload.country,
+          visaType: 'Visit',
+          urgency: leadForm.serviceType === 'emergency' ? 'emergency' : 'normal',
+          currentLocation: 'India',
+          message: `[${leadForm.serviceType}] ${leadForm.message || 'Callback requested.'}`,
+        });
+      }
       showMessage(response.message || 'Lead submitted successfully. We will contact you shortly.');
       setLeadForm({ fullName: '', email: currentUserEmail, phone: '', serviceType: 'visa', country: selectedCountry, message: '' });
       closeModal();
@@ -685,14 +789,14 @@ const GulfServices = () => {
     }
     setLoading(true);
     try {
-      const response = await gulfservicesApi.trackRequest(
-        trackRequest.type,
-        trackRequest.requestId.trim(),
-        trackRequest.email.trim().toLowerCase()
-      );
+      const trackingEmail = trackRequest.email.trim().toLowerCase();
+      const response =
+        trackRequest.type === 'visa' || trackRequest.type === 'attestation'
+          ? await gulfservicesApi.trackRequest(trackRequest.type, trackRequest.requestId.trim(), trackingEmail)
+          : await gulfservicesApi.trackServiceRequest(trackRequest.type, trackRequest.requestId.trim(), trackingEmail);
       const payload = response.data || {};
       setTrackResult({
-        status: payload.status || payload?.visaRequest?.status || payload?.attestation?.status || 'Unknown',
+        status: payload.status || payload?.visaRequest?.status || payload?.attestation?.status || payload?.record?.status || 'Unknown',
         timeline: payload.timeline || payload?.visaRequest?.timeline || payload?.attestation?.timeline || [],
       });
       setActivePane('tracking');
@@ -747,17 +851,41 @@ const GulfServices = () => {
     }
   };
 
+  const handleAdminFraudUpdate = async (reportId) => {
+    const draft = adminFraudDrafts[reportId] || {};
+    if (!draft.status) {
+      showMessage('Select a fraud status before updating.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await gulfservicesApi.updateAdminFraudStatus(reportId, {
+        status: draft.status,
+        adminNote: draft.adminNote || '',
+      });
+      showMessage(response?.message || 'Fraud report updated.');
+      await loadAdminFraudReports();
+      await loadAdminAnalytics();
+    } catch (error) {
+      showMessage(error?.response?.data?.message || 'Unable to update fraud report.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if ((activePane === 'workflow' || activePane === 'dashboard') && currentUserEmail) {
       loadMyApplications();
     }
     if (activePane === 'workflow' && isAdminUser) {
       loadAdminApplications();
+      loadAdminFraudReports();
     }
     if (activePane === 'dashboard' && isAdminUser) {
       loadPendingRecruiters();
     }
-  }, [activePane, currentUserEmail, isAdminUser, loadAdminApplications, loadMyApplications, loadPendingRecruiters]);
+  }, [activePane, currentUserEmail, isAdminUser, loadAdminApplications, loadAdminFraudReports, loadMyApplications, loadPendingRecruiters]);
 
   // Modal content renderer
   const renderModal = () => {
@@ -768,8 +896,8 @@ const GulfServices = () => {
     if (activeModal === 'visa') {
       return (
         <div className={modalClasses}>
-          <div className="gulf-services-modal-content">
-            <button type="button" className="gulf-services-modal-close" aria-label="Close visa support dialog" onClick={closeModal}>✕</button>
+          <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
+            <button type="button" className="gulf-services-modal-close" aria-label="Close visa support dialog" onClick={closeModal}>X</button>
             <h2>Visa Enquiry & Support</h2>
             <form className="gulf-services-form" onSubmit={submitVisa}>
               <div className="gulf-services-form-grid">
@@ -823,7 +951,7 @@ const GulfServices = () => {
               <div className="gulf-services-form-actions">
                 <button type="submit" className="btn btn-primary" disabled={loading}>Submit visa enquiry</button>
                 <button type="button" className="btn btn-secondary" onClick={closeModal}>Cancel</button>
-                <button type="button" className="btn btn-outline" onClick={() => window.open(`https://wa.me/${DEFAULT_SUPPORT_WHATSAPP}?text=I%20need%20visa%20support`, '_blank')}>
+                <button type="button" className="btn btn-outline" onClick={() => window.open(`https://wa.me/${supportWhatsapp}?text=I%20need%20visa%20support`, '_blank')}>
                   WhatsApp Support
                 </button>
               </div>
@@ -836,8 +964,8 @@ const GulfServices = () => {
     if (activeModal === 'jobs') {
       return (
         <div className={modalClasses}>
-          <div className="gulf-services-modal-content gulf-services-modal-large">
-            <button type="button" className="gulf-services-modal-close" aria-label="Close jobs dialog" onClick={closeModal}>✕</button>
+          <div className="gulf-services-modal-content gulf-services-modal-large" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
+            <button type="button" className="gulf-services-modal-close" aria-label="Close jobs dialog" onClick={closeModal}>X</button>
             <h2>Gulf Jobs & Verified Applications</h2>
             <div className="gulf-services-modal-grid">
               <div className="gulf-services-modal-filters">
@@ -860,11 +988,11 @@ const GulfServices = () => {
                   </select>
                 </label>
                 <label>
-                  Min salary (₹)
+                  Min salary (?)
                   <input name="salaryMin" type="number" value={jobFilters.salaryMin} onChange={handleInputChange(setJobFilters)} />
                 </label>
                 <label>
-                  Max salary (₹)
+                  Max salary (?)
                   <input name="salaryMax" type="number" value={jobFilters.salaryMax} onChange={handleInputChange(setJobFilters)} />
                 </label>
                 <label>
@@ -905,7 +1033,7 @@ const GulfServices = () => {
                         <span>{job.company}</span>
                         <p>{job.summary}</p>
                         <div className="gulf-services-job-meta">
-                          <span>₹{job.salary?.min}-{job.salary?.max}</span>
+                          <span>INR {job.salary?.min}-{job.salary?.max}</span>
                           <span>{job.country}</span>
                         </div>
                       </button>
@@ -923,7 +1051,7 @@ const GulfServices = () => {
                     <div className="gulf-services-job-details">
                       <p><strong>Description:</strong> {selectedJob.description}</p>
                       <p><strong>Location:</strong> {selectedJob.country}</p>
-                      <p><strong>Salary:</strong> ₹{selectedJob.salary?.min} - ₹{selectedJob.salary?.max}</p>
+                      <p><strong>Salary:</strong> INR {selectedJob.salary?.min} - INR {selectedJob.salary?.max}</p>
                       <p><strong>Experience:</strong> {selectedJob.experience} years</p>
                       {selectedJob.recruiter && getRecruiterDetails(selectedJob.recruiter) && (
                         <div className="gulf-services-recruiter-info">
@@ -963,8 +1091,8 @@ const GulfServices = () => {
     if (activeModal === 'attestation') {
       return (
         <div className={modalClasses}>
-          <div className="gulf-services-modal-content">
-            <button type="button" className="gulf-services-modal-close" aria-label="Close attestation dialog" onClick={closeModal}>✕</button>
+          <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
+            <button type="button" className="gulf-services-modal-close" aria-label="Close attestation dialog" onClick={closeModal}>X</button>
             <h2>Document Attestation Request</h2>
             <form className="gulf-services-form" onSubmit={submitAttestation}>
               <div className="gulf-services-form-grid">
@@ -1021,8 +1149,8 @@ const GulfServices = () => {
     if (activeModal === 'recruiter') {
       return (
         <div className={modalClasses}>
-          <div className="gulf-services-modal-content">
-            <button type="button" className="gulf-services-modal-close" aria-label="Close recruiter application" onClick={closeModal}>✕</button>
+          <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
+            <button type="button" className="gulf-services-modal-close" aria-label="Close recruiter application" onClick={closeModal}>X</button>
             <h2>Recruiter Onboarding Application</h2>
             <form className="gulf-services-form" onSubmit={submitRecruiterApplication}>
               <div className="gulf-services-form-grid">
@@ -1056,8 +1184,8 @@ const GulfServices = () => {
     if (activeModal === 'lead') {
       return (
         <div className={modalClasses}>
-          <div className="gulf-services-modal-content">
-            <button type="button" className="gulf-services-modal-close" aria-label="Close callback dialog" onClick={closeModal}>✕</button>
+          <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
+            <button type="button" className="gulf-services-modal-close" aria-label="Close callback dialog" onClick={closeModal}>X</button>
             <h2>Request Gulf Support Callback</h2>
             <form className="gulf-services-form" onSubmit={submitLead}>
               <div className="gulf-services-form-grid">
@@ -1070,6 +1198,8 @@ const GulfServices = () => {
                   <option value="attestation">Document Attestation</option>
                   <option value="travel">Travel Support</option>
                   <option value="medical">Medical/PCC</option>
+                  <option value="returnee">Returnee Help</option>
+                  <option value="nri">NRI Services</option>
                   <option value="emergency">Emergency Help</option>
                 </select>
                 <select name="country" value={leadForm.country} onChange={handleInputChange(setLeadForm)}>
@@ -1084,7 +1214,7 @@ const GulfServices = () => {
               </div>
               <div className="gulf-services-form-actions">
                 <button type="submit" className="btn btn-primary" disabled={loading}>Request callback</button>
-                <button type="button" className="btn btn-outline" onClick={() => window.open(`https://wa.me/${DEFAULT_SUPPORT_WHATSAPP}`, '_blank')}>
+                <button type="button" className="btn btn-outline" onClick={() => window.open(`https://wa.me/${supportWhatsapp}`, '_blank')}>
                   Contact WhatsApp
                 </button>
               </div>
@@ -1097,11 +1227,11 @@ const GulfServices = () => {
     if (activeModal === 'fraud') {
       return (
         <div className={modalClasses}>
-          <div className="gulf-services-modal-content">
-            <button type="button" className="gulf-services-modal-close" aria-label="Close fraud dialog" onClick={closeModal}>✕</button>
+          <div className="gulf-services-modal-content" ref={modalContainerRef} role="dialog" aria-modal="true" tabIndex="-1">
+            <button type="button" className="gulf-services-modal-close" aria-label="Close fraud dialog" onClick={closeModal}>X</button>
             <h2>Report Fraudulent Recruitment</h2>
             <div className="gulf-services-fraud-warning">
-              ⚠️ <strong>No legitimate recruiter asks for advance fees.</strong> Report suspicious offers here.
+              <strong>No legitimate recruiter asks for advance fees.</strong> Report suspicious offers here.
             </div>
             <form className="gulf-services-form" onSubmit={submitFraudReport}>
               <div className="gulf-services-form-grid">
@@ -1192,7 +1322,7 @@ const GulfServices = () => {
                 <div className="gulf-services-job-meta">
                   <span>{selectedJob.company}</span>
                   <span>{selectedJob.country}</span>
-                  <span>₹{selectedJob.salary?.min} - ₹{selectedJob.salary?.max}</span>
+                  <span>INR {selectedJob.salary?.min} - INR {selectedJob.salary?.max}</span>
                 </div>
                 <form className="gulf-services-form" onSubmit={submitJobApplication}>
                   <h4>Apply for this job</h4>
@@ -1409,6 +1539,22 @@ const GulfServices = () => {
                       <strong>Pending attestations</strong>
                       <p>{adminAnalytics.attestationStatusCounts?.document_received || 0}</p>
                     </div>
+                    <div>
+                      <strong>Open fraud cases</strong>
+                      <p>{adminAnalytics.fraudStatusCounts?.open || 0}</p>
+                    </div>
+                    <div>
+                      <strong>Travel-ready conversion</strong>
+                      <p>{adminAnalytics.funnelMetrics?.travelReadyConversionRate ?? 0}%</p>
+                    </div>
+                    <div>
+                      <strong>Recruiter verification SLA</strong>
+                      <p>{adminAnalytics.slaMetrics?.recruiterVerificationAvgHours ?? 'NA'} hrs</p>
+                    </div>
+                    <div>
+                      <strong>Fraud resolution SLA</strong>
+                      <p>{adminAnalytics.slaMetrics?.fraudResolutionAvgHours ?? 'NA'} hrs</p>
+                    </div>
                   </div>
                 ) : null}
               </>
@@ -1435,6 +1581,10 @@ const GulfServices = () => {
                 <select name="type" value={trackRequest.type} onChange={(event) => setTrackRequest((prev) => ({ ...prev, type: event.target.value }))}>
                   <option value="visa">Visa</option>
                   <option value="attestation">Attestation</option>
+                  <option value="travel">Travel Support</option>
+                  <option value="medical">Medical Booking</option>
+                  <option value="returnee">Returnee Service</option>
+                  <option value="nri">NRI Service</option>
                 </select>
               </label>
               <label>
@@ -1449,7 +1599,7 @@ const GulfServices = () => {
             </form>
             {trackResult && (
               <div className="gulf-services-tracking-result">
-                <h3>Status: {trackResult.status || 'Unknown'}</h3>
+                <h3>Status: {trackResult.status || "Unknown"}</h3>
                 {trackResult.timeline && (
                   <div className="gulf-services-timeline">
                     {trackResult.timeline.map((entry, idx) => (
@@ -1515,7 +1665,7 @@ const GulfServices = () => {
                     <div key={item._id} className="gulf-services-app-item">
                       <div>
                         <strong>{item.jobTitle || 'Gulf Application'}</strong>
-                        <p>{item.country} • {item.company || 'Company pending'}</p>
+                        <p>{item.country} - {item.company || 'Company pending'}</p>
                         <small>Passport: {item.passportNo || 'N/A'}</small>
                       </div>
                       <div>
@@ -1566,8 +1716,8 @@ const GulfServices = () => {
                       <div key={item._id} className="gulf-services-app-item gulf-services-app-item-admin">
                         <div>
                           <strong>{item.name}</strong>
-                          <p>{item.jobTitle} • {item.country} • {item.phone}</p>
-                          <small>Agent: {item.agentName || 'Unassigned'} {item.agentVerified ? '• Verified' : ''}</small>
+                          <p>{item.jobTitle} - {item.country} - {item.phone}</p>
+                          <small>Agent: {item.agentName || 'Unassigned'} {item.agentVerified ? '- Verified' : ''}</small>
                         </div>
                         <div className="gulf-services-admin-actions">
                           <select
@@ -1639,8 +1789,8 @@ const GulfServices = () => {
                         <div key={recruiter._id} className="gulf-services-app-item gulf-services-app-item-admin">
                           <div>
                             <strong>{recruiter.name}</strong>
-                            <p>{recruiter.companyName || 'Recruiter application'} • {recruiter.country}</p>
-                            <small>License: {recruiter.licenseNumber || 'N/A'} • Status: {recruiter.status}</small>
+                            <p>{recruiter.companyName || 'Recruiter application'} - {recruiter.country}</p>
+                            <small>License: {recruiter.licenseNumber || 'N/A'} - Status: {recruiter.status}</small>
                           </div>
                           <div className="gulf-services-admin-actions">
                             <input
@@ -1667,6 +1817,70 @@ const GulfServices = () => {
                     <p>No pending recruiter applications found. Click load to refresh.</p>
                   )}
                 </div>
+                <hr />
+                <div className="gulf-services-admin-fraud-section">
+                  <h4>Fraud Case Queue</h4>
+                  <div className="gulf-services-admin-toolbar">
+                    <select
+                      value={adminFraudFilter}
+                      onChange={(event) => setAdminFraudFilter(event.target.value)}
+                    >
+                      <option value="">All statuses</option>
+                      <option value="open">Open</option>
+                      <option value="in_review">In Review</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                    <button type="button" className="btn btn-secondary" onClick={loadAdminFraudReports} disabled={loading}>
+                      Load fraud reports
+                    </button>
+                  </div>
+                  {adminFraudReports.length ? (
+                    adminFraudReports.map((report) => {
+                      const draft = adminFraudDrafts[report.reportId] || {};
+                      return (
+                        <div key={report.reportId} className="gulf-services-app-item gulf-services-app-item-admin">
+                          <div>
+                            <strong>{report.reportId}</strong>
+                            <p>{report.phone} {report.recruiterId ? `- Recruiter: ${report.recruiterId}` : ''}</p>
+                            <small>{report.issueDescription}</small>
+                          </div>
+                          <div className="gulf-services-admin-actions">
+                            <select
+                              value={draft.status || report.status || 'open'}
+                              onChange={(event) =>
+                                setAdminFraudDrafts((prev) => ({
+                                  ...prev,
+                                  [report.reportId]: { ...draft, status: event.target.value },
+                                }))
+                              }
+                            >
+                              <option value="open">Open</option>
+                              <option value="in_review">In Review</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="rejected">Rejected</option>
+                            </select>
+                            <input
+                              placeholder="Admin note"
+                              value={draft.adminNote ?? report.adminNote ?? ''}
+                              onChange={(event) =>
+                                setAdminFraudDrafts((prev) => ({
+                                  ...prev,
+                                  [report.reportId]: { ...draft, adminNote: event.target.value },
+                                }))
+                              }
+                            />
+                            <button type="button" className="btn btn-primary" onClick={() => handleAdminFraudUpdate(report.reportId)}>
+                              Update
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p>No fraud reports found for the selected status.</p>
+                  )}
+                </div>
               </article>
             ) : null}
           </div>
@@ -1678,7 +1892,7 @@ const GulfServices = () => {
       return (
         <section className="gulf-services-panel gulf-services-action-panel">
           <div className="gulf-services-card gulf-services-card-emergency">
-            <h2>🚨 Emergency Support</h2>
+            <h2>Emergency Support</h2>
             <p>Passport lost, visa expired, or urgent Gulf crisis? Get immediate help.</p>
             <form className="gulf-services-form" onSubmit={async (event) => {
               event.preventDefault();
@@ -1711,8 +1925,8 @@ const GulfServices = () => {
                 <input value={visaForm.phone} onChange={(event) => setVisaForm((prev) => ({ ...prev, phone: event.target.value }))} required />
               </label>
               <button type="submit" className="btn btn-primary" disabled={loading}>Notify support team now</button>
-              <button type="button" className="btn btn-outline" onClick={() => window.open(`tel:${DEFAULT_SUPPORT_PHONE}`)}>
-                📞 Call 24/7 Emergency Line
+              <button type="button" className="btn btn-outline" onClick={() => window.open(`tel:${supportPhone}`)}>
+                Call 24/7 Emergency Line
               </button>
             </form>
           </div>
@@ -1756,34 +1970,34 @@ const GulfServices = () => {
           <h2>Why Choose Our Platform?</h2>
           <div className="gulf-services-trust-grid">
             <div className="gulf-services-card">
-              <strong>✓ Verified Agencies</strong>
+              <strong>Verified Agencies</strong>
               <p>Only govt-registered Gulf agencies with valid licenses and public reviews.</p>
             </div>
             <div className="gulf-services-card">
-              <strong>✓ No Advance Fees</strong>
+              <strong>No Advance Fees</strong>
               <p>We warn against any recruiter demanding upfront payments.</p>
             </div>
             <div className="gulf-services-card">
-              <strong>✓ Fraud Protection</strong>
+              <strong>Fraud Protection</strong>
               <p>Report fake jobs/recruiters and get verified opportunities only.</p>
             </div>
             <div className="gulf-services-card">
-              <strong>✓ Document Safety</strong>
+              <strong>Document Safety</strong>
               <p>Your documents are encrypted and handled by certified partners.</p>
             </div>
             <div className="gulf-services-card">
-              <strong>✓ Full Tracking</strong>
+              <strong>Full Tracking</strong>
               <p>Real-time status updates for visa, attestation and applications.</p>
             </div>
             <div className="gulf-services-card">
-              <strong>✓ 24/7 Support</strong>
+              <strong>24/7 Support</strong>
               <p>Emergency helpline and WhatsApp support for urgent cases.</p>
             </div>
           </div>
         </div>
 
         <div className="gulf-services-fraud-banner">
-          <h3>⚠️ Fraud Warning</h3>
+          <h3>Fraud Warning</h3>
           <p><strong>Do NOT send money to unknown accounts.</strong> No legitimate Gulf recruiter or agency asks for advance payment, registration fees, or deposits before employment.</p>
           <button type="button" className="btn btn-primary" onClick={() => setActiveModal('fraud')}>
             Report Fraud
@@ -1800,11 +2014,11 @@ const GulfServices = () => {
               <article key={recruiter.id} className="gulf-services-card gulf-services-recruiter-card">
                 <div className="gulf-services-recruiter-header">
                   <strong>{recruiter.name}</strong>
-                  {recruiter.verified && <span className="gulf-services-badge-verified">✓ Verified</span>}
+                  {recruiter.verified && <span className="gulf-services-badge-verified">Verified</span>}
                 </div>
                 <span>{recruiter.country}</span>
                 <p>License: {recruiter.licenseNumber}</p>
-                <p>{recruiter.successCases} successful placements • {recruiter.rating}★ ({recruiter.reviews} reviews)</p>
+                <p>{recruiter.successCases} successful placements • {recruiter.rating} stars ({recruiter.reviews} reviews)</p>
               </article>
             ))}
           </div>
@@ -1845,11 +2059,14 @@ const GulfServices = () => {
           </div>
         </div>
       </header>
-      <nav className="gulf-services-tabbar" aria-label="Gulf services sections">
+      <nav className="gulf-services-tabbar" aria-label="Gulf services sections" role="tablist">
         {sectionTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
+            role="tab"
+            aria-selected={activePane === tab.id}
+            aria-controls="gulf-services-active-panel"
             className={`gulf-services-tab ${activePane === tab.id ? 'active' : ''}`}
             onClick={() => {
               closeModal();
@@ -1861,11 +2078,18 @@ const GulfServices = () => {
         ))}
       </nav>
       {message && <div className="gulf-services-toast">{message}</div>}
-      {activeModal && <div className="gulf-services-modal-overlay" onClick={closeModal} />}
+      {activeModal && <div className="gulf-services-modal-overlay" aria-hidden="true" onClick={closeModal} />}
       {renderModal()}
-      {renderPanel()}
+      <div id="gulf-services-active-panel" role="tabpanel" aria-live="polite">
+        {renderPanel()}
+      </div>
     </div>
   );
 };
 
 export default GulfServices;
+
+
+
+
+

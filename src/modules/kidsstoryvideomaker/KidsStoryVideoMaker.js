@@ -745,6 +745,189 @@ const KidsStoryVideoMaker = () => {
     return sceneRenderMeta.some((item) => String(item?.renderEngine || "").toLowerCase().includes("fallback"));
   };
 
+  const getProjectHealthSummary = (project = {}) => {
+    if (!project || typeof project !== "object") {
+      return null;
+    }
+
+    const scenes = Array.isArray(project.scenes) ? project.scenes : [];
+    const characterCount = Array.isArray(project.characters) ? project.characters.length : 0;
+    const hasScript = Boolean(project.storyPrompt);
+    const hasTitle = Boolean(project.title);
+    const hasScenes = scenes.length > 0;
+    const hasCharacters = characterCount > 0;
+    const hasVoice = Boolean(project.voicePlan?.narrator?.text || project.narration);
+    const hasMusic = Boolean(
+      project.musicPlan?.backgroundTrack ||
+        (Array.isArray(project.musicPlan?.sfx) && project.musicPlan.sfx.length > 0)
+    );
+    const hasExport = Boolean(project.videoUrl);
+    const isReadyToRender = hasScenes && hasCharacters && hasVoice && hasMusic;
+    const score = Math.min(
+      100,
+      (hasTitle ? 12 : 0) +
+        (hasScript ? 18 : 0) +
+        (hasScenes ? 18 : 0) +
+        (hasCharacters ? 15 : 0) +
+        (hasVoice ? 15 : 0) +
+        (hasMusic ? 15 : 0) +
+        (hasExport ? 7 : 0)
+    );
+
+    const nextActions = [];
+    if (!hasScript) nextActions.push("Add a stronger story prompt so AI can generate your scenes.");
+    if (!hasScenes) nextActions.push("Generate the story pipeline to build your storyboard.");
+    if (!hasCharacters) nextActions.push("Create characters to make the video feel more engaging.");
+    if (!hasVoice) nextActions.push("Generate narration or voice so the story can be heard.");
+    if (!hasMusic) nextActions.push("Choose a music plan or sound effects for atmosphere.");
+    if (!isReadyToRender && hasScenes && hasCharacters && hasVoice && !hasMusic) {
+      nextActions.push("Add a music plan for the final render.");
+    }
+    if (hasScenes && hasCharacters && !hasVoice) {
+      nextActions.push("Update the voice plan to complete the storyboard.");
+    }
+    if (!hasExport && isReadyToRender) nextActions.push("Render the MP4 to preview the final story video.");
+    if (!hasExport && !isReadyToRender) nextActions.push("Finish story editing before exporting.");
+    if (project.safeMode !== true) nextActions.push("Enable Safe Mode for child-friendly stories.");
+
+    return {
+      totalScenes: scenes.length,
+      characterCount,
+      hasScenes,
+      hasCharacters,
+      hasVoice,
+      hasMusic,
+      hasExport,
+      isReadyToRender,
+      score,
+      status: hasExport
+        ? "Rendered"
+        : isReadyToRender
+        ? "Ready to export"
+        : "Needs editing",
+      nextActions,
+    };
+  };
+
+  const currentProjectSnapshot = useMemo(() => {
+    if (!generatedProject) {
+      return null;
+    }
+
+    return normalizeProjectForLocal(generatedProject, {
+      title: storyTitle,
+      storyPrompt: storyText,
+      storySource,
+      language: languageId,
+      style: styleId,
+      videoSize: videoSizeId,
+      voiceType,
+      storyMode,
+      aiProvider,
+      renderEngine: normalizeRenderEngine(hfRenderEngine),
+      safeMode,
+      ageFilter,
+      scenes: generatedScenes,
+      videoUrl,
+      premiumExport: premiumHD,
+    });
+  }, [generatedProject, storyTitle, storyText, storySource, languageId, styleId, videoSizeId, voiceType, storyMode, aiProvider, hfRenderEngine, safeMode, ageFilter, generatedScenes, videoUrl, premiumHD]);
+
+  const localProjectLibrary = useMemo(() => {
+    if (!currentProjectSnapshot) {
+      return projectLibrary;
+    }
+
+    const exists = projectLibrary.some((item) => item.projectId === currentProjectSnapshot.projectId);
+    if (exists) {
+      return projectLibrary;
+    }
+
+    return [currentProjectSnapshot, ...projectLibrary];
+  }, [projectLibrary, currentProjectSnapshot]);
+
+  const kidsStoryAnalytics = useMemo(() => {
+    const projects = Array.isArray(localProjectLibrary) ? localProjectLibrary : [];
+    const totals = {
+      totalProjects: projects.length,
+      totalScenes: 0,
+      renderedProjects: 0,
+      safeProjects: 0,
+      fallbackProjects: 0,
+      modeCounts: {},
+      styleCounts: {},
+      voiceCounts: {},
+    };
+
+    projects.forEach((project) => {
+      const scenes = Array.isArray(project.scenes) ? project.scenes.length : 0;
+      totals.totalScenes += scenes;
+      if (project.videoUrl) totals.renderedProjects += 1;
+      if (project.safeMode) totals.safeProjects += 1;
+      if (isFallbackRender(project)) totals.fallbackProjects += 1;
+      const mode = project.storyMode || "bedtime";
+      totals.modeCounts[mode] = (totals.modeCounts[mode] || 0) + 1;
+      const style = project.style || "cartoon";
+      totals.styleCounts[style] = (totals.styleCounts[style] || 0) + 1;
+      const voice = project.voiceType || "kid-female";
+      totals.voiceCounts[voice] = (totals.voiceCounts[voice] || 0) + 1;
+    });
+
+    const topModes = Object.entries(totals.modeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([mode]) => mode);
+    const topStyles = Object.entries(totals.styleCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([style]) => style);
+    const readinessCount = projects.reduce((count, project) => {
+      const health = getProjectHealthSummary(project);
+      return count + (health?.isReadyToRender ? 1 : 0);
+    }, 0);
+
+    return {
+      totalProjects: totals.totalProjects,
+      averageScenes: totals.totalProjects ? Math.round(totals.totalScenes / totals.totalProjects) : 0,
+      renderedProjects: totals.renderedProjects,
+      renderSuccessRate: totals.totalProjects
+        ? Math.round((totals.renderedProjects / totals.totalProjects) * 100)
+        : 0,
+      safeProjectPercentage: totals.totalProjects
+        ? Math.round((totals.safeProjects / totals.totalProjects) * 100)
+        : 0,
+      fallbackProjects: totals.fallbackProjects,
+      readyToRenderProjects: readinessCount,
+      topModes,
+      topStyles,
+      topVoices: Object.entries(totals.voiceCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .map(([voice]) => voice),
+    };
+  }, [localProjectLibrary]);
+
+  const currentProjectHealth = useMemo(
+    () => (currentProjectSnapshot ? getProjectHealthSummary(currentProjectSnapshot) : null),
+    [currentProjectSnapshot]
+  );
+
+  const dashboardRecentProjects = useMemo(() => {
+    if (!Array.isArray(localProjectLibrary)) return [];
+    return localProjectLibrary.slice(0, 4).map((project) => ({
+      projectId: project.projectId,
+      title: project.title || "Untitled story",
+      storyMode: project.storyMode || "bedtime",
+      style: project.style || "cartoon",
+      videoUrl: project.videoUrl,
+    }));
+  }, [localProjectLibrary]);
+
+  const currentProjectRecommendations = useMemo(() => {
+    if (!currentProjectHealth) return [];
+    return currentProjectHealth.nextActions.slice(0, 4);
+  }, [currentProjectHealth]);
+
   const applyKidsVideoCapabilities = (capabilities) => {
     if (!capabilities || typeof capabilities !== "object") {
       return;
@@ -2668,32 +2851,90 @@ const KidsStoryVideoMaker = () => {
 
           {activeTab === "dashboard" && (
             <div className="studio-card dashboard-card">
-              <h2>Dashboard</h2>
-              <p>Track project readiness, scenes, exports, and saved library.</p>
-              <div className="dashboard-grid">
+              <h2>Kids Story 360 Dashboard</h2>
+              <p>Track story creation, project health, export performance, and your saved library in one place.</p>
+
+              <div className="dashboard-grid dashboard-grid-analytics">
                 <div className="dashboard-item">
-                  <span>Projects</span>
-                  <strong>{generatedProject ? 1 : 0}</strong>
+                  <span>Stories created</span>
+                  <strong>{kidsStoryAnalytics.totalProjects}</strong>
                 </div>
                 <div className="dashboard-item">
-                  <span>Scenes</span>
-                  <strong>{generatedScenes.length}</strong>
+                  <span>Average scenes</span>
+                  <strong>{kidsStoryAnalytics.averageScenes}</strong>
                 </div>
                 <div className="dashboard-item">
-                  <span>Exports</span>
-                  <strong>{videoUrl ? 1 : 0}</strong>
+                  <span>Rendered exports</span>
+                  <strong>{kidsStoryAnalytics.renderedProjects}</strong>
+                </div>
+                <div className="dashboard-item">
+                  <span>Safe stories</span>
+                  <strong>{kidsStoryAnalytics.safeProjectPercentage}%</strong>
+                </div>
+                <div className="dashboard-item">
+                  <span>Ready to render</span>
+                  <strong>{kidsStoryAnalytics.readyToRenderProjects}</strong>
                 </div>
                 <div className="dashboard-item soft">
-                  <span>Saved Projects</span>
-                  <strong>{projectLibrary.length}</strong>
+                  <span>Render success rate</span>
+                  <strong>{kidsStoryAnalytics.renderSuccessRate}%</strong>
                 </div>
               </div>
-              {generatedProject && (
-                <div className="dashboard-welcome">
-                  <h3>{generatedProject.title}</h3>
-                  <p>{generatedProject.storyPrompt?.slice(0, 160)}{generatedProject.storyPrompt?.length > 160 ? "..." : ""}</p>
+
+              <div className="dashboard-row">
+                <div className="studio-stats-card">
+                  <h3>Top story choices</h3>
+                  <p>{kidsStoryAnalytics.topModes.join(", ") || "No stories yet."}</p>
+                  <p><strong>Top styles:</strong> {kidsStoryAnalytics.topStyles.join(", ") || "None"}</p>
+                  <p><strong>Top voices:</strong> {kidsStoryAnalytics.topVoices.join(", ") || "None"}</p>
                 </div>
-              )}
+
+                <div className="studio-stats-card">
+                  <h3>Library pulse</h3>
+                  <p>{projectLibrary.length} saved stories in My Projects.</p>
+                  <p>{kidsStoryAnalytics.fallbackProjects} project{kidsStoryAnalytics.fallbackProjects === 1 ? "" : "s"} used fallback render mode.</p>
+                  <p>{kidsStoryAnalytics.safeProjectPercentage}% of saved stories are child-safe.</p>
+                </div>
+              </div>
+
+              {currentProjectHealth ? (
+                <div className="studio-stats-card" style={{ marginTop: 20 }}>
+                  <h3>Current project health</h3>
+                  <p><strong>Health score:</strong> {currentProjectHealth.score}%</p>
+                  <p><strong>Status:</strong> {currentProjectHealth.status}</p>
+                  <p><strong>Scenes:</strong> {currentProjectHealth.totalScenes}</p>
+                  <p><strong>Characters:</strong> {currentProjectHealth.hasCharacters ? "Yes" : "No"}</p>
+                  <p><strong>Voice:</strong> {currentProjectHealth.hasVoice ? "Ready" : "Missing"}</p>
+                  <p><strong>Music:</strong> {currentProjectHealth.hasMusic ? "Ready" : "Missing"}</p>
+                  <div style={{ marginTop: 14 }}>
+                    <strong>Next steps</strong>
+                    <ul className="dashboard-recommendations">
+                      {currentProjectRecommendations.length > 0 ? (
+                        currentProjectRecommendations.map((line, index) => (
+                          <li key={`recommendation-${index}`}>{line}</li>
+                        ))
+                      ) : (
+                        <li>Generate or save a project to see recommendations.</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              ) : null}
+
+              {dashboardRecentProjects.length > 0 ? (
+                <div className="studio-stats-card" style={{ marginTop: 20 }}>
+                  <h3>Recent saved stories</h3>
+                  <div className="dashboard-recent-list">
+                    {dashboardRecentProjects.map((project) => (
+                      <div key={project.projectId} className="recent-project-row">
+                        <span>{project.title}</span>
+                        <small>{project.storyMode} · {project.style}</small>
+                        <strong>{project.videoUrl ? "Rendered" : "Draft"}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 

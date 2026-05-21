@@ -521,30 +521,6 @@ const MODULE_CONFIG = [
     emoji: "SF",
   },
   {
-    id: "hyperlocalaicommerce",
-    nameKey: "modules.hyperlocalaicommerce",
-    fallbackName: "Hyperlocal AI Commerce",
-    icon: "hyperlocal",
-    descriptionKey: "dashboard.moduleDescriptions.hyperlocalaicommerce",
-    fallbackDescription:
-      "AI commerce engine for local conversion with voice shopping, captioning, recommendations, and offer optimization.",
-    stats: "Conversion boost layer",
-    gradient: "linear-gradient(135deg, #064E3B 0%, #059669 45%, #10B981 100%)",
-    emoji: "HC",
-  },
-  {
-    id: "nilaaistudio",
-    nameKey: "modules.nilaaistudio",
-    fallbackName: "Nila AI Studio",
-    icon: "photostudio",
-    descriptionKey: "dashboard.moduleDescriptions.nilaaistudio",
-    fallbackDescription:
-      "Unified AI creator platform for story videos, reels, dubbing, avatars, and business promo generation.",
-    stats: "Creator growth engine",
-    gradient: "linear-gradient(135deg, #312E81 0%, #7C3AED 45%, #EC4899 100%)",
-    emoji: "NS",
-  },
-  {
     id: "trustlayer",
     nameKey: "modules.trustlayer",
     fallbackName: "Trust Layer",
@@ -809,8 +785,6 @@ const MODULE_CATEGORY_MAP = {
   karaokeduet: "business",
   beautyai: "business",
   kitchen: "business",
-  hyperlocalaicommerce: "business",
-  nilaaistudio: "business",
   trustlayer: "business",
   skilllearning: "business",
   resumebuilder: "business",
@@ -1288,8 +1262,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "businessbuilder" ||
         module.id === "gulfservices" ||
         module.id === "womensafetyfamily" ||
-        module.id === "hyperlocalaicommerce" ||
-        module.id === "nilaaistudio" ||
         module.id === "trustlayer" ||
         module.id === "devadarshan" ||
         module.id === "localservices" ||

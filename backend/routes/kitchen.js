@@ -174,6 +174,104 @@ router.get('/meta', authenticate, (_req, res) => {
   });
 });
 
+router.get('/insights', authenticate, async (req, res) => {
+  try {
+    await ensureSeedData();
+    const userId = getUserId(req);
+    const planTier = getPlanTier(req.user);
+
+    const totalRecipes = await KitchenRecipe.countDocuments({ status: 'approved' });
+    const savedRecipes = userId ? await SavedRecipe.countDocuments({ userId }) : 0;
+    const generatedRecipes = userId
+      ? await KitchenRecipe.countDocuments({ createdBy: userId, sourceType: 'ai-generated' })
+      : 0;
+    const groceryLists = userId ? await GroceryList.countDocuments({ userId }) : 0;
+    const mealPlans = userId ? await KitchenMealPlan.countDocuments({ userId }) : 0;
+    const communitySubmissions = userId ? await CommunityRecipe.countDocuments({ userId }) : 0;
+
+    const healthyRecipeCount = await KitchenRecipe.countDocuments({
+      status: 'approved',
+      $or: [
+        { tags: /healthy/i },
+        { tags: /weight/i },
+        { tags: /diabetic/i },
+        { category: /healthy|weight|diabetic/i },
+      ],
+    });
+
+    const topCuisines = await KitchenRecipe.aggregate([
+      { $match: { status: 'approved', cuisine: { $exists: true, $ne: '' } } },
+      { $group: { _id: '$cuisine', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 3 },
+    ]);
+
+    const topCategories = await KitchenRecipe.aggregate([
+      { $match: { status: 'approved', category: { $exists: true, $ne: '' } } },
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 3 },
+    ]);
+
+    const tipCategory = await KitchenTip.aggregate([
+      { $match: { status: 'published', category: { $exists: true, $ne: '' } } },
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 1 },
+    ]);
+
+    const recommendations = [];
+    if (generatedRecipes < 2) {
+      recommendations.push({
+        title: 'Generate more recipes',
+        description: 'Use the AI Recipe tab to create meals from your pantry ingredients.',
+      });
+    }
+    if (mealPlans < 1) {
+      recommendations.push({
+        title: 'Build a meal plan',
+        description: 'Save a weekly meal plan to stay organized and reduce grocery waste.',
+      });
+    }
+    if (groceryLists < 1) {
+      recommendations.push({
+        title: 'Use grocery lists',
+        description: 'Create a grocery list from a recipe or meal plan to shop smarter.',
+      });
+    }
+    if (savedRecipes < 3) {
+      recommendations.push({
+        title: 'Save favorite recipes',
+        description: 'Keep your best recipes handy for repeat cooking and meal planning.',
+      });
+    }
+    if (planTier === 'free') {
+      recommendations.push({
+        title: 'Upgrade your kitchen',
+        description: 'Premium unlocks unlimited recipe generation and meal planning.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      planTier,
+      totalRecipes,
+      savedRecipes,
+      generatedRecipes,
+      groceryLists,
+      mealPlans,
+      communitySubmissions,
+      healthyRecipeShare: totalRecipes ? Math.round((healthyRecipeCount / totalRecipes) * 100) : 0,
+      topCuisines: topCuisines.map((item) => ({ name: item._id, count: item.count })),
+      topCategories: topCategories.map((item) => ({ name: item._id, count: item.count })),
+      favoriteTipCategory: tipCategory[0]?._id || 'General',
+      recommendations,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load kitchen insights.', error: error.message });
+  }
+});
+
 router.get('/recipes', authenticate, async (req, res) => {
   try {
     await ensureSeedData();

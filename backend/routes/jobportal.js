@@ -918,6 +918,270 @@ router.get('/employer/dashboard', authenticateToken, async (req, res) => {
   }
 });
 
+router.get('/overview360', authenticateToken, async (req, res) => {
+  try {
+    const [
+      totalActiveJobs,
+      jobsByTypeAgg,
+      topLocationsAgg,
+      topSkillsAgg,
+      topSubtypesAgg,
+      salaryByTypeAgg,
+      verifiedEmployersCount,
+      totalEmployersCount,
+      urgentJobsCount,
+      newJobsLast7Days,
+    ] = await Promise.all([
+      Job.countDocuments({ isActive: true }),
+      Job.aggregate([
+        { $match: { isActive: true } },
+        { $group: { _id: '$type', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+      Job.aggregate([
+        { $match: { isActive: true } },
+        { $group: { _id: '$location', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 6 }
+      ]),
+      Job.aggregate([
+        { $match: { isActive: true } },
+        { $unwind: { path: '$skills', preserveNullAndEmptyArrays: false } },
+        { $group: { _id: '$skills', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]).then((results) => results.filter((entry) => entry._id)),
+      Job.aggregate([
+        { $match: { isActive: true } },
+        { $group: { _id: '$subtype', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 6 }
+      ]),
+      Job.aggregate([
+        { $match: { isActive: true } },
+        {
+          $group: {
+            _id: '$type',
+            averageMin: { $avg: '$salaryMin' },
+            averageMax: { $avg: '$salaryMax' },
+            count: { $sum: 1 }
+          }
+        }
+      ]),
+      EmployerProfile.countDocuments({ isVerified: true }),
+      EmployerProfile.countDocuments({}),
+      Job.countDocuments({ isActive: true, isUrgent: true }),
+      Job.countDocuments({ isActive: true, postedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }),
+    ]);
+
+    const salaryStats = salaryByTypeAgg.map((entry) => ({
+      type: entry._id || 'Unknown',
+      averageMin: Math.round(entry.averageMin || 0),
+      averageMax: Math.round(entry.averageMax || 0),
+      count: entry.count,
+    }));
+
+    const averageSalaryMin = salaryStats.length
+      ? Math.round(salaryStats.reduce((sum, item) => sum + item.averageMin, 0) / salaryStats.length)
+      : 0;
+    const averageSalaryMax = salaryStats.length
+      ? Math.round(salaryStats.reduce((sum, item) => sum + item.averageMax, 0) / salaryStats.length)
+      : 0;
+
+    const marketplace = {
+      totalActiveJobs,
+      jobsByType: jobsByTypeAgg.map((entry) => ({ type: entry._id || 'Unknown', count: entry.count })),
+      topLocations: topLocationsAgg.map((entry) => ({ location: entry._id || 'Unknown', count: entry.count })),
+      topSkills: topSkillsAgg.map((entry) => ({ skill: entry._id || 'Unknown', count: entry.count })),
+      topRoles: topSubtypesAgg.map((entry) => ({ role: entry._id || 'Unknown', count: entry.count })),
+      salaryStats,
+      averageSalaryMin,
+      averageSalaryMax,
+      verifiedEmployers: verifiedEmployersCount,
+      totalEmployers: totalEmployersCount,
+      gulfJobs: await Job.countDocuments({ isActive: true, type: 'gulf' }),
+      itJobs: await Job.countDocuments({ isActive: true, type: 'it' }),
+      gigJobs: await Job.countDocuments({ isActive: true, type: 'gig' }),
+      urgentJobs: urgentJobsCount,
+      newJobsLast7Days,
+    };
+
+    const candidateProfile = await JobSeekerProfile.findOne({ userId: req.user.id }).lean();
+    const candidateApplications = await JobApplication.find({ applicantId: req.user.id })
+      .populate('jobId', 'title company location type')
+      .sort('-appliedAt')
+      .lean();
+
+    const candidateRecentMatches = candidateApplications.slice(0, 5).map((application) => ({
+      jobId: String(application.jobId?._id || application.jobId || ''),
+      title: application.jobId?.title || 'Unknown job',
+      company: application.jobId?.company || 'Unknown company',
+      location: application.jobId?.location || 'Unknown location',
+      matchScore: Number(application.matchScore || 0),
+      applicationStatus: application.status || 'Applied',
+    }));
+
+    const candidateSkills = new Set(normalizeArrayField(candidateProfile?.skills || []).map((skill) => String(skill).trim().toLowerCase()));
+    const topSkillGaps = topSkillsAgg
+      .filter((skill) => skill._id && !candidateSkills.has(String(skill._id).trim().toLowerCase()))
+      .slice(0, 5)
+      .map((skill) => ({ skill: skill._id, count: skill.count }));
+
+    const recommendedActions = [];
+    if (!candidateProfile) {
+      recommendedActions.push('Complete your job seeker profile to start saving and applying.');
+    } else {
+      if (!candidateProfile.resume?.url) {
+        recommendedActions.push('Upload your resume so employers can quickly review your profile.');
+      }
+      if (!candidateProfile.skills?.length) {
+        recommendedActions.push('Add your main skills and certifications to improve your match score.');
+      }
+      if (!candidateProfile.preferredLocations?.length) {
+        recommendedActions.push('Set preferred locations to receive better local and Gulf job alerts.');
+      }
+      if (!candidateProfile.jobAlerts?.enabled) {
+        recommendedActions.push('Enable job alerts to receive fresh matches and urgent openings.');
+      }
+      if (candidateProfile.profileCompleteness < 80) {
+        recommendedActions.push('Finish profile sections marked incomplete for better visibility.');
+      }
+      if (candidateProfile.gulfReady && !candidateProfile.preferredJobTypes?.includes('gulf')) {
+        recommendedActions.push('If you are Gulf ready, add Gulf job preferences to see better opportunities.');
+      }
+    }
+
+    const candidate = {
+      profileCompleteness: candidateProfile?.profileCompleteness || 0,
+      resumeScore: calculateResumeScore(candidateProfile),
+      savedJobsCount: await JobSavedJob.countDocuments({ userId: req.user.id }),
+      applicationsCount: candidateApplications.length,
+      jobAlertsEnabled: candidateProfile?.jobAlerts?.enabled !== false,
+      recentMatches: candidateRecentMatches,
+      recommendedActions,
+      topSkillGaps,
+    };
+
+    const employerProfile = await EmployerProfile.findOne({ userId: req.user.id }).lean();
+    let employer = null;
+
+    if (employerProfile) {
+      const employerJobs = await Job.find({ postedBy: req.user.id }).sort('-postedAt').lean();
+      const employerJobIds = employerJobs.map((job) => job._id);
+      const employerApplications = employerJobIds.length
+        ? await JobApplication.find({ jobId: { $in: employerJobIds } })
+            .populate('jobId', 'title company location postedAt')
+            .lean()
+        : [];
+
+      const statusCounts = employerApplications.reduce(
+        (acc, application) => {
+          const status = String(application.status || 'Applied').toLowerCase();
+          if (status.includes('view')) acc.viewed += 1;
+          else if (status.includes('short')) acc.shortlisted += 1;
+          else if (status.includes('interview')) acc.interview += 1;
+          else if (status.includes('select') || status.includes('hire')) acc.selected += 1;
+          else if (status.includes('reject')) acc.rejected += 1;
+          else acc.applied += 1;
+          return acc;
+        },
+        { applied: 0, viewed: 0, shortlisted: 0, interview: 0, selected: 0, rejected: 0 }
+      );
+
+      const matchStats = employerApplications.reduce(
+        (acc, application) => {
+          const score = Number(application.matchScore || 0);
+          if (Number.isFinite(score) && score > 0) {
+            acc.sum += score;
+            acc.count += 1;
+          }
+          return acc;
+        },
+        { sum: 0, count: 0 }
+      );
+
+      const jobAppCounts = employerApplications.reduce((acc, application) => {
+        const jobId = String(application.jobId?._id || application.jobId || '');
+        acc[jobId] = (acc[jobId] || 0) + 1;
+        return acc;
+      }, {});
+
+      const jobMatchSum = employerApplications.reduce((acc, application) => {
+        const jobId = String(application.jobId?._id || application.jobId || '');
+        const score = Number(application.matchScore || 0);
+        if (!acc[jobId]) acc[jobId] = { sum: 0, count: 0 };
+        if (Number.isFinite(score)) {
+          acc[jobId].sum += score;
+          acc[jobId].count += 1;
+        }
+        return acc;
+      }, {});
+
+      const selectedApplications = employerApplications.filter((application) => {
+        const status = String(application.status || '').toLowerCase();
+        return status.includes('select') || status.includes('hire');
+      });
+
+      const hiringVelocityDays = selectedApplications.length
+        ? Math.round(
+            selectedApplications.reduce((sum, application) => {
+              const jobPostedAt = application.jobId?.postedAt ? new Date(application.jobId.postedAt) : null;
+              const appliedAt = application.appliedAt ? new Date(application.appliedAt) : null;
+              if (!jobPostedAt || !appliedAt) return sum;
+              return sum + Math.max(0, (appliedAt - jobPostedAt) / (1000 * 60 * 60 * 24));
+            }, 0) / selectedApplications.length
+          )
+        : 0;
+
+      const engagedCount = employerApplications.filter((application) => {
+        const status = String(application.status || 'Applied').toLowerCase();
+        return status !== 'applied';
+      }).length;
+
+      const responseRate = employerApplications.length
+        ? Math.round((engagedCount / employerApplications.length) * 100)
+        : 0;
+
+      const topJobs = employerJobs
+        .map((job) => ({
+          jobId: String(job._id),
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          applicationCount: jobAppCounts[String(job._id)] || 0,
+          avgMatchScore: jobMatchSum[String(job._id)]?.count
+            ? Math.round(jobMatchSum[String(job._id)].sum / jobMatchSum[String(job._id)].count)
+            : 0,
+        }))
+        .sort((a, b) => b.applicationCount - a.applicationCount)
+        .slice(0, 5);
+
+      employer = {
+        activeJobs: employerJobs.length,
+        totalApplications: employerApplications.length,
+        averageMatchScore: matchStats.count ? Math.round(matchStats.sum / matchStats.count) : 0,
+        selectedCount: statusCounts.selected,
+        shortlistedCount: statusCounts.shortlisted,
+        responseRate,
+        hiringVelocityDays,
+        topJobs,
+      };
+    }
+
+    res.json({
+      success: true,
+      data: {
+        marketplace,
+        candidate,
+        employer,
+      },
+    });
+  } catch (error) {
+    console.error('Error loading job portal overview360:', error);
+    res.status(500).json({ success: false, message: 'Error loading job portal 360 data' });
+  }
+});
+
 // Search jobs
 router.get('/search', async (req, res) => {
   try {
@@ -969,6 +1233,22 @@ function calculateProfileCompleteness(profile) {
   if (profile.preferredLocations && profile.preferredLocations.length > 0) score++;
 
   return Math.round((score / totalFields) * 100);
+}
+
+function calculateResumeScore(profile) {
+  if (!profile) return 0;
+  let score = 0;
+  if (profile.fullName) score += 10;
+  if (profile.email) score += 10;
+  if (profile.phone) score += 10;
+  if (profile.resume?.url) score += 15;
+  if (profile.skills?.length) score += 15;
+  if (profile.experience) score += 10;
+  if (profile.preferredLocations?.length) score += 10;
+  if (profile.linkedin) score += 5;
+  if (profile.portfolio) score += 5;
+  if (profile.videoIntro?.url || profile.voiceResume?.url) score += 10;
+  return Math.min(100, Math.round(score));
 }
 
 module.exports = router;

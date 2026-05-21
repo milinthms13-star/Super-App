@@ -1313,6 +1313,77 @@ router.get('/admin/analytics', authenticate, verifyAdmin, async (_req, res) => {
   });
 });
 
+router.get('/overview360', authenticate, async (_req, res) => {
+  const orders = isMongoReady() ? await HyperlocalOrder.find().lean() : store.orders;
+  const shops = isMongoReady() ? await HyperlocalShop.find().lean() : store.shops;
+  const partners = isMongoReady() ? await HyperlocalPartner.find().lean() : store.partners;
+  const subscriptions = isMongoReady() ? await HyperlocalSubscription.find().lean() : store.subscriptions;
+  const refunds = isMongoReady() ? await HyperlocalRefund.find().lean() : store.refunds;
+  const complaints = isMongoReady() ? await HyperlocalComplaint.find().lean() : store.complaints;
+  const totalRevenue = orders.reduce((sum, order) => sum + Number(order.finalPayable || 0), 0);
+  const totalGross = orders.reduce((sum, order) => sum + Number(order.subtotal || 0), 0);
+  const categorySales = orders.flatMap((order) => order.items || []).reduce((acc, item) => {
+    acc[item.category || 'Other'] = (acc[item.category || 'Other'] || 0) + Number(item.lineTotal || 0);
+    return acc;
+  }, {});
+  const shopRevenue = orders.flatMap((order) => order.items || []).reduce((acc, item) => {
+    acc[item.shopName || item.shopId] = (acc[item.shopName || item.shopId] || 0) + Number(item.lineTotal || 0);
+    return acc;
+  }, {});
+  const productVelocity = orders.flatMap((order) => order.items || []).reduce((acc, item) => {
+    acc[item.productName || item.productId] = (acc[item.productName || item.productId] || 0) + Number(item.qty || 0);
+    return acc;
+  }, {});
+  const openComplaints = complaints.filter((entry) => entry.status !== 'resolved').length;
+  const pendingRefunds = refunds.filter((entry) => entry.status === 'pending').length;
+  const resolvedRefunds = refunds.filter((entry) => entry.status === 'approved' || entry.status === 'rejected').length;
+  const approvedShopCount = shops.filter((entry) => entry.approvalStatus === 'approved').length;
+  const approvedPartnerCount = partners.filter((entry) => entry.approvalStatus === 'approved').length;
+  const activePartnerCount = partners.filter((entry) => entry.online).length;
+  const activeOrders = orders.filter((order) => ['Placed', 'Accepted by shop', 'Partner assigned', 'Picked up', 'Out for delivery'].includes(order.status)).length;
+  const ordersByCity = orders.reduce((acc, order) => {
+    const city = order.address?.city || 'Unknown';
+    acc[city] = (acc[city] || 0) + 1;
+    return acc;
+  }, {});
+  const topShops = Object.entries(shopRevenue)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, revenue]) => ({ name, revenue: Number(revenue.toFixed(2)) }));
+  const topProducts = Object.entries(productVelocity)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, qty]) => ({ name, qty }));
+  const categoryBreakdown = Object.entries(categorySales)
+    .sort((a, b) => b[1] - a[1])
+    .map(([category, revenue]) => ({ category, revenue: Number(revenue.toFixed(2)) }));
+
+  res.json({
+    success: true,
+    data: {
+      totalOrders: orders.length,
+      deliveredOrders: orders.filter((entry) => entry.status === 'Delivered').length,
+      cancelledOrders: orders.filter((entry) => entry.status === 'Cancelled/Refunded').length,
+      activeOrders,
+      totalRevenue: Number(totalRevenue.toFixed(2)),
+      averageOrderValue: orders.length ? Number((totalRevenue / orders.length).toFixed(2)) : 0,
+      totalGross: Number(totalGross.toFixed(2)),
+      approvedShopCount,
+      approvedPartnerCount,
+      activePartnerCount,
+      activeJobs,
+      openComplaints,
+      pendingRefunds,
+      resolvedRefunds,
+      subscriptionCount: subscriptions.length,
+      ordersByCity: Object.entries(ordersByCity).map(([city, count]) => ({ city, count })),
+      topShops,
+      topProducts,
+      categoryBreakdown,
+    },
+  });
+});
+
 router.get('/admin/refunds', authenticate, verifyAdmin, async (_req, res) => {
   const refunds = isMongoReady() ? await HyperlocalRefund.find().sort({ createdAt: -1 }).lean() : store.refunds;
   return res.json({ success: true, data: { refunds } });

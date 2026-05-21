@@ -255,11 +255,11 @@ export const healthcareApi = {
     }));
   },
 
-  verifyAppointmentPayment: async (appointmentId, paymentReference, paymentStatus = "success") => {
+  verifyAppointmentPayment: async (appointmentId, paymentReference, paymentStatus = "success", paymentProvider = "simulated") => {
     return getWithFallback(async () => {
       const response = await axios.post(
         `${endpoints.appointments}/${appointmentId}/payment/verify`,
-        { paymentReference, paymentStatus },
+        { paymentReference, paymentStatus, paymentProvider },
         authHeaders()
       );
       return unwrap(response);
@@ -267,6 +267,7 @@ export const healthcareApi = {
       id: appointmentId,
       paymentReference,
       paymentStatus: paymentStatus === "success" ? "paid" : "failed",
+      paymentProvider,
     }));
   },
 
@@ -337,6 +338,8 @@ export const healthcareApi = {
       ...order,
       paymentStatus: "pending",
       orderStatus: "placed",
+      paymentProvider: order.paymentProvider || "simulated",
+      paymentReference: `PHARM-MOCK-${Date.now()}`,
     }));
   },
 
@@ -347,11 +350,11 @@ export const healthcareApi = {
     }, () => [], { fallbackStatuses: [401, 403] });
   },
 
-  verifyPharmacyPayment: async (orderId, paymentReference, paymentStatus = "success") => {
+  verifyPharmacyPayment: async (orderId, paymentReference, paymentStatus = "success", paymentProvider = "simulated") => {
     return getWithFallback(async () => {
       const response = await axios.post(
         `${endpoints.pharmacyOrders}/${orderId}/payment/verify`,
-        { paymentReference, paymentStatus },
+        { paymentReference, paymentStatus, paymentProvider },
         authHeaders()
       );
       return unwrap(response);
@@ -359,6 +362,7 @@ export const healthcareApi = {
       id: orderId,
       paymentReference,
       paymentStatus: paymentStatus === "success" ? "paid" : "failed",
+      paymentProvider,
     }));
   },
 
@@ -520,6 +524,9 @@ export const healthcareApi = {
         approvedApplications: 0,
         totalAppointments: 0,
         totalPharmacyOrders: 0,
+        paidAppointmentsRevenue: 0,
+        paidPharmacyOrdersRevenue: 0,
+        totalRevenue: 0,
       },
     }), { fallbackStatuses: [401, 403] });
   },
@@ -594,6 +601,9 @@ export const healthcareApi = {
           approvedApplications: 0,
           totalAppointments: 0,
           totalPharmacyOrders: 0,
+          paidAppointmentsRevenue: 0,
+          paidPharmacyOrdersRevenue: 0,
+          totalRevenue: 0,
         },
       }),
     ]);

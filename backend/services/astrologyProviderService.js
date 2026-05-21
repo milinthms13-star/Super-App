@@ -1,7 +1,6 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
-
-const cacheStore = new Map();
+const { getRedisClient } = require('../config/redis');
 
 const getNow = () => Date.now();
 
@@ -15,20 +14,38 @@ const getTtlMs = (fallback = 5 * 60 * 1000) => {
   return Number.isFinite(configured) && configured > 1000 ? configured : fallback;
 };
 
-const readCache = (key) => {
-  const entry = cacheStore.get(key);
-  if (!entry) return null;
-  if (entry.expiresAt <= getNow()) {
-    cacheStore.delete(key);
+const readCache = async (key) => {
+  const redisClient = getRedisClient();
+  if (!redisClient) return null;
+
+  const entryJson = await redisClient.get(key);
+  if (!entryJson) return null;
+
+  try {
+    const entry = JSON.parse(entryJson);
+    if (entry.expiresAt <= getNow()) {
+      await redisClient.del(key);
+      return null;
+    }
+    return entry.value;
+  } catch (error) {
+    logger.warn(`Astrology cache decode failed for ${key}: ${error.message}`);
+    await redisClient.del(key).catch(() => {});
     return null;
   }
-  return entry.value;
 };
 
-const writeCache = (key, value, ttlMs) => {
-  cacheStore.set(key, {
+const writeCache = async (key, value, ttlMs) => {
+  const redisClient = getRedisClient();
+  if (!redisClient) return;
+
+  const entry = {
     value,
     expiresAt: getNow() + ttlMs,
+  };
+
+  await redisClient.set(key, JSON.stringify(entry), {
+    PX: ttlMs,
   });
 };
 
@@ -77,7 +94,7 @@ const resolveWithCache = async ({
   liveResolver,
 }) => {
   const cacheKey = makeCacheKey(bucket, keyPayload);
-  const cached = readCache(cacheKey);
+  const cached = await readCache(cacheKey);
   if (cached) {
     return {
       ...cached,
@@ -100,7 +117,7 @@ const resolveWithCache = async ({
         note: live.note || '',
       }),
     };
-    writeCache(cacheKey, result, ttlMs);
+    await writeCache(cacheKey, result, ttlMs);
     return result;
   } catch (error) {
     logger.warn(`Astrology live provider fallback (${bucket}): ${error.message}`);
@@ -111,7 +128,7 @@ const resolveWithCache = async ({
         cached: false,
       }),
     };
-    writeCache(cacheKey, result, Math.min(ttlMs, 60 * 1000));
+    await writeCache(cacheKey, result, Math.min(ttlMs, 60 * 1000));
     return result;
   }
 };

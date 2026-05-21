@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
+const { getRedisClient } = require('../config/redis');
 const authMiddleware = require('../middleware/auth');
 const { hasAdminPrivileges } = authMiddleware;
 
@@ -524,7 +525,6 @@ const CONSULTANTS = [
 ];
 
 const cloneValue = (value) => JSON.parse(JSON.stringify(value));
-const devWebhookAuditStore = new Map();
 const consultantState = CONSULTANTS.reduce((acc, consultant) => {
   acc[consultant.id] = cloneValue(consultant);
   return acc;
@@ -1240,24 +1240,38 @@ const createWebhookAuditEvent = async ({
   };
 
   if (shouldUseDevStore()) {
-    const mapKey = `${normalizedProvider}:${normalizedEventId}`;
-    const existing = devWebhookAuditStore.get(mapKey);
-    if (existing) {
+    const redisClient = getRedisClient();
+    const mapKey = `dev:webhookAudit:${normalizedEventId}`;
+
+    if (!redisClient) {
+      const created = {
+        ...auditPayload,
+        _id: `audit-${Date.now()}`,
+        id: `audit-${Date.now()}`,
+        replayCount: 0,
+      };
+      return cloneValue(created);
+    }
+
+    const existingJson = await redisClient.get(mapKey);
+    if (existingJson) {
+      const existing = JSON.parse(existingJson);
       const replayed = {
         ...cloneValue(existing),
         replayCount: Number(existing.replayCount || 0) + 1,
         status: 'duplicate',
       };
-      devWebhookAuditStore.set(mapKey, replayed);
+      await redisClient.set(mapKey, JSON.stringify(replayed));
       return cloneValue(replayed);
     }
+
     const created = {
       ...auditPayload,
-      _id: `audit-${Date.now()}`,
-      id: `audit-${Date.now()}`,
+      _id: normalizedEventId,
+      id: normalizedEventId,
       replayCount: 0,
     };
-    devWebhookAuditStore.set(mapKey, created);
+    await redisClient.set(mapKey, JSON.stringify(created));
     return cloneValue(created);
   }
 
@@ -1292,15 +1306,20 @@ const updateWebhookAuditEvent = async (auditId, updates = {}) => {
     updateSet.processedAt = new Date();
   }
   if (shouldUseDevStore()) {
-    for (const [key, audit] of devWebhookAuditStore.entries()) {
-      if (String(audit._id || audit.id) !== String(auditId)) {
-        continue;
-      }
-      const updated = { ...audit, ...updateSet };
-      devWebhookAuditStore.set(key, updated);
-      return cloneValue(updated);
+    const redisClient = getRedisClient();
+    if (!redisClient) {
+      return { id: auditId, ...updateSet };
     }
-    return { id: auditId, ...updateSet };
+
+    const key = `dev:webhookAudit:${String(auditId)}`;
+    const existingJson = await redisClient.get(key);
+    if (!existingJson) {
+      return { id: auditId, ...updateSet };
+    }
+    const existing = JSON.parse(existingJson);
+    const updated = { ...existing, ...updateSet };
+    await redisClient.set(key, JSON.stringify(updated));
+    return cloneValue(updated);
   }
   if (!mongoose.Types.ObjectId.isValid(String(auditId))) {
     return null;

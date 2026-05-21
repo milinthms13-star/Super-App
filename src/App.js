@@ -70,8 +70,6 @@ const NilaBeautyAI = React.lazy(() => import("./modules/beautyai/NilaBeautyAI"))
 const SmartKitchenRecipeHub = React.lazy(() => import("./modules/kitchen/SmartKitchenRecipeHub"));
 
 const WomenSafetyFamily = React.lazy(() => import("./modules/womensafetyfamily/WomenSafetyFamily"));
-const HyperlocalAICommerce = React.lazy(() => import("./modules/hyperlocalaicommerce/HyperlocalAICommerce"));
-const NilaAIStudio = React.lazy(() => import("./modules/nilaaistudio/NilaAIStudio"));
 const TrustLayer = React.lazy(() => import("./modules/trustlayer/TrustLayer"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
 const ModuleRatings = React.lazy(() => import("./modules/moduleratings/ModuleRatings"));
@@ -172,8 +170,6 @@ const PREVIEW_ENABLED_MODULES = [
   "beautyai",
   "kitchen",
   "womensafetyfamily",
-  "hyperlocalaicommerce",
-  "nilaaistudio",
   "trustlayer",
 ];
 
@@ -203,8 +199,6 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "beautyai",
   "kitchen",
   "womensafetyfamily",
-  "hyperlocalaicommerce",
-  "nilaaistudio",
   "trustlayer",
   "jobportal",
   "skilllearning",
@@ -1306,8 +1300,6 @@ function AppShell() {
               <Route path="kerala-gulf-jobs-migration" element={<Navigate to="/gulf-services" replace />} />
 
               <Route path="women-safety-family-protection" element={<WomenSafetyFamily />} />
-              <Route path="hyperlocal-ai-commerce" element={<HyperlocalAICommerce />} />
-              <Route path="nila-ai-studio" element={<NilaAIStudio />} />
               <Route path="trust-layer" element={<TrustLayer />} />
               <Route path="businessservices" element={<BusinessServices />} />
               <Route path="jobportal" element={<JobPortal />} />

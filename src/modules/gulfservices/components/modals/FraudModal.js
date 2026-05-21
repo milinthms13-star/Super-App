@@ -1,6 +1,12 @@
-// FraudModal.js - Fraud report modal for GulfServices
 import React from 'react';
-const FraudModal = ({ isOpen, onClose, onSubmit, fraudData }) => (
-  <div>FraudModal (render fraud form, handle submit/close)</div>
+import GulfModalShell from './GulfModalShell';
+
+const FraudModal = ({ isOpen, onClose, ...props }) => (
+  <GulfModalShell
+    {...props}
+    activeModal={isOpen ? 'fraud' : null}
+    closeModal={onClose || props.closeModal}
+  />
 );
+
 export default FraudModal;

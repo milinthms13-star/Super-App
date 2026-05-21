@@ -57,6 +57,7 @@ const GulfJobApplicationSchema = new Schema(
     fullName: { type: String, required: true, trim: true },
     email: { type: String, required: true, trim: true, index: true },
     phone: { type: String, required: true, trim: true },
+    passportNo: { type: String, trim: true, default: '' },
     experience: { type: Number, default: 0, min: 0 },
     currentCompany: { type: String, trim: true, default: '' },
     expectedSalary: { type: Number, default: 0, min: 0 },
@@ -165,9 +166,14 @@ const GulfUserSchema = new Schema(
 const GulfRecruiterSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
+    companyName: { type: String, trim: true, default: '' },
     licenseNumber: { type: String, trim: true },
     registrationNumber: { type: String, trim: true },
     country: { type: String, trim: true },
+    phone: { type: String, trim: true, default: '' },
+    email: { type: String, trim: true, default: '', index: true },
+    website: { type: String, trim: true, default: '' },
+    experienceSummary: { type: String, trim: true, default: '' },
     verified: { type: Boolean, default: false, index: true },
     status: { type: String, trim: true, default: 'active' },
     successCases: { type: Number, default: 0 },
@@ -202,6 +208,8 @@ const GulfApplicationSchema = new Schema(
         'Medical Pending',
         'Medical Completed',
         'Visa Processing',
+        'Requires Human Review',
+        'Escalated',
         'Visa Approved',
         'Visa Stamped',
         'Travel Ready',
@@ -213,6 +221,22 @@ const GulfApplicationSchema = new Schema(
     timeline: { type: [timelineEntrySchema], default: [{ status: 'Applied', note: 'Application submitted' }] },
     agentName: { type: String, trim: true, default: '' },
     agentVerified: { type: Boolean, default: false },
+    adminNote: { type: String, trim: true, default: '' },
+    source: { type: String, trim: true, default: 'gulf-services' },
+    paymentStatus: { type: String, trim: true, default: 'unpaid' },
+    paymentId: { type: String, trim: true, default: '' },
+    amount: { type: Number, default: 0, min: 0 },
+  },
+  { timestamps: true }
+);
+
+const GulfFraudReportSchema = new Schema(
+  {
+    reportId: { type: String, required: true, unique: true, index: true },
+    recruiterId: { type: String, trim: true, default: '', index: true },
+    issueDescription: { type: String, trim: true, required: true },
+    phone: { type: String, trim: true, required: true },
+    status: { type: String, trim: true, default: 'open', index: true },
     adminNote: { type: String, trim: true, default: '' },
     source: { type: String, trim: true, default: 'gulf-services' },
   },
@@ -232,4 +256,5 @@ module.exports = {
   GulfUser: mongoose.model('GulfUser', GulfUserSchema),
   GulfRecruiter: mongoose.model('GulfRecruiter', GulfRecruiterSchema),
   GulfApplication: mongoose.models.GulfApplication || mongoose.model('GulfApplication', GulfApplicationSchema),
+  GulfFraudReport: mongoose.models.GulfFraudReport || mongoose.model('GulfFraudReport', GulfFraudReportSchema),
 };

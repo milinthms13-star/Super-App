@@ -77,178 +77,7 @@ const DOCUMENT_FIELDS = [
   { key: "collateralDocuments", label: "Collateral Documents" },
 ];
 
-const GOVERNMENT_SCHEMES = [
-  {
-    id: "central-pm-mudra",
-    name: "PMMY (Pradhan Mantri Mudra Yojana)",
-    schemeType: "Central",
-    categoryHint: "business",
-    eligibility: "Non-corporate micro/small businesses in manufacturing, trading, services and allied activities.",
-    maxAmount: "Up to INR 20 lakh (Shishu/Kishor/Tarun/Tarun Plus as per borrower profile)",
-    documents: "KYC, business/activity proof, bank statement, quotation/invoice for funding need.",
-    benefit: "Collateral-free business credit through formal banking channels.",
-  },
-  {
-    id: "central-pmegp",
-    name: "PMEGP (Prime Minister's Employment Generation Programme)",
-    schemeType: "Central",
-    categoryHint: "msme",
-    eligibility: "New micro-enterprises; applicant 18+; project and category should satisfy PMEGP guidelines.",
-    maxAmount: "Project cost for subsidy: up to INR 50 lakh (manufacturing) and INR 20 lakh (service/business)",
-    documents: "Detailed project report, KYC, educational proof where applicable, category certificates, Udyam (post setup).",
-    benefit: "Credit-linked margin money subsidy via KVIC/KVIB/DIC with special-category support.",
-  },
-  {
-    id: "central-stand-up-india",
-    name: "Stand-Up India",
-    schemeType: "Central",
-    categoryHint: "women",
-    eligibility: "Women and SC/ST entrepreneurs for greenfield project.",
-    maxAmount: "INR 10 lakh to INR 1 crore",
-    documents: "KYC, project report, category certificate, business registration.",
-    benefit: "Bank loans with handholding support and working capital options.",
-  },
-  {
-    id: "central-cgtmse",
-    name: "CGTMSE Credit Guarantee Support",
-    schemeType: "Central",
-    categoryHint: "msme",
-    eligibility: "Micro and Small Enterprises borrowing through CGTMSE member lending institutions.",
-    maxAmount: "Guarantee on unsecured credit portion up to INR 10 crore (not a direct loan scheme)",
-    documents: "Lender loan application set: KYC, Udyam, financials, GST/ITR, business plan.",
-    benefit: "Enables collateral-free MSME lending by providing guarantee cover to the lender.",
-  },
-  {
-    id: "central-pm-vishwakarma",
-    name: "PM Vishwakarma",
-    schemeType: "Central",
-    categoryHint: "women",
-    eligibility: "Traditional artisans/craftspeople in notified trades, as per scheme registration criteria.",
-    maxAmount: "Collateral-free enterprise loan up to INR 3 lakh in two tranches (INR 1 lakh + INR 2 lakh)",
-    documents: "Aadhaar-linked KYC, trade declaration, scheme portal registration details.",
-    benefit: "Concessional credit, toolkit incentive, skill upgradation and market support.",
-  },
-  {
-    id: "central-pmfme",
-    name: "PMFME (Micro Food Processing Enterprises)",
-    schemeType: "Central",
-    categoryHint: "business",
-    eligibility: "Existing micro food processing units, SHGs, FPOs and cooperatives under PMFME norms.",
-    maxAmount: "Credit-linked subsidy up to 35% of eligible project cost; ceiling up to INR 10 lakh for individual units",
-    documents: "KYC, Udyam/FSSAI where applicable, project report, bank sanction details.",
-    benefit: "Formalization, modernization and branding support for micro food businesses.",
-  },
-  {
-    id: "kerala-ess",
-    name: "Kerala Entrepreneur Support Scheme (ESS)",
-    schemeType: "Kerala",
-    categoryHint: "msme",
-    eligibility: "Udyam-registered MSMEs in manufacturing in Kerala; support linked to fixed capital investment.",
-    maxAmount: "15%-45% assistance slab by category/sector; overall ceiling as per current ESS limits",
-    documents: "KYC, Udyam, fixed asset proof, project report, commencement and investment documents.",
-    benefit: "Capital subsidy with additional support for women, youth, SC/ST, NRK and priority sectors.",
-  },
-  {
-    id: "kerala-kels",
-    name: "Kerala Entrepreneur Loan Scheme (KELS)",
-    schemeType: "Kerala",
-    categoryHint: "business",
-    eligibility: "New and expanding MSMEs in manufacturing/service/trading in Kerala with Udyam registration.",
-    maxAmount: "Interest concession support on loans up to INR 10 lakh",
-    documents: "KYC, Udyam, loan details from participating banks, project/business plan.",
-    benefit: "Government interest subvention to bring effective borrowing cost lower for eligible units.",
-  },
-  {
-    id: "kerala-margin-money-nano",
-    name: "Kerala Margin Money Grant to Nano Units",
-    schemeType: "Kerala",
-    categoryHint: "business",
-    eligibility: "Nano units in manufacturing/job-work/service with project cost up to INR 10 lakh.",
-    maxAmount: "Margin grant 30%-40% with maximum assistance up to INR 4 lakh",
-    documents: "KYC, project report, bank sanction, proof of beneficiary contribution, Udyam details.",
-    benefit: "Upfront project support for nano entrepreneurs, with enhanced support for special categories.",
-  },
-  {
-    id: "kerala-interest-subvention-nano",
-    name: "Kerala Interest Subvention for Nano Household Enterprises",
-    schemeType: "Kerala",
-    categoryHint: "business",
-    eligibility: "Nano/household units (fixed capital up to INR 10 lakh) in manufacturing/services/job-work.",
-    maxAmount: "Interest subvention 6% p.a. (8% for women and SC/ST) for up to 3 years",
-    documents: "KYC, Udyam, term-loan details, repayment proof, fixed capital and connected-load details.",
-    benefit: "Reduces interest burden for early-stage nano enterprises on reimbursement basis.",
-  },
-  {
-    id: "kerala-asha",
-    name: "Kerala ASHA (Assistance Scheme for Handicrafts Artisans)",
-    schemeType: "Kerala",
-    categoryHint: "business",
-    eligibility: "Recognized handicraft artisans/micro enterprises in handicrafts with valid registration.",
-    maxAmount: "General: up to INR 5 lakh combined support; special categories: up to INR 7.5 lakh combined support",
-    documents: "Identity proof, artisan/sector proof, Udyam, project report, category certificates where applicable.",
-    benefit: "Fixed-capital and working-capital grant support for handicraft enterprises.",
-  },
-  {
-    id: "kerala-stressed-msme-revival",
-    name: "Kerala Stressed MSMEs Revival & Rehabilitation",
-    schemeType: "Kerala",
-    categoryHint: "msme",
-    eligibility: "Kerala MSMEs showing stress and taking approved revival/restructuring route.",
-    maxAmount: "Combined assistance up to INR 5 lakh per unit (as per relief component caps)",
-    documents: "Loan/restructuring records, revival project report, statutory dues and restart expense proofs.",
-    benefit: "Margin grant, limited-period interest support and restart assistance to revive operations.",
-  },
-  {
-    id: "kerala-iss-covid",
-    name: "Kerala ISS (Interest Subvention on Term/Working Capital Loan)",
-    schemeType: "Kerala",
-    categoryHint: "msme",
-    eligibility: "Manufacturing/job-work MSMEs in Kerala under notified ISS conditions.",
-    maxAmount: "Up to INR 1.2 lakh combined assistance per unit (one-time)",
-    documents: "KYC, Udyam, loan sanction details, operational and repayment evidence.",
-    benefit: "Time-bound interest relief for eligible MSMEs affected by economic disruption.",
-  },
-  {
-    id: "kerala-mission-1000",
-    name: "Kerala MSME Scale Up Mission (Mission 1000)",
-    schemeType: "Kerala",
-    categoryHint: "msme",
-    eligibility: "Kerala Udyam-registered MSMEs with operating history and scale-up potential under mission criteria.",
-    maxAmount: "Capital subsidy up to 40% (max INR 2 crore) plus other mission-linked support caps",
-    documents: "Udyam, audited financials, turnover/profit records, CIBIL and growth metrics.",
-    benefit: "Scale-up package for selected MSMEs targeting high-growth and larger turnover.",
-  },
-  {
-    id: "kerala-msme-insurance",
-    name: "Kerala MSME Insurance Scheme",
-    schemeType: "Kerala",
-    categoryHint: "msme",
-    eligibility: "Eligible MSMEs in Kerala insured through approved public-sector insurers.",
-    maxAmount: "Reimbursement up to 50% of annual insurance premium (as per scheme norms)",
-    documents: "Insurance policy and premium receipts, Udyam and business registration documents.",
-    benefit: "Risk protection support against business shocks such as fire, theft and disasters.",
-  },
-  {
-    id: "kerala-ofoe",
-    name: "Kerala One Family One Enterprise (OFOE)",
-    schemeType: "Kerala",
-    categoryHint: "business",
-    eligibility: "New MSMEs in manufacturing/service/trading that commenced operations on/after the notified date.",
-    maxAmount: "Interest subvention linked to term/working capital loans up to INR 10 lakh",
-    documents: "KYC, Udyam, loan documents from eligible financial institutions, activity proof.",
-    benefit: "Promotes household entrepreneurship with loan-interest support.",
-  },
-  {
-    id: "kerala-olop",
-    name: "Kerala One Local Body One Product (OLOP)",
-    schemeType: "Kerala",
-    categoryHint: "business",
-    eligibility: "Local enterprises and clusters aligned with LSGI-identified product opportunities.",
-    maxAmount: "Support converges with relevant state/central funding windows",
-    documents: "Project concept, local body alignment, enterprise and cluster documentation.",
-    benefit: "Promotes value-added local products and market linkage through local-body convergence.",
-  },
-];
+const GOVERNMENT_SCHEMES_ESTIMATED_COUNT = 17;
 
 const QUICK_LOAN_TYPE_TO_CATEGORY = {
   "personal loan": "personal",
@@ -406,6 +235,9 @@ const FinanceHub = () => {
   const [funnelAnalytics, setFunnelAnalytics] = useState(null);
   const [sourceChannelAnalytics, setSourceChannelAnalytics] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [governmentSchemes, setGovernmentSchemes] = useState([]);
+  const [schemesLoading, setSchemesLoading] = useState(false);
+  const [schemesError, setSchemesError] = useState("");
   const [quickJourney, setQuickJourney] = useState({
     loanCategory: "business",
     amount: "500000",
@@ -444,7 +276,7 @@ const FinanceHub = () => {
       {
         id: "schemes",
         label: "Govt Schemes",
-        value: GOVERNMENT_SCHEMES.length,
+        value: governmentSchemes.length || GOVERNMENT_SCHEMES_ESTIMATED_COUNT,
         helper: "Regional support options",
       },
       {
@@ -454,7 +286,7 @@ const FinanceHub = () => {
         helper: "Kerala, TN, KA, AP, TS",
       },
     ],
-    [institutions]
+    [institutions, governmentSchemes.length]
   );
 
   const filteredLoanCategories = useMemo(
@@ -674,6 +506,35 @@ const FinanceHub = () => {
     void loadSlaDashboard(consultantId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consultantId, roleCapabilities.isConsultant, roleCapabilities.isAdmin, roleCapabilities.loaded]);
+
+  useEffect(() => {
+    if (activeTab !== "schemes" || governmentSchemes.length > 0 || schemesLoading) return;
+
+    let active = true;
+    const loadSchemes = async () => {
+      setSchemesLoading(true);
+      setSchemesError("");
+      try {
+        const module = await import("./data/governmentSchemes.v1");
+        if (!active) return;
+        const rows = Array.isArray(module.default) ? module.default : [];
+        setGovernmentSchemes(rows);
+      } catch (_error) {
+        if (!active) return;
+        setSchemesError("Unable to load scheme catalogue right now.");
+      } finally {
+        if (active) {
+          setSchemesLoading(false);
+        }
+      }
+    };
+
+    void loadSchemes();
+
+    return () => {
+      active = false;
+    };
+  }, [activeTab, governmentSchemes.length, schemesLoading]);
 
   const handleEligibilitySubmit = async (event) => {
     event.preventDefault();
@@ -1392,7 +1253,12 @@ const FinanceHub = () => {
       ) : null}
 
       {activeTab === "schemes" ? (
-        <SchemesTab schemes={GOVERNMENT_SCHEMES} onApplyWithScheme={openApplyWithScheme} />
+        <SchemesTab
+          schemes={governmentSchemes}
+          loading={schemesLoading}
+          error={schemesError}
+          onApplyWithScheme={openApplyWithScheme}
+        />
       ) : null}
 
       <button type="button" className="finance-floating-apply" onClick={() => setActiveTab("apply")}>Apply Now</button>
@@ -1401,3 +1267,4 @@ const FinanceHub = () => {
 };
 
 export default FinanceHub;
+

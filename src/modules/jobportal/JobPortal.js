@@ -17,6 +17,7 @@ import PostJobForm from "./components/PostJobForm";
 import EmployerDashboard from "./components/EmployerDashboard";
 import AIAssistant from "./components/AIAssistant";
 import ApplicationsBoard from "./components/ApplicationsBoard";
+import JobPortalOverview360 from "./components/JobPortalOverview360";
 import "./JobPortal.css";
 
 const INITIAL_PROFILE_FORM = {
@@ -142,6 +143,9 @@ const JobPortal = () => {
   ]);
 
   const [toasts, setToasts] = useState([]);
+  const [overviewData, setOverviewData] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState("");
 
   const pushToast = useCallback((type, message) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -237,6 +241,21 @@ const JobPortal = () => {
     }
   }, [isAuthenticated, pushToast]);
 
+  const loadOverview360 = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setOverviewLoading(true);
+    setOverviewError("");
+    try {
+      const response = await jobPortalApi.getOverview360();
+      setOverviewData(response?.data || null);
+    } catch (error) {
+      setOverviewError(error?.response?.data?.message || "Unable to load job portal 360 data.");
+      setOverviewData(null);
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     loadJobs();
   }, [loadJobs]);
@@ -252,7 +271,10 @@ const JobPortal = () => {
     if (activeTab === "employer") {
       loadEmployerData();
     }
-  }, [activeTab, loadEmployerData]);
+    if (activeTab === "overview360") {
+      loadOverview360();
+    }
+  }, [activeTab, loadEmployerData, loadOverview360]);
 
   const savedJobIds = useMemo(
     () => new Set(savedJobs.map((job) => String(job?._id || job?.id || ""))),
@@ -493,6 +515,7 @@ const JobPortal = () => {
       <nav className="jp-nav" aria-label="Job portal navigation">
         {[
           { id: "home", label: "Home" },
+          { id: "overview360", label: "360 Dashboard" },
           { id: "applications", label: "Applications" },
           { id: "saved", label: "Saved Jobs" },
           { id: "profile", label: "Profile" },
@@ -612,6 +635,15 @@ const JobPortal = () => {
               </ul>
             </section>
           </>
+        ) : null}
+
+        {activeTab === "overview360" ? (
+          <JobPortalOverview360
+            data={overviewData}
+            loading={overviewLoading}
+            error={overviewError}
+            onRefresh={loadOverview360}
+          />
         ) : null}
 
         {activeTab === "applications" ? (

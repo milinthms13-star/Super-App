@@ -8,6 +8,7 @@ Kid-focused story-to-video module with end-to-end flow:
 2. Edit script/characters/scenes/voice/music
 3. Render MP4
 4. Download or save locally
+5. Review 360 analytics, project health, and library recommendations
 
 ## Module structure
 

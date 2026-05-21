@@ -7,6 +7,7 @@ const TABS = [
   { id: "vendor", label: "Vendor Dashboard" },
   { id: "partner", label: "Partner Dashboard" },
   { id: "admin", label: "Admin Panel" },
+  { id: "overview360", label: "360 Dashboard" },
   { id: "growth", label: "Wallet & Growth" },
 ];
 
@@ -150,6 +151,8 @@ const HyperlocalDeliveryHub = () => {
 
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [overviewData, setOverviewData] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [loading, setLoading] = useState({
     bootstrap: false,
     shops: false,
@@ -650,10 +653,24 @@ const HyperlocalDeliveryHub = () => {
     }
   };
 
+  const loadOverview360 = async () => {
+    setOverviewLoading(true);
+    try {
+      const response = await hyperlocalApi.getOverview360();
+      setOverviewData(response?.data || null);
+    } catch (error) {
+      setOverviewData(null);
+      showError(error?.response?.data?.message || "Unable to load Hyperlocal 360 data.");
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "vendor") loadVendorData();
     if (activeTab === "partner") loadPartnerData();
     if (activeTab === "admin") loadAdminData();
+    if (activeTab === "overview360") loadOverview360();
     if (activeTab === "growth") loadGrowthData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -1361,6 +1378,104 @@ const HyperlocalDeliveryHub = () => {
               </ul>
             )}
           </article>
+        </section>
+      )}
+
+      {activeTab === "overview360" && (
+        <section className="hyperlocal-dual-grid">
+          <article className="hyperlocal-panel">
+            <h2>Hyperlocal 360 Overview</h2>
+            <button type="button" className="hyperlocal-secondary-btn" onClick={loadOverview360}>
+              Refresh 360 data
+            </button>
+            {overviewLoading ? (
+              <div className="hyperlocal-skeleton-grid">
+                <div className="hyperlocal-skeleton-card" />
+                <div className="hyperlocal-skeleton-card" />
+                <div className="hyperlocal-skeleton-card" />
+              </div>
+            ) : overviewData ? (
+              <div className="hyperlocal-summary-card">
+                <p>Total orders: {overviewData.totalOrders}</p>
+                <p>Delivered orders: {overviewData.deliveredOrders}</p>
+                <p>Cancelled orders: {overviewData.cancelledOrders}</p>
+                <p>Active delivery jobs: {overviewData.activeJobs}</p>
+                <p>Total revenue: INR {overviewData.totalRevenue}</p>
+                <p>Average order value: INR {overviewData.averageOrderValue}</p>
+                <p>Approved shops: {overviewData.approvedShopCount}</p>
+                <p>Approved partners: {overviewData.approvedPartnerCount}</p>
+                <p>Partners currently online: {overviewData.activePartnerCount}</p>
+                <p>Subscriptions active: {overviewData.subscriptionCount}</p>
+                <p>Open complaints: {overviewData.openComplaints}</p>
+                <p>Pending refunds: {overviewData.pendingRefunds}</p>
+              </div>
+            ) : (
+              <div className="hyperlocal-empty-card">Switch to 360 Dashboard to load the full hyperlocal operations view.</div>
+            )}
+          </article>
+
+          {overviewData ? (
+            <article className="hyperlocal-panel">
+              <h2>Operations Insights</h2>
+              <div className="hyperlocal-summary-card">
+                <h3>Top shops by revenue</h3>
+                {overviewData.topShops.length ? (
+                  <ol>
+                    {overviewData.topShops.map((shop) => (
+                      <li key={shop.name}>
+                        {shop.name}: INR {shop.revenue}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="hyperlocal-empty-card">No shop revenue data yet.</div>
+                )}
+
+                <h3>Top products by quantity sold</h3>
+                {overviewData.topProducts.length ? (
+                  <ol>
+                    {overviewData.topProducts.map((product) => (
+                      <li key={product.name}>
+                        {product.name}: {product.qty} units
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="hyperlocal-empty-card">No product movement yet.</div>
+                )}
+              </div>
+
+              <div className="hyperlocal-summary-card">
+                <h3>Category revenue mix</h3>
+                {overviewData.categoryBreakdown.length ? (
+                  <ul>
+                    {overviewData.categoryBreakdown.map((category) => (
+                      <li key={category.category}>
+                        {category.category}: INR {category.revenue}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="hyperlocal-empty-card">No category revenue data available.</div>
+                )}
+              </div>
+
+              <div className="hyperlocal-summary-card">
+                <h3>Orders by city</h3>
+                {overviewData.ordersByCity.length ? (
+                  <ul>
+                    {overviewData.ordersByCity.map((cityEntry) => (
+                      <li key={cityEntry.city}>
+                        {cityEntry.city}: {cityEntry.count} orders
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="hyperlocal-empty-card">No city-level order data yet.</div>
+                )}
+              </div>
+            </article>
+          ) : null}
         </section>
       )}
 

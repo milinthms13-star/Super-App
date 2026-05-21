@@ -10,6 +10,12 @@ const buildAuthHeaders = () => {
 };
 
 export const gulfservicesApi = {
+  getCurrentUser: async () =>
+    handleResponse(
+      await axios.get(`${BACKEND_BASE_URL}/api/auth/me`, {
+        headers: buildAuthHeaders(),
+      })
+    ),
   bootstrap: async () => handleResponse(await axios.get(`${BASE}/bootstrap`)),
   getJobs: async (filters = {}) => handleResponse(await axios.get(`${BASE}/jobs`, { params: filters })),
   getJobDetails: async (jobId) => handleResponse(await axios.get(`${BASE}/jobs/${encodeURIComponent(jobId)}`)),
@@ -23,6 +29,13 @@ export const gulfservicesApi = {
         params: { email },
       })
     ),
+  trackServiceRequest: async (serviceType, requestId, email) =>
+    handleResponse(
+      await axios.get(`${BASE}/services/track/${encodeURIComponent(serviceType)}/${encodeURIComponent(requestId)}`, {
+        params: { email },
+        headers: buildAuthHeaders(),
+      })
+    ),
   getDashboard: async () =>
     handleResponse(
       await axios.get(`${BASE}/user/dashboard`, {
@@ -30,6 +43,10 @@ export const gulfservicesApi = {
       })
     ),
   reportEmergency: async (data) => handleResponse(await axios.post(`${BASE}/emergency/report`, data)),
+  submitTravelSupport: async (data) => handleResponse(await axios.post(`${BASE}/travel/request`, data)),
+  submitMedicalSupport: async (data) => handleResponse(await axios.post(`${BASE}/medical/request`, data)),
+  submitReturneeSupport: async (data) => handleResponse(await axios.post(`${BASE}/returnee/request`, data)),
+  submitNriSupport: async (data) => handleResponse(await axios.post(`${BASE}/nri/request`, data)),
   getVerifiedRecruiters: async () => handleResponse(await axios.get(`${BASE}/recruiters/verified`)),
   reportFraud: async (data) => handleResponse(await axios.post(`${BASE}/fraud/report`, data)),
   createApplication: async (data) =>
@@ -38,10 +55,13 @@ export const gulfservicesApi = {
         headers: buildAuthHeaders(),
       })
     ),
-  createPaymentIntent: async (data) =>
+  createPaymentIntent: async (data, options = {}) =>
     handleResponse(
       await axios.post(`${BASE}/payments/create`, data, {
-        headers: buildAuthHeaders(),
+        headers: {
+          ...buildAuthHeaders(),
+          ...(options.idempotencyKey ? { 'x-idempotency-key': options.idempotencyKey } : {}),
+        },
       })
     ),
   getAdminAnalytics: async () =>
@@ -84,6 +104,19 @@ export const gulfservicesApi = {
   updateApplicationStatus: async (id, data) =>
     handleResponse(
       await axios.put(`${BASE}/admin/applications/${encodeURIComponent(id)}/status`, data, {
+        headers: buildAuthHeaders(),
+      })
+    ),
+  getAdminFraudReports: async (status = '') =>
+    handleResponse(
+      await axios.get(`${BASE}/admin/fraud-reports`, {
+        params: status ? { status } : {},
+        headers: buildAuthHeaders(),
+      })
+    ),
+  updateAdminFraudStatus: async (reportId, data) =>
+    handleResponse(
+      await axios.put(`${BASE}/admin/fraud-reports/${encodeURIComponent(reportId)}/status`, data, {
         headers: buildAuthHeaders(),
       })
     ),

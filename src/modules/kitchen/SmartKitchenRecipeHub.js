@@ -6,6 +6,7 @@ import "./SmartKitchenRecipeHub.css";
 
 const BASE_TABS = [
   { id: "home", label: "Quick Cook" },
+  { id: "insights", label: "Kitchen 360" },
   { id: "generator", label: "AI Recipe" },
   { id: "details", label: "Recipe" },
   { id: "cooking", label: "Cooking Mode" },
@@ -87,6 +88,8 @@ const SmartKitchenRecipeHub = () => {
   const [todayTip, setTodayTip] = useState(null);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [grocery, setGrocery] = useState(null);
+  const [kitchenInsights, setKitchenInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
   const [recipeFinder, setRecipeFinder] = useState({ search: "", type: "All" });
   const [mealPlanForm, setMealPlanForm] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -224,6 +227,18 @@ const SmartKitchenRecipeHub = () => {
       }
     });
   }, [pushStatus, request, withBusy]);
+
+  const loadKitchenInsights = useCallback(async () => {
+    setInsightsLoading(true);
+    try {
+      const response = await request.get(buildApiUrl("/kitchen/insights"));
+      setKitchenInsights(response.data || null);
+    } catch (error) {
+      pushStatus("error", error?.response?.data?.message || "Failed to load kitchen insights.");
+    } finally {
+      setInsightsLoading(false);
+    }
+  }, [pushStatus, request]);
 
   const loadRecipeDetail = useCallback(
     async (recipeId) => {
@@ -628,7 +643,14 @@ const SmartKitchenRecipeHub = () => {
     loadMeta();
     loadRecipes();
     loadTips();
-  }, [loadMeta, loadRecipes, loadTips]);
+    loadKitchenInsights();
+  }, [loadMeta, loadRecipes, loadTips, loadKitchenInsights]);
+
+  useEffect(() => {
+    if (tab === "insights") {
+      loadKitchenInsights();
+    }
+  }, [loadKitchenInsights, tab]);
 
   useEffect(() => {
     if (tab === "admin" && isAdmin) {
@@ -922,6 +944,84 @@ const SmartKitchenRecipeHub = () => {
               ))}
             </div>
           </div>
+        </section>
+      ) : null}
+
+      {tab === "insights" ? (
+        <section className="kitchen-card kitchen-insights-card">
+          <h2>Kitchen 360 Insights</h2>
+          <p>See your cooking trends, pantry usage, and next kitchen actions in one place.</p>
+          {insightsLoading ? (
+            <div className="kitchen-card">
+              Loading insights...
+            </div>
+          ) : kitchenInsights ? (
+            <>
+              <div className="kitchen-insights-grid">
+                <article className="kitchen-insight-card">
+                  <h3>Plan Tier</h3>
+                  <p>{kitchenInsights.planTier || 'free'}</p>
+                </article>
+                <article className="kitchen-insight-card">
+                  <h3>Recipes Saved</h3>
+                  <p>{kitchenInsights.savedRecipes ?? 0}</p>
+                </article>
+                <article className="kitchen-insight-card">
+                  <h3>AI Recipes Generated</h3>
+                  <p>{kitchenInsights.generatedRecipes ?? 0}</p>
+                </article>
+                <article className="kitchen-insight-card">
+                  <h3>Grocery Lists</h3>
+                  <p>{kitchenInsights.groceryLists ?? 0}</p>
+                </article>
+                <article className="kitchen-insight-card">
+                  <h3>Meal Plans</h3>
+                  <p>{kitchenInsights.mealPlans ?? 0}</p>
+                </article>
+                <article className="kitchen-insight-card">
+                  <h3>Community Posts</h3>
+                  <p>{kitchenInsights.communitySubmissions ?? 0}</p>
+                </article>
+              </div>
+
+              <div className="kitchen-insights-grid kitchen-insight-summary-grid">
+                <article className="kitchen-insight-card">
+                  <h3>Healthy Cooking Share</h3>
+                  <p>{kitchenInsights.healthyRecipeShare ?? 0}% of approved recipes</p>
+                </article>
+                <article className="kitchen-insight-card">
+                  <h3>Top Cuisine</h3>
+                  <p>{kitchenInsights.topCuisines?.[0]?.name || 'N/A'}</p>
+                </article>
+                <article className="kitchen-insight-card">
+                  <h3>Top Category</h3>
+                  <p>{kitchenInsights.topCategories?.[0]?.name || 'N/A'}</p>
+                </article>
+                <article className="kitchen-insight-card">
+                  <h3>Most popular tip</h3>
+                  <p>{kitchenInsights.favoriteTipCategory || 'General'}</p>
+                </article>
+              </div>
+
+              <div className="kitchen-card kitchen-insights-actions">
+                <h3>Recommended next actions</h3>
+                <div className="kitchen-chip-wall kitchen-action-chips">
+                  {(kitchenInsights.recommendations || []).map((item) => (
+                    <span key={item.title}>{item.title}</span>
+                  ))}
+                </div>
+                <ul>
+                  {(kitchenInsights.recommendations || []).map((item) => (
+                    <li key={item.title}>{item.description}</li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          ) : (
+            <div className="kitchen-card">
+              No insights available yet. Generate a recipe or save a meal plan to start tracking.
+            </div>
+          )}
         </section>
       ) : null}
 

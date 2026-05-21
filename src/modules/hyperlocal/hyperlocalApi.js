@@ -85,6 +85,7 @@ export const hyperlocalApi = {
   adminAnalytics: async () => unwrap(await axios.get(`${BASE}/admin/analytics`, { headers: authHeaders() })),
   adminRefunds: async () => unwrap(await axios.get(`${BASE}/admin/refunds`, { headers: authHeaders() })),
   adminComplaints: async () => unwrap(await axios.get(`${BASE}/admin/complaints`, { headers: authHeaders() })),
+  getOverview360: async () => unwrap(await axios.get(`${BASE}/overview360`, { headers: authHeaders() })),
   resolveComplaint: async (complaintId, resolutionNote) =>
     unwrap(await axios.patch(`${BASE}/admin/complaints/${encodeURIComponent(complaintId)}/resolve`, { resolutionNote }, { headers: authHeaders() })),
   reviewRefund: async (refundId, status) =>

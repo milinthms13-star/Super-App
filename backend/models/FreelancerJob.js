@@ -22,6 +22,7 @@ const freelancerJobSchema = new mongoose.Schema(
       },
     ],
     createdBy: {
+      userId: { type: String, trim: true, default: '', index: true },
       customerName: { type: String, trim: true, default: '' },
       customerPhone: { type: String, trim: true, required: true, index: true },
       maskedPhone: { type: String, trim: true, default: '' },

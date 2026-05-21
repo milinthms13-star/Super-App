@@ -18,6 +18,24 @@ const { scanFile } = require('../utils/virusScan');
 const router = express.Router();
 const { authenticate, hasAdminPrivileges } = authMiddleware;
 
+router.use((req, res, next) => {
+  const incomingRequestId = String(req.get('x-request-id') || '').trim();
+  const requestId = incomingRequestId || `fin-${crypto.randomUUID()}`;
+  req.financeRequestId = requestId;
+  res.setHeader('x-request-id', requestId);
+
+  const start = process.hrtime.bigint();
+  res.on('finish', () => {
+    const elapsedNs = process.hrtime.bigint() - start;
+    const elapsedMs = Number(elapsedNs) / 1_000_000;
+    logger.info(
+      `[finance][${requestId}] ${req.method} ${req.originalUrl} ${res.statusCode} ${elapsedMs.toFixed(1)}ms`
+    );
+  });
+
+  next();
+});
+
 const SOUTH_INDIA_REGIONS = {
   Kerala: ['Kollam', 'Thiruvananthapuram', 'Trivandrum', 'Alappuzha', 'Kottayam', 'Pathanamthitta', 'Ernakulam', 'Thrissur', 'Kozhikode', 'Kannur'],
   TamilNadu: ['Chennai', 'Coimbatore', 'Madurai', 'Salem', 'Tiruchirappalli', 'Tirunelveli', 'Erode'],
@@ -66,6 +84,9 @@ const LEAD_STATUSES = [
 ];
 
 const NAME_PATTERN = /^[A-Za-z .'-]+$/;
+const ELIGIBILITY_SNAPSHOT_MAX_BYTES = 24 * 1024;
+const ELIGIBILITY_SNAPSHOT_MAX_KEYS = 80;
+const ELIGIBILITY_SNAPSHOT_MAX_DEPTH = 4;
 
 const financeUploadDir = path.join(__dirname, '../private/finance-docs');
 if (!fs.existsSync(financeUploadDir)) {
@@ -434,6 +455,78 @@ const ensureInstitutionsSeeded = async () => {
   await FinanceInstitution.insertMany(defaultInstitutions);
 };
 
+let financeBootstrapPromise = null;
+const bootstrapFinanceInstitutions = () => {
+  if (!financeBootstrapPromise) {
+    financeBootstrapPromise = ensureInstitutionsSeeded()
+      .then(() => {
+        logger.info('[finance] institution bootstrap complete');
+      })
+      .catch((error) => {
+        logger.error(`[finance] institution bootstrap failed: ${error.message}`);
+        financeBootstrapPromise = null;
+      });
+  }
+
+  return financeBootstrapPromise;
+};
+
+const sanitizeEligibilitySnapshot = (value, depth = 0, state = { keys: 0 }) => {
+  if (value == null) return null;
+  if (depth > ELIGIBILITY_SNAPSHOT_MAX_DEPTH) {
+    throw new Error('eligibility-snapshot-too-deep');
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map((item) => sanitizeEligibilitySnapshot(item, depth + 1, state));
+  }
+
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).slice(0, ELIGIBILITY_SNAPSHOT_MAX_KEYS);
+    const output = {};
+    for (const [key, nested] of entries) {
+      state.keys += 1;
+      if (state.keys > ELIGIBILITY_SNAPSHOT_MAX_KEYS) {
+        throw new Error('eligibility-snapshot-too-many-keys');
+      }
+      output[String(key).slice(0, 80)] = sanitizeEligibilitySnapshot(nested, depth + 1, state);
+    }
+    return output;
+  }
+
+  if (['string', 'number', 'boolean'].includes(typeof value)) {
+    return typeof value === 'string' ? value.slice(0, 500) : value;
+  }
+
+  return null;
+};
+
+const parseEligibilitySnapshot = (rawValue) => {
+  if (rawValue == null || rawValue === '') return null;
+
+  if (typeof rawValue === 'string') {
+    const byteLength = Buffer.byteLength(rawValue, 'utf8');
+    if (byteLength > ELIGIBILITY_SNAPSHOT_MAX_BYTES) {
+      throw new Error('eligibility-snapshot-too-large');
+    }
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('eligibility-snapshot-invalid');
+    }
+    return sanitizeEligibilitySnapshot(parsed);
+  }
+
+  if (typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+    const byteLength = Buffer.byteLength(JSON.stringify(rawValue), 'utf8');
+    if (byteLength > ELIGIBILITY_SNAPSHOT_MAX_BYTES) {
+      throw new Error('eligibility-snapshot-too-large');
+    }
+    return sanitizeEligibilitySnapshot(rawValue);
+  }
+
+  throw new Error('eligibility-snapshot-invalid');
+};
+
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -486,10 +579,15 @@ const getAuditActor = (req) => {
 const createAuditLog = async (req, payload = {}) => {
   try {
     const actor = getAuditActor(req);
+    const incomingDetails = payload.details && typeof payload.details === 'object' ? payload.details : {};
     await FinanceAuditLog.create({
       ...payload,
       actorRole: payload.actorRole || actor.actorRole,
       actorName: payload.actorName || actor.actorName,
+      details: {
+        ...incomingDetails,
+        requestId: req.financeRequestId || '',
+      },
       ipAddress: req.ip || '',
       userAgent: req.get('user-agent') || '',
     });
@@ -523,6 +621,23 @@ const publishWorkflowNotificationHook = async (lead, eventType, payload = {}) =>
   } catch (error) {
     logger.warn(`finance notification hook failed: ${error.message}`);
     return { delivered: false, reason: 'error' };
+  }
+};
+
+const publishSlaAlertHook = async ({ consultantId = '', overdueCount = 0, dueSoonCount = 0, withoutSlaCount = 0 } = {}) => {
+  if (overdueCount <= 0) return;
+
+  try {
+    await postWorkflowEvent({
+      eventType: 'finance_sla_alert',
+      consultantId,
+      overdueCount,
+      dueSoonCount,
+      withoutSlaCount,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.warn(`finance sla alert hook failed: ${error.message}`);
   }
 };
 
@@ -813,8 +928,6 @@ const handleLeadCreateIdempotency = async (req, res, next) => {
 
 router.get('/institutions', publicReadLimiter, async (req, res) => {
   try {
-    await ensureInstitutionsSeeded();
-
     const { state, district, type, category, verified } = req.query;
     const query = { isActive: true };
 
@@ -969,9 +1082,7 @@ router.post(
         consentPrivacy: String(req.body.consentPrivacy).toLowerCase() === 'true',
         consentKyc: String(req.body.consentKyc).toLowerCase() === 'true',
         consentDisclaimer: String(req.body.consentDisclaimer).toLowerCase() === 'true',
-        eligibilitySnapshot: req.body.eligibilitySnapshot
-          ? JSON.parse(req.body.eligibilitySnapshot)
-          : null,
+        eligibilitySnapshot: parseEligibilitySnapshot(req.body.eligibilitySnapshot),
       };
 
       const accountPhone = normalizePhone(req.user?.phone || '');
@@ -1000,8 +1111,6 @@ router.post(
           message: 'Privacy, KYC and disclaimer consent are required before submission.',
         });
       }
-
-      await ensureInstitutionsSeeded();
 
       let selectedInstitution = null;
       if (value.institutionId) {
@@ -1139,8 +1248,14 @@ router.post(
       if (error instanceof SyntaxError) {
         return res.status(400).json({ success: false, message: 'Eligibility snapshot format is invalid.' });
       }
+      if (String(error?.message || '').includes('eligibility-snapshot')) {
+        return res.status(400).json({ success: false, message: 'Eligibility snapshot payload is invalid or too large.' });
+      }
       if (String(error?.message || '').includes('empty-file') || String(error?.message || '').includes('file-not-found')) {
         return res.status(400).json({ success: false, message: 'One or more uploaded files failed security checks.' });
+      }
+      if (String(error?.message || '').includes('infected-file')) {
+        return res.status(400).json({ success: false, message: 'One or more uploaded files failed malware scan.' });
       }
       return res.status(500).json({ success: false, message: 'Unable to create finance lead.' });
     }
@@ -1774,6 +1889,12 @@ router.get('/dashboard/sla', authenticate, secureActionLimiter, requireFinanceCo
       .lean();
 
     const sla = buildSlaSummaryForLeads(leads, dueSoonHours);
+    void publishSlaAlertHook({
+      consultantId: query['consultant.consultantId'] || '',
+      overdueCount: sla.overdue.length,
+      dueSoonCount: sla.dueSoon.length,
+      withoutSlaCount: sla.withoutSla.length,
+    });
 
     return res.json({
       success: true,
@@ -1798,7 +1919,6 @@ router.get('/dashboard/sla', authenticate, secureActionLimiter, requireFinanceCo
 
 router.get('/mobile/bootstrap', authenticate, secureActionLimiter, async (req, res) => {
   try {
-    await ensureInstitutionsSeeded();
     const sourceMeta = getSourceMetaFromRequest(req);
     const accountPhone = normalizePhone(req.user?.phone || '');
     const roleTokens = Array.from(normalizeRoleTokens(req.user));
@@ -2137,5 +2257,8 @@ router.get('/admin/audit', authenticate, secureActionLimiter, requireFinanceAdmi
     return res.status(500).json({ success: false, message: 'Unable to fetch audit logs.' });
   }
 });
+
+router.bootstrap = bootstrapFinanceInstitutions;
+void bootstrapFinanceInstitutions();
 
 module.exports = router;

@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 
 const providerReviewSchema = new mongoose.Schema(
   {
+    bookingCode: { type: String, trim: true, default: '', uppercase: true },
+    reviewerUserId: { type: String, trim: true, default: '' },
     reviewerName: { type: String, trim: true, default: '' },
     reviewerPhone: { type: String, trim: true, default: '' },
     rating: { type: Number, min: 1, max: 5, required: true },
@@ -23,6 +25,7 @@ const providerPortfolioSchema = new mongoose.Schema(
 const freelancerProviderSchema = new mongoose.Schema(
   {
     providerCode: { type: String, required: true, unique: true, index: true, trim: true, uppercase: true },
+    ownerUserId: { type: String, trim: true, default: '', index: true },
     name: { type: String, required: true, trim: true, index: true },
     category: { type: String, required: true, trim: true, index: true },
     type: { type: String, enum: ['digital', 'local'], required: true, index: true },

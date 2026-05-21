@@ -194,18 +194,6 @@ const moduleFallbacks = {
     icon: "FaShieldAlt",
     isComingSoon: false,
   },
-  hyperlocalaicommerce: {
-    title: "Hyperlocal AI Commerce",
-    description: "AI-powered local shopping conversion with voice ordering, offers, and seller automation.",
-    icon: "FaStore",
-    isComingSoon: false,
-  },
-  nilaaistudio: {
-    title: "Nila AI Studio",
-    description: "AI creator platform for reels, dubbing, cartoons, avatars, and promo videos.",
-    icon: "FaRocket",
-    isComingSoon: false,
-  },
   trustlayer: {
     title: "Trust Layer",
     description: "Verified users, trust scoring, fraud detection, reporting, and moderation architecture.",
@@ -285,8 +273,6 @@ const moduleCategoryMap = {
   resumebuilder: "business",
   photostudio: "business",
   nilaaihub: "business",
-  hyperlocalaicommerce: "business",
-  nilaaistudio: "business",
   trustlayer: "business",
   finance: "utility",
   billpay: "utility",
@@ -340,8 +326,6 @@ const LaunchPage = ({
 
     "Kerala + Gulf Jobs Migration": "gulfservices",
     "Women Safety + Family Protection": "womensafetyfamily",
-    "Hyperlocal AI Commerce": "hyperlocalaicommerce",
-    "Nila AI Studio": "nilaaistudio",
     "Trust Layer": "trustlayer",
     SwiftRide: "ridesharing",
     SoulMatch: "matrimonial",

@@ -1,6 +1,12 @@
-// AttestationModal.js - Attestation request modal for GulfServices
 import React from 'react';
-const AttestationModal = ({ isOpen, onClose, onSubmit, attestationData }) => (
-  <div>AttestationModal (render attestation form, handle submit/close)</div>
+import GulfModalShell from './GulfModalShell';
+
+const AttestationModal = ({ isOpen, onClose, ...props }) => (
+  <GulfModalShell
+    {...props}
+    activeModal={isOpen ? 'attestation' : null}
+    closeModal={onClose || props.closeModal}
+  />
 );
+
 export default AttestationModal;

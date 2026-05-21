@@ -1122,8 +1122,9 @@ router.post('/appointments', authenticate, async (req, res) => {
   try {
     const payload = req.body || {};
     const userId = userIdString(req);
-    if (!payload.doctorName || !payload.appointmentDate || !payload.appointmentTime || !payload.patientName) {
-      return res.status(400).json({ success: false, message: 'doctorName, appointmentDate, appointmentTime, and patientName are required' });
+    const validationMessage = validateAppointmentPayload(payload);
+    if (validationMessage) {
+      return res.status(400).json({ success: false, message: validationMessage });
     }
     const amountDue = parseNumber(payload.amountDue, 0) || parseNumber(payload.consultationFee, 0) || 0;
     const paymentProvider = normalizePaymentProvider(payload.paymentProvider || 'simulated');
@@ -1321,7 +1322,8 @@ router.post('/appointments/:appointmentId/payment/verify', authenticate, async (
     const { appointmentId } = req.params;
     const userId = userIdString(req);
     const paymentReference = String(req.body?.paymentReference || '').trim();
-    const paymentProvider = normalizePaymentProvider(req.body?.paymentProvider || 'simulated');
+    const requestedProvider = req.body?.paymentProvider;
+    const paymentProvider = requestedProvider ? normalizePaymentProvider(requestedProvider) : null;
     const paymentStatus = String(req.body?.paymentStatus || 'success').trim().toLowerCase();
     const normalizedStatus = paymentStatus === 'success' ? 'paid' : 'failed';
     if (isMongoReady()) {
@@ -1553,6 +1555,10 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
       const initialStatus = requiresPrescription ? 'verified' : 'placed';
       const created = await HealthcarePharmacyOrder.create({
         userId,
+        pharmacyId: payload.pharmacyId || '',
+        pharmacyName: payload.pharmacyName || '',
+        pharmacyArea: payload.pharmacyArea || '',
+        pharmacyVendorId: payload.pharmacyVendorId || '',
         items: normalizedItems,
         totalAmount,
         deliveryAddress: payload.deliveryAddress || '',
@@ -1579,9 +1585,6 @@ router.post('/pharmacy/orders', authenticate, upload.single('prescriptionFile'),
       });
       return res.status(201).json({ success: true, data: toClientObject(created) });
     }
-    const paymentProvider = normalizePaymentProvider(payload.paymentProvider || 'simulated');
-    const paymentReference = totalAmount > 0 ? createPaymentReference('HC-PHARM') : '';
-    const paymentStatus = totalAmount > 0 ? 'pending' : 'paid';
     const initialStatus = requiresPrescription ? 'verified' : 'placed';
     const created = {
       id: `pharm-order-${Date.now()}-${crypto.randomUUID()}`,
@@ -1706,6 +1709,7 @@ router.post('/pharmacy/orders/:orderId/payment/verify', authenticate, async (req
     const { orderId } = req.params;
     const userId = userIdString(req);
     const paymentReference = String(req.body?.paymentReference || '').trim();
+    const requestedProvider = req.body?.paymentProvider;
     const paymentStatus = String(req.body?.paymentStatus || 'success').trim().toLowerCase();
     const normalizedStatus = paymentStatus === 'success' ? 'paid' : 'failed';
     if (isMongoReady()) {
@@ -1713,7 +1717,7 @@ router.post('/pharmacy/orders/:orderId/payment/verify', authenticate, async (req
       if (!order) {
         return res.status(404).json({ success: false, message: 'Order not found' });
       }
-      order.paymentProvider = normalizePaymentProvider(req.body?.paymentProvider || order.paymentProvider);
+      order.paymentProvider = requestedProvider ? normalizePaymentProvider(requestedProvider) : order.paymentProvider;
       order.paymentStatus = normalizedStatus;
       order.paymentReference = paymentReference || order.paymentReference;
       if (normalizedStatus === 'paid' && order.orderStatus !== 'delivered') {
@@ -1737,9 +1741,10 @@ router.post('/pharmacy/orders/:orderId/payment/verify', authenticate, async (req
     if (index === -1) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
+    const requestedProvider = req.body?.paymentProvider;
     inMemoryStore.pharmacyOrders[index] = {
       ...inMemoryStore.pharmacyOrders[index],
-      paymentProvider: normalizePaymentProvider(req.body?.paymentProvider || inMemoryStore.pharmacyOrders[index].paymentProvider),
+      paymentProvider: requestedProvider ? normalizePaymentProvider(requestedProvider) : inMemoryStore.pharmacyOrders[index].paymentProvider,
       paymentStatus: normalizedStatus,
       paymentReference: paymentReference || inMemoryStore.pharmacyOrders[index].paymentReference,
       updatedAt: new Date().toISOString(),
@@ -2052,6 +2057,9 @@ router.post('/partner/applications', authenticate, upload.array('documents', 5),
     }
     const uploadedDocuments = [];
     for (const file of req.files || []) {
+      if (!isAllowedUploadMimeType(file.mimetype)) {
+        return res.status(400).json({ success: false, message: 'Unsupported partner document file type' });
+      }
       const safeFileName = sanitizeFileName(file.originalname || `partner-${Date.now()}`);
       const storageKey = `healthcare/partner/${userId}/${Date.now()}-${safeFileName}`;
       const uploadResult = await uploadToS3(file.buffer, storageKey, { contentType: file.mimetype || 'application/octet-stream' });

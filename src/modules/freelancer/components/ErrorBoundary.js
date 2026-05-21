@@ -9,7 +9,9 @@ class ErrorBoundary extends React.Component {
     return { hasError: true };
   }
   componentDidCatch(error, info) {
-    // Log error to telemetry service
+    // Placeholder telemetry bridge for production integrations (Sentry/Datadog/etc.).
+    // eslint-disable-next-line no-console
+    console.error("[freelancer][ui-error]", error, info);
   }
   render() {
     if (this.state.hasError) {
