@@ -33,7 +33,7 @@ const dataRetentionPolicySchema = new mongoose.Schema(
     },
     autoDeleteMode: {
       type: String,
-      enum: ['disabled', 'soft-delete', 'hard-delete'],
+      enum: ['disabled', 'soft-delete', 'hard-delete', 'archive'],
       default: 'soft-delete',
     },
     policyStatus: {

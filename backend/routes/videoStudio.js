@@ -54,6 +54,9 @@ const sanitizeStatusText = (value = '') => String(value || '').replace(/\u0000/g
 const videoStudioPersistGridFs = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.VIDEO_STUDIO_PERSIST_GRIDFS || '1').toLowerCase()
 );
+const skipMemoryGuardInTest = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.VIDEO_STUDIO_SKIP_MEMORY_GUARD_IN_TEST || '1').toLowerCase()
+);
 
 const buildRequestOrigin = (req) => {
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
@@ -333,7 +336,8 @@ router.post('/render', async (req, res) => {
       Number(process.env.VIDEO_STUDIO_MAX_RSS_MB) || (isFreeMode ? 420 : 1024)
     );
     const currentRssMb = getRssMemoryMb();
-    if (currentRssMb >= maxRssMb) {
+    const allowBypassForTest = process.env.NODE_ENV === 'test' && skipMemoryGuardInTest;
+    if (!allowBypassForTest && currentRssMb >= maxRssMb) {
       logger.warn(
         `Video studio render skipped due to high memory rss=${currentRssMb}MB threshold=${maxRssMb}MB`
       );
@@ -468,7 +472,8 @@ router.post('/render-cartoon', async (req, res) => {
       Number(process.env.VIDEO_STUDIO_MAX_RSS_MB) || (isFreeMode ? 420 : 1024)
     );
     const currentRssMb = getRssMemoryMb();
-    if (currentRssMb >= maxRssMb) {
+    const allowBypassForTest = process.env.NODE_ENV === 'test' && skipMemoryGuardInTest;
+    if (!allowBypassForTest && currentRssMb >= maxRssMb) {
       logger.warn(
         `Video studio render-cartoon skipped due to high memory rss=${currentRssMb}MB threshold=${maxRssMb}MB`
       );

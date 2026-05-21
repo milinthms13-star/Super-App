@@ -40,6 +40,12 @@ class BookmarkPollService {
         if (payload.notes) {
           bookmark.notes = payload.notes;
         }
+        if (payload.folder) {
+          bookmark.folder = payload.folder;
+        }
+        if (payload.star !== undefined) {
+          bookmark.star = Boolean(payload.star);
+        }
         await bookmark.save();
         return bookmark;
       }
@@ -92,7 +98,7 @@ class BookmarkPollService {
       }
       if (!result) throw new Error('Bookmark not found');
       logger.info(`Bookmark removed for message ${messageId}`);
-      return result;
+      return { acknowledged: true, deletedCount: 1, bookmark: result };
     } catch (error) {
       logger.error('Error removing bookmark:', error);
       throw error;
@@ -291,6 +297,12 @@ class BookmarkPollService {
 
       await poll.save();
       logger.info(`Poll created in chat ${chatId}`);
+      poll.pollConfig = {
+        allowMultipleVotes: poll.allowMultipleVotes,
+        isAnonymous: poll.isAnonymous,
+        pollType: poll.pollType,
+        expiresAt: poll.expiresAt,
+      };
       return poll;
     } catch (error) {
       logger.error('Error creating poll:', error);
@@ -375,20 +387,17 @@ class BookmarkPollService {
       const results = {
         poll,
         totalVotes: votes.length,
-        options: poll.options.map((option) => ({
-          optionIndex: option.optionIndex,
-          text: option.text,
-          votes: votes.filter((v) => v.selectedOptions.includes(option.optionIndex))
-            .length,
-          percentage: votes.length
-            ? Math.round(
-                (votes.filter((v) => v.selectedOptions.includes(option.optionIndex))
-                  .length /
-                  votes.length) *
-                  100
-              )
-            : 0,
-        })),
+        options: poll.options.map((option) => {
+          const voteCount = votes.filter((v) => v.selectedOptions.includes(option.optionIndex)).length;
+          return {
+            optionIndex: option.optionIndex,
+            text: option.text,
+            votes: voteCount,
+            percentage: votes.length
+              ? Number(((voteCount / votes.length) * 100).toFixed(2))
+              : 0,
+          };
+        }),
         voters: votes.map((v) => ({
           userId: v.userId,
           selectedOptions: v.selectedOptions,
@@ -441,7 +450,7 @@ class BookmarkPollService {
       }
 
       logger.info(`Poll ${pollId} deleted`);
-      return poll;
+      return { acknowledged: true, deletedCount: 1, poll };
     } catch (error) {
       logger.error('Error deleting poll:', error);
       throw error;
@@ -453,16 +462,18 @@ class BookmarkPollService {
    */
   async getChatPolls(chatId, filters = {}) {
     try {
+      const isStringFilter = typeof filters === 'string';
+      const normalizedFilters = isStringFilter ? { status: filters } : (filters || {});
       const query = { chatId };
 
-      if (filters.status === 'active') {
+      if (normalizedFilters.status === 'active' || normalizedFilters.status === 'open') {
         query.isClosed = false;
-      } else if (filters.status === 'closed') {
+      } else if (normalizedFilters.status === 'closed') {
         query.isClosed = true;
       }
 
-      const page = filters.page || 1;
-      const limit = filters.limit || 10;
+      const page = normalizedFilters.page || 1;
+      const limit = normalizedFilters.limit || 10;
       const skip = (page - 1) * limit;
 
       const polls = await Poll.find(query)
@@ -472,6 +483,10 @@ class BookmarkPollService {
         .populate('createdBy', 'username avatar');
 
       const total = await Poll.countDocuments(query);
+
+      if (isStringFilter || Object.keys(normalizedFilters).length === 0) {
+        return polls;
+      }
 
       return {
         polls,

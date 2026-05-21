@@ -39,6 +39,18 @@ class SchedulingService {
         );
       }
 
+      if (!scheduledTime) {
+        throw new Error('Scheduled time is required');
+      }
+
+      const scheduledDate = new Date(scheduledTime);
+      if (Number.isNaN(scheduledDate.getTime())) {
+        throw new Error('Invalid scheduled time');
+      }
+      if (scheduledDate <= new Date()) {
+        throw new Error('Cannot schedule messages in the past');
+      }
+
       // Ensure mongoose is connected (helps tests that rely on in-memory MongoDB)
       if (mongoose.connection.readyState !== 1) {
         const uri = process.env.MONGO_TEST_URI || process.env.MONGODB_URI || process.env.DATABASE_URL;
@@ -56,7 +68,7 @@ class SchedulingService {
         userId,
         content,
         mediaUrls,
-        scheduledTime,
+        scheduledTime: scheduledDate,
         status: 'scheduled',
         messageType: options.messageType || 'text',
         timezone: options.timezone,
@@ -136,6 +148,9 @@ class SchedulingService {
       if (!existing) {
         throw new Error('Scheduled message not found');
       }
+      if (existing.status === 'sent') {
+        throw new Error('Cannot update message that is already sent');
+      }
 
       const message = await ScheduledMessage.findByIdAndUpdate(
         id,
@@ -156,15 +171,19 @@ class SchedulingService {
    */
   async cancelScheduledMessage(id) {
     try {
+      const existing = await ScheduledMessage.findById(id);
+      if (!existing) {
+        throw new Error('Scheduled message not found');
+      }
+      if (existing.status === 'sent') {
+        throw new Error('Cannot cancel message that is already sent');
+      }
+
       const message = await ScheduledMessage.findByIdAndUpdate(
         id,
         { status: 'cancelled', cancelledAt: new Date() },
         { new: true }
       );
-
-      if (!message) {
-        throw new Error('Scheduled message not found');
-      }
 
       logger.info(`Scheduled message ${id} cancelled`);
       if (!message.cancelledAt) {
@@ -255,18 +274,23 @@ class SchedulingService {
     try {
       // Backward-compatible input shape:
       // setMessageExpiration(messageId, { expiresInSeconds, expirationType })
-      if (
-        expiresInSeconds &&
-        typeof expiresInSeconds === 'object' &&
-        !Array.isArray(expiresInSeconds) &&
-        'expiresInSeconds' in expiresInSeconds
-      ) {
+      if (expiresInSeconds && typeof expiresInSeconds === 'object' && !Array.isArray(expiresInSeconds)) {
         const payload = expiresInSeconds;
+        const resolvedExpirationSeconds =
+          payload.expiresInSeconds ??
+          payload.timerSeconds ??
+          (payload.expirationType === 'self-destruct-after-read' ? 10 : undefined);
+        if (!resolvedExpirationSeconds || Number(resolvedExpirationSeconds) <= 0) {
+          throw new Error('Expiration seconds must be greater than zero');
+        }
         return this.setMessageExpiration(
           messageId,
-          payload.expiresInSeconds,
+          Number(resolvedExpirationSeconds),
           payload.expirationType || expirationType
         );
+      }
+      if (!expiresInSeconds || Number(expiresInSeconds) <= 0) {
+        throw new Error('Expiration seconds must be greater than zero');
       }
 
       const message = await Message.findById(messageId);
@@ -282,7 +306,7 @@ class SchedulingService {
         ownerId = scheduledMessage?.userId || new mongoose.Types.ObjectId();
       }
 
-      const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+      const expiresAt = new Date(Date.now() + Number(expiresInSeconds) * 1000);
 
       const expiration = new MessageExpiration({
         messageId,
@@ -315,9 +339,16 @@ class SchedulingService {
    */
   async enableSelfDestruct(messageId, timerSeconds = 10) {
     try {
+      const resolvedSeconds =
+        timerSeconds && typeof timerSeconds === 'object'
+          ? Number(timerSeconds.timerSeconds)
+          : Number(timerSeconds);
+      if (!resolvedSeconds || resolvedSeconds <= 0) {
+        throw new Error('Timer seconds must be greater than zero');
+      }
       return await this.setMessageExpiration(
         messageId,
-        timerSeconds,
+        resolvedSeconds,
         'self-destruct-after-read'
       );
     } catch (error) {
@@ -352,15 +383,9 @@ class SchedulingService {
    */
   async _deleteExpiredMessage(expiration) {
     try {
-      const message = await Message.findByIdAndDelete(expiration.messageId);
-
-      if (message) {
-        expiration.isExpired = true;
-        expiration.expiredAt = new Date();
-        await expiration.save();
-
-        logger.info(`Deleted expired message: ${expiration.messageId}`);
-      }
+      await Message.findByIdAndDelete(expiration.messageId);
+      await MessageExpiration.findByIdAndDelete(expiration._id);
+      logger.info(`Deleted expired message: ${expiration.messageId}`);
     } catch (error) {
       logger.error('Error deleting expired message:', error);
     }

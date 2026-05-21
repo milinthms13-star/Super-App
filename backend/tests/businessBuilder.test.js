@@ -42,7 +42,18 @@ describe('Business Builder API', () => {
   };
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection.readyState === 0) {
+      const mongoUri =
+        process.env.MONGO_TEST_URI ||
+        process.env.MONGODB_URI ||
+        process.env.DATABASE_URL;
+
+      if (!mongoUri) {
+        throw new Error('MongoDB test URI is not configured for businessBuilder.test');
+      }
+
+      await mongoose.connect(mongoUri);
+    } else if (mongoose.connection.readyState !== 1) {
       await new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           reject(new Error('MongoDB connection timeout in businessBuilder.test'));
@@ -86,10 +97,6 @@ describe('Business Builder API', () => {
       await Invoice.deleteMany({ userId: testUser._id });
       await MiniApp.deleteMany({ userId: testUser._id });
       await User.findByIdAndDelete(testUser._id);
-    }
-
-    if (mongoose.connection.readyState === 1) {
-      await mongoose.connection.close();
     }
   });
 

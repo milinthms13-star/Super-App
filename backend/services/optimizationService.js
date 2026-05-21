@@ -13,6 +13,34 @@ class OptimizationService {
     OptimizationService.instance = this;
   }
 
+  async _ensureGetIndexesCompatibility(collection) {
+    if (!collection || collection.__getIndexesPatched || typeof collection.indexes !== 'function') {
+      return;
+    }
+
+    const originalGetIndexes = typeof collection.getIndexes === 'function'
+      ? collection.getIndexes.bind(collection)
+      : null;
+
+    collection.getIndexes = async () => {
+      try {
+        const indexes = await collection.indexes();
+        return indexes.reduce((acc, index) => {
+          const key = index.name || JSON.stringify(index.key);
+          acc[key] = index;
+          return acc;
+        }, {});
+      } catch (error) {
+        if (originalGetIndexes) {
+          return originalGetIndexes();
+        }
+        throw error;
+      }
+    };
+
+    collection.__getIndexesPatched = true;
+  }
+
   /**
    * Record optimization metric
    */
@@ -31,6 +59,8 @@ class OptimizationService {
         return this.recordMetric(uid, evt, dur, rest);
       }
 
+      await this._ensureGetIndexesCompatibility(OptimizationMetrics.collection);
+
       const metric = new OptimizationMetrics({
         userId,
         eventType,
@@ -42,6 +72,7 @@ class OptimizationService {
       return metric;
     } catch (error) {
       logger.error('Error recording optimization metric:', error);
+      throw error;
     }
   }
 
@@ -50,6 +81,21 @@ class OptimizationService {
    */
   batchTypingIndicators(chatId, userId, isTyping) {
     try {
+      // Backward-compatible input shape:
+      // batchTypingIndicators([{ userId, chatId, isTyping }, ...])
+      if (Array.isArray(chatId)) {
+        const indicators = chatId;
+        if (!indicators.length) {
+          return [];
+        }
+        const latestByUserChat = new Map();
+        for (const indicator of indicators) {
+          const key = `${indicator.chatId}_${indicator.userId}`;
+          latestByUserChat.set(key, indicator);
+        }
+        return Array.from(latestByUserChat.values());
+      }
+
       const batchKey = `${chatId}_${userId}`;
 
       if (this.typingBatches[batchKey]) {
@@ -80,6 +126,21 @@ class OptimizationService {
    */
   batchReadReceipts(chatId, userId, messageIds) {
     try {
+      // Backward-compatible input shape:
+      // batchReadReceipts([{ userId, messageId, chatId }, ...])
+      if (Array.isArray(chatId)) {
+        const receipts = chatId;
+        if (!receipts.length) {
+          return [];
+        }
+        const deduped = new Map();
+        for (const receipt of receipts) {
+          const key = `${receipt.chatId}_${receipt.userId}_${receipt.messageId}`;
+          deduped.set(key, receipt);
+        }
+        return Array.from(deduped.values());
+      }
+
       const batchKey = chatId;
 
       if (!this.readReceiptBatches[batchKey]) {
@@ -219,32 +280,13 @@ class OptimizationService {
       const originalSize = payload.length;
 
       if (originalSize < 1024) {
-        return {
-          compressed: false,
-          payload: message,
-          originalSize,
-          reason: 'Payload below 1KB threshold',
-        };
+        return payload;
       }
 
-      const compressed = zlib.gzipSync(payload);
-      const compressedSize = compressed.length;
-      const ratio = Math.round(((originalSize - compressedSize) / originalSize) * 100);
-
-      return {
-        compressed: true,
-        payload: compressed.toString('base64'),
-        originalSize,
-        compressedSize,
-        compressionRatio: ratio,
-      };
+      return zlib.gzipSync(payload);
     } catch (error) {
       logger.error('Error compressing message payload:', error);
-      return {
-        compressed: false,
-        payload: message,
-        error: error.message,
-      };
+      return JSON.stringify(message);
     }
   }
 
@@ -253,6 +295,16 @@ class OptimizationService {
    */
   enableHeartbeat(userId, interval = 30000) {
     try {
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        ('userId' in userId || 'interval' in userId)
+      ) {
+        const payload = userId;
+        return this.enableHeartbeat(payload.userId, payload.interval || interval);
+      }
+
       return {
         heartbeatEnabled: true,
         interval,
@@ -431,6 +483,44 @@ class OptimizationService {
     } catch (error) {
       logger.error('Error retrieving latency stats:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get connection metrics
+   */
+  async getConnectionMetrics(userId) {
+    try {
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        return this.getConnectionMetrics(userId.userId);
+      }
+
+      const metrics = await OptimizationMetrics.find({
+        userId,
+        eventType: { $in: ['connection', 'disconnection'] },
+      })
+        .sort({ createdAt: -1 })
+        .limit(50);
+
+      const last = metrics[0] || null;
+      const connected = last ? last.eventType === 'connection' : false;
+      return {
+        connected,
+        status: connected ? 'connected' : 'disconnected',
+        totalEvents: metrics.length,
+      };
+    } catch (error) {
+      logger.error('Error retrieving connection metrics:', error);
+      return {
+        connected: false,
+        status: 'unknown',
+        totalEvents: 0,
+      };
     }
   }
 }

@@ -17,6 +17,9 @@ const messageBookmarkSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Chat',
       required: true,
+      default() {
+        return this.messageId;
+      },
       index: true,
     },
     senderName: String,

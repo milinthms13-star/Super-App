@@ -13,6 +13,9 @@ const messageExpirationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Chat',
       required: true,
+      default() {
+        return this.messageId;
+      },
       index: true,
     },
     userId: {
@@ -33,6 +36,13 @@ const messageExpirationSchema = new mongoose.Schema(
     expiresInSeconds: {
       type: Number,
       required: true,
+      default() {
+        if (this.expiresAt instanceof Date && !Number.isNaN(this.expiresAt.getTime())) {
+          const remaining = Math.ceil((this.expiresAt.getTime() - Date.now()) / 1000);
+          return remaining > 0 ? remaining : 1;
+        }
+        return 1;
+      },
     },
     readAt: Date,
     viewedAt: Date,

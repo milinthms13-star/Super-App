@@ -127,8 +127,8 @@ MiniAppSchema.index({ userId: 1, createdAt: -1 });
 MiniAppSchema.index({ slug: 1 });
 MiniAppSchema.index({ appType: 1 });
 
-// Pre-save middleware to generate slug if not provided
-MiniAppSchema.pre('save', function(next) {
+// Generate slug before validation so required+unique checks can pass.
+MiniAppSchema.pre('validate', function(next) {
   if (!this.slug && this.appName) {
     this.slug = this.appName
       .toLowerCase()

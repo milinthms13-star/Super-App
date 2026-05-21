@@ -300,7 +300,9 @@ const Messaging = () => {
   const [isNetworkOnline, setIsNetworkOnline] = useState(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine !== false
   );
-   const [outboxEntries, setOutboxEntries] = useState([]);
+  const [outboxEntries, setOutboxEntries] = useState([]);
+  const [chatrooms, setChatrooms] = useState([]);
+  const [loadingChatrooms, setLoadingChatrooms] = useState(false);
   const [selectedChatroom, setSelectedChatroom] = useState(null);
   const [showChatroomCreation, setShowChatroomCreation] = useState(false);
   const [showChatroomBrowser, setShowChatroomBrowser] = useState(false);
@@ -308,6 +310,8 @@ const Messaging = () => {
   const [linkupTheme, setLinkupTheme] = useState(() => readStoredLinkUpTheme());
   const [messagingDiagnostics, setMessagingDiagnostics] = useState({});
   const [messagingScore, setMessagingScore] = useState(0);
+  const [isOptimizingMessaging, setIsOptimizingMessaging] = useState(false);
+  const [lastOutboxFlushAt, setLastOutboxFlushAt] = useState('');
 
 
   const socketRef = useRef(null);

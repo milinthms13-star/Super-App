@@ -15,6 +15,7 @@ const optimizationMetricsSchema = new mongoose.Schema(
         'message-receive',
         'typing-indicator',
         'read-receipt',
+        'file-upload',
         'connection',
         'disconnection',
         'batch-delivery',

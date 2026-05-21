@@ -97,6 +97,8 @@ const normalizeContact = (contact = {}) => ({
 
 const normalizeReview = (review = {}) => ({
   userId: String(review?.userId || ''),
+  source: String(review?.source || 'direct'),
+  orderId: review?.orderId ? String(review.orderId) : '',
   rating: Number(review?.rating || 0),
   comment: String(review?.comment || '').trim(),
   createdAt: review?.createdAt || new Date().toISOString(),

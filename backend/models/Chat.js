@@ -21,6 +21,11 @@ const chatSchema = new mongoose.Schema(
     ],
 
     // Group-specific fields
+    name: {
+      type: String,
+      sparse: true,
+    },
+
     groupName: {
       type: String,
       sparse: true, // Only required for group chats
@@ -111,6 +116,12 @@ const chatSchema = new mongoose.Schema(
         },
       },
     ],
+
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      sparse: true,
+    },
 
     // Deletion soft delete - still visible but marked as deleted
     isDeleted: {

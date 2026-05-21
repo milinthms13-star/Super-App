@@ -105,12 +105,29 @@ describe("KidsStoryVideoMaker smoke", () => {
       "http://localhost/api/video-studio/create"
     );
 
-    const renderResponse = okResponse(
+    const jobCreateResponse = okResponse(
       {
         success: true,
-        videoUrl: "http://localhost/videos/story.mp4",
+        jobId: "job-1",
+        progress: 8,
       },
-      "http://localhost/api/video-studio/render"
+      "http://localhost/api/kids-video-hf/jobs"
+    );
+
+    const jobStatusResponse = okResponse(
+      {
+        success: true,
+        status: "completed",
+        progress: 100,
+        message: "Render complete.",
+        result: {
+          videoUrl: "http://localhost/videos/story.mp4",
+          project: {
+            projectId: "proj-1",
+          },
+        },
+      },
+      "http://localhost/api/kids-video-hf/jobs/job-1"
     );
 
     const downloadResponse = okResponse(
@@ -138,7 +155,8 @@ describe("KidsStoryVideoMaker smoke", () => {
         )
       )
       .mockResolvedValueOnce(createResponse)
-      .mockResolvedValueOnce(renderResponse)
+      .mockResolvedValueOnce(jobCreateResponse)
+      .mockResolvedValueOnce(jobStatusResponse)
       .mockResolvedValueOnce(downloadResponse);
 
     const clickSpy = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});

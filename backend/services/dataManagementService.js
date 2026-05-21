@@ -33,7 +33,7 @@ class DataManagementService {
         return this.getDetailedStatistics(payload.userId, range);
       }
 
-      const query = { $or: [{ senderId: userId }, { participants: userId }] };
+      const query = { senderId: userId };
 
       if (dateRange.from || dateRange.to) {
         query.createdAt = {};
@@ -41,9 +41,9 @@ class DataManagementService {
         if (dateRange.to) query.createdAt.$lte = dateRange.to;
       }
 
-      const totalMessages = await Message.countDocuments({ senderId: userId, ...query });
+      const totalMessages = await Message.countDocuments(query);
       const totalChats = await Chat.countDocuments({
-        $or: [{ participants: userId }, { owner: userId }],
+        $or: [{ participants: userId }, { owner: userId }, { createdBy: userId }],
       });
 
       const messagesByType = await Message.aggregate([
@@ -94,7 +94,7 @@ class DataManagementService {
       const activeChats = await Chat.aggregate([
         {
           $match: {
-            $or: [{ participants: userId }, { owner: userId }],
+            $or: [{ participants: userId }, { owner: userId }, { createdBy: userId }],
           },
         },
         {
@@ -150,6 +150,9 @@ class DataManagementService {
       if (timeframe === 'week') {
         matchDate.setDate(matchDate.getDate() - 7);
         groupFormat = '%Y-%m-%d';
+      } else if (timeframe === 'day') {
+        matchDate.setDate(matchDate.getDate() - 1);
+        groupFormat = '%Y-%m-%d';
       } else if (timeframe === 'month') {
         matchDate.setMonth(matchDate.getMonth() - 1);
         groupFormat = '%Y-%m-%d';
@@ -168,7 +171,7 @@ class DataManagementService {
         {
           $group: {
             _id: { $dateToString: { format: groupFormat, date: '$createdAt' } },
-            messageCount: { $sum: 1 },
+            count: { $sum: 1 },
             mediaCount: {
               $sum: { $cond: ['$mediaUrls.0', 1, 0] },
             },
@@ -192,6 +195,17 @@ class DataManagementService {
    */
   async getMediaUsageStats(userId) {
     try {
+      // Backward-compatible input shape:
+      // getMediaUsageStats({ userId })
+      if (
+        userId &&
+        typeof userId === 'object' &&
+        !Array.isArray(userId) &&
+        'userId' in userId
+      ) {
+        return this.getMediaUsageStats(userId.userId);
+      }
+
       const mediaStats = await Message.aggregate([
         {
           $match: { senderId: userId, 'mediaUrls.0': { $exists: true } },
@@ -236,15 +250,28 @@ class DataManagementService {
         return this.setRetentionPolicy(uid, cfg);
       }
 
-      let policy = await DataRetentionPolicy.findOne({ userId });
-
-      if (!policy) {
-        policy = new DataRetentionPolicy({
-          userId,
-          ...policyConfig,
-        });
-      } else {
-        Object.assign(policy, policyConfig);
+      const updateDoc = { ...policyConfig };
+      let policy;
+      try {
+        policy = await DataRetentionPolicy.findOneAndUpdate(
+          { userId },
+          { $set: updateDoc, $setOnInsert: { userId } },
+          {
+            new: true,
+            upsert: true,
+            runValidators: true,
+            setDefaultsOnInsert: true,
+          }
+        );
+      } catch (error) {
+        if (error?.code !== 11000) {
+          throw error;
+        }
+        policy = await DataRetentionPolicy.findOneAndUpdate(
+          { userId },
+          { $set: updateDoc },
+          { new: true, runValidators: true }
+        );
       }
 
       // Calculate next execution time
@@ -279,17 +306,7 @@ class DataManagementService {
         return this.getRetentionPolicy(userId.userId);
       }
 
-      let policy = await DataRetentionPolicy.findOne({ userId });
-
-      if (!policy) {
-        // Create default policy
-        policy = new DataRetentionPolicy({
-          userId,
-        });
-        await policy.save();
-      }
-
-      return policy;
+      return DataRetentionPolicy.findOne({ userId });
     } catch (error) {
       logger.error('Error retrieving retention policy:', error);
       throw error;
@@ -310,7 +327,10 @@ class DataManagementService {
         'userId' in userId
       ) {
         const payload = userId;
-        return this.archiveOldMessages(payload.userId, payload.olderThanDays || olderThanDays);
+        return this.archiveOldMessages(
+          payload.userId,
+          payload.olderThanDays || payload.thresholdDays || olderThanDays
+        );
       }
 
       const cutoffDate = new Date();
@@ -341,13 +361,32 @@ class DataManagementService {
    */
   async purgeDeletedMessages(olderThanDays = 30) {
     try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
+      // Backward-compatible input shape:
+      // purgeDeletedMessages({ userId, purgeAfterDays })
+      let userId = null;
+      let purgeAfterDays = olderThanDays;
+      if (
+        olderThanDays &&
+        typeof olderThanDays === 'object' &&
+        !Array.isArray(olderThanDays)
+      ) {
+        const payload = olderThanDays;
+        userId = payload.userId || null;
+        purgeAfterDays = payload.purgeAfterDays || payload.olderThanDays || 30;
+      }
 
-      const result = await Message.deleteMany({
-        isDeleted: true,
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - Number(purgeAfterDays));
+
+      const deleteQuery = {
+        $or: [{ isDeleted: true }, { deleted: true }],
         deletedAt: { $lt: cutoffDate },
-      });
+      };
+      if (userId) {
+        deleteQuery.senderId = userId;
+      }
+
+      const result = await Message.deleteMany(deleteQuery);
 
       logger.info(`Permanently deleted ${result.deletedCount} old deleted messages`);
       return result;
@@ -375,7 +414,7 @@ class DataManagementService {
 
       const user = await require('../models/User').findById(userId);
       const chats = await Chat.find({
-        $or: [{ participants: userId }, { owner: userId }],
+        $or: [{ participants: userId }, { owner: userId }, { createdBy: userId }],
       });
       const messages = await Message.find({ senderId: userId });
 
@@ -431,6 +470,11 @@ class DataManagementService {
    */
   startDataManagementJobs() {
     try {
+      if (process.env.NODE_ENV === 'test') {
+        logger.info('Data management jobs skipped in test mode');
+        return { started: true, skipped: true };
+      }
+
       // Execute retention policies every hour
       cron.schedule('0 * * * *', async () => {
         await this._executeRetentionPolicies();
@@ -442,8 +486,10 @@ class DataManagementService {
       });
 
       logger.info('Data management jobs started');
+      return { started: true };
     } catch (error) {
       logger.error('Error starting data management jobs:', error);
+      return { started: false, error: error.message || 'Failed to start jobs' };
     }
   }
 

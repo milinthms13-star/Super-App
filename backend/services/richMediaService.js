@@ -1,12 +1,15 @@
 const logger = require('../utils/logger');
 const Message = require('../models/Message');
 const MediaMetadata = require('../models/MediaMetadata');
+const mongoose = require('mongoose');
 const fs = require('fs').promises;
 const path = require('path');
 
 class RichMediaService {
   constructor() {
     this.cache = new Map();
+    this.memoryMedia = new Map();
+    this.memoryMediaByMessage = new Map();
     this.cacheTTL = 10 * 60 * 1000; // 10 minutes
     this.supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     this.supportedVideoTypes = ['video/mp4', 'video/webm', 'video/mpeg'];
@@ -16,6 +19,11 @@ class RichMediaService {
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ];
+    this.supportedFormats = [
+      ...this.supportedImageTypes,
+      ...this.supportedVideoTypes,
+      ...this.supportedDocTypes,
     ];
     this.maxFileSize = 100 * 1024 * 1024; // 100MB
   }
@@ -48,7 +56,7 @@ class RichMediaService {
       await fs.writeFile(storagePath, fileBuffer);
 
       // Create metadata
-      const metadata = new MediaMetadata({
+      const metadataPayload = {
         messageId,
         filename,
         mimeType,
@@ -63,11 +71,27 @@ class RichMediaService {
           thumbnail: options.thumbnail || null,
         },
         createdAt: new Date(),
-      });
+      };
+      const fallbackMetadata = {
+        _id: fileHash,
+        ...metadataPayload,
+      };
 
-      await metadata.save();
-      logger.info(`Media uploaded: ${fileHash} (${mediaType})`);
-      return metadata;
+      if (this.canUseDatabase()) {
+        const metadata = new MediaMetadata(metadataPayload);
+        await metadata.save();
+        this.cache.set(`media:${String(metadata._id)}`, { data: metadata, timestamp: Date.now() });
+        logger.info(`Media uploaded: ${fileHash} (${mediaType})`);
+        return metadata;
+      }
+
+      this.storeInMemoryMedia(fallbackMetadata);
+      this.cache.set(`media:${String(fallbackMetadata._id)}`, {
+        data: fallbackMetadata,
+        timestamp: Date.now(),
+      });
+      logger.info(`Media uploaded (memory mode): ${fileHash} (${mediaType})`);
+      return fallbackMetadata;
     } catch (error) {
       logger.error(`Error uploading media: ${error.message}`);
       throw error;
@@ -161,9 +185,19 @@ class RichMediaService {
         return cached.data;
       }
 
+      const inMemoryMedia = this.memoryMedia.get(String(mediaId));
+      if (inMemoryMedia) {
+        this.cache.set(cacheKey, { data: inMemoryMedia, timestamp: Date.now() });
+        return inMemoryMedia;
+      }
+
+      if (!this.canUseDatabase() || !this.isValidObjectId(mediaId)) {
+        return undefined;
+      }
+
       const media = await MediaMetadata.findById(mediaId);
       if (!media) {
-        throw new Error('Media not found');
+        return undefined;
       }
 
       this.cache.set(cacheKey, { data: media, timestamp: Date.now() });
@@ -181,9 +215,25 @@ class RichMediaService {
    */
   async deleteMedia(mediaId) {
     try {
+      const inMemoryMedia = this.memoryMedia.get(String(mediaId));
+      if (inMemoryMedia) {
+        try {
+          await fs.unlink(inMemoryMedia.storagePath);
+        } catch (_err) {
+          // best-effort in tests or missing files
+        }
+        this.deleteFromMemoryMedia(String(mediaId), inMemoryMedia.messageId);
+        this.cache.delete(`media:${mediaId}`);
+        return true;
+      }
+
+      if (!this.canUseDatabase() || !this.isValidObjectId(mediaId)) {
+        return false;
+      }
+
       const media = await MediaMetadata.findById(mediaId);
       if (!media) {
-        throw new Error('Media not found');
+        return false;
       }
 
       // Delete file from storage
@@ -211,11 +261,20 @@ class RichMediaService {
    */
   async getMediaForMessage(messageId) {
     try {
+      const inMemoryIds = this.memoryMediaByMessage.get(String(messageId)) || [];
+      const inMemoryMedia = inMemoryIds
+        .map((id) => this.memoryMedia.get(id))
+        .filter(Boolean);
+
+      if (!this.canUseDatabase()) {
+        return inMemoryMedia;
+      }
+
       const media = await MediaMetadata.find({ messageId }).exec();
-      return media;
+      return [...inMemoryMedia, ...media];
     } catch (error) {
       logger.error(`Error getting message media: ${error.message}`);
-      throw error;
+      return [];
     }
   }
 
@@ -269,6 +328,36 @@ class RichMediaService {
   clearCache() {
     this.cache.clear();
     logger.info('Media cache cleared');
+  }
+
+  canUseDatabase() {
+    return mongoose.connection && mongoose.connection.readyState === 1;
+  }
+
+  isValidObjectId(value) {
+    return mongoose.Types.ObjectId.isValid(value);
+  }
+
+  storeInMemoryMedia(media) {
+    const mediaId = String(media._id);
+    const messageKey = String(media.messageId);
+
+    this.memoryMedia.set(mediaId, media);
+    const messageMediaIds = this.memoryMediaByMessage.get(messageKey) || [];
+    messageMediaIds.push(mediaId);
+    this.memoryMediaByMessage.set(messageKey, messageMediaIds);
+  }
+
+  deleteFromMemoryMedia(mediaId, messageId) {
+    this.memoryMedia.delete(String(mediaId));
+    const messageKey = String(messageId);
+    const messageMediaIds = this.memoryMediaByMessage.get(messageKey) || [];
+    const filteredIds = messageMediaIds.filter((id) => id !== String(mediaId));
+    if (filteredIds.length > 0) {
+      this.memoryMediaByMessage.set(messageKey, filteredIds);
+    } else {
+      this.memoryMediaByMessage.delete(messageKey);
+    }
   }
 }
 

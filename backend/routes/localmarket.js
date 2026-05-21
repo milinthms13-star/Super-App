@@ -366,6 +366,8 @@ router.post("/orders/:orderId/review", authenticate, async (req, res) => {
       ...(Array.isArray(shop?.reviews) ? shop.reviews : []),
       {
         userId: getAuthenticatedUserId(req),
+        source: "order",
+        orderId: order._id,
         rating,
         comment,
         createdAt: new Date(),
@@ -400,9 +402,11 @@ router.post("/shops/:shopId/review", authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: "Shop not found" });
     }
 
-    const existingReviewByUser = (Array.isArray(shop.reviews) ? shop.reviews : []).find(
-      (entry) => getComparableId(entry?.userId) === getAuthenticatedUserId(req)
-    );
+    const existingReviewByUser = (Array.isArray(shop.reviews) ? shop.reviews : []).find((entry) => {
+      const isSameUser = getComparableId(entry?.userId) === getAuthenticatedUserId(req);
+      const isDirectReview = (entry?.source || "direct") !== "order";
+      return isSameUser && isDirectReview;
+    });
     if (existingReviewByUser) {
       return res.status(409).json({
         success: false,
@@ -414,6 +418,7 @@ router.post("/shops/:shopId/review", authenticate, async (req, res) => {
       ...(Array.isArray(shop.reviews) ? shop.reviews : []),
       {
         userId: getAuthenticatedUserId(req),
+        source: "direct",
         rating,
         comment,
         createdAt: new Date(),

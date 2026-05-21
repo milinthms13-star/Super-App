@@ -31,7 +31,8 @@ const getFileTypeFromMime = (mimetype) => {
 
 const VALID_CATEGORIES = ['Work', 'Personal', 'Urgent'];
 const VALID_PRIORITIES = ['Low', 'Medium', 'High'];
-const VALID_REMINDERS = ['Email', 'In-app', 'SMS', 'Call', 'WhatsApp', 'Telegram', 'Push'];
+const BASE_VALID_REMINDERS = ['Email', 'In-app', 'SMS', 'Call'];
+const EXTENDED_VALID_REMINDERS = ['WhatsApp', 'Telegram', 'Push'];
 const VALID_RECURRING = ['none', 'daily', 'weekly', 'monthly'];
 const VALID_FILE_TYPES = ['voice', 'image', 'document', 'video', 'audio'];
 const VALID_TRUSTED_CONTACT_RELATIONSHIPS = ['family', 'friend', 'caregiver', 'colleague', 'other'];
@@ -101,7 +102,10 @@ const buildReminderScheduleTime = (dueDateValue, dueTime = '') => {
   return scheduleTime;
 };
 
-const validateReminderFields = ({ title, category, priority, reminders, recurring, dueDate }, { partial = false } = {}) => {
+const validateReminderFields = (
+  { title, category, priority, reminders, recurring, dueDate },
+  { partial = false, allowExtendedReminderTypes = false } = {}
+) => {
   if (!partial || title !== undefined) {
     if (!String(title || '').trim()) {
       return 'Title is required';
@@ -130,7 +134,11 @@ const validateReminderFields = ({ title, category, priority, reminders, recurrin
       return 'Select at least one reminder type';
     }
 
-    if (!reminders.every((reminder) => VALID_REMINDERS.includes(reminder))) {
+    const validReminderTypes = allowExtendedReminderTypes
+      ? [...BASE_VALID_REMINDERS, ...EXTENDED_VALID_REMINDERS]
+      : BASE_VALID_REMINDERS;
+
+    if (!reminders.every((reminder) => validReminderTypes.includes(reminder))) {
       return 'Invalid reminder types';
     }
   }
@@ -275,6 +283,8 @@ router.post('/', async (req, res) => {
       reminders,
       recurring,
       dueDate,
+    }, {
+      allowExtendedReminderTypes: true,
     });
 
     if (validationMessage) {
@@ -380,7 +390,7 @@ router.put('/:id', async (req, res) => {
         recurring,
         dueDate,
       },
-      { partial: true }
+      { partial: true, allowExtendedReminderTypes: true }
     );
 
     if (validationMessage) {
@@ -710,6 +720,8 @@ router.post('/voice-call', async (req, res) => {
       reminders,
       recurring,
       dueDate
+    }, {
+      allowExtendedReminderTypes: true,
     });
 
     if (validationMessage) {

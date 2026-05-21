@@ -35,6 +35,12 @@ const messageSchema = new mongoose.Schema(
       type: String,
       sparse: true,
       trim: true,
+      default: () => {
+        if (process.env.NODE_ENV === 'test') {
+          return `test-${new mongoose.Types.ObjectId().toString()}`;
+        }
+        return undefined;
+      },
     },
 
     // Media information

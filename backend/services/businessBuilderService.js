@@ -547,6 +547,9 @@ class BusinessBuilderService {
         userId,
         businessId: business._id,
         invoiceNumber,
+        // `totalAmount` is required by schema validation and recalculated in pre-save.
+        // Seed a placeholder so validation passes when client omits it.
+        totalAmount: Number(invoiceData?.totalAmount || 0),
       });
 
       return await invoice.save();
@@ -1580,7 +1583,7 @@ class BusinessBuilderService {
 
   // Private helper methods for business plan generation
   generateSummary(business, costSummary) {
-    return `${business.businessName} is a ${business.businessType.toLowerCase()} business located in ${business.address.city || 'India'}. The business requires an initial investment of ₹${costSummary.oneTimeInvestment.toLocaleString()} and expects monthly revenue of ₹${costSummary.expectedMonthlyRevenue.toLocaleString()}.`;
+    return `${business.businessName} is a ${business.businessType.toLowerCase()} business located in ${business.address.city || 'India'}. The business requires an initial investment of ₹${costSummary.oneTimeInvestment.toLocaleString()} and expects monthly revenue of ₹${costSummary.revenue.toLocaleString()}.`;
   }
 
   generateMarketAnalysis(business) {
@@ -1605,7 +1608,7 @@ class BusinessBuilderService {
   }
 
   generateRevenueModel(business, costSummary) {
-    return `Revenue model focuses on ${business.businessType.toLowerCase()} services with expected monthly revenue of ₹${costSummary.expectedMonthlyRevenue.toLocaleString()}. Primary revenue streams include direct sales and service fees.`;
+    return `Revenue model focuses on ${business.businessType.toLowerCase()} services with expected monthly revenue of ₹${costSummary.revenue.toLocaleString()}. Primary revenue streams include direct sales and service fees.`;
   }
 
   generateCostEstimation(costSummary) {
