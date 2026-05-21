@@ -76,6 +76,17 @@ const AVAILABLE_360_STYLES = [
   },
 ];
 
+const QUICK_FILTER_PRESETS = {
+  Normal: "none",
+  Warm: "sepia(20%) saturate(130%) brightness(105%)",
+  Cool: "contrast(105%) saturate(120%) hue-rotate(15deg)",
+  Vintage: "sepia(55%) contrast(95%) brightness(95%)",
+  Mono: "grayscale(100%) contrast(110%)",
+  Cinematic: "contrast(120%) saturate(140%) brightness(90%)",
+};
+
+const QUICK_STICKERS = ["✨", "❤️", "🌸", "👑", "🕶️", "🎉", "🪔", "⭐"];
+
 const toTagList = (value = "") =>
   String(value || "")
     .split(/[,\n]+/)
@@ -98,6 +109,13 @@ const PhotoStudioAIAR = () => {
   const [exportUnlock, setExportUnlock] = useState(false);
   const [studio360Style, setStudio360Style] = useState("spherical");
   const [studio360Result, setStudio360Result] = useState(null);
+  const [quickFilter, setQuickFilter] = useState("Normal");
+  const [quickSticker, setQuickSticker] = useState("✨");
+  const [quickCaption, setQuickCaption] = useState("");
+  const [quickBrightness, setQuickBrightness] = useState(100);
+  const [quickContrast, setQuickContrast] = useState(100);
+  const [quickBlur, setQuickBlur] = useState(0);
+  const [quickRotation, setQuickRotation] = useState(0);
 
   const [arConfig, setArConfig] = useState({
     effectId: "live-face-filter",
@@ -128,6 +146,7 @@ const PhotoStudioAIAR = () => {
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const quickCanvasRef = useRef(null);
 
   const token = getStoredAuthToken();
   const isAuthenticated = Boolean(token);
@@ -188,6 +207,11 @@ const PhotoStudioAIAR = () => {
     const rule = AVAILABLE_360_STYLES.find((item) => item.value === studio360Style);
     return rule?.description || "Choose a 360° style and render your image into a premium panorama.";
   }, [studio360Style]);
+
+  const quickFilterStyle = useMemo(() => {
+    const baseFilter = QUICK_FILTER_PRESETS[quickFilter] || "none";
+    return `${baseFilter} brightness(${quickBrightness}%) contrast(${quickContrast}%) blur(${quickBlur}px)`;
+  }, [quickBlur, quickBrightness, quickContrast, quickFilter]);
 
   useEffect(() => {
     setStudio360Result(null);
@@ -634,6 +658,83 @@ const PhotoStudioAIAR = () => {
     });
   }, [planRules, pushStatus, request, withBusy]);
 
+  const handleQuickBackgroundRemove = useCallback(() => {
+    pushStatus("success", "AI background removal placeholder active. Connect /photo-studio/ai/background-remove for production.");
+  }, [pushStatus]);
+
+  const handleQuickExport = useCallback(() => {
+    if (!currentAssetUrl) {
+      pushStatus("error", "Upload an image first to export from Quick 10/10 Studio.");
+      return;
+    }
+
+    const canvas = quickCanvasRef.current;
+    if (!canvas) {
+      pushStatus("error", "Canvas is not ready.");
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.src = currentAssetUrl;
+
+    image.onload = () => {
+      const width = Number(editor.resize?.width || image.width || 1080);
+      const height = Number(editor.resize?.height || image.height || 1080);
+      canvas.width = width;
+      canvas.height = height;
+
+      context.clearRect(0, 0, width, height);
+      context.save();
+      context.translate(width / 2, height / 2);
+      context.rotate((quickRotation * Math.PI) / 180);
+      context.filter = quickFilterStyle;
+      context.drawImage(image, -width / 2, -height / 2, width, height);
+      context.restore();
+      context.filter = "none";
+
+      context.font = `${Math.max(42, Math.round(width * 0.07))}px Arial`;
+      context.textAlign = "center";
+      context.fillText(quickSticker, width / 2, Math.max(70, Math.round(height * 0.14)));
+
+      if (quickCaption.trim()) {
+        const barHeight = Math.max(88, Math.round(height * 0.11));
+        const marginX = Math.max(30, Math.round(width * 0.07));
+        const barY = height - barHeight - Math.max(20, Math.round(height * 0.04));
+
+        context.fillStyle = "rgba(0,0,0,0.55)";
+        context.fillRect(marginX, barY, width - marginX * 2, barHeight);
+
+        context.fillStyle = "#ffffff";
+        context.font = `${Math.max(22, Math.round(width * 0.035))}px Arial`;
+        context.fillText(quickCaption, width / 2, barY + barHeight / 2 + 10);
+      }
+
+      const format = editor.exportFormat === "jpg" ? "jpeg" : editor.exportFormat;
+      const anchor = document.createElement("a");
+      anchor.download = `photo-studio-upgrade.${editor.exportFormat}`;
+      anchor.href = canvas.toDataURL(`image/${format}`);
+      anchor.click();
+
+      pushStatus("success", "Quick 10/10 export completed.");
+    };
+
+    image.onerror = () => {
+      pushStatus("error", "Export failed due to image loading/CORS issue.");
+    };
+  }, [
+    currentAssetUrl,
+    editor.exportFormat,
+    editor.resize?.height,
+    editor.resize?.width,
+    pushStatus,
+    quickCaption,
+    quickFilterStyle,
+    quickRotation,
+    quickSticker,
+  ]);
+
   return (
     <div className="photostudio-shell">
       <section className="photostudio-hero">
@@ -981,6 +1082,117 @@ const PhotoStudioAIAR = () => {
               <p>History: {historyIndex + 1} / {historyStack.length || 0}</p>
               <p>Current URL: {currentAssetUrl || "N/A"}</p>
               <p>Available tools: {availableEditTools.join(", ")}</p>
+
+              <div className="photostudio-upgrade-panel">
+                <h3>Quick 10/10 Studio (Merged Upgrade)</h3>
+                <p>Client-side filter + AR sticker + caption preview + one-click export.</p>
+
+                <div className="photostudio-grid two">
+                  <label>
+                    Filter Preset
+                    <select value={quickFilter} onChange={(event) => setQuickFilter(event.target.value)}>
+                      {Object.keys(QUICK_FILTER_PRESETS).map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    AR Sticker
+                    <select value={quickSticker} onChange={(event) => setQuickSticker(event.target.value)}>
+                      {QUICK_STICKERS.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="photostudio-grid two">
+                  <label>
+                    Brightness ({quickBrightness}%)
+                    <input
+                      type="range"
+                      min="50"
+                      max="160"
+                      value={quickBrightness}
+                      onChange={(event) => setQuickBrightness(Number(event.target.value || 100))}
+                    />
+                  </label>
+                  <label>
+                    Contrast ({quickContrast}%)
+                    <input
+                      type="range"
+                      min="50"
+                      max="180"
+                      value={quickContrast}
+                      onChange={(event) => setQuickContrast(Number(event.target.value || 100))}
+                    />
+                  </label>
+                  <label>
+                    Blur ({quickBlur}px)
+                    <input
+                      type="range"
+                      min="0"
+                      max="8"
+                      value={quickBlur}
+                      onChange={(event) => setQuickBlur(Number(event.target.value || 0))}
+                    />
+                  </label>
+                  <label>
+                    Rotate ({quickRotation}deg)
+                    <input
+                      type="range"
+                      min="-25"
+                      max="25"
+                      value={quickRotation}
+                      onChange={(event) => setQuickRotation(Number(event.target.value || 0))}
+                    />
+                  </label>
+                </div>
+
+                <label>
+                  Caption
+                  <input
+                    value={quickCaption}
+                    onChange={(event) => setQuickCaption(event.target.value)}
+                    placeholder="Add caption..."
+                  />
+                </label>
+
+                <div className="photostudio-upgrade-preview">
+                  {currentAssetUrl ? (
+                    <>
+                      <img
+                        src={currentAssetUrl}
+                        alt="Quick upgrade preview"
+                        style={{
+                          filter: quickFilterStyle,
+                          transform: `rotate(${quickRotation}deg)`,
+                        }}
+                      />
+                      <span className="photostudio-upgrade-sticker">{quickSticker}</span>
+                      {quickCaption.trim() ? (
+                        <div className="photostudio-upgrade-caption">{quickCaption}</div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p>Upload an image to start quick preview.</p>
+                  )}
+                </div>
+
+                <div className="photostudio-inline-actions">
+                  <button type="button" onClick={handleQuickBackgroundRemove}>
+                    AI Background Remove (Placeholder)
+                  </button>
+                  <button type="button" onClick={handleQuickExport}>
+                    Export Quick 10/10 Image
+                  </button>
+                </div>
+                <canvas ref={quickCanvasRef} className="photostudio-hidden-input" />
+              </div>
             </div>
           </div>
         </section>
@@ -1463,4 +1675,3 @@ const PhotoStudioAIAR = () => {
 };
 
 export default PhotoStudioAIAR;
-

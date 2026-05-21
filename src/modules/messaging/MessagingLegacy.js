@@ -306,6 +306,8 @@ const Messaging = () => {
   const [showChatroomBrowser, setShowChatroomBrowser] = useState(false);
   const [chatroomSearchQuery, setChatroomSearchQuery] = useState('');
   const [linkupTheme, setLinkupTheme] = useState(() => readStoredLinkUpTheme());
+  const [messagingDiagnostics, setMessagingDiagnostics] = useState({});
+  const [messagingScore, setMessagingScore] = useState(0);
 
 
   const socketRef = useRef(null);
@@ -875,10 +877,14 @@ const Messaging = () => {
         ...queuedMessage,
         attemptCount: nextAttemptCount,
         lastAttemptAt: new Date().toISOString(),
-         nextAttemptAt: manual ? new Date().toISOString() : nextAttemptAt,
-         errorMessage:
-           error?.response?.data?.message || error?.message || 'Unable to send the message.',
-         permanentFailure: nextAttemptCount >= MESSAGE_OUTBOX_RETRY_LIMIT,
+        nextAttemptAt: manual ? new Date().toISOString() : nextAttemptAt,
+        errorMessage:
+          error?.response?.data?.message || error?.message || 'Unable to send the message.',
+        permanentFailure: nextAttemptCount >= MESSAGE_OUTBOX_RETRY_LIMIT,
+      };
+
+      upsertOutboxEntry(nextQueuedMessage);
+      syncFailedMessageState(queuedMessage.clientMessageId, {
         isPending: false,
         isFailed: true,
         errorMessage: nextQueuedMessage.errorMessage,
@@ -945,47 +951,46 @@ const Messaging = () => {
       console.error('Error loading notifications:', error);
     }
   }, [apiCall]);
-+
-+  const computeMessagingDiagnostics = useCallback(() => {
-+    try {
-+      const diagnostics = {};
-+      diagnostics.isNetworkOnline = Boolean(isNetworkOnline);
-+      diagnostics.socketConnected = Boolean(socket && socket.connected);
-+      diagnostics.outboxCount = Array.isArray(outboxRef.current) ? outboxRef.current.length : 0;
-+      diagnostics.notificationPermission = notificationPermission;
-+      diagnostics.encryptionEnabled = Boolean(encryptionEnabled);
-+
-+      // Check whether recent messages have deliveryStatus entries
-+      const recentHasDelivery = Array.isArray(messages) && messages.slice(-20).some((m) => Array.isArray(m.deliveryStatus) && m.deliveryStatus.length > 0);
-+      diagnostics.deliveryStatusPresent = recentHasDelivery;
-+
-+      // Basic scoring (0-10)
-+      let score = 0;
-+      if (diagnostics.isNetworkOnline) score += 2;
-+      if (diagnostics.socketConnected) score += 2;
-+      if (diagnostics.outboxCount === 0) score += 2; // no queued messages
-+      if (diagnostics.notificationPermission === 'granted') score += 1;
-+      if (diagnostics.deliveryStatusPresent) score += 1;
-+      if (diagnostics.encryptionEnabled) score += 1;
-+      // small bonus for typing indicator active
-+      diagnostics.typingActive = typingUsers && typingUsers.size > 0;
-+      if (diagnostics.typingActive) score += 1;
-+
-+      setMessagingDiagnostics(diagnostics);
-+      setMessagingScore(Math.min(10, score));
-+      return diagnostics;
-+    } catch (e) {
-+      console.warn('Error computing messaging diagnostics', e);
-+      return {};
-+    }
-+  }, [isNetworkOnline, socket, notificationPermission, encryptionEnabled, messages, typingUsers]);
-+
-+  useEffect(() => {
-+    computeMessagingDiagnostics();
-+    const timer = setInterval(() => computeMessagingDiagnostics(), 10000);
-+    return () => clearInterval(timer);
-+  }, [computeMessagingDiagnostics]);
-*** End Patch
+  const computeMessagingDiagnostics = useCallback(() => {
+    try {
+      const diagnostics = {};
+      diagnostics.isNetworkOnline = Boolean(isNetworkOnline);
+      diagnostics.socketConnected = Boolean(socket && socket.connected);
+      diagnostics.outboxCount = Array.isArray(outboxRef.current) ? outboxRef.current.length : 0;
+      diagnostics.notificationPermission = notificationPermission;
+      diagnostics.encryptionEnabled = Boolean(encryptionEnabled);
+
+      const recentHasDelivery =
+        Array.isArray(messages) &&
+        messages.slice(-20).some(
+          (message) => Array.isArray(message.deliveryStatus) && message.deliveryStatus.length > 0
+        );
+      diagnostics.deliveryStatusPresent = recentHasDelivery;
+
+      let score = 0;
+      if (diagnostics.isNetworkOnline) score += 2;
+      if (diagnostics.socketConnected) score += 2;
+      if (diagnostics.outboxCount === 0) score += 2;
+      if (diagnostics.notificationPermission === 'granted') score += 1;
+      if (diagnostics.deliveryStatusPresent) score += 1;
+      if (diagnostics.encryptionEnabled) score += 1;
+      diagnostics.typingActive = typingUsers && typingUsers.size > 0;
+      if (diagnostics.typingActive) score += 1;
+
+      setMessagingDiagnostics(diagnostics);
+      setMessagingScore(Math.min(10, score));
+      return diagnostics;
+    } catch (error) {
+      console.warn('Error computing messaging diagnostics', error);
+      return {};
+    }
+  }, [isNetworkOnline, socket, notificationPermission, encryptionEnabled, messages, typingUsers]);
+
+  useEffect(() => {
+    computeMessagingDiagnostics();
+    const timer = setInterval(() => computeMessagingDiagnostics(), 10000);
+    return () => clearInterval(timer);
+  }, [computeMessagingDiagnostics]);
   const checkEncryptionStatus = useCallback(async (chatId) => {
     try {
       const response = await apiCall(`/messaging/encryption/status/${chatId}`, 'GET');
@@ -1197,9 +1202,10 @@ const Messaging = () => {
   }, [incomingCall]);
 
   useEffect(() => {
-     const storedOutbox = loadMessagingOutbox(currentUserId);
-     outboxRef.current = storedOutbox;
-     setOutboxEntries(Array.isArray(storedOutbox) ? storedOutbox : []);
+    const storedOutbox = loadMessagingOutbox(currentUserId);
+    outboxRef.current = storedOutbox;
+    setOutboxEntries(Array.isArray(storedOutbox) ? storedOutbox : []);
+  }, [currentUserId]);
 
   useEffect(() => {
     const applyPendingEmergencyCall = (callData = readPendingEmergencyCall()) => {
@@ -2319,7 +2325,7 @@ const Messaging = () => {
     }
 
     try {
-      const response = await apiCall(`/messaging/chats/${selectedChat._id}/messages`, 'DELETE');
+      const response = await apiCall(`/messaging/chats/${activeChat._id}/messages`, 'DELETE');
 
       if (response?.deletedCount !== undefined) {
         // Clear messages from state
@@ -2343,7 +2349,18 @@ const Messaging = () => {
       }
 
       await retryQueuedMessage(queuedMessage, { manual: true });
-       computeMessagingDiagnostics();
+      computeMessagingDiagnostics();
+    } catch (error) {
+      console.error('Error retrying message:', error);
+    }
+  };
+
+  const handleExportChat = async () => {
+    const activeChat = selectedChat || selectedChatroom;
+    if (!activeChat?._id) {
+      return;
+    }
+
     try {
       const response = await apiCall(`/messaging/chats/${activeChat._id}/export`, 'GET');
       const exportPayload = response?.chatExport;
@@ -2358,8 +2375,8 @@ const Messaging = () => {
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       const chatLabel =
-        selectedChat?.groupName ||
-        getOtherParticipant(selectedChat, currentUser)?.name ||
+        activeChat?.groupName ||
+        getOtherParticipant(activeChat, currentUser)?.name ||
         'chat';
 
       link.href = downloadUrl;
@@ -3095,43 +3112,8 @@ const Messaging = () => {
                 </div>
               </div>
             ) : (
-              <div className="messaging-empty-state messaging-empty-state-rich">
-                <div className="messaging-empty-shell">
-                  <div className="messaging-empty-hero">
-                    <h2>Chatrooms Workspace</h2>
-                    <p>Select a chatroom or create one to start chatting.</p>
-                  </div>
-                  <div className="messaging-empty-actions">
-                    <button
-                      type="button"
-                      className="messaging-empty-action-btn primary"
-                      onClick={handleOpenChatroomCreation}
-                    >
-                      Create Chatroom
-                    </button>
-                    <button
-                      type="button"
-                      className="messaging-empty-action-btn"
-                      onClick={handleOpenChatroomBrowser}
-                    >
-                      Browse Public Rooms
-                    </button>
-                  </div>
-                  <div className="messaging-empty-metrics">
-                    <div className="messaging-empty-metric">
-                      <span className="metric-label">My rooms</span>
-                      <strong>{chatrooms.length}</strong>
-                    </div>
-                    <div className="messaging-empty-metric">
-                      <span className="metric-label">Public rooms</span>
-                      <strong>{chatrooms.filter((room) => !room?.isPrivate).length}</strong>
-                    </div>
-                    <div className="messaging-empty-metric">
-                      <span className="metric-label">Private rooms</span>
-                      <strong>{chatrooms.filter((room) => room?.isPrivate).length}</strong>
-                    </div>
-                  </div>
-                </div>
+              <div className="messaging-empty-state">
+                <p>Select a chatroom or create one to start chatting.</p>
               </div>
             )
           ) : showNewChat ? (
@@ -3151,31 +3133,25 @@ const Messaging = () => {
                     onClick={() => setNewChatMode('direct')}
                     type="button"
                   >
-                    💬 Direct Chat
+                    Direct Chat
                   </button>
                   <button
                     className={`mode-btn ${newChatMode === 'group' ? 'active' : ''}`}
                     onClick={() => setNewChatMode('group')}
                     type="button"
                   >
-                    👥 Create Group
+                    Create Group
                   </button>
                 </div>
 
-                <div className="new-chat-header-copy">
-                  <h3>Start a New Chat</h3>
-                  <p className="new-chat-intro">
-                    Search for people, send a LinkUp invite, or jump into a conversation with someone you already know.
-                  </p>
-                </div>
                 <div className="new-chat-search">
                   <input
                     type="text"
                     placeholder="Search people by name, email, or username..."
                     value={newChatSearchQuery}
-                    onChange={(e) => {
-                      setNewChatSearchQuery(e.target.value);
-                      searchUsers(e.target.value);
+                    onChange={(event) => {
+                      setNewChatSearchQuery(event.target.value);
+                      searchUsers(event.target.value);
                     }}
                     className="search-input"
                   />
@@ -3186,59 +3162,23 @@ const Messaging = () => {
                     {searchingUsers ? (
                       <p className="loading">Searching...</p>
                     ) : availableUsers.length > 0 ? (
-                      availableUsers.map((user) => {
-                        const visibility = user.visibility || {
-                          visibleViaEmail: true,
-                          visibleViaPhone: true,
-                          visibleViaUsername: true,
-                        };
-                        const contactMeans = user.contactMeans || {
-                          availableForChat: true,
-                          availableForVoiceCall: true,
-                          availableForVideoCall: true,
-                        };
-                        const visibleMethods = [];
-                        if (visibility.visibleViaEmail) visibleMethods.push('Email');
-                        if (visibility.visibleViaPhone) visibleMethods.push('Phone');
-                        if (visibility.visibleViaUsername) visibleMethods.push('Username');
-
-                        const availableMeans = [];
-                        if (contactMeans.availableForChat) availableMeans.push('Chat');
-                        if (contactMeans.availableForVoiceCall) availableMeans.push('Voice');
-                        if (contactMeans.availableForVideoCall) availableMeans.push('Video');
-
-                        return (
-                          <div key={user._id} className="user-search-result">
-                            <span className="user-avatar">{getAvatarLabel(user.name, user.username, user.avatar, 'U')}</span>
-                            <div className="user-info">
-                              <h4>{user.name}</h4>
-                              <p>{user.email}</p>
-                              <div className="badges-row">
-                                <div className="visibility-badges">
-                                  {visibleMethods.map((method, idx) => (
-                                    <span key={idx} className="visibility-badge" title="Can find you via this method">
-                                      {method}
-                                    </span>
-                                  ))}
-                                </div>
-                                <div className="contact-means-badges">
-                                  {availableMeans.map((means, idx) => (
-                                    <span key={idx} className="contact-means-badge" title="Available for this contact method">
-                                      {means}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                            <button
-                              className="btn-add-contact"
-                              onClick={() => handleAddContact(user.name, user.email, user.username)}
-                            >
-                              + Invite
-                            </button>
+                      availableUsers.map((user) => (
+                        <div key={user._id} className="user-search-result">
+                          <span className="user-avatar">
+                            {getAvatarLabel(user.name, user.username, user.avatar, 'U')}
+                          </span>
+                          <div className="user-info">
+                            <h4>{user.name}</h4>
+                            <p>{user.email}</p>
                           </div>
-                        );
-                      })
+                          <button
+                            className="btn-add-contact"
+                            onClick={() => handleAddContact(user.name, user.email, user.username)}
+                          >
+                            Invite
+                          </button>
+                        </div>
+                      ))
                     ) : (
                       <p className="no-results">No users found. Try another search.</p>
                     )}
@@ -3246,7 +3186,7 @@ const Messaging = () => {
                 ) : (
                   <div className="available-users">
                     <p className="section-title">Your Contacts</p>
-                    {contacts.filter((c) => !c.isBlocked).length > 0 ? (
+                    {contacts.filter((contact) => !contact.isBlocked).length > 0 ? (
                       contacts
                         .filter((contact) => !contact.isBlocked)
                         .map((contact) => (
@@ -3255,13 +3195,21 @@ const Messaging = () => {
                             className="user-card"
                             onClick={() => handleCreateDirectChat(contact.contactUserId._id)}
                           >
-                            <span className="user-avatar">{getAvatarLabel(contact.displayName, contact.contactUserId?.name, contact.contactUserId?.username, contact.contactUserId?.avatar, 'U')}</span>
+                            <span className="user-avatar">
+                              {getAvatarLabel(
+                                contact.displayName,
+                                contact.contactUserId?.name,
+                                contact.contactUserId?.username,
+                                contact.contactUserId?.avatar,
+                                'U'
+                              )}
+                            </span>
                             <h4>{contact.contactUserId?.name}</h4>
                             <p>{contact.category}</p>
                           </div>
                         ))
                     ) : (
-                      <p className="no-contacts">No contacts yet. Search above to add one!</p>
+                      <p className="no-contacts">No contacts yet. Search above to add one.</p>
                     )}
                   </div>
                 )}
@@ -3308,72 +3256,6 @@ const Messaging = () => {
                 />
               </div>
 
-              <aside className="linkup-smart-sidebar" aria-label="LinkUp smart tools">
-                <section className="linkup-smart-card">
-                  <h4>Quick actions</h4>
-                  <div className="linkup-quick-action-grid">
-                    {SUPERAPP_QUICK_ACTIONS.map((action) => (
-                      <button
-                        key={action.id}
-                        type="button"
-                        className="linkup-quick-action-btn"
-                        onClick={() => handleSuperappQuickAction(action.id)}
-                      >
-                        <span className="quick-action-icon">{action.icon}</span>
-                        <span>{action.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="linkup-smart-card">
-                  <h4>AI assist</h4>
-                  <div className="linkup-ai-hint-list">
-                    {aiAssistantHints.map((hint) => (
-                      <button
-                        key={hint}
-                        type="button"
-                        className="linkup-ai-hint-btn"
-                        onClick={() => setShowAISuggestions(true)}
-                      >
-                        {hint}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="linkup-smart-card">
-                  <h4>Live now</h4>
-                  <div className="messaging-online-user-list">
-                    {onlineContactsPreview.slice(0, 5).map((entry) => (
-                      <span key={entry.id} className="messaging-online-user-chip">
-                        <span className="messaging-online-dot"></span>
-                        {entry.name}
-                      </span>
-                    ))}
-                    {onlineContactsPreview.length === 0 && (
-                      <p className="messaging-insight-empty">No contacts online right now.</p>
-                    )}
-                  </div>
-                </section>
-
-                <section className="linkup-smart-card">
-                  <h4>Recent shares</h4>
-                  {recentSharedItems.length > 0 ? (
-                    <ul className="messaging-insight-bullets">
-                      {recentSharedItems.slice(0, 4).map((item) => (
-                        <li key={`${item.id}-${item.type}`}>
-                          <span>{item.title}</span>
-                          <em>{item.type}</em>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="messaging-insight-empty">Shared files and media will appear here.</p>
-                  )}
-                </section>
-              </aside>
-
               {showFileUpload && (
                 <FileUpload
                   chatId={selectedChat?._id}
@@ -3395,177 +3277,28 @@ const Messaging = () => {
           ) : (
             <div className="messaging-empty-state messaging-empty-state-rich">
               <div className="messaging-empty-shell">
-                <div className="messaging-empty-hero">
-                  <h2>{chats.length > 0 ? 'LinkUp Conversations' : 'Welcome to LinkUp'}</h2>
-                  <p>
-                    {chats.length > 0
-                      ? 'Select a chat to continue messaging.'
-                      : 'Start with a quick action, or create your first conversation.'}
-                  </p>
-                </div>
-                <div className="messaging-live-strip" aria-label="LinkUp live activity">
-                  <span className="live-strip-pill">{isOnline ? '🟢 Live network' : '🟠 Reconnecting'}</span>
-                  <span className="live-strip-pill">{unreadChatsCount} unread</span>
-                  <span className="live-strip-pill">{activeNowCount} online now</span>
-                  <span className="live-strip-pill">Typing + presence active</span>
-                </div>
-
+                <h2>{chats.length > 0 ? 'LinkUp Conversations' : 'Welcome to LinkUp'}</h2>
                 {chats.length === 0 ? (
                   <EnhancedEmptyState
                     onSelectAction={handleEmptyStateQuickAction}
                     onStartNewChat={handleEmptyStateStartNewChat}
                   />
                 ) : (
-                  <>
-                <div className="messaging-empty-actions">
-                  <button
-                    type="button"
-                    className="messaging-empty-action-btn primary"
-                    onClick={() => setShowNewChat(true)}
-                  >
-                    Start New Conversation
-                  </button>
-                  <button
-                    type="button"
-                    className="messaging-empty-action-btn"
-                    onClick={() => setActiveTab('chatrooms')}
-                  >
-                    Explore Rooms
-                  </button>
-                  <button
-                    type="button"
-                    className="messaging-empty-action-btn"
-                    onClick={() => setShowNewChat(true)}
-                  >
-                    Nearby People
-                  </button>
-                  <button
-                    type="button"
-                    className="messaging-empty-action-btn"
-                    onClick={() => setShowAISuggestions(true)}
-                  >
-                    AI Icebreaker
-                  </button>
-                </div>
-
-                {recentConversationCards.length > 0 && (
-                  <div className="messaging-empty-recent">
-                    <h3>Recent conversations</h3>
-                    <div className="messaging-empty-recent-list">
-                      {recentConversationCards.map((card) => (
-                        <button
-                          key={card.id}
-                          type="button"
-                          className="messaging-empty-recent-card"
-                          onClick={() => {
-                            const targetChat = chats.find((chat) => chat._id === card.id);
-                            if (targetChat) {
-                              handleSelectChat(targetChat);
-                            }
-                          }}
-                        >
-                          <span className={`recent-presence-dot ${card.online ? 'online' : ''}`}></span>
-                          <div className="recent-copy">
-                            <strong>{card.title}</strong>
-                            <p>{card.preview}</p>
-                          </div>
-                          <div className="recent-meta">
-                            {card.unreadCount > 0 && (
-                              <span className="recent-unread-count">{card.unreadCount}</span>
-                            )}
-                            <span>{card.time}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+                  <div className="messaging-empty-actions">
+                    <button
+                      type="button"
+                      className="messaging-empty-action-btn primary"
+                      onClick={() => setShowNewChat(true)}
+                    >
+                      Start New Conversation
+                    </button>
                   </div>
-                )}
-
-                <div className="messaging-empty-insights-grid">
-                  <section className="messaging-insight-card">
-                    <h4>Online users</h4>
-                    {onlineContactsPreview.length > 0 ? (
-                      <div className="messaging-online-user-list">
-                        {onlineContactsPreview.map((entry) => (
-                          <span key={entry.id} className="messaging-online-user-chip">
-                            <span className="messaging-online-dot"></span>
-                            {entry.name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="messaging-insight-empty">No contacts are online yet.</p>
-                    )}
-                  </section>
-
-                  <section className="messaging-insight-card">
-                    <h4>Suggested conversations</h4>
-                    {suggestedConversationCards.length > 0 ? (
-                      <div className="messaging-insight-list">
-                        {suggestedConversationCards.map((card) => (
-                          <button
-                            key={card.id}
-                            type="button"
-                            className="messaging-inline-link"
-                            onClick={() => {
-                              const targetChat = chats.find((chat) => chat._id === card.id);
-                              if (targetChat) {
-                                handleSelectChat(targetChat);
-                              }
-                            }}
-                          >
-                            <strong>{card.title}</strong>
-                            <span>{card.online ? 'Online' : card.time}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="messaging-insight-empty">We will suggest active chats here.</p>
-                    )}
-                  </section>
-
-                  <section className="messaging-insight-card">
-                    <h4>Recent media & files</h4>
-                    {recentSharedItems.length > 0 ? (
-                      <ul className="messaging-insight-bullets">
-                        {recentSharedItems.map((item) => (
-                          <li key={`${item.id}-${item.type}`}>
-                            <span>{item.title}</span>
-                            <em>{item.type}</em>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="messaging-insight-empty">Recent shared files will appear here.</p>
-                    )}
-                  </section>
-
-                  <section className="messaging-insight-card">
-                    <h4>AI suggestions</h4>
-                    <ul className="messaging-insight-bullets">
-                      {aiAssistantHints.map((hint) => (
-                        <li key={hint}>{hint}</li>
-                      ))}
-                    </ul>
-                  </section>
-
-                  <section className="messaging-insight-card messaging-insight-card-wide">
-                    <h4>LinkUp social energy</h4>
-                    <ul className="messaging-insight-bullets">
-                      <li>Jump back into active chats with unread badges and typing previews.</li>
-                      <li>Share superapp items directly: rides, products, property, and payments.</li>
-                      <li>Use AI to translate, polish replies, and draft quick business responses.</li>
-                    </ul>
-                  </section>
-                </div>
-                  </>
                 )}
               </div>
             </div>
           )}
         </div>
       </div>
-
       {showScheduledBlockManager && selectedContactForScheduledBlock && (
         <div className="modal-overlay">
           <ScheduledBlockManager
@@ -3592,4 +3325,6 @@ const Messaging = () => {
 };
 
 export default Messaging;
+
+
 
