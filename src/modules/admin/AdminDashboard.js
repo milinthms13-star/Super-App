@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
 import useI18n from "../../hooks/useI18n";
@@ -91,6 +91,69 @@ const normalizeCategoryRecord = (category) => {
   };
 };
 
+const MODULE_MANAGEMENT_IDS = [
+  "ecommerce",
+  "messaging",
+  "classifieds",
+  "realestate",
+  "socialmedia",
+  "matrimonial",
+  "localservices",
+  "hyperlocal",
+  "tourism",
+  "hotelbooking",
+  "bustrainbooking",
+  "ridesharing",
+  "gulfservices",
+  "businessbuilder",
+  "businessservices",
+  "freelancer",
+  "resumebuilder",
+  "photostudio",
+  "karaokeduet",
+  "danceduet",
+  "voicefriend",
+  "liveplaceexplorer",
+  "beautyai",
+  "kitchen",
+  "kidsstoryvideomaker",
+  "jobportal",
+  "skilllearning",
+  "education",
+  "nilaaihub",
+  "finance",
+  "billpay",
+  "fooddelivery",
+  "healthcare",
+  "reminderalert",
+  "sosalert",
+  "devadarshan",
+  "astrology",
+  "quicklinks",
+  "diary",
+];
+
+const moduleIdToTitle = (moduleId) =>
+  String(moduleId || "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+const isSameBrandingDraftMap = (currentDrafts = {}, nextDrafts = {}) => {
+  const currentKeys = Object.keys(currentDrafts);
+  const nextKeys = Object.keys(nextDrafts);
+
+  if (currentKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  return nextKeys.every((moduleId) => {
+    const current = currentDrafts[moduleId] || {};
+    const next = nextDrafts[moduleId] || {};
+    return current.name === next.name && current.logoUrl === next.logoUrl;
+  });
+};
+
 const AdminDashboard = ({
   businessCategories,
   globeMartCategories,
@@ -101,6 +164,8 @@ const AdminDashboard = ({
   onAddGlobeMartSubcategory,
   enabledModules,
   onToggleModule,
+  moduleBranding = {},
+  onSaveModuleBranding,
 }) => {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -129,7 +194,47 @@ const AdminDashboard = ({
   const [registrationActionPending, setRegistrationActionPending] = useState({});
   const [registrationActionMessage, setRegistrationActionMessage] = useState("");
   const [registrationRemarks, setRegistrationRemarks] = useState({});
+  const [brandingDrafts, setBrandingDrafts] = useState({});
+  const [brandingMessage, setBrandingMessage] = useState("");
+  const [brandingSavingMap, setBrandingSavingMap] = useState({});
   const moderationSectionRef = useRef(null);
+  const enabledModuleSet = useMemo(
+    () =>
+      new Set(
+        (Array.isArray(enabledModules) ? enabledModules : []).map((moduleId) =>
+          normalizeModuleId(moduleId)
+        )
+      ),
+    [enabledModules]
+  );
+
+  const managedModules = useMemo(() => {
+    return MODULE_MANAGEMENT_IDS.map((moduleId) => {
+      const normalizedModuleId = normalizeModuleId(moduleId);
+      const branding = moduleBranding?.[normalizedModuleId] || {};
+      return {
+        id: normalizedModuleId,
+        defaultName: moduleIdToTitle(moduleId),
+        name: String(branding?.name || "").trim() || moduleIdToTitle(moduleId),
+        logoUrl: String(branding?.logoUrl || "").trim(),
+        enabled: enabledModuleSet.has(normalizedModuleId),
+      };
+    });
+  }, [enabledModuleSet, moduleBranding]);
+
+  useEffect(() => {
+    const nextDrafts = managedModules.reduce((acc, moduleRecord) => {
+      acc[moduleRecord.id] = {
+        name: moduleRecord.name,
+        logoUrl: moduleRecord.logoUrl,
+      };
+      return acc;
+    }, {});
+
+    setBrandingDrafts((currentDrafts) =>
+      isSameBrandingDraftMap(currentDrafts, nextDrafts) ? currentDrafts : nextDrafts
+    );
+  }, [managedModules]);
 
   const totalRevenuePotential = useMemo(
     () => registrationApplications.reduce((total, application) => total + Number(application.registrationFee || 0), 0),
@@ -340,6 +445,48 @@ const AdminDashboard = ({
     }
   };
 
+  const handleBrandingFieldChange = (moduleId, field, value) => {
+    setBrandingDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [moduleId]: {
+        ...(currentDrafts[moduleId] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleModuleLogoUpload = (moduleId, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      handleBrandingFieldChange(moduleId, "logoUrl", String(event?.target?.result || ""));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveModuleBrandingRow = async (moduleId) => {
+    if (typeof onSaveModuleBranding !== "function") {
+      return;
+    }
+
+    const draft = brandingDrafts[moduleId] || {};
+    setBrandingSavingMap((currentMap) => ({ ...currentMap, [moduleId]: true }));
+    setBrandingMessage("");
+    try {
+      await onSaveModuleBranding(moduleId, {
+        name: String(draft.name || "").trim(),
+        logoUrl: String(draft.logoUrl || "").trim(),
+      });
+      setBrandingMessage(`Saved branding for ${moduleIdToTitle(moduleId)}.`);
+    } catch (error) {
+      setBrandingMessage(
+        error?.response?.data?.message || "Module branding could not be saved."
+      );
+    } finally {
+      setBrandingSavingMap((currentMap) => ({ ...currentMap, [moduleId]: false }));
+    }
+  };
+
   return (
     <div className="admin-dashboard">
       <section className="admin-hero">
@@ -407,107 +554,78 @@ const AdminDashboard = ({
             </p>
           </div>
 
-          <div className="admin-list">
-            {businessCategories.map((category) => {
-              const normalizedCategoryId = normalizeModuleId(category.id);
-              const isEnabled = enabledModules.includes(normalizedCategoryId);
+          <div className="module-branding-list">
+            {managedModules.map((moduleRecord) => {
+              const draft = brandingDrafts[moduleRecord.id] || {};
+              const previewLogo = String(draft.logoUrl || "").trim();
+              const isSaving = Boolean(brandingSavingMap[moduleRecord.id]);
               return (
-                <div className="admin-list-item" key={category.id}>
-                  <div>
-                    <strong>{category.name}</strong>
+                <div className="module-branding-row" key={moduleRecord.id}>
+                  <div className="module-branding-meta">
+                    <strong>{moduleRecord.defaultName}</strong>
                     <span>
-                      {isEnabled
+                      {moduleRecord.enabled
                         ? t("admin.visibleOnPlatform", "Visible on the platform")
                         : t("admin.hiddenOnPlatform", "Hidden on the platform")}
                     </span>
                   </div>
-                  <label className="toggle-switch" htmlFor={`toggle-${category.id}`}>
+
+                  <label className="module-branding-input-group" htmlFor={`module-name-${moduleRecord.id}`}>
+                    <span>Display Name</span>
                     <input
-                      id={`toggle-${category.id}`}
+                      id={`module-name-${moduleRecord.id}`}
+                      type="text"
+                      value={draft.name ?? moduleRecord.name}
+                      onChange={(event) =>
+                        handleBrandingFieldChange(moduleRecord.id, "name", event.target.value)
+                      }
+                      placeholder={moduleRecord.defaultName}
+                    />
+                  </label>
+
+                  <label className="module-branding-input-group" htmlFor={`module-logo-${moduleRecord.id}`}>
+                    <span>Logo Upload</span>
+                    <input
+                      id={`module-logo-${moduleRecord.id}`}
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => handleModuleLogoUpload(moduleRecord.id, event.target.files?.[0])}
+                    />
+                  </label>
+
+                  {previewLogo ? (
+                    <img
+                      src={previewLogo}
+                      alt={`${moduleRecord.name} logo preview`}
+                      className="module-branding-preview"
+                    />
+                  ) : (
+                    <div className="module-branding-preview module-branding-preview-empty">No Logo</div>
+                  )}
+
+                  <label className="toggle-switch" htmlFor={`toggle-${moduleRecord.id}`}>
+                    <input
+                      id={`toggle-${moduleRecord.id}`}
                       type="checkbox"
-                      checked={isEnabled}
-                      onChange={() => onToggleModule(normalizedCategoryId)}
+                      checked={moduleRecord.enabled}
+                      onChange={() => onToggleModule(moduleRecord.id)}
                     />
                     <span className="toggle-slider"></span>
                   </label>
+
+                  <button
+                    type="button"
+                    className="admin-button module-branding-save-btn"
+                    onClick={() => handleSaveModuleBrandingRow(moduleRecord.id)}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Saving..." : "Save"}
+                  </button>
                 </div>
               );
             })}
           </div>
-
-          {/* Ensure fixed module list is shown even if business categories are missing some modules (e.g., astrology) */}
-          <div className="admin-list" style={{ marginTop: 16 }}>
-            {[
-              "ecommerce",
-              "messaging",
-              "classifieds",
-              "realestate",
-              "socialmedia",
-              "matrimonial",
-              "localservices",
-              "hyperlocal",
-              "tourism",
-              "hotelbooking",
-              "bustrainbooking",
-              "ridesharing",
-              "gulfservices",
-              "businessbuilder",
-              "businessservices",
-              "freelancer",
-              "resumebuilder",
-              "photostudio",
-              "karaokeduet",
-              "danceduet",
-              "voicefriend",
-              "liveplaceexplorer",
-              "beautyai",
-              "kitchen",
-              "kidsstoryvideomaker",
-              "quicklinks",
-              "jobportal",
-              "skilllearning",
-              "education",
-              "nilaaihub",
-              "finance",
-              "billpay",
-              "fooddelivery",
-              "healthcare",
-              "reminderalert",
-              "sosalert",
-              "devadarshan",
-              "astrology",
-              "mydiary",
-            ].map((moduleId) => {
-              const normalizedModuleId = normalizeModuleId(moduleId);
-              const isEnabled = enabledModules.includes(normalizedModuleId);
-              const name = moduleId
-                .replace(/([a-z])([A-Z])/g, "$1 $2")
-                .replace(/-/g, " ")
-                .replace(/\b\w/g, (c) => c.toUpperCase());
-
-              return (
-                <div className="admin-list-item" key={moduleId}>
-                  <div>
-                    <strong>{name}</strong>
-                    <span>
-                      {isEnabled
-                        ? t("admin.visibleOnPlatform", "Visible on the platform")
-                        : t("admin.hiddenOnPlatform", "Hidden on the platform")}
-                    </span>
-                  </div>
-                  <label className="toggle-switch" htmlFor={`toggle-${moduleId}`}>
-                    <input
-                      id={`toggle-${moduleId}`}
-                      type="checkbox"
-                      checked={isEnabled}
-                      onChange={() => onToggleModule(normalizedModuleId)}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
-              );
-            })}
-          </div>
+          {brandingMessage ? <p className="admin-feedback-message">{brandingMessage}</p> : null}
         </div>
       </section>
 

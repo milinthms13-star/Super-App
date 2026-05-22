@@ -351,6 +351,73 @@ const normalizeEnabledModules = (moduleIds = []) => {
   );
 };
 
+const MODULE_BRANDING_MANAGED_IDS = normalizeEnabledModules([
+  'ecommerce',
+  'messaging',
+  'classifieds',
+  'realestate',
+  'socialmedia',
+  'matrimonial',
+  'localservices',
+  'hyperlocal',
+  'tourism',
+  'hotelbooking',
+  'bustrainbooking',
+  'ridesharing',
+  'gulfservices',
+  'businessbuilder',
+  'businessservices',
+  'freelancer',
+  'resumebuilder',
+  'photostudio',
+  'karaokeduet',
+  'danceduet',
+  'voicefriend',
+  'liveplaceexplorer',
+  'beautyai',
+  'kitchen',
+  'jobportal',
+  'skilllearning',
+  'education',
+  'nilaaihub',
+  'kidsstoryvideomaker',
+  'finance',
+  'billpay',
+  'fooddelivery',
+  'healthcare',
+  'reminderalert',
+  'sosalert',
+  'devadarshan',
+  'astrology',
+  'quicklinks',
+  'diary',
+]);
+
+const toDefaultModuleLabel = (moduleId = '') => {
+  const normalizedId = String(moduleId || '').trim().toLowerCase();
+  const combinedWords = normalizedId
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
+  return combinedWords.join(' ');
+};
+
+const normalizeModuleBranding = (moduleBranding = {}) =>
+  MODULE_BRANDING_MANAGED_IDS.reduce((accumulator, moduleId) => {
+    const raw = moduleBranding && typeof moduleBranding === 'object' ? moduleBranding[moduleId] : {};
+    const name = String(raw?.name || '').trim();
+    const logoUrl = String(raw?.logoUrl || '').trim();
+
+    accumulator[moduleId] = {
+      id: moduleId,
+      name: name || toDefaultModuleLabel(moduleId),
+      logoUrl: logoUrl || '',
+    };
+    return accumulator;
+  }, {});
+
 const PLATFORM_SETTINGS_KEY = 'global';
 
 const getPersistedEnabledModules = async (fallbackModules = []) => {
@@ -479,6 +546,11 @@ const globeMartCategorySchema = Joi.object({
 
 const globeMartSubcategorySchema = Joi.object({
   subcategory: Joi.string().trim().min(2).max(60).required(),
+});
+
+const moduleBrandingSchema = Joi.object({
+  name: Joi.string().allow('').trim().max(80).optional(),
+  logoUrl: Joi.string().allow('').trim().max(3000000).optional(),
 });
 
 const classifiedsMediaItemSchema = Joi.alternatives().try(
@@ -2464,6 +2536,7 @@ router.get('/public', async (req, res) => {
       businessCategories: appData.businessCategories,
       globeMartCategories: normalizeGlobeMartCategories(appData.globeMartCategories),
       enabledModules,
+      moduleBranding: normalizeModuleBranding(appData.moduleBranding),
       registeredAccounts: registeredAccounts,
       moduleData: {
         ...appData.moduleData,
@@ -4310,6 +4383,7 @@ router.get('/admin', authenticate, adminOnly, async (req, res) => {
       businessCategories: appData.businessCategories,
       globeMartCategories: normalizeGlobeMartCategories(appData.globeMartCategories),
       enabledModules,
+      moduleBranding: normalizeModuleBranding(appData.moduleBranding),
       registrationApplications: appData.registrationApplications,
       registeredAccounts: registeredAccounts,
       moduleData: {
@@ -4646,6 +4720,57 @@ router.patch('/registration-applications/:applicationId/review', authenticate, a
       registrationApplications: nextData.registrationApplications,
       registeredAccounts: nextData.registeredAccounts,
       emailSent,
+    },
+  });
+});
+
+router.patch('/module-branding/:moduleId', authenticate, adminOnly, async (req, res) => {
+  const normalizedModuleId = normalizeModuleId(req.params.moduleId);
+  if (!MODULE_BRANDING_MANAGED_IDS.includes(normalizedModuleId)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid module id for branding update.',
+    });
+  }
+
+  const { error, value } = moduleBrandingSchema.validate(req.body || {}, {
+    stripUnknown: true,
+  });
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message,
+    });
+  }
+
+  const nextData = await devAppDataStore.updateAppData(async (currentData) => {
+    const currentBranding = normalizeModuleBranding(currentData.moduleBranding);
+    const currentRecord = currentBranding[normalizedModuleId] || {
+      id: normalizedModuleId,
+      name: toDefaultModuleLabel(normalizedModuleId),
+      logoUrl: '',
+    };
+
+    const nextRecord = {
+      ...currentRecord,
+      ...(typeof value.name !== 'undefined' ? { name: String(value.name || '').trim() || toDefaultModuleLabel(normalizedModuleId) } : {}),
+      ...(typeof value.logoUrl !== 'undefined' ? { logoUrl: String(value.logoUrl || '').trim() } : {}),
+    };
+
+    return {
+      ...currentData,
+      moduleBranding: {
+        ...currentBranding,
+        [normalizedModuleId]: nextRecord,
+      },
+    };
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      moduleBranding: normalizeModuleBranding(nextData.moduleBranding),
+      module: normalizedModuleId,
     },
   });
 });

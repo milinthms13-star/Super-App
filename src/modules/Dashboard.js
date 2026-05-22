@@ -880,7 +880,7 @@ const inferActivityModuleFromFeed = (activity = {}) => {
   return "";
 };
 
-const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) => {
+const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null, moduleBranding = {} }) => {
     // Real-time analytics state
     const [dashboardAnalytics, setDashboardAnalytics] = useState(null);
     const [dashboardAnalyticsUpdatedAt, setDashboardAnalyticsUpdatedAt] = useState(null);
@@ -1210,7 +1210,10 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
   const filteredModules = MODULE_CONFIG
     .map((module) => ({
       ...module,
-      name: t(module.nameKey, module.fallbackName),
+      name:
+        String(moduleBranding?.[module.id]?.name || "").trim() ||
+        t(module.nameKey, module.fallbackName),
+      logoUrl: String(moduleBranding?.[module.id]?.logoUrl || "").trim(),
       description: t(module.descriptionKey, module.fallbackDescription),
     }))
     .filter((module) => {
@@ -1736,7 +1739,15 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                     className="favorite-module-chip"
                     onClick={() => handleModuleNavigation(module.id)}
                   >
-                    <Icon type={module.icon} className="favorite-module-chip-icon" />
+                    {module.logoUrl ? (
+                      <img
+                        src={module.logoUrl}
+                        alt={`${module.name} logo`}
+                        className="favorite-module-logo"
+                      />
+                    ) : (
+                      <Icon type={module.icon} className="favorite-module-chip-icon" />
+                    )}
                     <span>{module.name}</span>
                   </button>
                 ))}
@@ -1750,7 +1761,15 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                         className="favorite-manager-open"
                         onClick={() => handleModuleNavigation(module.id)}
                       >
-                        <Icon type={module.icon} className="favorite-module-chip-icon" />
+                        {module.logoUrl ? (
+                          <img
+                            src={module.logoUrl}
+                            alt={`${module.name} logo`}
+                            className="favorite-module-logo"
+                          />
+                        ) : (
+                          <Icon type={module.icon} className="favorite-module-chip-icon" />
+                        )}
                         <span>{module.name}</span>
                       </button>
                       <button
@@ -1890,7 +1909,15 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
                 <div className="module-hero-overlay" />
                 <div className="module-stats-badge">{module.stats}</div>
                 <div className="module-icon">
-                  <Icon type={module.icon} className="module-icon-svg" />
+                  {module.logoUrl ? (
+                    <img
+                      src={module.logoUrl}
+                      alt={`${module.name} logo`}
+                      className="module-logo-image"
+                    />
+                  ) : (
+                    <Icon type={module.icon} className="module-icon-svg" />
+                  )}
                 </div>
                 <h3>{module.name}</h3>
                 <p>{module.description}</p>

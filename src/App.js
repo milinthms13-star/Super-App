@@ -134,6 +134,7 @@ const EMPTY_APP_DATA = {
   registrationApplications: [],
   registeredAccounts: [],
   enabledModules: [],
+  moduleBranding: {},
 };
 
 const PREVIEW_ENABLED_MODULES = [
@@ -300,6 +301,7 @@ function AppShell() {
   );
   const [registeredAccounts, setRegisteredAccounts] = useState(EMPTY_APP_DATA.registeredAccounts);
   const [enabledModules, setEnabledModules] = useState(EMPTY_APP_DATA.enabledModules);
+  const [moduleBranding, setModuleBranding] = useState(EMPTY_APP_DATA.moduleBranding);
   const [customLinks, setCustomLinks] = useState(() => {
     try {
       return sanitizeCustomLinks(JSON.parse(localStorage.getItem(CUSTOM_LINKS_STORAGE_KEY) || "[]"));
@@ -384,6 +386,11 @@ function AppShell() {
     );
     setRegisteredAccounts(Array.isArray(data.registeredAccounts) ? data.registeredAccounts : []);
     setEnabledModules(normalizeEnabledModules(data.enabledModules));
+    setModuleBranding(
+      data && typeof data.moduleBranding === "object" && data.moduleBranding !== null
+        ? data.moduleBranding
+        : {}
+    );
   }, []);
 
   const fetchPublicAppData = useCallback(async () => {
@@ -552,6 +559,7 @@ function AppShell() {
         setRegistrationApplications(PREVIEW_REGISTRATION_APPLICATIONS);
         setRegisteredAccounts([]);
         setEnabledModules(normalizeEnabledModules(PREVIEW_ENABLED_MODULES));
+        setModuleBranding({});
         setCustomLinks([]);
         setAppDataError("");
         setIncomingSosAlert(null);
@@ -1014,6 +1022,25 @@ function AppShell() {
     }
   }, []);
 
+  const handleSaveModuleBranding = useCallback(async (moduleId, brandingPayload = {}) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/app-data/module-branding/${moduleId}`,
+      brandingPayload
+    );
+
+    if (!response.data?.success) {
+      throw new Error("Module branding update failed.");
+    }
+
+    const nextBranding =
+      response.data?.data?.moduleBranding &&
+      typeof response.data.data.moduleBranding === "object"
+        ? response.data.data.moduleBranding
+        : {};
+    setModuleBranding(nextBranding);
+    return response.data;
+  }, []);
+
   const handleReviewRegistration = useCallback(async (applicationId, action, reason) => {
     const response = await axios.patch(
       `${API_BASE_URL}/app-data/registration-applications/${applicationId}/review`,
@@ -1213,6 +1240,7 @@ function AppShell() {
                   language={language}
                   appDataError={appDataError}
                   enabledModules={enabledModules}
+                  moduleBranding={moduleBranding}
                 />
               }
             >
@@ -1223,6 +1251,7 @@ function AppShell() {
                   <Dashboard
                     enabledModules={enabledModules}
                     customLinks={customLinks}
+                    moduleBranding={moduleBranding}
                   />
                 }
               />
@@ -1240,6 +1269,8 @@ function AppShell() {
                       onAddGlobeMartSubcategory={handleAddGlobeMartSubcategory}
                       enabledModules={enabledModules}
                       onToggleModule={handleToggleModule}
+                      moduleBranding={moduleBranding}
+                      onSaveModuleBranding={handleSaveModuleBranding}
                     />
                   ) : (
                     <Navigate to={MODULE_PATHS.dashboard} replace />

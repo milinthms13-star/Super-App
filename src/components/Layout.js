@@ -9,6 +9,7 @@ const Layout = ({
   language,
   appDataError = "",
   enabledModules = [],
+  moduleBranding = {},
 }) => {
   return (
     <>
@@ -17,6 +18,7 @@ const Layout = ({
         onLogout={onLogout}
         loggedInUser={loggedInUser}
         enabledModules={enabledModules}
+        moduleBranding={moduleBranding}
       />
       <main className="main-content">
         {appDataError ? <div className="app-loading">{appDataError}</div> : null}

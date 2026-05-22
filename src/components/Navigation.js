@@ -50,7 +50,7 @@ const MODULE_CATEGORIES = {
   },
 };
 
-const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
+const Navigation = ({ onLogout, loggedInUser, enabledModules = [], moduleBranding = {} }) => {
   const { currentUser, cart } = useApp();
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -90,6 +90,8 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
       .filter(Boolean)
   );
   const cartItemCount = cart.reduce((total, item) => total + Number(item.quantity || 1), 0);
+  const getBrandedModuleLabel = (moduleId, fallbackLabel) =>
+    String(moduleBranding?.[normalizeModuleId(moduleId)]?.name || fallbackLabel || "").trim();
 
   const allBusinessModules = [
     { id: "dashboard", label: isSeller ? "Seller Dashboard" : t("modules.dashboard", "Dashboard"), icon: "📊" },
@@ -133,15 +135,20 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "support", label: t("modules.support", "Support"), icon: "🛟", sellerVisible: true },
     { id: "voicefriend", label: t("modules.voicefriend", "AI Voice Friend"), icon: "🎙️" },
   ];
+  const allBusinessModulesWithBranding = allBusinessModules.map((module) => ({
+    ...module,
+    label: getBrandedModuleLabel(module.id, module.label),
+  }));
+
   const isModuleVisible = (moduleId) =>
     ALWAYS_VISIBLE_MODULE_IDS.has(moduleId) || enabledModuleIds.has(moduleId);
 
   const modules = isAdmin
     ? [
         { id: "admin-dashboard", label: t("modules.admin", "Admin Dashboard") },
-        ...allBusinessModules,
+        ...allBusinessModulesWithBranding,
       ]
-    : allBusinessModules.filter(
+    : allBusinessModulesWithBranding.filter(
         (module) =>
           isModuleVisible(module.id) &&
           (!isSeller ||

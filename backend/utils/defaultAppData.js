@@ -100,6 +100,7 @@ const DEFAULT_APP_DATA = {
     },
   ],
   enabledModules: DEFAULT_BUSINESS_CATEGORIES.map((category) => category.id),
+  moduleBranding: {},
   registrationApplications: [],
   registeredAccounts: [],
   userEducation: {},
