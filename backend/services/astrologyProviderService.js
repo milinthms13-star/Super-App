@@ -4,6 +4,8 @@ const { getRedisClient } = require('../config/redis');
 
 const getNow = () => Date.now();
 
+const inMemoryCache = new Map();
+
 const makeCacheKey = (bucket, payload = {}) => {
   const stable = JSON.stringify(payload, Object.keys(payload).sort());
   return `${bucket}:${stable}`;
@@ -16,7 +18,15 @@ const getTtlMs = (fallback = 5 * 60 * 1000) => {
 
 const readCache = async (key) => {
   const redisClient = getRedisClient();
-  if (!redisClient) return null;
+  if (!redisClient) {
+    const entry = inMemoryCache.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= getNow()) {
+      inMemoryCache.delete(key);
+      return null;
+    }
+    return entry.value;
+  }
 
   const entryJson = await redisClient.get(key);
   if (!entryJson) return null;
@@ -36,13 +46,16 @@ const readCache = async (key) => {
 };
 
 const writeCache = async (key, value, ttlMs) => {
-  const redisClient = getRedisClient();
-  if (!redisClient) return;
-
   const entry = {
     value,
     expiresAt: getNow() + ttlMs,
   };
+
+  const redisClient = getRedisClient();
+  if (!redisClient) {
+    inMemoryCache.set(key, entry);
+    return;
+  }
 
   await redisClient.set(key, JSON.stringify(entry), {
     PX: ttlMs,
@@ -241,7 +254,8 @@ const astrologyProviderService = {
   },
 
   _resetCacheForTests() {
-    cacheStore.clear();
+    inMemoryCache.clear();
+    return Promise.resolve();
   },
 };
 

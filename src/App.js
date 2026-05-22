@@ -92,6 +92,31 @@ const UserProfile = React.lazy(() => import("./components/UserProfile"));
 const SOCKET_BASE_URL = BACKEND_BASE_URL;
 const EMERGENCY_CALL_STORAGE_KEY = "malabarbazaar-emergency-call";
 const ADMIN_EMAIL = "mgdhanyamohan@gmail.com";
+const MODULE_BRANDING_STORAGE_KEY = "malabarbazaar-module-branding";
+
+const isPlainObject = (value) =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const readStoredModuleBranding = () => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(MODULE_BRANDING_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return isPlainObject(parsed) ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+};
+
+const toDefaultModuleLabel = (moduleId = "") =>
+  String(moduleId || "")
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 
 const buildPendingEmergencyCall = (alert = {}) => {
   const emergencyCall = alert?.emergencyCall || {};
@@ -301,7 +326,7 @@ function AppShell() {
   );
   const [registeredAccounts, setRegisteredAccounts] = useState(EMPTY_APP_DATA.registeredAccounts);
   const [enabledModules, setEnabledModules] = useState(EMPTY_APP_DATA.enabledModules);
-  const [moduleBranding, setModuleBranding] = useState(EMPTY_APP_DATA.moduleBranding);
+  const [moduleBranding, setModuleBranding] = useState(() => readStoredModuleBranding());
   const [customLinks, setCustomLinks] = useState(() => {
     try {
       return sanitizeCustomLinks(JSON.parse(localStorage.getItem(CUSTOM_LINKS_STORAGE_KEY) || "[]"));
@@ -386,11 +411,12 @@ function AppShell() {
     );
     setRegisteredAccounts(Array.isArray(data.registeredAccounts) ? data.registeredAccounts : []);
     setEnabledModules(normalizeEnabledModules(data.enabledModules));
-    setModuleBranding(
-      data && typeof data.moduleBranding === "object" && data.moduleBranding !== null
-        ? data.moduleBranding
-        : {}
-    );
+    const serverModuleBranding = isPlainObject(data?.moduleBranding) ? data.moduleBranding : {};
+    const storedModuleBranding = readStoredModuleBranding();
+    setModuleBranding({
+      ...storedModuleBranding,
+      ...serverModuleBranding,
+    });
   }, []);
 
   const fetchPublicAppData = useCallback(async () => {
@@ -488,6 +514,13 @@ function AppShell() {
   useEffect(() => {
     localStorage.setItem(CUSTOM_LINKS_STORAGE_KEY, JSON.stringify(customLinks));
   }, [customLinks]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(MODULE_BRANDING_STORAGE_KEY, JSON.stringify(moduleBranding || {}));
+  }, [moduleBranding]);
 
   useEffect(() => {
     if (investorPreviewEnabled) {
@@ -1023,22 +1056,52 @@ function AppShell() {
   }, []);
 
   const handleSaveModuleBranding = useCallback(async (moduleId, brandingPayload = {}) => {
-    const response = await axios.patch(
-      `${API_BASE_URL}/app-data/module-branding/${moduleId}`,
-      brandingPayload
-    );
+    try {
+      const response = await axios.patch(
+        `${API_BASE_URL}/app-data/module-branding/${moduleId}`,
+        brandingPayload
+      );
 
-    if (!response.data?.success) {
-      throw new Error("Module branding update failed.");
+      if (!response.data?.success) {
+        throw new Error("Module branding update failed.");
+      }
+
+      const nextBranding =
+        isPlainObject(response.data?.data?.moduleBranding)
+          ? response.data.data.moduleBranding
+          : {};
+      setModuleBranding(nextBranding);
+      return response.data;
+    } catch (error) {
+      // Fallback for environments where module-branding endpoint is not yet deployed.
+      if (error?.response?.status === 404 || error?.response?.status === 405) {
+        const normalizedModuleId = normalizeModuleId(moduleId);
+        const normalizedName = String(brandingPayload?.name || "").trim();
+        const normalizedLogo = String(brandingPayload?.logoUrl || "").trim();
+
+        setModuleBranding((currentBranding) => {
+          const currentRecord = isPlainObject(currentBranding?.[normalizedModuleId])
+            ? currentBranding[normalizedModuleId]
+            : {};
+
+          return {
+            ...(isPlainObject(currentBranding) ? currentBranding : {}),
+            [normalizedModuleId]: {
+              id: normalizedModuleId,
+              name:
+                normalizedName ||
+                String(currentRecord?.name || "").trim() ||
+                toDefaultModuleLabel(normalizedModuleId),
+              logoUrl: normalizedLogo || String(currentRecord?.logoUrl || "").trim(),
+            },
+          };
+        });
+
+        return { success: true, data: { localFallback: true } };
+      }
+
+      throw error;
     }
-
-    const nextBranding =
-      response.data?.data?.moduleBranding &&
-      typeof response.data.data.moduleBranding === "object"
-        ? response.data.data.moduleBranding
-        : {};
-    setModuleBranding(nextBranding);
-    return response.data;
   }, []);
 
   const handleReviewRegistration = useCallback(async (applicationId, action, reason) => {

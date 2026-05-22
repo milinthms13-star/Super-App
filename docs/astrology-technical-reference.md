@@ -590,6 +590,17 @@ in places where they are not imported in the file as shown. That is an implement
 
 ---
 
+## Production readiness notes
+
+- Confirm `NODE_ENV=production` and `PORT` are configured in production.
+- Configure `MONGODB_URI` and `REDIS_URL`; Redis is optional but recommended for astrology provider caching.
+- Enable `ASTROLOGY_LIVE_MODE=true` only when `ASTROLOGY_PROVIDER_BASE_URL` and `ASTROLOGY_PROVIDER_API_KEY` are present.
+- Configure `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` for live payment processing.
+- Monitor backend logs for provider fallback warnings and webhook signature validation failures.
+- Ensure analytics and consultant endpoints remain restricted to admin/consultant roles.
+
+---
+
 ## Verification checklist
 
 When modifying this module, verify:
