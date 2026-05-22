@@ -3,62 +3,59 @@
   viewBox="0 0 256 256"
   role="img"
   aria-labelledby="title desc"
-  fill="none"
 >
-  <title id="title">NilaHub logo</title>
-  <desc id="desc">
-    A premium navy, teal, and gold emblem with a stylized N, a crescent moon,
-    and a glowing hub node.
-  </desc>
+  <title id="title">MGRAND HUB logo</title>
+  <desc id="desc">Geometric hub shield with interlocking M facets and central sync core.</desc>
+
   <defs>
-    <linearGradient id="bg" x1="32" y1="24" x2="224" y2="232" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#081525" />
-      <stop offset="0.5" stop-color="#122A46" />
-      <stop offset="1" stop-color="#0E5C61" />
+    <linearGradient id="mgrand-bg" x1="28" y1="32" x2="228" y2="224" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1B1B1D" />
+      <stop offset="1" stop-color="#141414" />
     </linearGradient>
-    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(76 60) rotate(90) scale(92)">
-      <stop stop-color="#FFE49B" />
-      <stop offset="1" stop-color="#FFE49B" stop-opacity="0" />
+    <linearGradient id="mgrand-gold" x1="66" y1="72" x2="190" y2="194" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E3C76F" />
+      <stop offset="1" stop-color="#D4AF37" />
+    </linearGradient>
+    <linearGradient id="mgrand-slate" x1="72" y1="84" x2="184" y2="186" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B9BBC1" />
+      <stop offset="1" stop-color="#8E8E93" />
+    </linearGradient>
+    <radialGradient id="sync-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(128 134) rotate(90) scale(40)">
+      <stop offset="0" stop-color="#D4AF37" stop-opacity="0.4" />
+      <stop offset="1" stop-color="#D4AF37" stop-opacity="0" />
     </radialGradient>
-    <linearGradient id="mark" x1="74" y1="78" x2="196" y2="190" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFF8DF" />
-      <stop offset="1" stop-color="#F2C94C" />
-    </linearGradient>
-    <linearGradient id="node" x1="181" y1="164" x2="222" y2="203" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#8AF1D8" />
-      <stop offset="1" stop-color="#29B9A3" />
-    </linearGradient>
-    <mask id="crescent-mask">
-      <rect width="256" height="256" fill="#000" />
-      <circle cx="188" cy="70" r="28" fill="#fff" />
-      <circle cx="200" cy="61" r="24" fill="#000" />
-    </mask>
   </defs>
 
-  <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#bg)" />
-  <circle cx="76" cy="60" r="92" fill="url(#glow)" opacity="0.22" />
-  <rect width="256" height="256" fill="#F6D36C" mask="url(#crescent-mask)" />
-
-  <path
-    d="M74 180V78L182 180V78"
-    stroke="url(#mark)"
-    stroke-width="18"
-    stroke-linecap="round"
+  <polygon
+    points="128,12 228,70 228,186 128,244 28,186 28,70"
+    fill="url(#mgrand-bg)"
+    stroke="#D4AF37"
+    stroke-width="10"
     stroke-linejoin="round"
   />
-  <path
-    d="M182 180H206"
-    stroke="url(#node)"
-    stroke-width="10"
-    stroke-linecap="round"
+
+  <polygon
+    points="128,26 216,77 216,179 128,230 40,179 40,77"
+    fill="none"
+    stroke="#8E8E93"
+    stroke-opacity="0.55"
+    stroke-width="3"
+    stroke-linejoin="round"
   />
-  <circle cx="216" cy="180" r="11" fill="url(#node)" />
-  <circle cx="216" cy="180" r="4" fill="#F7FCFB" />
-  <path
-    d="M58 202C88 188 121 188 154 202"
-    stroke="#77D8CD"
-    stroke-opacity="0.36"
-    stroke-width="8"
-    stroke-linecap="round"
-  />
+
+  <g transform="translate(0 -2)">
+    <polygon points="66,188 66,76 104,76 128,134 152,76 190,76 190,188 160,188 160,122 136,178 120,178 96,122 96,188" fill="url(#mgrand-slate)" />
+    <polygon points="78,188 78,88 98,88 128,158 158,88 178,88 178,188 164,188 164,118 138,178 118,178 92,118 92,188" fill="url(#mgrand-gold)" />
+  </g>
+
+  <circle cx="128" cy="134" r="40" fill="url(#sync-glow)" />
+  <circle cx="128" cy="134" r="16" fill="#141414" stroke="#D4AF37" stroke-width="4" />
+  <circle cx="128" cy="134" r="6" fill="#FFFFFF" />
+
+  <g fill="none" stroke-linecap="round">
+    <path d="M112 134H97" stroke="#D4AF37" stroke-width="3" />
+    <path d="M159 134H144" stroke="#D4AF37" stroke-width="3" />
+    <path d="M128 118V103" stroke="#D4AF37" stroke-width="3" />
+    <path d="M128 165V150" stroke="#D4AF37" stroke-width="3" />
+  </g>
 </svg>

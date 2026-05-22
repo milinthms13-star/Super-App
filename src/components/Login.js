@@ -678,7 +678,7 @@ const Login = ({
         } else if (isAdminFlow || (isLoginFlow && isAdminEmail)) {
           mergedUser = {
             ...response.data.user,
-            name: "NilaHub Admin",
+            name: "MGRAND HUB Admin",
             email: ADMIN_EMAIL,
             avatar: "A",
             role: "admin",
@@ -847,9 +847,9 @@ const Login = ({
         )}
 
         <div className={`login-header ${isLoginFlow ? "login-header-compact" : ""}`}>
-          <img src="/logo.svg" alt="NilaHub" className="login-logo" />
+          <img src="/logo.svg" alt="MGRAND HUB" className="login-logo" />
           <p className="login-kicker">{headerKicker}</p>
-          <h1>NilaHub</h1>
+          <h1>MGRAND HUB</h1>
           <p className="login-subtitle">{loginSubtitle}</p>
       
         </div>
@@ -916,7 +916,7 @@ const Login = ({
 
                   <div className="form-group">
                     <label htmlFor="username">
-                      <span>Choose your NilaHub ID</span>
+                      <span>Choose your MGRAND HUB ID</span>
                     </label>
                     <input
                       type="text"

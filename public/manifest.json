@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "short_name": "NilaHub",
-  "name": "NilaHub Marketplace",
+  "short_name": "MGRAND HUB",
+  "name": "MGRAND HUB Marketplace",
   "description": "Marketplace PWA with flash sales, invoices, secure checkout, and offline cart support.",
   "start_url": "/?source=pwa",
   "scope": "/",

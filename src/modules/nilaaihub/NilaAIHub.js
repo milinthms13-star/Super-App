@@ -84,7 +84,7 @@ const DEFAULT_RECOMMENDATIONS = [
   },
   {
     title: "Mini App Starter",
-    description: "Turn ideas into an AI-powered storefront or booking tool within NilaHub.",
+    description: "Turn ideas into an AI-powered storefront or booking tool within MGRAND HUB.",
   },
 ];
 

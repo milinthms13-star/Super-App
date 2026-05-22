@@ -68,7 +68,7 @@ export const STICKER_CATEGORIES = [
   { id: 'food', label: 'Food', icon: '🍲' },
   { id: 'mood', label: 'Mood', icon: '🌈' },
   { id: 'festival', label: 'Festival', icon: '🪔' },
-  { id: 'nilahub', label: 'NilaHub', icon: '✨' },
+  { id: 'MGRAND HUB', label: 'MGRAND HUB', icon: '✨' },
 ];
 
 export const STICKERS = [
@@ -301,19 +301,19 @@ export const STICKERS = [
     tags: ['eid', 'festival'],
   }),
   makeSticker({
-    id: 'nilahub-order',
+    id: 'MGRAND HUB-order',
     label: 'Order Placed',
     text: 'ORDER PLACED',
-    category: 'nilahub',
+    category: 'MGRAND HUB',
     palette: ['#1d4ed8', '#0ea5e9'],
     tags: ['order', 'ecommerce', 'globemart'],
     trending: true,
   }),
   makeSticker({
-    id: 'nilahub-driver',
+    id: 'MGRAND HUB-driver',
     label: 'Driver Arrived',
     text: 'DRIVER ARRIVED',
-    category: 'nilahub',
+    category: 'MGRAND HUB',
     palette: ['#0891b2', '#14b8a6'],
     tags: ['driver', 'swiftride'],
   }),

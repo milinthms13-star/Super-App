@@ -51,7 +51,7 @@ const PaymentGateway = ({ subscriptionTier, amount, onSuccess, onCancel }) => {
         key: razorpayKeyId,
         amount: Math.round(Number(amount || 0) * 100),
         currency: "INR",
-        name: "NilaHub Matrimonial",
+        name: "MGRAND HUB Matrimonial",
         description: `${subscriptionTier} subscription`,
         order_id: razorpayOrderId,
         handler: async (rzpResponse) => {

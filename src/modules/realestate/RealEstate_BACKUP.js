@@ -220,7 +220,7 @@ const RealEstate = () => {
       {/* NAV / ROLE SWITCHER */}
       <nav className="realestate-top-nav">
         <div className="realestate-nav-brand">
-          <h2>NilaHub Real Estate</h2>
+          <h2>MGRAND HUB Real Estate</h2>
         </div>
         <div className="realestate-nav-views">
           <button

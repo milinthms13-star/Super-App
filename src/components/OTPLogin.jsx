@@ -187,7 +187,7 @@ const OTPLogin = ({ onSuccess, onError }) => {
   return (
     <div className="otp-login-container">
       <div className="otp-login-card">
-        <h2 className="otp-title">Welcome to NilaHub</h2>
+        <h2 className="otp-title">Welcome to MGRAND HUB</h2>
         <p className="otp-subtitle">
           {step === 'phone' && 'Enter your phone number to continue'}
           {step === 'otp' && 'Enter the OTP sent to your phone'}

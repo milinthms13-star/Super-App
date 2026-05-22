@@ -275,8 +275,8 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
               className="nav-logo"
               onClick={() => handleModuleClick(defaultHomeModule)}
             >
-              <img src="/logo.svg" alt="NilaHub Logo" className="logo-image" />
-              <span>NilaHub</span>
+              <img src="/logo.svg" alt="MGRAND HUB Logo" className="logo-image" />
+              <span>MGRAND HUB</span>
             </div>
 
             <GlobalSearch />
@@ -451,7 +451,7 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
 
       <div className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <h3>NilaHub</h3>
+          <h3>MGRAND HUB</h3>
           <button className="close-btn" onClick={() => setIsSidebarOpen(false)}>
             {t("common.close", "Close")}
           </button>

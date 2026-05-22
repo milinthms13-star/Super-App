@@ -9,7 +9,7 @@ const buildDraftStorageKey = (userId) =>
   `${SOCIAL_DRAFT_STORAGE_PREFIX}:${String(userId || "guest")}`;
 
 const CAPTION_SUGGESTIONS = [
-  "Discover local stories and creators with #NilaHub",
+  "Discover local stories and creators with #MGRAND HUB",
   "Community first, growth next. What are you building today?",
   "Fresh reel drop. Tell us your favorite moment.",
   "From Kerala to global audience, one post at a time.",

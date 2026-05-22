@@ -583,7 +583,7 @@ const CartPage = ({ onContinueShopping = null }) => {
         key: paymentSession.key,
         amount: paymentSession.order.amount,
         currency: paymentSession.order.currency,
-        name: "NilaHub",
+        name: "MGRAND HUB",
         description: "Secure order payment",
         order_id: paymentSession.order.id,
         prefill: {

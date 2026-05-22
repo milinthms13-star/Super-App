@@ -28,7 +28,7 @@ const CHANNEL_OPTIONS = [
   {
     value: "In-app",
     title: "In-app alert",
-    description: "Shows the reminder inside your NilaHub workspace.",
+    description: "Shows the reminder inside your MGRAND HUB workspace.",
   },
   {
     value: "SMS",

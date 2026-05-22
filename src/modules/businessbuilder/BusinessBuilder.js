@@ -1677,7 +1677,7 @@ const BusinessBuilder = () => {
 
           <div className="bb10x-hero">
             <div className="bb10x-hero-copy">
-              <p className="bb10x-tag">NilaHub Business Builder</p>
+              <p className="bb10x-tag">MGRAND HUB Business Builder</p>
               <h3>Build your business plan, brand kit, and launch roadmap</h3>
               <p>
                 This workspace merges your proposed upgrade directly into the current module and keeps data compatible with AI Plan, Cost, and Documents tabs.

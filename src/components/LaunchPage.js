@@ -421,7 +421,7 @@ const LaunchPage = ({
           </div>
           <div className="launch-hero-grid">
             <div className="launch-hero-main">
-              <img src="/logo.svg" alt="NilaHub" className="launch-logo" />
+              <img src="/logo.svg" alt="MGRAND HUB" className="launch-logo" />
               <p className="launch-eyebrow">{launch.brand}</p>
               <h1>{launch.title}</h1>
               <div className="registration-actions" aria-label="Registration options">
@@ -550,7 +550,7 @@ const LaunchPage = ({
       <section className="launch-compact-overview" aria-labelledby="compact-overview-heading">
         <div className="launch-section-heading">
           <p>Quick Overview</p>
-          <h2 id="compact-overview-heading">How NilaHub Works in One View</h2>
+          <h2 id="compact-overview-heading">How MGRAND HUB Works in One View</h2>
           <span className="section-subtitle">Everything important, without long scrolling.</span>
         </div>
         <div className="compact-overview-grid">
@@ -582,7 +582,7 @@ const LaunchPage = ({
             </div>
           </article>
         </div>
-        <div className="compact-trust-strip" aria-label="Why choose NilaHub">
+        <div className="compact-trust-strip" aria-label="Why choose MGRAND HUB">
           {trustReasons.map((reason) => (
             <span className="compact-trust-pill" key={reason}>
               <FaCheckCircle aria-hidden="true" />
@@ -594,7 +594,7 @@ const LaunchPage = ({
 
       <section className="launch-cta" aria-labelledby="cta-heading">
         <div className="cta-container">
-          <p className="cta-kicker">Ready to Experience the NilaHub Ecosystem?</p>
+          <p className="cta-kicker">Ready to Experience the MGRAND HUB Ecosystem?</p>
           <h2 id="cta-heading">Launch your journey across Kerala&apos;s growing digital super platform.</h2>
           <div className="cta-actions">
             <button

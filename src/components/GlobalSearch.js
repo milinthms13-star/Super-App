@@ -99,7 +99,7 @@ const GlobalSearch = () => {
           type="button"
           className="search-toggle"
           onClick={() => setIsOpen(!isOpen)}
-          title="Search NilaHub ecosystem"
+          title="Search MGRAND HUB ecosystem"
         >
           <span className="search-icon">S</span>
           <span className="search-placeholder">Search products, homes, rides...</span>
@@ -114,7 +114,7 @@ const GlobalSearch = () => {
               <input
                 ref={inputRef}
                 type="text"
-                placeholder="Search everything in NilaHub..."
+                placeholder="Search everything in MGRAND HUB..."
                 className="search-input"
                 value={searchQuery}
                 onChange={handleSearchChange}

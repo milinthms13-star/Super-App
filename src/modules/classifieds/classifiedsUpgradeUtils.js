@@ -50,7 +50,7 @@ export const getListingRiskWarnings = (listing = {}) => {
 };
 
 export const buildWhatsAppListingMessage = (listing = {}) =>
-  `Hi, I saw your listing on NilaHub Classifieds: ${listing.title || "listing"}. Is it available? Location: ${
+  `Hi, I saw your listing on MGRAND HUB Classifieds: ${listing.title || "listing"}. Is it available? Location: ${
     listing.location || "not mentioned"
   }.`;
 

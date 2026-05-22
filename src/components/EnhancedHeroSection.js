@@ -84,7 +84,7 @@ const EnhancedHeroSection = ({
             <p className="greeting-subtitle">
               {isSeller
                 ? "Manage your business workspace and monitor your channels"
-                : "Your NilaHub dashboard is synced with live platform data"}
+                : "Your MGRAND HUB dashboard is synced with live platform data"}
             </p>
           </div>
 

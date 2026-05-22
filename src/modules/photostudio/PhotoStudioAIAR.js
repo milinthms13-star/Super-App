@@ -53,7 +53,7 @@ const DEFAULT_PLAN_RULES = {
   premiumTools: ["ai-enhance", "background-remove", "object-remove", "face-retouch", "ar-filters"],
   businessTools: ["product-editing", "template-marketplace", "batch-export"],
   payPerExportPrice: 29,
-  watermarkText: "NilaHub Photo Studio",
+  watermarkText: "MGRAND HUB Photo Studio",
   allowFreeWatermarkRemoval: false,
 };
 

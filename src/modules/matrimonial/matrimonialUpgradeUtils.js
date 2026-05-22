@@ -27,7 +27,7 @@ export const buildMatrimonialWhatsAppMessage = (profile) => {
   const name = profile?.name || "your profile";
   const location = profile?.location ? ` from ${profile.location}` : "";
   return encodeURIComponent(
-    `Hi, I saw ${name}${location} on NilaHub SoulMatch. We are interested to know more if your family is comfortable.`
+    `Hi, I saw ${name}${location} on MGRAND HUB SoulMatch. We are interested to know more if your family is comfortable.`
   );
 };
 

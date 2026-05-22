@@ -74,8 +74,8 @@ const ReferralProgram = () => {
   };
 
   const handleShareCode = (platform) => {
-    const shareMessage = dashboard?.shareMessage || `Join me on NilaHub! Use code ${referralCode}`;
-    const shareUrl = dashboard?.referralLink || `https://nilahub.app/referral/${referralCode}`;
+    const shareMessage = dashboard?.shareMessage || `Join me on MGRAND HUB! Use code ${referralCode}`;
+    const shareUrl = dashboard?.referralLink || `https://MGRAND HUB.app/referral/${referralCode}`;
 
     switch (platform) {
       case 'whatsapp':

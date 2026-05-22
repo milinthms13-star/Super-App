@@ -184,7 +184,7 @@ export const DEMO_MESSAGES = {
       _id: 'msg-support-1',
       chatId: 'conv-support-1',
       sender: DEMO_USERS.supportTeam,
-      content: 'Hi! Thank you for contacting NilaHub Support. How can I help you today?',
+      content: 'Hi! Thank you for contacting MGRAND HUB Support. How can I help you today?',
       createdAt: timeAgo(120),
       messageType: 'text',
       read: true,

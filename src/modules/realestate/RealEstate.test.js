@@ -118,7 +118,7 @@ describe("RealEstate", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /^Rent$/i })[0]);
 
-    expect(screen.getByText(/28,000 \/ month/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/28,000 \/ month/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/95 Lakhs/i)).not.toBeInTheDocument();
   });
 

@@ -809,7 +809,7 @@ const normalizeEnabledModuleIds = (modules) => {
     .filter(Boolean);
 };
 
-const FAVORITE_MODULES_STORAGE_PREFIX = "nilahub:dashboard:favorites";
+const FAVORITE_MODULES_STORAGE_PREFIX = "MGRAND HUB:dashboard:favorites";
 const MODULE_VALUE_BADGE_BY_ID = {
   ecommerce: "GlobeMart: Smart shopping",
   messaging: "LinkUp: Live updates",
@@ -1482,10 +1482,10 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
           <>
             {isSeller && (
               <div className={`welcome-section seller-welcome-section`}>
-                <img src="/logo.svg" alt="NilaHub" className="welcome-logo" />
+                <img src="/logo.svg" alt="MGRAND HUB" className="welcome-logo" />
                 <h1>{businessName} Seller Dashboard</h1>
                 <p>
-                  Manage your subscribed NilaHub business categories, monitor seller orders,
+                  Manage your subscribed MGRAND HUB business categories, monitor seller orders,
                   and jump directly into the services your business registered for.
                 </p>
               </div>

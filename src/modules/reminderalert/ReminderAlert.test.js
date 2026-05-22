@@ -109,7 +109,7 @@ describe("ReminderAlert", () => {
     expect(reminderTitles.length).toBeGreaterThan(0);
     expect(screen.queryByText(/invalid date/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit doctor follow-up/i }));
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("2030-05-12")).toBeInTheDocument();

@@ -781,7 +781,7 @@ const BillPayHub = () => {
         key: orderData.razorpayKeyId,
         amount: orderData.amount,
         currency: orderData.currency,
-        name: "NilaHub BillPay",
+        name: "MGRAND HUB BillPay",
         description: selectedBill?.nickname || "Utility bill payment",
         order_id: orderData.orderId,
         handler: (response) =>
@@ -969,7 +969,7 @@ const BillPayHub = () => {
   const handleDownloadReceipt = (txn) => {
     const doc = new jsPDF();
     doc.setFontSize(14);
-    doc.text("NilaHub BillPay Receipt", 14, 20);
+    doc.text("MGRAND HUB BillPay Receipt", 14, 20);
     doc.setFontSize(11);
     doc.text(`Receipt ID: ${txn.receiptId}`, 14, 32);
     doc.text(`Transaction ID: ${txn.displayId || txn.id}`, 14, 40);

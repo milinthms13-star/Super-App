@@ -278,7 +278,7 @@ const EmojiPicker = ({ onSelectEmoji, onSelectSticker, onClose, position }) => {
   const customStickerPreview = createSticker({
     id: 'custom-preview',
     label: customStickerName.trim() || customStickerText.trim() || 'My Sticker',
-    text: customStickerText.trim() || customStickerName.trim() || 'NILAHUB',
+    text: customStickerText.trim() || customStickerName.trim() || 'MGRAND HUB',
     category: CUSTOM_STICKER_CATEGORY_ID,
     palette: selectedCustomPalette.colors,
     tags: ['custom-preview'],

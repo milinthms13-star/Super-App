@@ -55,7 +55,7 @@ export const getDanceReadinessScore = ({ video1File, video2File, removeBackgroun
 
 export const createShareText = (outputUrl) => {
   const url = outputUrl?.startsWith('http') ? outputUrl : `${window.location.origin}${outputUrl}`;
-  return `Check my AI dance duet created in NilaHub: ${url}`;
+  return `Check my AI dance duet created in MGRAND HUB: ${url}`;
 };
 
 export const openWhatsAppShare = (outputUrl) => {

@@ -290,7 +290,7 @@ test("renders the launch screen when the backend reports no active session", asy
   render(<App />);
 
   expect(
-    await screen.findByRole("heading", { level: 1, name: /kerala super app/i })
+    await screen.findByRole("heading", { level: 1, name: /mgrand hub/i })
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /login/i })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /register as a user/i })).toBeInTheDocument();
@@ -373,7 +373,7 @@ test("opens the user registration form", async () => {
   expect(screen.getByText(/register as user/i)).toBeInTheDocument();
   expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
   expect(screen.getByLabelText(/phone number/i)).toBeInTheDocument();
-  expect(screen.getByLabelText(/choose your nilahub id/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/choose your mgrand hub id/i)).toBeInTheDocument();
 });
 
 test("logout returns an authenticated user to the launch page", async () => {
@@ -407,7 +407,7 @@ test("logout returns an authenticated user to the launch page", async () => {
   fireEvent.click(container.querySelector(".logout-btn"));
 
   expect(
-    await screen.findByRole("heading", { level: 1, name: /kerala super app/i })
+    await screen.findByRole("heading", { level: 1, name: /mgrand hub/i })
   ).toBeInTheDocument();
 });
 

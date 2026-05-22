@@ -565,8 +565,8 @@ function AppShell() {
           const previewUser =
             investorPreviewMode === "admin"
               ? {
-                  name: "NilaHub Admin",
-                  email: "admin@nilahub.com",
+                  name: "MGRAND HUB Admin",
+                  email: "admin@MGRAND HUB.com",
                   avatar: "A",
                   registrationType: "admin",
                   role: "admin",
@@ -574,7 +574,7 @@ function AppShell() {
                 }
               : {
                   name: "Dhanya",
-                  email: "dhanya@nilahub.com",
+                  email: "dhanya@MGRAND HUB.com",
                   avatar: "D",
                   registrationType: "user",
                   role: "user",
@@ -1160,7 +1160,7 @@ function AppShell() {
     return (
       <>
         <AnnouncementBar language={language} />
-        <div className="app-loading">Loading NilaHub...</div>
+        <div className="app-loading">Loading MGRAND HUB...</div>
       </>
     );
   }

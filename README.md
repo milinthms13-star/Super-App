@@ -1,6 +1,6 @@
-# NilaHub / MalabarBazaar
+# MGRAND HUB / MalabarBazaar
 
-NilaHub is a large multi-domain super-app built as a React single-page application with a Node/Express backend. It includes commerce, messaging, classifieds, real estate, finance, freelancer services, bill pay, food delivery, travel, safety, astrology, education, productivity, and admin workflows.
+MGRAND HUB is a large multi-domain super-app built as a React single-page application with a Node/Express backend. It includes commerce, messaging, classifieds, real estate, finance, freelancer services, bill pay, food delivery, travel, safety, astrology, education, productivity, and admin workflows.
 
 ## Stack
 

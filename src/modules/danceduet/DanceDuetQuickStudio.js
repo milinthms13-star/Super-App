@@ -389,7 +389,7 @@ const DanceDuetQuickStudio = () => {
     <main className="dance-duet-studio">
       <section className="dance-duet-hero">
         <div>
-          <p className="dance-duet-eyebrow">NilaHub AI Studio</p>
+          <p className="dance-duet-eyebrow">MGRAND HUB AI Studio</p>
           <h1>Auto Dance Duet Maker</h1>
           <p>Merge two dance videos into one reel, shared stage, or premium split-screen performance.</p>
         </div>
@@ -583,7 +583,7 @@ const DanceDuetQuickStudio = () => {
           <h2>Duet Output</h2>
           <video controls src={outputUrl} className="dance-duet-result-video" />
           <div className="dance-duet-result-actions">
-            <a href={outputUrl} download="nilahub-dance-duet.mp4">
+            <a href={outputUrl} download="MGRAND HUB-dance-duet.mp4">
               Download MP4
             </a>
             <button type="button" onClick={() => openWhatsAppShare(outputUrl)}>
@@ -661,7 +661,7 @@ const DanceDuetQuickStudio = () => {
                   </div>
                   <div className="dance-duet-history-actions">
                     {canDownload ? (
-                      <a href={job.output.outputUrl} download={`nilahub-dance-duet-${jobId.slice(-6)}.mp4`}>
+                      <a href={job.output.outputUrl} download={`MGRAND HUB-dance-duet-${jobId.slice(-6)}.mp4`}>
                         Download
                       </a>
                     ) : (

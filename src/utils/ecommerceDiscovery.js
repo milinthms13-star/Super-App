@@ -312,7 +312,7 @@ export const buildProductShareMessage = (product = {}) => {
     ? ` Dispatches from ${product.batchLocation || product.location}.`
     : "";
 
-  return `Check out ${name}${businessName} on NilaHub GlobeMart for ${price}.${discountCopy}${locationCopy}`.trim();
+  return `Check out ${name}${businessName} on MGRAND HUB GlobeMart for ${price}.${discountCopy}${locationCopy}`.trim();
 };
 
 export const getDefaultRefillCadenceDays = (product = {}) => {

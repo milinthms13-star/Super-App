@@ -1,0 +1,39 @@
+{
+  "brandName": "MGRAND HUB",
+  "tagline": "OMNIPLATFORM ECOSYSTEM",
+  "designSystem": {
+    "typography": {
+      "primaryFont": "Inter",
+      "secondaryFont": "Montserrat",
+      "weights": {
+        "title": 900,
+        "subtitle": 800,
+        "tagline": 500
+      }
+    },
+    "colorPalette": {
+      "primaryTextDarkTheme": "#FFFFFF",
+      "primaryTextLightTheme": "#000000",
+      "accentGold": "#D4AF37",
+      "secondarySlate": "#8E8E93",
+      "backgroundDark": "#141414"
+    },
+    "iconography": {
+      "type": "Geometric Hub Shield",
+      "elements": [
+        "Hexagonal Boundary",
+        "Interlocking 'M' Facets",
+        "Central Sync Dot Core"
+      ]
+    }
+  },
+  "subBrands": [
+    "MGRAND Commerce",
+    "MGRAND Financial",
+    "MGRAND Services",
+    "MGRAND Health"
+  ],
+  "visualAssets": {
+    "referenceDesign": "watermarked_img_2943629295701846465.png"
+  }
+}

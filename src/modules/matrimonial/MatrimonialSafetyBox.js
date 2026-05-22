@@ -10,7 +10,7 @@ const MatrimonialSafetyBox = () => (
       <li>Report profiles asking for urgent money, foreign transfer, crypto or gift cards.</li>
     </ul>
     <p>
-      NilaHub supports discovery and communication. Final marriage decisions should be verified by
+      MGRAND HUB supports discovery and communication. Final marriage decisions should be verified by
       family and legal documents.
     </p>
   </aside>

@@ -910,7 +910,7 @@ const Ecommerce = ({
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareMessage);
-        setQuickActionMessage("Product summary copied. You can paste it directly into NilaHub chat.");
+        setQuickActionMessage("Product summary copied. You can paste it directly into MGRAND HUB chat.");
         return;
       }
     } catch (error) {
@@ -2446,7 +2446,7 @@ const Ecommerce = ({
               </div>
               {personalizedRecommendations.length === 0 ? (
                 <p className="shopper-empty-copy">
-                  Browse or favorite a few products and NilaHub will start curating this section.
+                  Browse or favorite a few products and MGRAND HUB will start curating this section.
                 </p>
               ) : (
                 <div className="shopper-mini-grid">
