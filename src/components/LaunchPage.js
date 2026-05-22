@@ -482,38 +482,34 @@ const LaunchPage = ({
               </div>
             </div>
 
-            <aside className="hero-spotlight-panel" aria-label="Launch overview">
-              <p className="hero-spotlight-kicker">Platform at a glance</p>
-              <div className="hero-spotlight-metrics">
-                <div className="hero-spotlight-metric">
-                  <strong>{activeModuleCount}+</strong>
-                  <span>Live modules</span>
-                </div>
-                <div className="hero-spotlight-metric">
-                  <strong>{ecosystemRoles.length}</strong>
-                  <span>Role journeys</span>
-                </div>
-                <div className="hero-spotlight-metric">
-                  <strong>{externalLinkCount}</strong>
-                  <span>Custom links</span>
-                </div>
-              </div>
-              <div className="hero-spotlight-list">
-                {spotlightModules.map((feature) => (
-                  <div key={feature.key} className="hero-spotlight-item">
-                    <span className="hero-spotlight-icon-wrap">
-                      {feature.icon ? renderIcon(feature.icon, "hero-spotlight-icon") : null}
-                    </span>
-                    <div>
-                      <h3>{feature.title}</h3>
-                      <p>{feature.description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </aside>
           </div>
-
+          <div className="hero-stats-row" aria-label="Platform at a glance">
+            <div className="hero-spotlight-metric">
+              <strong>{activeModuleCount}+</strong>
+              <span>Live modules</span>
+            </div>
+            <div className="hero-spotlight-metric">
+              <strong>{ecosystemRoles.length}</strong>
+              <span>Role journeys</span>
+            </div>
+            <div className="hero-spotlight-metric">
+              <strong>{externalLinkCount}</strong>
+              <span>Custom links</span>
+            </div>
+          </div>
+          <div className="hero-spotlight-list" aria-label="Platform spotlight modules">
+            {spotlightModules.map((feature) => (
+              <div key={feature.key} className="hero-spotlight-item">
+                <span className="hero-spotlight-icon-wrap">
+                  {feature.icon ? renderIcon(feature.icon, "hero-spotlight-icon") : null}
+                </span>
+                <div>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -605,7 +601,7 @@ const LaunchPage = ({
         <div className="compact-trust-strip" aria-label="Why choose MGRAND HUB">
           {trustReasons.map((reason) => (
             <span className="compact-trust-pill" key={reason}>
-              <FaCheckCircle aria-hidden="true" />
+              <FaCheckCircle className="compact-trust-icon" aria-hidden="true" />
               {reason}
             </span>
           ))}
