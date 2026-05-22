@@ -32,17 +32,50 @@ const getRazorpayCredentials = () => {
   const keyId = String(process.env.RAZORPAY_KEY_ID || '').trim();
   const keySecret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
 
-  if (isProduction && (!keyId || !keySecret)) {
-    throw new Error('Razorpay credentials must be configured in production.');
-  }
-
   return {
-    key_id: keyId || 'test_key',
-    key_secret: keySecret || 'test_secret',
+    key_id: keyId,
+    key_secret: keySecret,
   };
 };
 
-const razorpay = new Razorpay(getRazorpayCredentials());
+const buildRazorpayUnavailableError = () => {
+  const error = new Error('Razorpay credentials are not configured.');
+  error.code = 'RAZORPAY_NOT_CONFIGURED';
+  return error;
+};
+
+const createRazorpayDisabledClient = () => ({
+  orders: {
+    create: async () => {
+      throw buildRazorpayUnavailableError();
+    },
+    fetch: async () => {
+      throw buildRazorpayUnavailableError();
+    },
+  },
+  payments: {
+    refund: async () => {
+      throw buildRazorpayUnavailableError();
+    },
+  },
+});
+
+const createRazorpayClient = () => {
+  const credentials = getRazorpayCredentials();
+  if (!credentials.key_id || !credentials.key_secret) {
+    const message =
+      'Razorpay credentials are not configured. Astrology payment endpoints are disabled until keys are set.';
+    if (isProduction) {
+      logger.error(message);
+    } else {
+      logger.warn(message);
+    }
+    return createRazorpayDisabledClient();
+  }
+  return new Razorpay(credentials);
+};
+
+const razorpay = createRazorpayClient();
 
 const assistantLimiter = rateLimit({
   windowMs: 60 * 1000,
