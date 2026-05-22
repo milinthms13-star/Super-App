@@ -13,6 +13,23 @@ const EmployerDashboard = ({
   const stats = dashboard?.stats || {};
   const jobs = dashboard?.jobs || [];
   const currentApplications = selectedJobId ? applicationsByJob[selectedJobId] || [] : [];
+  const totalApplications = Number(stats.totalApplications || 0);
+  const viewedRate = totalApplications ? Math.round(((stats.viewed || 0) / totalApplications) * 100) : 0;
+  const shortlistedRate = totalApplications ? Math.round(((stats.shortlisted || 0) / totalApplications) * 100) : 0;
+  const interviewRate = totalApplications ? Math.round(((stats.interview || 0) / totalApplications) * 100) : 0;
+  const selectedRate = totalApplications ? Math.round(((stats.selected || 0) / totalApplications) * 100) : 0;
+  const funnelBlocks = [
+    { id: "applied", label: "Applied", count: stats.applied || totalApplications, rate: 100 },
+    { id: "viewed", label: "Viewed", count: stats.viewed || 0, rate: viewedRate },
+    { id: "shortlisted", label: "Shortlisted", count: stats.shortlisted || 0, rate: shortlistedRate },
+    { id: "interview", label: "Interview", count: stats.interview || 0, rate: interviewRate },
+    { id: "selected", label: "Selected", count: stats.selected || 0, rate: selectedRate },
+  ];
+  const getBlockTone = (rate) => {
+    if (rate >= 65) return "high";
+    if (rate >= 30) return "medium";
+    return "low";
+  };
 
   return (
     <section className="jp-panel">
@@ -28,10 +45,24 @@ const EmployerDashboard = ({
         <article><h3>{stats.selected || 0}</h3><p>Selected</p></article>
         <article><h3>{stats.averageMatchScore || 0}%</h3><p>Avg Match Score</p></article>
       </div>
+      <div className="jp-funnel-grid" aria-label="Hiring funnel">
+        {funnelBlocks.map((block) => (
+          <article key={block.id} className={`jp-funnel-card ${getBlockTone(block.rate)}`}>
+            <p>{block.label}</p>
+            <h3>{block.count}</h3>
+            <span>{block.rate}% conversion</span>
+          </article>
+        ))}
+      </div>
 
       <h3>Your Jobs</h3>
       {loading ? <p>Loading employer jobs...</p> : null}
-      {!loading && jobs.length === 0 ? <p>No jobs posted yet.</p> : null}
+      {!loading && jobs.length === 0 ? (
+        <div className="jp-empty-state">
+          <h4>No jobs posted yet</h4>
+          <p>Create your first role and use Canva-ready creative cards to boost response quality.</p>
+        </div>
+      ) : null}
       {!loading && jobs.length > 0 ? (
         <div className="jp-table">
           {jobs.map((job) => (

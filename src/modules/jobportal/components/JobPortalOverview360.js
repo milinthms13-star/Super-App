@@ -360,6 +360,24 @@ const JobPortalOverview360 = ({ data, loading, error, onRefresh }) => {
                 ))}
               </div>
             ) : null}
+            <div className="jp-reporting-card">
+              <h4>Monthly Reporting Kit</h4>
+              <p>Standardized visual blocks for leadership deck and Canva infographic exports.</p>
+              <div className="jp-reporting-grid">
+                <article>
+                  <strong>Demand Tile</strong>
+                  <p>Use trend + projected jobs for executive summary.</p>
+                </article>
+                <article>
+                  <strong>Trust Tile</strong>
+                  <p>Show pending/high-risk moderation counts monthly.</p>
+                </article>
+                <article>
+                  <strong>Funnel Tile</strong>
+                  <p>View to Save, Save to Apply, Apply to Selection.</p>
+                </article>
+              </div>
+            </div>
             {marketplace.topSkills?.length ? (
               <div className="jp-table">
                 <h4>Top skills</h4>

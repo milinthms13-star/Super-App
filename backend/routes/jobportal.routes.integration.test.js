@@ -3,6 +3,8 @@ const request = require('supertest');
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
+process.env.JOBPORTAL_CRON_SECRET = process.env.JOBPORTAL_CRON_SECRET || 'test-cron-secret';
+
 jest.mock('../middleware/auth', () => ({
   authenticate: (req, _res, next) => {
     req.user = {
@@ -162,5 +164,33 @@ describe('jobportal overview360 integration', () => {
     expect(response.body.data.employer.activeJobs).toBe(2);
     expect(response.body.data.employer.totalApplications).toBe(1);
     expect(response.body.data.employer.topJobs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('returns public marketplace overview with cache metadata', async () => {
+    const response = await request(app).get('/api/jobportal/overview360/public');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toBeDefined();
+    expect(response.body.data.marketplace).toBeDefined();
+    expect(response.body.data.cache).toBeDefined();
+    expect(typeof response.body.data.cache.hit).toBe('boolean');
+  });
+
+  it('protects and serves cron rebuild endpoint', async () => {
+    const blocked = await request(app)
+      .get('/api/jobportal/internal/cron/overview360-rebuild')
+      .set('x-cron-secret', 'wrong-secret');
+
+    expect(blocked.status).toBe(401);
+
+    const allowed = await request(app)
+      .get('/api/jobportal/internal/cron/overview360-rebuild')
+      .set('x-cron-secret', 'test-cron-secret');
+
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.success).toBe(true);
+    expect(allowed.body.data).toBeDefined();
+    expect(typeof allowed.body.data.totalActiveJobs).toBe('number');
   });
 });

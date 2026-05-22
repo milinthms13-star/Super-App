@@ -14,17 +14,39 @@ const User = require('../models/User');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
+const { publishDueScheduledPosts } = require('../../workers/scheduler');
 const router = express.Router();
 
 const SOCIAL_POST_STATUS = {
   PUBLISHED: 'published',
   DRAFT: 'draft',
-  SCHEDULED: 'scheduled',
-};
-
-const SOCIAL_POST_TYPE = {
+    const likesAgg = await SocialPost.aggregate([
+      { $match: { author: mongoose.Types.ObjectId(userId), isDeleted: false } },
+      { $group: { _id: null, likes: { $sum: { $ifNull: ["$likesCount", 0] } } } },
+    ]);
+    const likesCount = likesAgg && likesAgg[0] ? likesAgg[0].likes : 0;
   TEXT: 'text',
+    // 30-day timeseries
+    const since = new Date();
+    since.setDate(since.getDate() - 29);
+    const timeSeries = await SocialPost.aggregate([
+      { $match: { author: mongoose.Types.ObjectId(userId), isDeleted: false, createdAt: { $gte: since } } },
+      { $project: { day: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, likesCount: { $ifNull: ["$likesCount", 0] }, commentsCount: { $ifNull: ["$commentsCount", 0] } } },
+      { $group: { _id: "$day", posts: { $sum: 1 }, likes: { $sum: "$likesCount" }, comments: { $sum: "$commentsCount" } } },
+      { $sort: { _id: 1 } },
+    ]);
   IMAGE: 'image',
+    // fill missing days
+    const seriesMap = {};
+    timeSeries.forEach((r) => (seriesMap[r._id] = r));
+    const series = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - (29 - i));
+      const key = d.toISOString().slice(0, 10);
+      const entry = seriesMap[key] || { _id: key, posts: 0, likes: 0, comments: 0 };
+      series.push({ date: key, posts: entry.posts, likes: entry.likes, comments: entry.comments });
+    }
   VIDEO: 'video',
   REEL: 'reel',
   POLL: 'poll',
@@ -32,6 +54,7 @@ const SOCIAL_POST_TYPE = {
 
 const SOCIAL_POST_CATEGORIES = new Set([
   'Community',
+// Admin: trigger publish of due scheduled posts
   'Reels',
   'Polls',
   'Business',

@@ -866,7 +866,7 @@ const ReminderAlert = () => {
         </div>
       )}
 
-      
+      <button
         type="button"
         className="reminderalert-floating-add-btn"
         onClick={() => {

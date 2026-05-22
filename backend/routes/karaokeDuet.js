@@ -8,6 +8,12 @@ const multer = require('multer');
 const authenticate = require('../middleware/auth');
 const KaraokeDuetRoom = require('../models/KaraokeDuetRoom');
 const { mixDuetRoom, mixStudioKaraokeDuet } = require('../services/karaokeMixService');
+const {
+  generateLyricsSyncScript,
+  buildSessionFeedback,
+  buildStudioFeedback,
+  buildCreatorPack,
+} = require('../services/karaokeCoachService');
 
 const router = express.Router();
 
@@ -161,6 +167,7 @@ router.get('/meta', authenticate, async (_req, res) => {
       'Local take upload (per singer)',
       'Server-side alignment and final MP3/WAV mix',
       'Lyrics sync payload',
+      'Zero-cost Canva-ready creator pack',
     ],
   });
 });
@@ -214,6 +221,141 @@ router.get('/rooms/mine', authenticate, async (req, res) => {
     return res.json({ success: true, rooms: rooms.map(summarizeRoomForAnalytics) });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Failed to load your karaoke duet rooms.', error: error.message });
+  }
+});
+
+router.post('/coach/lyrics-sync', authenticate, async (req, res) => {
+  try {
+    const lyricsText = String(req.body?.lyricsText || '').trim();
+    if (!lyricsText) {
+      return res.status(400).json({ success: false, message: 'lyricsText is required.' });
+    }
+
+    const result = generateLyricsSyncScript({
+      lyricsText,
+      bpm: req.body?.bpm,
+      beatsPerLine: req.body?.beatsPerLine,
+      startTimeSec: req.body?.startTimeSec,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Zero-cost lyric sync script generated.',
+      data: result,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate lyric sync script.',
+      error: error.message,
+    });
+  }
+});
+
+router.post('/coach/session-feedback', authenticate, async (req, res) => {
+  try {
+    const roomCode = String(req.body?.roomCode || '').trim().toUpperCase();
+    const userId = currentUserId(req);
+    let room = null;
+
+    if (roomCode) {
+      room = await KaraokeDuetRoom.findOne({ roomCode }).lean();
+      if (!room) {
+        return res.status(404).json({ success: false, message: 'Room not found.' });
+      }
+      if (!requireParticipant(room, userId)) {
+        return res.status(403).json({ success: false, message: 'Only participants can request room coaching.' });
+      }
+    }
+
+    const feedback = buildSessionFeedback({
+      room,
+      context: req.body?.context || {},
+    });
+
+    return res.json({
+      success: true,
+      message: 'Zero-cost session coaching generated.',
+      data: feedback,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate session feedback.',
+      error: error.message,
+    });
+  }
+});
+
+router.post('/coach/studio-feedback', authenticate, async (req, res) => {
+  try {
+    const feedback = buildStudioFeedback({
+      delayASeconds: req.body?.delayASeconds,
+      delayBSeconds: req.body?.delayBSeconds,
+      volumeA: req.body?.volumeA,
+      volumeB: req.body?.volumeB,
+      hasTrack: Boolean(req.body?.hasTrack),
+      hasVoiceA: Boolean(req.body?.hasVoiceA),
+      hasVoiceB: Boolean(req.body?.hasVoiceB),
+      lyricsLength: req.body?.lyricsLength,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Zero-cost studio coaching generated.',
+      data: feedback,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate studio feedback.',
+      error: error.message,
+    });
+  }
+});
+
+router.post('/coach/creator-pack', authenticate, async (req, res) => {
+  try {
+    const roomCode = String(req.body?.roomCode || '').trim().toUpperCase();
+    const userId = currentUserId(req);
+    let room = null;
+
+    if (roomCode) {
+      room = await KaraokeDuetRoom.findOne({ roomCode }).lean();
+      if (!room) {
+        return res.status(404).json({ success: false, message: 'Room not found.' });
+      }
+      if (!requireParticipant(room, userId)) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'Only participants can generate creator pack for this room.' });
+      }
+    }
+
+    const pack = buildCreatorPack({
+      room,
+      context: {
+        roomCode,
+        title: req.body?.title,
+        karaokeTrackBpm: req.body?.karaokeTrackBpm,
+        lyrics: req.body?.lyrics,
+        mood: req.body?.mood,
+        overallScore: req.body?.overallScore,
+        fallbackScore: req.body?.fallbackScore,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Zero-cost creator pack generated.',
+      data: pack,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate creator pack.',
+      error: error.message,
+    });
   }
 });
 
@@ -486,6 +628,27 @@ router.post('/rooms/:roomCode/finalize', authenticate, async (req, res) => {
     const host = room.participants.find((participant) => participant.role === 'host');
     if (!host || String(host.userId) !== userId) {
       return res.status(403).json({ success: false, message: 'Only host can finalize duet mix.' });
+    }
+
+    const activeMixJob = [...(room.mixJobs || [])]
+      .reverse()
+      .find((job) => job.status === 'processing' || job.status === 'queued');
+    if (activeMixJob) {
+      return res.status(409).json({
+        success: false,
+        message: 'Mix generation is already in progress for this room.',
+        jobId: activeMixJob.jobId,
+        status: activeMixJob.status,
+      });
+    }
+
+    if (room.status === ROOM_STATUS.completed && Array.isArray(room.finalOutputs) && room.finalOutputs.length > 0) {
+      return res.json({
+        success: true,
+        message: 'Existing final mix is already available.',
+        outputs: room.finalOutputs,
+        reused: true,
+      });
     }
 
     const jobId = `mix-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;

@@ -225,6 +225,70 @@ class RideSharingService {
   }
 
   /**
+   * Get active ride for current user
+   */
+  static async getActiveRide() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.get(`${API_BASE}/rides/active`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { error: 'Failed to fetch active ride' };
+    }
+  }
+
+  /**
+   * Get rides for current user (customer or driver)
+   */
+  static async getMyRides() {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.get(`${API_BASE}/my-rides`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { error: 'Failed to fetch rides' };
+    }
+  }
+
+  /**
+   * Set driver availability status
+   */
+  static async setDriverStatus(status) {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.put(
+        `${API_BASE}/driver/status`,
+        { status },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { error: 'Failed to update driver status' };
+    }
+  }
+
+  /**
+   * Activate SOS for a ride
+   */
+  static async activateSOS(rideId) {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await axios.post(
+        `${API_BASE}/rides/${rideId}/sos`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { error: 'Failed to activate SOS' };
+    }
+  }
+
+  /**
    * Refresh authentication token
    */
   static async refreshToken() {

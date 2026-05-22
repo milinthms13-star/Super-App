@@ -508,30 +508,7 @@ const MODULE_CONFIG = [
     gradient: "linear-gradient(135deg, #166534 0%, #16A34A 45%, #F59E0B 100%)",
     emoji: "KH",
   },
-  {
-    id: "womensafetyfamily",
-    nameKey: "modules.womensafetyfamily",
-    fallbackName: "Women Safety + Family Protection",
-    icon: "sosalert",
-    descriptionKey: "dashboard.moduleDescriptions.womensafetyfamily",
-    fallbackDescription:
-      "Family safety ecosystem with SOS tracking, trusted circles, child safety, and elderly care alerts.",
-    stats: "Safety-first network",
-    gradient: "linear-gradient(135deg, #7F1D1D 0%, #E11D48 45%, #FB7185 100%)",
-    emoji: "SF",
-  },
-  {
-    id: "trustlayer",
-    nameKey: "modules.trustlayer",
-    fallbackName: "Trust Layer",
-    icon: "sosalert",
-    descriptionKey: "dashboard.moduleDescriptions.trustlayer",
-    fallbackDescription:
-      "Platform-wide verification, trust scores, fraud detection, community reporting, and AI moderation safeguards.",
-    stats: "Fraud defense core",
-    gradient: "linear-gradient(135deg, #111827 0%, #374151 45%, #6B7280 100%)",
-    emoji: "TL",
-  },
+
   {
     id: "jobportal",
     nameKey: "modules.jobportal",
@@ -785,7 +762,6 @@ const MODULE_CATEGORY_MAP = {
   karaokeduet: "business",
   beautyai: "business",
   kitchen: "business",
-  trustlayer: "business",
   skilllearning: "business",
   resumebuilder: "business",
   education: "business",
@@ -795,7 +771,6 @@ const MODULE_CATEGORY_MAP = {
   healthcare: "utility",
   devadarshan: "utility",
   localservices: "utility",
-  womensafetyfamily: "utility",
   reminderalert: "utility",
   sosalert: "utility",
   astrology: "utility",
@@ -1261,8 +1236,6 @@ const Dashboard = ({ enabledModules, customLinks = [], onModuleChange = null }) 
         module.id === "kitchen" ||
         module.id === "businessbuilder" ||
         module.id === "gulfservices" ||
-        module.id === "womensafetyfamily" ||
-        module.id === "trustlayer" ||
         module.id === "devadarshan" ||
         module.id === "localservices" ||
         module.id === "hyperlocal" ||

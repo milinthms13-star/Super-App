@@ -188,19 +188,8 @@ const moduleFallbacks = {
     icon: "FaStar",
     isComingSoon: false,
   },
-  womensafetyfamily: {
-    title: "Women Safety + Family Protection",
-    description: "Trusted SOS, child and elderly care alerts, and safety-first family protection stack.",
-    icon: "FaShieldAlt",
-    isComingSoon: false,
-  },
-  trustlayer: {
-    title: "Trust Layer",
-    description: "Verified users, trust scoring, fraud detection, reporting, and moderation architecture.",
-    icon: "FaShieldAlt",
-    isComingSoon: false,
-  },
-};
+
+  };
 
 const ecosystemRoles = [
   { icon: "FaUser", label: "Users" },
@@ -273,12 +262,10 @@ const moduleCategoryMap = {
   resumebuilder: "business",
   photostudio: "business",
   nilaaihub: "business",
-  trustlayer: "business",
-  finance: "utility",
+    finance: "utility",
   billpay: "utility",
   fooddelivery: "utility",
   healthcare: "utility",
-  womensafetyfamily: "utility",
   reminderalert: "utility",
   sosalert: "utility",
   devadarshan: "utility",
@@ -325,8 +312,6 @@ const LaunchPage = ({
     "Nila Kids Story Video Maker": "kidsstoryvideomaker",
 
     "Kerala + Gulf Jobs Migration": "gulfservices",
-    "Women Safety + Family Protection": "womensafetyfamily",
-    "Trust Layer": "trustlayer",
     SwiftRide: "ridesharing",
     SoulMatch: "matrimonial",
     VibeHub: "socialmedia",

@@ -62,6 +62,12 @@ const resolveInputPath = async (assetUrl, fallbackExtension = '.bin') => {
   throw new Error(`Unsupported or missing asset source: ${assetUrl}`);
 };
 
+const isPathInsideDirectory = (baseDir, targetPath) => {
+  const normalizedBase = path.normalize(baseDir);
+  const normalizedTarget = path.normalize(targetPath);
+  return normalizedTarget.startsWith(normalizedBase);
+};
+
 const runFfmpeg = (args) =>
   new Promise((resolve, reject) => {
     const child = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -142,9 +148,16 @@ const mixDuetRoom = async ({ room, outputFormats = ['mp3', 'wav'] }) => {
   const seed = crypto.randomBytes(3).toString('hex');
   const baseName = `room-${String(room.roomCode || 'DUET').toLowerCase()}-${timestamp}-${seed}`;
 
+  const cleanupPaths = new Set();
   const trackPath = await resolveInputPath(mixTrackUrl, '.mp3');
   const hostTakePath = await resolveInputPath(hostTake.fileUrl, '.webm');
   const guestTakePath = await resolveInputPath(guestTake.fileUrl, '.webm');
+
+  [trackPath, hostTakePath, guestTakePath].forEach((resolvedPath) => {
+    if (isPathInsideDirectory(MIX_TEMP_DIR, resolvedPath)) {
+      cleanupPaths.add(resolvedPath);
+    }
+  });
 
   const roomStartedAtMs = Number(room.startedAtMs);
   const hostDelayMs = getTakeDelayMs(roomStartedAtMs, hostTake);
@@ -157,60 +170,72 @@ const mixDuetRoom = async ({ room, outputFormats = ['mp3', 'wav'] }) => {
     `[0:a][host][guest]amix=inputs=3:duration=longest:dropout_transition=2[mixout]`,
   ].join(';');
 
-  await runFfmpeg([
-    '-y',
-    '-i',
-    trackPath,
-    '-i',
-    hostTakePath,
-    '-i',
-    guestTakePath,
-    '-filter_complex',
-    filterComplex,
-    '-map',
-    '[mixout]',
-    '-ac',
-    '2',
-    '-ar',
-    '44100',
-    wavOutputPath,
-  ]);
-
-  const outputs = [];
-
-  if (outputFormats.includes('wav')) {
-    outputs.push({
-      format: 'wav',
-      outputUrl: publicUrlForAbsolutePath(wavOutputPath),
-      fileSizeBytes: await statSize(wavOutputPath),
-    });
-  }
-
-  if (outputFormats.includes('mp3')) {
-    const mp3OutputPath = path.join(MIX_OUTPUT_DIR, `${baseName}.mp3`);
+  try {
     await runFfmpeg([
       '-y',
       '-i',
-      wavOutputPath,
-      '-codec:a',
-      'libmp3lame',
-      '-qscale:a',
+      trackPath,
+      '-i',
+      hostTakePath,
+      '-i',
+      guestTakePath,
+      '-filter_complex',
+      filterComplex,
+      '-map',
+      '[mixout]',
+      '-ac',
       '2',
-      mp3OutputPath,
+      '-ar',
+      '44100',
+      wavOutputPath,
     ]);
 
-    outputs.push({
-      format: 'mp3',
-      outputUrl: publicUrlForAbsolutePath(mp3OutputPath),
-      fileSizeBytes: await statSize(mp3OutputPath),
-    });
-  }
+    const outputs = [];
 
-  return {
-    hostDelayMs,
-    guestDelayMs,
-    outputs,
-  };
+    if (outputFormats.includes('wav')) {
+      outputs.push({
+        format: 'wav',
+        outputUrl: publicUrlForAbsolutePath(wavOutputPath),
+        fileSizeBytes: await statSize(wavOutputPath),
+      });
+    }
+
+    if (outputFormats.includes('mp3')) {
+      const mp3OutputPath = path.join(MIX_OUTPUT_DIR, `${baseName}.mp3`);
+      await runFfmpeg([
+        '-y',
+        '-i',
+        wavOutputPath,
+        '-codec:a',
+        'libmp3lame',
+        '-qscale:a',
+        '2',
+        mp3OutputPath,
+      ]);
+
+      outputs.push({
+        format: 'mp3',
+        outputUrl: publicUrlForAbsolutePath(mp3OutputPath),
+        fileSizeBytes: await statSize(mp3OutputPath),
+      });
+    }
+
+    return {
+      hostDelayMs,
+      guestDelayMs,
+      outputs,
+    };
+  } finally {
+    await Promise.all(
+      Array.from(cleanupPaths).map(async (tempPath) => {
+        try {
+          await fs.promises.unlink(tempPath);
+        } catch (_error) {
+          // best-effort cleanup
+        }
+      })
+    );
+  }
 };
 
 const mixStudioKaraokeDuet = async ({

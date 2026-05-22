@@ -177,6 +177,7 @@ router.post('/message', validateVoiceFriendSession, messageRateLimiter, async (r
       data: {
         ...result,
         reply,
+        safetyResponse: result?.safetyResponse || false,
       },
       message: 'Voice Friend response generated',
     });
@@ -222,12 +223,16 @@ router.post('/avatar', validateVoiceFriendSession, upload.single('avatar'), asyn
 
     const relativeUrl = `/uploads/voicefriend/${req.file.filename}`;
     req.voiceFriendSession.friendCustomAvatar = relativeUrl;
+    voiceFriendService.updateSession(req.voiceFriendSession.sessionId, {
+      friendCustomAvatar: relativeUrl,
+    });
 
     res.json({
       success: true,
       data: {
         url: relativeUrl,
         fileName: req.file.filename,
+        friendCustomAvatar: relativeUrl,
       },
       message: 'Avatar uploaded successfully.',
     });

@@ -11,6 +11,7 @@ const logger = require('../utils/logger');
 const { sendSMS, sendWhatsApp } = require('../services/smsService');
 const { uploadPhotoToS3 } = require('../services/s3Service');
 const { saveAudioFile, validateAudio } = require('../services/audioProcessingService');
+const { enqueueNotificationJob } = require('../jobs/sosNotificationQueue');
 const { detectSpam } = require('../services/spamDetectionService');
 const VideoTranscodingService = require('../services/videoTranscodingService');
 const ContactGroupService = require('../services/contactGroupService');
@@ -418,6 +419,7 @@ exports.getTrackingLocation = async (req, res) => {
 exports.sendSOSAlert = async (req, res) => {
   try {
     const userId = req.user.id;
+    const userName = req.user.name || req.user.email || 'SOS User';
     const { reason, longitude, latitude, accuracy, photos = [], channels = [] } = req.body;
     const parsedLatitude = Number(latitude);
     const parsedLongitude = Number(longitude);
@@ -443,12 +445,20 @@ exports.sendSOSAlert = async (req, res) => {
       });
     }
 
-    // Validate user has verified contacts
-    const verifiedContacts = await SOSContact.find({
-      userId,
-      verified: true,
-    });
+    const allowedChannels = ['SMS', 'WhatsApp', 'Call', 'LinkUp'];
+    const normalizedChannels = channels
+      .filter((channel) => typeof channel === 'string')
+      .map((channel) => channel.trim())
+      .filter((channel) => allowedChannels.includes(channel));
 
+    if (normalizedChannels.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid alert channels',
+      });
+    }
+
+    const verifiedContacts = await SOSContact.find({ userId, verified: true });
     if (verifiedContacts.length === 0) {
       return res.status(400).json({
         success: false,
@@ -457,43 +467,33 @@ exports.sendSOSAlert = async (req, res) => {
       });
     }
 
-    // Upload photos to S3 (if provided)
     let photoURLs = [];
     if (photos && photos.length > 0) {
       for (const photo of photos) {
         try {
-          // photo should be base64 string
           const buffer = Buffer.from(photo.data, 'base64');
           const filename = `sos-${userId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
           const url = await uploadPhotoToS3(buffer, filename, 'sos-photos');
-          photoURLs.push({
-            url,
-            timestamp: photo.timestamp,
-          });
+          photoURLs.push({ url, timestamp: photo.timestamp || new Date() });
         } catch (photoError) {
           logger.warn(`Photo upload failed: ${photoError.message}`);
-          // Continue without this photo, don't block alert
         }
       }
     }
 
-    // Create incident record
     const incident = await SOSIncident.create({
       userId,
       reason,
       latitude: parsedLatitude,
       longitude: parsedLongitude,
       accuracy,
+      locationText: `${parsedLatitude}, ${parsedLongitude}`,
+      mapsUrl: `https://www.google.com/maps/search/?api=1&query=${parsedLatitude},${parsedLongitude}`,
       photos: photoURLs,
       status: 'active',
-      channels,
-      retryLog: [
-        {
-          timestamp: new Date(),
-          action: 'INITIAL_ALERT',
-          status: 'sent',
-        },
-      ],
+      channels: normalizedChannels,
+      alertQueueStatus: 'queued',
+      queuedAt: new Date(),
     });
 
     if (!incident) {
@@ -503,117 +503,74 @@ exports.sendSOSAlert = async (req, res) => {
       });
     }
 
-    // Send alerts to verified contacts via specified channels
-    const alerts = [];
-    for (const contact of verifiedContacts) {
-      for (const channel of channels) {
-        try {
-          const channelLower = String(channel || '').toLowerCase();
+    const token = crypto.randomBytes(16).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-          if (channelLower === 'sms' || channelLower === 'whatsapp' || channelLower === 'linkup') {
-            // Create tracking link first
-            const token = crypto.randomBytes(16).toString('hex');
-            const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await TrackingLink.create({
+      token,
+      incidentId: incident._id,
+      userId,
+      expiresAt,
+      active: true,
+    });
 
-            await TrackingLink.create({
-              token,
-              incidentId: incident._id,
-              userId,
-              expiresAt,
-              active: true,
-            });
+    const trackingURL = `${process.env.FRONTEND_URL || 'https://app.nilahub.com'}/sos/tracking/${token}`;
+    const formattedLocation = `${parsedLatitude.toFixed(5)}, ${parsedLongitude.toFixed(5)}`;
+    const message = `🚨 EMERGENCY ALERT: ${reason}\n\n📍 Location: ${formattedLocation}\nℹ️ Accuracy: ${Number.isFinite(accuracy) ? `${accuracy}m` : 'unknown'}\n\n🔗 Track live: ${trackingURL}\n\n(Valid for 24 hours)`;
 
-            const trackingURL = `${process.env.FRONTEND_URL || 'https://app.nilahub.com'}/sos/tracking/${token}`;
-            const message = `🚨 EMERGENCY ALERT: ${reason}\n\n📍 Location: ${latitude}, ${longitude}\nℹ️ Accuracy: ${accuracy}m\n\n🔗 Track live: ${trackingURL}\n\n(Valid for 24 hours)`;
+    const recipients = verifiedContacts.flatMap((contact) => {
+      const contactChannels = Array.isArray(contact.notifyBy) && contact.notifyBy.length > 0
+        ? contact.notifyBy.map((c) => c.trim())
+        : ['SMS', 'WhatsApp', 'Call'];
 
-            if (channelLower === 'linkup') {
-              const recipient = await User.findOne({ phone: contact.phone.trim() });
-              if (!recipient) {
-                alerts.push({
-                  contactId: contact._id,
-                  phone: contact.phone,
-                  channel,
-                  status: 'failed',
-                  error: 'LINKUP_USER_NOT_FOUND',
-                  timestamp: new Date(),
-                });
-                incident.retryLog.push({
-                  timestamp: new Date(),
-                  action: 'ALERT_LINKUP',
-                  status: 'failed',
-                  error: 'LinkUp user not found',
-                  nextRetry: new Date(Date.now() + 30000),
-                });
-                continue;
-              }
-              await sendLinkUpMessage({
-                senderId: userId,
-                recipientId: recipient._id,
-                content: message,
-              });
-            } else if (channelLower === 'whatsapp') {
-              await sendWhatsApp(contact.phone, message);
-            } else {
-              await sendSMS(contact.phone, message);
-            }
-
-            alerts.push({
-              contactId: contact._id,
-              phone: contact.phone,
-              channel,
-              status: 'sent',
-              timestamp: new Date(),
-            });
-          } else if (channel === 'Call') {
-            // TODO: Implement voice call integration (Twilio voice)
-            alerts.push({
-              contactId: contact._id,
-              phone: contact.phone,
-              channel,
-              status: 'pending',
-              timestamp: new Date(),
-            });
-          }
-        } catch (alertError) {
-          logger.error(`Alert send failed for ${contact.phone}: ${alertError.message}`);
-          alerts.push({
-            contactId: contact._id,
-            phone: contact.phone,
-            channel,
-            status: 'failed',
-            error: alertError.message,
-            timestamp: new Date(),
-          });
-
-          // Add to retry queue
-          incident.retryLog.push({
-            timestamp: new Date(),
-            action: `ALERT_${channel}`,
-            status: 'failed',
-            error: alertError.message,
-            nextRetry: new Date(Date.now() + 30000), // retry in 30 seconds
-          });
-        }
+      const sharedChannels = normalizedChannels.filter((channel) => contactChannels.includes(channel));
+      if (!sharedChannels.length) {
+        return [];
       }
+
+      return [{
+        contactId: contact._id,
+        contactName: contact.name,
+        phone: contact.phone,
+        channels: sharedChannels,
+      }];
+    });
+
+    if (recipients.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No contacts matched the requested alert channels',
+      });
     }
 
-    // Update incident with alert info
-    incident.alerts = alerts;
-    await incident.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'SOS alert sent to contacts',
+    const payload = {
       incidentId: incident._id,
-      contactsNotified: verifiedContacts.length,
-      channelsUsed: channels,
-      photosAttached: photoURLs.length,
-      details: {
-        reason,
-        location: { latitude, longitude, accuracy },
-        timestamp: incident.createdAt,
-        status: incident.status,
+      userId,
+      userName,
+      reason,
+      location: {
+        latitude: parsedLatitude,
+        longitude: parsedLongitude,
+        accuracy,
+        trackingURL,
+        mapsUrl: incident.mapsUrl,
       },
+      message,
+      trackingURL,
+      recipients,
+      createdAt: new Date(),
+    };
+
+    await enqueueNotificationJob(incident._id, payload);
+
+    res.status(202).json({
+      success: true,
+      message: 'SOS alert queued for delivery',
+      incidentId: incident._id,
+      queued: true,
+      contactsQueued: recipients.length,
+      channelsRequested: normalizedChannels,
+      photosAttached: photoURLs.length,
     });
   } catch (error) {
     logger.error('sendSOSAlert error:', error);

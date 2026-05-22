@@ -69,8 +69,6 @@ const LivePlaceExplorer = React.lazy(() => import("./modules/liveplaceexplorer/L
 const NilaBeautyAI = React.lazy(() => import("./modules/beautyai/NilaBeautyAI"));
 const SmartKitchenRecipeHub = React.lazy(() => import("./modules/kitchen/SmartKitchenRecipeHub"));
 
-const WomenSafetyFamily = React.lazy(() => import("./modules/womensafetyfamily/WomenSafetyFamily"));
-const TrustLayer = React.lazy(() => import("./modules/trustlayer/TrustLayer"));
 const BusinessServices = React.lazy(() => import("./modules/businessservices/BusinessServices"));
 const JobPortal = React.lazy(() => import("./modules/jobportal/JobPortal"));
 const Education = React.lazy(() => import("./modules/education/Education"));
@@ -168,9 +166,7 @@ const PREVIEW_ENABLED_MODULES = [
   "liveplaceexplorer",
   "beautyai",
   "kitchen",
-  "womensafetyfamily",
-  "trustlayer",
-];
+  ];
 
 const TOGGLE_CONTROLLED_MODULE_IDS = [
   "ecommerce",
@@ -197,9 +193,7 @@ const TOGGLE_CONTROLLED_MODULE_IDS = [
   "liveplaceexplorer",
   "beautyai",
   "kitchen",
-  "womensafetyfamily",
-  "trustlayer",
-  "jobportal",
+    "jobportal",
   "skilllearning",
   "education",
   "nilaaihub",
@@ -1298,9 +1292,7 @@ function AppShell() {
 
               <Route path="kerala-gulf-jobs-migration" element={<Navigate to="/gulf-services" replace />} />
 
-              <Route path="women-safety-family-protection" element={<WomenSafetyFamily />} />
-              <Route path="trust-layer" element={<TrustLayer />} />
-              <Route path="businessservices" element={<BusinessServices />} />
+                            <Route path="businessservices" element={<BusinessServices />} />
               <Route path="jobportal" element={<JobPortal />} />
               <Route path="education" element={<Education />} />
               <Route path="tourism" element={<TourismMarketplace />} />

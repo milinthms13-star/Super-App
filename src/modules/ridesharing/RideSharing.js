@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useApp } from "../../contexts/AppContext";
+import RideSharingService from "./services/rideSharingService";
 import "../../styles/RideSharing.css";
 
 const VEHICLE_TYPES = [
@@ -64,6 +65,16 @@ const SERVICE_TYPES = [
   { id: 'tourist', name: 'Tourist', icon: '🗺️' }
 ];
 
+const getMockLocation = (address, seed = 0) => {
+  if (!address) return { address: '', lat: 9.9312, lng: 76.2673 };
+  const hash = address.split('').reduce((sum, ch) => sum + ch.charCodeAt(0), seed);
+  return {
+    address,
+    lat: 9.9312 + ((hash % 1000) / 10000),
+    lng: 76.2673 + (((hash + 500) % 1000) / 10000)
+  };
+};
+
 const RideSharing = () => {
   const { user } = useApp();
   const [activeMode, setActiveMode] = useState('rider');
@@ -72,7 +83,7 @@ const RideSharing = () => {
   // Rider states
   const [pickupLocation, setPickupLocation] = useState('');
   const [dropLocation, setDropLocation] = useState('');
-  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [selectedVehicle, setSelectedVehicle] = useState(VEHICLE_TYPES[0]);
   const [selectedService, setSelectedService] = useState('regular');
   const [fareEstimate, setFareEstimate] = useState(null);
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
@@ -83,6 +94,7 @@ const RideSharing = () => {
   const [driverStatus, setDriverStatus] = useState('offline');
   const [driverRides, setDriverRides] = useState([]);
   const [driverEarnings, setDriverEarnings] = useState({ today: 0, week: 0, month: 0 });
+  const [driverProfile, setDriverProfile] = useState(null);
 
   // Common states
   const [loading, setLoading] = useState(false);
@@ -97,20 +109,40 @@ const RideSharing = () => {
     try {
       setLoading(true);
       if (activeMode === 'rider') {
-        const historyResponse = await fetch('/api/ridesharing/rides/history', {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        });
-        const historyData = await historyResponse.json();
-        if (historyData.success) {
-          setRideHistory(historyData.data);
+        const historyResponse = await RideSharingService.getRideHistory(10, 0);
+        if (historyResponse.success) {
+          setRideHistory(historyResponse.data);
+        }
+
+        const activeResponse = await RideSharingService.getActiveRide();
+        if (activeResponse.success && activeResponse.data) {
+          setCurrentRide(activeResponse.data);
+          setCurrentScreen('tracking');
+        } else {
+          setCurrentRide(null);
+          if (currentScreen === 'tracking') {
+            setCurrentScreen('home');
+          }
         }
       } else if (activeMode === 'driver') {
-        const profileResponse = await fetch('/api/ridesharing/driver/profile', {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        });
-        const profileData = await profileResponse.json();
-        if (profileData.success) {
-          setDriverStatus(profileData.data.isOnline ? 'available' : 'offline');
+        const profileResponse = await RideSharingService.getProfile();
+        if (profileResponse.success) {
+          const profile = profileResponse.profile || profileResponse.data;
+          setDriverProfile(profile);
+          setDriverStatus(profile.isOnline ? 'available' : 'offline');
+        }
+
+        const myRidesResponse = await RideSharingService.getMyRides();
+        if (myRidesResponse.success) {
+          const rides = myRidesResponse.data || [];
+          setDriverRides(rides);
+          const completed = rides.filter((ride) => ride.status === 'ride_completed' || ride.status === 'completed');
+          const todayEarnings = completed.reduce((sum, ride) => sum + (ride.commission?.driverEarnings || 0), 0);
+          setDriverEarnings({
+            today: todayEarnings,
+            week: todayEarnings,
+            month: todayEarnings
+          });
         }
       }
     } catch (err) {
@@ -121,16 +153,23 @@ const RideSharing = () => {
   };
 
   const getFareEstimate = useCallback(async () => {
-    if (!pickupLocation || !dropLocation || !selectedVehicle) return;
+    if (!pickupLocation || !dropLocation || !selectedVehicle) {
+      setFareEstimate(null);
+      return;
+    }
 
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/ridesharing/fare/estimate?pickupLat=9.9312&pickupLng=76.2673&dropLat=9.9816&dropLng=76.2999&vehicleType=${selectedVehicle.id}`
+      const pickup = getMockLocation(pickupLocation, 123);
+      const destination = getMockLocation(dropLocation, 456);
+      const response = await RideSharingService.estimateFare(
+        selectedVehicle.id,
+        pickup,
+        destination
       );
-      const data = await response.json();
-      if (data.success) {
-        setFareEstimate(data.data);
+
+      if (response.success) {
+        setFareEstimate(response.data);
       }
     } catch (err) {
       setError('Failed to get fare estimate');
@@ -151,40 +190,29 @@ const RideSharing = () => {
 
     try {
       setLoading(true);
-      const response = await fetch('/api/ridesharing/rides/book', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          pickup: {
-            address: pickupLocation,
-            lat: 9.9312,
-            lng: 76.2673
-          },
-          destination: {
-            address: dropLocation,
-            lat: 9.9816,
-            lng: 76.2999
-          },
-          vehicleType: selectedVehicle.id,
-          serviceType: selectedService,
-          paymentMethod: 'cash'
-        })
+      const pickup = getMockLocation(pickupLocation, 123);
+      const destination = getMockLocation(dropLocation, 456);
+
+      const response = await RideSharingService.bookRide({
+        pickup,
+        destination,
+        vehicleType: selectedVehicle.id,
+        serviceType: selectedService,
+        paymentMethod: 'cash',
+        estimatedFare: fareEstimate?.pricing?.totalFare || 0,
+        specialRequests: []
       });
 
-      const data = await response.json();
-      if (data.success) {
+      if (response.success) {
         setBookingConfirmed(true);
-        setCurrentRide(data.data);
+        setCurrentRide(response.data);
         setCurrentScreen('tracking');
         setSuccess('Ride booked successfully!');
       } else {
-        setError(data.message || 'Failed to book ride');
+        setError(response.message || 'Failed to book ride');
       }
     } catch (err) {
-      setError('Failed to book ride');
+      setError(err.message || 'Failed to book ride');
     } finally {
       setLoading(false);
     }
@@ -194,19 +222,12 @@ const RideSharing = () => {
     try {
       setLoading(true);
       const newStatus = driverStatus === 'available' ? 'offline' : 'available';
-      const response = await fetch('/api/ridesharing/driver/status', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
+      const response = await RideSharingService.setDriverStatus(newStatus);
 
-      const data = await response.json();
-      if (data.success) {
+      if (response.success) {
         setDriverStatus(newStatus);
         setSuccess(`You are now ${newStatus === 'available' ? 'online' : 'offline'}`);
+        loadUserData();
       }
     } catch (err) {
       setError('Failed to update status');
@@ -219,15 +240,8 @@ const RideSharing = () => {
     if (!currentRide) return;
 
     try {
-      const response = await fetch(`/api/ridesharing/rides/${currentRide._id}/sos`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const response = await RideSharingService.activateSOS(currentRide._id || currentRide.id);
+      if (response.success) {
         setSuccess('SOS activated! Help is on the way.');
         alert('EMERGENCY: SOS has been activated. Authorities have been notified.');
       }
@@ -341,6 +355,37 @@ const RideSharing = () => {
           >
             {loading ? '🔄 Finding Driver...' : '🚀 Book Ride'}
           </button>
+
+          {fareEstimate && (
+            <div className="estimate-summary">
+              <h4>Estimated fare</h4>
+              <p>₹{fareEstimate.pricing.totalFare} • {fareEstimate.distance} • {fareEstimate.duration}</p>
+            </div>
+          )}
+
+          <div className="ride-history-preview">
+            <h3>Recent Rides</h3>
+            {rideHistory.length > 0 ? (
+              <div className="history-list">
+                {rideHistory.slice(0, 4).map((ride) => (
+                  <div key={ride._id || ride.rideId} className="history-card">
+                    <div>
+                      <strong>{ride.pickup?.address}</strong>
+                      <span>→</span>
+                      <strong>{ride.destination?.address}</strong>
+                    </div>
+                    <div className="history-meta">
+                      <span>{ride.distance?.text || '—'}</span>
+                      <span>₹{ride.pricing?.totalFare || ride.estimatedFare || '—'}</span>
+                      <span>{ride.status?.replace('_', ' ')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p>No ride history available yet.</p>
+            )}
+          </div>
         </div>
       )}
 

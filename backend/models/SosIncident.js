@@ -52,6 +52,20 @@ const sosIncidentSchema = new mongoose.Schema({
     type: String,
     enum: ['SMS', 'WhatsApp', 'Call', 'Push']
   }],
+  photos: [{
+    url: { type: String, trim: true },
+    timestamp: { type: Date, default: Date.now }
+  }],
+  alertQueueStatus: {
+    type: String,
+    enum: ['queued', 'processing', 'completed', 'failed'],
+    default: 'queued'
+  },
+  queuedAt: {
+    type: Date,
+    default: Date.now
+  },
+  lastDispatchedAt: Date,
   batteryStatus: {
     supported: {
       type: Boolean,

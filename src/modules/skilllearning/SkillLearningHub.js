@@ -1,7 +1,6 @@
-import React, { useMemo, useState, useEffect } from "react";
-import axios from "axios";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { jsPDF } from "jspdf";
-import { API_BASE_URL } from "../../utils/api";
+import * as service from "../../services/skillLearningService";
 import "./SkillLearningHub.css";
 import "./SkillDevelopmentUpgrade.css";
 import SkillQuickActions from "./SkillQuickActions";
@@ -83,19 +82,27 @@ const INITIAL_CERTIFICATE = {
   credentialId: '',
 };
 
-const BASE_API_PATH = `${API_BASE_URL}/appdata/skilllearning`;
+// API paths are handled by src/services/skillLearningService
 
 const SkillLearningHub = () => {
+  const [activeTab, setActiveTab] = useState('overview');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [categories, setCategories] = useState(COURSE_CATEGORIES);
   const [courses, setCourses] = useState([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [courseLoading, setCourseLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [searchTerm, setSearchTerm] = useState(filters.query || '');
+  const searchDebounceRef = useRef(null);
   const [courseDetailLoading, setCourseDetailLoading] = useState(false);
   const [dashboardStats, setDashboardStats] = useState({ continueLearning: 0, recommendedCourses: 0, govtCertifications: 0, upcomingExams: 0, interviewPractice: 0, avgProgress: 0 });
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [watchHistory, setWatchHistory] = useState([]);
+  const [educationState, setEducationState] = useState(null);
+  const [learningOverview, setLearningOverview] = useState(null);
+  const [learningPath, setLearningPath] = useState(null);
+  const [progressHistory, setProgressHistory] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [mockTestForm, setMockTestForm] = useState(INITIAL_MOCK_TEST);
@@ -116,6 +123,10 @@ const SkillLearningHub = () => {
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [courseFiltersOpen, setCourseFiltersOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('gulf-ready');
+  const [learningLoading, setLearningLoading] = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [pathLoading, setPathLoading] = useState(false);
+  const [progressLoading, setProgressLoading] = useState(false);
 
   const fetchCourses = async () => {
     setCourseLoading(true);
@@ -130,8 +141,7 @@ const SkillLearningHub = () => {
         certificateAvailable: filters.certificateAvailable || undefined,
         jobLinked: filters.jobLinked || undefined,
       };
-      const response = await axios.get(`${BASE_API_PATH}/courses`, { params });
-      const responseData = response?.data?.data || {};
+      const responseData = await service.fetchCourses(params);
       setCourses(responseData.courses || []);
       setCategories(responseData.categories || COURSE_CATEGORIES);
       if (!selectedCourseId && Array.isArray(responseData.courses) && responseData.courses.length) {
@@ -139,6 +149,7 @@ const SkillLearningHub = () => {
       }
     } catch (error) {
       console.error('Failed to load courses', error);
+      setErrorMessage('Failed to load courses.');
     } finally {
       setCourseLoading(false);
     }
@@ -148,8 +159,8 @@ const SkillLearningHub = () => {
     if (!courseId) return;
     setCourseDetailLoading(true);
     try {
-      const response = await axios.get(`${BASE_API_PATH}/courses/${encodeURIComponent(courseId)}`);
-      setSelectedCourse(response?.data?.data?.course || null);
+      const data = await service.fetchCourseDetail(courseId);
+      setSelectedCourse(data?.course || null);
     } catch (error) {
       console.error('Failed to load course detail', error);
       setSelectedCourse(null);
@@ -160,41 +171,131 @@ const SkillLearningHub = () => {
 
   const fetchDashboard = async () => {
     try {
-      const response = await axios.get(`${BASE_API_PATH}/dashboard`);
-      const data = response?.data?.data || {};
+      const data = await service.fetchDashboard();
       setDashboardStats(data.dashboardStats || dashboardStats);
       setEnrolledCourses(data.enrolled || []);
       setWatchHistory(data.recent || []);
     } catch (error) {
       console.error('Failed to load dashboard', error);
+      setErrorMessage('Failed to load dashboard data.');
     }
   };
 
   const fetchCertificates = async () => {
     try {
-      const response = await axios.get(`${BASE_API_PATH}/certificates`);
-      setCertificates(response?.data?.data?.certificates || []);
-      setGovtPortals(response?.data?.data?.govtPortals || GOVT_PORTALS);
+      const data = await service.fetchCertificates();
+      setCertificates(data?.certificates || []);
+      setGovtPortals(data?.govtPortals || GOVT_PORTALS);
     } catch (error) {
       console.error('Failed to load certificates', error);
+      setErrorMessage('Failed to load certificates.');
     }
   };
 
   const fetchWallet = async () => {
     try {
-      const response = await axios.get(`${BASE_API_PATH}/wallet`);
-      setSkillWallet(response?.data?.data?.certificates || []);
+      const data = await service.fetchWallet();
+      setSkillWallet(data?.certificates || []);
     } catch (error) {
       console.error('Failed to load wallet', error);
+      setErrorMessage('Failed to load skill wallet.');
+    }
+  };
+
+  const fetchEducationState = async () => {
+    setLearningLoading(true);
+    try {
+      const data = await service.fetchEducationState();
+      setEducationState(data?.state || {});
+    } catch (error) {
+      console.error('Failed to load education state', error);
+      setErrorMessage('Failed to load education state.');
+    } finally {
+      setLearningLoading(false);
+    }
+  };
+
+  const fetchLearningOverview = async () => {
+    setOverviewLoading(true);
+    try {
+      const data = await service.fetchLearningOverview();
+      setLearningOverview(data?.payload || null);
+    } catch (error) {
+      console.warn('Overview360 unavailable or not enabled', error?.response?.status || error);
+      setLearningOverview(null);
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
+  const fetchLearningPath = async () => {
+    setPathLoading(true);
+    try {
+      const data = await service.fetchLearningPath();
+      setLearningPath(data || {});
+    } catch (error) {
+      console.error('Failed to load learning path', error);
+      setLearningPath(null);
+    } finally {
+      setPathLoading(false);
+    }
+  };
+
+  const fetchSkillRecommendations = async () => {
+    try {
+      const data = await service.fetchSkillRecommendations({
+        education: recommenderForm.education,
+        interests: recommenderForm.interests,
+        salaryTarget: recommenderForm.salaryTarget,
+        destination: recommenderForm.destination,
+      });
+      setRecommendations(data?.recommendations || []);
+    } catch (error) {
+      console.error('Failed to load skill recommendations', error);
+      setRecommendations([]);
+    }
+  };
+
+  const fetchProgressHistory = async (courseId) => {
+    if (!courseId) return;
+    setProgressLoading(true);
+    try {
+      const data = await service.fetchProgressHistory(courseId);
+      setProgressHistory(data?.history || []);
+    } catch (error) {
+      console.error('Failed to load progress history', error);
+      setProgressHistory([]);
+    } finally {
+      setProgressLoading(false);
+    }
+  };
+
+  const recordLearningProgress = async ({ courseId, lessonId, eventType = 'lesson_complete', progressDelta = 15, progressValue = null, metadata = {} }) => {
+    if (!courseId) return;
+    try {
+      const response = await service.recordLearningProgress({
+        courseId,
+        lessonId,
+        eventType,
+        progressDelta,
+        progressValue,
+        metadata,
+      });
+      if (response?.success) {
+        await fetchEducationState();
+        await fetchProgressHistory(courseId);
+      }
+      return response;
+    } catch (error) {
+      console.error('Failed to record progress event', error);
+      return null;
     }
   };
 
   const fetchQuestions = async (category) => {
     try {
-      const response = await axios.get(`${BASE_API_PATH}/questions`, {
-        params: { category: category || mockTestForm.category },
-      });
-      setQuestions(response?.data?.data?.questions || []);
+      const data = await service.fetchQuestions(category || mockTestForm.category);
+      setQuestions(data?.questions || []);
     } catch (error) {
       console.error('Failed to load question bank', error);
       setQuestions([]);
@@ -206,7 +307,37 @@ const SkillLearningHub = () => {
     void fetchDashboard();
     void fetchCertificates();
     void fetchWallet();
+    void fetchEducationState();
+    void fetchLearningOverview();
+    void fetchLearningPath();
+    void fetchSkillRecommendations();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setSearchTerm(value);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setFilters((current) => ({ ...current, query: value }));
+    }, 350);
+  };
+
+  const isSafeEmbedUrl = (url) => {
+    if (!url) return false;
+    try {
+      const u = new URL(url);
+      const host = u.hostname.toLowerCase();
+      return host.includes('youtube.com') || host.includes('youtube-nocookie.com') || host.includes('vimeo.com');
+    } catch (e) {
+      return false;
+    }
+  };
 
   useEffect(() => {
     void fetchCourses();
@@ -215,6 +346,7 @@ const SkillLearningHub = () => {
   useEffect(() => {
     if (selectedCourseId) {
       void fetchCourseDetail(selectedCourseId);
+      void fetchProgressHistory(selectedCourseId);
     }
   }, [selectedCourseId]);
 
@@ -248,10 +380,15 @@ const SkillLearningHub = () => {
     if (!courseId) return;
     setIsEnrolling(true);
     try {
-      await axios.post(`${BASE_API_PATH}/course-enroll`, { courseId });
+      await service.enrollCourse(courseId);
       await fetchDashboard();
+      await fetchEducationState();
+      if (selectedCourseId === courseId) {
+        await fetchProgressHistory(courseId);
+      }
     } catch (error) {
       console.error('Enrollment failed', error);
+      setErrorMessage('Enrollment failed.');
     } finally {
       setIsEnrolling(false);
     }
@@ -261,12 +398,9 @@ const SkillLearningHub = () => {
     event.preventDefault();
     const answers = questions.map((question) => ({ id: question.id, selectedIndex: selectedAnswers[question.id] }));
     try {
-      const response = await axios.post(`${BASE_API_PATH}/tests/submit`, {
-        category: mockTestForm.category,
-        answers,
-      });
-      setMockTestResult(response.data.data.result);
-      setTestNotification(response.data.data.insight || 'Mock test completed.');
+      const resp = await service.submitMockTest({ category: mockTestForm.category, answers });
+      setMockTestResult(resp.result);
+      setTestNotification(resp.insight || 'Mock test completed.');
     } catch (error) {
       console.error('Test submit failed', error);
       setTestNotification('Unable to submit test. Please try again.');
@@ -281,7 +415,7 @@ const SkillLearningHub = () => {
     event.preventDefault();
     const validationError = validateCertificateUpload(certificateForm, certificateFile);
     if (validationError) {
-      alert(validationError);
+      setErrorMessage(validationError);
       return;
     }
 
@@ -296,14 +430,13 @@ const SkillLearningHub = () => {
 
     setUploading(true);
     try {
-      await axios.post(`${BASE_API_PATH}/certificates/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await service.uploadCertificate(formData);
       setCertificateForm(INITIAL_CERTIFICATE);
       setCertificateFile(null);
       await fetchCertificates();
     } catch (error) {
       console.error('Upload failed', error);
+      setErrorMessage('Certificate upload failed.');
     } finally {
       setUploading(false);
     }
@@ -338,6 +471,12 @@ const SkillLearningHub = () => {
 
   return (
     <div className="skillhub-page">
+      {errorMessage ? (
+        <div className="skillhub-error" role="alert">
+          <span>{errorMessage}</span>
+          <button type="button" onClick={() => setErrorMessage('')}>Close</button>
+        </div>
+      ) : null}
       <section className="skillhub-hero">
         <div>
           <p className="skillhub-kicker">Nila Skill Hub</p>
@@ -351,8 +490,9 @@ const SkillLearningHub = () => {
           <input
             type="text"
             placeholder="Search courses, skills, or topics..."
-            value={filters.query}
-            onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+            value={searchTerm}
+            onChange={handleSearchChange}
+            aria-label="Search courses"
           />
           <div className="skillhub-chip-row">
             <span>{dashboardStats.continueLearning} active tracks</span>
@@ -361,6 +501,108 @@ const SkillLearningHub = () => {
             <span>{dashboardStats.avgProgress}% avg progress</span>
           </div>
         </div>
+      </section>
+
+      <section className="skillhub-section">
+        <div className="skillhub-section-header">
+          <h2>Learning 360 Dashboard</h2>
+          <p>Track your progress, career path guidance, and achievement health in one place.</p>
+        </div>
+        {overviewLoading ? (
+          <div className="skillhub-status">Loading Learning 360 overview...</div>
+        ) : learningOverview?.outcomeMetrics ? (
+          <>
+          <div className="skillhub-stats-grid">
+            <div className="skillhub-stat-card">
+              <h3>Readiness</h3>
+              <p>{learningOverview.outcomeMetrics.readinessScore || 'N/A'}%</p>
+            </div>
+            <div className="skillhub-stat-card">
+              <h3>Progress</h3>
+              <p>{learningOverview.outcomeMetrics.avgCourseProgress || 'N/A'}%</p>
+            </div>
+            <div className="skillhub-stat-card">
+              <h3>Certifications</h3>
+              <p>{learningOverview.outcomeMetrics.certificationVerificationRate || 'N/A'}%</p>
+            </div>
+            <div className="skillhub-stat-card">
+              <h3>Goal alignment</h3>
+              <p>{learningOverview.outcomeMetrics.goalAlignment || 'Balanced'}</p>
+            </div>
+            <div className="skillhub-stat-card">
+              <h3>Weak areas</h3>
+              <p>{learningOverview?.latestTest?.weakAreas?.length ? learningOverview.latestTest.weakAreas.join(', ') : 'None yet'}</p>
+            </div>
+            <div className="skillhub-stat-card">
+              <h3>Recommended path</h3>
+              <p>{learningPath?.path?.[0] || learningPath?.path?.join(' ') || 'Complete one course to get recommendations.'}</p>
+            </div>
+          </div>
+          {recommendations.length ? (
+            <div className="skillhub-section">
+              <div className="skillhub-section-header">
+                <h2>Expert Skill Guidance</h2>
+                <p>AI-enabled course recommendations based on your profile and goals.</p>
+              </div>
+              <div className="skillhub-list">
+                {recommendations.map((rec, index) => (
+                  <li key={`${rec.title || rec.id}-${index}`}>
+                    <strong>{rec.title || rec.name || 'Recommended Path'}</strong> — {rec.summary || rec.description || 'Complete this course or skill path.'}
+                  </li>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          </>
+        ) : (
+          <div className="skillhub-status">Learning 360 overview is not available. Use course planning and practice to build your momentum.</div>
+        )}
+      </section>
+
+      <section className="skillhub-section">
+        <div className="skillhub-section-header">
+          <h2>My Learning Summary</h2>
+          <p>See enrolled course progress and recent activity, then keep your learning streak alive.</p>
+        </div>
+        {learningLoading ? (
+          <div className="skillhub-status">Loading your learning summary...</div>
+        ) : (enrolledCourses.length || (educationState?.enrolledCourseIds || []).length) ? (
+          <div className="skillhub-course-grid">
+            {(enrolledCourses.length ? enrolledCourses : courses.filter((course) => (educationState?.enrolledCourseIds || []).includes(course.id))).map((course) => {
+              const progress = Number(educationState?.courseProgress?.[course.id] || 0);
+              return (
+                <article key={course.id} className="skillhub-course-card">
+                  <div className="skillhub-course-card-header">
+                    <div>
+                      <h3>{course.title}</h3>
+                      <p>{course.description}</p>
+                    </div>
+                    <span className="skillhub-badge">Enrolled</span>
+                  </div>
+                  <div className="skillhub-course-details">
+                    <span>{course.level}</span>
+                    <span>{course.language}</span>
+                    <span>{course.duration}</span>
+                  </div>
+                  <div className="skillhub-progress-bar">
+                    <div className="skillhub-progress-fill" style={{ width: `${progress}%` }} />
+                  </div>
+                  <div className="skillhub-course-actions">
+                    <button type="button" onClick={() => setSelectedCourseId(course.id)}>
+                      Continue
+                    </button>
+                    <button type="button" className="secondary" onClick={() => recordLearningProgress({ courseId: course.id, lessonId: course.modules?.[0]?.title || '', progressDelta: 10 })}>
+                      Mark progress
+                    </button>
+                  </div>
+                  <small>{progress}% complete</small>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="skillhub-status">No enrolled courses yet. Enroll in a track to start learning.</div>
+        )}
       </section>
 
       <SkillQuickActions
@@ -478,10 +720,10 @@ const SkillLearningHub = () => {
         ) : selectedCourse ? (
           <div className="skillhub-course-detail">
             <div className="skillhub-course-detail-main">
-              <div className="skillhub-course-player">
+                <div className="skillhub-course-player">
                 <iframe
                   title="Course intro"
-                  src={selectedCourse?.modules?.[0]?.lessons?.[0]?.videoUrl || 'https://www.youtube.com/embed/dQw4w9WgXcQ'}
+                  src={isSafeEmbedUrl(selectedCourse?.modules?.[0]?.lessons?.[0]?.videoUrl) ? selectedCourse?.modules?.[0]?.lessons?.[0]?.videoUrl : 'https://www.youtube.com/embed/dQw4w9WgXcQ'}
                   allowFullScreen
                 />
               </div>
@@ -498,6 +740,15 @@ const SkillLearningHub = () => {
                   <button type="button" onClick={() => handleEnroll(selectedCourse.id)} disabled={isEnrolling}>
                     {enrolledCourses.some((enrolled) => enrolled.id === selectedCourse.id) ? 'Already Enrolled' : 'Enroll in this course'}
                   </button>
+                  {educationState?.enrolledCourseIds?.includes(selectedCourse.id) ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => recordLearningProgress({ courseId: selectedCourse.id, lessonId: selectedCourse.modules?.[0]?.title || '', progressDelta: 10 })}
+                    >
+                      Mark progress
+                    </button>
+                  ) : null}
                   <span className="skillhub-tag">{selectedCourse.region}</span>
                 </div>
               </div>

@@ -416,40 +416,4 @@ rideSchema.methods.getCancellationCharges = function() {
 };
 
 module.exports = mongoose.model('Ride', rideSchema);
-    default: 1,
-  },
-  estimatedFare: {
-    type: Number,
-    required: true,
-  },
-  status: {
-    type: String,
-    enum: ['requested', 'driver_assigned', 'accepted', 'started', 'arrived_pickup', 'in_transit', 'arrived', 'cancelled', 'completed'],
-    default: 'requested',
-  },
-  paymentStatus: {
-    type: String,
-    enum: ['pending', 'paid', 'refunded'],
-    default: 'pending',
-  },
-  notes: String,
-  otp: String,
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
-  cancelledBy: String,
-  cancelReason: String,
-});
-
-rideRequestSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
-  next();
-});
-
-module.exports = mongoose.model('RideRequest', rideRequestSchema);
 

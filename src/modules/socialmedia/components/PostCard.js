@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../../../contexts/AppContext";
 import { getAvatarSrc, normalizeSocialUser } from "../socialData";
 import "../styles/PostCard.css";
+import Modal from "../../../components/Modal";
+import { isSafeMediaUrl, getMediaSrc } from "../socialData";
 
 const buildComments = (comments = []) =>
   (Array.isArray(comments) ? comments : []).map((comment, index) => ({
@@ -25,6 +27,10 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers = new Set(),
   const [editedContent, setEditedContent] = useState(post.content);
   const [actionMessage, setActionMessage] = useState("");
   const [actionLoading, setActionLoading] = useState("");
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [showBlockModal, setShowBlockModal] = useState(false);
 
   useEffect(() => {
     setLiked(Boolean(post.liked));
@@ -100,14 +106,15 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers = new Set(),
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Are you sure you want to delete this post?")) {
-      return;
-    }
+    setShowDeleteModal(true);
+  };
 
+  const confirmDelete = async () => {
     setActionLoading("delete");
     try {
       await apiCall(`/socialmedia/posts/${post._id}`, "DELETE");
       onPostDeleted(post._id);
+      setShowDeleteModal(false);
     } catch (error) {
       setActionMessage("Unable to delete this post.");
     } finally {
@@ -202,20 +209,22 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers = new Set(),
   };
 
   const handleReport = async () => {
-    const reason = window.prompt("Report reason (spam, abuse, misinformation, etc.)");
-    if (!reason || !reason.trim()) {
-      return;
-    }
+    setReportReason('');
+    setShowReportModal(true);
+  };
 
+  const submitReport = async () => {
+    if (!reportReason || !reportReason.trim()) return;
     setActionLoading("report");
     try {
       await apiCall("/socialmedia/report", "POST", {
         reportedObjectType: "post",
         reportedObjectId: post._id,
         reportReason: "other",
-        description: reason.trim(),
+        description: reportReason.trim(),
       });
       setActionMessage("Thanks. Report submitted for moderation review.");
+      setShowReportModal(false);
     } catch (error) {
       setActionMessage("Unable to submit report right now.");
     } finally {
@@ -224,14 +233,15 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers = new Set(),
   };
 
   const handleBlockUser = async () => {
-    if (!window.confirm(`Block ${author.name}? You can unblock later from settings.`)) {
-      return;
-    }
+    setShowBlockModal(true);
+  };
 
+  const confirmBlock = async () => {
     setActionLoading("block");
     try {
       await apiCall(`/socialmedia/users/${author._id}/block`, "POST");
       setActionMessage(`${author.name} has been blocked.`);
+      setShowBlockModal(false);
     } catch (error) {
       setActionMessage("Unable to block this user right now.");
     } finally {
@@ -285,7 +295,11 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers = new Set(),
         {post.images && post.images.length > 0 ? (
           <div className="post-images">
             {post.images.map((image, index) => (
-              <img key={`${post._id}-image-${index}`} src={image.url} alt={`Post ${index + 1}`} />
+              <img
+                key={`${post._id}-image-${index}`}
+                src={isSafeMediaUrl(image.url) ? image.url : getMediaSrc(image.url)}
+                alt={`Post ${index + 1}`}
+              />
             ))}
           </div>
         ) : null}
@@ -293,7 +307,12 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers = new Set(),
         {hasVideo ? (
           <div className={`post-videos ${post.postType === "reel" ? "reel-mode" : ""}`}>
             {post.videos.map((video, index) => (
-              <video key={`${post._id}-video-${index}`} src={video.url || video} controls preload="metadata" />
+              <video
+                key={`${post._id}-video-${index}`}
+                src={isSafeMediaUrl(video.url) ? video.url : getMediaSrc(video.url)}
+                controls
+                preload="metadata"
+              />
             ))}
           </div>
         ) : null}
@@ -373,6 +392,54 @@ const PostCard = ({ post, onPostDeleted, onPostUpdated, onlineUsers = new Set(),
           </div>
         </div>
       ) : null}
+
+      {showDeleteModal && (
+        <Modal
+          title="Confirm delete"
+          onClose={() => setShowDeleteModal(false)}
+          actions={(
+            <>
+              <button onClick={confirmDelete} className="danger-btn">{actionLoading === 'delete' ? 'Deleting...' : 'Delete'}</button>
+              <button onClick={() => setShowDeleteModal(false)}>Cancel</button>
+            </>
+          )}
+        >
+          <p>Are you sure you want to delete this post? This action cannot be undone.</p>
+        </Modal>
+      )}
+
+      {showReportModal && (
+        <Modal
+          title="Report post"
+          onClose={() => setShowReportModal(false)}
+          actions={(
+            <>
+              <button onClick={submitReport} className="primary-btn">{actionLoading === 'report' ? 'Sending...' : 'Submit'}</button>
+              <button onClick={() => setShowReportModal(false)}>Cancel</button>
+            </>
+          )}
+        >
+          <label>
+            Reason
+            <input value={reportReason} onChange={(e) => setReportReason(e.target.value)} placeholder="spam, abuse, misinformation" />
+          </label>
+        </Modal>
+      )}
+
+      {showBlockModal && (
+        <Modal
+          title={`Block ${author.name}?`}
+          onClose={() => setShowBlockModal(false)}
+          actions={(
+            <>
+              <button onClick={confirmBlock} className="danger-btn">{actionLoading === 'block' ? 'Blocking...' : 'Block'}</button>
+              <button onClick={() => setShowBlockModal(false)}>Cancel</button>
+            </>
+          )}
+        >
+          <p>Blocking will hide content from this user and prevent them from messaging you. You can unblock later in settings.</p>
+        </Modal>
+      )}
     </div>
   );
 };

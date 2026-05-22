@@ -135,19 +135,24 @@ const toTourismBookingView = (booking = {}) => {
   };
 };
 
-const buildBookingTotals = (baseAmount, paymentType, couponCode, coupons) => {
+const buildBookingTotals = (baseAmount, travelerCount, paymentType, couponCode, coupons) => {
   const normalizedPaymentType = paymentType === 'full' ? 'full' : 'advance';
+  const quantity = Math.max(1, Number(travelerCount || 1));
+  const totalBase = Math.max(0, Number(baseAmount || 0)) * quantity;
   const appliedCoupon = (Array.isArray(coupons) ? coupons : []).find(
     (coupon) => String(coupon.code || '').toUpperCase() === String(couponCode || '').toUpperCase()
   );
   const discountAmount =
-    appliedCoupon && baseAmount >= toNumber(appliedCoupon.minAmount, 0)
-      ? Math.round((baseAmount * toNumber(appliedCoupon.discountPercent, 0)) / 100)
+    appliedCoupon && totalBase >= toNumber(appliedCoupon.minAmount, 0)
+      ? Math.round((totalBase * toNumber(appliedCoupon.discountPercent, 0)) / 100)
       : 0;
-  const chargeableAmount = Math.max(0, baseAmount - discountAmount);
+  const chargeableAmount = Math.max(0, totalBase - discountAmount);
   const payableAmount = normalizedPaymentType === 'full' ? chargeableAmount : Math.round(chargeableAmount * 0.3);
+
   return {
     paymentType: normalizedPaymentType,
+    travelerCount: quantity,
+    totalAmount: totalBase,
     discountAmount,
     chargeableAmount,
     payableAmount,
@@ -200,7 +205,7 @@ router.post('/custom-requests', async (req, res) => {
   return res.status(201).json({ success: true, data: { lead } });
 });
 
-router.post('/payments/intent', (req, res) => {
+router.post('/payments/intent', async (req, res) => {
   const bookingId = toNormalizedText(req.body?.bookingId);
   const amount = toNumber(req.body?.amount, 0);
   const paymentType = toNormalizedText(req.body?.paymentType || 'advance').toLowerCase();
@@ -212,17 +217,89 @@ router.post('/payments/intent', (req, res) => {
     });
   }
 
+  const now = new Date().toISOString();
+  const paymentIntent = {
+    id: createId('pay'),
+    bookingId,
+    provider: 'manual_or_gateway_pending',
+    orderId: `TOUR-PAY-${Date.now()}`,
+    amount,
+    paymentType: paymentType === 'full' ? 'full' : 'advance',
+    status: 'created',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await updateTourismData((current) => {
+    const nextPayments = [paymentIntent, ...(Array.isArray(current.payments) ? current.payments : [])];
+    const nextBookings = (Array.isArray(current.bookings) ? current.bookings : []).map((booking) => {
+      if (String(booking.id) !== bookingId) return booking;
+      return {
+        ...booking,
+        paymentDetails: {
+          ...booking.paymentDetails,
+          status: 'pending',
+          paymentIntentId: paymentIntent.id,
+          payableAmount: amount,
+          paymentType: paymentIntent.paymentType,
+        },
+        updatedAt: now,
+      };
+    });
+    return { ...current, payments: nextPayments, bookings: nextBookings };
+  });
+
   return res.json({
     success: true,
-    data: {
-      provider: 'manual_or_gateway_pending',
-      orderId: `TOUR-PAY-${Date.now()}`,
-      bookingId,
-      amount,
-      paymentType: paymentType === 'full' ? 'full' : 'advance',
-      status: 'created',
-    },
+    data: paymentIntent,
   });
+});
+
+router.post('/payments/confirm', async (req, res) => {
+  const bookingId = toNormalizedText(req.body?.bookingId);
+  const reference = toNormalizedText(req.body?.reference || `PAY-${Date.now()}`);
+  const amount = toNumber(req.body?.amount, 0);
+  if (!bookingId || amount <= 0) {
+    return res.status(400).json({ success: false, message: 'bookingId and amount are required.' });
+  }
+
+  let updatedBooking = null;
+  const payment = {
+    id: createId('pay'),
+    bookingId,
+    provider: 'manual_payment',
+    reference,
+    amount,
+    status: 'paid',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  await updateTourismData((current) => {
+    const nextPayments = [payment, ...(Array.isArray(current.payments) ? current.payments : [])];
+    const nextBookings = (Array.isArray(current.bookings) ? current.bookings : []).map((booking) => {
+      if (String(booking.id) !== bookingId) return booking;
+      updatedBooking = {
+        ...booking,
+        bookingStatus: 'paid',
+        paymentDetails: {
+          ...booking.paymentDetails,
+          status: 'paid',
+          paidAmount: amount,
+          reference,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      return updatedBooking;
+    });
+    return { ...current, payments: nextPayments, bookings: nextBookings };
+  });
+
+  if (!updatedBooking) {
+    return res.status(404).json({ success: false, message: 'Booking not found.' });
+  }
+
+  return res.json({ success: true, data: { payment, booking: updatedBooking } });
 });
 
 router.post('/planner/itinerary', (req, res) => {
@@ -374,7 +451,13 @@ router.post('/bookings', async (req, res) => {
     });
   }
 
-  const totals = buildBookingTotals(toNumber(selectedPackage.startPrice, 0), paymentType, couponCode, data.coupons);
+  const totals = buildBookingTotals(
+    toNumber(selectedPackage.startPrice, 0),
+    travelerCount,
+    paymentType,
+    couponCode,
+    data.coupons
+  );
   const now = new Date().toISOString();
   const booking = {
     id: createId('bk'),
@@ -393,8 +476,21 @@ router.post('/bookings', async (req, res) => {
     bookingStatus: 'pending',
     amountSummary: {
       baseAmount: toNumber(selectedPackage.startPrice, 0),
-      ...totals,
+      travelerCount: totals.travelerCount,
+      totalAmount: totals.totalAmount,
+      discountAmount: totals.discountAmount,
+      chargeableAmount: totals.chargeableAmount,
+      payableAmount: totals.payableAmount,
+      paymentType: totals.paymentType,
+      couponCode: totals.couponCode,
       gstAndServiceCharge: selectedPackage.gstAndServiceCharge || '',
+    },
+    paymentDetails: {
+      paymentType: totals.paymentType,
+      payableAmount: totals.payableAmount,
+      discountAmount: totals.discountAmount,
+      status: 'pending',
+      currency: 'INR',
     },
     refundRules:
       selectedPackage.cancellationPolicy ||

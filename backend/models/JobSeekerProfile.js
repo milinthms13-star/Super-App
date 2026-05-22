@@ -117,6 +117,37 @@ const jobSeekerProfileSchema = new mongoose.Schema({
       }]
     }
   },
+  pushSubscriptions: [{
+    token: {
+      type: String,
+      trim: true
+    },
+    platform: {
+      type: String,
+      enum: ['web', 'ios', 'android'],
+      default: 'web'
+    },
+    deviceId: {
+      type: String,
+      trim: true
+    },
+    appVersion: {
+      type: String,
+      trim: true
+    },
+    pushEnabled: {
+      type: Boolean,
+      default: false
+    },
+    lastSeenAt: {
+      type: Date,
+      default: Date.now
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   profileCompleteness: {
     type: Number,
     default: 0,

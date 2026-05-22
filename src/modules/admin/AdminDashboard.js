@@ -462,8 +462,6 @@ const AdminDashboard = ({
               "liveplaceexplorer",
               "beautyai",
               "kitchen",
-              "womensafetyfamily",
-              "trustlayer",
               "kidsstoryvideomaker",
               "quicklinks",
               "jobportal",

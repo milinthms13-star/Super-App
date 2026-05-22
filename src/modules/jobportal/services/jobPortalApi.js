@@ -1,11 +1,11 @@
 import axios from "axios";
 import { BACKEND_BASE_URL } from "../../../utils/api";
-import { getStoredAuthToken } from "../../../utils/auth";
+import jobPortalAuthStorage from "./jobPortalAuthStorage";
 
 const BASE = `${BACKEND_BASE_URL}/api/jobportal`;
 
 const authHeaders = () => {
-  const token = getStoredAuthToken();
+  const token = jobPortalAuthStorage.getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -14,13 +14,15 @@ const unwrap = (response) => response.data;
 export const jobPortalApi = {
   getJobs: async (params = {}) => unwrap(await axios.get(`${BASE}/jobs`, { params })),
   getJob: async (jobId) => unwrap(await axios.get(`${BASE}/jobs/${encodeURIComponent(jobId)}`)),
-  applyJob: async (jobId, formData) =>
+  applyJob: async (jobId, formData, options = {}) =>
     unwrap(
       await axios.post(`${BASE}/jobs/${encodeURIComponent(jobId)}/apply`, formData, {
         headers: {
           ...authHeaders(),
           "Content-Type": "multipart/form-data",
         },
+        onUploadProgress: options.onUploadProgress,
+        signal: options.signal,
       })
     ),
   reportJob: async (jobId, payload) =>
@@ -32,23 +34,27 @@ export const jobPortalApi = {
   removeSavedJob: async (jobId) =>
     unwrap(await axios.delete(`${BASE}/saved-jobs/${encodeURIComponent(jobId)}`, { headers: authHeaders() })),
   getProfile: async () => unwrap(await axios.get(`${BASE}/profile`, { headers: authHeaders() })),
-  updateProfile: async (formData) =>
+  updateProfile: async (formData, options = {}) =>
     unwrap(
       await axios.put(`${BASE}/profile`, formData, {
         headers: {
           ...authHeaders(),
           "Content-Type": "multipart/form-data",
         },
+        onUploadProgress: options.onUploadProgress,
+        signal: options.signal,
       })
     ),
   getEmployerProfile: async () => unwrap(await axios.get(`${BASE}/employer/profile`, { headers: authHeaders() })),
-  updateEmployerProfile: async (formData) =>
+  updateEmployerProfile: async (formData, options = {}) =>
     unwrap(
       await axios.put(`${BASE}/employer/profile`, formData, {
         headers: {
           ...authHeaders(),
           "Content-Type": "multipart/form-data",
         },
+        onUploadProgress: options.onUploadProgress,
+        signal: options.signal,
       })
     ),
   createJob: async (payload) => unwrap(await axios.post(`${BASE}/jobs`, payload, { headers: authHeaders() })),
@@ -57,8 +63,15 @@ export const jobPortalApi = {
   getMyJobs: async () => unwrap(await axios.get(`${BASE}/my-jobs`, { headers: authHeaders() })),
   getEmployerDashboard: async () => unwrap(await axios.get(`${BASE}/employer/dashboard`, { headers: authHeaders() })),
   getOverview360: async () => unwrap(await axios.get(`${BASE}/overview360`, { headers: authHeaders() })),
+  getOverview360Public: async () => unwrap(await axios.get(`${BASE}/overview360/public`)),
   chatAssistant: async (payload) =>
     unwrap(await axios.post(`${BASE}/assistant/chat`, payload, { headers: authHeaders() })),
+  registerDevice: async (payload) =>
+    unwrap(await axios.post(`${BASE}/notifications/register`, payload, { headers: authHeaders() })),
+  updateNotificationPreferences: async (payload) =>
+    unwrap(await axios.put(`${BASE}/notifications/preferences`, payload, { headers: authHeaders() })),
+  trackClientEvent: async (payload) =>
+    unwrap(await axios.post(`${BASE}/events`, payload, { headers: authHeaders() })),
   getJobApplications: async (jobId) =>
     unwrap(await axios.get(`${BASE}/jobs/${encodeURIComponent(jobId)}/applications`, { headers: authHeaders() })),
   updateApplicationStatus: async (applicationId, payload) =>

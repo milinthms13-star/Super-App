@@ -110,6 +110,11 @@ const QUICK_PROMPTS_BY_LANGUAGE = {
 const SAFETY_ALERT_TEXT =
   'For self-harm thoughts, medical emergency, or immediate danger, contact local emergency services, family, or a nearby doctor immediately.';
 
+const SAFETY_DETECTION_PATTERN = /\b(suicide|kill myself|hurt myself|die by suicide|die|want to die|not worth living|end my life|self harm|self-harm|ending it|too much to live|can't go on|cut myself|shoot myself|poison myself|stab myself)\b/i;
+
+const DANGER_WARNING_TEXT =
+  'This message may describe emotional crisis or self-harm. Your Voice Friend will reply with caring support and encourage seeking help if needed.';
+
 const decodeJwtPayload = (token = '') => {
   try {
     const parts = String(token || '').split('.');
@@ -254,6 +259,7 @@ const VoiceFriend = () => {
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [newPresetName, setNewPresetName] = useState('');
   const [scenario, setScenario] = useState('room');
+  const [safetyWarning, setSafetyWarning] = useState('');
   const [autoSendVoice, setAutoSendVoice] = useState(true);
   const [pendingVoiceTranscript, setPendingVoiceTranscript] = useState('');
 
@@ -437,6 +443,8 @@ const VoiceFriend = () => {
     setScenario(value);
     markPendingSessionSettings();
   };
+
+  const detectSafetyWarning = (text = '') => SAFETY_DETECTION_PATTERN.test(String(text || ''));
 
   const handleVoiceChange = (value) => {
     setVoice(value);
@@ -774,6 +782,9 @@ const VoiceFriend = () => {
       setStatus('Please type or speak a message before sending.');
       return;
     }
+    if (detectSafetyWarning(trimmed)) {
+      setStatus('I see this feels serious. Your Voice Friend will reply with extra care and encourage help if needed.');
+    }
     if (!sessionId) {
       setStatus('Setting up your Voice Friend session. Please wait a moment.');
       return;
@@ -862,6 +873,15 @@ const VoiceFriend = () => {
       sendMessageRef.current(transcript);
     }
   }, [pendingVoiceTranscript, autoSendVoice, busy, sessionId]);
+
+  useEffect(() => {
+    const activeText = String(messageText || pendingVoiceTranscript || '');
+    if (detectSafetyWarning(activeText)) {
+      setSafetyWarning(DANGER_WARNING_TEXT);
+    } else if (safetyWarning) {
+      setSafetyWarning('');
+    }
+  }, [messageText, pendingVoiceTranscript, safetyWarning]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -1522,6 +1542,11 @@ const VoiceFriend = () => {
       <div className="voice-friend-safety-alert" role="note" aria-live="polite">
         {SAFETY_ALERT_TEXT}
       </div>
+      {safetyWarning && (
+        <div className="voice-friend-safety-warning" role="alert" aria-live="assertive">
+          {safetyWarning}
+        </div>
+      )}
 
       <div className="voice-friend-status">{status}</div>
 

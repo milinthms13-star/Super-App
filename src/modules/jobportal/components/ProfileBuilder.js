@@ -7,13 +7,43 @@ const ProfileBuilder = ({
   onSubmit,
   saving,
   resumeScore,
-}) => (
-  <section className="jp-panel">
-    <div className="jp-panel-head">
-      <h2>Job Seeker Profile</h2>
-      <p>Complete profile improves application visibility.</p>
-      <span className="jp-score-pill">Resume Score: {resumeScore}%</span>
-    </div>
+  uploadProgress = 0,
+  jobAlertsEnabled = true,
+  onToggleJobAlerts = () => {},
+}) => {
+  const progressSteps = [
+    { id: "identity", label: "Identity", done: Boolean(profileForm.fullName && profileForm.email && profileForm.phone) },
+    { id: "skills", label: "Skills", done: Boolean(profileForm.skills) },
+    { id: "career", label: "Career", done: Boolean(profileForm.experience && profileForm.expectedSalary) },
+    { id: "location", label: "Location", done: Boolean(profileForm.preferredLocations) },
+    { id: "availability", label: "Availability", done: Boolean(profileForm.availability) },
+  ];
+  const completedSteps = progressSteps.filter((step) => step.done).length;
+  const completionPercent = Math.round((completedSteps / progressSteps.length) * 100);
+
+  return (
+    <section className="jp-panel">
+      <div className="jp-panel-head">
+        <h2>Job Seeker Profile</h2>
+        <p>Complete profile improves application visibility.</p>
+        <span className="jp-score-pill">Resume Score: {resumeScore}%</span>
+      </div>
+      <div className="jp-progress-card">
+        <div className="jp-progress-head">
+          <h3>Career Progress Meter</h3>
+          <span>{completionPercent}%</span>
+        </div>
+        <div className="jp-progress-track" aria-hidden="true">
+          <div className="jp-progress-fill" style={{ width: `${completionPercent}%` }} />
+        </div>
+        <div className="jp-progress-steps">
+          {progressSteps.map((step) => (
+            <span key={step.id} className={`jp-progress-step ${step.done ? "done" : ""}`}>
+              {step.done ? "Done" : "Pending"}: {step.label}
+            </span>
+          ))}
+        </div>
+      </div>
     <form className="jp-form" onSubmit={onSubmit}>
       <div className="jp-grid-two">
         <div>
@@ -87,12 +117,30 @@ const ProfileBuilder = ({
           <label htmlFor="jp-gulf-ready">Open to verified Gulf jobs</label>
         </div>
       </div>
+      <label className="jp-checkbox-row" htmlFor="jp-job-alerts-enabled">
+        <input
+          id="jp-job-alerts-enabled"
+          type="checkbox"
+          checked={Boolean(jobAlertsEnabled)}
+          onChange={(e) => onToggleJobAlerts(e.target.checked)}
+        />
+        Enable push-ready job alerts
+      </label>
 
       <button type="submit" className="jp-btn jp-btn-primary" disabled={saving}>
         {saving ? "Saving..." : "Save Profile"}
       </button>
+      {saving ? (
+        <div className="jp-upload-progress" aria-live="polite">
+          <div className="jp-upload-progress-bar">
+            <div className="jp-upload-progress-fill" style={{ width: `${Math.max(0, Math.min(100, uploadProgress))}%` }} />
+          </div>
+          <p>{Math.round(uploadProgress)}% uploaded</p>
+        </div>
+      ) : null}
     </form>
-  </section>
-);
+    </section>
+  );
+};
 
 export default ProfileBuilder;

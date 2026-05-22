@@ -53,6 +53,16 @@ describe('VoiceFriendService', () => {
     expect(session.messages[1]).toMatchObject({ role: 'assistant', content: 'I am here with you.' });
   });
 
+  test('sendMessage returns a supportive safety response for crisis-related text', async () => {
+    const session = voiceFriendService.createSession({ userId: 'user123', persona: 'supportive', mood: 'sad', language: 'en' });
+    const crisisResult = await voiceFriendService.sendMessage({ sessionId: session.sessionId, message: 'I feel like I want to die', persona: 'supportive', mood: 'sad', language: 'en' });
+
+    expect(crisisResult.safetyResponse).toBe(true);
+    expect(crisisResult.response).toContain('I hear that this feels very hard');
+    expect(session.messages.length).toBe(2);
+    expect(session.messages[1]).toMatchObject({ role: 'assistant', content: expect.stringContaining('contact local emergency services') });
+  });
+
   test('generateSpeech returns base64 audio from configured TTS provider', async () => {
     const result = await voiceFriendService.generateSpeech({ text: 'Hello friend', friendId: 'nila', language: 'en' });
 

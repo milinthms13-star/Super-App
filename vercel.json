@@ -4,6 +4,10 @@
     {
       "path": "/api/hyperlocal/internal/cron/overview360-rebuild",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/jobportal/internal/cron/overview360-rebuild",
+      "schedule": "*/15 * * * *"
     }
   ],
   "headers": [
@@ -37,6 +41,24 @@
       "source": "/api/hyperlocal/subscriptions/plans",
       "headers": [
         { "key": "Cache-Control", "value": "public, s-maxage=600, stale-while-revalidate=3600" }
+      ]
+    },
+    {
+      "source": "/api/jobportal/overview360/public",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=120, stale-while-revalidate=600" }
+      ]
+    },
+    {
+      "source": "/api/jobportal/jobs",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=45, stale-while-revalidate=300" }
+      ]
+    },
+    {
+      "source": "/api/jobportal/overview360",
+      "headers": [
+        { "key": "Cache-Control", "value": "private, no-cache, no-store, max-age=0, must-revalidate" }
       ]
     }
   ]

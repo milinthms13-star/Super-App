@@ -8,3 +8,5 @@
 [0521/211709.792:ERROR:third_party\crashpad\crashpad\client\crashpad_client_win.cc:869] not connected
 [0521/211744.310:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: Access is denied. (0x5)
 [0521/211744.386:ERROR:third_party\crashpad\crashpad\client\crashpad_client_win.cc:869] not connected
+[0522/200605.054:ERROR:third_party\crashpad\crashpad\util\win\registration_protocol_win.cc:108] CreateFile: Access is denied. (0x5)
+[0522/200605.323:ERROR:third_party\crashpad\crashpad\client\crashpad_client_win.cc:869] not connected

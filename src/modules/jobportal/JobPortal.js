@@ -1,7 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "../../contexts/AppContext";
-import { getStoredAuthToken } from "../../utils/auth";
 import { jobPortalApi } from "./services/jobPortalApi";
+import jobPortalAuthStorage from "./services/jobPortalAuthStorage";
+import jobPortalOfflineQueue from "./services/jobPortalOfflineQueue";
+import jobPortalNotifications from "./services/jobPortalNotifications";
+import jobPortalTelemetry from "./services/jobPortalTelemetry";
 import {
   APPLICATION_STATUS_OPTIONS,
   GOVERNMENT_PORTAL_LINKS,
@@ -88,11 +92,38 @@ const calculateSkillMatchScore = (jobSkills = [], candidateSkills = []) => {
   return Math.min(100, 50 + Array.from(new Set(matched)).length * 15);
 };
 
+const ASSISTANT_QUICK_PROMPTS = [
+  { id: "resume", label: "Resume Tune-up", text: "Review my profile and suggest resume improvements for IT jobs." },
+  { id: "interview", label: "Interview Prep", text: "Give me 5 interview prep steps for my current skill profile." },
+  { id: "fraud", label: "Fraud Check", text: "How can I verify if a Gulf job posting is safe and genuine?" },
+  { id: "salary", label: "Salary Strategy", text: "Help me negotiate expected salary for my experience level." },
+];
+
+const HERO_COPY = {
+  en: {
+    title: "Design-led 360 Hiring Hub",
+    subtitle: "Discover, trust, apply, and grow with branded candidate and employer journeys.",
+  },
+  ml: {
+    title: "Malayalam 360 Hiring Hub",
+    subtitle: "Discover trusted jobs and apply with confidence.",
+  },
+  hi: {
+    title: "Hindi 360 Hiring Hub",
+    subtitle: "Find verified opportunities and grow faster.",
+  },
+};
+
 const JobPortal = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useApp();
-  const token = getStoredAuthToken();
+  jobPortalAuthStorage.initialize();
+  const token = jobPortalAuthStorage.getToken();
   const isAuthenticated = Boolean(token);
   const currentEmail = String(user?.email || "").toLowerCase();
+  const applyAbortRef = useRef(null);
+  const profileAbortRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState("home");
   const [jobs, setJobs] = useState([]);
@@ -109,6 +140,7 @@ const JobPortal = () => {
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobModalOpen, setJobModalOpen] = useState(false);
   const [applySubmitting, setApplySubmitting] = useState(false);
+  const [applyUploadProgress, setApplyUploadProgress] = useState(0);
 
   const [applications, setApplications] = useState([]);
   const [applicationsLoading, setApplicationsLoading] = useState(false);
@@ -118,6 +150,8 @@ const JobPortal = () => {
   const [profileForm, setProfileForm] = useState(INITIAL_PROFILE_FORM);
   const [profileFiles, setProfileFiles] = useState({ resume: null, videoIntro: null, voiceResume: null });
   const [profileSaving, setProfileSaving] = useState(false);
+  const [profileUploadProgress, setProfileUploadProgress] = useState(0);
+  const [jobAlertsEnabled, setJobAlertsEnabled] = useState(true);
 
   const [employerProfile, setEmployerProfile] = useState(null);
   const [employerDashboard, setEmployerDashboard] = useState(null);
@@ -134,6 +168,7 @@ const JobPortal = () => {
   const [assistantInput, setAssistantInput] = useState("");
   const [assistantSending, setAssistantSending] = useState(false);
   const [assistantProvider, setAssistantProvider] = useState("fallback");
+  const [uiLanguage, setUiLanguage] = useState("en");
   const [aiSkillInput, setAiSkillInput] = useState("");
   const [assistantMessages, setAssistantMessages] = useState([
     {
@@ -147,6 +182,9 @@ const JobPortal = () => {
   const [overviewData, setOverviewData] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState("");
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [queueSize, setQueueSize] = useState(jobPortalOfflineQueue.size());
+  const [queueSyncing, setQueueSyncing] = useState(false);
 
   const pushToast = useCallback((type, message) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -154,9 +192,68 @@ const JobPortal = () => {
     window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3500);
   }, []);
 
+  const enqueueOfflineAction = useCallback(
+    async (type, payload) => {
+      jobPortalOfflineQueue.enqueue({ type, payload });
+      setQueueSize(jobPortalOfflineQueue.size());
+      await jobPortalTelemetry.sendEvent(
+        jobPortalApi,
+        "offline_action_queued",
+        { actionType: type },
+        "mobile"
+      );
+    },
+    []
+  );
+
+  const executeQueuedAction = useCallback(async (item) => {
+    if (!item?.type) return;
+    if (item.type === "save_job") {
+      await jobPortalApi.saveJob(item.payload.jobId);
+      return;
+    }
+    if (item.type === "unsave_job") {
+      await jobPortalApi.removeSavedJob(item.payload.jobId);
+      return;
+    }
+    if (item.type === "report_job") {
+      await jobPortalApi.reportJob(item.payload.jobId, { reason: item.payload.reason });
+      return;
+    }
+    if (item.type === "apply_job") {
+      const formData = new FormData();
+      formData.append("skills", String(item.payload.skills || ""));
+      formData.append("name", String(item.payload.name || ""));
+      formData.append("email", String(item.payload.email || ""));
+      formData.append("phone", String(item.payload.phone || ""));
+      if (item.payload.coverLetter) formData.append("coverLetter", item.payload.coverLetter);
+      if (item.payload.expectedSalary) formData.append("expectedSalary", item.payload.expectedSalary);
+      if (item.payload.availability) formData.append("availability", item.payload.availability);
+      await jobPortalApi.applyJob(item.payload.jobId, formData);
+    }
+  }, []);
+
+  const flushOfflineQueue = useCallback(async () => {
+    if (!isAuthenticated || !isOnline || queueSyncing) return;
+    setQueueSyncing(true);
+    const result = await jobPortalOfflineQueue.drain(executeQueuedAction);
+    setQueueSize(jobPortalOfflineQueue.size());
+    setQueueSyncing(false);
+    if (result.processed > 0) {
+      pushToast("success", `Synced ${result.processed} offline action(s).`);
+    }
+    await jobPortalTelemetry.sendEvent(
+      jobPortalApi,
+      "offline_queue_flushed",
+      { processed: result.processed, failed: result.failed, remaining: result.remaining },
+      "mobile"
+    );
+  }, [executeQueuedAction, isAuthenticated, isOnline, pushToast, queueSyncing]);
+
   const loadJobs = useCallback(async () => {
     setJobsLoading(true);
     setJobsError("");
+    jobPortalTelemetry.mark("jobportal_load_jobs_start");
     try {
       const params = {
         q: filters.q || undefined,
@@ -168,9 +265,19 @@ const JobPortal = () => {
       };
       const response = await jobPortalApi.getJobs(params);
       setJobs(Array.isArray(response?.data) ? response.data : []);
+      const loadDuration = jobPortalTelemetry.measure("jobportal_load_jobs_start");
+      if (loadDuration !== null) {
+        jobPortalTelemetry.sendEvent(jobPortalApi, "screen_view", { tab: "home", loadDuration }, "mobile");
+      }
     } catch (error) {
       setJobs([]);
       setJobsError(error?.response?.data?.message || "Unable to load jobs.");
+      jobPortalTelemetry.sendEvent(
+        jobPortalApi,
+        "api_error",
+        { route: "jobs", message: error?.message || "unknown_error" },
+        "mobile"
+      );
     } finally {
       setJobsLoading(false);
     }
@@ -218,6 +325,7 @@ const JobPortal = () => {
         availability: profile.availability || "immediate",
         gulfReady: Boolean(profile.gulfReady),
       });
+      setJobAlertsEnabled(profile?.jobAlerts?.enabled !== false);
       setAiSkillInput((current) =>
         current || (Array.isArray(profile.skills) ? profile.skills.join(", ") : "")
       );
@@ -276,7 +384,94 @@ const JobPortal = () => {
     if (activeTab === "overview360") {
       loadOverview360();
     }
-  }, [activeTab, loadEmployerData, loadOverview360]);
+    if (isAuthenticated) {
+      jobPortalTelemetry.sendEvent(jobPortalApi, "screen_view", { tab: activeTab }, "mobile");
+    }
+  }, [activeTab, isAuthenticated, loadEmployerData, loadOverview360]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    flushOfflineQueue();
+  }, [flushOfflineQueue, isAuthenticated, isOnline]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !isOnline || queueSyncing || queueSize !== 0) return;
+    loadSavedJobs();
+    loadApplications();
+  }, [isAuthenticated, isOnline, loadApplications, loadSavedJobs, queueSize, queueSyncing]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    jobPortalNotifications
+      .registerDevice(jobPortalApi)
+      .then((result) => {
+        if (result?.success) {
+          jobPortalTelemetry.sendEvent(
+            jobPortalApi,
+            "notification_registered",
+            { permission: result.permission },
+            "mobile"
+          );
+        }
+      })
+      .catch(() => {});
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = String(params.get("tab") || "").trim();
+    const jobIdParam = String(params.get("jobId") || "").trim();
+    const validTabs = new Set(["home", "overview360", "applications", "saved", "profile", "employer"]);
+    if (tabParam && validTabs.has(tabParam) && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+    if (jobIdParam) {
+      openJobDetails(jobIdParam);
+      jobPortalTelemetry.sendEvent(
+        jobPortalApi,
+        "deep_link_open",
+        { tab: tabParam || activeTab, jobId: jobIdParam },
+        "mobile"
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("tab") !== activeTab) {
+      params.set("tab", activeTab);
+      navigate({ search: params.toString() }, { replace: true });
+    }
+  }, [activeTab, location.search, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!["home", "overview360", "applications"].includes(activeTab)) return;
+    const timer = window.setInterval(() => {
+      if (document.hidden) return;
+      if (activeTab === "overview360") {
+        loadOverview360();
+      } else if (activeTab === "applications") {
+        loadApplications();
+      } else {
+        loadJobs();
+      }
+      jobPortalTelemetry.sendEvent(jobPortalApi, "background_refresh", { tab: activeTab }, "mobile");
+    }, 45000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, isAuthenticated, loadApplications, loadJobs, loadOverview360]);
 
   const savedJobIds = useMemo(
     () => new Set(savedJobs.map((job) => String(job?._id || job?.id || ""))),
@@ -314,6 +509,7 @@ const JobPortal = () => {
     },
     [candidateSkills]
   );
+  const heroCopy = HERO_COPY[uiLanguage] || HERO_COPY.en;
 
   const displayedJobs = useMemo(() => {
     const jobsCopy = [...jobs];
@@ -339,17 +535,31 @@ const JobPortal = () => {
       pushToast("error", "Login required to save jobs.");
       return;
     }
+    const normalizedJobId = String(jobId || "");
     try {
-      if (savedJobIds.has(String(jobId))) {
-        await jobPortalApi.removeSavedJob(jobId);
+      if (savedJobIds.has(normalizedJobId)) {
+        await jobPortalApi.removeSavedJob(normalizedJobId);
         pushToast("success", "Removed from saved jobs.");
       } else {
-        await jobPortalApi.saveJob(jobId);
+        await jobPortalApi.saveJob(normalizedJobId);
         pushToast("success", "Job saved.");
       }
       loadSavedJobs();
     } catch (error) {
-      pushToast("error", error?.response?.data?.message || "Unable to update saved jobs.");
+      const canQueue = !isOnline || !error?.response;
+      if (canQueue) {
+        const actionType = savedJobIds.has(normalizedJobId) ? "unsave_job" : "save_job";
+        await enqueueOfflineAction(actionType, { jobId: normalizedJobId });
+        pushToast("success", "Saved action queued. It will sync when connection returns.");
+      } else {
+        pushToast("error", error?.response?.data?.message || "Unable to update saved jobs.");
+      }
+      await jobPortalTelemetry.sendEvent(
+        jobPortalApi,
+        "api_error",
+        { route: "saved-jobs", message: error?.message || "save_failed" },
+        "mobile"
+      );
     }
   };
 
@@ -359,23 +569,86 @@ const JobPortal = () => {
       return;
     }
     setApplySubmitting(true);
+    setApplyUploadProgress(0);
     try {
+      const normalizedJobId = String(jobId || "");
+      const queuedPayload = {
+        jobId: normalizedJobId,
+        coverLetter: String(payload?.coverLetter || ""),
+        expectedSalary: String(payload?.expectedSalary || ""),
+        availability: String(payload?.availability || ""),
+        skills: aiSkillInput || profileForm.skills || "",
+        name: profileForm.fullName || user?.name || "",
+        email: profileForm.email || currentEmail || "",
+        phone: profileForm.phone || "",
+      };
+      if (!isOnline) {
+        if (payload?.resumeFile) {
+          pushToast("error", "Offline apply with file upload is not supported. Retry when online.");
+          setApplySubmitting(false);
+          return;
+        }
+        await enqueueOfflineAction("apply_job", queuedPayload);
+        pushToast("success", "Application queued. It will sync automatically when online.");
+        setApplySubmitting(false);
+        return;
+      }
+
       const formData = new FormData();
       if (payload?.coverLetter) formData.append("coverLetter", payload.coverLetter);
       if (payload?.expectedSalary) formData.append("expectedSalary", payload.expectedSalary);
       if (payload?.availability) formData.append("availability", payload.availability);
       if (payload?.resumeFile) formData.append("resume", payload.resumeFile);
-      formData.append("skills", aiSkillInput || profileForm.skills || "");
-      formData.append("name", profileForm.fullName || user?.name || "");
-      formData.append("email", profileForm.email || currentEmail || "");
-      formData.append("phone", profileForm.phone || "");
-      await jobPortalApi.applyJob(jobId, formData);
+      formData.append("skills", queuedPayload.skills);
+      formData.append("name", queuedPayload.name);
+      formData.append("email", queuedPayload.email);
+      formData.append("phone", queuedPayload.phone);
+      applyAbortRef.current = new AbortController();
+      await jobPortalApi.applyJob(normalizedJobId, formData, {
+        signal: applyAbortRef.current.signal,
+        onUploadProgress: (event) => {
+          const total = Number(event?.total || 0);
+          const loaded = Number(event?.loaded || 0);
+          if (total > 0) {
+            setApplyUploadProgress(Math.round((loaded / total) * 100));
+          }
+        },
+      });
       pushToast("success", "Application submitted successfully.");
+      setApplyUploadProgress(100);
       loadApplications();
     } catch (error) {
-      pushToast("error", error?.response?.data?.message || "Unable to submit application.");
+      if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+        pushToast("error", "Application upload cancelled.");
+      } else if (!isOnline || !error?.response) {
+        if (payload?.resumeFile) {
+          pushToast("error", "Network issue detected. File-based applications cannot be queued offline.");
+        } else {
+          await enqueueOfflineAction("apply_job", {
+            jobId: String(jobId || ""),
+            coverLetter: String(payload?.coverLetter || ""),
+            expectedSalary: String(payload?.expectedSalary || ""),
+            availability: String(payload?.availability || ""),
+            skills: aiSkillInput || profileForm.skills || "",
+            name: profileForm.fullName || user?.name || "",
+            email: profileForm.email || currentEmail || "",
+            phone: profileForm.phone || "",
+          });
+          pushToast("success", "Application queued due to network issue.");
+        }
+      } else {
+        pushToast("error", error?.response?.data?.message || "Unable to submit application.");
+      }
+      await jobPortalTelemetry.sendEvent(
+        jobPortalApi,
+        "api_error",
+        { route: "apply", message: error?.message || "apply_failed" },
+        "mobile"
+      );
     } finally {
+      applyAbortRef.current = null;
       setApplySubmitting(false);
+      setApplyUploadProgress(0);
     }
   };
 
@@ -392,7 +665,18 @@ const JobPortal = () => {
       await jobPortalApi.reportJob(jobId, { reason });
       pushToast("success", "Report submitted to moderation.");
     } catch (error) {
-      pushToast("error", error?.response?.data?.message || "Unable to report this job.");
+      if (!isOnline || !error?.response) {
+        await enqueueOfflineAction("report_job", { jobId: String(jobId || ""), reason: String(reason || "").trim() });
+        pushToast("success", "Report queued. It will be submitted automatically when online.");
+      } else {
+        pushToast("error", error?.response?.data?.message || "Unable to report this job.");
+      }
+      await jobPortalTelemetry.sendEvent(
+        jobPortalApi,
+        "api_error",
+        { route: "report", message: error?.message || "report_failed" },
+        "mobile"
+      );
     }
   };
 
@@ -405,6 +689,7 @@ const JobPortal = () => {
       return;
     }
     setProfileSaving(true);
+    setProfileUploadProgress(0);
     try {
       const formData = new FormData();
       Object.entries(profileForm).forEach(([key, value]) => {
@@ -414,14 +699,44 @@ const JobPortal = () => {
       if (profileFiles.resume) formData.append("resume", profileFiles.resume);
       if (profileFiles.videoIntro) formData.append("videoIntro", profileFiles.videoIntro);
       if (profileFiles.voiceResume) formData.append("voiceResume", profileFiles.voiceResume);
-      await jobPortalApi.updateProfile(formData);
+      profileAbortRef.current = new AbortController();
+      await jobPortalApi.updateProfile(formData, {
+        signal: profileAbortRef.current.signal,
+        onUploadProgress: (event) => {
+          const total = Number(event?.total || 0);
+          const loaded = Number(event?.loaded || 0);
+          if (total > 0) {
+            setProfileUploadProgress(Math.round((loaded / total) * 100));
+          }
+        },
+      });
       setProfileFiles({ resume: null, videoIntro: null, voiceResume: null });
       pushToast("success", "Profile updated.");
+      setProfileUploadProgress(100);
       loadProfile();
+      await jobPortalApi.updateNotificationPreferences({ enabled: jobAlertsEnabled });
     } catch (error) {
-      pushToast("error", error?.response?.data?.message || "Unable to update profile.");
+      if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+        pushToast("error", "Profile upload cancelled.");
+      } else {
+        pushToast("error", error?.response?.data?.message || "Unable to update profile.");
+      }
+      await jobPortalTelemetry.sendEvent(
+        jobPortalApi,
+        "api_error",
+        { route: "profile", message: error?.message || "profile_update_failed" },
+        "mobile"
+      );
     } finally {
+      profileAbortRef.current = null;
       setProfileSaving(false);
+      setProfileUploadProgress(0);
+    }
+  };
+
+  const cancelApplyUpload = () => {
+    if (applyAbortRef.current) {
+      applyAbortRef.current.abort();
     }
   };
 
@@ -495,8 +810,8 @@ const JobPortal = () => {
     }
   };
 
-  const sendAssistantMessage = async () => {
-    const question = String(assistantInput || "").trim();
+  const sendAssistantMessage = async (promptText = "") => {
+    const question = String(promptText || assistantInput || "").trim();
     if (!question) return;
     if (!isAuthenticated) {
       pushToast("error", "Login required to use AI assistant.");
@@ -525,6 +840,12 @@ const JobPortal = () => {
       };
       setAssistantProvider(result?.provider || "fallback");
       setAssistantMessages((current) => [...current, botMessage]);
+      if (result?.provider === "openai") {
+        jobPortalNotifications.showNotification({
+          title: "NilaJobs Assistant",
+          body: "Your AI guidance is ready.",
+        });
+      }
     } catch (error) {
       const fallbackMessage = {
         id: `b-${Date.now() + 1}`,
@@ -535,19 +856,44 @@ const JobPortal = () => {
       setAssistantProvider("fallback");
       setAssistantMessages((current) => [...current, fallbackMessage]);
       pushToast("error", error?.response?.data?.message || "Unable to connect AI assistant.");
+      await jobPortalTelemetry.sendEvent(
+        jobPortalApi,
+        "api_error",
+        { route: "assistant", message: error?.message || "assistant_failed" },
+        "mobile"
+      );
     } finally {
       setAssistantSending(false);
     }
+  };
+  const handleAssistantQuickPrompt = (promptText) => {
+    setAssistantInput(promptText);
+    sendAssistantMessage(promptText);
   };
 
   return (
     <div className="jp-shell">
       <header className="jp-topbar">
         <div>
-          <h1>Job Portal</h1>
-          <p>Live jobs, real applications, employer moderation and Gulf safety checks.</p>
+          <h1>{heroCopy.title}</h1>
+          <p>{heroCopy.subtitle}</p>
         </div>
         <div className="jp-topbar-actions">
+          <span className={`jp-network-pill ${isOnline ? "online" : "offline"}`}>
+            {isOnline ? "Online" : "Offline"}
+          </span>
+          <div className="jp-language-switch" role="tablist" aria-label="Language switch">
+            {["en", "ml", "hi"].map((language) => (
+              <button
+                key={language}
+                type="button"
+                className={`jp-language-btn ${uiLanguage === language ? "active" : ""}`}
+                onClick={() => setUiLanguage(language)}
+              >
+                {language.toUpperCase()}
+              </button>
+            ))}
+          </div>
           <button type="button" className="jp-btn jp-btn-muted" onClick={() => setAssistantOpen(true)}>
             Career Tips Assistant
           </button>
@@ -577,6 +923,17 @@ const JobPortal = () => {
       <main className="jp-content">
         {activeTab === "home" ? (
           <>
+            <section className="jp-panel jp-brand-hero">
+              <div>
+                <h2>{heroCopy.title}</h2>
+                <p>{heroCopy.subtitle}</p>
+              </div>
+              <div className="jp-hero-pills">
+                <span>Verified trust layer</span>
+                <span>AI-powered matching</span>
+                <span>Employer funnel analytics</span>
+              </div>
+            </section>
             <section className="jp-panel jp-ai-panel">
               <div className="jp-panel-head">
                 <h2>AI Job Match</h2>
@@ -646,7 +1003,12 @@ const JobPortal = () => {
               <h2>Live Job Listings</h2>
               {jobsLoading ? <p>Loading jobs...</p> : null}
               {jobsError ? <p className="jp-error-text">{jobsError}</p> : null}
-              {!jobsLoading && !jobsError && displayedJobs.length === 0 ? <p>No jobs found for current filters.</p> : null}
+              {!jobsLoading && !jobsError && displayedJobs.length === 0 ? (
+                <div className="jp-empty-state">
+                  <h4>No jobs found for current filters</h4>
+                  <p>Try switching job type, clearing district filter, or adding broader skills in AI Match.</p>
+                </div>
+              ) : null}
               <div className="jp-job-grid">
                 {displayedJobs.map((job) => {
                   const jobId = String(job?._id || job?.id || "");
@@ -699,7 +1061,12 @@ const JobPortal = () => {
               <p>Track shortlisted opportunities here.</p>
             </div>
             {savedLoading ? <p>Loading saved jobs...</p> : null}
-            {!savedLoading && savedJobs.length === 0 ? <p>No saved jobs yet.</p> : null}
+            {!savedLoading && savedJobs.length === 0 ? (
+              <div className="jp-empty-state">
+                <h4>No saved jobs yet</h4>
+                <p>Save interesting roles first, then compare trust score, salary, and match quality here.</p>
+              </div>
+            ) : null}
             <div className="jp-job-grid">
               {savedJobs.map((job) => {
                 const jobId = String(job?._id || job?.id || "");
@@ -728,6 +1095,9 @@ const JobPortal = () => {
             onSubmit={saveProfile}
             saving={profileSaving}
             resumeScore={resumeScore}
+            uploadProgress={profileUploadProgress}
+            jobAlertsEnabled={jobAlertsEnabled}
+            onToggleJobAlerts={setJobAlertsEnabled}
           />
         ) : null}
 
@@ -765,6 +1135,8 @@ const JobPortal = () => {
           isSaved={savedJobIds.has(String(selectedJob?._id || selectedJob?.id || ""))}
           onReportFakeJob={reportFakeJob}
           submitting={applySubmitting}
+          uploadProgress={applyUploadProgress}
+          onCancelApply={cancelApplyUpload}
         />
       ) : null}
 
@@ -774,6 +1146,8 @@ const JobPortal = () => {
           input={assistantInput}
           onInputChange={setAssistantInput}
           onSend={sendAssistantMessage}
+          quickPrompts={ASSISTANT_QUICK_PROMPTS}
+          onQuickPrompt={handleAssistantQuickPrompt}
           onClose={() => setAssistantOpen(false)}
           isSending={assistantSending}
           provider={assistantProvider}
@@ -794,6 +1168,12 @@ const JobPortal = () => {
         </div>
       ) : null}
 
+      {isAuthenticated && queueSize > 0 ? (
+        <div className="jp-offline-pill" role="status" aria-live="polite">
+          {queueSyncing ? "Syncing offline actions..." : `${queueSize} offline action(s) pending sync`}
+        </div>
+      ) : null}
+
       {activeTab === "applications" && applications.length > 0 ? (
         <div className="jp-status-footer">
           Status legend: {APPLICATION_STATUS_OPTIONS.join(" | ")}. Current top status:{" "}
@@ -805,3 +1185,4 @@ const JobPortal = () => {
 };
 
 export default JobPortal;
+

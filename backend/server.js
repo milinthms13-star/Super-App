@@ -80,6 +80,7 @@ const startBackgroundServices = () => {
   }
 
   const voiceCallScheduler = require('./services/voiceCallScheduler');
+  require('./workers/sosNotificationWorker');
   const {
     scheduleAbandonedCartReminders,
     stopAbandonedCartReminders,

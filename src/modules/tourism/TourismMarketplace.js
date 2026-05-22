@@ -378,6 +378,24 @@ const TourismMarketplace = () => {
         ...current,
         bookings: [booking, ...current.bookings],
       }));
+
+      try {
+        const paymentIntent = await tourismService.createPaymentIntent({
+          bookingId: booking.id,
+          amount: booking.amountSummary.payableAmount,
+          paymentType: booking.amountSummary.paymentType,
+        });
+        pushToast(
+          `Booking submitted. Payment order created: ${paymentIntent.orderId}.`,
+          "success"
+        );
+      } catch (paymentError) {
+        pushToast(
+          "Booking created, but payment order could not be generated right now.",
+          "warning"
+        );
+      }
+
       pushToast(`Booking submitted for ${selectedPackage.title}. Status: ${booking.bookingStatus}`);
       resetBookingSheet();
       setActiveTab("history");

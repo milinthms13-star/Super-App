@@ -251,6 +251,114 @@ jobs:
       - store_artifacts:
           path: /tmp/frontend.log
 
+  backend_karaokeduet_tests:
+    docker:
+      - image: cimg/node:20.12
+    working_directory: ~/repo/backend
+    steps:
+      - checkout:
+          path: ~/repo
+      - restore_cache:
+          keys:
+            - backend-npm-v2-{{ checksum "package-lock.json" }}
+            - backend-npm-v2-
+      - run:
+          name: Install backend dependencies
+          command: npm ci
+      - run:
+          name: Run KaraokeDuet backend integration tests with JUnit and coverage
+          command: |
+            mkdir -p test-results coverage
+            JEST_JUNIT_OUTPUT_DIR=./test-results \
+            JEST_JUNIT_OUTPUT_NAME=karaokeduet-backend-junit.xml \
+            npx jest --watchAll=false --runInBand --testPathPattern=tests/karaokeDuet.routes.integration.test.js --coverage --collectCoverageFrom='routes/karaokeDuet.js' --collectCoverageFrom='services/karaokeCoachService.js' --collectCoverageFrom='models/KaraokeDuetRoom.js' --coverageReporters=json-summary --coverageReporters=text --coverageReporters=lcov --reporters=default --reporters=jest-junit
+      - run:
+          name: Enforce backend KaraokeDuet coverage thresholds
+          command: |
+            node -e "const fs=require('fs'); const p='coverage/coverage-summary.json'; if(!fs.existsSync(p)){console.error('Missing '+p); process.exit(1);} const summary=JSON.parse(fs.readFileSync(p,'utf8')); const t=summary.total||{}; const req={lines:30,functions:30,branches:20,statements:30}; const bad=Object.entries(req).filter(([k,v])=>!t[k] || Number(t[k].pct||0)<v); if(bad.length){console.error('Coverage thresholds failed:', bad.map(([k,v])=>k+':'+(t[k]?t[k].pct:0)+'<'+v).join(', ')); process.exit(1);} console.log('Coverage thresholds passed.');"
+      - save_cache:
+          key: backend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: coverage
+
+  frontend_karaokeduet_tests:
+    docker:
+      - image: cimg/node:20.12
+    working_directory: ~/repo
+    environment:
+      CI: "true"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-npm-v2-{{ checksum "package-lock.json" }}
+            - frontend-npm-v2-
+      - run:
+          name: Install frontend dependencies
+          command: npm ci
+      - run:
+          name: Run KaraokeDuet frontend tests with JUnit and coverage
+          command: |
+            mkdir -p test-results coverage
+            JEST_JUNIT_OUTPUT_DIR=./test-results \
+            JEST_JUNIT_OUTPUT_NAME=karaokeduet-frontend-junit.xml \
+            npm test -- --watchAll=false --runInBand --testPathPattern=src/modules/karaokeduet/karaokeDuetUpgradeUtils.test.js --coverage --collectCoverageFrom='src/modules/karaokeduet/karaokeDuetUpgradeUtils.js' --coverageReporters=json-summary --coverageReporters=text --coverageReporters=lcov --reporters=default --reporters=jest-junit
+      - run:
+          name: Enforce frontend KaraokeDuet coverage thresholds
+          command: |
+            node -e "const fs=require('fs'); const p='coverage/coverage-summary.json'; if(!fs.existsSync(p)){console.error('Missing '+p); process.exit(1);} const summary=JSON.parse(fs.readFileSync(p,'utf8')); const t=summary.total||{}; const req={lines:70,functions:70,branches:50,statements:70}; const bad=Object.entries(req).filter(([k,v])=>!t[k] || Number(t[k].pct||0)<v); if(bad.length){console.error('Coverage thresholds failed:', bad.map(([k,v])=>k+':'+(t[k]?t[k].pct:0)+'<'+v).join(', ')); process.exit(1);} console.log('Coverage thresholds passed.');"
+      - save_cache:
+          key: frontend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: coverage
+
+  frontend_karaokeduet_e2e:
+    docker:
+      - image: cimg/node:20.12-browsers
+    working_directory: ~/repo
+    environment:
+      CI: "true"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-npm-v2-{{ checksum "package-lock.json" }}
+            - frontend-npm-v2-
+      - run:
+          name: Install frontend dependencies
+          command: npm ci
+      - run:
+          name: Run KaraokeDuet Cypress E2E smoke flow
+          command: |
+            mkdir -p test-results
+            npm start > /tmp/frontend.log 2>&1 &
+            npx wait-on http://localhost:3000
+            npx cypress run --spec cypress/e2e/karaokeduet-go-live.cy.js --browser chrome
+      - save_cache:
+          key: frontend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: /tmp/frontend.log
+      - store_artifacts:
+          path: cypress/screenshots
+      - store_artifacts:
+          path: cypress/videos
+
   backend_education_tests:
     docker:
       - image: cimg/node:20.12
@@ -388,6 +496,14 @@ jobs:
       - run:
           name: Main branch DanceDuet quality gate summary
           command: echo "DanceDuet backend and frontend quality gates passed on main."
+
+  karaokeduet_main_gate:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Main branch KaraokeDuet quality gate summary
+          command: echo "KaraokeDuet backend, frontend and e2e quality gates passed on main."
 
   education_main_gate:
     docker:
@@ -959,6 +1075,198 @@ jobs:
           name: Main branch GulfServices quality gate summary
           command: echo "GulfServices backend, frontend and e2e quality gates passed on main."
 
+  backend_jobportal_tests:
+    docker:
+      - image: cimg/node:20.12
+    working_directory: ~/repo/backend
+    environment:
+      CI: "true"
+    steps:
+      - checkout:
+          path: ~/repo
+      - restore_cache:
+          keys:
+            - backend-npm-v2-{{ checksum "package-lock.json" }}
+            - backend-npm-v2-
+      - run:
+          name: Install backend dependencies
+          command: npm ci
+      - run:
+          name: Run JobPortal backend integration tests with JUnit and coverage
+          command: |
+            mkdir -p test-results coverage
+            JEST_JUNIT_OUTPUT_DIR=./test-results \
+            JEST_JUNIT_OUTPUT_NAME=jobportal-backend-junit.xml \
+            npx jest routes/jobportal.routes.integration.test.js --watchAll=false --runInBand --coverage --collectCoverageFrom='routes/jobportal.js' --collectCoverageFrom='models/Job.js' --collectCoverageFrom='models/JobApplication.js' --collectCoverageFrom='services/jobPortalAiService.js' --coverageReporters=json-summary --coverageReporters=text --coverageReporters=lcov --reporters=default --reporters=jest-junit
+      - run:
+          name: Enforce backend JobPortal coverage thresholds
+          command: |
+            node -e "const fs=require('fs'); const p='coverage/coverage-summary.json'; if(!fs.existsSync(p)){console.error('Missing '+p); process.exit(1);} const summary=JSON.parse(fs.readFileSync(p,'utf8')); const t=summary.total||{}; const req={lines:10,functions:10,branches:5,statements:10}; const bad=Object.entries(req).filter(([k,v])=>!t[k] || Number(t[k].pct||0)<v); if(bad.length){console.error('Coverage thresholds failed:', bad.map(([k,v])=>k+':'+(t[k]?t[k].pct:0)+'<'+v).join(', ')); process.exit(1);} console.log('Coverage thresholds passed.');"
+      - run:
+          name: Build backend JobPortal quality summary artifact
+          command: |
+            node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')).total||{}; const out=[`backend_jobportal_tests`,`lines=${s.lines?s.lines.pct:0}`,`functions=${s.functions?s.functions.pct:0}`,`branches=${s.branches?s.branches.pct:0}`,`statements=${s.statements?s.statements.pct:0}`].join('\n'); fs.writeFileSync('test-results/jobportal-backend-quality-summary.txt', out);"
+      - save_cache:
+          key: backend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: coverage
+
+  frontend_jobportal_tests:
+    docker:
+      - image: cimg/node:20.12
+    working_directory: ~/repo
+    environment:
+      CI: "true"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-npm-v2-{{ checksum "package-lock.json" }}
+            - frontend-npm-v2-
+      - run:
+          name: Install frontend dependencies
+          command: npm ci
+      - run:
+          name: Run JobPortal frontend tests with JUnit and coverage
+          command: |
+            mkdir -p test-results coverage
+            JEST_JUNIT_OUTPUT_DIR=./test-results \
+            JEST_JUNIT_OUTPUT_NAME=jobportal-frontend-junit.xml \
+            npm test -- --watchAll=false --runInBand --testPathPattern='src/modules/jobportal/components/JobPortalOverview360.test.js' --coverage --collectCoverageFrom='src/modules/jobportal/**/*.{js,jsx}' --coverageReporters=json-summary --coverageReporters=text --coverageReporters=lcov --reporters=default --reporters=jest-junit
+      - run:
+          name: Enforce frontend JobPortal coverage thresholds
+          command: |
+            node -e "const fs=require('fs'); const p='coverage/coverage-summary.json'; if(!fs.existsSync(p)){console.error('Missing '+p); process.exit(1);} const summary=JSON.parse(fs.readFileSync(p,'utf8')); const t=summary.total||{}; const req={lines:5,functions:5,branches:2,statements:5}; const bad=Object.entries(req).filter(([k,v])=>!t[k] || Number(t[k].pct||0)<v); if(bad.length){console.error('Coverage thresholds failed:', bad.map(([k,v])=>k+':'+(t[k]?t[k].pct:0)+'<'+v).join(', ')); process.exit(1);} console.log('Coverage thresholds passed.');"
+      - run:
+          name: Build frontend JobPortal quality summary artifact
+          command: |
+            node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('coverage/coverage-summary.json','utf8')).total||{}; const out=[`frontend_jobportal_tests`,`lines=${s.lines?s.lines.pct:0}`,`functions=${s.functions?s.functions.pct:0}`,`branches=${s.branches?s.branches.pct:0}`,`statements=${s.statements?s.statements.pct:0}`].join('\n'); fs.writeFileSync('test-results/jobportal-frontend-quality-summary.txt', out);"
+      - save_cache:
+          key: frontend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: coverage
+
+  frontend_jobportal_e2e:
+    docker:
+      - image: cimg/node:20.12-browsers
+    working_directory: ~/repo
+    environment:
+      CI: "true"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-npm-v2-{{ checksum "package-lock.json" }}
+            - frontend-npm-v2-
+      - run:
+          name: Install frontend dependencies
+          command: npm ci
+      - run:
+          name: Run JobPortal Cypress E2E smoke flow
+          command: |
+            mkdir -p test-results
+            npm start > /tmp/frontend.log 2>&1 &
+            npx wait-on http://localhost:3000
+            npx cypress run --spec cypress/e2e/jobportal-go-live.cy.js --browser chrome
+      - run:
+          name: Build JobPortal E2E quality summary artifact
+          command: |
+            echo "frontend_jobportal_e2e" > test-results/jobportal-e2e-quality-summary.txt
+            echo "spec=cypress/e2e/jobportal-go-live.cy.js" >> test-results/jobportal-e2e-quality-summary.txt
+            echo "status=passed" >> test-results/jobportal-e2e-quality-summary.txt
+      - save_cache:
+          key: frontend-npm-v2-{{ checksum "package-lock.json" }}
+          paths:
+            - ~/.npm
+      - store_artifacts:
+          path: /tmp/frontend.log
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: cypress/screenshots
+      - store_artifacts:
+          path: cypress/videos
+
+  jobportal_security_audit:
+    docker:
+      - image: cimg/node:20.12
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-npm-v2-{{ checksum "package-lock.json" }}
+            - frontend-npm-v2-
+      - run:
+          name: Install frontend dependencies
+          command: npm ci
+      - run:
+          name: Frontend production dependency security audit (critical gate)
+          command: |
+            mkdir -p test-results
+            npm audit --omit=dev --json > test-results/jobportal-frontend-audit.json || true
+            node -e "const fs=require('fs');const p='test-results/jobportal-frontend-audit.json';const d=JSON.parse(fs.readFileSync(p,'utf8'));const c=Number((d.metadata&&d.metadata.vulnerabilities&&d.metadata.vulnerabilities.critical)||0);console.log('frontend_critical_vulnerabilities='+c);if(c>0){process.exit(1);}"
+      - run:
+          name: Install backend dependencies
+          command: npm ci
+          working_directory: ~/repo/backend
+      - run:
+          name: Backend production dependency security audit (critical gate)
+          command: |
+            npm audit --omit=dev --json > ../test-results/jobportal-backend-audit.json || true
+            node -e "const fs=require('fs');const p='test-results/jobportal-backend-audit.json';const d=JSON.parse(fs.readFileSync(p,'utf8'));const c=Number((d.metadata&&d.metadata.vulnerabilities&&d.metadata.vulnerabilities.critical)||0);console.log('backend_critical_vulnerabilities='+c);if(c>0){process.exit(1);}"
+          working_directory: ~/repo/backend
+      - store_artifacts:
+          path: test-results
+
+  frontend_jobportal_performance_budget:
+    docker:
+      - image: cimg/node:20.12
+    working_directory: ~/repo
+    environment:
+      CI: "true"
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - frontend-npm-v2-{{ checksum "package-lock.json" }}
+            - frontend-npm-v2-
+      - run:
+          name: Install frontend dependencies
+          command: npm ci
+      - run:
+          name: Build frontend bundle
+          command: npm run build
+      - run:
+          name: Enforce JobPortal frontend bundle budget
+          command: |
+            mkdir -p test-results
+            node -e "const fs=require('fs');const path=require('path');const dir='build/static/js';if(!fs.existsSync(dir)){console.error('Missing '+dir);process.exit(1);}const files=fs.readdirSync(dir).filter(f=>f.endsWith('.js')).map(f=>path.join(dir,f));const total=files.reduce((sum,file)=>sum+fs.statSync(file).size,0);const max=9*1024*1024;fs.writeFileSync('test-results/jobportal-frontend-bundle-summary.txt',`total_js_bytes=${total}\\nmax_bytes=${max}\\n`);console.log('total_js_bytes='+total);if(total>max){console.error('Bundle budget exceeded');process.exit(1);}"
+      - store_artifacts:
+          path: test-results
+      - store_artifacts:
+          path: build/static/js
+
+  jobportal_main_gate:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Main branch JobPortal quality gate summary
+          command: echo "JobPortal backend, frontend, e2e, security, and performance quality gates passed on main."
+
 workflows:
   beautyai_quality_gates:
     jobs:
@@ -1015,6 +1323,33 @@ workflows:
             - backend_danceduet_tests
             - frontend_danceduet_tests
             - frontend_danceduet_e2e
+          filters:
+            branches:
+              only:
+                - main
+
+  karaokeduet_quality_gates:
+    jobs:
+      - backend_karaokeduet_tests:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - frontend_karaokeduet_tests:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - frontend_karaokeduet_e2e:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - karaokeduet_main_gate:
+          requires:
+            - backend_karaokeduet_tests
+            - frontend_karaokeduet_tests
+            - frontend_karaokeduet_e2e
           filters:
             branches:
               only:
@@ -1171,6 +1506,45 @@ workflows:
             - backend_hyperlocal_tests
             - frontend_hyperlocal_tests
             - frontend_hyperlocal_e2e
+          filters:
+            branches:
+              only:
+                - main
+
+  jobportal_quality_gates:
+    jobs:
+      - backend_jobportal_tests:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - frontend_jobportal_tests:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - frontend_jobportal_e2e:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - jobportal_security_audit:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - frontend_jobportal_performance_budget:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - jobportal_main_gate:
+          requires:
+            - backend_jobportal_tests
+            - frontend_jobportal_tests
+            - frontend_jobportal_e2e
+            - jobportal_security_audit
+            - frontend_jobportal_performance_budget
           filters:
             branches:
               only:

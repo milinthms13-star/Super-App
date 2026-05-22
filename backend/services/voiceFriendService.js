@@ -9,6 +9,13 @@ const isFreeMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.FREE_M
 let aiClient = null;
 let googleTtsClient = null;
 
+const CRISIS_CONTENT_PATTERN = /\b(suicide|kill myself|hurt myself|die by suicide|die|want to die|not worth living|end my life|self harm|self-harm|ending it|too much to live|can't go on|cut myself|shoot myself|poison myself|stab myself)\b/i;
+
+const buildCrisisSupportReply = (session) => {
+  const userName = session.userName ? `${session.userName}, ` : '';
+  return `${userName}I hear that this feels very hard. I’m not a medical professional, but I want you to stay safe. If you are in immediate danger or thinking of harming yourself, please contact local emergency services or someone close to you right now. I’m here to listen, and I can help you find a small step to stay safe.`;
+};
+
 const createAIClient = () => {
   if (isFreeMode) {
     logger.info('VoiceFriendService running in FREE_MODE; cloud AI disabled.');
@@ -214,6 +221,21 @@ const normalizeUserName = (value) => {
   return normalized || null;
 };
 
+const isCrisisMessage = (text) => {
+  return CRISIS_CONTENT_PATTERN.test(String(text || ''));
+};
+
+const updateSession = (sessionId, changes = {}) => {
+  const session = getSession(sessionId);
+  if (!session) {
+    return null;
+  }
+  Object.assign(session, changes);
+  session.updatedAt = Date.now();
+  saveSessionsToDisk();
+  return session;
+};
+
 const cleanOldSessions = () => {
   const now = Date.now();
   let changed = false;
@@ -367,7 +389,6 @@ const buildLocalSupportReply = (session, userMessage) => {
   const namePrefix = session?.userName ? `${session.userName}, ` : '';
   const favoritePlace = session?.favoritePlaces?.[0];
   const scenarioHint = session.scenario ? `In this ${session.scenario} moment, ` : '';
-  const mood = session.mood || 'neutral';
   const tone = session.persona === 'motivational'
     ? 'Stay caring while offering a focused next step.'
     : session.persona === 'mindful'
@@ -655,6 +676,30 @@ const sendMessage = async ({
     throw new Error('Voice friend session not found');
   }
 
+  const normalizedMessage = String(message || '').trim();
+  if (!normalizedMessage) {
+    throw new Error('Message text is required');
+  }
+
+  if (isCrisisMessage(normalizedMessage)) {
+    session.messages.push({ role: 'user', content: normalizedMessage, timestamp: new Date() });
+    const safeReply = buildCrisisSupportReply(session);
+    session.messages.push({ role: 'assistant', content: safeReply, timestamp: new Date() });
+    session.updatedAt = Date.now();
+    saveSessionsToDisk();
+    return {
+      sessionId: session.sessionId,
+      persona: session.persona,
+      mood: session.mood,
+      language: session.language,
+      friendId: session.friendId,
+      friendName: session.friendName,
+      response: safeReply,
+      reply: safeReply,
+      safetyResponse: true,
+    };
+  }
+
   if (friendId) {
     session.friendId = friendId;
     const friend = buildFriendProfile(friendId);
@@ -694,6 +739,7 @@ const sendMessage = async ({
     session.messages = session.messages.slice(-24);
   }
 
+  session.updatedAt = Date.now();
   saveSessionsToDisk();
 
   return {
@@ -711,6 +757,7 @@ const sendMessage = async ({
 module.exports = {
   createSession,
   getSession,
+  updateSession,
   sendMessage,
   generateSpeech,
   setAIClient,

@@ -19,7 +19,12 @@ const ApplicationsBoard = ({ applications, loading }) => (
       <p>Status stages: {APPLICATION_STATUS_OPTIONS.join(" -> ")}</p>
     </div>
     {loading ? <p>Loading application history...</p> : null}
-    {!loading && applications.length === 0 ? <p>No applications yet. Apply to jobs and track progress here.</p> : null}
+    {!loading && applications.length === 0 ? (
+      <div className="jp-empty-state">
+        <h4>No applications yet</h4>
+        <p>Apply to verified roles and monitor each stage from Applied to Selected here.</p>
+      </div>
+    ) : null}
     {!loading && applications.length > 0 ? (
       <div className="jp-table">
         {applications.map((application) => (

@@ -13,7 +13,7 @@ const Vehicle = require('../models/Vehicle');
 const User = require('../models/User');
 
 // Utils
-const { calculateDistance, calculateFare, getNearbyDrivers } = require('../utils/rideSharingStore');
+const { calculateDistance, calculateFare, getNearbyDrivers, createRideRequest, assignDriverToRide, completeRide, updateDriverLocation } = require('../utils/rideSharingStore');
 
 const rateLimiter = createModerateRateLimiter();
 
@@ -137,6 +137,27 @@ router.get('/rides/active', authenticate, async (req, res) => {
     res.json({ success: true, data: activeRide });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch active ride' });
+  }
+});
+
+// GET /api/ridesharing/rides/:rideId - Get ride details
+router.get('/rides/:rideId', authenticate, async (req, res) => {
+  try {
+    const ride = await Ride.findOne({
+      _id: req.params.rideId,
+      $or: [
+        { customerId: req.user.id },
+        { driverId: req.user.id }
+      ]
+    });
+
+    if (!ride) {
+      return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    res.json({ success: true, data: ride });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch ride details' });
   }
 });
 
@@ -594,6 +615,42 @@ router.get('/fare/estimate', async (req, res) => {
   }
 });
 
+// POST /api/ridesharing/estimate-fare - Estimate fare for frontend compatibility
+router.post('/estimate-fare', async (req, res) => {
+  try {
+    const { rideType, pickup, destination } = req.body;
+    if (!pickup || !destination || !rideType) {
+      return res.status(400).json({ success: false, message: 'rideType, pickup and destination are required' });
+    }
+
+    const distance = calculateDistance(
+      parseFloat(pickup.lat),
+      parseFloat(pickup.lng),
+      parseFloat(destination.lat),
+      parseFloat(destination.lng)
+    );
+
+    const duration = Math.round(distance * 2); // Rough estimate
+    const pricing = calculateFare(rideType, distance, duration);
+
+    res.json({
+      success: true,
+      data: {
+        distance: `${distance.toFixed(1)} km`,
+        duration: `${duration} mins`,
+        pricing,
+        baseFare: pricing.baseFare,
+        distanceFare: pricing.distanceFare,
+        timeFare: pricing.timeFare,
+        tax: pricing.tax || 0,
+        total: pricing.totalFare
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to calculate fare' });
+  }
+});
+
 // GET /api/ridesharing/drivers/nearby - Get nearby drivers
 router.get('/drivers/nearby', async (req, res) => {
   try {
@@ -728,23 +785,6 @@ router.put('/admin/drivers/:driverId/verify', authenticate, async (req, res) => 
     res.json({ success: true, data: driver });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to update driver verification' });
-  }
-});
-
-module.exports = router;
-  }
-});
-
-// PUT /api/ridesharing/driver/location
-router.put('/driver/location', authenticate, async (req, res) => {
-  try {
-    const { lat, lng } = req.body;
-    // Assume req.user.driverId or logic
-    const driverId = req.user.driverId || req.user.id; // Adjust
-    const driver = await updateDriverLocation(driverId, lat, lng);
-    res.json({ success: true, data: driver });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
   }
 });
 

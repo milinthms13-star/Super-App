@@ -16,16 +16,6 @@ const MODULE_META = {
     priority: 'high',
     monetization: ['Service commissions', 'Candidate premium', 'Recruiter plans', 'Verification fees'],
   },
-  womensafetyfamily: {
-    title: 'Women Safety + Family Protection',
-    priority: 'high',
-    monetization: ['Family plans', 'Institution safety plans', 'Partner services'],
-  },
-  trustlayer: {
-    title: 'Trust Layer',
-    priority: 'highest',
-    monetization: ['Verification tiers', 'Trust badges', 'Risk APIs'],
-  },
 };
 
 router.get('/meta', authenticate, (_req, res) => {

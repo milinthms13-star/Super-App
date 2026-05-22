@@ -158,7 +158,6 @@ Important references:
 - `/live-place-explorer`
 - `/nila-beauty-ai`
 - `/smart-kitchen-recipe-hub`
-- `/women-safety-family-protection`
 - `/trust-layer`
 - `/businessservices`
 - `/jobportal`
@@ -572,21 +571,7 @@ These aliases keep older links and alternate naming schemes working.
 - **Backend references:**
   - `backend/routes/kitchen.js`
 
-## 29) Women Safety + Family Protection
-- **Route:** `/women-safety-family-protection`
-- **Entry file:** `src/modules/womensafetyfamily/WomenSafetyFamily`
-- **Purpose:** safety and emergency support
-- **Primary responsibilities:**
-  - SOS tracking
-  - trusted circles
-  - child safety
-  - elderly care alerts
-- **Backend references:**
-  - `backend/routes/sos.js`
-  - `backend/routes/sosController.js`
-  - family access and emergency integration controllers
-
-## 30) Trust Layer
+## 29) Trust Layer
 - **Route:** `/trust-layer`
 - **Entry file:** `src/modules/trustlayer/TrustLayer`
 - **Purpose:** trust and verification core
@@ -1006,7 +991,6 @@ Examples:
 - `liveplaceexplorer`
 - `beautyai`
 - `kitchen`
-- `womensafetyfamily`
 - `trustlayer`
 - `jobportal`
 - `skilllearning`

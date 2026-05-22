@@ -97,7 +97,6 @@ The dashboard lives in `src/modules/Dashboard.js` and exposes enabled modules pl
 - `/live-place-explorer`
 - `/nila-beauty-ai`
 - `/smart-kitchen-recipe-hub`
-- `/women-safety-family-protection`
 - `/trust-layer`
 - `/businessservices`
 - `/jobportal`
@@ -301,12 +300,7 @@ Examples:
 - **Entry:** `src/modules/kitchen/SmartKitchenRecipeHub`
 - **Purpose:** recipes and kitchen utility hub
 
-### 29. Women Safety + Family Protection
-- **Route:** `/women-safety-family-protection`
-- **Entry:** `src/modules/womensafetyfamily/WomenSafetyFamily`
-- **Purpose:** safety and emergency support
-
-### 30. Trust Layer
+### 29. Trust Layer
 - **Route:** `/trust-layer`
 - **Entry:** `src/modules/trustlayer/TrustLayer`
 - **Purpose:** trust and verification core
@@ -460,7 +454,6 @@ Examples:
 - liveplaceexplorer
 - beautyai
 - kitchen
-- womensafetyfamily
 - trustlayer
 - jobportal
 - skilllearning

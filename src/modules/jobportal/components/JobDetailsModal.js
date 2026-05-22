@@ -11,6 +11,8 @@ const JobDetailsModal = ({
   isSaved,
   onReportFakeJob,
   submitting,
+  uploadProgress = 0,
+  onCancelApply = () => {},
 }) => {
   const [coverLetter, setCoverLetter] = useState("");
   const [expectedSalary, setExpectedSalary] = useState("");
@@ -46,6 +48,15 @@ const JobDetailsModal = ({
 
   if (!open || !job) return null;
 
+  const trustSignals = [
+    job?.isVerified ? "Verified employer profile" : "Employer profile not verified yet",
+    job?.gulfSafetyChecklist?.agencyLicenseNumber
+      ? `License: ${job.gulfSafetyChecklist.agencyLicenseNumber}`
+      : "License details not provided",
+    job?.isUrgent ? "Urgent listing - verify interview details before travel/payment" : "Standard listing",
+  ];
+  const trustRiskLevel = job?.reports?.length > 2 ? "Elevated" : "Normal";
+
   const handleSubmit = (event) => {
     event.preventDefault();
     onApply(job._id || job.id, {
@@ -68,6 +79,15 @@ const JobDetailsModal = ({
         <section className="jp-modal-body">
           <p><strong>{job.company}</strong> | {job.location}</p>
           <p>{job.salary} | {job.experience} | {(job.workMode || "onsite").toUpperCase()}</p>
+          <div className="jp-trust-banner">
+            <h4>Trust Snapshot</h4>
+            <p>Risk level: {trustRiskLevel}</p>
+            <ul>
+              {trustSignals.map((signal) => (
+                <li key={signal}>{signal}</li>
+              ))}
+            </ul>
+          </div>
           <p>{job.description}</p>
 
           {(job.skills || []).length ? (
@@ -140,7 +160,20 @@ const JobDetailsModal = ({
               <button type="submit" className="jp-btn jp-btn-primary" disabled={hasApplied || submitting}>
                 {hasApplied ? "Applied" : submitting ? "Applying..." : "Apply Now"}
               </button>
+              {submitting ? (
+                <button type="button" className="jp-btn jp-btn-muted" onClick={onCancelApply}>
+                  Cancel Upload
+                </button>
+              ) : null}
             </div>
+            {submitting ? (
+              <div className="jp-upload-progress" aria-live="polite">
+                <div className="jp-upload-progress-bar">
+                  <div className="jp-upload-progress-fill" style={{ width: `${Math.max(0, Math.min(100, uploadProgress))}%` }} />
+                </div>
+                <p>{Math.round(uploadProgress)}% uploaded</p>
+              </div>
+            ) : null}
           </form>
 
           <div className="jp-support-row">
@@ -162,6 +195,11 @@ const JobDetailsModal = ({
             >
               Report Fake Job
             </button>
+          </div>
+          <div className="jp-multilingual-strip" aria-label="Multilingual trust note">
+            <span>EN: Verify offer terms before payment.</span>
+            <span>ML: പണം നൽകുന്നതിന് മുൻപ് ഓഫർ പരിശോധിക്കുക.</span>
+            <span>HI: भुगतान से पहले ऑफर जांचें।</span>
           </div>
         </section>
       </div>

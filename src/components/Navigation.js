@@ -41,7 +41,7 @@ const MODULE_CATEGORIES = {
   services: {
     label: "Services",
     icon: "🚗",
-    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen", "womensafetyfamily", "trustlayer"],
+    modules: ["fooddelivery", "tourism", "devadarshan", "hyperlocal", "localservices", "nilaaihub", "kidsstoryvideomaker", "gulfservices", "hotelbooking", "healthcare", "education", "businessbuilder", "ridesharing", "realestate", "finance", "freelancer", "maps", "diary", "resumebuilder", "photostudio", "karaokeduet", "beautyai", "kitchen"],
   },
   utilities: {
     label: "Utilities",
@@ -118,8 +118,6 @@ const Navigation = ({ onLogout, loggedInUser, enabledModules = [] }) => {
     { id: "beautyai", label: t("modules.beautyai", "Nila Beauty AI"), icon: "BA", sellerVisible: true },
     { id: "kitchen", label: t("modules.kitchen", "Smart Kitchen & Recipe Hub"), icon: "KH", sellerVisible: true },
 
-    { id: "womensafetyfamily", label: t("modules.womensafetyfamily", "Women Safety + Family Protection"), icon: "SF", sellerVisible: true },
-    { id: "trustlayer", label: t("modules.trustlayer", "Trust Layer"), icon: "TL", sellerVisible: true },
     { id: "businessservices", label: t("modules.businessservices", "Business Services Hub"), icon: "💼" },
     { id: "jobportal", label: t("modules.jobportal", "NilaJobs"), icon: "🔎" },
     { id: "businessbuilder", label: t("modules.businessbuilder", "AI Business Builder"), icon: "🚀", sellerVisible: true },

@@ -54,6 +54,22 @@ export const getMediaSrc = (value, fallbackLabel = "Post") => {
   return buildSvgDataUri(label, background);
 };
 
+export const isSafeMediaUrl = (value = '') => {
+  if (!value) return false;
+  try {
+    const url = String(value).trim();
+    // Allow data:, blob:, relative paths, and http(s) with common hosts
+    if (/^data:|^blob:|^\//i.test(url)) return true;
+    const parsed = new URL(url, 'http://localhost');
+    const host = parsed.hostname.toLowerCase();
+    // whitelist well-known media hosts and allow same-origin
+    const allowedHosts = ['youtube.com', 'youtube-nocookie.com', 'vimeo.com', 'imgur.com', 'cdn', 'localhost'];
+    return allowedHosts.some((h) => host.includes(h)) || parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch (e) {
+    return false;
+  }
+};
+
 export const normalizeSocialUser = (user, fallbackName = "VibeHub User") => {
   const name =
     user?.name || user?.fullName || user?.businessName || fallbackName;

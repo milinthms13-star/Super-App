@@ -27,7 +27,7 @@ const sosContactSchema = new mongoose.Schema({
   },
   notifyBy: [{
     type: String,
-    enum: ['SMS', 'WhatsApp', 'Call'],
+    enum: ['SMS', 'WhatsApp', 'Call', 'LinkUp'],
     default: ['SMS']
   }],
   otp: {

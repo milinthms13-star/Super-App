@@ -16,6 +16,13 @@ const jobPortalEventSchema = new mongoose.Schema(
         'job_posted',
         'job_updated',
         'assistant_chat',
+        'screen_view',
+        'api_error',
+        'deep_link_open',
+        'offline_action_queued',
+        'offline_queue_flushed',
+        'background_refresh',
+        'notification_registered',
       ],
     },
     userId: {

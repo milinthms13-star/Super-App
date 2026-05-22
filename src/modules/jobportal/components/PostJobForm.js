@@ -3,6 +3,24 @@ import { JOB_TYPE_OPTIONS, KERALA_DISTRICTS } from "../data/jobPortalConstants";
 
 const PostJobForm = ({ form, errors, onChange, onSubmit, saving, employerVerified }) => {
   const isGulf = form.type === "gulf";
+  const creativeTemplates = [
+    {
+      id: "it",
+      title: "IT Hiring Creative",
+      caption: `Hiring ${form.title || "Top Tech Talent"} | ${form.location || "Kerala"} | Apply now`,
+    },
+    {
+      id: "gulf",
+      title: "Gulf Verified Creative",
+      caption: `Verified Gulf opening: ${form.subtype || "Role"} | ${form.salary || "Salary on request"}`,
+    },
+    {
+      id: "urgent",
+      title: "Urgent Hiring Banner",
+      caption: `Urgent hiring at ${form.company || "our company"} | Contact ${form.contactPhone || "HR team"}`,
+    },
+  ];
+
   return (
     <section className="jp-panel">
       <div className="jp-panel-head">
@@ -162,6 +180,24 @@ const PostJobForm = ({ form, errors, onChange, onSubmit, saving, employerVerifie
         <button type="submit" className="jp-btn jp-btn-primary" disabled={saving}>
           {saving ? "Publishing..." : "Publish Job"}
         </button>
+
+        <div className="jp-creative-kit">
+          <h3>Canva Promotion Kit</h3>
+          <p>Use these pre-written captions in your Canva templates for social distribution.</p>
+          <div className="jp-creative-list">
+            {creativeTemplates.map((template) => (
+              <article key={template.id} className="jp-creative-item">
+                <strong>{template.title}</strong>
+                <p>{template.caption}</p>
+              </article>
+            ))}
+          </div>
+          <div className="jp-multilingual-strip">
+            <span>EN: Verified openings only</span>
+            <span>ML: വിശ്വാസമുള്ള ജോലികൾ മാത്രം</span>
+            <span>HI: केवल सत्यापित नौकरी</span>
+          </div>
+        </div>
       </form>
     </section>
   );

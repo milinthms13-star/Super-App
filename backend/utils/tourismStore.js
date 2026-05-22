@@ -174,6 +174,7 @@ const DEFAULT_TOURISM_DATA = {
       ],
     },
   ],
+  payments: [],
 };
 
 const ensureDataFile = async () => {
@@ -200,6 +201,7 @@ const readTourismData = async () => {
       leads: Array.isArray(parsed.leads) ? parsed.leads : DEFAULT_TOURISM_DATA.leads,
       coupons: Array.isArray(parsed.coupons) ? parsed.coupons : DEFAULT_TOURISM_DATA.coupons,
       complaints: Array.isArray(parsed.complaints) ? parsed.complaints : DEFAULT_TOURISM_DATA.complaints,
+      payments: Array.isArray(parsed.payments) ? parsed.payments : DEFAULT_TOURISM_DATA.payments,
     };
   } catch (error) {
     return DEFAULT_TOURISM_DATA;
