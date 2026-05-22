@@ -54,11 +54,11 @@ const JobPortalOverview360 = ({ data, loading, error, onRefresh }) => {
             </div>
             <div className="jp-stats-grid">
               <article>
-                <h3>{marketplace.averageSalaryMin ? `₹${marketplace.averageSalaryMin}` : 'N/A'}</h3>
+                <h3>{marketplace.averageSalaryMin ? `INR ${marketplace.averageSalaryMin}` : 'N/A'}</h3>
                 <p>Avg min salary</p>
               </article>
               <article>
-                <h3>{marketplace.averageSalaryMax ? `₹${marketplace.averageSalaryMax}` : 'N/A'}</h3>
+                <h3>{marketplace.averageSalaryMax ? `INR ${marketplace.averageSalaryMax}` : 'N/A'}</h3>
                 <p>Avg max salary</p>
               </article>
               <article>
@@ -85,11 +85,11 @@ const JobPortalOverview360 = ({ data, loading, error, onRefresh }) => {
                     </div>
                     <div>
                       <p className="jp-inline-label">Min avg</p>
-                      <p>₹{stat.averageMin}</p>
+                      <p>INR {stat.averageMin}</p>
                     </div>
                     <div>
                       <p className="jp-inline-label">Max avg</p>
-                      <p>₹{stat.averageMax}</p>
+                      <p>INR {stat.averageMax}</p>
                     </div>
                   </div>
                 ))}
@@ -227,6 +227,18 @@ const JobPortalOverview360 = ({ data, loading, error, onRefresh }) => {
                   <p>Hiring velocity (days)</p>
                 </article>
               </div>
+              {employer.recommendedActions?.length ? (
+                <div className="jp-table">
+                  <h4>Employer next steps</h4>
+                  {employer.recommendedActions.map((action, index) => (
+                    <div key={`${action}-${index}`} className="jp-row">
+                      <div>
+                        <p>{action}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {employer.topJobs?.length ? (
                 <div className="jp-table">
                   <h4>Top hiring jobs</h4>
@@ -277,7 +289,77 @@ const JobPortalOverview360 = ({ data, loading, error, onRefresh }) => {
                 <h3>{marketplace.newJobsLast7Days ?? 0}</h3>
                 <p>New jobs last 7 days</p>
               </article>
+              <article>
+                <h3>{marketplace.projectedNewJobsNext7Days ?? 0}</h3>
+                <p>Projected new jobs (next 7d)</p>
+              </article>
+              <article>
+                <h3>{marketplace.demandTrend || "stable"}</h3>
+                <p>Demand trend</p>
+              </article>
             </div>
+            {marketplace.funnel ? (
+              <div className="jp-table">
+                <h4>Conversion funnel (last 30 days)</h4>
+                <div className="jp-row">
+                  <div>
+                    <p className="jp-row-count">View to Save</p>
+                  </div>
+                  <div>
+                    <p>{marketplace.funnel.viewToSaveRate ?? 0}%</p>
+                  </div>
+                </div>
+                <div className="jp-row">
+                  <div>
+                    <p className="jp-row-count">Save to Apply</p>
+                  </div>
+                  <div>
+                    <p>{marketplace.funnel.saveToApplyRate ?? 0}%</p>
+                  </div>
+                </div>
+                <div className="jp-row">
+                  <div>
+                    <p className="jp-row-count">Apply to Selection</p>
+                  </div>
+                  <div>
+                    <p>{marketplace.funnel.applyToSelectionRate ?? 0}%</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {marketplace.moderation ? (
+              <div className="jp-table">
+                <h4>Trust and moderation</h4>
+                <div className="jp-row">
+                  <div>
+                    <p className="jp-row-count">Pending reports</p>
+                  </div>
+                  <div>
+                    <p>{marketplace.moderation.pendingReports ?? 0}</p>
+                  </div>
+                </div>
+                <div className="jp-row">
+                  <div>
+                    <p className="jp-row-count">High risk reports</p>
+                  </div>
+                  <div>
+                    <p>{marketplace.moderation.highRiskReports ?? 0}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {marketplace.recommendedActions?.length ? (
+              <div className="jp-table">
+                <h4>Marketplace actions</h4>
+                {marketplace.recommendedActions.map((action, index) => (
+                  <div key={`${action}-${index}`} className="jp-row">
+                    <div>
+                      <p>{action}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {marketplace.topSkills?.length ? (
               <div className="jp-table">
                 <h4>Top skills</h4>
@@ -318,3 +400,4 @@ const JobPortalOverview360 = ({ data, loading, error, onRefresh }) => {
 };
 
 export default JobPortalOverview360;
+

@@ -169,6 +169,26 @@ const jobSchema = new mongoose.Schema({
       type: String,
       trim: true
     },
+    riskScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0
+    },
+    riskLevel: {
+      type: String,
+      enum: ['low', 'medium', 'high', 'critical'],
+      default: 'low'
+    },
+    riskCategories: [{
+      type: String,
+      trim: true
+    }],
+    moderationStatus: {
+      type: String,
+      enum: ['pending', 'in_review', 'resolved', 'dismissed', 'escalated'],
+      default: 'pending'
+    },
     createdAt: {
       type: Date,
       default: Date.now

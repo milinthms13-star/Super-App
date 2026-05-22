@@ -95,6 +95,55 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+.resume-live-preview {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--resume-builder-surface-alt);
+  border-radius: 20px;
+  border: 1px solid var(--resume-builder-border);
+}
+
+.resume-live-preview .preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.resume-live-preview .template-label {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--resume-builder-primary-dark);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  font-weight: 700;
+}
+
+.preview-score-label,
+.preview-score-detail {
+  margin: 0;
+  color: var(--resume-builder-muted);
+  font-size: 0.85rem;
+}
+
+.resume-preview-score {
+  text-align: right;
+}
+
+.preview-bullet {
+  margin-left: 1rem;
+}
+
+.gulf-readiness-card {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
 .resume-header h3 {
   margin: 0 0 0.25rem;
   color: var(--resume-builder-primary);

@@ -4,7 +4,6 @@ import { getStoredAuthToken } from "../../utils/auth";
 import { jobPortalApi } from "./services/jobPortalApi";
 import {
   APPLICATION_STATUS_OPTIONS,
-  CAREER_TIP_RESPONSES,
   GOVERNMENT_PORTAL_LINKS,
   JOB_TYPE_OPTIONS,
   KERALA_DISTRICTS,
@@ -133,6 +132,8 @@ const JobPortal = () => {
 
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantInput, setAssistantInput] = useState("");
+  const [assistantSending, setAssistantSending] = useState(false);
+  const [assistantProvider, setAssistantProvider] = useState("fallback");
   const [aiSkillInput, setAiSkillInput] = useState("");
   const [assistantMessages, setAssistantMessages] = useState([
     {
@@ -163,6 +164,7 @@ const JobPortal = () => {
         type: filters.type || undefined,
         district: filters.district || undefined,
         quickFilter: filters.quickFilter !== "all" ? filters.quickFilter : undefined,
+        applicantSkills: aiSkillInput || profileForm.skills || undefined,
       };
       const response = await jobPortalApi.getJobs(params);
       setJobs(Array.isArray(response?.data) ? response.data : []);
@@ -172,7 +174,7 @@ const JobPortal = () => {
     } finally {
       setJobsLoading(false);
     }
-  }, [filters]);
+  }, [aiSkillInput, filters, profileForm.skills]);
 
   const loadApplications = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -304,7 +306,12 @@ const JobPortal = () => {
   );
 
   const getJobMatchScore = useCallback(
-    (job) => calculateSkillMatchScore(job?.skills, candidateSkills),
+    (job) => {
+      if (Number.isFinite(Number(job?.aiMatchScore))) {
+        return Math.max(0, Math.min(100, Number(job.aiMatchScore)));
+      }
+      return calculateSkillMatchScore(job?.skills, candidateSkills);
+    },
     [candidateSkills]
   );
 
@@ -488,14 +495,49 @@ const JobPortal = () => {
     }
   };
 
-  const sendAssistantMessage = () => {
+  const sendAssistantMessage = async () => {
     const question = String(assistantInput || "").trim();
     if (!question) return;
+    if (!isAuthenticated) {
+      pushToast("error", "Login required to use AI assistant.");
+      return;
+    }
     const userMessage = { id: `u-${Date.now()}`, role: "user", content: question };
-    const answer = CAREER_TIP_RESPONSES[(assistantMessages.length + question.length) % CAREER_TIP_RESPONSES.length];
-    const botMessage = { id: `b-${Date.now() + 1}`, role: "bot", content: answer };
-    setAssistantMessages((current) => [...current, userMessage, botMessage]);
+    setAssistantMessages((current) => [...current, userMessage]);
     setAssistantInput("");
+    setAssistantSending(true);
+    try {
+      const response = await jobPortalApi.chatAssistant({
+        message: question,
+      });
+      const result = response?.data || {};
+      const nextStepsText = Array.isArray(result?.nextSteps) && result.nextSteps.length
+        ? `Next steps: ${result.nextSteps.map((step, index) => `${index + 1}. ${step}`).join(" ")}`
+        : "";
+      const alertsText = Array.isArray(result?.safetyAlerts) && result.safetyAlerts.length
+        ? `Safety alerts: ${result.safetyAlerts.join(" | ")}`
+        : "";
+      const botText = [String(result?.answer || "").trim(), nextStepsText, alertsText].filter(Boolean).join("\n\n");
+      const botMessage = {
+        id: `b-${Date.now() + 1}`,
+        role: "bot",
+        content: botText || "I could not generate a response right now. Please try again.",
+      };
+      setAssistantProvider(result?.provider || "fallback");
+      setAssistantMessages((current) => [...current, botMessage]);
+    } catch (error) {
+      const fallbackMessage = {
+        id: `b-${Date.now() + 1}`,
+        role: "bot",
+        content:
+          "I could not reach the AI service right now. Update your profile skills and apply to roles with 60%+ match for better outcomes.",
+      };
+      setAssistantProvider("fallback");
+      setAssistantMessages((current) => [...current, fallbackMessage]);
+      pushToast("error", error?.response?.data?.message || "Unable to connect AI assistant.");
+    } finally {
+      setAssistantSending(false);
+    }
   };
 
   return (
@@ -733,6 +775,8 @@ const JobPortal = () => {
           onInputChange={setAssistantInput}
           onSend={sendAssistantMessage}
           onClose={() => setAssistantOpen(false)}
+          isSending={assistantSending}
+          provider={assistantProvider}
         />
       ) : null}
 

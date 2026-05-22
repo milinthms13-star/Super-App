@@ -22,6 +22,13 @@ jest.mock('../middleware/auth', () => ({
     };
     next();
   },
+  verifyAdmin: (req, _res, next) => {
+    req.user = {
+      ...(req.user || {}),
+      isAdmin: true,
+    };
+    next();
+  },
 }));
 
 const jobportalRouter = require('./jobportal');
@@ -30,6 +37,8 @@ const JobSeekerProfile = require('../models/JobSeekerProfile');
 const EmployerProfile = require('../models/EmployerProfile');
 const JobSavedJob = require('../models/JobSavedJob');
 const JobApplication = require('../models/JobApplication');
+const JobReport = require('../models/JobReport');
+const JobPortalEvent = require('../models/JobPortalEvent');
 
 describe('jobportal overview360 integration', () => {
   let app;
@@ -54,6 +63,8 @@ describe('jobportal overview360 integration', () => {
       EmployerProfile.deleteMany({}),
       JobSavedJob.deleteMany({}),
       JobApplication.deleteMany({}),
+      JobReport.deleteMany({}),
+      JobPortalEvent.deleteMany({}),
     ]);
   });
 

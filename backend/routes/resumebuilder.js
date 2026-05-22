@@ -403,9 +403,9 @@ const callGoogleAiJson = async ({ systemPrompt, userPrompt, fallback }) => {
 
 router.post('/generate', authenticate, async (req, res) => {
   try {
-    const { formData = {}, template = 'simple-ats', resumeType = 'professional', language = 'en' } =
+    const { formData = {}, template = 'simple-ats', resumeType = 'professional', language = 'en', jobDescription = '' } =
       req.body || {};
-    const validation = validateResumePayload({ formData, jobDescription: req.body?.jobDescription || '' });
+    const validation = validateResumePayload({ formData, jobDescription });
     if (!validation.valid) {
       return res.status(400).json({ success: false, message: validation.errors.join(' ') });
     }
@@ -419,12 +419,13 @@ router.post('/generate', authenticate, async (req, res) => {
     const aiResult = await callGoogleAiJson({
       systemPrompt:
         'You are a senior resume writer. Return strictly valid JSON with fields: profile, skills, education, experience, projects, certifications, languages. Keep concise and ATS-friendly.',
-      userPrompt: `Create an ATS-friendly resume body for this candidate profile.\n\n${JSON.stringify(
+      userPrompt: `Create an ATS-friendly resume body for this candidate profile aligned to the target job description. Use the details below:\n\n${JSON.stringify(
         {
           formData,
           template,
           resumeType,
           language,
+          jobDescription,
         }
       )}`,
       fallback: () => fallbackResume,

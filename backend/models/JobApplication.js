@@ -59,6 +59,30 @@ const jobApplicationSchema = new mongoose.Schema({
     max: 100,
     default: 0
   },
+  lexicalMatchScore: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0
+  },
+  semanticMatchScore: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0
+  },
+  matchedSkills: [{
+    type: String,
+    trim: true
+  }],
+  matchProvider: {
+    type: String,
+    default: 'fallback'
+  },
+  matchModel: {
+    type: String,
+    default: 'fallback'
+  },
   coverLetter: {
     type: String
   },

@@ -6,8 +6,15 @@ const JobApplication = require('../models/JobApplication');
 const JobSeekerProfile = require('../models/JobSeekerProfile');
 const EmployerProfile = require('../models/EmployerProfile');
 const JobSavedJob = require('../models/JobSavedJob');
+const JobReport = require('../models/JobReport');
+const JobPortalEvent = require('../models/JobPortalEvent');
 const User = require('../models/User');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, verifyAdmin } = require('../middleware/auth');
+const {
+  computeSemanticMatchScore,
+  generateCareerAssistantResponse,
+  assessJobReportRisk,
+} = require('../services/jobPortalAiService');
 const multer = require('multer');
 const path = require('path');
 
@@ -28,15 +35,27 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /pdf|doc|docx|mp4|webm|mp3|wav/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    const extension = String(path.extname(file.originalname || '') || '').toLowerCase();
+    const mimeType = String(file.mimetype || '').toLowerCase();
+    const allowedMimeTypes = new Set([
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'video/mp4',
+      'video/webm',
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/wav',
+      'audio/x-wav',
+      'audio/webm',
+    ]);
+    const allowedExtensions = new Set(['.pdf', '.doc', '.docx', '.mp4', '.webm', '.mp3', '.wav']);
 
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
+    if (!allowedExtensions.has(extension) || !allowedMimeTypes.has(mimeType)) {
       cb(new Error('Invalid file type'));
+      return;
     }
+    cb(null, true);
   }
 });
 
@@ -50,6 +69,43 @@ if (!fs.existsSync(uploadDir)) {
 const APPLICATION_STATUSES = ['Applied', 'Viewed', 'Shortlisted', 'Interview', 'Selected', 'Rejected'];
 const PHONE_REGEX = /^\+?[0-9][0-9\s-]{7,14}$/;
 const LICENSE_REGEX = /^[A-Za-z0-9/-]{5,30}$/;
+const MODERATION_STATUSES = ['pending', 'in_review', 'resolved', 'dismissed', 'escalated'];
+
+const parsePositiveInt = (value, fallback, { min = 1, max = 100 } = {}) => {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+};
+
+const mapRiskToPriority = (riskLevel = '', riskScore = 0) => {
+  const normalizedRisk = String(riskLevel || '').trim().toLowerCase();
+  if (normalizedRisk === 'critical' || riskScore >= 85) return 'urgent';
+  if (normalizedRisk === 'high' || riskScore >= 70) return 'high';
+  if (normalizedRisk === 'medium' || riskScore >= 45) return 'medium';
+  return 'low';
+};
+
+const trackJobPortalEvent = async ({
+  eventType,
+  userId = null,
+  jobId = null,
+  applicationId = null,
+  metadata = {},
+  source = 'web',
+} = {}) => {
+  try {
+    await JobPortalEvent.create({
+      eventType,
+      userId,
+      jobId,
+      applicationId,
+      metadata,
+      source,
+    });
+  } catch (_error) {
+    // Non-blocking tracking.
+  }
+};
 
 const normalizeArrayField = (value = '') =>
   Array.isArray(value)
@@ -143,6 +199,8 @@ router.get('/jobs', async (req, res) => {
     } = req.query;
 
     const query = { isActive: true };
+    const parsedPage = parsePositiveInt(page, 1, { min: 1, max: 10000 });
+    const parsedLimit = parsePositiveInt(limit, 20, { min: 1, max: 100 });
 
     if (type) query.type = type;
     if (subtype) query.subtype = subtype;
@@ -171,19 +229,32 @@ router.get('/jobs', async (req, res) => {
     const jobs = await Job.find(query)
       .populate('postedBy', 'name email')
       .sort(sort)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
+      .limit(parsedLimit)
+      .skip((parsedPage - 1) * parsedLimit)
       .select('-__v');
     const applicantSkillsList = normalizeArrayField(applicantSkills);
     const jobsWithMatch = applicantSkillsList.length
-      ? jobs.map((job) => {
-          const match = calculateMatchScore(job.skills, applicantSkillsList);
-          return {
-            ...job.toObject(),
-            aiMatchScore: match.score,
-            matchedSkills: match.matchedSkills,
-          };
-        })
+      ? await Promise.all(
+          jobs.map(async (job) => {
+            const semanticMatch = await computeSemanticMatchScore({
+              jobTitle: job.title,
+              jobDescription: job.description,
+              jobSkills: job.skills,
+              applicantSkills: applicantSkillsList,
+            });
+            return {
+              ...job.toObject(),
+              aiMatchScore: semanticMatch.score,
+              matchedSkills: semanticMatch.matchedSkills,
+              aiMatchBreakdown: {
+                lexicalScore: semanticMatch.lexicalScore,
+                semanticScore: semanticMatch.semanticScore,
+                provider: semanticMatch.provider,
+                model: semanticMatch.model,
+              },
+            };
+          })
+        )
       : jobs;
 
     const total = await Job.countDocuments(query);
@@ -192,10 +263,10 @@ router.get('/jobs', async (req, res) => {
       success: true,
       data: jobsWithMatch,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parsedPage,
+        limit: parsedLimit,
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / parsedLimit)
       }
     });
   } catch (error) {
@@ -223,6 +294,15 @@ router.get('/jobs/:id', async (req, res) => {
 
     // Increment view count
     await Job.findByIdAndUpdate(req.params.id, { $inc: { viewCount: 1 } });
+    await trackJobPortalEvent({
+      eventType: 'job_view',
+      userId: req.user?.id || null,
+      jobId: req.params.id,
+      metadata: {
+        type: job.type,
+        location: job.location,
+      },
+    });
 
     res.json({ success: true, data: job });
   } catch (error) {
@@ -304,6 +384,15 @@ router.post('/jobs', authenticateToken, upload.array('documents', 5), async (req
     await EmployerProfile.findByIdAndUpdate(employerProfile._id, {
       $inc: { jobsPosted: 1, activeJobs: 1 }
     });
+    await trackJobPortalEvent({
+      eventType: 'job_posted',
+      userId: req.user.id,
+      jobId: job._id,
+      metadata: {
+        type: job.type,
+        isUrgent: Boolean(job.isUrgent),
+      },
+    });
 
     res.status(201).json({ success: true, data: job });
   } catch (error) {
@@ -370,6 +459,15 @@ router.put('/jobs/:id', authenticateToken, async (req, res) => {
       },
       { new: true }
     );
+    await trackJobPortalEvent({
+      eventType: 'job_updated',
+      userId: req.user.id,
+      jobId: req.params.id,
+      metadata: {
+        type: updatedJob?.type,
+        isActive: updatedJob?.isActive !== false,
+      },
+    });
 
     res.json({ success: true, data: updatedJob });
   } catch (error) {
@@ -400,6 +498,15 @@ router.delete('/jobs/:id', authenticateToken, async (req, res) => {
       });
     }
 
+    await trackJobPortalEvent({
+      eventType: 'job_updated',
+      userId: req.user.id,
+      jobId: req.params.id,
+      metadata: {
+        action: 'deactivate',
+      },
+    });
+
     res.json({ success: true, message: 'Job deleted successfully' });
   } catch (error) {
     console.error('Error deleting job:', error);
@@ -429,7 +536,19 @@ router.post('/jobs/:id/apply', authenticateToken, upload.single('resume'), async
 
     const profile = await JobSeekerProfile.findOne({ userId: req.user.id }).lean();
     const applicantSkills = normalizeArrayField(req.body.skills || profile?.skills || []);
-    const matchResult = calculateMatchScore(job.skills, applicantSkills);
+    const matchResult = await computeSemanticMatchScore({
+      jobTitle: job.title,
+      jobDescription: job.description,
+      jobSkills: job.skills,
+      applicantSkills,
+      applicantContext: [
+        `Experience: ${String(profile?.experience || '')}`,
+        `ExpectedSalary: ${String(req.body.expectedSalary || profile?.expectedSalary || '')}`,
+        `Availability: ${String(req.body.availability || profile?.availability || '')}`,
+      ]
+        .filter(Boolean)
+        .join(' | '),
+    });
     const fallbackEmail = String(profile?.email || req.user.email || '').trim().toLowerCase();
     const fallbackName = String(profile?.fullName || req.user.name || '').trim();
     const fallbackPhone = String(profile?.phone || '').trim();
@@ -442,6 +561,11 @@ router.post('/jobs/:id/apply', authenticateToken, upload.single('resume'), async
       phone: String(req.body.phone || fallbackPhone || '').trim(),
       skills: applicantSkills,
       matchScore: matchResult.score,
+      lexicalMatchScore: matchResult.lexicalScore,
+      semanticMatchScore: matchResult.semanticScore,
+      matchedSkills: matchResult.matchedSkills,
+      matchProvider: matchResult.provider,
+      matchModel: matchResult.model,
       coverLetter: req.body.coverLetter,
       expectedSalary: req.body.expectedSalary,
       availability: req.body.availability,
@@ -461,6 +585,17 @@ router.post('/jobs/:id/apply', authenticateToken, upload.single('resume'), async
         $inc: { totalApplications: 1 }
       });
     }
+    await trackJobPortalEvent({
+      eventType: 'job_apply',
+      userId: req.user.id,
+      jobId: req.params.id,
+      applicationId: application._id,
+      metadata: {
+        matchScore: matchResult.score,
+        lexicalMatchScore: matchResult.lexicalScore,
+        semanticMatchScore: matchResult.semanticScore,
+      },
+    });
 
     res.status(201).json({ success: true, data: application });
   } catch (error) {
@@ -546,6 +681,23 @@ router.put('/applications/:id', authenticateToken, async (req, res) => {
       },
       { new: true }
     );
+
+    if (normalizedStatus === 'Selected') {
+      await EmployerProfile.findOneAndUpdate(
+        { userId: req.user.id },
+        { $inc: { hiredCount: 1 } }
+      );
+    }
+
+    await trackJobPortalEvent({
+      eventType: 'job_status_update',
+      userId: req.user.id,
+      jobId: application.jobId?._id || application.jobId,
+      applicationId: updatedApplication._id,
+      metadata: {
+        status: normalizedStatus,
+      },
+    });
 
     res.json({ success: true, data: updatedApplication });
   } catch (error) {
@@ -636,6 +788,16 @@ router.put('/profile', authenticateToken, upload.fields([
       updateData,
       { new: true, upsert: true }
     );
+
+    await trackJobPortalEvent({
+      eventType: 'profile_update',
+      userId: req.user.id,
+      metadata: {
+        profileCompleteness: profile?.profileCompleteness || 0,
+        hasResume: Boolean(profile?.resume?.url),
+        hasSkills: Array.isArray(profile?.skills) && profile.skills.length > 0,
+      },
+    });
 
     res.json({ success: true, data: profile });
   } catch (error) {
@@ -735,6 +897,18 @@ router.post('/jobs/:id/report', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Reason is required.' });
     }
 
+    const job = await Job.findById(req.params.id).lean();
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job not found.' });
+    }
+
+    const riskAssessment = await assessJobReportRisk({
+      reason,
+      details,
+      job,
+    });
+    const priority = mapRiskToPriority(riskAssessment.riskLevel, riskAssessment.riskScore);
+
     const updated = await Job.findByIdAndUpdate(
       req.params.id,
       {
@@ -743,6 +917,10 @@ router.post('/jobs/:id/report', authenticateToken, async (req, res) => {
             reportedBy: req.user.id,
             reason,
             details,
+            riskScore: riskAssessment.riskScore,
+            riskLevel: riskAssessment.riskLevel,
+            riskCategories: riskAssessment.categories || [],
+            moderationStatus: 'pending',
             createdAt: new Date(),
           },
         },
@@ -754,10 +932,121 @@ router.post('/jobs/:id/report', authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Job not found.' });
     }
 
-    return res.status(201).json({ success: true, message: 'Report submitted for moderation.' });
+    const report = await JobReport.create({
+      jobId: req.params.id,
+      reportedBy: req.user.id,
+      reason,
+      details,
+      riskScore: riskAssessment.riskScore,
+      riskLevel: riskAssessment.riskLevel,
+      riskCategories: riskAssessment.categories || [],
+      moderationStatus: 'pending',
+      priority,
+    });
+
+    await trackJobPortalEvent({
+      eventType: 'job_report',
+      userId: req.user.id,
+      jobId: req.params.id,
+      metadata: {
+        riskLevel: riskAssessment.riskLevel,
+        riskScore: riskAssessment.riskScore,
+        moderationStatus: 'pending',
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Report submitted for moderation.',
+      data: {
+        reportId: report._id,
+        riskLevel: report.riskLevel,
+        priority: report.priority,
+        moderationStatus: report.moderationStatus,
+      },
+    });
   } catch (error) {
     console.error('Error reporting job:', error);
     return res.status(500).json({ success: false, message: 'Error reporting job' });
+  }
+});
+
+router.get('/reports', authenticateToken, verifyAdmin, async (req, res) => {
+  try {
+    const status = String(req.query.status || '').trim().toLowerCase();
+    const priority = String(req.query.priority || '').trim().toLowerCase();
+    const page = parsePositiveInt(req.query.page, 1, { min: 1, max: 10000 });
+    const limit = parsePositiveInt(req.query.limit, 20, { min: 1, max: 100 });
+    const query = {};
+
+    if (MODERATION_STATUSES.includes(status)) query.moderationStatus = status;
+    if (['low', 'medium', 'high', 'urgent'].includes(priority)) query.priority = priority;
+
+    const [reports, total] = await Promise.all([
+      JobReport.find(query)
+        .populate('jobId', 'title company type location isVerified')
+        .populate('reportedBy', 'name email')
+        .populate('assignedTo', 'name email')
+        .sort({ riskScore: -1, createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      JobReport.countDocuments(query),
+    ]);
+
+    res.json({
+      success: true,
+      data: reports,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Error loading job reports queue:', error);
+    res.status(500).json({ success: false, message: 'Error loading job reports queue' });
+  }
+});
+
+router.patch('/reports/:id/moderation', authenticateToken, verifyAdmin, async (req, res) => {
+  try {
+    const nextStatus = String(req.body.moderationStatus || '').trim().toLowerCase();
+    const resolutionNote = String(req.body.resolutionNote || '').trim();
+    if (!MODERATION_STATUSES.includes(nextStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid moderation status. Allowed: ${MODERATION_STATUSES.join(', ')}`,
+      });
+    }
+
+    const updatePayload = {
+      moderationStatus: nextStatus,
+      assignedTo: req.user.id,
+    };
+    if (resolutionNote) updatePayload.resolutionNote = resolutionNote;
+    if (nextStatus === 'resolved' || nextStatus === 'dismissed') {
+      updatePayload.resolvedAt = new Date();
+    }
+
+    const report = await JobReport.findByIdAndUpdate(req.params.id, updatePayload, { new: true });
+    if (!report) {
+      return res.status(404).json({ success: false, message: 'Report not found.' });
+    }
+
+    await Job.updateOne(
+      { _id: report.jobId, 'reports.reportedBy': report.reportedBy, 'reports.reason': report.reason },
+      {
+        $set: {
+          'reports.$.moderationStatus': nextStatus,
+        },
+      }
+    );
+
+    res.json({ success: true, data: report });
+  } catch (error) {
+    console.error('Error updating report moderation:', error);
+    res.status(500).json({ success: false, message: 'Error updating report moderation status' });
   }
 });
 
@@ -790,11 +1079,15 @@ router.post('/saved-jobs/:jobId', authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Job not found or inactive' });
     }
 
-    const saved = await JobSavedJob.findOneAndUpdate(
-      { userId: req.user.id, jobId: req.params.jobId },
-      { $setOnInsert: { userId: req.user.id, jobId: req.params.jobId } },
-      { upsert: true, new: true }
-    );
+    let saved = await JobSavedJob.findOne({ userId: req.user.id, jobId: req.params.jobId });
+    if (!saved) {
+      saved = await JobSavedJob.create({ userId: req.user.id, jobId: req.params.jobId });
+      await trackJobPortalEvent({
+        eventType: 'job_save',
+        userId: req.user.id,
+        jobId: req.params.jobId,
+      });
+    }
 
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
@@ -805,7 +1098,14 @@ router.post('/saved-jobs/:jobId', authenticateToken, async (req, res) => {
 
 router.delete('/saved-jobs/:jobId', authenticateToken, async (req, res) => {
   try {
-    await JobSavedJob.deleteOne({ userId: req.user.id, jobId: req.params.jobId });
+    const deleted = await JobSavedJob.deleteOne({ userId: req.user.id, jobId: req.params.jobId });
+    if (deleted?.deletedCount) {
+      await trackJobPortalEvent({
+        eventType: 'job_unsave',
+        userId: req.user.id,
+        jobId: req.params.jobId,
+      });
+    }
     res.json({ success: true, message: 'Saved job removed.' });
   } catch (error) {
     console.error('Error removing saved job:', error);
@@ -918,6 +1218,56 @@ router.get('/employer/dashboard', authenticateToken, async (req, res) => {
   }
 });
 
+router.post('/assistant/chat', authenticateToken, async (req, res) => {
+  try {
+    const message = String(req.body.message || '').trim();
+    if (!message) {
+      return res.status(400).json({ success: false, message: 'Message is required.' });
+    }
+    if (message.length > 1000) {
+      return res.status(400).json({ success: false, message: 'Message is too long.' });
+    }
+
+    const [profile, applicationsCount, savedJobsCount] = await Promise.all([
+      JobSeekerProfile.findOne({ userId: req.user.id }).lean(),
+      JobApplication.countDocuments({ applicantId: req.user.id }),
+      JobSavedJob.countDocuments({ userId: req.user.id }),
+    ]);
+
+    const aiResponse = await generateCareerAssistantResponse({
+      message,
+      context: {
+        profileCompleteness: profile?.profileCompleteness || 0,
+        skills: profile?.skills || [],
+        experience: profile?.experience || '',
+        expectedSalary: profile?.expectedSalary || '',
+        availability: profile?.availability || '',
+        gulfReady: Boolean(profile?.gulfReady),
+        applicationsCount,
+        savedJobsCount,
+      },
+    });
+
+    await trackJobPortalEvent({
+      eventType: 'assistant_chat',
+      userId: req.user.id,
+      metadata: {
+        provider: aiResponse.provider,
+        model: aiResponse.model,
+        messageLength: message.length,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: aiResponse,
+    });
+  } catch (error) {
+    console.error('Error generating assistant response:', error);
+    res.status(500).json({ success: false, message: 'Error generating assistant response' });
+  }
+});
+
 router.get('/overview360', authenticateToken, async (req, res) => {
   try {
     const [
@@ -974,6 +1324,35 @@ router.get('/overview360', authenticateToken, async (req, res) => {
       Job.countDocuments({ isActive: true, postedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }),
     ]);
 
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [newJobsPrevious7Days, eventCountsLast30Days, moderationSummary, selectedApplicationsLast30Days] = await Promise.all([
+      Job.countDocuments({ isActive: true, postedAt: { $gte: fourteenDaysAgo, $lt: sevenDaysAgo } }),
+      JobPortalEvent.aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+        { $group: { _id: '$eventType', count: { $sum: 1 } } },
+      ]),
+      JobReport.aggregate([
+        {
+          $group: {
+            _id: '$moderationStatus',
+            count: { $sum: 1 },
+            highRiskCount: {
+              $sum: {
+                $cond: [{ $gte: ['$riskScore', 70] }, 1, 0],
+              },
+            },
+          },
+        },
+      ]),
+      JobApplication.countDocuments({
+        status: { $in: ['Selected', 'hired'] },
+        updatedAt: { $gte: thirtyDaysAgo },
+      }),
+    ]);
+
     const salaryStats = salaryByTypeAgg.map((entry) => ({
       type: entry._id || 'Unknown',
       averageMin: Math.round(entry.averageMin || 0),
@@ -987,6 +1366,33 @@ router.get('/overview360', authenticateToken, async (req, res) => {
     const averageSalaryMax = salaryStats.length
       ? Math.round(salaryStats.reduce((sum, item) => sum + item.averageMax, 0) / salaryStats.length)
       : 0;
+
+    const eventCountMap = eventCountsLast30Days.reduce((acc, entry) => {
+      acc[String(entry._id || '')] = entry.count;
+      return acc;
+    }, {});
+    const moderationByStatus = moderationSummary.reduce(
+      (acc, entry) => {
+        const key = String(entry._id || 'pending').toLowerCase();
+        acc[key] = entry.count || 0;
+        acc.highRisk += Number(entry.highRiskCount || 0);
+        return acc;
+      },
+      { pending: 0, in_review: 0, resolved: 0, dismissed: 0, escalated: 0, highRisk: 0 }
+    );
+    const forecastGrowthRatio = newJobsPrevious7Days > 0 ? newJobsLast7Days / newJobsPrevious7Days : 1;
+    const projectedNewJobsNext7Days = Math.max(
+      0,
+      Math.round(newJobsLast7Days * Math.max(0.6, Math.min(1.6, forecastGrowthRatio)))
+    );
+
+    const totalViews30 = Number(eventCountMap.job_view || 0);
+    const totalSaves30 = Number(eventCountMap.job_save || 0);
+    const totalApplies30 = Number(eventCountMap.job_apply || 0);
+    const totalSelected30 = Number(selectedApplicationsLast30Days || 0);
+    const viewToSaveRate = totalViews30 ? Math.round((totalSaves30 / totalViews30) * 100) : 0;
+    const saveToApplyRate = totalSaves30 ? Math.round((totalApplies30 / totalSaves30) * 100) : 0;
+    const applyToSelectionRate = totalApplies30 ? Math.round((totalSelected30 / totalApplies30) * 100) : 0;
 
     const marketplace = {
       totalActiveJobs,
@@ -1004,6 +1410,26 @@ router.get('/overview360', authenticateToken, async (req, res) => {
       gigJobs: await Job.countDocuments({ isActive: true, type: 'gig' }),
       urgentJobs: urgentJobsCount,
       newJobsLast7Days,
+      newJobsPrevious7Days,
+      projectedNewJobsNext7Days,
+      demandTrend: forecastGrowthRatio >= 1.05 ? 'up' : forecastGrowthRatio <= 0.95 ? 'down' : 'stable',
+      funnel: {
+        viewToSaveRate,
+        saveToApplyRate,
+        applyToSelectionRate,
+        totalsLast30Days: {
+          views: totalViews30,
+          saves: totalSaves30,
+          applies: totalApplies30,
+          statusUpdates: totalSelected30,
+        },
+      },
+      moderation: {
+        pendingReports: moderationByStatus.pending + moderationByStatus.in_review,
+        resolvedReports: moderationByStatus.resolved,
+        escalatedReports: moderationByStatus.escalated,
+        highRiskReports: moderationByStatus.highRisk,
+      },
     };
 
     const candidateProfile = await JobSeekerProfile.findOne({ userId: req.user.id }).lean();
@@ -1142,6 +1568,20 @@ router.get('/overview360', authenticateToken, async (req, res) => {
         ? Math.round((engagedCount / employerApplications.length) * 100)
         : 0;
 
+      const employerRecommendedActions = [];
+      if (responseRate < 45) {
+        employerRecommendedActions.push('Respond to new applications within 48 hours to improve conversion.');
+      }
+      if ((statusCounts.shortlisted + statusCounts.interview + statusCounts.selected) === 0 && employerApplications.length > 0) {
+        employerRecommendedActions.push('Shortlist top 5 candidates by match score to unblock hiring pipeline.');
+      }
+      if (matchStats.count > 0 && Math.round(matchStats.sum / matchStats.count) < 60) {
+        employerRecommendedActions.push('Refine job descriptions and required skills for higher quality matches.');
+      }
+      if (employerJobs.length && employerJobs.every((job) => !job.isVerified)) {
+        employerRecommendedActions.push('Complete employer verification to increase candidate trust and apply rate.');
+      }
+
       const topJobs = employerJobs
         .map((job) => ({
           jobId: String(job._id),
@@ -1165,8 +1605,24 @@ router.get('/overview360', authenticateToken, async (req, res) => {
         responseRate,
         hiringVelocityDays,
         topJobs,
+        recommendedActions: employerRecommendedActions,
       };
     }
+
+    const marketplaceRecommendations = [];
+    if (marketplace.funnel.viewToSaveRate < 8) {
+      marketplaceRecommendations.push('Improve job card quality (clear salary, benefits, verification badge) to raise saves.');
+    }
+    if (marketplace.funnel.saveToApplyRate < 20) {
+      marketplaceRecommendations.push('Simplify application flow and reduce mandatory fields to improve apply conversion.');
+    }
+    if (marketplace.moderation.highRiskReports > 0) {
+      marketplaceRecommendations.push('Prioritize moderation of high-risk reports to protect candidates from scams.');
+    }
+    if (marketplace.demandTrend === 'down') {
+      marketplaceRecommendations.push('Run employer outreach campaigns in high-demand categories to stabilize inventory.');
+    }
+    marketplace.recommendedActions = marketplaceRecommendations;
 
     res.json({
       success: true,

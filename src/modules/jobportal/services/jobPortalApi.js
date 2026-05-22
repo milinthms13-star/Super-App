@@ -57,6 +57,8 @@ export const jobPortalApi = {
   getMyJobs: async () => unwrap(await axios.get(`${BASE}/my-jobs`, { headers: authHeaders() })),
   getEmployerDashboard: async () => unwrap(await axios.get(`${BASE}/employer/dashboard`, { headers: authHeaders() })),
   getOverview360: async () => unwrap(await axios.get(`${BASE}/overview360`, { headers: authHeaders() })),
+  chatAssistant: async (payload) =>
+    unwrap(await axios.post(`${BASE}/assistant/chat`, payload, { headers: authHeaders() })),
   getJobApplications: async (jobId) =>
     unwrap(await axios.get(`${BASE}/jobs/${encodeURIComponent(jobId)}/applications`, { headers: authHeaders() })),
   updateApplicationStatus: async (applicationId, payload) =>

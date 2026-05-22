@@ -205,7 +205,7 @@ const inferRoleSkills = (roleText = "") => {
   return ["Communication", "Teamwork", "Problem solving", "Execution", "Documentation"];
 };
 
-const buildResumeFromForm = (formData = {}, template = "simple-ats", resumeType = "professional", language = "en") => ({
+const buildResumeFromForm = (formData = {}, template = "simple-ats", resumeType = "professional", language = "en", jobDescription = "") => ({
   header: {
     fullName: clean(formData.name),
     targetJob: clean(formData.targetJob),
@@ -215,7 +215,7 @@ const buildResumeFromForm = (formData = {}, template = "simple-ats", resumeType 
     phone: clean(formData.phone),
     linkedin: clean(formData.linkedin),
   },
-  profile: clean(formData.summary) || rewriteSummaryLocal(formData, ""),
+  profile: clean(formData.summary) || rewriteSummaryLocal(formData, jobDescription),
   skills: toList(formData.skills),
   education: parseEducation(formData.education),
   experience: parseExperience(formData.experience),
@@ -341,6 +341,44 @@ const formatResumeText = (resume = {}) => {
   }
 
   return lines.filter(Boolean).join("\n");
+};
+
+const buildResumePreviewSections = (resume = {}) => {
+  const sections = [];
+  if (clean(resume.profile)) {
+    sections.push({
+      title: "Profile",
+      content: resume.profile,
+    });
+  }
+  if (Array.isArray(resume.skills) && resume.skills.length > 0) {
+    sections.push({
+      title: "Skills",
+      content: (resume.skills || []).join(", "),
+    });
+  }
+  if (Array.isArray(resume.experience) && resume.experience.length > 0) {
+    sections.push({
+      title: "Experience",
+      content: (resume.experience || []).slice(0, 2).map((item) => {
+        const bullets = (item.bullets || []).slice(0, 2).map((bullet) => `• ${bullet}`).join(" \n");
+        return `${[item.role, item.company, item.duration].filter(Boolean).join(" | ")}\n${bullets}`.trim();
+      }).join("\n\n"),
+    });
+  }
+  if (Array.isArray(resume.education) && resume.education.length > 0) {
+    sections.push({
+      title: "Education",
+      content: (resume.education || []).slice(0, 3).map((item) => [item.degree, item.institution, item.year].filter(Boolean).join(" | ")).join("\n"),
+    });
+  }
+  if (Array.isArray(resume.projects) && resume.projects.length > 0) {
+    sections.push({
+      title: "Projects",
+      content: (resume.projects || []).slice(0, 2).map((item) => `${item.name}${item.tech ? ` | ${item.tech}` : ""}${item.summary ? `\n• ${item.summary}` : ""}`).join("\n\n"),
+    });
+  }
+  return sections;
 };
 
 const buildLocalAtsReport = ({ resume = {}, jobDescription = "" }) => {
@@ -947,7 +985,7 @@ const ResumeBuilder = () => {
     }
 
     if (!isAuthenticated) {
-      setResumeData(buildResumeFromForm(formData, template, resumeType, language));
+      setResumeData(buildResumeFromForm(formData, template, resumeType, language, jobDescription));
       updateUsage({ resumeGenerations: 1 });
       pushStatus("success", "Resume generated locally.");
       return;
@@ -955,7 +993,7 @@ const ResumeBuilder = () => {
 
     await withBusy("generate", async () => {
       try {
-        const result = await request("post", "/resumebuilder/generate", { formData, template, resumeType, language });
+        const result = await request("post", "/resumebuilder/generate", { formData, template, resumeType, language, jobDescription });
         setResumeData(result?.resume || null);
         updateUsage({ resumeGenerations: 1 });
         pushStatus("success", "Resume generated.");
@@ -963,7 +1001,7 @@ const ResumeBuilder = () => {
         pushStatus("error", error?.response?.data?.message || "Generate failed.");
       }
     });
-  }, [formData, hasPremiumAccess, isAuthenticated, language, pushStatus, request, resumeType, template, updateUsage, usageStats.resumeGenerations, validateForm, withBusy]);
+  }, [formData, hasPremiumAccess, isAuthenticated, jobDescription, language, pushStatus, request, resumeType, template, updateUsage, usageStats.resumeGenerations, validateForm, withBusy]);
 
   const handleAtsCheck = useCallback(async () => {
     if (!clean(jobDescription)) {
@@ -1206,31 +1244,37 @@ const ResumeBuilder = () => {
     let y = 44;
 
     doc.setFillColor(rgb.r, rgb.g, rgb.b);
-    doc.rect(0, 0, 595, 64, "F");
+    doc.rect(0, 0, 595, 72, "F");
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(17);
-    doc.text(previewResume?.header?.fullName || "Candidate", 44, 34);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text(previewResume?.header?.fullName || "Candidate", 44, 40);
     doc.setFontSize(11);
-    doc.text(previewResume?.header?.targetJob || "Resume", 44, 50);
-    doc.setTextColor(30, 41, 59);
-    y = 84;
+    doc.setFont("helvetica", "normal");
+    doc.text(previewResume?.header?.targetJob || "Resume", 44, 58);
+    y = 88;
 
     formatResumeText(previewResume).split("\n").forEach((line) => {
-      const wrapped = doc.splitTextToSize(line || " ", 510);
-      wrapped.forEach((segment) => {
-        if (y > 790) {
+      const isHeading = /^[A-Z ]+$/.test(line) && !/^\-/.test(line);
+      const indent = line.startsWith("- ") ? 16 : 0;
+      const textLine = line.startsWith("- ") ? line.slice(2) : line;
+      const wrapped = doc.splitTextToSize(textLine || " ", 510 - indent);
+      wrapped.forEach((segment, index) => {
+        if (y > 760) {
           doc.addPage();
           y = 44;
         }
-        if (/^[A-Z ]+$/.test(segment)) {
+        if (isHeading) {
+          doc.setFontSize(12);
           doc.setTextColor(rgb.r, rgb.g, rgb.b);
-          doc.setFontSize(11);
+          doc.setFont("helvetica", "bold");
         } else {
-          doc.setTextColor(30, 41, 59);
           doc.setFontSize(10);
+          doc.setTextColor(30, 41, 59);
+          doc.setFont("helvetica", "normal");
         }
-        doc.text(segment, 44, y);
-        y += 13;
+        doc.text(segment, 44 + indent, y);
+        y += index === wrapped.length - 1 ? 16 : 12;
       });
     });
     doc.save(`${clean(previewResume?.header?.fullName || "resume").replace(/\s+/g, "_")}_${template}.pdf`);
@@ -1239,20 +1283,33 @@ const ResumeBuilder = () => {
   const exportDoc = useCallback(async () => {
     const theme = TEMPLATE_THEME[template] || TEMPLATE_THEME["simple-ats"];
     const headingColor = theme.primary.replace("#", "");
-    const docFile = new Document({
-      sections: [{
-        properties: {},
-        children: formatResumeText(previewResume)
-          .split("\n")
-          .map((line) => new Paragraph({
-            children: [new TextRun({
-              text: line || " ",
-              color: /^[A-Z ]+$/.test(line) ? headingColor : undefined,
-              bold: /^[A-Z ]+$/.test(line),
-            })],
-          })),
-      }],
-    });
+    const children = [];
+    formatResumeText(previewResume)
+      .split("\n")
+      .forEach((line) => {
+        if (!line) {
+          children.push(new Paragraph({ text: "", spacing: { after: 120 } }));
+          return;
+        }
+        const isHeading = /^[A-Z ]+$/.test(line) && !/^\-/.test(line);
+        const text = line.startsWith("- ") ? line.slice(2) : line;
+        children.push(
+          new Paragraph({
+            text,
+            bullet: line.startsWith("- ") ? { level: 0 } : undefined,
+            heading: isHeading ? "Heading2" : undefined,
+            children: [
+              new TextRun({
+                text,
+                bold: isHeading,
+                color: isHeading ? headingColor : undefined,
+              }),
+            ],
+          })
+        );
+      });
+
+    const docFile = new Document({ sections: [{ properties: {}, children }] });
     const blob = await Packer.toBlob(docFile);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -1285,37 +1342,46 @@ const ResumeBuilder = () => {
     [copyText, jobMatchBreakdown?.sections, pushStatus]
   );
 
-  const renderPreview = () => (
-    <div className={`resume-live-preview template-${template}`}>
-      <div className="preview-head">
-        <h3>{previewResume?.header?.fullName || "Your Name"}</h3>
-        <p>{previewResume?.header?.targetJob || "Target Role"}</p>
-        <p className="preview-meta">{[previewResume?.header?.location, previewResume?.header?.preferredCountry].filter(Boolean).join(", ")}</p>
-      </div>
-      <div className="preview-block">
-        <h4>Profile</h4>
-        <p>{previewResume?.profile || "Professional summary will appear here."}</p>
-      </div>
-      <div className="preview-block">
-        <h4>Skills</h4>
-        <div className="resume-skills">{(previewResume?.skills || []).map((skill) => <span key={skill} className="skill-tag">{skill}</span>)}</div>
-      </div>
-      <div className="resume-health-card">
-        <strong>Resume Health: {resumeHealth.score}%</strong>
-        <ul>
-          {(resumeHealth.issues || []).slice(0, 4).map((item) => <li key={item}>{item}</li>)}
-        </ul>
-      </div>
-      {resumeType === "gulf" ? (
-        <div className="resume-health-card">
-          <strong>Gulf Readiness</strong>
-          <p className="mini-score">Passport: {previewResume?.gulfProfile?.passportStatus || "Not set"}</p>
-          <p className="mini-score">Passport No: {previewResume?.gulfProfile?.passportNumber || "Not set"}</p>
-          <p className="mini-score">Visa: {previewResume?.gulfProfile?.visaStatus || "Not set"}</p>
+  const renderPreview = () => {
+    const previewSections = buildResumePreviewSections(previewResume);
+    return (
+      <div className={`resume-live-preview template-${template}`}>
+        <div className="preview-head">
+          <div>
+            <span className="template-label">{getTemplateLabel(template)}</span>
+            <h3>{previewResume?.header?.fullName || "Your Name"}</h3>
+            <p>{previewResume?.header?.targetJob || "Target Role"}</p>
+            <p className="preview-meta">{[previewResume?.header?.location, previewResume?.header?.preferredCountry].filter(Boolean).join(", ")}</p>
+          </div>
+          <div className="resume-preview-score">
+            <p className="preview-score-label">Resume Health</p>
+            <strong>{resumeHealth.score}%</strong>
+            <p className="preview-score-detail">{computeSectionCompleteness(previewResume).percent}% sections complete</p>
+          </div>
         </div>
-      ) : null}
-    </div>
-  );
+
+        {previewSections.map((section) => (
+          <div key={section.title} className="preview-block">
+            <h4>{section.title}</h4>
+            {section.content.split("\n").map((line, index) => (
+              <p key={`${section.title}-${index}`} className={line.startsWith("•") ? "preview-bullet" : undefined}>
+                {line}
+              </p>
+            ))}
+          </div>
+        ))}
+
+        {resumeType === "gulf" ? (
+          <div className="resume-health-card gulf-readiness-card">
+            <strong>Gulf Readiness</strong>
+            <p className="mini-score">Passport: {previewResume?.gulfProfile?.passportStatus || "Not set"}</p>
+            <p className="mini-score">Visa: {previewResume?.gulfProfile?.visaStatus || "Not set"}</p>
+            <p className="mini-score">Relocation: {previewResume?.gulfProfile?.availableToRelocate || "Unknown"}</p>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   const stepProgress = Math.round(((wizardStep + 1) / WIZARD_STEPS.length) * 100);
 

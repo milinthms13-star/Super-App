@@ -1,6 +1,6 @@
 import React from "react";
 
-const AIAssistant = ({ messages, input, onInputChange, onSend, onClose }) => (
+const AIAssistant = ({ messages, input, onInputChange, onSend, onClose, isSending = false, provider = "fallback" }) => (
   <div className="jp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="jp-assistant-title">
     <div className="jp-modal jp-modal-small">
       <header className="jp-modal-head">
@@ -10,7 +10,9 @@ const AIAssistant = ({ messages, input, onInputChange, onSend, onClose }) => (
         </button>
       </header>
       <section className="jp-modal-body">
-        <p className="jp-muted-text">Assistant provides career tips using curated guidance. Real AI integration can be enabled later with API key.</p>
+        <p className="jp-muted-text">
+          AI assistant mode: {provider === "openai" ? "Live OpenAI guidance" : "Smart fallback guidance"}.
+        </p>
         <div className="jp-chat-list">
           {messages.map((message) => (
             <div key={message.id} className={`jp-chat-bubble ${message.role === "user" ? "jp-chat-user" : "jp-chat-bot"}`}>
@@ -23,12 +25,13 @@ const AIAssistant = ({ messages, input, onInputChange, onSend, onClose }) => (
             value={input}
             onChange={(event) => onInputChange(event.target.value)}
             placeholder="Ask for resume or interview tips..."
+            disabled={isSending}
             onKeyDown={(event) => {
-              if (event.key === "Enter") onSend();
+              if (event.key === "Enter" && !isSending) onSend();
             }}
           />
-          <button type="button" className="jp-btn jp-btn-primary" onClick={onSend}>
-            Send
+          <button type="button" className="jp-btn jp-btn-primary" onClick={onSend} disabled={isSending}>
+            {isSending ? "Thinking..." : "Send"}
           </button>
         </div>
       </section>
