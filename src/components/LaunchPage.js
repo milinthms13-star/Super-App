@@ -1,5 +1,6 @@
 import React from "react";
 import { getTranslation, languageOptions } from "../data/translations";
+import { normalizeModuleId } from "../utils/moduleRoutes";
 import "../styles/LaunchPage.css";
 import {
   FaShoppingCart,
@@ -176,7 +177,7 @@ const moduleFallbacks = {
     icon: "FaBriefcase",
     isComingSoon: false,
   },
-  mydiary: {
+  diary: {
     title: "MyDiary",
     description: "Personal diary, journaling, and memory storage.",
     icon: "FaBook",
@@ -270,7 +271,7 @@ const moduleCategoryMap = {
   sosalert: "utility",
   devadarshan: "utility",
   astrology: "utility",
-  mydiary: "utility",
+  diary: "utility",
 };
 
 const openExternalLink = (url) => {
@@ -282,6 +283,7 @@ const LaunchPage = ({
   onLanguageChange,
   onSelectRegistrationType,
   enabledModules,
+  moduleBranding = {},
   customLinks = [],
 }) => {
   const { launch, direction } = getTranslation(language);
@@ -317,40 +319,58 @@ const LaunchPage = ({
     VibeHub: "socialmedia",
     "ReminderAlert - Todo List": "reminderalert",
     "SOS Safety Center": "sosalert",
-    MyDiary: "mydiary",
+    MyDiary: "diary",
     AstroNila: "astrology",
   };
 
-  const filteredFeatures = launch.features.filter(([name]) =>
-    enabledModules.includes(moduleMapping[name])
+  const enabledModuleSet = new Set(
+    (Array.isArray(enabledModules) ? enabledModules : [])
+      .map((moduleId) => normalizeModuleId(moduleId))
+      .filter(Boolean)
   );
+
+  const getMappedModuleId = (name) => normalizeModuleId(moduleMapping[name]);
+  const getBrandedModuleTitle = (moduleId, fallbackTitle) =>
+    String(
+      moduleBranding?.[normalizeModuleId(moduleId)]?.name || fallbackTitle || ""
+    ).trim();
+
+  const filteredFeatures = launch.features.filter(([name]) => {
+    const mappedModuleId = getMappedModuleId(name);
+    return mappedModuleId && enabledModuleSet.has(mappedModuleId);
+  });
   const visibleModuleIds = new Set(
-    filteredFeatures.map(([name]) => moduleMapping[name]).filter(Boolean)
+    filteredFeatures.map(([name]) => getMappedModuleId(name)).filter(Boolean)
   );
   const missingEnabledFeatures = Object.entries(moduleFallbacks)
     .filter(
-      ([moduleId]) => enabledModules.includes(moduleId) && !visibleModuleIds.has(moduleId)
+      ([moduleId]) =>
+        enabledModuleSet.has(normalizeModuleId(moduleId)) &&
+        !visibleModuleIds.has(normalizeModuleId(moduleId))
     )
     .map(([moduleId, feature]) => ({
-      key: moduleId,
-      title: feature.title,
+      key: `module-${normalizeModuleId(moduleId)}`,
+      title: getBrandedModuleTitle(moduleId, feature.title),
       description: feature.description,
       icon: feature.icon,
       isComingSoon: feature.isComingSoon,
       type: "module",
-      moduleId,
+      moduleId: normalizeModuleId(moduleId),
     }));
 
   const featureCards = [
-    ...filteredFeatures.map(([title, description, icon, isComingSoon]) => ({
-      key: title,
-      title,
+    ...filteredFeatures.map(([title, description, icon, isComingSoon]) => {
+      const mappedModuleId = getMappedModuleId(title);
+      return {
+      key: `module-${mappedModuleId || title}`,
+      title: getBrandedModuleTitle(mappedModuleId, title),
       description,
       icon,
       isComingSoon,
       type: "module",
-      moduleId: moduleMapping[title],
-    })),
+      moduleId: mappedModuleId,
+    };
+    }),
     ...missingEnabledFeatures,
     ...customLinks.map((link) => ({
       key: link.id,
@@ -524,7 +544,7 @@ const LaunchPage = ({
                         ? openExternalLink(feature.url)
                         : onSelectRegistrationType(
                             "login",
-                            feature.moduleId || moduleMapping[feature.title]
+                            feature.moduleId || getMappedModuleId(feature.title)
                           ))
                     }
                     disabled={feature.isComingSoon}

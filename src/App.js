@@ -1202,6 +1202,7 @@ function AppShell() {
             onLanguageChange={handleLanguageChange}
             onSelectRegistrationType={handleSelectRegistrationType}
             enabledModules={enabledModules}
+            moduleBranding={moduleBranding}
             customLinks={customLinks}
           />
           {appDataError && <div className="app-loading">{appDataError}</div>}
